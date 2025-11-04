@@ -94,6 +94,15 @@
                   "servers/extensibility/plugins",
                   "servers/extensibility/logging"
                 ]
+              },
+              {
+                "group": "Advanced Components",
+                "icon": "cube",
+                "pages": [
+                  "servers/flows",
+                  "servers/hooks",
+                  "servers/auth-providers"
+                ]
               }
             ]
           },
@@ -107,9 +116,16 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/build-a-server",
+              "guides/write-a-tool",
+              "guides/customize-flow-stages",
               "guides/add-openapi-adapter",
+              "guides/use-providers-and-di",
+              "guides/proxy-auth",
+              "guides/session-consent-ux",
               "guides/caching-and-cache-miss",
-              "guides/customize-flow-stages"
+              "guides/rate-limits-and-semaphores",
+              "guides/transport-selection-rules"
             ]
           }
         ]
