@@ -1,122 +1,139 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "FrontMCP",
+  "description": "A TypeScript-first framework for building Model Context Protocol (MCP) servers",
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
   "theme": "almond",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "light": "#3b82f6",
+    "dark": "#0ea5e9",
+    "primary": "#6366f1"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
+  "contextual": {
+    "options": ["copy", "view"]
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+  "interaction": {
+    "drilldown": true
   },
   "navbar": {
     "links": [
       {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "href": "https://github.com/frontmcp/frontmcp",
+        "icon": "github",
+        "label": "GitHub"
       }
     ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "href": "https://github.com/frontmcp/frontmcp",
+      "type": "github"
     }
   },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+  "search": {
+    "prompt": "Search the FrontMCP docs..."
   },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+  "styling": {
+    "codeblocks": {
+      "theme": {
+        "dark": "dark-plus",
+        "light": "snazzy-light"
+      }
     }
+  },
+  "navigation": {
+    "dropdowns": [
+      {
+        "dropdown": "Documentation",
+        "icon": "book",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "getting-started/quickstart",
+              "getting-started/installation",
+              "getting-started/welcome"
+            ]
+          },
+          {
+            "group": "Servers",
+            "pages": [
+              "servers/server",
+              {
+                "group": "Core Components",
+                "icon": "toolbox",
+                "pages": [
+                  "servers/apps",
+                  "servers/providers",
+                  "servers/http",
+                  "servers/logging",
+                  "servers/authentication"
+                ]
+              },
+              {
+                "group": "Advanced",
+                "icon": "stars",
+                "pages": [
+                  "servers/serve-flag",
+                  "servers/tokens",
+                  "servers/errors"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/metadata",
+              {
+                "group": "Options",
+                "icon": "settings",
+                "pages": [
+                  "configuration/options/apps",
+                  "configuration/options/providers",
+                  "configuration/options/http",
+                  "configuration/options/logging",
+                  "configuration/options/authentication"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "SDK Reference",
+            "pages": [
+              {
+                "group": "Decorators",
+                "pages": [
+                  "api/decorators/front-mcp"
+                ]
+              },
+              {
+                "group": "Common",
+                "pages": [
+                  "typescript-sdk/common/tokens",
+                  "typescript-sdk/common/metadata"
+                ]
+              },
+              {
+                "group": "Core",
+                "pages": [
+                  "typescript-sdk/core/instance",
+                  "typescript-sdk/core/transports"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/running",
+              "deployment/http",
+              "deployment/configuration"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }
