@@ -89,9 +89,10 @@
                 "group": "Extensibility Components",
                 "icon": "toolbox",
                 "pages": [
-                  "servers/providers",
-                  "servers/adapters",
-                  "servers/plugins"
+                  "servers/extensibility/providers",
+                  "servers/extensibility/adapters",
+                  "servers/extensibility/plugins",
+                  "servers/extensibility/logging"
                 ]
               },
               {
