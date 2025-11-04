@@ -1,0 +1,25 @@
+{
+  "name": "adapters",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/adapters/src",
+  "projectType": "library",
+  "tags": [
+    "scope:libs"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "libs/adapters/dist",
+        "main": "libs/adapters/src/index.ts",
+        "tsConfig": "libs/adapters/tsconfig.lib.json",
+        "assets": [
+          "libs/adapters/*.md"
+        ]
+      }
+    }
+  }
+}
