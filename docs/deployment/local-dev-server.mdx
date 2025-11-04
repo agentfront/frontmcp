@@ -18,19 +18,19 @@ Run your FrontMCP server locally with a clean, no‑Nx setup. This guide shows *
 
     ```bash npm
     npm init -y
-    npm i -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    npm i -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
     npm i -D typescript tsx @types/node rimraf
     ```
 
     ```bash yarn
     yarn init -y
-    yarn add -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    yarn add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
     yarn add -D typescript tsx @types/node rimraf
     ```
 
     ```bash pnpm
     pnpm init -y
-    pnpm add -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    pnpm add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
     pnpm add -D typescript tsx @types/node rimraf
     ```
 
@@ -85,7 +85,7 @@ Optional **tsconfig.build.json** (no source maps, emits types if you want to pub
 .
 ├─ src/
 │  ├─ main.ts          # @FrontMcp entry — imports 'reflect-metadata' first
-│  ├─ hello.app.ts     # @FrontMcpApp with tools/resources/prompts
+│  ├─ hello.app.ts     # @App with tools/resources/prompts
 │  └─ tools/
 │     └─ greet.tool.ts # @Tool example
 ├─ package.json
@@ -99,7 +99,7 @@ Optional **tsconfig.build.json** (no source maps, emits types if you want to pub
 **src/main.ts**
 ```ts
 import 'reflect-metadata';
-import { FrontMcp, LogLevel } from '@frontmcp/common';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
@@ -113,16 +113,16 @@ export default class Server {}
 
 **src/hello.app.ts**
 ```ts
-import { FrontMcpApp } from '@frontmcp/common';
+import { App } from '@frontmcp/sdk';
 import Greet from './tools/greet.tool';
 
-@FrontMcpApp({ id: 'hello', name: 'Hello', tools: [Greet] })
+@App({ id: 'hello', name: 'Hello', tools: [Greet] })
 export default class HelloApp {}
 ```
 
 **src/tools/greet.tool.ts**
 ```ts
-import { tool } from '@frontmcp/common';
+import { tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 export default tool({

@@ -11,7 +11,7 @@ They’re declared with `@Provider()` and registered at **server** or **app** sc
 ## Define a provider
 
 ```ts
-import { Provider, ProviderScope } from '@frontmcp/common';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 @Provider({
   name: 'DbProvider',
@@ -42,7 +42,7 @@ export default class Server {}
 
 **App-level** providers (override or add on top of server-level):
 ```ts
-@FrontMcpApp({
+@App({
   name: 'Billing',
   providers: [BillingConfigProvider],
 })

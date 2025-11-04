@@ -40,7 +40,7 @@ export default class Server {}
 
 ### Example (per app)
 ```ts
-@FrontMcpApp({
+@App({
   name: 'CRM',
   auth: { type: 'remote', name: 'crm', baseUrl: 'https://idp.example.com', scopes: ['openid','email'] },
   standalone: true,

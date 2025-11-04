@@ -9,7 +9,7 @@ Tools are **typed actions** your server can execute. They’re described with Zo
 ## Minimal tool (class)
 
 ```ts
-import { Tool } from '@frontmcp/common';
+import { Tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Tool({
@@ -27,14 +27,14 @@ export default class GreetTool {
 Register it on an app:
 
 ```ts
-@FrontMcpApp({ id: 'hello', name: 'Hello', tools: [GreetTool] })
+@App({ id: 'hello', name: 'Hello', tools: [GreetTool] })
 export default class HelloApp {}
 ```
 
 ## Inline tool (function builder)
 
 ```ts
-import { tool } from '@frontmcp/common';
+import { tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 export const Add = tool({
@@ -48,7 +48,7 @@ export const Add = tool({
 Add to app:
 
 ```ts
-@FrontMcpApp({ name: 'Calc', tools: [Add] })
+@App({ name: 'Calc', tools: [Add] })
 class CalcApp {}
 ```
 

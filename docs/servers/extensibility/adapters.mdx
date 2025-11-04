@@ -13,7 +13,7 @@ icon: plug
 ## Define an adapter
 
 ```ts
-import { Adapter } from '@frontmcp/common';
+import { Adapter } from '@frontmcp/sdk';
 
 @Adapter({
   name: 'Billing OpenAPI Loader',
@@ -26,7 +26,7 @@ export default class BillingOpenApiAdapter {
 
 Register the adapter on an app:
 ```ts
-@FrontMcpApp({
+@App({
   name: 'Billing',
   adapters: [BillingOpenApiAdapter],
 })
