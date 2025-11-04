@@ -8,9 +8,9 @@
   },
   "theme": "almond",
   "colors": {
-    "light": "#3b82f6",
-    "dark": "#0ea5e9",
-    "primary": "#6366f1"
+    "primary": "#16A34A",
+    "light": "#07C983",
+    "dark": "#15803D"
   },
   "contextual": {
     "options": ["copy", "view"]
