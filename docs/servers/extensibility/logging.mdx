@@ -1,10 +1,14 @@
 ---
+
 title: Logging Transports
 slug: servers/extensibility/logging
-icon: receipt
---------------
+icon: activity
+description: Create and register custom log transports for FrontMCP.
+--------------------------------------------------------------------
 
-FrontMCP logging is **extensible**. In addition to the default console logger, you can register one or more **custom transports** via the server config:
+FrontMCP logging is extensible. In addition to the default console logger, you can register one or more custom transports via the server config.
+
+## Register a transport
 
 ```ts
 @FrontMcp({
@@ -12,7 +16,7 @@ FrontMCP logging is **extensible**. In addition to the default console logger, y
   apps: [App],
   logging: {
     level: LogLevel.Info,
-    enableConsole: true,             // set false to disable the built‑in console transport
+    enableConsole: true, // set false to disable the built‑in console transport
     transports: [StructuredJsonTransport, HttpBatchTransport],
   },
 })
@@ -40,14 +44,9 @@ export abstract class LogTransportInterface {
 }
 ```
 
-The framework filters by the configured `logging.level` **before** calling transports.
+The framework filters by the configured `logging.level` before calling transports.
 
-<Warning>
-    Transports should never throw. Handle errors internally and keep I/O non‑blocking (use buffering/batching for remote
-    sinks).
-</Warning>
-
----
+> Transports should never throw. Handle errors internally and keep I/O non‑blocking (use buffering/batching for remote sinks).
 
 ## Built‑in: Console
 
@@ -66,11 +65,9 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
 
 Disable it by setting `enableConsole: false` in your server config.
 
----
+## Example: Structured JSON (JSONL)
 
-## Example 1 — Structured JSON (JSONL)
-
-Emit **machine‑readable** logs (one JSON per line). Useful for file shipping agents or centralized logging.
+Emit machine‑readable logs (one JSON per line). Useful for file shipping agents or centralized logging.
 
 ```ts
 import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/common';
@@ -91,7 +88,8 @@ export class StructuredJsonTransport extends LogTransportInterface {
         args: rec.args?.map(stringify),
       };
       // Avoid console formatting; write raw line
-      process.stdout.write(JSON.stringify(payload) + '\n');
+      process.stdout.write(JSON.stringify(payload) + '
+');
     } catch (err) {
       // Never throw from a transport
     }
@@ -107,15 +105,13 @@ function stringify(x: unknown) {
 }
 ```
 
-**Register** it:
+Register it:
 
 ```ts
 logging: { level: LogLevel.Info, enableConsole: false, transports: [StructuredJsonTransport] }
 ```
 
----
-
-## Example 2 — HTTP batch transport (non‑blocking)
+## Example: HTTP batch transport (non‑blocking)
 
 Buffer records in memory and POST them in batches. Implements basic retry with backoff.
 
@@ -174,14 +170,12 @@ async function postJson(url: string, body: unknown) {
 }
 ```
 
-**Notes**
+Notes:
 
 * Keep batches small and time‑bounded; avoid blocking the event loop.
 * On process exit, you may add a `beforeExit`/`SIGTERM` handler to flush synchronously.
 
----
-
-## Prefixes & levels
+## Prefixes and levels
 
 * `logging.prefix` adds a static scope tag to all records (e.g., app name or environment).
 * Transports receive `rec.level` and `rec.levelName`; the framework already filtered below‑level logs.
@@ -194,26 +188,10 @@ logging: {
 }
 ```
 
----
-
-## Testing your transport
-
-1. Start your server with your transport registered.
-2. Trigger some logs (e.g., tool execution, startup).
-3. Verify output or remote ingestion.
-
-For local JSONL, tail your logs:
-
-```bash
-node app.js | jq -c .
-```
-
----
-
 ## Best practices
 
-* **Never throw** from `log()`; swallow and self‑heal.
-* **Avoid heavy sync I/O**; prefer buffering and async flush.
-* **Redact** sensitive fields before emit (tokens, PII).
-* **Serialize** `Error` objects explicitly (name, message, stack).
-* **Backpressure**: if the sink is down, drop or sample rather than blocking the server.
+* Never throw from `log()`; swallow and self‑heal.
+* Avoid heavy sync I/O; prefer buffering and async flush.
+* Redact sensitive fields before emit (tokens, PII).
+* Serialize `Error` objects explicitly (name, message, stack).
+* Apply backpressure: if the sink is down, drop or sample rather than blocking the server.
