@@ -79,14 +79,9 @@
                 "icon": "shield-check",
                 "pages": [
                   "servers/authentication/overview",
-                  "servers/authentication/authorization",
-                  {
-                    "group": "Remote OAuth",
-                    "pages": [
-                      "servers/authentication/remote",
-                      "servers/authentication/remote-proxy"
-                    ]
-                  },
+                  "servers/authentication/token",
+                  "servers/authentication/remote",
+                  "servers/authentication/remote-proxy",
                   "servers/authentication/local"
                 ]
               },
