@@ -90,7 +90,7 @@ export class StructuredJsonTransport extends LogTransportInterface {
         args: rec.args?.map(stringify),
       };
       // Avoid console formatting; write raw line
-      process.stdout.write(JSON.stringify(payload) + '');
+      process.stdout.write(JSON.stringify(payload) + '\n');
     } catch (err) {
       // Never throw from a transport
     }
@@ -148,7 +148,11 @@ export class HttpBatchTransport extends LogTransportInterface {
   }
 
   private async flush() {
-    /* do you batch flush http request*/
+    // TODO: Implement batch flush logic
+    // - Extract batch from queue
+    // - POST to this.endpoint
+    // - Handle errors and implement retry with backoff
+    // - Reset flushing flag and timer
   }
 }
 

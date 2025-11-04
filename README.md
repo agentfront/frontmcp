@@ -309,25 +309,21 @@ You can configure auth on the server (multi-app shared) or per app (isolated sco
 ```ts
 auth: {
   type: 'remote',
-    name
-:
-  'frontegg',
-    baseUrl
-:
-  'https://idp.example.com',
-    dcrEnabled ? : boolean,
-    clientId ? : string | ((info: { clientId: string }) => string),
-    mode ? : 'orchestrated' | 'transparent',
-    allowAnonymous ? : boolean,
-    consent ? : boolean,
-    scopes ? : string[],
-    grantTypes ? : ('authorization_code' | 'refresh_token')[],
-    authEndpoint ? : string,
-    tokenEndpoint ? : string,
-    registrationEndpoint ? : string,
-    userInfoEndpoint ? : string,
-    jwks ? : JSONWebKeySet,
-    jwksUri ? : string
+  name : 'frontegg', 
+  baseUrl: 'https://idp.example.com',
+  dcrEnabled ? : boolean,
+  clientId ? : string | ((info: { clientId: string }) => string),
+  mode ? : 'orchestrated' | 'transparent',
+  allowAnonymous ? : boolean,
+  consent ? : boolean,
+  scopes ? : string[],
+  grantTypes ? : ('authorization_code' | 'refresh_token')[],
+  authEndpoint ? : string,
+  tokenEndpoint ? : string,
+  registrationEndpoint ? : string,
+  userInfoEndpoint ? : string,
+  jwks ? : JSONWebKeySet,
+  jwksUri ? : string
 }
 ```
 
@@ -432,8 +428,7 @@ pnpm dev
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a “version mismatch” error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core`on
-the **same version** across your workspace.
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core` on the **same version** across your workspace.
 
 ---
 

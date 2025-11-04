@@ -45,7 +45,12 @@ export default class Server {}
 Enable consent to let users select the **tools/resources/prompts** they grant, producing a **scoped token**.
 
 ```ts
-auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://idp.example.com', consent: true }
+auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://idp.example.com',
+    consent: true
+}
 ```
 
 You can still send classic OAuth scopes via `scopes: string[]`.
