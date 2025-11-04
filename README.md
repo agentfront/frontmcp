@@ -1,291 +1,448 @@
-# MCP Gateway
+<div align="center">
 
-Build **Model Context Protocol (MCP)** servers with a strongly‑typed, extensible framework. MCP Gateway gives you first‑class primitives for **Tools**, **Plugins**, **Hooks**, **Providers**, and optional **Adapters**—so you can focus on product logic, not plumbing.
+# FrontMCP 🚀
 
-MIT‑licensed • Nx monorepo • TypeScript‑first
+<strong>The TypeScript-first way to build production-grade MCP servers.</strong>
 
-<p align="center">
-  <a href="#features">Features</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#key-concepts">Key concepts</a> ·
-  <a href="#using-plugins">Plugins</a> ·
-  <a href="#project-layout">Project layout</a> ·
-  <a href="#contributing-and-development">Contributing</a> ·
-  <a href="#roadmap">Roadmap</a> ·
-  <a href="#license">License</a>
-</p>
+*Made with ❤️ for TypeScript developers*
+
+[![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg)](https://www.npmjs.com/package/@frontmcp/sdk)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![License](https://img.shields.io/github/license/agentfront/frontmcp.svg)](./LICENSE)
+
+</div>
 
 ---
 
-## Overview
-
-**MCP Gateway** is a batteries‑included runtime for building MCP servers. Define tools with decorators and **Zod** schemas, compose cross‑cutting concerns via **hook stages**, and extend behavior with a simple yet powerful **plugin system**. The repo is organized as an **Nx** workspace with multiple libraries under `libs` and example applications under `apps`.
-
----
-
-## Features
-
-* **Tool‑centric DX**
-
-  * Define tools with `@McpTool`, Zod input/output schemas, and a single async `execute`.
-  * Hook stages let you parse/validate input, authorize, collect metrics, and redact output.
-* **Extensible plugins**
-
-  * Plugins can contribute dynamic providers and global tool hooks.
-  * Configure plugins with static options or DI‑powered factories (`inject` + `useFactory`).
-* **Dependency Injection (DI)**
-
-  * Lightweight provider registry with tokens and scopes (global/session/request).
-  * Dynamic providers resolved early in the app lifecycle.
-* **TypeScript‑first**
-
-  * Strong typing for tool metadata via global declaration merging.
-* **Ready‑to‑use Cache plugin**
-
-  * Per‑tool opt‑in caching with TTL & sliding window semantics.
-  * Memory and Redis stores supported.
-
----
-
-## Quick start
-
-### Prerequisites
-
-* Node.js **>= 20**
-* **Yarn** (the workspace uses Yarn; pnpm/npm can work, examples assume Yarn)
-
-### Install
-
-```bash
-yarn install
-```
-
-### Build core libraries
-
-```bash
-yarn nx build common
-yarn nx build core
-yarn nx build plugins
-```
-
-### Run the example Expenses MCP app (watch mode)
-
-```bash
-yarn nx serve expenses
-```
-
-The example lives at `apps/expenses` and demonstrates tool definitions and plugin usage (Cache).
-
-> **Tip:** `yarn nx graph` to explore project dependency graphs.
-
----
-
-## Key concepts
-
-### App
-
-Decorate a class with `@McpApp({ name, providers, adapters?, plugins, tools })` to define your server entry.
+FrontMCP is a **TypeScript-first framework** for the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
+You describe servers, apps, tools, resources, and prompts with decorators; FrontMCP handles protocol, transport, DI,
+session/auth, and execution flow.
 
 ```ts
-import { McpApp } from '@frontmcp/sdk';
-import CachePlugin from '@frontmcp/plugins/cache';
-import CreateExpense from './tools/create-expense.tool';
+// src/main.ts
+import {FrontMcp, LogLevel} from '@frontmcp/sdk';
+import HelloApp from './hello.app';
 
-@McpApp({
-  name: 'expense-mcp',
-  plugins: [CachePlugin],
-  tools: [CreateExpense],
-  // providers: [...],
-  // adapters: [...],
+@FrontMcp({
+  info: {name: 'Demo 🚀', version: '0.1.0'},
+  apps: [HelloApp],
+  http: {port: 3001},
+  logging: {level: LogLevel.Info},
 })
-export default class ExpenseMcp {}
+export default class Server {
+}
+````
+
+---
+
+<!-- omit in toc -->
+
+## Table of Contents
+
+* [Why FrontMCP?](#why-frontmcp)
+* [Installation](#installation)
+* [Quickstart](#quickstart)
+
+    * [Minimal Server & App](#minimal-server--app)
+    * [Function and Class Tools](#function-and-class-tools)
+    * [Scripts & tsconfig](#scripts--tsconfig)
+    * [MCP Inspector](#mcp-inspector)
+* [Core Concepts](#core-concepts)
+
+    * [Servers](#servers)
+    * [Apps](#apps)
+    * [Tools](#tools)
+    * [Resources](#resources)
+    * [Prompts](#prompts)
+    * [Providers](#providers)
+    * [Adapters](#adapters)
+    * [Plugins](#plugins)
+* [Authentication](#authentication)
+
+    * [Remote OAuth](#remote-oauth)
+    * [Local OAuth](#local-oauth)
+* [Sessions & Transport](#sessions--transport)
+* [Logging Transports](#logging-transports)
+* [Deployment](#deployment)
+
+    * [Local Dev](#local-dev)
+    * [Production](#production)
+* [Version Alignment](#version-alignment)
+* [Contributing](#contributing)
+* [License](#license)
+
+---
+
+## Why FrontMCP?
+
+* **TypeScript-native DX** — decorators, Zod validation, strong typing end-to-end
+* **Spec-aligned transports** — Streamable HTTP (GET/POST), streaming, sessions
+* **Scoped invoker + DI** — secure, composable execution with hooks
+* **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
+* **Auth** — remote OAuth (external IdP) or built-in local OAuth
+* **Logging** — pluggable log transports (console, JSONL, HTTP batch, …)
+
+---
+
+## Installation
+
+Choose your package manager:
+
+```bash
+# npm
+npm i -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+npm i -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
+
+# yarn
+yarn add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+yarn add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
+
+# pnpm
+pnpm add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+pnpm add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 ```
+
+> Requires **Node 20+**.
+
+---
+
+## Quickstart
+
+### Minimal Server & App
+
+```
+src/
+  main.ts
+  hello.app.ts
+  tools/
+    greet.tool.ts
+```
+
+**`src/main.ts`**
+
+```ts
+import 'reflect-metadata';
+import {FrontMcp, LogLevel} from '@frontmcp/sdk';
+import HelloApp from './hello.app';
+
+@FrontMcp({
+  info: {name: 'Hello MCP', version: '0.1.0'},
+  apps: [HelloApp],
+  http: {port: Number(process.env.PORT) || 3001},
+  logging: {level: LogLevel.Info},
+})
+export default class Server {
+}
+```
+
+**`src/hello.app.ts`**
+
+```ts
+import {App} from '@frontmcp/sdk';
+import GreetTool from './tools/greet.tool';
+
+@App({id: 'hello', name: 'Hello', tools: [GreetTool]})
+export default class HelloApp {
+}
+```
+
+### Function and Class Tools
+
+**Function tool**
+
+```ts
+import {tool} from '@frontmcp/sdk';
+import {z} from 'zod';
+
+export default tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: z.object({name: z.string()}),
+})(({name}) => `Hello, ${name}!`);
+```
+
+**Class tool**
+
+```ts
+import {Tool} from '@frontmcp/sdk';
+import {z} from 'zod';
+
+@Tool({
+  name: 'add',
+  description: 'Add two numbers',
+  inputSchema: z.object({a: z.number(), b: z.number()}),
+})
+export default class AddTool {
+  execute({a, b}: { a: number; b: number }) {
+    return a + b;
+  }
+}
+```
+
+### Scripts & tsconfig
+
+**`tsconfig.json`**
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": [
+      "ES2020"
+    ],
+    "rootDir": "src",
+    "outDir": "dist",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/__tests__/**"
+  ]
+}
+```
+
+**`tsconfig.build.json`**
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "sourceMap": false
+  },
+  "exclude": [
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "src/**/*.dev.ts"
+  ]
+}
+```
+
+**`package.json` (scripts)**
+
+```json
+{
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start:dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rimraf dist",
+    "inspect:dev": "npx @modelcontextprotocol/inspector tsx src/main.ts",
+    "inspect:dist": "npx @modelcontextprotocol/inspector node dist/main.js"
+  }
+}
+```
+
+> Always import **`reflect-metadata` first** in your entry to enable decorator metadata.
+
+### MCP Inspector
+
+Debug your server with a browser UI:
+
+```bash
+# Dev (runs TS)
+npm run inspect:dev
+# Dist (runs built JS)
+npm run inspect:dist
+```
+
+---
+
+## Core Concepts
+
+### Servers
+
+The decorated entry (`@FrontMcp`) defines server **info**, **apps**, **http**, **logging**, **session**, optional **auth
+**, and shared **providers**.
+
+### Apps
+
+Use `@App` to group **tools**, **resources**, **prompts**, **providers**, **adapters**, and **plugins**. With
+`splitByApp: true`, each app has its own scope/base path and (optionally) its own auth.
 
 ### Tools
 
-A class annotated with `@McpTool({ name, description, inputSchema, outputSchema, ... })` and an async `execute(input, ctx)`.
+Active actions with input/output schemas. Use class tools (`@Tool`) or function tools (`tool({...})(handler)`).
 
-Hooks can participate in the tool lifecycle: `@WillParseInput`, `@WillValidateInput`, `@CanActivate`, `@WillRedactOutput`, `@OnMetrics`, `@AroundExecute`.
+### Resources
 
-```ts
-import z from 'zod';
-import { McpTool, ToolInvokeContext } from '@frontmcp/sdk';
+Expose read-only data by URI. Define with `@Resource` or `resource(...)` (see docs).
 
-const inputSchema = { id: z.string().min(1) };
-const outputSchema = { ok: z.string() };
+### Prompts
 
-type In = z.baseObjectInputType<typeof inputSchema>;
-type Out = z.baseObjectOutputType<typeof outputSchema>;
+Reusable prompt templates (`@Prompt` / `prompt(...)`) supplying arguments for LLM interactions.
 
-@McpTool({ name: 'hello', description: 'Example tool', inputSchema, outputSchema })
-export default class HelloTool {
-  async execute(input: In, _ctx: ToolInvokeContext<In, Out>): Promise<Out> {
-    return { ok: `Hello ${input.id}` };
-  }
-}
-```
+### Providers
 
-### Providers (DI)
+Dependency-injected singletons for config/DB/Redis/KMS/etc., with scopes: **GLOBAL**, **SESSION**, **REQUEST**.
 
-Register tokens and concrete providers; resolve them in `ctx.get(Token)` from within tools and hooks. Providers can be **global**, **session**, or **request** scoped.
+### Adapters
 
-```ts
-import { McpProvider, Scope } from '@frontmcp/sdk';
-
-@McpProvider({ name: 'config', scope: Scope.GLOBAL })
-export class ConfigProvider {
-  get(key: string) { /* read from env/files */ }
-}
-```
+Generate tools/resources/prompts from external definitions (e.g., **OpenAPI**).
 
 ### Plugins
 
-Extend `DynamicPlugin<TOptions>` and decorate with `@McpPlugin` to contribute providers/adapters/tools and global tool hooks. Initialize with a value via `init({ ... })` or factory via `init({ inject, useFactory })`.
+Cross-cutting behavior (caching, tracing, policy). Plugins can contribute providers/adapters/tools/resources/prompts.
+
+---
+
+## Authentication
+
+You can configure auth on the server (multi-app shared) or per app (isolated scopes).
+
+### Remote OAuth
 
 ```ts
-import CachePlugin from '@frontmcp/plugins/cache';
-
-@McpApp({
-  name: 'my-app',
-  plugins: [
-    CachePlugin,
-    // or customize:
-    // CachePlugin.init({ defaultTTL: 300 })
-    // or factory style with DI:
-    // CachePlugin.init({
-    //   inject: () => [ConfigProvider],
-    //   useFactory: (cfg: ConfigProvider) => ({ defaultTTL: cfg.get('cache.ttl') })
-    // })
-  ],
-  tools: [/* your tools */],
-})
-export class MyApp {}
+auth: {
+  type: 'remote',
+  name : 'frontegg', 
+  baseUrl: 'https://idp.example.com',
+  dcrEnabled ? : boolean,
+  clientId ? : string | ((info: { clientId: string }) => string),
+  mode ? : 'orchestrated' | 'transparent',
+  allowAnonymous ? : boolean,
+  consent ? : boolean,
+  scopes ? : string[],
+  grantTypes ? : ('authorization_code' | 'refresh_token')[],
+  authEndpoint ? : string,
+  tokenEndpoint ? : string,
+  registrationEndpoint ? : string,
+  userInfoEndpoint ? : string,
+  jwks ? : JSONWebKeySet,
+  jwksUri ? : string
+}
 ```
 
-### Hooks (tool lifecycle)
-
-Global tool hooks are contributed by plugins using `@ToolHook(ToolHookStage.someStage)`. Per‑tool hooks use the decorators listed above.
+### Local OAuth
 
 ```ts
-import { ToolHook, ToolHookStage } from '@frontmcp/sdk';
+auth: {
+  type: 'local',
+    id
+:
+  'local',
+    name
+:
+  'Local Auth',
+    scopes ? : string[],
+    grantTypes ? : ('authorization_code' | 'refresh_token')[],
+    allowAnonymous ? : boolean, // default true
+    consent ? : boolean,
+    jwks ? : JSONWebKeySet,
+    signKey ? : JWK | Uint8Array
+}
+```
 
-@ToolHook(ToolHookStage.CanActivate)
-export class RequireAuthHook {
-  async run(ctx) {
-    const user = await ctx.get(AuthProvider).currentUser();
-    if (!user) throw new Error('Unauthorized');
+> With `splitByApp: true`, define auth **per `@App`** (server-level `auth` is disallowed).
+
+---
+
+## Sessions & Transport
+
+```ts
+session: {
+  sessionMode ? : 'stateful' | 'stateless' | ((issuer) =>
+...), // default 'stateless'
+  transportIdMode ? : 'uuid' | 'jwt' | ((issuer) =>
+...),       // default 'uuid'
+}
+```
+
+* **Stateful**: server-side store for tokens; enables refresh; recommended for short-lived upstream tokens.
+* **Stateless**: tokens embedded in JWT; simpler but no silent refresh.
+* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups).
+
+---
+
+## Logging Transports
+
+Add custom log sinks via `@LogTransport`:
+
+```ts
+import {LogTransport, LogTransportInterface, LogRecord} from '@frontmcp/sdk';
+
+@LogTransport({name: 'StructuredJson', description: 'JSONL to stdout'})
+export class StructuredJsonTransport extends LogTransportInterface {
+  log(rec: LogRecord): void {
+    try {
+      process.stdout.write(JSON.stringify({
+        ts: rec.timestamp.toISOString(),
+        level: rec.levelName,
+        msg: String(rec.message),
+        prefix: rec.prefix || undefined,
+        args: (rec.args || []).map(String),
+      }) + '\n');
+    } catch {
+    }
   }
 }
 ```
 
-### Adapters (optional)
-
-Adapters allow integration points to external runtimes/transports (e.g., HTTP, CLI, custom bridges). Apps and plugins can contribute adapters and participate in adapter initialization via future adapter hooks.
-
----
-
-## Using plugins
-
-See the plugins index for a catalog and contributor guidance:
-
-* Plugins index: `./libs/plugins/README.md`
-* Cache plugin docs: `./libs/plugins/src/cache/README.md`
-
-**Per‑tool opt‑in caching** (default memory store, 1‑day TTL unless overridden):
+Register:
 
 ```ts
-@McpTool({
-  name: 'get-expense-by-id',
-  inputSchema,
-  outputSchema,
-  cache: { ttl: 60, slideWindow: true },
-})
-```
-
-**Redis‑backed caching** (configure via plugin options or DI factory):
-
-```ts
-CachePlugin.init({
-  store: 'redis',
-  redis: { host: '127.0.0.1', port: 6379 },
-  defaultTTL: 300,
-});
+logging: {
+  level: LogLevel.Info,
+    enableConsole
+:
+  false,
+    transports
+:
+  [StructuredJsonTransport],
+}
 ```
 
 ---
 
-## Project layout
+## Deployment
 
-```
-apps/
-  expenses/            # Example MCP app
-libs/
-  common/              # Shared types, decorators, plugin base (DynamicPlugin)
-  core/                # Runtime: registries, metadata utils, execution pipeline
-  plugins/             # First‑party plugins (e.g., Cache)
-```
-
----
-
-## Contributing and Development
-
-We welcome issues and PRs! To work locally:
-
-### Build & run
+### Local Dev
 
 ```bash
-yarn install
-yarn nx build common core plugins
-yarn nx serve expenses
+# npm
+npm run dev
+# yarn
+yarn dev
+# pnpm
+pnpm dev
 ```
 
-### Test, lint, format
-
-```bash
-yarn nx test [project]
-yarn nx lint [project]
-yarn nx format:check
-```
-
-### Coding standards
-
-* TypeScript, strict typing favored
-* Keep public APIs minimal and documented
-* Prefer small, composable hooks and providers
-* Update or add docs (e.g., plugin READMEs) with behavior changes
-
-### PR guidelines
-
-* Keep PRs focused and include a clear rationale
-* Add tests where practical
-* Document new hooks/providers/plugins
+* HTTP default: `http.port` (e.g., 3001)
+* `http.entryPath` defaults to `''` (set to `/mcp` if you prefer)
 
 ---
 
-## Roadmap
+## Version Alignment
 
-The hook surface is evolving. Planned families:
-
-* **AppHook**: bootstrap/shutdown lifecycle
-* **HttpHook**: inbound/outbound request observation & mutation
-* **AuthHook**: authentication/authorization lifecycle
-* **AdapterHooks**: adapter initialization/configuration
-* **IO hooks**: monitor and optionally block filesystem/native calls
-
-(Placeholders may exist to help authors prepare for future capabilities.)
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core` on the **same version** across your workspace.
 
 ---
 
-## FAQ
+## Contributing
 
-**Is this MCP‑spec compliant?**  MCP Gateway is a framework to build MCP servers. Adapters can expose your tools over your chosen transport; see examples and plugins for guidance.
+PRs welcome! Please:
 
-**Do I have to use Yarn?**  No, but the workspace is configured for Yarn and the docs assume it.
-
-**Can I bring my own cache store?**  Yes—implement a plugin or extend the Cache plugin with a compatible store.
+* Keep changes focused and tested
+* Run `typecheck`, `build`, and try **MCP Inspector** locally
+* Align `@frontmcp/*` versions in examples
 
 ---
 
 ## License
 
-MIT © MCP Gateway contributors
+See [LICENSE](./LICENSE).
+

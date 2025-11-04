@@ -1,4 +1,4 @@
-import {App, FrontMcpApp} from '@frontmcp/sdk';
+import {App} from '@frontmcp/sdk';
 
 import CreateExpenseTool from './tools/create-expense.tool';
 import {ExpenseConfigProvider,} from './provders';
@@ -7,7 +7,7 @@ import CachePlugin from '@frontmcp/plugins/cache';
 // import {SessionRedisProvider} from "../../expense-mcp/provders";
 import OpenapiAdapter from "@frontmcp/adapters/openapi";
 
-@FrontMcpApp({
+@App({
   id: 'expense',
   name: 'Expense MCP app',
   providers: [
