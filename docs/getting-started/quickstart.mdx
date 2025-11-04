@@ -8,8 +8,6 @@ Welcome! This guide will help you quickly set up FrontMcp, run your first MCP se
 
 If you haven't already installed FrontMcp, follow the [installation instructions](/getting-started/installation).
 
-In ~5 minutes you’ll have a running MCP server with a typed tool.
-
 ## 1) Create you FrontMCP server
 
 ```ts
@@ -29,7 +27,7 @@ export default class HelloServer {}
 ## 2) Define an app
 
 ```ts
-// apps/hello/src/hello.app.ts
+// src/hello.app.ts
 import { App } from '@frontmcp/sdk';
 import GreetTool from './tools/greet.tool';
 
@@ -44,7 +42,7 @@ export default class HelloApp {}
 ## 3) Add your first tool
 
 ```ts
-// apps/hello/src/tools/greet.tool.ts
+// src/tools/greet.tool.ts
 import { Tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
@@ -67,7 +65,7 @@ Add scripts:
 ```json
 {
   "scripts": {
-    "dev": "tsx apps/hello/src/main.ts",
+    "dev": "tsx src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/apps/hello/main.js"
   }
@@ -82,7 +80,8 @@ npm run dev
 ```
 
 <Tip>
-    FrontMCP speaks **MCP Streamable HTTP**. You can connect any MCP-capable client and call the `greet` tool with `{ "name": "Ada" }`.
+    FrontMCP speaks **MCP Streamable HTTP**. You can connect any MCP-capable client and call the `greet` tool with
+    `{"name": "Ada"}`.
 </Tip>
 
 ## What’s next
