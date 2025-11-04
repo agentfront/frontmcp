@@ -21,13 +21,13 @@
   "navbar": {
     "links": [
       {
-        "href": "https://github.com/frontmcp/frontmcp",
+        "href": "https://github.com/agentfront/frontmcp",
         "icon": "github",
         "label": "GitHub"
       }
     ],
     "primary": {
-      "href": "https://github.com/frontmcp/frontmcp",
+      "href": "https://github.com/agentfront/frontmcp",
       "type": "github"
     }
   },
@@ -67,8 +67,36 @@
                   "servers/apps",
                   "servers/providers",
                   "servers/http",
-                  "servers/logging",
-                  "servers/authentication"
+                  "servers/logging"
+                ]
+              },
+              {
+                "group": "Code Components",
+                "icon": "cube",
+                "pages": [
+                  "servers/tools",
+                  "servers/resources",
+                  "servers/prompts"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "icon": "shield-check",
+                "pages": [
+                  "servers/authentication/overview",
+                  "servers/authentication/remote",
+                  "servers/authentication/proxy",
+                  "servers/authentication/session",
+                  "servers/authentication/token-verification"
+                ]
+              },
+              {
+                "group": "Extensibility",
+                "icon": "puzzle",
+                "pages": [
+                  "servers/extensibility/providers-di",
+                  "servers/extensibility/adapters",
+                  "servers/extensibility/plugins"
                 ]
               },
               {
@@ -127,9 +155,9 @@
           {
             "group": "Deployment",
             "pages": [
-              "deployment/running",
-              "deployment/http",
-              "deployment/configuration"
+              "deployment/dev-mode",
+              "deployment/docker",
+              "deployment/production"
             ]
           }
         ]
