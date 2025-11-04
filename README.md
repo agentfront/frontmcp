@@ -304,46 +304,39 @@ You can configure auth on the server (multi-app shared) or per app (isolated sco
 
 ```ts
 auth: {
-  type: 'remote',
-    name
-:
-  'frontegg',
-    baseUrl
-:
-  'https://idp.example.com',
-    dcrEnabled ? : boolean,
-    clientId ? : string | ((info: { clientId: string }) => string),
-    mode ? : 'orchestrated' | 'transparent',
-    allowAnonymous ? : boolean,
-    consent ? : boolean,
-    scopes ? : string[],
-    grantTypes ? : ('authorization_code' | 'refresh_token')[],
-    authEndpoint ? : string,
-    tokenEndpoint ? : string,
-    registrationEndpoint ? : string,
-    userInfoEndpoint ? : string,
-    jwks ? : JSONWebKeySet,
-    jwksUri ? : string
+  type: 'remote', 
+  name: 'frontegg',
+  baseUrl: 'https://idp.example.com',
+  dcrEnabled ? : boolean,
+  clientId ? : string | ((info: { clientId: string }) => string),
+  mode ? : 'orchestrated' | 'transparent',
+  allowAnonymous ? : boolean,
+  consent ? : boolean,
+  scopes ? : string[],
+  grantTypes ? : ('authorization_code' | 'refresh_token')[],
+  authEndpoint ? : string,
+  tokenEndpoint ? : string,
+  registrationEndpoint ? : string,
+  userInfoEndpoint ? : string,
+  jwks ? : JSONWebKeySet,
+  jwksUri ? : string
 }
 ```
 
 ### Local OAuth
 
 ```ts
+{
 auth: {
   type: 'local',
-    id
-:
-  'local',
-    name
-:
-  'Local Auth',
-    scopes ? : string[],
-    grantTypes ? : ('authorization_code' | 'refresh_token')[],
-    allowAnonymous ? : boolean, // default true
-    consent ? : boolean,
-    jwks ? : JSONWebKeySet,
-    signKey ? : JWK | Uint8Array
+  id: 'local', 
+  name: 'Local Auth',
+  scopes?: string[],
+  grantTypes?: ('authorization_code' | 'refresh_token')[],
+  allowAnonymous?: boolean, // default true
+  consent?: boolean,
+  jwks?: JSONWebKeySet,
+  signKey?: JWK | Uint8Array
 }
 ```
 
@@ -396,13 +389,9 @@ Register:
 
 ```ts
 logging: {
-  level: LogLevel.Info,
-    enableConsole
-:
-  false,
-    transports
-:
-  [StructuredJsonTransport],
+  level: LogLevel.Info, 
+  enableConsole: false, 
+  transports : [StructuredJsonTransport],
 }
 ```
 

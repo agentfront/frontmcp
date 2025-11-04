@@ -1,11 +1,11 @@
-import { ClassType, FactoryType, Token, Type, ValueType } from './base.interface';
-import { ToolType } from './tool.interface';
-import { ResourceType } from './resource.interface';
-import { PromptType } from './prompt.interface';
-import { AdapterMetadata } from '../metadata';
+import {ClassType, FactoryType, Token, Type, ValueType} from './base.interface';
+import {ToolType} from './tool.interface';
+import {ResourceType} from './resource.interface';
+import {PromptType} from './prompt.interface';
+import {AdapterMetadata} from '../metadata';
 
 export interface AdapterInterface {
-  options: {name:string} & any;
+  options: { name: string } & Record<string, unknown>;
   fetch: () => Promise<FrontMcpAdapterResponse> | FrontMcpAdapterResponse;
 }
 
@@ -23,7 +23,7 @@ export type AdapterFactoryType<Provide, Tokens extends readonly Token[]> =
   & AdapterMetadata;
 
 
-export type AdapterType<Provide extends AdapterInterface=any> =
+export type AdapterType<Provide extends AdapterInterface = any> =
   | Type<Provide>
   | AdapterClassType<Provide>
   | AdapterValueType<Provide>
