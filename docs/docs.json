@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "FrontMCP",
-  "description": "A TypeScript-first framework for building Model Context Protocol (MCP) servers",
+  "description": "A TypeScript-first framework for building production ready Model Context Protocol (MCP) servers",
   "appearance": {
     "default": "system",
     "strict": false
@@ -13,7 +13,10 @@
     "dark": "#15803D"
   },
   "contextual": {
-    "options": ["copy", "view"]
+    "options": [
+      "copy",
+      "view"
+    ]
   },
   "interaction": {
     "drilldown": true
@@ -21,9 +24,9 @@
   "navbar": {
     "links": [
       {
-        "href": "https://github.com/agentfront/frontmcp",
+        "href": "https://github.com/agentfront/frontmcp-examples",
         "icon": "github",
-        "label": "GitHub"
+        "label": "Examples"
       }
     ],
     "primary": {
@@ -51,29 +54,21 @@
           {
             "group": "Get Started",
             "pages": [
+              "getting-started/welcome",
               "getting-started/quickstart",
               "getting-started/installation",
-              "getting-started/welcome"
+              "getting-started/updates"
             ]
           },
           {
             "group": "Servers",
             "pages": [
-              "servers/server",
+              "servers/overview",
               {
                 "group": "Core Components",
                 "icon": "toolbox",
                 "pages": [
                   "servers/apps",
-                  "servers/providers",
-                  "servers/http",
-                  "servers/logging"
-                ]
-              },
-              {
-                "group": "Code Components",
-                "icon": "cube",
-                "pages": [
                   "servers/tools",
                   "servers/resources",
                   "servers/prompts"
@@ -84,70 +79,39 @@
                 "icon": "shield-check",
                 "pages": [
                   "servers/authentication/overview",
-                  "servers/authentication/remote",
-                  "servers/authentication/proxy",
-                  "servers/authentication/session",
-                  "servers/authentication/token-verification"
+                  "servers/authentication/authorization",
+                  {
+                    "group": "Remote OAuth",
+                    "pages": [
+                      "servers/authentication/remote",
+                      "servers/authentication/remote-proxy"
+                    ]
+                  },
+                  {
+                    "group": "Local OAuth",
+                    "pages": [
+                      "servers/authentication/local",
+                      "servers/authentication/local-proxy"
+                    ]
+                  }
                 ]
               },
               {
-                "group": "Extensibility",
-                "icon": "puzzle",
+                "group": "Extensibility Components",
+                "icon": "toolbox",
                 "pages": [
-                  "servers/extensibility/providers-di",
-                  "servers/extensibility/adapters",
-                  "servers/extensibility/plugins"
+                  "servers/providers",
+                  "servers/adapters",
+                  "servers/plugins"
                 ]
               },
               {
-                "group": "Advanced",
-                "icon": "stars",
+                "group": "Advanced Components",
+                "icon": "cube",
                 "pages": [
-                  "servers/serve-flag",
-                  "servers/tokens",
-                  "servers/errors"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "Configuration",
-            "pages": [
-              "configuration/metadata",
-              {
-                "group": "Options",
-                "icon": "settings",
-                "pages": [
-                  "configuration/options/apps",
-                  "configuration/options/providers",
-                  "configuration/options/http",
-                  "configuration/options/logging",
-                  "configuration/options/authentication"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "SDK Reference",
-            "pages": [
-              {
-                "group": "Decorators",
-                "pages": [
-                  "api/decorators/front-mcp"
-                ]
-              },
-              {
-                "group": "Common",
-                "pages": [
-                  "typescript-sdk/common/tokens",
-                  "typescript-sdk/common/metadata"
-                ]
-              },
-              {
-                "group": "Core",
-                "pages": [
-                  "typescript-sdk/core/instance",
-                  "typescript-sdk/core/transports"
+                  "servers/flows",
+                  "servers/hooks",
+                  "servers/auth-providers"
                 ]
               }
             ]
@@ -155,9 +119,63 @@
           {
             "group": "Deployment",
             "pages": [
-              "deployment/dev-mode",
-              "deployment/docker",
-              "deployment/production"
+              "deployment/local-dev-server",
+              "deployment/production-build"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/build-a-server",
+              "guides/write-a-tool",
+              "guides/customize-flow-stages",
+              "guides/add-openapi-adapter",
+              "guides/use-providers-and-di",
+              "guides/proxy-auth",
+              "guides/session-consent-ux",
+              "guides/caching-and-cache-miss",
+              "guides/rate-limits-and-semaphores",
+              "guides/transport-selection-rules"
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "SDK Reference",
+        "icon": "code",
+        "groups": [
+          {
+            "group": "common",
+            "pages": [
+              {
+                "group": "Decorators",
+                "pages": [
+                  "sdk/common/decorators"
+                ]
+              },
+              {
+                "group": "Interfaces & Types",
+                "pages": [
+                  "sdk/common/interfaces"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "core",
+            "pages": [
+              {
+                "group": "Decorators",
+                "pages": [
+                  "sdk/core/decorators"
+                ]
+              },
+              {
+                "group": "Interfaces & Types",
+                "pages": [
+                  "sdk/core/interfaces"
+                ]
+              }
             ]
           }
         ]
