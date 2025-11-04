@@ -87,13 +87,7 @@
                       "servers/authentication/remote-proxy"
                     ]
                   },
-                  {
-                    "group": "Local OAuth",
-                    "pages": [
-                      "servers/authentication/local",
-                      "servers/authentication/local-proxy"
-                    ]
-                  }
+                  "servers/authentication/local"
                 ]
               },
               {

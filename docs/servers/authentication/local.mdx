@@ -1,23 +1,48 @@
 ---
 title: Local OAuth
 slug: servers/authentication/local
+icon: lock
 ---
 
-Use Local OAuth for development or simple deployments. The FrontMCP server provides a built-in local authorization server.
+FrontMCP ships a **built‑in OAuth provider** for first‑party scenarios for development.
 
-Server-level config
+### Configuration
+```ts
+auth: {
+  type: 'local',
+  id: 'local',
+  name: 'Local Auth',
+  scopes?: string[],
+  grantTypes?: ('authorization_code' | 'refresh_token')[],
+  allowAnonymous?: boolean,  // default true
+  consent?: boolean,
+  jwks?: JSONWebKeySet,      // inline JWKS (optional)
+  signKey?: JWK | Uint8Array // private key (optional; auto‑generated if omitted)
+}
 ```
+
+### Example (per app, split‑by‑app server)
+```ts
 @FrontMcp({
-  auth: { type: 'local' },
-  apps: [...]
+  info: { name: 'Workspace', version: '1.0.0' },
+  auth: { type:'local' },
+  apps: [DocsApp, MailApp],
+  splitByApp: true
 })
+export default class Server {}
+
+@FrontMcpApp({
+  name: 'Docs'
+})
+export default class DocsApp {}
 ```
 
-Behavior
-- Tokens are issued by the local server
-- Suitable for local runs and low-stakes environments
-- You can migrate to Remote later with minimal changes
+<Warning>
+    When using `splitByApp: true`, define auth per app; server‑level `auth` is not allowed.
+</Warning>
 
-Tips
-- Pair with http.entryPath when hosting multiple servers behind one domain
-- Use hooks to enforce per-tool authorization policies
+---
+
+## Keys & JWKS
+- Omit `signKey` to auto‑generate keys (exposed via the local JWKS endpoint).
+- Provide `jwks` or `signKey` to pin keys for stable environments.

@@ -1,24 +1,36 @@
 ---
 title: Authorization
 slug: servers/authentication/authorization
+icon: key-round
 ---
 
-Authentication verifies identity; authorization decides what an identity can do.
+Authorization determines **what** a token may do.
 
-Ways to authorize tool execution
-- Hook-based checks at specific stages (will/did/around) per tool or globally
-- Provider-driven policies injected into tools
-- Per-app scopes when splitByApp is enabled
-
-Example (conceptual)
-```
-// In a hook: deny if user lacks permission
-if (!ctx.user.permissions.includes('expenses:create')) {
-  throw new Error('Forbidden');
+## OAuth scopes
+Provide standard scopes to external IdPs:
+```ts
+auth: {
+  type: 'remote',
+  name: 'frontegg',
+  baseUrl: 'https://idp.example.com',
+  scopes: ['openid','profile','email']
 }
 ```
 
-Tips
-- Keep authorization close to the boundary: early stages of tool execution
-- Prefer deny-by-default policies with explicit allow rules
-- Log denials with minimal PII for auditing
+## Tool/resource/prompt consent
+Set `consent: true` to display a **post‑login consent** listing your registered **tools/resources/prompts**. The issued access token includes the selected grants.
+
+## Modes (Remote OAuth)
+Use the `mode` field to reflect deployment topology:
+- `transparent` (default): your server acts as a regular confidential client.
+- `orchestrated`: gateway coordinates multiple apps/providers under one umbrella token (used in advanced multi‑app setups).
+
+<Warning>
+    When `splitByApp: true`, configure auth **per app**; server‑level `auth` is disallowed.
+</Warning>
+
+---
+
+## Token lifetimes & sessions
+- **Stateful sessions**: tokens are encrypted server‑side; clients hold a lightweight reference. Smooth refresh.
+- **Stateless sessions**: tokens ride inside JWT; simple but no silent refresh of upstream tokens.
