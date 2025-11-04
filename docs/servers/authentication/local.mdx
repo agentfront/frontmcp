@@ -1,0 +1,23 @@
+---
+title: Local OAuth
+slug: servers/authentication/local
+---
+
+Use Local OAuth for development or simple deployments. The FrontMCP server provides a built-in local authorization server.
+
+Server-level config
+```
+@FrontMcp({
+  auth: { type: 'local' },
+  apps: [...]
+})
+```
+
+Behavior
+- Tokens are issued by the local server
+- Suitable for local runs and low-stakes environments
+- You can migrate to Remote later with minimal changes
+
+Tips
+- Pair with http.entryPath when hosting multiple servers behind one domain
+- Use hooks to enforce per-tool authorization policies

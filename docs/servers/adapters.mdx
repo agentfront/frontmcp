@@ -1,0 +1,25 @@
+---
+title: Adapters
+slug: servers/adapters
+---
+
+Adapters can add tools, resources, or other runtime integrations to an app. A common use is loading tools from an OpenAPI definition at runtime.
+
+OpenAPI Adapter (example)
+```
+@FrontMcpApp({
+  id: 'expenses',
+  adapters: [OpenapiAdapter.init({ name: 'expenses', url: 'https://example.com/openapi.json' })],
+  tools: [...]
+})
+```
+
+How it works
+- On server startup, the adapter fetches the OpenAPI JSON from the given URL
+- Tools are generated and attached to the correct app automatically
+- Tools inherit app-level hooks and plugins
+
+Tips
+- Use a stable adapter `name` per app
+- Combine with auth to protect adapter-fetched tools if needed
+- Cache responses or rate-limit via plugins/providers if the source API is slow

@@ -1,0 +1,41 @@
+---
+title: Servers Overview
+slug: servers/overview
+---
+
+FrontMCP servers are defined with the @FrontMcp decorator from @frontmcp/common. The runtime in @frontmcp/core bootstraps automatically when the decorated class is imported (serve defaults to true).
+
+Example (based on apps/expenses):
+```
+@FrontMcp({
+  info: { name: 'Expense MCP Server', version: '1.0.0' },
+  apps: [/* ExpenseMcpApp2 */],
+  http: { port: 3001 },
+  logging: { level: 'VERBOSE' },
+  auth: {
+    type: 'remote', // switch to 'local' for built-in local auth
+    name: 'frontegg',
+    baseUrl: 'https://autheu.davidantoon.me',
+  },
+})
+class MyMcpSever {}
+```
+
+Key options
+- info: { name, version }
+- apps: array of @FrontMcpApp classes
+- http: { port = 3001, entryPath = '', hostFactory? }
+  - entryPath adds a prefix to the HTTP JSON-RPC entry for all apps (e.g., '/mcp') so the same host can serve multiple FrontMCP servers
+  - hostFactory lets you supply a custom HTTP host implementation (Express/other)
+- logging: level, transports, etc.
+- auth: choose local or remote OAuth. In multi-app mode you can set a single server-level provider. In split-by-app mode, define auth per app.
+- serve: defaults to true; set to false to disable auto-bootstrap
+- splitByApp: when true, each app gets its own scope and basePath (served under its own id prefix)
+
+Serving multiple apps
+- A single server can host multiple apps (tool collections)
+- With splitByApp: true, each app is served under /:appId/...
+- Without splitByApp, apps share the same scope and base path
+
+HTTP entry prefix
+- Use http.entryPath (e.g., '/frontmcp') to run multiple FrontMCP servers on the same host. Combined with per-app ids, you can neatly namespace everything.

@@ -1,0 +1,27 @@
+---
+title: Welcome to FrontMCP
+slug: getting-started/welcome
+---
+
+FrontMCP is a TypeScript‑first framework for building production‑ready Model Context Protocol (MCP) servers.
+
+- Decorators define servers, apps, tools, providers, adapters, and plugins
+- Extensible hook stages let you compose cross‑cutting concerns
+- Batteries‑included helpers for authentication, caching, rate limits, and more
+
+What you can build
+- A single MCP server that hosts multiple apps (tool collections)
+- Apps that expose tools implemented in TypeScript with Zod schemas
+- Optional adapters that load tools dynamically (e.g., from an OpenAPI URL)
+- Plugins that add capabilities like transparent caching and hook integrations
+
+Key ideas
+- libs/common: decorators, metadata, types
+- libs/core: the runtime that executes based on the decorated metadata
+- @FrontMcp is the entry decorator — pass a config object and your server will boot
+
+Next steps
+- Quickstart to spin up a server in minutes
+- Learn the core components: servers, apps, tools
+- Add authentication (local or remote OAuth)
+- Extend with adapters and plugins

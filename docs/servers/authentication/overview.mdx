@@ -1,0 +1,30 @@
+---
+title: Authentication Overview
+slug: servers/authentication/overview
+---
+
+FrontMCP supports local and remote OAuth strategies. Choose per server or per app depending on your topology.
+
+Concepts
+- Local OAuth: built-in local authorization server suitable for dev or simple deployments
+- Remote OAuth: delegate auth to an external provider (e.g., Frontegg) via baseUrl and provider name
+- Proxy modes: run auth via a reverse proxy if needed
+
+Server-level auth (multi-app scope)
+```
+@FrontMcp({
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://auth.example.com'
+  },
+  apps: [...]
+})
+```
+
+Split by app
+- With splitByApp: true, omit server-level auth and configure per app instead.
+
+Notes
+- Sessions are configurable; see Session options in the SDK reference
+- Hooks let you enforce authorization at tool stages

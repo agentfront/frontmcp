@@ -1,0 +1,24 @@
+---
+title: Authorization
+slug: servers/authentication/authorization
+---
+
+Authentication verifies identity; authorization decides what an identity can do.
+
+Ways to authorize tool execution
+- Hook-based checks at specific stages (will/did/around) per tool or globally
+- Provider-driven policies injected into tools
+- Per-app scopes when splitByApp is enabled
+
+Example (conceptual)
+```
+// In a hook: deny if user lacks permission
+if (!ctx.user.permissions.includes('expenses:create')) {
+  throw new Error('Forbidden');
+}
+```
+
+Tips
+- Keep authorization close to the boundary: early stages of tool execution
+- Prefer deny-by-default policies with explicit allow rules
+- Log denials with minimal PII for auditing

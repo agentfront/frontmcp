@@ -1,0 +1,43 @@
+---
+title: Installation
+slug: getting-started/installation
+---
+
+Prerequisites
+- Node.js >= 20
+- Yarn (recommended)
+
+Install workspace deps
+```bash
+yarn install
+```
+
+Packages
+- @frontmcp/common — decorators, metadata, types
+- @frontmcp/core — runtime that boots and serves your server
+- @frontmcp/plugins — optional plugins (e.g., Cache)
+- @frontmcp/adapters — optional adapters (e.g., OpenAPI)
+
+Create a new app (example layout)
+```
+apps/
+  my-app/
+    src/
+      main.ts         # @FrontMcp entry
+      my.app.ts       # @FrontMcpApp
+      tools/
+        hello.tool.ts # @Tool
+```
+
+Typical scripts (add to package.json)
+```json
+{
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/apps/my-app/main.js"
+  }
+}
+```
+
+Note on auto-serve
+- @FrontMcp defaults to serve: true; importing the decorated class will bootstrap the server.

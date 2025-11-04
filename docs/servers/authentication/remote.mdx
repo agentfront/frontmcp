@@ -1,0 +1,37 @@
+---
+title: Remote OAuth
+slug: servers/authentication/remote
+---
+
+Use a remote OAuth provider when you want to delegate auth to an external system (e.g., Frontegg).
+
+Server-level config
+```
+@FrontMcp({
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://auth.example.com'
+  },
+  apps: [...]
+})
+class MyServer {}
+```
+
+Per-app config (when splitByApp is true)
+```
+@FrontMcpApp({
+  id: 'expenses',
+  name: 'Expenses',
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://auth.example.com'
+  },
+  tools: [...]
+})
+```
+
+Notes
+- Remote auth integrates with session handling; see Session options
+- Combine with http.entryPath to host multiple servers on the same domain

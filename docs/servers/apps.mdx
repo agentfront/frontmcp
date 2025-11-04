@@ -1,0 +1,37 @@
+---
+title: Apps
+slug: servers/apps
+---
+
+Apps are collections of tools, providers, adapters, and plugins. Define an app with @FrontMcpApp and give it a stable id.
+
+Example
+```
+// App definition (pseudo-code)
+@FrontMcpApp({
+  id: 'expense-2',
+  name: 'Expense MCP 2',
+  providers: [ExpenseConfigProvider, createRedisProvider, SessionRedisProvider],
+  adapters: [OpenapiAdapter.init({ name: 'expenses', url: 'https://example.com/openapi.json' })],
+  plugins: [CachePlugin],
+  tools: [CreateExpenseTool],
+})
+class ExpenseMcpApp {}
+```
+
+Register apps on a server
+```
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [ExpenseMcpApp, ReportsApp],
+  // splitByApp: true // optional; when true each app is served under its own base path (/:appId)
+})
+class MyServer {}
+```
+
+Split by app vs multi-app
+- splitByApp: true — each app gets its own scope and basePath, served under its id prefix
+- splitByApp: false (default) — apps share the same scope and basePath
+
+HTTP entry prefix
+- Set http.entryPath (e.g., '/frontmcp') to add a server-wide prefix so you can host multiple FrontMCP servers on the same domain.

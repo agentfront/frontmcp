@@ -1,0 +1,18 @@
+---
+title: Prompts
+slug: servers/prompts
+---
+
+Prompts are reusable text or template snippets your tools or flows can leverage. While tools are executable units, prompts are static inputs you can compose into tool logic or agent prompts.
+
+Typical uses
+- Provide standard system prompts for agent runtimes
+- Parameterize prompts with variables from tool input
+- Share prompt templates across multiple tools in an app
+
+How to organize
+- Keep prompts alongside tools in your app (e.g., src/prompts/*)
+- Reference them from tools or providers at runtime
+
+Notes
+- Prompts are read-only resources. If you need dynamic behavior, implement it in tools or providers.

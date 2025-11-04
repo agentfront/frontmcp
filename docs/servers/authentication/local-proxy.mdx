@@ -1,0 +1,26 @@
+---
+title: Local OAuth via Proxy
+slug: servers/authentication/local-proxy
+---
+
+You can run the built-in Local OAuth behind a reverse proxy for consistent ingress or TLS termination.
+
+Topology
+- Client -> Reverse Proxy -> FrontMCP Server (Local OAuth)
+
+Config tips
+- Keep `auth.type = 'local'`
+- Ensure your proxy forwards auth endpoints and the MCP JSON-RPC entry (honor http.entryPath if set)
+- Use distinct `http.entryPath` values when hosting multiple FrontMCP servers on one domain
+
+Example (conceptual)
+```
+@FrontMcp({
+  http: { entryPath: '/local' },
+  auth: { type: 'local' },
+  apps: [...]
+})
+```
+
+Notes
+- For production, consider Remote OAuth if you need centralized identity, SSO, or advanced policies

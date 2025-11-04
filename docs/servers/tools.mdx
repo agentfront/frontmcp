@@ -1,0 +1,34 @@
+---
+title: Tools
+slug: servers/tools
+---
+
+Tools are the primary execution units. Define them with the @Tool (aka @FrontMcpTool) decorator from @frontmcp/common. Tools have a name, description, Zod input schema, and an async execute method.
+
+Basic example (conceptual)
+```
+Tool metadata:
+{
+  name: 'create-expense',
+  description: 'Create an expense record',
+  inputSchema: {
+    amount: 'number',
+    category: 'string'
+  }
+}
+
+execute(input) => Promise<Output>
+```
+
+Caching with the Cache plugin
+- When the Cache plugin is installed on an app, tools may opt into caching.
+- The plugin extends tool metadata with:
+```
+cache: true | { ttl?: number; slideWindow?: boolean }
+```
+
+Hooks around tools
+- Global and app/plugin hooks can intercept tool stages (will/did/around) to add auth, metrics, redaction, etc. See Servers → Hooks.
+
+Hooks around tools
+- Global and app/plugin hooks can intercept tool stages (will/did/around) to add auth, metrics, redaction, etc. See Servers → Hooks.

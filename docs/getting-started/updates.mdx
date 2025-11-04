@@ -1,0 +1,20 @@
+---
+title: Updates
+slug: getting-started/updates
+---
+
+FrontMCP evolves rapidly. Keep your packages aligned to avoid runtime mismatches.
+
+Recommendations
+- Pin @frontmcp/* versions together across common, core, adapters, plugins
+- Check the changelog and README in this repo
+- When upgrading, re-run your local dev server and smoke test tools
+
+Version mismatch errors
+- If versions drift, you may see errors like “version mismatch, make sure you have the same version for all @frontmcp/* packages”. Align the versions and reinstall.
+
+Safe upgrade steps
+1) Update all @frontmcp/* packages to the same range
+2) yarn install
+3) Build and run examples (e.g., apps/expenses)
+4) Verify tools load and authenticate correctly

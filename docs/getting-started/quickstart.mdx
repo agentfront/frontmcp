@@ -1,0 +1,72 @@
+---
+title: Quickstart
+slug: getting-started/quickstart
+---
+
+This guide spins up a FrontMCP server that hosts an app with tools.
+
+Prerequisites
+- Node.js >= 20
+- Yarn (recommended for this workspace)
+
+1) Create a server entry
+Create a file like apps/hello/src/main.ts:
+
+```ts
+import { FrontMcp, LogLevel } from '@frontmcp/common';
+import HelloApp from './hello.app';
+
+@FrontMcp({
+  info: { name: 'Hello MCP', version: '0.1.0' },
+  apps: [HelloApp],
+  // http defaults: port 3001, entryPath ''
+  http: { port: 3000 },
+  logging: { level: LogLevel.INFO },
+  // Default auth is local; you can switch to remote later
+})
+export default class HelloServer {}
+```
+
+2) Define an app
+apps/hello/src/hello.app.ts:
+```ts
+import { FrontMcpApp } from '@frontmcp/common';
+import { Tool } from '@frontmcp/common';
+import z from 'zod';
+
+@FrontMcpApp({ id: 'hello', name: 'Hello App', tools: [] })
+export default class HelloApp {}
+```
+
+3) Add your first tool
+apps/hello/src/tools/greet.tool.ts:
+```ts
+import { Tool } from '@frontmcp/common';
+import z from 'zod';
+
+@Tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: z.object({ name: z.string() }),
+})
+export default class GreetTool {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`;
+  }
+}
+```
+
+Then register the tool in HelloApp:
+```ts
+@FrontMcpApp({ id: 'hello', name: 'Hello App', tools: [GreetTool] })
+export default class HelloApp {}
+```
+
+4) Run the server
+- In this monorepo, see the example at apps/expenses for reference. You can run your app similarly with your preferred TS runner (ts-node, tsx) or compile then run.
+- The server starts with the @FrontMcp decorator; defaults are serve: true, http.port: 3001, http.entryPath: ''.
+
+What’s next
+- Add authentication (local/remote OAuth)
+- Use adapters to auto‑load tools (e.g., OpenAPI)
+- Enable plugins like caching

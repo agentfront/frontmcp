@@ -1,0 +1,19 @@
+---
+title: Resources
+slug: servers/resources
+---
+
+Resources are read-only surfaces (files, schemas, docs, KBs) that your tools or clients can consume. In FrontMCP, resources can be exposed by apps or plugins.
+
+Typical uses
+- Expose a JSON schema or config that tools rely on
+- Provide static documentation or templates
+- Surface read-only data from providers
+
+How to add
+- Some plugins or adapters may register resources automatically
+- You can also expose resources from your app using app-level metadata (plugin/provider specific)
+
+Notes
+- Resources are namespaced by app when splitByApp is enabled
+- Respect authentication/authorization when serving protected resources

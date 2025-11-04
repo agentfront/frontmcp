@@ -1,0 +1,27 @@
+---
+title: Remote OAuth via Proxy
+slug: servers/authentication/remote-proxy
+---
+
+Run Remote OAuth behind a reverse proxy when your auth provider is only accessible through a gateway or you need to terminate TLS elsewhere.
+
+Topology
+- Client -> Reverse Proxy -> FrontMCP Server -> Remote OAuth Provider
+
+Config tips
+- Keep `auth.type = 'remote'` with `name` and `baseUrl`
+- Configure your reverse proxy to forward auth endpoints and the MCP JSON-RPC entry (honor http.entryPath if set)
+- If you host multiple FrontMCP servers on one domain, set distinct `http.entryPath` values
+
+Example (conceptual)
+```
+@FrontMcp({
+  http: { entryPath: '/frontmcp' },
+  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://auth.example.com' },
+  apps: [...]
+})
+```
+
+Notes
+- Ensure cookies/headers required by the remote provider survive proxying
+- Consider CSRF protections if your proxy modifies origins
