@@ -1,8 +1,7 @@
 ---
-
 title: Logging Transports
 slug: servers/extensibility/logging
-icon: activity
+icon: receipt
 description: Create and register custom log transports for FrontMCP.
 --------------------------------------------------------------------
 
@@ -53,7 +52,10 @@ The framework filters by the configured `logging.level` before calling transport
 The default console transport formats messages with ANSI (when TTY) and falls back to plain text otherwise.
 
 ```ts
-@LogTransport({ name: 'ConsoleLogger', description: 'Default console logger' })
+@LogTransport({
+  name: 'ConsoleLogger',
+  description: 'Default console logger'
+})
 export class ConsoleLogTransportInstance extends LogTransportInterface {
   log(rec: LogRecord): void {
     const fn = this.bind(rec.level, rec.prefix);
@@ -88,8 +90,7 @@ export class StructuredJsonTransport extends LogTransportInterface {
         args: rec.args?.map(stringify),
       };
       // Avoid console formatting; write raw line
-      process.stdout.write(JSON.stringify(payload) + '
-');
+      process.stdout.write(JSON.stringify(payload) + '');
     } catch (err) {
       // Never throw from a transport
     }
@@ -100,8 +101,11 @@ function stringify(x: unknown) {
   if (x instanceof Error) {
     return { name: x.name, message: x.message, stack: x.stack };
   }
-  try { return typeof x === 'string' ? x : JSON.parse(JSON.stringify(x)); }
-  catch { return String(x); }
+  try {
+    return typeof x === 'string' ? x : JSON.parse(JSON.stringify(x));
+  } catch {
+    return String(x);
+  }
 }
 ```
 
@@ -118,7 +122,10 @@ Buffer records in memory and POST them in batches. Implements basic retry with b
 ```ts
 import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
 
-@LogTransport({ name: 'HttpBatchTransport', description: 'POST logs in batches' })
+@LogTransport({
+  name: 'HttpBatchTransport',
+  description: 'POST logs in batches'
+})
 export class HttpBatchTransport extends LogTransportInterface {
   private queue: any[] = [];
   private timer: NodeJS.Timeout | null = null;
@@ -141,32 +148,12 @@ export class HttpBatchTransport extends LogTransportInterface {
   }
 
   private async flush() {
-    if (this.flushing) return;
-    this.flushing = true;
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-
-    const batch = this.queue.splice(0, this.maxBatch);
-    if (!batch.length) { this.flushing = false; return; }
-
-    try {
-      await postJson(this.endpoint, batch);
-    } catch {
-      // simple backoff and requeue
-      this.queue.unshift(...batch);
-      setTimeout(() => this.flush(), 1500);
-    } finally {
-      this.flushing = false;
-    }
+    /* do you batch flush http request*/
   }
 }
 
 function safeArgs(a: unknown[]) {
   return (a || []).map((x) => (x instanceof Error ? { name: x.name, message: x.message, stack: x.stack } : x));
-}
-
-async function postJson(url: string, body: unknown) {
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`log sink ${res.status}`);
 }
 ```
 
