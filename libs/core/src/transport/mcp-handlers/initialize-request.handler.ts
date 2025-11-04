@@ -20,9 +20,7 @@ export default function initializeRequestHandler({
   serverOptions,
 }: McpHandlerOptions): McpHandler<InitializeRequest, InitializeResult> {
   return {
-    when: isInitializeRequest,
     requestSchema: InitializeRequestSchema,
-    responseSchema: InitializeResultSchema,
     handler: async (request, ctx): Promise<InitializeResult> => {
       guardClientVersion(request.params.protocolVersion);
 

@@ -40,7 +40,6 @@ const plan = {
 };
 
 declare global {
-  // noinspection JSUnusedGlobalSymbols
   export interface ExtendFlows {
     'well-known.oauth-protected-resource': FlowRunOptions<
       WellKnownPrmFlow,

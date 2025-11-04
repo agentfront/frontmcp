@@ -1,7 +1,9 @@
-import { Tool as MCPTool } from '@modelcontextprotocol/sdk/types.js';
-import { Token, Type } from '@frontmcp/sdk';
-import { ToolRecordImpl } from '@frontmcp/core';
-import { ToolChangeEvent } from './tool.events';
+import {Tool as MCPTool} from '@modelcontextprotocol/sdk/types.js';
+import {EntryLineage, Token, Type} from '@frontmcp/sdk';
+import {ToolRecordImpl} from '@frontmcp/core';
+import {ToolChangeEvent} from './tool.events';
+import {ToolInstance} from "./tool.instance";
+import ToolRegistry from "./tool.registry";
 
 
 export type Tool = MCPTool & {
@@ -41,9 +43,12 @@ export interface ToolRegistryContract {
 
   // mutations
   upsertGlobal(record: ToolRecordImpl): ToolRecordImpl;
+
   // TODO: upsert based rule (user.id === 'david') =>
   upsertSession(sessionId: string, record: ToolRecordImpl): ToolRecordImpl;
+
   removeGlobal(by: { id?: string; name?: string }): boolean;
+
   removeSession(sessionId: string, by: { id?: string; name?: string }): boolean;
 
   // subscribe (scoped)
@@ -52,3 +57,37 @@ export interface ToolRegistryContract {
     cb: (evt: ToolChangeEvent) => void,
   ): () => void;
 }
+
+
+
+/** Internal augmented row: instance + provenance + token */
+export type IndexedTool = {
+  token: Token;
+  instance: ToolInstance;
+  /** base tool name from metadata (unmodified) */
+  baseName: string;
+  /** lineage & qualified info */
+  lineage: EntryLineage;
+  ownerKey: string;       // "app:Portal/plugin:Okta"
+  qualifiedName: string;  // "app:Portal/plugin:Okta:toolName"
+  qualifiedId: string;    // "app:Portal/plugin:Okta:tokenName(<token>)"
+  /** which registry constructed the instance (the “owner” registry) */
+  source: ToolRegistry;
+};
+
+/* -------------------- naming options & helpers (MCP constraints) -------------------- */
+
+export type NameCase = 'snake' | 'camel' | 'kebab' | 'dot';
+export type ExportNameOptions = {
+  case?: NameCase;                        // default 'snake'
+  maxLen?: number;                        // default 64
+  prefixChildrenOnConflict?: boolean;     // default true
+  prefixSource?: 'provider' | 'owner';    // default 'provider'
+};
+
+export const DEFAULT_EXPORT_OPTS: Required<ExportNameOptions> = {
+  case: 'snake',
+  maxLen: 64,
+  prefixChildrenOnConflict: true,
+  prefixSource: 'provider',
+};

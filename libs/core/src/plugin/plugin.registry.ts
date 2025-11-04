@@ -1,6 +1,7 @@
 // plugin-registry.ts
 import 'reflect-metadata';
 import {
+  FlowName,
   PluginEntry,
   PluginKind,
   PluginRecord,
@@ -8,17 +9,16 @@ import {
   PluginType,
   Token,
 } from '@frontmcp/sdk';
-import { FlowName, FrontMcpHooksByStage } from './plugin.types';
-import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
+import {normalizePlugin, pluginDiscoveryDeps} from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
-import { tokenName } from '../utils/token.utils';
+import {tokenName} from '../utils/token.utils';
 import AdapterRegistry from '../adapter/adapter.regsitry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
-import { Ctor } from '../types/token.types';
-import { normalizeProvider } from '../provider/provider.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import {Ctor} from '../types/token.types';
+import {normalizeProvider} from '../provider/provider.utils';
+import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
 
 export default class PluginRegistry extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]> implements PluginRegistryInterface {
   /** providers by token */
@@ -34,12 +34,6 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
   /** prompts by token */
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
-
-  private globalHooksByStage: Partial<FrontMcpHooksByStage> = {
-    tool: {},
-    session: {},
-    auth: {},
-  };
 
   constructor(providers: ProviderRegistry, list: PluginType[]) {
     super('PluginRegistry', providers, list);
@@ -62,7 +56,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       graph.set(provide, new Set());
     }
 
-    return { tokens, defs, graph };
+    return {tokens, defs, graph};
   }
 
   protected buildGraph() {
@@ -85,7 +79,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       const rec = this.defs.get(token)!;
       const deps = this.graph.get(token)!;
 
-      const providers = new ProviderRegistry(rec.metadata.providers ?? []);
+      const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
 
       const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? []);
@@ -150,13 +144,14 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
 
 
   /** Unified hook collector for registries — returns the live map for the given kind. */
-  collectHooksByStage<T extends FlowName>(kind: T): FrontMcpHooksByStage[T] {
-    let map = this.globalHooksByStage[kind];
-    if (!map) {
-      map = {};
-      this.globalHooksByStage[kind] = map;
-    }
-    return map as FrontMcpHooksByStage[T];
+  collectHooksByStage<T extends FlowName>(kind: T): any {
+    // let map = this.globalHooksByStage[kind];
+    // if (!map) {
+    //   map = {};
+    //   this.globalHooksByStage[kind] = map;
+    // }
+    // TODO: implement this
+    return new Map();
   }
 
 

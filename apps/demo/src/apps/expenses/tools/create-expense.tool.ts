@@ -14,7 +14,7 @@ type In = z.baseObjectInputType<typeof inputSchema> & { value?: string };
 type Out = z.baseObjectOutputType<typeof outputSchema>;
 
 @Tool({
-  name: 'create-expense',
+  name: 'createExpense',
   description: 'Create an expense',
   inputSchema,
   outputSchema,

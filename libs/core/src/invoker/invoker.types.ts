@@ -5,11 +5,10 @@ import {
   ServerResponse,
   ProviderScope,
   Token,
-  Type, HttpOutput,
+  Type, HttpOutput, FlowName,
 } from '@frontmcp/sdk';
-import { FlowName } from '../plugin/plugin.types';
-import { AppLocalInstance } from '../app/instances';
-import { Scope } from '../scope';
+import {AppLocalInstance} from '../app/instances';
+import {Scope} from '../scope';
 
 /**
  * Base context contract that matches InvokerContext while staying backward-compatible.
@@ -73,7 +72,6 @@ export interface InvokeBaseContext<
   mark(stage: string, phase: InvokePhase): void;
 }
 
-export type AwaitedT<T> = T extends Promise<infer U> ? U : T;
 
 export type CapitalizeStr<S extends string> = S extends `${infer H}${infer T}` ? `${Uppercase<H>}${T}` : S;
 
@@ -131,15 +129,6 @@ export type InvokerOptions<Stage extends string, Ctx extends InvokeBaseContext =
   sortForStage?: SortForStage<Stage, Ctx>;
 };
 
-export type CollectorArgs<Stage extends string> = {
-  resolve?: <T>(cls: any) => T;
-  pluginHooksByStage: Partial<Record<AllStages<Stage>, any[]>>;
-  localHooksByStage?: Partial<Record<AllStages<Stage>, any[]>>;
-  fnHooksProvider?: (
-    stage: AllStages<Stage>,
-  ) => Promise<InvokerHook<InvokeBaseContext, AllStages<Stage>>[]> | InvokerHook<InvokeBaseContext, AllStages<Stage>>[];
-  ctx: InvokeBaseContext;
-};
 
 export type FlowSpec<BaseStage extends string, Ctx extends InvokeBaseContext, InitArgs extends any[] = any[]> = {
   plan: RunPlan<BaseStage>;

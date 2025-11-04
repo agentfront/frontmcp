@@ -5,7 +5,6 @@ import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
 import { CachePluginOptions, CacheStoreInterface } from './cache.types';
 import { CacheStoreToken } from './cache.symbol';
-import OpenapiAdapter from '@frontmcp/adapters/openapi';
 
 @Plugin({
   name: 'cache',

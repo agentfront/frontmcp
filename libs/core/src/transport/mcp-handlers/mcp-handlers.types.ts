@@ -30,9 +30,9 @@ export interface McpHandler<
   Out extends ZodObject<any> = ZodObject<any>,
   HandlerNotification extends Notification = Notification,
 > {
-  when: (request: Infer<In>) => boolean;
+  when?: (request: Infer<In>) => boolean;
   requestSchema: In;
-  responseSchema: Out;
+  responseSchema?: Out;
 
   handler: (
     request: HandlerRequest,

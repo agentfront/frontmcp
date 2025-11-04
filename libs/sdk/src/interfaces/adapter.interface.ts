@@ -5,6 +5,7 @@ import { PromptType } from './prompt.interface';
 import { AdapterMetadata } from '../metadata';
 
 export interface AdapterInterface {
+  options: {name:string} & any;
   fetch: () => Promise<FrontMcpAdapterResponse> | FrontMcpAdapterResponse;
 }
 

@@ -9,11 +9,9 @@ import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 export default function initializedNotificationHandler(
   options: McpHandlerOptions
-): McpHandler<InitializedNotification> {
+): McpHandler<InitializedNotification, Result> {
   return {
-    when: isInitializedNotification,
     requestSchema: InitializedNotificationSchema,
-    responseSchema: InitializeResultSchema,
     handler: async (request: InitializedNotification, ctx): Promise<Result> => {
       // check session
       return {};

@@ -27,6 +27,7 @@ type AdapterClassWithOptions<T> = {
 type AdapterReturn<T> = AdapterType
 
 export abstract class DynamicAdapter<TOptions extends object> implements AdapterInterface {
+  abstract options: {name:string} & TOptions
   /**
    * Private property to ensure options are typed correctly.
    */
@@ -41,6 +42,7 @@ export abstract class DynamicAdapter<TOptions extends object> implements Adapter
     options: InitOptions<TThis['prototype'] extends { __options_brand?: infer O } ? O : never>,
   ): AdapterReturn<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> {
     const typedOptions = options as any;
+
     if ('useFactory' in options) {
       const { inject, useFactory, ...rest } = typedOptions;
       return {

@@ -8,9 +8,9 @@ import {
   ScopeRecord,
   ScopeKind,
 } from '@frontmcp/sdk';
-import { normalizeApp } from '../app/app.utils';
-import { depsOfClass } from '../utils/token.utils';
-import { Scope } from './scope.instance';
+import {normalizeApp} from '../app/app.utils';
+import {depsOfClass} from '../utils/token.utils';
+import {Scope} from './scope.instance';
 
 /**
  * Normalize a raw scope metadata list into useful maps/sets.
@@ -33,7 +33,12 @@ export function normalizeAppScope(appItem: AppType, metadata: FrontMcpMultiAppCo
   return {
     kind: ScopeKind.SPLIT_BY_APP,
     provide: Scope,
-    metadata: { ...metadata, apps: [appItem], auth: appMetadata.auth } as any as AppScopeMetadata,
+    metadata: {
+      ...metadata,
+      id: appMetadata.id ?? appMetadata.name,
+      apps: [appItem],
+      auth: appMetadata.auth
+    } as any as AppScopeMetadata,
   };
 }
 
@@ -43,6 +48,7 @@ export function normalizeMultiAppScope(includedApps: AppType[], metadata: FrontM
     provide: Scope,
     metadata: {
       ...metadata,
+      id: 'root',
       apps: includedApps,
     } as MultiAppScopeMetadata,
   };

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import {z} from 'zod';
 import {
   AuthOptions,
   authOptionsSchema,
@@ -16,7 +16,7 @@ import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpProvidersSchema,
 } from '../schemas';
-import { AppType, ProviderType } from '../interfaces';
+import {AppType, ProviderType} from '../interfaces';
 
 
 export interface FrontMcpBaseMetadata {
@@ -80,11 +80,13 @@ export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
 export type FrontMcpConfigType = z.infer<typeof frontMcpMetadataSchema>;
 
 export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'auth' | 'splitByApp'> {
+  id: string;
   apps: [AppType];
   auth?: AuthOptions;
 }
 
 export interface MultiAppScopeMetadata extends FrontMcpMultiAppMetadata {
+  id: string;
   apps: AppType[];
 }
 

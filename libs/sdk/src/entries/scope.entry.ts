@@ -1,15 +1,14 @@
-import type { RouterType } from 'itty-router';
-import { BaseEntry } from './base.entry';
-import { ScopeRecord } from '../records';
+import {BaseEntry} from './base.entry';
+import {ScopeRecord} from '../records';
 import {
   ScopeInterface,
   ProviderRegistryInterface,
   AppRegistryInterface,
   AuthRegistryInterface,
   FrontMcpAuth,
-  Token, FlowInputOf, FlowOutputOf, Type, FlowType, FrontMcpLogger,
+  Token, FlowInputOf, FlowOutputOf, Type, FlowType, FrontMcpLogger, ToolRegistryInterface,
 } from '../interfaces';
-import { FlowName, ScopeMetadata } from '../metadata';
+import {FlowName, ScopeMetadata} from '../metadata';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;
@@ -24,6 +23,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
   abstract get providers(): ProviderRegistryInterface;
 
   abstract get apps(): AppRegistryInterface;
+
+  abstract get tools(): ToolRegistryInterface;
 
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 

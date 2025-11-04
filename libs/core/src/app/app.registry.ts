@@ -45,7 +45,7 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
 
   /** Instantiate adapters, run fetch/transform, and populate registries. */
   protected async initialize(): Promise<void> {
-
+    const readyArr: Promise<void>[] = [];
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
 
@@ -60,8 +60,9 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
       }
 
       this.instances.set(token, app);
-      await app.ready;
+      readyArr.push(app.ready);
     }
+    await Promise.all(readyArr);
   }
 
 

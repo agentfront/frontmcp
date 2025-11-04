@@ -1,4 +1,4 @@
-import { ToolEntry, Token, ToolRecord } from '@frontmcp/sdk';
+import {ToolEntry, ToolRecord, EntryOwnerRef} from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
 
 
@@ -9,16 +9,12 @@ export class ToolInstance extends ToolEntry<any, any> {
    * Tool name used for execution.
    */
   readonly name: string;
-  /**
-   * Chain ids that provide this tool.
-   */
-  readonly providedBy: Token[];
 
-  constructor(record: ToolRecord, providers: ProviderRegistry) {
+  constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
+    this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
-
     this.ready = this.initialize();
   }
 
