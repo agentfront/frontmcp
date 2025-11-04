@@ -1,48 +1,48 @@
 ---
 title: Quickstart
 slug: getting-started/quickstart
+icon: rocket-launch
 ---
 
-This guide spins up a FrontMCP server that hosts an app with tools.
+Welcome! In ~5 minutes you’ll have a running MCP server with a typed tool.
 
-Prerequisites
-- Node.js >= 20
-- Yarn (recommended for this workspace)
-
-1) Create a server entry
-Create a file like apps/hello/src/main.ts:
+## 1) Server entry
 
 ```ts
+// apps/hello/src/main.ts
 import { FrontMcp, LogLevel } from '@frontmcp/common';
 import HelloApp from './hello.app';
 
 @FrontMcp({
   info: { name: 'Hello MCP', version: '0.1.0' },
   apps: [HelloApp],
-  // http defaults: port 3001, entryPath ''
   http: { port: 3000 },
   logging: { level: LogLevel.INFO },
-  // Default auth is local; you can switch to remote later
 })
 export default class HelloServer {}
-```
+````
 
-2) Define an app
-apps/hello/src/hello.app.ts:
+## 2) Define an app
+
 ```ts
+// apps/hello/src/hello.app.ts
 import { FrontMcpApp } from '@frontmcp/common';
-import { Tool } from '@frontmcp/common';
-import z from 'zod';
+import GreetTool from './tools/greet.tool';
 
-@FrontMcpApp({ id: 'hello', name: 'Hello App', tools: [] })
+@FrontMcpApp({
+  id: 'hello',
+  name: 'Hello App',
+  tools: [GreetTool],
+})
 export default class HelloApp {}
 ```
 
-3) Add your first tool
-apps/hello/src/tools/greet.tool.ts:
+## 3) Add your first tool
+
 ```ts
+// apps/hello/src/tools/greet.tool.ts
 import { Tool } from '@frontmcp/common';
-import z from 'zod';
+import { z } from 'zod';
 
 @Tool({
   name: 'greet',
@@ -56,17 +56,34 @@ export default class GreetTool {
 }
 ```
 
-Then register the tool in HelloApp:
-```ts
-@FrontMcpApp({ id: 'hello', name: 'Hello App', tools: [GreetTool] })
-export default class HelloApp {}
+## 4) Run it
+
+Add scripts:
+
+```json
+{
+  "scripts": {
+    "dev": "tsx apps/hello/src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/apps/hello/main.js"
+  }
+}
 ```
 
-4) Run the server
-- In this monorepo, see the example at apps/expenses for reference. You can run your app similarly with your preferred TS runner (ts-node, tsx) or compile then run.
-- The server starts with the @FrontMcp decorator; defaults are serve: true, http.port: 3001, http.entryPath: ''.
+Run:
 
-What’s next
-- Add authentication (local/remote OAuth)
-- Use adapters to auto‑load tools (e.g., OpenAPI)
-- Enable plugins like caching
+```bash
+npm run dev
+# Server listening on http://localhost:3000
+```
+
+<Tip>
+    FrontMCP speaks **MCP Streamable HTTP**. You can connect any MCP-capable client and call the `greet` tool with `{ "name": "Ada" }`.
+</Tip>
+
+## What’s next
+
+* Add auth (local or remote OAuth)
+* Use **adapters** to load tools from OpenAPI
+* Enable **plugins** like transparent caching
+* Wire **hooks** for logging, rate limits, or request transforms

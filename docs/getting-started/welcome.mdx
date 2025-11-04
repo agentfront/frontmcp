@@ -1,27 +1,44 @@
 ---
 title: Welcome to FrontMCP
 slug: getting-started/welcome
+icon: hand-wave
+description: The TypeScript way to build MCP servers with decorators, DI, and Streamable HTTP.
 ---
 
-FrontMCP is a TypeScript‑first framework for building production‑ready Model Context Protocol (MCP) servers.
+**FrontMCP is the TypeScript-first framework for MCP.** You write clean, typed code; FrontMCP handles the protocol, transport, and execution flow.
 
-- Decorators define servers, apps, tools, providers, adapters, and plugins
-- Extensible hook stages let you compose cross‑cutting concerns
-- Batteries‑included helpers for authentication, caching, rate limits, and more
+```ts {1,5,10}
+import { FrontMcp, App, Tool } from '@frontmcp/common';
+import { z } from 'zod';
 
-What you can build
-- A single MCP server that hosts multiple apps (tool collections)
-- Apps that expose tools implemented in TypeScript with Zod schemas
-- Optional adapters that load tools dynamically (e.g., from an OpenAPI URL)
-- Plugins that add capabilities like transparent caching and hook integrations
+@Tool({ name: 'add', description: 'Add two numbers', inputSchema: z.object({ a: z.number(), b: z.number() }) })
+class AddTool { execute({ a, b }: { a: number; b: number }) { return a + b; } }
 
-Key ideas
-- libs/common: decorators, metadata, types
-- libs/core: the runtime that executes based on the decorated metadata
-- @FrontMcp is the entry decorator — pass a config object and your server will boot
+@App({ id: 'calc', name: 'Calculator', tools: [AddTool] })
+class CalcApp {}
 
-Next steps
-- Quickstart to spin up a server in minutes
-- Learn the core components: servers, apps, tools
-- Add authentication (local or remote OAuth)
-- Extend with adapters and plugins
+@FrontMcp({ info: { name: 'Demo 🚀', version: '0.1.0' }, apps: [CalcApp] })
+export default class Server {}
+````
+
+### Why FrontMCP?
+
+* 🧑‍💻 **TypeScript-native DX** — decorators, Zod, and strong typing end-to-end
+* 🧠 **Scoped invoker + DI** — secure, composable execution with hooks
+* 🧩 **Adapters & Plugins** — extend your server without boilerplate
+* 🔌 **Spec-aligned transport** — Streamable HTTP for modern MCP clients
+
+### Core concepts
+
+* **Server** — entry point via `@FrontMcp({...})`
+* **App** — a logical bundle of tools via `@FrontMcpApp({...})`
+* **Tool** — typed units of work via `@Tool({...})`
+* **Hooks** — cross-cutting behaviors (auth, logging, rate limits)
+* **Adapters/Plugins** — load tools dynamically; enrich behavior
+
+<Info>
+    FrontMCP follows MCP protocol principles and **secured transport requirements**. You get sessions, streaming, and validation out of the box—no custom wiring needed.
+</Info>
+
+**Build something real**: jump to the [Quickstart](/getting-started/quickstart) or set up your workspace in [Installation](/getting-started/installation).
+

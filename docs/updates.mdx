@@ -1,20 +1,38 @@
 ---
 title: Updates
 slug: updates
+icon: sparkles
 ---
 
-FrontMCP evolves rapidly. Keep your packages aligned to avoid runtime mismatches.
+<Update label="FrontMCP 0.1.0" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.1.0: Stream it. Scope it. Ship it."
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.1.0"
+        cta="Read the release notes"
+    >
+        FrontMCP 0.1 lands streamlined **Streamable HTTP** transport, scoped **DI-powered invoker** flows, and first-class **adapters/plugins** so you can ship production MCP servers with minimal boilerplate.
 
-Recommendations
-- Pin @frontmcp/* versions together across common, core, adapters, plugins
-- Check the changelog and README in this repo
-- When upgrading, re-run your local dev server and smoke test tools
+        - ⚙️ **Streamable HTTP**: spec-compliant GET/POST with sessions and server-pushed events.
+        - 🧩 **Adapters & Plugins**: load tools dynamically (OpenAPI, more coming) and add cross-cutting capabilities like caching.
+        - 🪝 **Composable hooks**: fine-grained hooks for auth, rate-limit, logging, and execution transforms.
+    </Card>
+</Update>
 
-Version mismatch errors
-- If versions drift, you may see errors like “version mismatch, make sure you have the same version for all @frontmcp/* packages”. Align the versions and reinstall.
+## Versioning policy
 
-Safe upgrade steps
-1) Update all @frontmcp/* packages to the same range
-2) yarn install
-3) Build and run examples (e.g., apps/expenses)
-4) Verify tools load and authenticate correctly
+For production, **pin exact versions** across all packages:
+
+```bash
+# Good
+@frontmcp/sdk@0.1.0
+@frontmcp/adapters@0.1.0
+@frontmcp/plugins@0.1.0
+```
+
+<Warning>
+    If versions drift, runtime mismatches can occur (e.g., “version mismatch… make sure you have the same version for all @frontmcp/* packages”). Align and reinstall.
+</Warning>
+
+<Tip>
+    After upgrades: clean install, build, then smoke-test your tools.
+</Tip>

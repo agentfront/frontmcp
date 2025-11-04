@@ -1,43 +1,35 @@
 ---
 title: Installation
 slug: getting-started/installation
+icon: arrow-down-to-line
 ---
 
-Prerequisites
-- Node.js >= 20
-- Yarn (recommended)
+## Install FrontMCP
 
-Install workspace deps
-```bash
-yarn install
-```
+FrontMCP targets TypeScript devs. Use your favorite package manager:
 
-Packages
-- @frontmcp/common — decorators, metadata, types
-- @frontmcp/core — runtime that boots and serves your server
-- @frontmcp/plugins — optional plugins (e.g., Cache)
-- @frontmcp/adapters — optional adapters (e.g., OpenAPI)
+<CodeGroup>
+    ```bash npm
+    npm i @frontmcp/sdk
+    ````
 
-Create a new app (example layout)
-```
-apps/
-  my-app/
-    src/
-      main.ts         # @FrontMcp entry
-      my.app.ts       # @FrontMcpApp
-      tools/
-        hello.tool.ts # @Tool
-```
+    ```bash pnpm
+    pnpm add @frontmcp/sdk
+    ```
 
-Typical scripts (add to package.json)
-```json
-{
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/apps/my-app/main.js"
-  }
-}
-```
+    ```bash yarn
+    yarn add @frontmcp/sdk
+    ```
 
-Note on auto-serve
-- @FrontMcp defaults to serve: true; importing the decorated class will bootstrap the server.
+</CodeGroup>
+
+Optional add-ons (install as needed):
+
+* `@frontmcp/adapters` — e.g., OpenAPI tool loader
+* `@frontmcp/plugins` — caching, extra hooks, etc.
+
+
+<Info>
+    FrontMCP is framework-style: your **decorated server class** boots the HTTP transport (Streamable HTTP) by default.
+    No separate CLI required.
+</Info>
