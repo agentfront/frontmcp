@@ -1,12 +1,11 @@
 import {
   Flow, httpInputSchema, FlowRunOptions, httpOutputSchema, FlowPlan,
-  FlowBase, FlowHooksOf,
-  authorizationSchema, sessionIdSchema, httpRespond, ServerRequestTokens, Authorization,
+  FlowBase, FlowHooksOf, sessionIdSchema, httpRespond, ServerRequestTokens, Authorization,
 } from '@frontmcp/sdk';
-import { z } from 'zod';
-import { ElicitResultSchema, InitializeRequestSchema, RequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { Scope } from '../../scope';
-import { createSessionId } from '../../auth/session/utils/session-id.utils';
+import {z} from 'zod';
+import {ElicitResultSchema, InitializeRequestSchema, RequestSchema} from '@modelcontextprotocol/sdk/types.js';
+import {Scope} from '../../scope';
+import {createSessionId} from '../../auth/session/utils/session-id.utils';
 
 export const plan = {
   pre: [
@@ -32,7 +31,7 @@ export const stateSchema = z.object({
 });
 
 const name = 'handle:streamable-http' as const;
-const { Stage } = FlowHooksOf(name);
+const {Stage} = FlowHooksOf(name);
 
 
 declare global {
@@ -58,20 +57,20 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
   @Stage('parseInput')
   async paseInput() {
-    const { request } = this.rawInput;
+    const {request} = this.rawInput;
 
-    let { token, session } = request[ServerRequestTokens.auth] as Authorization;
+    let {token, session} = request[ServerRequestTokens.auth] as Authorization;
 
     if (!session) {
       session = createSessionId('streamable-http', token);
       request[ServerRequestTokens.auth].session = session;
     }
-    this.state.set(stateSchema.parse({ token, session }));
+    this.state.set(stateSchema.parse({token, session}));
   }
 
   @Stage('router')
   async router() {
-    const { request } = this.rawInput;
+    const {request} = this.rawInput;
 
     if (InitializeRequestSchema.safeParse(request.body).success) {
       this.state.set('requestType', 'initialize');
@@ -85,33 +84,33 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   }
 
   @Stage('onInitialize', {
-    filter: ({ state: { requestType } }) => requestType === 'initialize',
+    filter: ({state: {requestType}}) => requestType === 'initialize',
   })
   async onInitialize() {
     const transportService = (this.scope as Scope).transportService;
 
-    const { request, response } = this.rawInput;
-    const { token, session } = this.state.required;
+    const {request, response} = this.rawInput;
+    const {token, session} = this.state.required;
     const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
     await transport.initialize(request, response);
     this.handled();
   }
 
   @Stage('onElicitResult', {
-    filter: ({ state: { requestType } }) => requestType === 'elicitResult',
+    filter: ({state: {requestType}}) => requestType === 'elicitResult',
   })
   async onElicitResult() {
 
   }
 
   @Stage('onMessage', {
-    filter: ({ state: { requestType } }) => requestType === 'message',
+    filter: ({state: {requestType}}) => requestType === 'message',
   })
   async onMessage() {
     const transportService = (this.scope as Scope).transportService;
 
-    const { request, response } = this.rawInput;
-    const { token, session } = this.state.required;
+    const {request, response} = this.rawInput;
+    const {token, session} = this.state.required;
     const transport = await transportService.getTransporter('streamable-http', token, session.id);
     if (!transport) {
       this.respond(httpRespond.rpcError('session not initialized'));

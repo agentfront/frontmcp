@@ -1,19 +1,18 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
-import { HttpMethod, ServerRequest, Token } from '../interfaces';
-import { ScopeEntry } from '../entries';
-
+import {z} from 'zod';
+import {RawZodShape} from '../types';
+import {HttpMethod, ServerRequest, Token} from '../interfaces';
+import {ScopeEntry} from '../entries';
 
 declare global {
   // eslint-disable-next-line
   export interface ExtendFlows {
-    // Extendable interfaces
+
   }
 }
 
 export type FlowName = keyof ExtendFlows;
 
-export type CanActivateFlow = (request: ServerRequest, scope:ScopeEntry) => Promise<boolean>;
+export type CanActivateFlow = (request: ServerRequest, scope: ScopeEntry) => Promise<boolean>;
 
 export interface FlowMiddlewareOptions {
   path?: RegExp | string; // string can be "/test/**" or "/test/*/asds", default to all paths
@@ -21,7 +20,7 @@ export interface FlowMiddlewareOptions {
   canActivate?: CanActivateFlow[];
 }
 
-export type FlowRunOptions<Ctx, Plan extends FlowPlan<any>, Input, Output extends (z.ZodObject<any> | z.ZodUnion<any> | z.ZodDiscriminatedUnion<any, any>),  State  extends z.ZodObject<any>> = {
+export type FlowRunOptions<Ctx, Plan extends FlowPlan<string>, Input, Output extends (z.ZodObject<any> | z.ZodUnion<any> | z.ZodDiscriminatedUnion<any, any>), State extends z.ZodObject<any>> = {
   ctx: Ctx;
   plan: Plan;
   input: Input;

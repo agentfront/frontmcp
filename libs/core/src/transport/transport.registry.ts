@@ -1,5 +1,5 @@
 // server/transport/transport.registry.ts
-import { createHash } from 'crypto';
+import {createHash} from 'crypto';
 import {
   TransportBus,
   Transporter,
@@ -9,14 +9,12 @@ import {
   TransportType,
   TransportTypeBucket,
 } from './transport.types';
-import { RemoteTransporter } from './transport.remote';
-import { LocalTransporter } from './transport.local';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { ServerResponse } from '@frontmcp/sdk';
-import { Scope } from '../scope';
+import {RemoteTransporter} from './transport.remote';
+import {LocalTransporter} from './transport.local';
+import {AuthInfo} from '@modelcontextprotocol/sdk/server/auth/types.js';
+import {ServerResponse} from '@frontmcp/sdk';
+import {Scope} from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
-import { createMcpHandlers } from './mcp-handlers';
 import HandleSseFlow from './flows/handle.sse.flow';
 
 export class TransportService {

@@ -57,7 +57,6 @@ const plan = {
 };
 
 declare global {
-  // noinspection JSUnusedGlobalSymbols
   export interface ExtendFlows {
     'session:verify': FlowRunOptions<
       SessionVerifyFlow,

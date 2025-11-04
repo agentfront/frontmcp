@@ -39,37 +39,33 @@ export default class Server {
 
 ## Table of Contents
 
-* [Why FrontMCP?](#why-frontmcp)
-* [Installation](#installation)
-* [Quickstart](#quickstart)
-
-    * [Minimal Server & App](#minimal-server--app)
-    * [Function and Class Tools](#function-and-class-tools)
-    * [Scripts & tsconfig](#scripts--tsconfig)
-    * [MCP Inspector](#mcp-inspector)
-* [Core Concepts](#core-concepts)
-
-    * [Servers](#servers)
-    * [Apps](#apps)
-    * [Tools](#tools)
-    * [Resources](#resources)
-    * [Prompts](#prompts)
-    * [Providers](#providers)
-    * [Adapters](#adapters)
-    * [Plugins](#plugins)
-* [Authentication](#authentication)
-
-    * [Remote OAuth](#remote-oauth)
-    * [Local OAuth](#local-oauth)
-* [Sessions & Transport](#sessions--transport)
-* [Logging Transports](#logging-transports)
-* [Deployment](#deployment)
-
-    * [Local Dev](#local-dev)
-    * [Production](#production)
-* [Version Alignment](#version-alignment)
-* [Contributing](#contributing)
-* [License](#license)
+- [Why FrontMCP?](#why-frontmcp)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+    - [Minimal Server & App](#minimal-server--app)
+    - [Function and Class Tools](#function-and-class-tools)
+    - [Scripts & tsconfig](#scripts--tsconfig)
+    - [MCP Inspector](#mcp-inspector)
+- [Core Concepts](#core-concepts)
+    - [Servers](#servers)
+    - [Apps](#apps)
+    - [Tools](#tools)
+    - [Resources](#resources)
+    - [Prompts](#prompts)
+    - [Providers](#providers)
+    - [Adapters](#adapters)
+    - [Plugins](#plugins)
+- [Authentication](#authentication)
+    - [Remote OAuth](#remote-oauth)
+    - [Local OAuth](#local-oauth)
+- [Sessions & Transport](#sessions--transport)
+- [Logging Transports](#logging-transports)
+- [Deployment](#deployment)
+    - [Local Dev](#local-dev)
+    - [Production](#production)
+- [Version Alignment](#version-alignment)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -308,8 +304,8 @@ You can configure auth on the server (multi-app shared) or per app (isolated sco
 
 ```ts
 auth: {
-  type: 'remote',
-  name : 'frontegg', 
+  type: 'remote', 
+  name: 'frontegg',
   baseUrl: 'https://idp.example.com',
   dcrEnabled ? : boolean,
   clientId ? : string | ((info: { clientId: string }) => string),
@@ -330,20 +326,17 @@ auth: {
 ### Local OAuth
 
 ```ts
+{
 auth: {
   type: 'local',
-    id
-:
-  'local',
-    name
-:
-  'Local Auth',
-    scopes ? : string[],
-    grantTypes ? : ('authorization_code' | 'refresh_token')[],
-    allowAnonymous ? : boolean, // default true
-    consent ? : boolean,
-    jwks ? : JSONWebKeySet,
-    signKey ? : JWK | Uint8Array
+  id: 'local', 
+  name: 'Local Auth',
+  scopes?: string[],
+  grantTypes?: ('authorization_code' | 'refresh_token')[],
+  allowAnonymous?: boolean, // default true
+  consent?: boolean,
+  jwks?: JSONWebKeySet,
+  signKey?: JWK | Uint8Array
 }
 ```
 
@@ -396,13 +389,9 @@ Register:
 
 ```ts
 logging: {
-  level: LogLevel.Info,
-    enableConsole
-:
-  false,
-    transports
-:
-  [StructuredJsonTransport],
+  level: LogLevel.Info, 
+  enableConsole: false, 
+  transports : [StructuredJsonTransport],
 }
 ```
 
@@ -428,7 +417,8 @@ pnpm dev
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core` on the **same version** across your workspace.
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core`
+on the **same version** across your workspace.
 
 ---
 

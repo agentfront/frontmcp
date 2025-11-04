@@ -88,7 +88,7 @@ export interface ToolRegistryInterface {
   owner: EntryOwnerRef;
 
   // inline tools plus discovered by nested tool registries
-  getTools(): ToolEntry<any, any>[];
+  getTools(includeHidden?:boolean): ToolEntry<any, any>[];
 
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];

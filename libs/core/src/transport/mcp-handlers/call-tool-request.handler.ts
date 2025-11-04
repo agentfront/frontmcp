@@ -1,28 +1,21 @@
 import {
   CallToolRequestSchema,
-  CallToolResultSchema,
   CallToolRequest,
   CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import { scoped } from '../../invoker/invoker.bindings';
+import {McpHandler, McpHandlerOptions} from './mcp-handlers.types';
 
-const isCallToolRequest = (request: any): boolean => {
-  return CallToolRequestSchema.safeParse(request).success;
-};
 export default function callToolRequestHandler(
-  { scope }: McpHandlerOptions,
+  {scope}: McpHandlerOptions,
 ): McpHandler<CallToolRequest, CallToolResult> {
   return {
-    when: isCallToolRequest,
     requestSchema: CallToolRequestSchema,
-    responseSchema: CallToolResultSchema,
-    handler: async function(request: CallToolRequest, ctx): Promise<CallToolResult> {
+    handler: async function (request: CallToolRequest, ctx): Promise<CallToolResult> {
 
-      const tool = scope.tools.find(tool => tool.metadata.name === request.params.name);
-      if (!tool) {
-        throw new Error('Tool not found');
-      }
+      // const tool = scope.tools.find(tool => tool.metadata.name === request.params.name);
+      // if (!tool) {
+      //   throw new Error('Tool not found');
+      // }
 
       return {
         content: [{

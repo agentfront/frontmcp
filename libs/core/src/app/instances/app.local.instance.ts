@@ -1,5 +1,5 @@
-import { AppEntry, AppRecord, LocalAppMetadata } from '@frontmcp/sdk';
-import { idFromString } from '../../utils/string.utils';
+import {AppEntry, AppRecord, LocalAppMetadata} from '@frontmcp/sdk';
+import {idFromString} from '../../utils/string.utils';
 import ProviderRegistry from '../../provider/provider.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import ResourceRegistry from '../../resource/resource.registry';

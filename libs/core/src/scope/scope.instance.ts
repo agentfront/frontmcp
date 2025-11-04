@@ -10,14 +10,15 @@ import {
   ScopeEntry,
   ScopeRecord,
   SessionProvider,
-  Token, ToolEntry, Type,
+  Token,
+  Type,
 } from '@frontmcp/sdk';
 import AppRegistry from '../app/app.registry';
 import ProviderRegistry from '../provider/provider.registry';
-import { AuthRegistry } from '../auth/auth.registry';
+import {AuthRegistry} from '../auth/auth.registry';
 import FlowRegistry from '../flows/flow.registry';
 import HttpRequestFlow from './flows/http.request.flow';
-import { TransportService } from '../transport/transport.registry';
+import {TransportService} from '../transport/transport.registry';
 import ToolRegistry from '../tool/tool.registry';
 
 
@@ -28,9 +29,11 @@ export class Scope extends ScopeEntry {
 
   private readonly scopeProviders: ProviderRegistry;
   private scopeAuth: AuthRegistry;
-  private readonly scopeFlows: FlowRegistry;
+  private scopeFlows: FlowRegistry;
   private scopeApps: AppRegistry;
-  readonly transportService: TransportService;
+  private scopeTools: ToolRegistry;
+
+  transportService: TransportService; // TODO: migrate transport service to transport.registry
   readonly entryPath: string;
   readonly routeBase: string = '';
   readonly orchestrated: boolean = false;
@@ -39,31 +42,35 @@ export class Scope extends ScopeEntry {
 
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
-    this.id = 'root'; // Fix by using rec.id
+    this.id = rec.metadata.id;
     this.logger = globalProviders.get(FrontMcpLogger).child('FrontMcp.MultiAppScope');
     this.globalProviders = globalProviders;
     this.server = this.globalProviders.get(FrontMcpServer);
     this.entryPath = rec.metadata.http?.entryPath ?? '';
-
     this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders);
-    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]); // add HttpRequestFlow
-
     this.ready = this.initialize();
-    this.transportService = new TransportService(this);
   }
 
   protected async initialize(): Promise<void> {
     await this.scopeProviders.ready;
+
+    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]); // add HttpRequestFlow
     await this.scopeFlows.ready;
 
+    this.transportService = new TransportService(this);
+
     this.scopeAuth = new AuthRegistry(this.scopeProviders, [], this.metadata.auth);
+    await this.scopeAuth.ready
+
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps);
-
-    this.logger.info('Initializing multi-app scope', this.metadata);
-
-    // wait for app to be ready
-    await this.auth.ready;
     await this.scopeApps.ready;
+
+    this.scopeTools = new ToolRegistry(this.scopeProviders, [], {kind: 'scope', id: this.id, ref: Scope});
+    await this.scopeTools.ready;
+
+
+    await this.auth.ready;
+    this.logger.info('Initializing multi-app scope', this.metadata);
   }
 
   private get defaultScopeProviders() {
@@ -106,10 +113,8 @@ export class Scope extends ScopeEntry {
     return this.scopeApps;
   }
 
-  get tools(): ToolEntry[] {
-    return this.apps.getApps().reduce((tools: ToolEntry[], app) => {
-      return [...tools, ...app.tools.getTools()];
-    }, []);
+  get tools(): ToolRegistry {
+    return this.scopeTools;
   }
 
 
@@ -119,5 +124,13 @@ export class Scope extends ScopeEntry {
 
   runFlow<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     return this.scopeFlows.runFlow(name, input, deps);
+  }
+
+  async runFlowForOutput<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name>> {
+    const result = await this.scopeFlows.runFlow(name, input, deps);
+    if (result) {
+      return result;
+    }
+    throw new Error(`flow exist without output`);
   }
 }

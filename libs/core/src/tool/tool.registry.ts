@@ -1,149 +1,29 @@
-import { Token, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '@frontmcp/sdk';
-import { getMetadata } from '../utils/metadata.utils';
-import { ToolChangeEvent, ToolEmitter } from './tool.events';
+import {
+  EntryLineage,
+  EntryOwnerRef,
+  Token,
+  ToolEntry,
+  ToolRecord,
+  ToolRegistryInterface,
+  ToolType
+} from '@frontmcp/sdk';
+import {getMetadata} from '../utils/metadata.utils';
+import {ToolChangeEvent, ToolEmitter} from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
-import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
-import { tokenName } from '../utils/token.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { ToolInstance } from './tool.instance';
+import {
+  ensureMaxLen,
+  normalizeOwnerPath,
+  normalizeProviderId,
+  normalizeSegment,
+  normalizeTool, ownerKeyOf, qualifiedNameOf, sepFor,
+  toolDiscoveryDeps
+} from './tool.utils';
+import {tokenName} from '../utils/token.utils';
+import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
+import {ToolInstance} from './tool.instance';
+import {DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool} from "./tool.types";
+import ToolsListFlow from "./flows/tools-list.flow";
 
-/** Provenance identity for a registry owner */
-type OwnerKind = 'scope' | 'app' | 'plugin' | 'adapter';
-export type OwnerRef = { kind: OwnerKind; id: string; ref: Token };
-type Lineage = OwnerRef[]; // root -> leaf; e.g. [{kind:'app', id:'Portal'}, {kind:'plugin', id:'Okta'}]
-
-/** Internal augmented row: instance + provenance + token */
-type IndexedTool = {
-  token: Token;
-  instance: ToolInstance;
-  /** base tool name from metadata (unmodified) */
-  baseName: string;
-  /** lineage & qualified info */
-  lineage: Lineage;
-  ownerKey: string;       // "app:Portal/plugin:Okta"
-  qualifiedName: string;  // "app:Portal/plugin:Okta:toolName"
-  qualifiedId: string;    // "app:Portal/plugin:Okta:tokenName(<token>)"
-  /** which registry constructed the instance (the “owner” registry) */
-  source: ToolRegistry;
-};
-
-/* -------------------- naming options & helpers (MCP constraints) -------------------- */
-
-type NameCase = 'snake' | 'camel' | 'kebab' | 'dot';
-type ExportNameOptions = {
-  case?: NameCase;                        // default 'snake'
-  maxLen?: number;                        // default 64
-  prefixChildrenOnConflict?: boolean;     // default true
-  prefixSource?: 'provider' | 'owner';    // default 'provider'
-};
-
-const DEFAULT_EXPORT_OPTS: Required<ExportNameOptions> = {
-  case: 'snake',
-  maxLen: 64,
-  prefixChildrenOnConflict: true,
-  prefixSource: 'provider',
-};
-
-// Allowed chars per MCP spec: a-zA-Z0-9 _ - . /
-const MCP_ALLOWED = /[A-Za-z0-9_\-\.\/]/;
-
-function splitWords(input: string): string[] {
-  const parts: string[] = [];
-  let buff = '';
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    const isAlphaNum = /[A-Za-z0-9]/.test(ch);
-    if (!isAlphaNum) {
-      if (buff) {
-        parts.push(buff);
-        buff = '';
-      }
-      continue;
-    }
-    if (buff && /[a-z]/.test(buff[buff.length - 1]) && /[A-Z]/.test(ch)) {
-      parts.push(buff);
-      buff = ch;
-    } else {
-      buff += ch;
-    }
-  }
-  if (buff) parts.push(buff);
-  return parts;
-}
-
-function toCase(words: string[], kind: NameCase): string {
-  const safe = words.filter(Boolean);
-  switch (kind) {
-    case 'snake':
-      return safe.map(w => w.toLowerCase()).join('_');
-    case 'kebab':
-      return safe.map(w => w.toLowerCase()).join('-');
-    case 'dot':
-      return safe.map(w => w.toLowerCase()).join('.');
-    case 'camel':
-      if (safe.length === 0) return '';
-      return safe[0].toLowerCase() + safe.slice(1)
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
-  }
-}
-
-function normalizeSegment(raw: string, kind: NameCase): string {
-  const words = splitWords(raw);
-  let cased = toCase(words, kind);
-  cased = [...cased].filter(ch => MCP_ALLOWED.test(ch)).join('');
-  return cased || 'x';
-}
-
-function normalizeProviderId(raw: string | undefined, kind: NameCase): string | undefined {
-  if (!raw) return undefined;
-  const tokens = raw.split(/[^\w]+/);
-  const cased = toCase(tokens, kind);
-  const safe = [...cased].filter(ch => MCP_ALLOWED.test(ch)).join('');
-  return safe || undefined;
-}
-
-function normalizeOwnerPath(ownerKey: string, kind: NameCase): string {
-  const levels = ownerKey.split('/');
-  const normLevels = levels.map(level => {
-    const parts = level.split(':'); // ["app","Portal"]
-    return parts.map(p => normalizeSegment(p, kind)).join(
-      kind === 'snake' ? '_' : kind === 'kebab' ? '-' : kind === 'dot' ? '.' : '',
-    );
-  });
-  if (kind === 'camel') return normLevels.map(seg => seg.charAt(0).toLowerCase() + seg.slice(1)).join('');
-  const sep = kind === 'snake' ? '_' : kind === 'kebab' ? '-' : '.';
-  return normLevels.join(sep);
-}
-
-function shortHash(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
-  return (h >>> 0).toString(16).slice(-6).padStart(6, '0');
-}
-
-function ensureMaxLen(name: string, max: number): string {
-  if (name.length <= max) return name;
-  const hash = shortHash(name);
-  const lastSep = Math.max(name.lastIndexOf('_'), name.lastIndexOf('-'), name.lastIndexOf('.'), name.lastIndexOf('/'));
-  const tail = lastSep > 0 ? name.slice(lastSep + 1) : name.slice(-Math.max(3, Math.min(16, Math.floor(max / 4))));
-  const budget = Math.max(1, max - (1 + hash.length + 1 + tail.length));
-  const prefix = name.slice(0, budget);
-  return `${prefix}-${hash}-${tail}`.slice(0, max);
-}
-
-function sepFor(kind: NameCase): string {
-  return kind === 'snake' ? '_' : kind === 'kebab' ? '-' : kind === 'dot' ? '.' : '';
-}
-
-function ownerKeyOf(lineage: Lineage): string {
-  return lineage.map(o => `${o.kind}:${o.id}`).join('/');
-}
-
-function qualifiedNameOf(lineage: Lineage, name: string): string {
-  return `${ownerKeyOf(lineage)}:${name}`;
-}
-
-/* -------------------- ToolRegistry (instances + hierarchy + conflicts) -------------------- */
 
 export default class ToolRegistry extends RegistryAbstract<
   ToolInstance,        // IMPORTANT: instances map holds ToolInstance (not the interface)
@@ -151,7 +31,7 @@ export default class ToolRegistry extends RegistryAbstract<
   ToolType[]
 > implements ToolRegistryInterface {
   /** Who owns this registry (used for provenance). Optional. */
-  owner: OwnerRef;
+  owner: EntryOwnerRef;
 
   /** Tools truly owned/constructed by THIS registry (with lineage applied) */
   private localRows: IndexedTool[] = [];
@@ -173,7 +53,7 @@ export default class ToolRegistry extends RegistryAbstract<
   private version = 0;
   private emitter = new ToolEmitter();
 
-  constructor(providers: ProviderRegistry, list: ToolType[], owner: OwnerRef) {
+  constructor(providers: ProviderRegistry, list: ToolType[], owner: EntryOwnerRef) {
     // disable auto so subclass fields initialize first
     super('ToolRegistry', providers, list, false);
     this.owner = owner;
@@ -196,7 +76,7 @@ export default class ToolRegistry extends RegistryAbstract<
       defs.set(provide, rec);
       graph.set(provide, new Set());
     }
-    return { tokens, defs, graph };
+    return {tokens, defs, graph};
   }
 
   protected buildGraph() {
@@ -220,32 +100,37 @@ export default class ToolRegistry extends RegistryAbstract<
       const rec = this.defs.get(token)!;
 
       // Single, authoritative instance per local tool
-      const ti = new ToolInstance(rec, this.providers);
+      const ti = new ToolInstance(rec, this.providers, this.owner);
       this.instances.set(token as Token<ToolInstance>, ti);
 
-      // Apply provenance (owner lineage if provided)
-      const lineage: Lineage = this.owner ? [this.owner] : [];
+      const lineage: EntryLineage = this.owner ? [this.owner] : [];
       const row = this.makeRow(token, ti, lineage, this);
       this.localRows.push(row);
     }
 
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
-    childAppRegistries.forEach(childAppRegistry => {
-      const apps = childAppRegistry.getApps();
+    childAppRegistries.forEach(appRegistry => {
+      const apps = appRegistry.getApps();
       for (const app of apps) {
-        //  get app tools and adopt them as owner app owne
-        //  register's provided tools inside the app
+        const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
+        appToolsRegistries.filter(t => t.owner.kind === 'app').forEach(appToolRegistry => {
+          this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
+        });
       }
     });
 
-    const childRegistries = this.providers.getRegistries('ToolRegistry');
-    childRegistries.filter(t => t != this).forEach(childRegistry => {
-      this.adoptFromChild(childRegistry as ToolRegistry, childRegistry.owner);
+    const childToolRegistries = this.providers.getRegistries('ToolRegistry');
+    childToolRegistries.filter(t => t != this).forEach(toolRegistry => {
+      this.adoptFromChild(toolRegistry as ToolRegistry, toolRegistry.owner);
     });
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
     this.bump('reset');
+
+
+    const scope = this.providers.getActiveScope();
+    await scope.registryFlows(ToolsListFlow)
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -258,11 +143,11 @@ export default class ToolRegistry extends RegistryAbstract<
    * - Child rows already include the child's own lineage (e.g., adapter:openapi).
    * - Here we only prepend the **parent's** owner, to avoid double-prefixing the child.
    */
-  adoptFromChild(child: ToolRegistry, _childOwner: OwnerRef): void {
+  adoptFromChild(child: ToolRegistry, _childOwner: EntryOwnerRef): void {
     if (this.children.has(child)) return;
 
     const childRows = child.listAllIndexed(); // includes child's lineage
-    const prepend: Lineage = this.owner ? [this.owner] : [];
+    const prepend: EntryLineage = this.owner ? [this.owner] : [];
 
     const adoptedRows = childRows.map(r => this.relineage(r, prepend));
 
@@ -270,7 +155,7 @@ export default class ToolRegistry extends RegistryAbstract<
     this.children.add(child);
 
     // keep live if child changes
-    child.subscribe({ immediate: false }, () => {
+    child.subscribe({immediate: false}, () => {
       const latest = child.listAllIndexed().map(r => this.relineage(r, prepend));
       this.adopted.set(child, latest);
       this.reindex();
@@ -281,10 +166,10 @@ export default class ToolRegistry extends RegistryAbstract<
     this.bump('reset');
   }
 
-  getTools(): ToolEntry<any, any>[] {
+  getTools(includeHidden: boolean = false): ToolEntry<any, any>[] {
     const local = [...this.localRows].flat().map(t => t.instance);
     const adopted = [...this.adopted.values()].flat().map(t => t.instance);
-    return [...local, ...adopted];
+    return [...local, ...adopted].filter(t => t.metadata.hideFromDiscovery !== true || includeHidden);
   }
 
   getInlineTools(): ToolEntry<any, any>[] {
@@ -349,14 +234,14 @@ export default class ToolRegistry extends RegistryAbstract<
    *    - Children with same base get prefixed by providerId (or owner path)
    */
   exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolInstance }> {
-    const cfg = { ...DEFAULT_EXPORT_OPTS, ...(opts ?? {}) };
+    const cfg = {...DEFAULT_EXPORT_OPTS, ...(opts ?? {})};
 
     const rows = this.listAllIndexed().map(r => {
       const base = normalizeSegment(r.baseName, cfg.case);
       const isLocal = r.source === this;
       const provider = normalizeProviderId(this.providerIdOf(r.instance), cfg.case);
       const ownerPath = normalizeOwnerPath(r.ownerKey, cfg.case);
-      return { base, row: r, isLocal, provider, ownerPath };
+      return {base, row: r, isLocal, provider, ownerPath};
     });
 
     // group by standardized base
@@ -414,7 +299,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
     return [...out.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, instance]) => ({ name, instance }));
+      .map(([name, instance]) => ({name, instance}));
 
     function disambiguate(candidate: string, pool: Map<string, any>, cfg: Required<ExportNameOptions>): string {
       if (!pool.has(candidate)) return candidate;
@@ -448,27 +333,27 @@ export default class ToolRegistry extends RegistryAbstract<
         snapshot: this.listAllInstances().filter(filter),
       });
     }
-    return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
+    return this.emitter.on((e) => cb({...e, snapshot: this.listAllInstances().filter(filter)}));
   }
 
   private bump(kind: ToolChangeEvent['kind']) {
     const version = ++this.version;
-    this.emitter.emit({ kind, scope: 'global', version, snapshot: this.listAllInstances() });
+    this.emitter.emit({kind, scope: 'global', version, snapshot: this.listAllInstances()});
   }
 
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedTool row */
-  private makeRow(token: Token, instance: ToolInstance, lineage: Lineage, source: ToolRegistry): IndexedTool {
+  private makeRow(token: Token, instance: ToolInstance, lineage: EntryLineage, source: ToolRegistry): IndexedTool {
     const ownerKey = ownerKeyOf(lineage);
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
     const qualifiedId = `${ownerKey}:${tokenName(token)}`;
-    return { token, instance, baseName, lineage, ownerKey, qualifiedName, qualifiedId, source };
+    return {token, instance, baseName, lineage, ownerKey, qualifiedName, qualifiedId, source};
   }
 
   /** Clone a child row and prepend lineage (with adjacent de-dup to avoid double prefixes). */
-  private relineage(row: IndexedTool, prepend: Lineage): IndexedTool {
+  private relineage(row: IndexedTool, prepend: EntryLineage): IndexedTool {
     const merged = [...prepend, ...row.lineage];
     const lineage = dedupLineage(merged);
 
@@ -516,8 +401,8 @@ export default class ToolRegistry extends RegistryAbstract<
 /* -------------------- lineage utility -------------------- */
 
 /** Remove only adjacent duplicates like [adapter:x, adapter:x] → [adapter:x] */
-function dedupLineage(l: Lineage): Lineage {
-  const out: Lineage = [];
+function dedupLineage(l: EntryLineage): EntryLineage {
+  const out: EntryLineage = [];
   for (const o of l) {
     const last = out[out.length - 1];
     if (!last || last.kind !== o.kind || last.id !== o.id) out.push(o);

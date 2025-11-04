@@ -1,12 +1,12 @@
 // libs/core/src/tool/flows/tool.execute.flow.ts
 import 'reflect-metadata';
 import { z } from 'zod';
-import { InvokePlan, FlowAsCtx, HooksOf, StagesFromPlan, RunPlan, RunOptions, CreateOptions } from '../../invoker';
+import { InvokePlan, FlowAsCtx, StagesFromPlan, RunPlan } from '../../invoker';
 
 import ProviderRegistry from '../../provider/provider.registry';
 import { ToolRecordImpl } from '../toolRecordImpl';
 import { ToolResolveFn } from '../tool.types';
-import { ToolHookStage, Type } from '@frontmcp/sdk';
+import {FlowHooksOf, ToolHookStage, Type} from '@frontmcp/sdk';
 
 import { ControlRespond } from '../../types/invoke.type';
 
@@ -32,7 +32,7 @@ export type ToolExecuteFlowOutput = z.infer<typeof FlowOutputSchema>;
 
 // ---------- Plan (non-prefixed stage names) ----------
 export const toolExecutePlan = {
-  name: 'tool.call',
+  name: 'tool.call' as any,
   pre: [
     'createInvokeContext',
     // rate limiting / concurrency
@@ -70,7 +70,7 @@ export const toolExecutePlan = {
   error: ['error'],
 } as const satisfies RunPlan<string>;
 export type ToolExecuteStage = StagesFromPlan<typeof toolExecutePlan>;
-const { Stage } = HooksOf<ToolExecuteStage>();
+const { Stage } = FlowHooksOf('tools:list-tools')as any;
 
 // ---------- Internals ----------
 type RuntimeHook = {
@@ -97,25 +97,25 @@ function orderForStage(stage: ToolHookStage, hooks: RuntimeHook[]): RuntimeHook[
   });
 }
 
-function toRuntimeHooks(stage: ToolHookStage, tool: ToolRecordImpl, classHooks: any[], fnHooks: any[]): RuntimeHook[] {
-  const fromClass: RuntimeHook[] = classHooks.map((h: any) => ({
-    providedBy: h.providedBy ?? h.constructor?.name ?? 'AnonymousHook',
-    call: async (ctx) => h[stage](ctx),
-    filter: h.filter ? (ctx) => h.filter!(ctx) : undefined,
-    priority: typeof h.priority === 'function' ? Number(h.priority()) || 0 : 0,
-    sourceKind: 'class',
-    hasFilter: typeof h.filter === 'function',
-  }));
-  const fromFn: RuntimeHook[] = fnHooks.map((fh: any) => ({
-    providedBy: fh.providedBy ?? `${tool.toolClass?.name}.${stage}`,
-    call: async (ctx) => fh[stage](ctx),
-    filter: fh.filter ? (ctx) => fh.filter!(ctx) : undefined,
-    priority: typeof fh.priority === 'function' ? Number(fh.priority()) || 0 : 0,
-    sourceKind: 'method',
-    hasFilter: typeof fh.filter === 'function',
-  }));
-  return [...fromClass, ...fromFn];
-}
+// function toRuntimeHooks(stage: ToolHookStage, tool: ToolRecordImpl, classHooks: any[], fnHooks: any[]): RuntimeHook[] {
+//   const fromClass: RuntimeHook[] = classHooks.map((h: any) => ({
+//     providedBy: h.providedBy ?? h.constructor?.name ?? 'AnonymousHook',
+//     call: async (ctx) => h[stage](ctx),
+//     filter: h.filter ? (ctx) => h.filter!(ctx) : undefined,
+//     priority: typeof h.priority === 'function' ? Number(h.priority()) || 0 : 0,
+//     sourceKind: 'class',
+//     hasFilter: typeof h.filter === 'function',
+//   }));
+//   const fromFn: RuntimeHook[] = fnHooks.map((fh: any) => ({
+//     providedBy: fh.providedBy ?? `${tool.toolClass?.name}.${stage}`,
+//     call: async (ctx) => fh[stage](ctx),
+//     filter: fh.filter ? (ctx) => fh.filter!(ctx) : undefined,
+//     priority: typeof fh.priority === 'function' ? Number(fh.priority()) || 0 : 0,
+//     sourceKind: 'method',
+//     hasFilter: typeof fh.filter === 'function',
+//   }));
+//   return [...fromClass, ...fromFn];
+// }
 
 async function buildContext(
   tool: ToolRecordImpl,
@@ -183,12 +183,6 @@ export default class ToolExecuteFlow extends FlowAsCtx<
   ToolExecuteFlowInput,
   ToolExecuteFlowOutput
 > {
-  static create(options: CreateOptions) {
-    return super.createInvoker.bind(this)(toolExecutePlan.name, options) as RunOptions<
-      ToolExecuteFlowRawInput,
-      ToolExecuteFlowOutput
-    >;
-  }
 
   constructor(options: ToolExecuteFlowRawInput) {
     super({ rawInput: options });
@@ -197,7 +191,6 @@ export default class ToolExecuteFlow extends FlowAsCtx<
   // ---------- runtime ----------
   private ctx!: ToolInvokeContext;
   private stageInventory: StageInventory = new Map();
-  private _wrappedExecute?: () => Promise<unknown>;
   state = { cacheHit: false };
 
   @Stage('createInvokeContext')

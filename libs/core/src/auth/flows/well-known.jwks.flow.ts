@@ -24,7 +24,6 @@ const plan = {
 };
 
 declare global {
-  // noinspection JSUnusedGlobalSymbols
   export interface ExtendFlows {
     'well-known.jwks': FlowRunOptions<
       WellKnownJwksFlow,

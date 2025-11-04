@@ -73,7 +73,6 @@ type WellKnownAsFlowOptions = FlowRunOptions<
 
 
 declare global {
-  // noinspection JSUnusedGlobalSymbols
   export interface ExtendFlows {
     'well-known.oauth-authorization-server': WellKnownAsFlowOptions;
   }

@@ -7,12 +7,12 @@ import {
   ScopeKind,
   Token,
 } from '@frontmcp/sdk';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
-import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
-import { normalizeApp } from '../app/app.utils';
-import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
-import { tokenName } from '../utils/token.utils';
+import {FrontMcpConfig} from '../front-mcp/front-mcp.tokens';
+import {normalizeApp} from '../app/app.utils';
+import {normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps} from './scope.utils';
+import {tokenName} from '../utils/token.utils';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
 

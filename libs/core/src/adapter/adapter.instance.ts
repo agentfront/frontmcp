@@ -54,7 +54,7 @@ export class AdapterInstance extends AdapterEntry {
 
     this.tools = new ToolRegistry(this.globalProviders, result.tools ?? [], {
       kind: 'adapter',
-      id: rec.metadata.id ?? rec.metadata.name,
+      id: `${adapter.options.name}`,
       ref: rec.provide,
     });
 

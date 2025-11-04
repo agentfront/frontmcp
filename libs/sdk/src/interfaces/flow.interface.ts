@@ -3,6 +3,7 @@ import { FlowMetadata, FlowName } from '../metadata';
 import { z } from 'zod';
 import { ScopeEntry } from '../entries';
 import { FlowState, FlowStateOf } from './internal/flow.utils';
+import {FrontMcpLogger} from "./logger.interface";
 
 export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
 export type FlowOutputOf<N extends FlowName> = z.infer<ExtendFlows[N]['output']>;
@@ -44,7 +45,7 @@ export class FlowControl extends Error {
 export abstract class FlowBase<N extends FlowName = FlowName> {
   protected input: FlowInputOf<N>;
   state: FlowStateOf<N> = FlowState.create({});
-
+  scopeLogger: FrontMcpLogger;
   constructor(
     protected readonly metadata: FlowMetadata<N>,
     protected readonly rawInput: Partial<FlowInputOf<N>> | any,
@@ -52,6 +53,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     protected readonly deps: ReadonlyMap<Token, unknown> = new Map(),
   ) {
     this.input = (metadata.inputSchema as any)?.parse?.(rawInput);
+    this.scopeLogger = scope.logger;
   }
 
   get<T>(token: Token<T>): T {

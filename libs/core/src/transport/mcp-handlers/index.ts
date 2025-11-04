@@ -1,11 +1,10 @@
-
-import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import {McpHandler, McpHandlerOptions} from './mcp-handlers.types';
 import initializeRequestHandler from './initialize-request.handler';
 import initializedNotificationHandler from './Initialized-notification.hanlder';
 import listToolsRequestHandler from './list-tools-request.handler';
 import callToolRequestHandler from './call-tool-request.handler';
 
-export function createMcpHandlers(options: McpHandlerOptions): McpHandler<any, any>[] {
+export function createMcpHandlers(options: McpHandlerOptions) {
   return [
     initializeRequestHandler(options),
     initializedNotificationHandler(options),

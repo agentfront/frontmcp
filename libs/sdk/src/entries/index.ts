@@ -1,3 +1,4 @@
+export * from './base.entry';
 export * from './scope.entry';
 export * from './flow.entry';
 export * from './app.entry';

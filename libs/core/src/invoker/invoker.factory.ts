@@ -1,19 +1,18 @@
 // invoker/invoker.factory.ts
-import { Invoker } from './invoker';
+import {Invoker} from './invoker';
 import type {
-  ScopeKeyExtractor,
-  ProviderGettersOption,
   BindingsGetter,
   HooksByStage,
   InvokeBaseContext,
   ProviderBinding,
+  ProviderGettersOption,
+  ScopeKeyExtractor,
 } from './invoker.types';
 
-import { MCP_HOOK_ORIGIN_RESOLVE } from '../plugin/plugin.tokens';
-import { FlowName } from '../plugin/plugin.types';
-import { AppLocalInstance } from '../app/instances';
-import { Scope } from '../scope/scope.instance';
-import { ProviderScope, Token } from '@frontmcp/sdk';
+import {MCP_HOOK_ORIGIN_RESOLVE} from '../plugin/plugin.tokens';
+import {AppLocalInstance} from '../app/instances';
+import {Scope} from '../scope';
+import {FlowName, ProviderScope, Token} from '@frontmcp/sdk';
 
 // ---------- scope key extractor (strict) ----------
 export function compileScopeExtractor<Ctx = any>(overrides?: ScopeKeyExtractor<Ctx>): ScopeKeyExtractor<Ctx> {
@@ -107,8 +106,7 @@ function collectHooksByStage(scope: Scope, app: AppLocalInstance | undefined, ns
   const appHooks = app.plugins.collectHooksByStage(ns);
   const out: HooksByStage = {};
   for (const stage of Object.keys(appHooks)) {
-    const withOrigin = appHooks[stage].map((h: any) => Object.assign({}, h, { __originApp: app }));
-    out[stage] = withOrigin;
+    out[stage] = appHooks[stage].map((h: any) => Object.assign({}, h, {__originApp: app}));
   }
   return out;
 }

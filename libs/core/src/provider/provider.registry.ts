@@ -13,13 +13,13 @@ import {
   RegistryKind,
   RegistryType, ProviderEntry, FrontMcpServer,
 } from '@frontmcp/sdk';
-import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
-import { depsOfClass, isClass, isPromise, tokenName } from '../utils/token.utils';
-import { hasAsyncWith } from '../utils/metadata.utils';
-import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { AuthRegistry } from '../auth/auth.registry';
-import { ProviderViews } from './provider.types';
-import { Scope } from '../scope/scope.instance';
+import {normalizeProvider, providerDiscoveryDeps, providerInvocationTokens} from './provider.utils';
+import {depsOfClass, isClass, isPromise, tokenName} from '../utils/token.utils';
+import {hasAsyncWith} from '../utils/metadata.utils';
+import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
+import {AuthRegistry} from '../auth/auth.registry';
+import {ProviderViews} from './provider.types';
+import {Scope} from '../scope';
 
 export default class ProviderRegistry extends RegistryAbstract<
   ProviderEntry,
@@ -37,7 +37,7 @@ export default class ProviderRegistry extends RegistryAbstract<
 
   private registries: Map<RegistryKind, Set<RegistryType>> = new Map();
 
-  constructor(list: ProviderType[], parentProviders?: ProviderRegistry) {
+  constructor(list: ProviderType[], private readonly parentProviders?: ProviderRegistry) {
     super('ProviderRegistry', parentProviders, list, false);
 
     this.providedBy = new Map();
@@ -59,7 +59,7 @@ export default class ProviderRegistry extends RegistryAbstract<
   private lookupDefInHierarchy(token: Token):
     | { registry: ProviderRegistry; rec: ProviderRecord }
     | undefined {
-    if (this.defs.has(token as any)) return { registry: this, rec: this.defs.get(token as any)! };
+    if (this.defs.has(token as any)) return {registry: this, rec: this.defs.get(token as any)!};
     return this.providers?.lookupDefInHierarchy(token);
   }
 
@@ -67,7 +67,7 @@ export default class ProviderRegistry extends RegistryAbstract<
   private resolveDefaultFromHierarchy(token: Token): any {
     const found = this.lookupDefInHierarchy(token);
     if (!found) throw new Error(`Cannot resolve token ${tokenName(token)}: not registered in hierarchy.`);
-    const { registry, rec } = found;
+    const {registry, rec} = found;
     const sc = registry.getScope(rec);
     if (sc !== ProviderScope.GLOBAL) {
       const scName = ProviderScope[sc];
@@ -99,7 +99,7 @@ export default class ProviderRegistry extends RegistryAbstract<
       graph.set(provide, new Set());
     }
 
-    return { tokens, defs, graph };
+    return {tokens, defs, graph};
   }
 
   protected buildGraph() {
@@ -757,7 +757,7 @@ export default class ProviderRegistry extends RegistryAbstract<
 
     const found = this.lookupDefInHierarchy(t);
     if (found) {
-      const { registry, rec } = found;
+      const {registry, rec} = found;
       const sc = registry.getScope(rec);
       if (sc !== ProviderScope.GLOBAL)
         throw new Error(`Plugin dependency ${tokenName(t)} must be DEFAULT-scoped at bootstrap`);
@@ -779,7 +779,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     // 1) If it's a registered token (local or parent), handle via DI rules
     const found = this.lookupDefInHierarchy(cls as any);
     if (found) {
-      const { registry, rec } = found;
+      const {registry, rec} = found;
       const sc = registry.getScope(rec);
       if (sc !== ProviderScope.GLOBAL) {
         const scName = ProviderScope[sc];
@@ -823,7 +823,7 @@ export default class ProviderRegistry extends RegistryAbstract<
       instance: ProviderEntry;
     }[],
   ) {
-    for (const { token, def, instance } of exported) {
+    for (const {token, def, instance} of exported) {
       if (def.metadata.scope === ProviderScope.GLOBAL) {
         this.instances.set(token, instance);
       }
@@ -861,13 +861,23 @@ export default class ProviderRegistry extends RegistryAbstract<
     this.graph.set(rec.provide, new Set());
     this.instances.set(rec.provide, rec.value);
   }
-
+  private getWithParents<T>(token: Token<T>): T {
+    let providers: ProviderRegistry = this
+    while (providers && !providers.instances.has(token)){
+      if(providers.parentProviders){
+        providers = providers.parentProviders
+      }else {
+        return providers.get(token)
+      }
+    }
+    return providers.get(token)
+  }
   getActiveScope(): Scope {
-    return this.get<Scope>(ScopeEntry);
+    return this.getWithParents(Scope)
   }
 
   getActiveServer(): FrontMcpServer {
-    return this.get(FrontMcpServer);
+    return this.getWithParents(FrontMcpServer)
   }
 
   async buildViews(session: string): Promise<ProviderViews> {
