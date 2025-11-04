@@ -1,34 +1,88 @@
 ---
 title: Tools
 slug: servers/tools
+icon: wrench
 ---
 
-Tools are the primary execution units. Define them with the @Tool (aka @FrontMcpTool) decorator from @frontmcp/common. Tools have a name, description, Zod input schema, and an async execute method.
+Tools are **typed actions** your server can execute. They’re described with Zod schemas and exposed via MCP. Implement as a class with `@Tool({...})` or as a function via `tool()`.
 
-Basic example (conceptual)
-```
-Tool metadata:
-{
-  name: 'create-expense',
-  description: 'Create an expense record',
-  inputSchema: {
-    amount: 'number',
-    category: 'string'
+## Minimal tool (class)
+
+```ts
+import { Tool } from '@frontmcp/common';
+import { z } from 'zod';
+
+@Tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: z.object({ name: z.string() }),
+})
+export default class GreetTool {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`;
   }
 }
-
-execute(input) => Promise<Output>
 ```
 
-Caching with the Cache plugin
-- When the Cache plugin is installed on an app, tools may opt into caching.
-- The plugin extends tool metadata with:
-```
-cache: true | { ttl?: number; slideWindow?: boolean }
+Register it on an app:
+
+```ts
+@FrontMcpApp({ id: 'hello', name: 'Hello', tools: [GreetTool] })
+export default class HelloApp {}
 ```
 
-Hooks around tools
-- Global and app/plugin hooks can intercept tool stages (will/did/around) to add auth, metrics, redaction, etc. See Servers → Hooks.
+## Inline tool (function builder)
 
-Hooks around tools
-- Global and app/plugin hooks can intercept tool stages (will/did/around) to add auth, metrics, redaction, etc. See Servers → Hooks.
+```ts
+import { tool } from '@frontmcp/common';
+import { z } from 'zod';
+
+export const Add = tool({
+  name: 'add',
+  description: 'Add two numbers',
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  // optional: outputSchema
+})((input) => input.a + input.b);
+```
+
+Add to app:
+
+```ts
+@FrontMcpApp({ name: 'Calc', tools: [Add] })
+class CalcApp {}
+```
+
+---
+
+## Tool metadata
+
+```ts
+@Tool({
+  id?: string,
+  name: string,
+  description?: string,
+  inputSchema: ZodSchema,
+  rawInputSchema?: JSONSchema7,
+  outputSchema?: ZodSchema,
+  tags?: string[],
+  annotations?: {
+    title?: string,
+    readOnlyHint?: boolean,
+    destructiveHint?: boolean,
+    idempotentHint?: boolean,
+    openWorldHint?: boolean,
+  },
+  hideFromDiscovery?: boolean, // default false
+})
+```
+
+**Notes**
+- `annotations` hint model & UI behavior (read-only, idempotent, etc.).
+- `hideFromDiscovery` keeps a tool callable but off `tool/list`.
+- Tools can attach **per-tool hooks** (see *Advanced → Hooks*).
+
+---
+
+## Return values
+- Return any serializable type; if you provide `outputSchema`, it will validate.
+- Errors are surfaced via MCP error responses; you can also throw typed errors inside executors.

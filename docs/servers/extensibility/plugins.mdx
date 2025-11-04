@@ -1,0 +1,48 @@
+---
+title: Plugins
+slug: servers/extensibility/plugins
+icon: puzzle-piece
+---
+
+**Plugins** add cross-cutting behavior and can also contribute components. Typical uses: auth/session helpers, PII filtering, tracing, logging, caching, error policy, rate-limits.
+
+## Define a plugin
+
+```ts
+import { Plugin } from '@frontmcp/common';
+
+@Plugin({
+  name: 'Cache Plugin',
+  description: 'Adds transparent response caching for tools/resources',
+  providers: [CacheProvider],          // plugin-scoped providers
+  exports: [CacheProvider],            // re-export to host app
+  adapters: [SpecNormalizerAdapter],   // optionally attach adapters
+  tools: [WarmCacheTool],              // and tools/resources/prompts if desired
+  resources: [],
+  prompts: [],
+})
+export default class CachePlugin {}
+```
+
+Attach a plugin at app scope:
+```ts
+@FrontMcpApp({
+  name: 'Billing',
+  plugins: [CachePlugin, ObservabilityPlugin],
+})
+export default class BillingApp {}
+```
+
+### What plugins can do
+- Register **providers** (and **export** them to the host app)
+- Contribute **adapters**, **tools**, **resources**, **prompts**
+- Participate in lifecycle via **hooks** (see *Advanced → Hooks*)
+
+### Composition
+Plugins compose **depth-first** at the app level. Later plugins can depend on providers exported by earlier ones.
+
+<Tip>
+    Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
+    behavior without boilerplate.
+</Tip>
+

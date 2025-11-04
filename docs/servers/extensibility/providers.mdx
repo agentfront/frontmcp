@@ -1,0 +1,65 @@
+---
+title: Providers
+slug: servers/extensibility/providers
+icon: boxes
+---
+
+**Providers** are dependency-injected singletons (or scoped singletons) that your apps, tools, adapters, and plugins can use — e.g., config, DB pools, Redis clients, KMS, HTTP clients.
+
+They’re declared with `@Provider()` and registered at **server** or **app** scope. Resolution is hierarchical: **tool → app → server**.
+
+## Define a provider
+
+```ts
+import { Provider, ProviderScope } from '@frontmcp/common';
+
+@Provider({
+  name: 'DbProvider',
+  description: 'Postgres connection pool',
+  scope: ProviderScope.GLOBAL, // GLOBAL | SESSION | REQUEST
+})
+export class DbProvider {
+  /* create pool, expose query() etc. */
+}
+```
+
+### Scopes
+- **GLOBAL** (default): one instance per process/worker. Ideal for clients, pools, caches.
+- **SESSION**: one instance per authenticated session. Use for per-user credentials or token-bound clients.
+- **REQUEST**: one instance per inbound request. Use sparingly (e.g., per-request trace/state).
+
+## Register providers
+
+**Server-level** providers (available to all apps):
+```ts
+@FrontMcp({
+  info: { name: 'Suite', version: '1.0.0' },
+  apps: [BillingApp, AnalyticsApp],
+  providers: [DbProvider, CacheProvider],
+})
+export default class Server {}
+```
+
+**App-level** providers (override or add on top of server-level):
+```ts
+@FrontMcpApp({
+  name: 'Billing',
+  providers: [BillingConfigProvider],
+})
+export default class BillingApp {}
+```
+
+<Tip>
+    You can register **class**, **value**, or **factory** providers. Factories are useful for async initialization or composing other providers.
+</Tip>
+
+## Using providers from tools/plugins
+FrontMCP resolves providers for your executors and hooks. Keep your tool logic pure; read side-effects (DB, queues, secrets) via providers.
+
+- Prefer **GLOBAL** for shared clients.
+- Use **SESSION** for user-bound clients (e.g., per-user API token).
+- Reserve **REQUEST** for ephemeral state.
+
+<Info>
+    Provider injection/consumption follows your runtime’s DI rules. In general: register providers at the minimal scope and let the framework resolve them for tools and hooks at execution time.
+</Info>
