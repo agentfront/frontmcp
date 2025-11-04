@@ -1,0 +1,109 @@
+---
+title: MCP Inspector
+slug: deployment/mcp-inspector
+icon: magnifying-glass
+---
+
+Test and debug your FrontMCP server with the **MCP Inspector**. It launches a small proxy plus a web UI where you can browse **tools**, **resources**, and **prompts**, send requests, and see logs.
+
+> The Inspector runs via `npx` and works great with TypeScript servers. You can run against your built JS or your TS entry using `tsx`.
+
+---
+
+## Install (as a dev dependency)
+
+<CodeGroup>
+
+    ```bash npm
+    npm i -D @modelcontextprotocol/inspector
+    ```
+
+    ```bash yarn
+    yarn add -D @modelcontextprotocol/inspector
+    ```
+
+    ```bash pnpm
+    pnpm add -D @modelcontextprotocol/inspector
+    ```
+
+</CodeGroup>
+
+This keeps the Inspector version pinned in your repo. You can still invoke it with `npx` so your local version is used.
+
+---
+
+## Quick start (TypeScript)
+
+Run the Inspector and let it spawn your TS entry with **tsx**:
+
+```bash
+npx @modelcontextprotocol/inspector tsx src/main.ts
+```
+
+Or run against your compiled output:
+
+```bash
+npx @modelcontextprotocol/inspector node dist/main.js
+```
+
+- You’ll get a browser UI to connect and exercise your server.
+- From the UI you can pick transports and tweak command args/env.
+
+---
+
+## package.json scripts
+
+Add handy scripts for dev and dist builds:
+
+```json package.json (scripts)
+{
+"scripts": {
+    "inspect:dev"
+:
+    "npx @modelcontextprotocol/inspector tsx src/main.ts",
+        "inspect:dist"
+:
+    "npx @modelcontextprotocol/inspector node dist/main.js"
+}
+}
+```
+
+Run them with your package manager:
+
+<CodeGroup>
+
+    ```bash npm
+    npm run inspect:dev
+    ```
+
+    ```bash yarn
+    yarn inspect:dev
+    ```
+
+    ```bash pnpm
+    pnpm inspect:dev
+    ```
+
+</CodeGroup>
+
+---
+
+## Tips
+
+- If you change server code, **rebuild** (or re-run `tsx`) and **reconnect** the Inspector.
+- Use the UI’s **Tools**, **Resources**, and **Prompts** tabs to validate schemas, try inputs, and preview results.
+- Keep logs readable: set `logging.level` in your `@FrontMcp` options.
+
+---
+
+## Troubleshooting
+
+- **Server doesn’t start**: make sure your command is correct (e.g., `node dist/main.js` or `tsx src/main.ts`).
+- **Auth or transport issues**: double‑check your `http.entryPath`, and verify the transport selected in the UI.
+- **Version drift**: keep `@frontmcp/*` packages aligned.
+
+---
+
+## References
+- Official MCP Inspector docs (usage via `npx`, inspecting npm/PyPI packages, and local servers).
+- Inspector repository (source and issues).

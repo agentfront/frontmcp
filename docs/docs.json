@@ -101,6 +101,7 @@
             "group": "Deployment",
             "pages": [
               "deployment/local-dev-server",
+              "deployment/mcp-inspector",
               "deployment/production-build"
             ]
           },

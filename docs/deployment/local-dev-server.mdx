@@ -1,0 +1,197 @@
+---
+title: Local Dev Server
+slug: deployment/local-dev-server
+icon: computer
+---
+
+Run your FrontMCP server locally with a clean, no‑Nx setup. This guide shows **install**, **TypeScript config**, **package.json scripts**, and a **minimal server**.
+
+## Prerequisites
+- Node.js **>= 20**
+- A package manager: **npm**, **yarn**, or **pnpm**
+
+---
+
+## 1) Install dependencies
+
+<CodeGroup>
+
+    ```bash npm
+    npm init -y
+    npm i -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    npm i -D typescript tsx @types/node rimraf
+    ```
+
+    ```bash yarn
+    yarn init -y
+    yarn add -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    yarn add -D typescript tsx @types/node rimraf
+    ```
+
+    ```bash pnpm
+    pnpm init -y
+    pnpm add -E @frontmcp/common @frontmcp/core zod reflect-metadata
+    pnpm add -D typescript tsx @types/node rimraf
+    ```
+
+</CodeGroup>
+
+---
+
+## 2) TypeScript config
+Create **tsconfig.json** at project root:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": ["ES2020"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/__tests__/**"]
+}
+```
+
+Optional **tsconfig.build.json** (no source maps, emits types if you want to publish):
+
+```json tsconfig.build.json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "sourceMap": false
+  },
+  "exclude": ["**/*.test.ts", "**/__tests__/**", "src/**/*.dev.ts"]
+}
+```
+
+---
+
+## 3) Project structure
+
+```text
+.
+├─ src/
+│  ├─ main.ts          # @FrontMcp entry — imports 'reflect-metadata' first
+│  ├─ hello.app.ts     # @FrontMcpApp with tools/resources/prompts
+│  └─ tools/
+│     └─ greet.tool.ts # @Tool example
+├─ package.json
+├─ tsconfig.json
+└─ tsconfig.build.json
+```
+
+---
+
+## 4) Minimal code
+**src/main.ts**
+```ts
+import 'reflect-metadata';
+import { FrontMcp, LogLevel } from '@frontmcp/common';
+import HelloApp from './hello.app';
+
+@FrontMcp({
+  info: { name: 'Hello MCP', version: '0.1.0' },
+  apps: [HelloApp],
+  http: { port: Number(process.env.PORT) || 3000 },
+  logging: { level: LogLevel.Info },
+})
+export default class Server {}
+```
+
+**src/hello.app.ts**
+```ts
+import { FrontMcpApp } from '@frontmcp/common';
+import Greet from './tools/greet.tool';
+
+@FrontMcpApp({ id: 'hello', name: 'Hello', tools: [Greet] })
+export default class HelloApp {}
+```
+
+**src/tools/greet.tool.ts**
+```ts
+import { tool } from '@frontmcp/common';
+import { z } from 'zod';
+
+export default tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: z.object({ name: z.string() }),
+})(({ name }) => `Hello, ${name}!`);
+```
+
+---
+
+## 5) package.json (scripts)
+
+```json package.json
+{
+  "name": "frontmcp-server",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/main.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start:dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@frontmcp/sdk": "^0.1.0",
+    "zod": "^3.23.8",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "tsx": "^4.16.0",
+    "@types/node": "^20.11.30",
+    "rimraf": "^5.0.5"
+  }
+}
+```
+
+---
+
+## 6) Run it
+
+<CodeGroup>
+
+    ```bash npm
+    npm run dev
+    ```
+
+    ```bash yarn
+    yarn dev
+    ```
+
+    ```bash pnpm
+    pnpm dev
+    ```
+
+</CodeGroup>
+
+- Server listens on `http://localhost:3000` (or `$PORT`).
+- Connect with any MCP client that supports **Streamable HTTP**.
+
+---
+
+## Notes
+- Always import **`reflect-metadata` first** in your entry (enables decorator metadata).
+- Control logs via `logging` in `@FrontMcp` options.
+- Configure `http.entryPath` if you want `/mcp` instead of the default `''`.
+
