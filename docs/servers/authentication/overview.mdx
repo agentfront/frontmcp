@@ -30,11 +30,11 @@ export default class Server {}
 
 **Per app (isolated scopes):**
 ```ts
+@App({ name: 'Billing', auth: { type: 'local', id: 'local', name: 'Local Auth' } })
+export default class BillingApp {}
+
 @FrontMcp({ info: { name: 'Suite', version: '1.0.0' }, apps: [BillingApp, AnalyticsApp], splitByApp: true })
 export default class Server {}
-
-@FrontMcpApp({ name: 'Billing', auth: { type: 'local', id: 'local', name: 'Local Auth' } })
-export default class BillingApp {}
 ```
 
 ---

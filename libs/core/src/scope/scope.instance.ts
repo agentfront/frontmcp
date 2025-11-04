@@ -1,0 +1,123 @@
+import 'reflect-metadata';
+import {
+  FlowInputOf,
+  FlowName, FlowOutputOf,
+  FlowType,
+  FrontMcpAuth,
+  FrontMcpLogger,
+  FrontMcpServer,
+  ProviderScope,
+  ScopeEntry,
+  ScopeRecord,
+  SessionProvider,
+  Token, ToolEntry, Type,
+} from '@frontmcp/sdk';
+import AppRegistry from '../app/app.registry';
+import ProviderRegistry from '../provider/provider.registry';
+import { AuthRegistry } from '../auth/auth.registry';
+import FlowRegistry from '../flows/flow.registry';
+import HttpRequestFlow from './flows/http.request.flow';
+import { TransportService } from '../transport/transport.registry';
+import ToolRegistry from '../tool/tool.registry';
+
+
+export class Scope extends ScopeEntry {
+  readonly id: string;
+  private readonly globalProviders: ProviderRegistry;
+  readonly logger: FrontMcpLogger;
+
+  private readonly scopeProviders: ProviderRegistry;
+  private scopeAuth: AuthRegistry;
+  private readonly scopeFlows: FlowRegistry;
+  private scopeApps: AppRegistry;
+  readonly transportService: TransportService;
+  readonly entryPath: string;
+  readonly routeBase: string = '';
+  readonly orchestrated: boolean = false;
+
+  readonly server: FrontMcpServer;
+
+  constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
+    super(rec, rec.provide);
+    this.id = 'root'; // Fix by using rec.id
+    this.logger = globalProviders.get(FrontMcpLogger).child('FrontMcp.MultiAppScope');
+    this.globalProviders = globalProviders;
+    this.server = this.globalProviders.get(FrontMcpServer);
+    this.entryPath = rec.metadata.http?.entryPath ?? '';
+
+    this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders);
+    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]); // add HttpRequestFlow
+
+    this.ready = this.initialize();
+    this.transportService = new TransportService(this);
+  }
+
+  protected async initialize(): Promise<void> {
+    await this.scopeProviders.ready;
+    await this.scopeFlows.ready;
+
+    this.scopeAuth = new AuthRegistry(this.scopeProviders, [], this.metadata.auth);
+    this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps);
+
+    this.logger.info('Initializing multi-app scope', this.metadata);
+
+    // wait for app to be ready
+    await this.auth.ready;
+    await this.scopeApps.ready;
+  }
+
+  private get defaultScopeProviders() {
+    return [{
+      scope: ProviderScope.GLOBAL,
+      name: 'ScopeEntry',
+      provide: ScopeEntry,
+      useValue: this,
+    }, {
+      scope: ProviderScope.GLOBAL,
+      name: 'Scope',
+      provide: Scope,
+      useValue: this,
+    }, {
+      scope: ProviderScope.GLOBAL,
+      name: 'FrontMcpLogger',
+      provide: FrontMcpLogger,
+      useValue: this.logger,
+    }, {
+      scope: ProviderScope.SESSION,
+      name: 'SessionProvider',
+      provide: SessionProvider,
+      useClass: SessionProvider,
+    }];
+  }
+
+  get auth(): FrontMcpAuth {
+    return this.scopeAuth.getPrimary();
+  }
+
+  get authProviders(): AuthRegistry {
+    return this.scopeAuth;
+  }
+
+  get providers() {
+    return this.scopeProviders;
+  }
+
+  get apps(): AppRegistry {
+    return this.scopeApps;
+  }
+
+  get tools(): ToolEntry[] {
+    return this.apps.getApps().reduce((tools: ToolEntry[], app) => {
+      return [...tools, ...app.tools.getTools()];
+    }, []);
+  }
+
+
+  registryFlows(...flows: FlowType[]) {
+    return this.scopeFlows.registryFlows(flows);
+  }
+
+  runFlow<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
+    return this.scopeFlows.runFlow(name, input, deps);
+  }
+}

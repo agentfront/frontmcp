@@ -1,0 +1,45 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": ".",
+    "strict": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "noImplicitAny": false,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "resolveJsonModule": true,
+    "strictPropertyInitialization": false,
+    "esModuleInterop": true,
+    "importHelpers": true,
+    "target": "es2021",
+    "module": "esnext",
+    "lib": [
+      "es2021",
+      "dom"
+    ],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "paths": {
+      "@frontmcp/sdk": [
+        "libs/sdk/src/index.ts"
+      ],
+      "@frontmcp/core": [
+        "libs/core/src/index.ts"
+      ],
+      "@frontmcp/plugins/cache": [
+        "libs/plugins/src/cache/index.ts"
+      ],
+      "@frontmcp/adapters/openapi": [
+        "libs/adapters/src/openapi/index.ts"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
+}

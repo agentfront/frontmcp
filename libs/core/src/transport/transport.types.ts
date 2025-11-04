@@ -1,0 +1,74 @@
+import { AuthenticatedServerRequest } from '../server/server.types';
+import { ElicitResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodObject } from 'zod';
+import { Infer } from '../utils/types.utils';
+import { ServerResponse } from '@frontmcp/sdk';
+
+export type TransportType = 'sse' | 'streamable-http' | 'http';
+
+export interface TransportKey {
+  type: TransportType;
+  token: string;
+  tokenHash: string;
+  sessionId: string;
+  sessionIdSse?: string;
+}
+
+export interface RemoteLocation {
+  nodeId: string;
+  channel: string;
+}
+
+export interface TransportBus {
+  nodeId(): string;
+
+  advertise(key: TransportKey): Promise<void>;
+
+  revoke(key: TransportKey): Promise<void>;
+
+  lookup(key: TransportKey): Promise<RemoteLocation | null>;
+
+  proxyRequest(
+    key: TransportKey,
+    payload: {
+      method?: string;
+      url?: string;
+      headers?: Record<string, string | string[] | undefined>;
+    },
+    io: {
+      onResponseStart(statusCode: number, headers: Record<string, string>): void;
+      onResponseChunk(chunk: Uint8Array | string): void;
+      onResponseEnd(finalChunk?: Uint8Array | string): void;
+      onError?(err: Error | string): void;
+    },
+  ): Promise<void>;
+
+  destroyRemote(key: TransportKey, reason?: string): Promise<void>;
+}
+
+/* --------------------------------- API ---------------------------------- */
+
+export interface Transporter {
+  readonly type: TransportType;
+  readonly tokenHash: string;
+  readonly sessionId: string;
+
+  initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
+
+  handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
+
+  destroy(reason?: string): Promise<void>;
+
+  ping(timeoutMs?: number): Promise<boolean>;
+}
+
+export interface TransportRegistryOptions {
+  distributed?: boolean;
+  bus?: TransportBus;
+}
+
+export type TransportTokenBucket = Map<string, Transporter>; // sessionHash -> Transporter
+export type TransportTypeBucket = Map<string, TransportTokenBucket>; // tokenHash   -> TokenBucket
+export type TransportRegistryBucket = Map<TransportType, TransportTypeBucket>; // tokenHash   -> TokenBucket
+
+export type TypedElicitResult<T extends ZodObject<any>> = { action: ElicitResult['action']; content: Infer<T> };

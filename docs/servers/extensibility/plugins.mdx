@@ -9,7 +9,7 @@ icon: puzzle-piece
 ## Define a plugin
 
 ```ts
-import { Plugin } from '@frontmcp/common';
+import { Plugin } from '@frontmcp/sdk';
 
 @Plugin({
   name: 'Cache Plugin',
@@ -26,7 +26,7 @@ export default class CachePlugin {}
 
 Attach a plugin at app scope:
 ```ts
-@FrontMcpApp({
+@App({
   name: 'Billing',
   plugins: [CachePlugin, ObservabilityPlugin],
 })

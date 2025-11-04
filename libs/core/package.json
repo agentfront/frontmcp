@@ -1,0 +1,25 @@
+{
+  "name": "@frontmcp/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "test": "jest --runInBand --config=jest.config.ts"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "dependencies": {
+    "tslib": "^2.3.0",
+    "@frontmcp/sdk": "*",
+    "itty-router": "^5.0.22"
+  }
+}

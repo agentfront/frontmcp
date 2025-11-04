@@ -70,7 +70,7 @@ Disable it by setting `enableConsole: false` in your server config.
 Emit machine‑readable logs (one JSON per line). Useful for file shipping agents or centralized logging.
 
 ```ts
-import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/common';
+import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
 
 @LogTransport({
   name: 'StructuredJsonTransport',
@@ -116,7 +116,7 @@ logging: { level: LogLevel.Info, enableConsole: false, transports: [StructuredJs
 Buffer records in memory and POST them in batches. Implements basic retry with backoff.
 
 ```ts
-import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/common';
+import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
 
 @LogTransport({ name: 'HttpBatchTransport', description: 'POST logs in batches' })
 export class HttpBatchTransport extends LogTransportInterface {

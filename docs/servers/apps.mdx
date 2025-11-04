@@ -9,9 +9,9 @@ Apps are how you **group capabilities** in FrontMCP. Each app can contribute **t
 ## Minimal local app
 
 ```ts
-import { FrontMcpApp } from '@frontmcp/common';
+import { App } from '@frontmcp/sdk';
 
-@FrontMcpApp({
+@App({
   id: 'hello',
   name: 'Hello App',
   tools: [],
@@ -31,7 +31,7 @@ export default class Server {}
 ## Local app options
 
 ```ts
-@FrontMcpApp({
+@App({
   id?: string,
   name: string,
   description?: string,
@@ -62,7 +62,7 @@ export default class Server {}
 Define an app that proxies to a **worker file** or a **URL**:
 
 ```ts
-@FrontMcpApp({
+@App({
   name: 'Remote CRM',
   urlType: 'url',                // 'url' | 'worker'
   url: 'https://crm.example.com/mcp',
@@ -90,7 +90,7 @@ export default class CrmApp {}
 ## Example: app with adapter + providers
 
 ```ts
-@FrontMcpApp({
+@App({
   id: 'billing',
   name: 'Billing',
   providers: [DbProvider, CacheProvider],

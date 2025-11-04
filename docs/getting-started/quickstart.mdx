@@ -14,7 +14,7 @@ In ~5 minutes you’ll have a running MCP server with a typed tool.
 
 ```ts
 // src/main.ts
-import { FrontMcp, LogLevel } from '@frontmcp/common';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
@@ -30,10 +30,10 @@ export default class HelloServer {}
 
 ```ts
 // apps/hello/src/hello.app.ts
-import { FrontMcpApp } from '@frontmcp/common';
+import { App } from '@frontmcp/sdk';
 import GreetTool from './tools/greet.tool';
 
-@FrontMcpApp({
+@App({
   id: 'hello',
   name: 'Hello App',
   tools: [GreetTool],
@@ -45,7 +45,7 @@ export default class HelloApp {}
 
 ```ts
 // apps/hello/src/tools/greet.tool.ts
-import { Tool } from '@frontmcp/common';
+import { Tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Tool({
