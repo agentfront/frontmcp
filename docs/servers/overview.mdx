@@ -22,9 +22,9 @@ class MyMcpSever {}
 ```
 
 Key options
-- info: { name, version }
+- info: `{ name, version }`
 - apps: array of @FrontMcpApp classes
-- http: { port = 3001, entryPath = '', hostFactory? }
+- http: `{ port = 3001, entryPath = '', hostFactory? }`
   - entryPath adds a prefix to the HTTP JSON-RPC entry for all apps (e.g., '/mcp') so the same host can serve multiple FrontMCP servers
   - hostFactory lets you supply a custom HTTP host implementation (Express/other)
 - logging: level, transports, etc.
