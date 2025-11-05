@@ -14,7 +14,6 @@
     }
   },
   "dependencies": {
-    "typescript": "^5.9.3",
     "@modelcontextprotocol/sdk": "^1.19.1",
     "axios": "^1.6.0",
     "ioredis": "^5.8.0",
@@ -25,5 +24,8 @@
     "zod-from-json-schema": "^0.5.1",
     "zod-to-json-schema": "^3.24.6",
     "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
