@@ -18,7 +18,10 @@ export class ToolInstance extends ToolEntry<any, any> {
     this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
-    this.inputSchema = z.object(record.metadata.inputSchema);
+
+    const schema:any = record.metadata.inputSchema
+    this.inputSchema = typeof schema.parse === 'function' ? schema : z.object(schema);
+    this.rawInputSchema = record.metadata.rawInputSchema as any;
     this.outputSchema = record.metadata.outputSchema ? z.object(record.metadata.outputSchema) : z.object({}).passthrough();
     this.ready = this.initialize();
   }

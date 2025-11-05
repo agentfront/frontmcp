@@ -54,7 +54,9 @@ export class Scope extends ScopeEntry {
   protected async initialize(): Promise<void> {
     await this.scopeProviders.ready;
 
-    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]); // add HttpRequestFlow
+    this.scopeFlows = new FlowRegistry(this.scopeProviders, [
+      HttpRequestFlow
+    ]); // add HttpRequestFlow
     await this.scopeFlows.ready;
 
     this.transportService = new TransportService(this);

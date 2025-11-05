@@ -1,3 +1,13 @@
+## 0.2.1 (2025-11-05)
+
+### 🚀 Features
+
+- **auth:** support no auth DCR (development mode only) ([#11](https://github.com/agentfront/frontmcp/pull/11))
+
+### ❤️ Thank You
+
+- David Antoon @frontegg-david
+
 ## 0.2.0 (2025-11-05)
 
 FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,

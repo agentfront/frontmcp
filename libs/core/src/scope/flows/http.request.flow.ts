@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../../auth/path.utils';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
 
-export const plan = {
+const plan = {
   pre: [
     // rate limiting / concurrency
     'acquireQuota',
@@ -25,7 +25,6 @@ export const plan = {
     'handleStatefulHttp',
     'handleStatelessHttp',
   ],
-  post: [],
   finalize: [
     // audit/metrics
     'audit',
@@ -37,7 +36,7 @@ export const plan = {
     'finalize',
   ],
   error: ['error'],
-} as const satisfies FlowPlan<string>;
+};
 
 
 export const httpRequestStateSchema = z.object({
@@ -46,6 +45,10 @@ export const httpRequestStateSchema = z.object({
   verifyResult: sessionVerifyOutputSchema,
 });
 
+
+
+const name = 'http:request' as const;
+const { Stage } = FlowHooksOf('http:request');
 
 declare global {
   export interface ExtendFlows {
@@ -60,20 +63,17 @@ declare global {
 }
 
 
-const { Stage } = FlowHooksOf('http:request');
-
-const name = 'http:request';
 @Flow({
   name,
+  plan,
   access: 'public',
   inputSchema: httpInputSchema,
   outputSchema: httpOutputSchema,
-  plan,
   middleware: {
     path: '/',
   },
 })
-export default class HttpRequestFlow extends FlowBase<'http:request'> {
+export default class HttpRequestFlow extends FlowBase<typeof name> {
 
   logger= this.scope.logger.child('HttpRequestFlow');
   static canActivate(request: ServerRequest, scope: ScopeEntry) {

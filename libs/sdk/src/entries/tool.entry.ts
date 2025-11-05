@@ -13,6 +13,7 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification>;
 export abstract class ToolEntry<In = z.ZodRawShape, Out = z.ZodRawShape> extends BaseEntry<ToolRecord, ToolContext<In, Out>, ToolMetadata> {
   owner: EntryOwnerRef;
   inputSchema: z.ZodObject<any>;
+  rawInputSchema: z.ZodObject<any>;
   outputSchema: z.ZodObject<any>;
 
   abstract create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<In, Out>;

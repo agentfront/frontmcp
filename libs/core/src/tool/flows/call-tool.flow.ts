@@ -1,5 +1,5 @@
 // tools/flows/call-tool.flow.ts
-import {Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, tool, ToolContext, ToolEntry} from '@frontmcp/sdk';
+import {Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolContext, ToolEntry} from '@frontmcp/sdk';
 import {z} from 'zod';
 import {CallToolRequestSchema, CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 
@@ -135,11 +135,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('validateInput:start');
     const {tool, input, toolContext} = this.state.required;
     toolContext.mark('validateInput')
-    const {error, data} = tool.inputSchema.safeParse(input.arguments ?? {});
-    if (error) {
-      this.fail(error)
+    try {
+      toolContext.input = tool.inputSchema.parse(input.arguments ?? {});
+    } catch (err) {
+      this.fail(new Error(`Invalid input: validation failed`));
     }
-    toolContext.input = data;
     this.logger.verbose('validateInput:done');
   }
 

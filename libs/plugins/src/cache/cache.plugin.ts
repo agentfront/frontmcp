@@ -1,10 +1,10 @@
-import { DynamicPlugin, Plugin, ToolHook, ProviderType, ToolHookStage } from '@frontmcp/sdk';
-import { ToolInvokeContext } from '@frontmcp/core';
-import { hashObject } from 'nx/src/hasher/file-hasher';
+import {DynamicPlugin, Plugin, ToolHook, ProviderType, ToolHookStage} from '@frontmcp/sdk';
+import {ToolInvokeContext} from '@frontmcp/core';
+import {hashObject} from 'nx/src/hasher/file-hasher';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
-import { CachePluginOptions, CacheStoreInterface } from './cache.types';
-import { CacheStoreToken } from './cache.symbol';
+import {CachePluginOptions, CacheStoreInterface} from './cache.types';
+import {CacheStoreToken} from './cache.symbol';
 
 @Plugin({
   name: 'cache',
@@ -59,7 +59,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook(ToolHookStage.willReadCache)
   async willReadCache(ctx: ToolInvokeContext) {
-    const { cache } = ctx.metadata;
+    const {cache} = ctx.metadata;
     if (!cache) {
       return;
     }
@@ -83,11 +83,11 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook(ToolHookStage.willWriteCache)
   async willWriteCache(ctx: ToolInvokeContext) {
-    const { cache } = ctx.metadata;
+    const {cache} = ctx.metadata;
     if (!cache) {
       return;
     }
-    console.log('willWriteCache', { cache });
+    console.log('willWriteCache', {cache});
     const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
 
     const redis = ctx.get<CacheStoreInterface>(CacheStoreToken);

@@ -30,11 +30,11 @@
       "@frontmcp/core": [
         "libs/core/src/index.ts"
       ],
-      "@frontmcp/plugins/cache": [
-        "libs/plugins/src/cache/index.ts"
+      "@frontmcp/plugins": [
+        "libs/plugins/src/index.ts"
       ],
-      "@frontmcp/adapters/openapi": [
-        "libs/adapters/src/openapi/index.ts"
+      "@frontmcp/adapters": [
+        "libs/adapters/src/index.ts"
       ]
     }
   },

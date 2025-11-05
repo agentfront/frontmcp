@@ -48,13 +48,13 @@ declare global {
 
 @Flow({
   name,
+  plan,
   access: 'authorized',
   inputSchema: httpInputSchema,
   outputSchema: httpOutputSchema,
-  plan,
 })
 export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
-
+  name = name;
   @Stage('parseInput')
   async paseInput() {
     const {request} = this.rawInput;

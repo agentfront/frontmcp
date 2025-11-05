@@ -1,9 +1,9 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
-import { z } from 'zod';
+import {z} from 'zod';
 import {
   Flow,
-  FlowBase,
+  FlowBase, FlowPlan,
   FlowRunOptions,
   httpInputSchema,
   HttpJsonSchema,
@@ -11,7 +11,7 @@ import {
   ServerRequest,
   StageHookOf,
 } from '@frontmcp/sdk';
-import { computeResource, getRequestBaseUrl, makeWellKnownPaths } from '../path.utils';
+import {computeResource, getRequestBaseUrl, makeWellKnownPaths} from '../path.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -37,7 +37,7 @@ const plan = {
   pre: ['parseInput'],
   execute: ['collectData'],
   post: ['validateOutput'],
-};
+} as const satisfies FlowPlan<string>;
 
 declare global {
   export interface ExtendFlows {
@@ -71,7 +71,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
   @Stage('parseInput')
   async parseInput() {
-    const { request } = this.rawInput;
+    const {request} = this.rawInput;
     const scope = this.scope;
     if (!request) throw new Error('Request is undefined');
 
@@ -86,7 +86,7 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
   }
 
   @Stage('collectData') async collectData() {
-    const { resource, baseUrl, scopesSupported, isOrchestrated } = this.state.required;
+    const {resource, baseUrl, scopesSupported, isOrchestrated} = this.state.required;
 
     if (isOrchestrated) {
       this.respond({

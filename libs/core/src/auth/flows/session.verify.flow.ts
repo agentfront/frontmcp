@@ -4,7 +4,7 @@ import {
   Flow, FlowBase,
   FlowRunOptions,
   ScopeEntry, ServerRequest, StageHookOf, userClaimSchema,
-  RemoteAuthOptions, sessionIdSchema, httpRequestInputSchema,
+  RemoteAuthOptions, sessionIdSchema, httpRequestInputSchema, FlowPlan,
 } from '@frontmcp/sdk';
 import 'reflect-metadata';
 import {z} from 'zod';
@@ -55,7 +55,7 @@ export type SessionVerifyFlowResult = z.infer<typeof sessionVerifyOutputSchema>;
 const plan = {
   pre: ['parseInput', 'requireAuthorizationHeader', 'verifyIfJwt'],
   execute: ['deriveUser', 'parseSessionHeader', 'buildAuthorizedOutput'],
-};
+} as const satisfies FlowPlan<string>;
 
 declare global {
   export interface ExtendFlows {

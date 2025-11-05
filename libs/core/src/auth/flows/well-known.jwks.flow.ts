@@ -1,6 +1,6 @@
 // auth/flows/well-known.jwks.flow.ts
 import {
-  Flow, FlowBase,
+  Flow, FlowBase, FlowPlan,
   FlowRunOptions, httpInputSchema, HttpJsonSchema, HttpRedirectSchema, httpRespond, HttpTextSchema,
   RemoteAuthOptions, ScopeEntry, ServerRequest, StageHookOf,
 } from '@frontmcp/sdk';
@@ -21,7 +21,7 @@ const outputSchema = z.union([HttpJsonSchema, HttpTextSchema, HttpRedirectSchema
 const plan = {
   pre: ['parseInput', 'validateInput'],
   execute: ['collectData'],
-};
+} as const satisfies FlowPlan<string>;
 
 declare global {
   export interface ExtendFlows {

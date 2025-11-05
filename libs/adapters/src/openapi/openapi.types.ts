@@ -1,13 +1,13 @@
 import {AuthInfo} from "@modelcontextprotocol/sdk/server/auth/types.js";
+import {GetToolsOptions} from "openapi-mcp-generator/dist/api";
 
-export interface OpenApiAdapterOptions {
+export interface OpenApiAdapterOptions extends Omit<GetToolsOptions, 'dereference'> {
   name: string;
   url: string;
 
   additionalHeaders?: Record<string, string>;
-  headersMapper?: (authInfo: AuthInfo, headers: Record<string, string>) => Record<string, string>;
+  headersMapper?: (authInfo: AuthInfo, headers: Headers) => Headers;
   bodyMapper?: (authInfo: AuthInfo, body: any) => any;
-
   /**
    * This can be used to map request information to specific
    * input schema values as required by the API.

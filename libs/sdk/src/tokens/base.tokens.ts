@@ -1,5 +1,3 @@
-import { Token } from '../interfaces';
-
 export const baseTokenPrefix = 'FrontMcp';
 
 export const tokenFactory = {
