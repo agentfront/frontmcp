@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { FrontMcpToolTokens } from '../tokens';
 import { ToolMetadata, frontMcpToolMetadataSchema } from '../metadata';
 import z from 'zod';
+import {ToolContext} from "../interfaces";
 
 /**
  * Decorator that marks a class as a McpTool module and provides metadata
@@ -20,7 +21,7 @@ function FrontMcpTool(providedMetadata: ToolMetadata): ClassDecorator {
 }
 
 
-export type FrontMcpToolExecuteHandler<In, Out> = (input: In, ...tokens: any[]) => Out | Promise<Out>;
+export type FrontMcpToolExecuteHandler<In, Out> = (input: In, ctx: ToolContext<In, Out>) => Out | Promise<Out>;
 
 /**
  * Decorator that marks a class as a McpTool module and provides metadata

@@ -20,7 +20,7 @@ export default class ExpenseConfigProvider {
     console.log('ExpenseConfigProvider');
   }
 
-  get<T>(key: string): T {
+  get<T extends keyof typeof this.config>(key: T): typeof this.config[T] {
     return this.config[key];
   }
 }

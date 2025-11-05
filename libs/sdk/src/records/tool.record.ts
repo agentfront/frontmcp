@@ -1,6 +1,5 @@
-import { ToolInterface, Type } from '../interfaces';
-import { ToolMetadata } from '../metadata';
-import { ToolEntry } from '../entries';
+import {ToolContext, Type} from '../interfaces';
+import {ToolMetadata} from '../metadata';
 
 
 export enum ToolKind {
@@ -10,7 +9,7 @@ export enum ToolKind {
 
 export type ToolClassTokenRecord = {
   kind: ToolKind.CLASS_TOKEN;
-  provide: Type;
+  provide: Type<ToolContext<any, any>>;
   metadata: ToolMetadata
 };
 
