@@ -95,5 +95,8 @@
         "^production"
       ]
     }
+  },
+  "release": {
+    "projects": ["libs/*"]
   }
 }
