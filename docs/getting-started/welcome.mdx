@@ -22,22 +22,20 @@ const AddTool = tool({
   };
 })
 
-
 @App({
   id: 'calc',
   name: 'Calculator',
   tools: [AddTool]
 })
-class CalcApp {
-}
+class CalcApp {}
 
 @FrontMcp({
   info: {name: 'Demo 🚀', version: '0.1.0'},
   apps: [CalcApp],
   auth: {
     type: 'remote',
-    name: 'frontegg',
-    baseUrl: 'https://autheu.davidantoon.me',
+    name: 'my-oauth',
+    baseUrl: 'https://oauth.example.com',
   },
 })
 export default class Server {}
