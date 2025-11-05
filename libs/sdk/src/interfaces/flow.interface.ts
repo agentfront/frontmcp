@@ -1,8 +1,8 @@
-import { Token, Type } from './base.interface';
-import { FlowMetadata, FlowName } from '../metadata';
-import { z } from 'zod';
-import { ScopeEntry } from '../entries';
-import { FlowState, FlowStateOf } from './internal/flow.utils';
+import {Token, Type} from './base.interface';
+import {FlowMetadata, FlowName} from '../metadata';
+import {z} from 'zod';
+import {ScopeEntry} from '../entries';
+import {FlowState, FlowStateOf} from './internal/flow.utils';
 import {FrontMcpLogger} from "./logger.interface";
 
 export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
@@ -46,6 +46,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   protected input: FlowInputOf<N>;
   state: FlowStateOf<N> = FlowState.create({});
   scopeLogger: FrontMcpLogger;
+
   constructor(
     protected readonly metadata: FlowMetadata<N>,
     protected readonly rawInput: Partial<FlowInputOf<N>> | any,
@@ -82,56 +83,6 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   }
 }
 
-// 2) The public-facing type = class instance & the dynamic stage methods
-// export type BaseFlow<N extends FlowName = FlowName> = BaseFlowCore<N> & StageFns<N>;
-
-// 3) Re-export the class under the convenient name so you can `new BaseFlow(...)`
-// export const BaseFlow = BaseFlowCore;
-
 export type FlowType<Provide = FlowBase<FlowName>> =
   | Type<Provide>
-
-
-// const inputSchema = z.object({
-//   id: z.string().min(1),
-//   id22: z.string().optional(),
-// });
-//
-// const outputSchema = z.object({
-//   testing: z.number(),
-// });
-//
-//
-// type Stages = 'parse' | 'test' | 'query'
-//
-// declare global {
-//   interface ExtendFlows {
-//     'myFlow': FlowExecute<typeof inputSchema, typeof outputSchema, Stages>;
-//   }
-// }
-//
-// @Flow({
-//   name: 'myFlow',
-//   access: 'public',
-//   inputSchema,
-//   outputSchema,
-//   middleware:{
-//     path:'/asdsd'
-//   },
-//   plan: {
-//     pre: ['test'],
-//     post: ['query'],
-//   },
-// })
-// class MyFlow {
-//
-// }
-//
-// function runFlow<T extends FlowName>(name: T) {
-//   return (input: z.infer<ExtendFlows[T]['input']>): z.infer<ExtendFlows[T]['result']> => {
-//     return { testing: 11 };
-//   };
-// }
-//
-// runFlow('myFlow')({ id: 'asd', id22: 'asd' }).testing;
 

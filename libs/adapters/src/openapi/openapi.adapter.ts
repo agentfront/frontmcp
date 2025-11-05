@@ -47,7 +47,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         inputSchema: inputSchema.shape,
         rawInputSchema: oTool.inputSchema as any,
         // outputSchema: outputSchema.shape
-      })((input, sessionProvider: SessionProvider) => {
+      })((input, ctx) => {
         return {
           data: {
             id: '1',

@@ -1,6 +1,6 @@
 import z from 'zod';
-import {SessionRedisProvider} from '../provders';
 import {tool} from '@frontmcp/sdk';
+import {ExpenseConfigProvider} from "../provders";
 
 
 export default tool({
@@ -13,10 +13,11 @@ export default tool({
   outputSchema: {
     ok: z.string()
   },
-})((input, sessionProvider: SessionRedisProvider) => {
-  console.log('getExpenseFun', input, sessionProvider);
+})((input, ctx) => {
+
+  const configProvider = ctx.get(ExpenseConfigProvider)
   return {
-    ok: 'asdasdsd',
+    ok: 'asdasdsd: ' + configProvider.get('redis').host,
   };
 });
 

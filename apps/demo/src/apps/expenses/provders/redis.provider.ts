@@ -72,7 +72,7 @@ export const createRedisProvider = AsyncProvider({
   scope: ProviderScope.GLOBAL,
   inject: () => [ExpenseConfigProvider] as const,
   useFactory: async (config) => {
-    const redisConfig = config.get<RedisConfig>('redis');
+    const redisConfig = config.get('redis');
     return new RedisProvider(redisConfig);
   },
 });
