@@ -54,7 +54,6 @@ export class AppLocalInstance extends AppEntry {
       this.appPrompts.ready,
     ]);
 
-    console.log('FrontMcpAppInstance.ready', this.id);
   }
 
   get providers(): Readonly<ProviderRegistry> {

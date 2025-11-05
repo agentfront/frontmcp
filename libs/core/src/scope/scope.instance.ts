@@ -59,7 +59,11 @@ export class Scope extends ScopeEntry {
 
     this.transportService = new TransportService(this);
 
-    this.scopeAuth = new AuthRegistry(this.scopeProviders, [], this.metadata.auth);
+    this.scopeAuth = new AuthRegistry(this.scopeProviders, [], {
+      kind: 'scope',
+      id: this.id,
+      ref: ScopeEntry,
+    }, this.metadata.auth);
     await this.scopeAuth.ready
 
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps);
@@ -71,6 +75,10 @@ export class Scope extends ScopeEntry {
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
+    if (!this.metadata.auth) {
+      // log large warning about using FrontMcp without authentication
+      this.logger.warn(`\n\n*******************************\n  WARNING: FrontMcp is running without authentication. \n  This is a security risk and should only be used in development environments. \n*******************************\n\n`);
+    }
   }
 
   private get defaultScopeProviders() {

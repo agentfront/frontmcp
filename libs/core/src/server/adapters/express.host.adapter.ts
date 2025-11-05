@@ -12,9 +12,10 @@ export class ExpressHostAdapter extends HostServerAdapter {
   constructor() {
     super();
     this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true }));
     this.app.use(cors({ origin: '*', maxAge: 300 }));
     // When creating the HTTP(S) server that hosts /mcp:
-    this.app.use((_, res, next) => {
+    this.app.use((req, res, next) => {
       res.setHeader('Access-Control-Expose-Headers', 'WWW-Authenticate');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

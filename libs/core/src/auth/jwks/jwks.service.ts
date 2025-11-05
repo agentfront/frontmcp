@@ -1,8 +1,8 @@
 // auth/jwks/jwks.service.ts
 import crypto from 'node:crypto';
-import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet } from 'jose';
-import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
-import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
+import {jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet} from 'jose';
+import {JwksServiceOptions, ProviderVerifyRef, VerifyResult} from './jwks.types';
+import {normalizeIssuer, trimSlash, decodeJwtPayloadSafe} from './jwks.utils';
 
 export class JwksService {
   private readonly opts: Required<JwksServiceOptions>;
@@ -43,20 +43,38 @@ export class JwksService {
   /** Verify a token issued by the gateway itself (orchestrated mode). */
   async verifyGatewayToken(token: string, expectedIssuer: string): Promise<VerifyResult> {
     try {
-      const jwks = this.getPublicJwks();
-      const JWKS = createLocalJWKSet(jwks);
-      const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
-        issuer: normalizeIssuer(expectedIssuer),
-      });
+      // TODO: add support for local/remote proxy mode
+      //       current implementation for anonymous mode only
+
+      // const jwks = this.getPublicJwks();
+      // const JWKS = createLocalJWKSet(jwks);
+      // const {payload, protectedHeader} = await jwtVerify(token, JWKS, {
+      //   issuer: normalizeIssuer(expectedIssuer),
+      // });
+      // return {
+      //   ok: true,
+      //   issuer: payload?.iss as string | undefined,
+      //   sub: payload?.sub as string | undefined,
+      //   header: protectedHeader,
+      //   payload,
+      // };
+
+      const payload = decodeJwtPayloadSafe(token);
+      if (!payload) {
+        return {
+          ok: false,
+          error: 'invalid bearer token'
+        }
+      }
       return {
         ok: true,
-        issuer: payload?.iss as string | undefined,
-        sub: payload?.sub as string | undefined,
-        header: protectedHeader,
+        issuer: expectedIssuer,
+        sub: payload['sub'] as string,
         payload,
-      };
+        header: decodeProtectedHeader(token),
+      }
     } catch (err: any) {
-      return { ok: false, error: err?.message ?? 'verification_failed' };
+      return {ok: false, error: err?.message ?? 'verification_failed'};
     }
   }
 
@@ -65,7 +83,7 @@ export class JwksService {
    * Ensures JWKS are available (cached/TTL/AS discovery) per provider.
    */
   async verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult> {
-    if (!candidates?.length) return { ok: false, error: 'no_providers' };
+    if (!candidates?.length) return {ok: false, error: 'no_providers'};
 
     // Helpful only for error messages
     let kid: string | undefined;
@@ -83,7 +101,7 @@ export class JwksService {
         if (!jwks?.keys?.length) continue;
         const draftPayload = decodeJwtPayloadSafe(token);
         const JWKS = createLocalJWKSet(jwks);
-        const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
+        const {payload, protectedHeader} = await jwtVerify(token, JWKS, {
           issuer: [
             normalizeIssuer(p.issuerUrl),
 
@@ -105,7 +123,7 @@ export class JwksService {
       }
     }
 
-    return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
+    return {ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}`};
   }
 
   // ===========================================================================
@@ -114,7 +132,7 @@ export class JwksService {
 
   /** Directly set provider JWKS (e.g., inline keys from config). */
   setProviderJwks(providerId: string, jwks: JSONWebKeySet) {
-    this.providerJwks.set(providerId, { jwks, fetchedAt: Date.now() });
+    this.providerJwks.set(providerId, {jwks, fetchedAt: Date.now()});
   }
 
   /**
@@ -168,7 +186,7 @@ export class JwksService {
   /** Return private signing key + kid for issuing orchestrator tokens. */
   getOrchestratorSigningKey(): { kid: string; key: crypto.KeyObject; alg: string } {
     this.ensureOrchestratorKey();
-    return { kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg };
+    return {kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg};
   }
 
   // ===========================================================================
@@ -202,7 +220,7 @@ export class JwksService {
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: { accept: 'application/json' },
+        headers: {accept: 'application/json'},
         signal: ctl?.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -222,17 +240,17 @@ export class JwksService {
 
   private generateKey(alg: 'RS256' | 'ES256') {
     if (alg === 'RS256') {
-      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const {privateKey, publicKey} = crypto.generateKeyPairSync('rsa', {modulusLength: 2048});
       const kid = crypto.randomBytes(8).toString('hex');
-      const publicJwk = publicKey.export({ format: 'jwk' });
-      Object.assign(publicJwk, { kid, alg: 'RS256', use: 'sig', kty: 'RSA' });
-      return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };
+      const publicJwk = publicKey.export({format: 'jwk'});
+      Object.assign(publicJwk, {kid, alg: 'RS256', use: 'sig', kty: 'RSA'});
+      return {kid, privateKey, publicJwk: {keys: [publicJwk]}, createdAt: Date.now()};
     } else {
-      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+      const {privateKey, publicKey} = crypto.generateKeyPairSync('ec', {namedCurve: 'P-256'});
       const kid = crypto.randomBytes(8).toString('hex');
-      const publicJwk = publicKey.export({ format: 'jwk' });
-      Object.assign(publicJwk, { kid, alg: 'ES256', use: 'sig', kty: 'EC' });
-      return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };
+      const publicJwk = publicKey.export({format: 'jwk'});
+      Object.assign(publicJwk, {kid, alg: 'ES256', use: 'sig', kty: 'EC'});
+      return {kid, privateKey, publicJwk: {keys: [publicJwk]}, createdAt: Date.now()};
     }
   }
 }
