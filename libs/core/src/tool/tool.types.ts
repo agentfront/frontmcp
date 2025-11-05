@@ -59,7 +59,6 @@ export interface ToolRegistryContract {
 }
 
 
-
 /** Internal augmented row: instance + provenance + token */
 export type IndexedTool = {
   token: Token;

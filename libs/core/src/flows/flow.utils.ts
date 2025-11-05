@@ -1,7 +1,6 @@
 import { FlowKind, FlowMetadata, FlowRecord, FlowType, FrontMcpFlowTokens, Token } from '@frontmcp/sdk';
 import { depsOfClass, isClass } from '../utils/token.utils';
 import { getMetadata } from '../utils/metadata.utils';
-import { DecoratorMD, HookMeta, HooksByStage, type StageFn } from '../invoker';
 
 export function collectFlowMetadata(cls: FlowType): FlowMetadata<never> {
   return Object.entries(FrontMcpFlowTokens).reduce((metadata, [key, token]) => {

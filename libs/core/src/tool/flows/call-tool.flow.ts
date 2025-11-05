@@ -24,15 +24,13 @@ const plan = {
     'parseInput',
     'findTool',
     'createToolCallContext',
-    'acquireQuota',
-    'acquireSemaphore',
   ],
   execute: [
+    'acquireQuota',
+    'acquireSemaphore',
     'validateInput',
     'execute',
     'validateOutput',
-  ],
-  post: [
     'releaseSemaphore',
     'releaseQuota',
   ],

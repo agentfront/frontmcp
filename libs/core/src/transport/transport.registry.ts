@@ -11,7 +11,6 @@ import {
 } from './transport.types';
 import {RemoteTransporter} from './transport.remote';
 import {LocalTransporter} from './transport.local';
-import {AuthInfo} from '@modelcontextprotocol/sdk/server/auth/types.js';
 import {ServerResponse} from '@frontmcp/sdk';
 import {Scope} from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
@@ -147,10 +146,6 @@ export class TransportService {
     return bucket;
   }
 
-  lookupWithAuthInfo(authInfo: AuthInfo): Transporter | undefined {
-    const key = this.keyOf(authInfo.protocol, authInfo.token, authInfo.sessionId);
-    return this.lookupLocal(key);
-  }
 
   private lookupLocal(key: TransportKey): Transporter | undefined {
     const typeBucket = this.byType.get(key.type);
@@ -175,31 +170,4 @@ export class TransportService {
     if (tokenBucket.size === 0) typeBucket.delete(key.tokenHash);
     if (typeBucket.size === 0) this.byType.delete(key.type);
   }
-
-  // servers = new Map<string, Server>();
-  //
-  // private getOrCreate(key: TransportKey): Server {
-  //   if (this.servers.has(key.sessionId)) {
-  //     return this.servers.get(key.sessionId)!;
-  //   }
-  //   const serverOptions = {
-  //     instructions: 'Expense server',
-  //     debouncedNotificationMethods: [],
-  //     enforceStrictCapabilities: true,
-  //     capabilities: {
-  //       tools: {
-  //         subscribe: true,
-  //         listChanged: true,
-  //       },
-  //     },
-  //   };
-  //   const server = new Server({
-  //     name: 'Test',
-  //     title: 'test test',
-  //     version: '1.0.0',
-  //
-  //   }, serverOptions);
-  //   this.servers.set(key.sessionId, server);
-  //   return server;
-  // }
 }
