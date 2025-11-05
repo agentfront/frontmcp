@@ -6,9 +6,9 @@
 
 *Made with ❤️ for TypeScript developers*
 
-[![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg)](https://www.npmjs.com/package/@frontmcp/sdk)
+[![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg?v=2)](https://www.npmjs.com/package/@frontmcp/sdk)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![License](https://img.shields.io/github/license/agentfront/frontmcp.svg)](./LICENSE)
+[![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?v=1)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
 </div>
 
@@ -42,27 +42,27 @@ export default class Server {
 - [Why FrontMCP?](#why-frontmcp)
 - [Installation](#installation)
 - [Quickstart](#quickstart)
-    - [Minimal Server & App](#minimal-server--app)
-    - [Function and Class Tools](#function-and-class-tools)
-    - [Scripts & tsconfig](#scripts--tsconfig)
-    - [MCP Inspector](#mcp-inspector)
+  - [Minimal Server & App](#minimal-server--app)
+  - [Function and Class Tools](#function-and-class-tools)
+  - [Scripts & tsconfig](#scripts--tsconfig)
+  - [MCP Inspector](#mcp-inspector)
 - [Core Concepts](#core-concepts)
-    - [Servers](#servers)
-    - [Apps](#apps)
-    - [Tools](#tools)
-    - [Resources](#resources)
-    - [Prompts](#prompts)
-    - [Providers](#providers)
-    - [Adapters](#adapters)
-    - [Plugins](#plugins)
+  - [Servers](#servers)
+  - [Apps](#apps)
+  - [Tools](#tools)
+  - [Resources](#resources)
+  - [Prompts](#prompts)
+  - [Providers](#providers)
+  - [Adapters](#adapters)
+  - [Plugins](#plugins)
 - [Authentication](#authentication)
-    - [Remote OAuth](#remote-oauth)
-    - [Local OAuth](#local-oauth)
+  - [Remote OAuth](#remote-oauth)
+  - [Local OAuth](#local-oauth)
 - [Sessions & Transport](#sessions--transport)
 - [Logging Transports](#logging-transports)
 - [Deployment](#deployment)
-    - [Local Dev](#local-dev)
-    - [Production](#production)
+  - [Local Dev](#local-dev)
+  - [Production](#production)
 - [Version Alignment](#version-alignment)
 - [Contributing](#contributing)
 - [License](#license)
@@ -304,22 +304,22 @@ You can configure auth on the server (multi-app shared) or per app (isolated sco
 
 ```ts
 auth: {
-  type: 'remote', 
-  name: 'frontegg',
-  baseUrl: 'https://idp.example.com',
-  dcrEnabled ? : boolean,
-  clientId ? : string | ((info: { clientId: string }) => string),
-  mode ? : 'orchestrated' | 'transparent',
-  allowAnonymous ? : boolean,
-  consent ? : boolean,
-  scopes ? : string[],
-  grantTypes ? : ('authorization_code' | 'refresh_token')[],
-  authEndpoint ? : string,
-  tokenEndpoint ? : string,
-  registrationEndpoint ? : string,
-  userInfoEndpoint ? : string,
-  jwks ? : JSONWebKeySet,
-  jwksUri ? : string
+  type: 'remote',
+          name: 'frontegg',
+          baseUrl: 'https://idp.example.com',
+          dcrEnabled ? : boolean,
+          clientId ? : string | ((info: { clientId: string }) => string),
+          mode ? : 'orchestrated' | 'transparent',
+          allowAnonymous ? : boolean,
+          consent ? : boolean,
+          scopes ? : string[],
+          grantTypes ? : ('authorization_code' | 'refresh_token')[],
+          authEndpoint ? : string,
+          tokenEndpoint ? : string,
+          registrationEndpoint ? : string,
+          userInfoEndpoint ? : string,
+          jwks ? : JSONWebKeySet,
+          jwksUri ? : string
 }
 ```
 
@@ -327,17 +327,17 @@ auth: {
 
 ```ts
 {
-auth: {
-  type: 'local',
-  id: 'local', 
-  name: 'Local Auth',
-  scopes?: string[],
-  grantTypes?: ('authorization_code' | 'refresh_token')[],
-  allowAnonymous?: boolean, // default true
-  consent?: boolean,
-  jwks?: JSONWebKeySet,
-  signKey?: JWK | Uint8Array
-}
+  auth: {
+    type: 'local',
+            id: 'local',
+            name: 'Local Auth',
+            scopes?: string[],
+            grantTypes?: ('authorization_code' | 'refresh_token')[],
+            allowAnonymous?: boolean, // default true
+            consent?: boolean,
+            jwks?: JSONWebKeySet,
+            signKey?: JWK | Uint8Array
+  }
 ```
 
 > With `splitByApp: true`, define auth **per `@App`** (server-level `auth` is disallowed).
@@ -389,9 +389,9 @@ Register:
 
 ```ts
 logging: {
-  level: LogLevel.Info, 
-  enableConsole: false, 
-  transports : [StructuredJsonTransport],
+  level: LogLevel.Info,
+          enableConsole: false,
+          transports : [StructuredJsonTransport],
 }
 ```
 
