@@ -36,7 +36,12 @@ if (pkg.exports) {
     else delete pkg.exports;
 }
 
-fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
-console.log(
-    `✅ Rewrote ${pkgPath}: removed "./dist/" and stripped "development" conditions from exports.`
-);
+try {
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+    console.log(
+        `✅ Rewrote ${pkgPath}: removed "./dist/" and stripped "development" conditions from exports.`
+    );
+} catch (err) {
+    console.error(`❌ Error writing ${pkgPath}:`, err.message);
+    process.exit(1);
+}
