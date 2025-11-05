@@ -1,5 +1,4 @@
-import {Tool, ToolContext, ToolInterface} from '@frontmcp/sdk';
-import {SessionRedisProvider} from '../provders';
+import {Tool, ToolContext} from '@frontmcp/sdk';
 import z from 'zod';
 
 

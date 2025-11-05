@@ -101,6 +101,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('findTool:done');
   }
 
+  @Stage('createToolCallContext')
+  async createToolCallContext() {
+    this.logger.verbose('createToolCallContext:start');
+    const {ctx} = this.input
+    const {tool, input} = this.state.required;
+    const context = tool.create(input, ctx)
+    context.input = input;
+    context.mark('createToolCallContext')
+    this.state.set('toolContext', context)
+    this.logger.verbose('createToolCallContext:done');
+  }
+
   @Stage('acquireQuota')
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
@@ -117,17 +129,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('acquireSemaphore:done');
   }
 
-  @Stage('createToolCallContext')
-  async createToolCallContext() {
-    this.logger.verbose('createToolCallContext:start');
-    const {ctx} = this.input
-    const {tool, input} = this.state.required;
-    const context = tool.create(input, ctx)
-    context.input = input;
-    context.mark('createToolCallContext')
-    this.state.set('toolContext', context)
-    this.logger.verbose('createToolCallContext:done');
-  }
 
   @Stage('validateInput')
   async validateInput() {
@@ -184,7 +185,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       content: [{
         type: 'text',
         text: JSON.stringify(this.state.required.toolContext.output)
-      }]
+      }],
+      structuredContent: {
+        result: this.state.required.toolContext.output
+      }
     })
     this.logger.verbose('finalize:done');
   }

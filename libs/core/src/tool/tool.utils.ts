@@ -1,4 +1,13 @@
-import {ToolMetadata, FrontMcpToolTokens, ToolType, Token, ToolRecord, ToolKind, EntryLineage} from '@frontmcp/sdk';
+import {
+  ToolMetadata,
+  FrontMcpToolTokens,
+  ToolType,
+  Token,
+  ToolRecord,
+  ToolKind,
+  EntryLineage,
+  Type, ToolContext
+} from '@frontmcp/sdk';
 import {depsOfClass, depsOfFunc, isClass} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
 import { NameCase} from "./tool.types";
@@ -23,7 +32,7 @@ export function normalizeTool(item: any): ToolRecord {
   if (isClass(item)) {
     // read McpToolMetadata from class
     const metadata = collectToolMetadata(item);
-    return {kind: ToolKind.CLASS_TOKEN, provide: item, metadata};
+    return {kind: ToolKind.CLASS_TOKEN, provide: item as Type<ToolContext<any, any>>, metadata};
   }
   const name = (item as any)?.name ?? String(item);
   throw new Error(

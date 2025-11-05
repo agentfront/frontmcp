@@ -1,6 +1,6 @@
 import z from 'zod';
 import {SessionRedisProvider} from '../provders';
-import {Tool, ToolContext, ToolInterface} from '@frontmcp/sdk';
+import {Tool, ToolContext} from '@frontmcp/sdk';
 
 const inputSchema = {
   id: z.string().describe('The expense id'),
@@ -17,9 +17,9 @@ type Out = z.baseObjectOutputType<typeof outputSchema>;
   inputSchema,
   outputSchema,
 })
-export default class CreateOrUpdateExpenseTool implements ToolInterface<In, Out> {
-  async execute(input: In, ctx: ToolContext<In, Out>): Promise<Out> {
-    const red = ctx.get(SessionRedisProvider);
+export default class CreateOrUpdateExpenseTool extends ToolContext<In, Out> {
+  async execute(input: In): Promise<Out> {
+    const red = this.get(SessionRedisProvider);
     await red.setValue('expense-id', input.id);
 
 

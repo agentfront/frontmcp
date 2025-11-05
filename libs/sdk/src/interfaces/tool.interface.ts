@@ -10,10 +10,6 @@ export type ToolType<T = any> =
   | Type<T>
   | FuncType<T>
 
-export abstract class ToolInterface<In, Out> {
-  abstract execute(input: In, context: ToolContext<In, Out>): Promise<Out>;
-}
-
 type HistoryEntry<T> = {
   at: number;
   stage?: string;

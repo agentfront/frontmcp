@@ -45,7 +45,7 @@ export class ToolInstance extends ToolEntry<any, any> {
     const session = ctx.authInfo;
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:
-        return new (this.record.provide as any)(metadata, input, providers, logger, session);
+        return new this.record.provide(metadata, input, providers, logger, session);
       case ToolKind.FUNCTION:
         return new FunctionToolContext(this.record, metadata, input, providers, logger, session);
     }
