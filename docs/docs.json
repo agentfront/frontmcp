@@ -101,7 +101,6 @@
             "group": "Deployment",
             "pages": [
               "deployment/local-dev-server",
-              "deployment/mcp-inspector",
               "deployment/production-build"
             ]
           },
@@ -111,46 +110,6 @@
               "guides/add-openapi-adapter",
               "guides/caching-and-cache-miss",
               "guides/customize-flow-stages"
-            ]
-          }
-        ]
-      },
-      {
-        "dropdown": "SDK Reference",
-        "icon": "code",
-        "groups": [
-          {
-            "group": "common",
-            "pages": [
-              {
-                "group": "Decorators",
-                "pages": [
-                  "sdk/common/decorators"
-                ]
-              },
-              {
-                "group": "Interfaces & Types",
-                "pages": [
-                  "sdk/common/interfaces"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "core",
-            "pages": [
-              {
-                "group": "Decorators",
-                "pages": [
-                  "sdk/core/decorators"
-                ]
-              },
-              {
-                "group": "Interfaces & Types",
-                "pages": [
-                  "sdk/core/interfaces"
-                ]
-              }
             ]
           }
         ]
