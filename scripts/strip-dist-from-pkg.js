@@ -2,7 +2,19 @@ const fs = require('fs');
 const path = require('path');
 
 const pkgPath = process.argv[2] || path.resolve(process.cwd(), 'package.json');
-const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+
+if (!fs.existsSync(pkgPath)) {
+    console.error(`❌ Error: package.json not found at ${pkgPath}`);
+    process.exit(1);
+}
+
+let pkg;
+try {
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+} catch (err) {
+    console.error(`❌ Error reading or parsing ${pkgPath}:`, err.message);
+    process.exit(1);
+}
 
 const stripDist = (v) =>
     typeof v === 'string' ? v.replace(/^\.\/dist\//, './') : v;
