@@ -15,7 +15,7 @@ import { z } from 'zod';
 @Tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: z.object({ name: z.string() }),
+  inputSchema: { name: z.string() }
 })
 export default class GreetTool {
   async execute({ name }: { name: string }) {
@@ -40,8 +40,7 @@ import { z } from 'zod';
 export const Add = tool({
   name: 'add',
   description: 'Add two numbers',
-  inputSchema: z.object({ a: z.number(), b: z.number() }),
-  // optional: outputSchema
+  inputSchema: { a: z.number(), b: z.number() }
 })((input) => input.a + input.b);
 ```
 
