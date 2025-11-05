@@ -57,7 +57,7 @@
  */
 
 import {
-  Flow, FlowBase,
+  Flow, FlowBase, FlowPlan,
   FlowRunOptions,
   httpInputSchema, HttpJsonSchema,
   httpRespond,
@@ -113,7 +113,7 @@ const plan = {
   post: [
     'validateOutput',
   ],
-};
+} as const satisfies FlowPlan<string>;
 
 
 declare global {
@@ -180,15 +180,6 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
     // TBD
   }
 
-  @Stage('checkIfAuthorized')
-  async checkIfAuthorized() {
-    // TBD
-  }
-
-  @Stage('prepareAuthorizationRequest')
-  async prepareAuthorizationRequest() {
-    // TBD
-  }
 
   @Stage('buildAuthorizeOutput')
   async buildAuthorizeOutput() {

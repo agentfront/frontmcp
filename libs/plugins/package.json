@@ -6,14 +6,15 @@
   "types": "./dist/src/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
-    "./cache": {
-      "development": "./src/cache/index.ts",
-      "types": "./dist/src/cache/index.d.ts",
-      "import": "./dist/src/cache/index.js",
-      "default": "./dist/src/cache/index.js"
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
     }
   },
   "dependencies": {
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "@frontmcp/sdk": "^0.2.0"
   }
 }

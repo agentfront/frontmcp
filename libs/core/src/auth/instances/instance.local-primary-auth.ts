@@ -1,13 +1,14 @@
-import {FrontMcpAuth, FrontMcpLogger, LocalAuthOptions, ProviderScope, ServerRequest} from '@frontmcp/sdk';
+import {SignJWT} from "jose";
 import {URL} from 'url';
+import {randomBytes, randomUUID} from "crypto";
+import {FrontMcpAuth, FrontMcpLogger, LocalAuthOptions, ProviderScope, ServerRequest} from '@frontmcp/sdk';
 import ProviderRegistry from '../../provider/provider.registry';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import SessionVerifyFlow from '../flows/session.verify.flow';
 import OauthAuthorizeFlow from "../flows/oauth.authorize.flow";
-import {SignJWT} from "jose";
-import {randomBytes, randomUUID} from "crypto";
+import OauthRegisterFlow from "../flows/oauth.register.flow";
 import OauthTokenFlow from "../flows/oauth.token.flow";
 import {JwksService} from "../jwks";
 
@@ -85,7 +86,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth {
       SessionVerifyFlow, /** Session verification flow */
 
       OauthAuthorizeFlow,
-      OauthTokenFlow
+      OauthTokenFlow,
+      OauthRegisterFlow
     );
   }
 }

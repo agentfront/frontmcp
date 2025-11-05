@@ -5,6 +5,7 @@ import {ToolMetadata} from "../metadata";
 import {FrontMcpLogger} from "./logger.interface";
 import {FlowControl} from "./flow.interface";
 import {URL} from "url";
+import {AuthInfo} from "@modelcontextprotocol/sdk/server/auth/types.js";
 
 export type ToolType<T = any> =
   | Type<T>
@@ -19,7 +20,7 @@ type HistoryEntry<T> = {
 
 export abstract class ToolContext<In, Out> {
   private providers: ProviderRegistryInterface;
-  private session: any; // TODO: type this
+  readonly authInfo: AuthInfo;
 
   protected readonly runId: string;
   protected readonly toolId: string;
@@ -44,7 +45,7 @@ export abstract class ToolContext<In, Out> {
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
 
-  constructor(metadata: ToolMetadata, input: In, providers: ProviderRegistryInterface, logger: FrontMcpLogger, session: any) {
+  constructor(metadata: ToolMetadata, input: In, providers: ProviderRegistryInterface, logger: FrontMcpLogger, authInfo: any) {
     this.runId = randomUUID();
     this.toolName = metadata.name;
     this.toolId = metadata.id ?? metadata.name;
@@ -52,7 +53,7 @@ export abstract class ToolContext<In, Out> {
     this._input = input;
     this.providers = providers;
     this.logger = logger.child(`tool:${this.toolId}`);
-    this.session = session;
+    this.authInfo = authInfo;
   }
 
   abstract execute(input: In): Promise<Out>;
@@ -117,7 +118,7 @@ export abstract class ToolContext<In, Out> {
   }
 
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    return this.session.fetch(input, init);
+    return fetch(input, init);
   }
 }
 

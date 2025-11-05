@@ -10,7 +10,7 @@ import {
   FlowRunOptions,
   ScopeEntry,
   ServerRequest,
-  StageHookOf, httpInputSchema,
+  StageHookOf, httpInputSchema, FlowPlan,
 } from '@frontmcp/sdk';
 import { getRequestBaseUrl, makeWellKnownPaths } from '../path.utils';
 
@@ -60,7 +60,7 @@ export const wellKnownAsStateSchema = z.object({
 const wellKnownAsPlan = {
   pre: ['parseInput'],
   execute: ['collectData'],
-};
+} as const satisfies FlowPlan<string>;
 
 type WellKnownAsPlan = typeof wellKnownAsPlan;
 type WellKnownAsFlowOptions = FlowRunOptions<
@@ -128,7 +128,7 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           token_endpoint: `${baseIssuer}/oauth/token`,
           userinfo_endpoint: `${baseIssuer}/oauth/userinfo`,
           jwks_uri: `${baseIssuer}/.well-known/jwks.json`,
-          registration_endpoint: dcrEnabled ? `${baseIssuer}/oauth/dcr/register` : undefined,
+          registration_endpoint: `${baseIssuer}/oauth/register`,
           token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],

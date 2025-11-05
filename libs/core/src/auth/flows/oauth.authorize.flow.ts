@@ -17,7 +17,7 @@
  * response_type=code, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method=S256, (optionally request_uri from PAR)
  */
 import {
-  Flow, FlowBase,
+  Flow, FlowBase, FlowPlan,
   FlowRunOptions, FrontMcpAuth, FrontMcpAuthProviderTokens, FrontMcpServer, FrontMcpTokens,
   httpInputSchema,
   HttpRedirectSchema, httpRespond,
@@ -66,7 +66,7 @@ const plan = {
   post: [
     'validateOutput',
   ],
-};
+} as const satisfies FlowPlan<string>;
 
 
 declare global {

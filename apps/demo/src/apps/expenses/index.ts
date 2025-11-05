@@ -1,8 +1,8 @@
 import {App} from '@frontmcp/sdk';
 
 import {ExpenseConfigProvider,} from './provders';
-import CachePlugin from '@frontmcp/plugins/cache';
-import OpenapiAdapter from "@frontmcp/adapters/openapi";
+import {CachePlugin} from '@frontmcp/plugins';
+import {OpenapiAdapter} from "@frontmcp/adapters";
 import CreateExpenseTool from './tools/create-expense.tool';
 import GetExpenseTool from './tools/get-expense-fun.tool';
 
@@ -15,6 +15,7 @@ import GetExpenseTool from './tools/get-expense-fun.tool';
   adapters: [OpenapiAdapter.init({
     name: 'backend:api',
     url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
+    baseUrl: 'https://frontmcp-test.proxy.beeceptor.com'
   })],
   plugins: [
     CachePlugin

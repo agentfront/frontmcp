@@ -252,8 +252,8 @@ export type HttpOutput = z.infer<typeof httpOutputSchema>;
  * Convenience factories
  */
 export const httpRespond = {
-  json: <T extends Record<string, any>>(body: T): z.infer<typeof HttpJsonSchema> => {
-    return { kind: 'json', status: 200, body, contentType: 'application/json; charset=utf-8' };
+  json: <T extends Record<string, any>>(body: T, extra: Partial<z.infer<typeof HttpJsonSchema>> = {}): z.infer<typeof HttpJsonSchema> => {
+    return { kind: 'json', status: 200, body, contentType: 'application/json; charset=utf-8', ...extra };
   },
 
   ok: (body: string | Record<string, any>): z.infer<typeof HttpJsonSchema> | z.infer<typeof HttpTextSchema> => {
