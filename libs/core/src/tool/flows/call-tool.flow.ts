@@ -181,14 +181,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async finalize() {
     this.logger.verbose('finalize:start');
     this.state.required.toolContext.mark('finalize')
+    const {tool, toolContext} = this.state.required;
+    const response = tool.outputSchema.parse(toolContext.output);
     this.respond({
       content: [{
         type: 'text',
-        text: JSON.stringify(this.state.required.toolContext.output)
+        text: JSON.stringify(response)
       }],
-      structuredContent: {
-        result: this.state.required.toolContext.output
-      }
+      structuredContent: response
     })
     this.logger.verbose('finalize:done');
   }

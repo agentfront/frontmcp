@@ -52,6 +52,7 @@ export abstract class ToolContext<In, Out> {
     this._input = input;
     this.providers = providers;
     this.logger = logger.child(`tool:${this.toolId}`);
+    this.session = session;
   }
 
   abstract execute(input: In): Promise<Out>;
