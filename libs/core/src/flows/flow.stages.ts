@@ -1,16 +1,16 @@
 import { FlowHookMeta, FlowType, FrontMcpFlowHookTokens } from '@frontmcp/sdk';
 
-export type HookEntry<C> = {
+export type StageEntry<C> = {
   /** Call as: await entry.method(context) */
   method: (ctx: C) => Promise<void>;
 };
 
-export type HookMap<C> = Record<string, HookEntry<C>[]>;
+export type StageMap<C> = Record<string, StageEntry<C>[]>;
 
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // Cache per class to avoid repeated reflection
-const CACHE: WeakMap<Function, HookMap<any>> = new WeakMap();
+const CACHE: WeakMap<Function, StageMap<any>> = new WeakMap();
 
 /**
  * Build a stage->hooks map ready for:
@@ -22,7 +22,7 @@ const CACHE: WeakMap<Function, HookMap<any>> = new WeakMap();
  *   - 'didStageName'  for kind==='did'
  *   - 'aroundStageName' for kind==='around'
  */
-export function collectHookMap<C>(FlowClass: FlowType): HookMap<C> {
+export function collectFLowHookMap<C>(FlowClass: FlowType): StageMap<C> {
   const cached = CACHE.get(FlowClass as any);
   if (cached) return cached;
 
@@ -34,7 +34,7 @@ export function collectHookMap<C>(FlowClass: FlowType): HookMap<C> {
     .sort((a, b) => ((a.m.priority ?? 0) - (b.m.priority ?? 0)) || (a.i - b.i))
     .map(x => x.m);
 
-  const table: HookMap<C> = {};
+  const table: StageMap<C> = {};
 
   for (const m of sorted) {
     const resolved =
@@ -48,7 +48,7 @@ export function collectHookMap<C>(FlowClass: FlowType): HookMap<C> {
 
     // Prepare a wrapper that will be called later with the *request instance as context*.
     // We don’t bind to an instance here (prepare-time), we resolve the impl at call-time from ctx.
-    const entry: HookEntry<C> = {
+    const entry: StageEntry<C> = {
       method: async (ctx: any) => {
         // Resolve impl: static on class, otherwise on the instance (ctx)
         const target = m.static ? (FlowClass as any) : ctx;

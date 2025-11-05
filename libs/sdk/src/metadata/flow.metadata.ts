@@ -27,6 +27,7 @@ export type FlowRunOptions<Ctx, Plan extends FlowPlan<string>, Input, Output ext
   output: Output;
   state: State;
   stage: StagesFromPlan<Plan>;
+  executeStage: ExecuteStagesFromPlan<Plan>;
 }
 
 /**
@@ -50,6 +51,7 @@ type Values<T> = T[keyof T];
 type ArrayElem<T> = T extends ReadonlyArray<infer U> ? U : never;
 
 export type StagesFromPlan<P extends FlowPlan<string>> = ArrayElem<Values<Required<P>>>;
+export type ExecuteStagesFromPlan<P extends FlowPlan<string>> = ArrayElem<Required<P['execute']>>;
 
 export type FlowPlan<Base extends string> = {
   steps?: Record<Base, StepInfo>;

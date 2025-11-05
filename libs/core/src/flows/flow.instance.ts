@@ -12,9 +12,9 @@ import {
   Token, Type,
 } from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
-import { collectHookMap, HookMap } from './flow.hooks';
-import { writeHttpResponse } from '../server/server.validation';
-import { Scope } from '../scope';
+import {collectFLowHookMap, StageMap} from './flow.stages';
+import {writeHttpResponse} from '../server/server.validation';
+import {Scope} from '../scope';
 
 type StageOutcome =
   | 'ok'
@@ -35,7 +35,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   readonly globalProviders: ProviderRegistry;
   private plan: FlowPlan<never>;
   private FlowClass: FlowType;
-  private hooks: HookMap<FlowType>;
+  private stages: StageMap<FlowType>;
   private globalDeps: Map<Token, Type>;
 
   constructor(scope: Scope, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
@@ -50,10 +50,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   protected async initialize() {
     const server = this.globalProviders.getActiveServer();
 
-    this.hooks = collectHookMap(this.FlowClass);
+    this.stages = collectFLowHookMap(this.FlowClass);
     this.globalDeps = new Map();
 
-    const { middleware } = this.metadata;
+    const {middleware} = this.metadata;
     if (middleware) {
       const path = typeof middleware.path === 'string' ? middleware.path : '';
       server.registerMiddleware(path, async (request, response, next) => {
@@ -61,16 +61,16 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (!canActivate) return next();
 
         try {
-          const result = await this.run({ request, response, next } as any, new Map());
+          const result = await this.run({request, response, next} as any, new Map());
           if (result) return writeHttpResponse(response, result);
         } catch (e) {
           if (e instanceof FlowControl) {
             switch (e.type) {
               case 'abort':
-                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Aborted' });
+                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Aborted'});
               case 'fail':
                 // e.output is the Error; do not leak details
-                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
+                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
               case 'handled':
                 return; // response already produced by user code
               case 'next':
@@ -84,7 +84,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           // Unknown error fallback
           // eslint-disable-next-line no-console
           console.error(e);
-          return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
+          return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
         }
 
         // Flow didn't control the response → continue
@@ -110,7 +110,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     const scope = this.globalProviders.getActiveScope();
-    const { hooks, FlowClass, plan } = this;
+    const {stages, FlowClass, plan} = this;
 
     // Construct user flow instance with deps map
     const context = new (FlowClass as any)(this.metadata, input, scope, deps) as any;
@@ -126,8 +126,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       key: string,
       opts?: { ignoreRespond?: boolean }
     ): Promise<StageResult> => {
-      const list = (hooks as any)[key] ?? [];
-      const didList = (hooks as any)[didKey(key)] ?? [];
+      const list = (stages as any)[key] ?? [];
+      const didList = (stages as any)[didKey(key)] ?? [];
 
       for (const item of list) {
         try {
@@ -141,18 +141,18 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
                 // run did{Stage} on respond
                 for (const d of didList) await d.method(context);
                 responded = e.output as FlowOutputOf<Name>;
-                return { outcome: 'respond', control: e };
+                return {outcome: 'respond', control: e};
               }
               // explicitly ignore respond in this stage (used by error stage)
               for (const d of didList) await d.method(context);
               continue;
             }
-            return { outcome: e.type, control: e };
+            return {outcome: e.type, control: e};
           }
-          return { outcome: 'unknown_error', control: e as Error };
+          return {outcome: 'unknown_error', control: e as Error};
         }
       }
-      return { outcome: 'ok' };
+      return {outcome: 'ok'};
     };
 
     const runStageGroup = async (
@@ -160,10 +160,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       stopOnRespond: boolean,
       opts?: { ignoreRespond?: boolean }
     ): Promise<StageResult> => {
-      if (!group || group.length === 0) return { outcome: 'ok' };
+      if (!group || group.length === 0) return {outcome: 'ok'};
 
       let sawRespond = false;
-      let last: StageResult = { outcome: 'ok' };
+      let last: StageResult = {outcome: 'ok'};
 
       for (const key of group) {
         const res = await runHookList(key, opts);
@@ -180,13 +180,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         }
       }
 
-      return sawRespond ? { outcome: 'respond', control: last.control } : last;
+      return sawRespond ? {outcome: 'respond', control: last.control} : last;
     };
 
     const runErrorStage = async () => {
       // Only called for unknown exceptions or fail; spec says: run error stage then rethrow.
       // We **ignore** responds inside error stage (they do not change control flow).
-      await runStageGroup((plan as any).error, /*stopOnRespond*/ false, { ignoreRespond: true });
+      await runStageGroup((plan as any).error, /*stopOnRespond*/ false, {ignoreRespond: true});
     };
 
     const runFinalizeStage = async () => {
@@ -202,7 +202,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           // skip execute, still run post + finalize
           const post = await runStageGroup(plan.post as any, /*stopOnRespond*/ false);
           if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-            try { await runErrorStage(); } finally { await runFinalizeStage(); }
+            try {
+              await runErrorStage();
+            } finally {
+              await runFinalizeStage();
+            }
             if (post.outcome === 'fail') throw post.control!;
             throw post.control!;
           }
@@ -214,7 +218,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           return responded;
         }
         if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
-          try { await runErrorStage(); } finally { await runFinalizeStage(); }
+          try {
+            await runErrorStage();
+          } finally {
+            await runFinalizeStage();
+          }
           if (pre.outcome === 'fail') throw pre.control!;
           throw pre.control!;
         }
@@ -231,7 +239,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           // didExecute already ran; proceed with post + finalize
           // fall-through to post below
         } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
-          try { await runErrorStage(); } finally { await runFinalizeStage(); }
+          try {
+            await runErrorStage();
+          } finally {
+            await runFinalizeStage();
+          }
           if (exec.outcome === 'fail') throw exec.control!;
           throw exec.control!;
         } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
@@ -244,7 +256,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       {
         const post = await runStageGroup(plan.post as any, /*stopOnRespond*/ false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-          try { await runErrorStage(); } finally { await runFinalizeStage(); }
+          try {
+            await runErrorStage();
+          } finally {
+            await runFinalizeStage();
+          }
           if (post.outcome === 'fail') throw post.control!;
           throw post.control!;
         }

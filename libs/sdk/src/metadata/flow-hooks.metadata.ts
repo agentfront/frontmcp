@@ -1,4 +1,5 @@
 export type FlowHookKind = 'stage' | 'will' | 'did' | 'around';
+export type FlowHookPriority = number;
 
 export type FlowHookMetadata<Ctx = any> = {
   type: 'flow';
@@ -9,17 +10,13 @@ export type FlowHookMeta<Ctx = any> = {
   kind: FlowHookKind;
   stage: string;
   method: string;
-  priority?: number;
+  priority?: FlowHookPriority;
   filter?: (ctx: Ctx) => boolean | Promise<boolean>;
   static?: boolean;
 };
 
-
-export type HookKind = 'stage' | 'will' | 'did' | 'around';
-export type Priority = number;
-
 export interface FlowHookOptions<Ctx> {
-  priority?: Priority;
+  priority?: FlowHookPriority;
   filter?: (ctx: Ctx) => boolean | Promise<boolean>;
   name?: string;
 }

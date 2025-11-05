@@ -10,10 +10,11 @@ import {
   ResourceEntry,
   ToolEntry, LoggerEntry,
 } from '../../entries';
-import { Token } from '../base.interface';
-import { EntryOwnerRef } from '../../entries/base.entry';
-import { FrontMcpAuth } from './primary-auth-provider.interface';
-import { FlowName } from '../../metadata';
+import {Token} from '../base.interface';
+import {EntryOwnerRef} from '../../entries';
+import {FrontMcpAuth} from './primary-auth-provider.interface';
+import {FlowName} from '../../metadata';
+import {HookEntry} from "../../entries/hook.entry";
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -23,9 +24,15 @@ export interface FlowRegistryInterface {
   getFlows(): FlowEntry<FlowName>[];
 }
 
+export interface HookRegistryInterface {
+  getClsHooks(token: Token): HookEntry<any, any>[];
+
+  getFlowHooks(flow: FlowName): HookEntry<any,any>[];
+}
+
 
 export interface ProviderViews {
-  /** App-wide singletons, created at boot. Immutable from invoke’s POV. */
+  /** App-wide singletons, created at boot. Immutable from invokes POV. */
   global: ReadonlyMap<Token, unknown>;
   /** Session-scoped cache for this sessionId. Mutable. */
   session: Map<Token, unknown>;
@@ -57,38 +64,17 @@ export interface AppRegistryInterface {
 
 export interface PluginRegistryInterface {
   getPlugins(): PluginEntry[];
-
-  //
-  // // nested adapters
-  // getAdapters(): AdapterEntry[];
-  //
-  // // plugin tools plus nested adapter's tools
-  // getTools(): ToolEntry<any, any>[];
-  //
-  // // plugin resources plus nested adapter's tools
-  // getResources(): ResourceEntry[];
-  //
-  // // plugin prompts plus nested adapter's tools
-  // getPrompts(): PromptEntry[];
 }
 
 export interface AdapterRegistryInterface {
   getAdapters(): AdapterEntry[];
-
-  //
-  // // nested tools
-  // getTools(): ToolEntry<any, any>[];
-  //
-  // getResources(): ResourceEntry[];
-  //
-  // getPrompts(): PromptEntry[];
 }
 
 export interface ToolRegistryInterface {
   owner: EntryOwnerRef;
 
   // inline tools plus discovered by nested tool registries
-  getTools(includeHidden?:boolean): ToolEntry<any, any>[];
+  getTools(includeHidden?: boolean): ToolEntry<any, any>[];
 
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];
@@ -127,6 +113,7 @@ export type ScopedRegistryKind =
   | 'AppRegistry'
   | 'AuthRegistry'
   | 'FlowRegistry'
+  | 'HookRegistry'
 
 export type AppRegistryKind =
   | 'ProviderRegistry'
@@ -143,6 +130,7 @@ export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
   ScopeRegistry: ScopeRegistryInterface;
   FlowRegistry: FlowRegistryInterface;
+  HookRegistry: HookRegistryInterface;
   AppRegistry: AppRegistryInterface;
   AuthRegistry: AuthRegistryInterface,
   ProviderRegistry: ProviderRegistryInterface;

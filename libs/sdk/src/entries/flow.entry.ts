@@ -4,7 +4,6 @@ import { FlowRecord } from '../records';
 import { FlowBase, FlowInputOf, FlowOutputOf, HttpMethod, ServerRequest, Token, Type } from '../interfaces';
 import { FlowMetadata, FlowName } from '../metadata';
 import { ScopeEntry } from './scope.entry';
-import { z } from 'zod';
 
 
 export abstract class FlowEntry<Name extends FlowName> extends BaseEntry<FlowRecord, FlowBase, FlowMetadata<never>> {

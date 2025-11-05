@@ -9,6 +9,8 @@ export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
 export type FlowOutputOf<N extends FlowName> = z.infer<ExtendFlows[N]['output']>;
 export type FlowPlanOf<N extends FlowName> = ExtendFlows[N]['plan'];
 export type FlowCtxOf<N extends FlowName> = ExtendFlows[N]['ctx'];
+export type FlowStagesOf<N extends FlowName> = ExtendFlows[N]['stage'];
+export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeStage'];
 
 
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
