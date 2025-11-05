@@ -20,6 +20,24 @@
           "libs/plugins/*.md"
         ]
       }
+    },
+    "fix-pkg": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "fix-pkg"
+      ],
+      "options": {
+        "command": "npm publish libs/plugins/dist --access public"
+      }
     }
   }
 }
