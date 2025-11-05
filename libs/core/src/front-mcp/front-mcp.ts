@@ -1,7 +1,7 @@
-import { FrontMcpConfigType, FrontMcpInterface, FrontMcpServer } from '@frontmcp/sdk';
-import { ScopeRegistry } from '../scope/scope.registry';
+import {FrontMcpConfigType, FrontMcpInterface, FrontMcpServer} from '@frontmcp/sdk';
+import {ScopeRegistry} from '../scope/scope.registry';
 import ProviderRegistry from '../provider/provider.registry';
-import { createMcpGlobalProviders } from './front-mcp.providers';
+import {createMcpGlobalProviders} from './front-mcp.providers';
 import LoggerRegistry from '../logger/logger.registry';
 
 export class FrontMcpInstance implements FrontMcpInterface {
@@ -41,10 +41,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
   }
 
   public static async bootstrap(options: FrontMcpConfigType) {
-    console.log('FrontMcp.bootstrap', options);
     const frontMcp = new FrontMcpInstance(options);
     await frontMcp.ready;
-    console.log('FrontMcp.bootstrap done');
 
     frontMcp.start();
   }

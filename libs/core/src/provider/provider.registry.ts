@@ -17,7 +17,6 @@ import {normalizeProvider, providerDiscoveryDeps, providerInvocationTokens} from
 import {depsOfClass, isClass, isPromise, tokenName} from '../utils/token.utils';
 import {hasAsyncWith} from '../utils/metadata.utils';
 import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
-import {AuthRegistry} from '../auth/auth.registry';
 import {ProviderViews} from './provider.types';
 import {Scope} from '../scope';
 
@@ -739,10 +738,6 @@ export default class ProviderRegistry extends RegistryAbstract<
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][] {
     return [...this.registries.get(type) ?? []] as any;
-  }
-
-  getAuthRegistry() {
-    return this.getRegistries('AuthRegistry')[0] as AuthRegistry;
   }
 
   // noinspection JSUnusedGlobalSymbols
