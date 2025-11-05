@@ -71,7 +71,7 @@ import {LocalPrimaryAuth} from "../instances/instance.local-primary-auth";
 const inputSchema = httpInputSchema;
 
 // RFC 7636 PKCE: code_verifier is 43–128 chars from ALPHA / DIGIT / "-" / "." / "_" / "~"
-const pkceVerifierRegex = /^[A-Za-z0-9_.~\-]{43,128}$/;
+const pkceVerifierRegex = /^[A-Za-z0-9_.~-]{43,128}$/; // TODO: move to shared regex utils
 const authorizationCodeGrant = z.object({
   grant_type: z.literal("authorization_code"),
   /** Authorization code returned from the /authorize step */

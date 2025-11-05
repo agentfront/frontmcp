@@ -25,7 +25,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth {
 
   constructor(private providers: ProviderRegistry, metadata: LocalAuthOptions) {
     super(metadata);
-    const logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
+    this.logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
     this.port = this.providers.getActiveScope().metadata.http?.port ?? 3001;
     this.host = 'localhost';
     this.issuer = `http://${this.host}:${this.port}`
@@ -33,7 +33,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth {
     if (process.env["JWT_SECRET"]) {
       this.secret = new TextEncoder().encode(process.env["JWT_SECRET"])
     } else {
-      logger.warn('JWT_SECRET is not set, using default secret')
+      this.logger.warn('JWT_SECRET is not set, using default secret')
       this.secret = DEFAULT_NO_AUTH_SECRET;
     }
     this.ready = this.initialize();

@@ -41,6 +41,7 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
     }
     this.tokens.add(FrontMcpAuth);
     this.defs.set(FrontMcpAuth, primaryRecord)
+    this.graph.set(FrontMcpAuth, new Set())
 
     this.buildGraph();
     this.ready = this.initialize();

@@ -119,7 +119,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   @Stage('validateInput')
   async validateInput() {
     if (this.state.isDefaultAuthProvider) {
-      const redirectUri = `${this.state.redirectUri}?code=anonymous`;
+      const redirectUri = `${this.state.required.redirectUri}?code=anonymous`;
       this.respond(httpRespond.redirect(redirectUri))
     }
     /**
