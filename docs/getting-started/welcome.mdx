@@ -8,15 +8,19 @@ description: The TypeScript way to build MCP servers with decorators, DI, and St
 **FrontMCP is the TypeScript-first framework for MCP.** You write clean, typed code; FrontMCP handles the protocol, transport, and execution flow.
 
 ```ts
-import { FrontMcp, App, Tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import {FrontMcp, App, tool} from '@frontmcp/sdk';
+import {z} from 'zod';
 
-@Tool({
+
+const AddTool = tool({
   name: 'add',
   description: 'Add two numbers',
   inputSchema: { a: z.number(), b: z.number() }
+})(async (input, ctx) => {
+  return {
+    result: input.a + input.b,
+  };
 })
-class AddTool { execute({ a, b }: { a: number; b: number }) { return a + b; } }
 
 @App({
   id: 'calc',
@@ -26,8 +30,13 @@ class AddTool { execute({ a, b }: { a: number; b: number }) { return a + b; } }
 class CalcApp {}
 
 @FrontMcp({
-  info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [CalcApp]
+  info: {name: 'Demo 🚀', version: '0.1.0'},
+  apps: [CalcApp],
+  auth: {
+    type: 'remote',
+    name: 'my-oauth',
+    baseUrl: 'https://oauth.example.com',
+  },
 })
 export default class Server {}
 ````
