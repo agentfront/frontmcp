@@ -2,13 +2,12 @@ import {
   Adapter,
   DynamicAdapter,
   FrontMcpAdapterResponse,
-  SessionProvider,
   tool,
 } from '@frontmcp/sdk';
-import { OpenApiAdapterOptions } from './openapi.types';
-import { z } from 'zod';
-import { getToolsFromOpenApi, McpToolDefinition } from 'openapi-mcp-generator';
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
+import {OpenApiAdapterOptions} from './openapi.types';
+import {z} from 'zod';
+import {getToolsFromOpenApi, McpToolDefinition} from 'openapi-mcp-generator';
+import {convertJsonSchemaToZod} from 'zod-from-json-schema';
 
 
 @Adapter({
@@ -25,7 +24,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
 
   async fetch(): Promise<FrontMcpAdapterResponse> {
-    const openapiLink =  this.options.url
+    const openapiLink = this.options.url
     const openApiTools = await withSilencedConsole(getToolsFromOpenApi(openapiLink, {
       dereference: false,
     }));
