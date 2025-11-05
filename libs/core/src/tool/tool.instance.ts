@@ -1,16 +1,13 @@
 import {
-  EntryOwnerRef, FrontMcpLogger, ToolCallArgs, ToolCallExtra, ToolContext, ToolEntry,
-  ToolFunctionTokenRecord, ToolKind, ToolMetadata, ToolRecord
+  EntryOwnerRef, ToolCallArgs, ToolCallExtra, ToolContext,
+  ToolCtorArgs, ToolEntry, ToolFunctionTokenRecord, ToolKind, ToolRecord
 } from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
 import {z} from "zod";
 
-export class ToolInstance extends ToolEntry<any, any> {
-  private readonly providers: ProviderRegistry;
 
-  /**
-   * Tool name used for execution.
-   */
+export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
+  private readonly providers: ProviderRegistry;
   readonly name: string;
 
   constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
@@ -19,7 +16,7 @@ export class ToolInstance extends ToolEntry<any, any> {
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
 
-    const schema:any = record.metadata.inputSchema
+    const schema: any = record.metadata.inputSchema
     this.inputSchema = typeof schema.parse === 'function' ? schema : z.object(schema);
     this.rawInputSchema = record.metadata.rawInputSchema as any;
     this.outputSchema = record.metadata.outputSchema ? z.object(record.metadata.outputSchema) : z.object({}).passthrough();
@@ -40,35 +37,38 @@ export class ToolInstance extends ToolEntry<any, any> {
     return this.record.metadata;
   }
 
-  override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<any, any> {
+  override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<In, Out> {
     const metadata = this.metadata;
     const providers = this.providers;
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
-    const session = ctx.authInfo;
+    const authInfo = ctx.authInfo;
+
+    const toolCtorArgs: ToolCtorArgs<In> = {
+      metadata,
+      input: input as In,
+      providers,
+      logger,
+      authInfo,
+    }
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:
-        return new this.record.provide(metadata, input, providers, logger, session);
+        return new this.record.provide(toolCtorArgs);
       case ToolKind.FUNCTION:
-        return new FunctionToolContext(this.record, metadata, input, providers, logger, session);
+        return new FunctionToolContext(this.record, toolCtorArgs);
     }
   }
 }
 
-
-class FunctionToolContext extends ToolContext<any, any> {
+class FunctionToolContext<In = any, Out = any> extends ToolContext<In, Out> {
   constructor(
     private readonly record: ToolFunctionTokenRecord,
-    metadata: ToolMetadata,
-    input: ToolCallArgs,
-    providers: ProviderRegistry,
-    logger: FrontMcpLogger,
-    session: any,
+    args: ToolCtorArgs<In>
   ) {
-    super(metadata, input, providers, logger, session);
+    super(args);
   }
 
-  execute(input: any): Promise<any> {
+  execute(input: In): Promise<Out> {
     return this.record.provide(input, this);
   }
 }

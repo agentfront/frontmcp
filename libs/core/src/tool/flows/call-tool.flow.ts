@@ -32,11 +32,9 @@ const plan = {
     'execute',
     'validateOutput',
   ],
-  post: [
+  finalize: [
     'releaseSemaphore',
     'releaseQuota',
-  ],
-  finalize: [
     'finalize',
   ],
 } as const satisfies FlowPlan<string>;

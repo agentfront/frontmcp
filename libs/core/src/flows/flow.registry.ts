@@ -6,8 +6,6 @@ import { tokenName } from '../utils/token.utils';
 import { FlowInstance } from './flow.instance';
 
 export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName>, FlowRecord, FlowType[]> {
-
-
   constructor(providers: ProviderRegistry, list: FlowType[]) {
     super('FlowRegistry', providers, list);
   }

@@ -111,6 +111,12 @@
               "guides/caching-and-cache-miss",
               "guides/customize-flow-stages"
             ]
+          },
+          {
+            "group": "Adapters",
+            "pages": [
+              "adapters/openapi-adapter"
+            ]
           }
         ]
       }

@@ -6,7 +6,7 @@ import {
 import {OpenApiAdapterOptions} from './openapi.types';
 import {getToolsFromOpenApi, McpToolDefinition} from 'openapi-mcp-generator';
 import {createOpenApiTool} from "./openapi.tool";
-
+import {OpenAPIV3} from "openapi-types";
 
 @Adapter({
   name: 'openapi',
@@ -22,9 +22,16 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
 
   async fetch(): Promise<FrontMcpAdapterResponse> {
-    const openapiLink = this.options.url
+    let urlOrSpec: string | OpenAPIV3.Document = ''
+    if ('url' in this.options) {
+      urlOrSpec = this.options.url;
+    } else if ('spec' in this.options) {
+      urlOrSpec = this.options.spec;
+    } else {
+      throw new Error('Either url or spec must be provided');
+    }
     const {baseUrl, filterFn, defaultInclude, excludeOperationIds} = this.options;
-    const openApiTools = await getToolsFromOpenApi(openapiLink, {
+    const openApiTools = await getToolsFromOpenApi(urlOrSpec, {
       baseUrl,
       filterFn,
       defaultInclude,
@@ -41,22 +48,5 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     return openApiTools.map(tool => {
       return createOpenApiTool(tool, this.options);
     });
-  }
-
-
-}
-
-async function withSilencedConsole(fn: Promise<any>) {
-  const methods = ['log', 'info', 'debug', 'warn', 'error', 'table', 'group', 'groupCollapsed', 'groupEnd', 'dir'];
-  const originals = {};
-  try {
-    for (const m of methods) {
-      originals[m] = console[m];
-      console[m] = () => {
-      };
-    }
-    return await fn;
-  } finally {
-    for (const m of Object.keys(originals)) console[m] = originals[m];
   }
 }

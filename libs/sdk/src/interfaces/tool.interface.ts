@@ -18,6 +18,14 @@ type HistoryEntry<T> = {
   note?: string;
 };
 
+export type ToolCtorArgs<In> = {
+  metadata: ToolMetadata;
+  input: In;
+  providers: ProviderRegistryInterface;
+  logger: FrontMcpLogger
+  authInfo: AuthInfo;
+}
+
 export abstract class ToolContext<In, Out> {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;
@@ -45,7 +53,8 @@ export abstract class ToolContext<In, Out> {
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
 
-  constructor(metadata: ToolMetadata, input: In, providers: ProviderRegistryInterface, logger: FrontMcpLogger, authInfo: any) {
+  constructor(args: ToolCtorArgs<In>) {
+    const {metadata, input, providers, logger, authInfo} = args;
     this.runId = randomUUID();
     this.toolName = metadata.name;
     this.toolId = metadata.id ?? metadata.name;

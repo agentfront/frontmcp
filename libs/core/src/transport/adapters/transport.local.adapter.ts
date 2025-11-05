@@ -117,10 +117,9 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
     const {token, user, session} = req[ServerRequestTokens.auth];
     req.auth = {
       token,
-      sessionId: session!.id,
       user,
+      sessionId: session!.id,
       sessionIdPayload: session!.payload,
-      protocol: 'sse',
       scopes: [],
       clientId: user.sub ?? '',
       transport,
