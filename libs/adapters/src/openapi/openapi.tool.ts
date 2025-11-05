@@ -1,8 +1,8 @@
+import {z} from "zod";
 import {McpToolDefinition} from "openapi-mcp-generator";
 import {tool} from "@frontmcp/sdk";
 import {convertJsonSchemaToZod} from "zod-from-json-schema";
-import {z} from "zod";
-import {OpenApiAdapterOptions} from "@frontmcp/adapters";
+import {OpenApiAdapterOptions} from "./openapi.types";
 
 
 export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdapterOptions) => {
@@ -34,7 +34,7 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
       // prepare body
       if (oTool.requestBodyContentType && typeof input['requestBody'] !== 'undefined') {
         requestBodyData = input['requestBody'];
-        headers['content-type'] = oTool.requestBodyContentType;
+        headers.set('content-type', oTool.requestBodyContentType);
       }
     }
 

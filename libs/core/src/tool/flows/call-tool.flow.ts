@@ -135,7 +135,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('validateInput:start');
     const {tool, input, toolContext} = this.state.required;
     toolContext.mark('validateInput')
-    toolContext.input = tool.inputSchema.parse(input.arguments ?? {});
+    try {
+      toolContext.input = tool.inputSchema.parse(input.arguments ?? {});
+    } catch (err) {
+      this.fail(new Error(`Invalid input: validation failed`));
+    }
     this.logger.verbose('validateInput:done');
   }
 

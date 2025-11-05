@@ -2,12 +2,9 @@ import {
   Adapter,
   DynamicAdapter,
   FrontMcpAdapterResponse,
-  tool,
 } from '@frontmcp/sdk';
 import {OpenApiAdapterOptions} from './openapi.types';
-import {z} from 'zod';
-import {getToolsFromOpenApi, McpToolDefinition, generateMcpServer} from 'openapi-mcp-generator';
-import {convertJsonSchemaToZod} from 'zod-from-json-schema';
+import {getToolsFromOpenApi, McpToolDefinition} from 'openapi-mcp-generator';
 import {createOpenApiTool} from "./openapi.tool";
 
 
