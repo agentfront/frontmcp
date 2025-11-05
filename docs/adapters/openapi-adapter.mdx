@@ -59,7 +59,7 @@ Static API key header
 ```ts
 OpenapiAdapter.init({
   name: 'my-api',
-  specOrUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
   additionalHeaders: { 'x-api-key': process.env.MY_API_KEY! }
 });
@@ -69,11 +69,10 @@ Derive headers from the authenticated context
 ```ts
 OpenapiAdapter.init({
   name: 'my-api',
-  specOrUrl: 'https://api.example.com/openapi.json',
+  url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
   headersMapper: (authInfo, headers) => {
     if (authInfo.token) headers.set('authorization', `Bearer ${authInfo.token}`);
-    if (authInfo.user.tenantId) headers.set('x-tenant-id', String(authInfo.user.tenantId));
     return headers;
   },
 });
@@ -84,7 +83,7 @@ Only generate tools for specific operations using `filterFn` or exclude by id wi
 ```ts
 OpenapiAdapter.init({
   name: 'billing',
-  specOrUrl: 'https://my.api/openapi.json',
+  url: 'https://my.api/openapi.json',
   baseUrl: 'https://my.api',
   filterFn: (op) => op.path.startsWith('/invoices') || op.operationId === 'getCustomer',
   excludeOperationIds: ['deprecatedEndpoint'],

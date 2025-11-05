@@ -19,7 +19,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
 
 OpenapiAdapter.init({
   name: 'backend:api',
-  specOrUrl: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
+  url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
   baseUrl: 'https://frontmcp-test.proxy.beeceptor.com',
 });
 ```
