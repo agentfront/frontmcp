@@ -1,6 +1,6 @@
 export * from './front-mcp.metadata';
 export * from './flow.metadata';
-export * from './flow-hooks.metadata';
+export * from './hook.metadata';
 export * from './app.metadata';
 export * from './provider.metadata';
 export * from './auth-provider.metadata';

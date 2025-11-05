@@ -1,4 +1,4 @@
-import { FlowHookMeta, FlowType, FrontMcpFlowHookTokens } from '@frontmcp/sdk';
+import { HookMetadata, FlowType, FrontMcpFlowHookTokens } from '@frontmcp/sdk';
 
 export type StageEntry<C> = {
   /** Call as: await entry.method(context) */
@@ -26,7 +26,7 @@ export function collectFLowHookMap<C>(FlowClass: FlowType): StageMap<C> {
   const cached = CACHE.get(FlowClass as any);
   if (cached) return cached;
 
-  const metas = (Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, FlowClass) ?? []) as FlowHookMeta[];
+  const metas = (Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, FlowClass) ?? []) as HookMetadata[];
 
   // stable sort: priority asc, then definition order
   const sorted = metas

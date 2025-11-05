@@ -3,6 +3,7 @@ export * from './front-mcp.interface';
 export * from './server.interface';
 export * from './scope.interface';
 export * from './flow.interface';
+export * from './hook.interface';
 export * from './app.interface';
 export * from './provider.interface';
 export * from './auth-provider.interface';

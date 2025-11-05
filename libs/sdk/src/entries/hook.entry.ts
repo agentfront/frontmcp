@@ -1,21 +1,15 @@
-import {
-  BaseEntry,
-  FlowBase,
-  FlowHookOptions,
-  FlowMetadata,
-  FlowRecord,
-  ScopeEntry,
-  Token,
-} from "@frontmcp/sdk";
+import {ScopeEntry} from "./scope.entry";
+import {HookOptions, HookMetadata} from "../metadata";
+import {HookRecord} from "../records";
+import {HookBase, Token} from "../interfaces";
+import {BaseEntry} from "./base.entry";
 
-export abstract class HookEntry<Stage, Ctx> extends BaseEntry<HookRecord, HookBase, HookMetadata<never>> {
+export abstract class HookEntry<In, Stage, Ctx> extends BaseEntry<HookRecord, HookBase<In, Ctx>, HookMetadata<Stage>> {
   readonly scope: ScopeEntry;
-  readonly options: FlowHookOptions<Ctx>;
+  readonly options: HookOptions<Ctx>;
 
-  protected constructor(scope: ScopeEntry, record: FlowRecord, token?: Token<FlowBase>, metadata?: FlowMetadata<never>) {
+  protected constructor(scope: ScopeEntry, record: HookRecord, token: Token, metadata: HookMetadata<Stage>) {
     super(record, token, metadata);
-    const {path, method} = record.metadata.middleware ?? metadata?.middleware ?? {};
-
     this.scope = scope;
   }
 

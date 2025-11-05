@@ -1,6 +1,6 @@
 export * from './front-mcp.decorator';
 export * from './flow.decorator';
-export * from './flow-hooks.decorator';
+export * from './hook.decorator';
 export * from './app.decorator';
 export * from './provider.decorator';
 export * from './auth-provider.decorator';
