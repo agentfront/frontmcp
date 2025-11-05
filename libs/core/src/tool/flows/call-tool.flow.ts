@@ -153,25 +153,32 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
   @Stage('validateOutput')
   async validateOutput() {
+    this.logger.verbose('validateOutput:start');
     const {tool, toolContext} = this.state.required;
     toolContext.mark('validateOutput')
     toolContext.output = tool.outputSchema.parse(toolContext.output)
+    this.logger.verbose('validateOutput:done');
   }
 
   @Stage('releaseSemaphore')
   async releaseSemaphore() {
+    this.logger.verbose('releaseSemaphore:start');
     // release concurrency control
     this.state.required.toolContext.mark('releaseSemaphore')
+    this.logger.verbose('releaseSemaphore:done');
   }
 
   @Stage('releaseQuota')
   async releaseQuota() {
+    this.logger.verbose('releaseQuota:start');
     // release rate limiting
     this.state.required.toolContext.mark('releaseQuota')
+    this.logger.verbose('releaseQuota:done');
   }
 
   @Stage('finalize')
   async finalize() {
+    this.logger.verbose('finalize:start');
     this.state.required.toolContext.mark('finalize')
     this.respond({
       content: [{
@@ -179,5 +186,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         text: JSON.stringify(this.state.required.toolContext.output)
       }]
     })
+    this.logger.verbose('finalize:done');
   }
 }
