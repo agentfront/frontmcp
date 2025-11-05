@@ -108,9 +108,7 @@ export abstract class InvokerContext<
     return this._inputDraftHistory;
   }
 
-  // =========================
-  // VALIDATED INPUT (Zod-parsed)
-  // =========================
+
   public get input(): InputSchemaType {
     return this._input as InputSchemaType;
   }

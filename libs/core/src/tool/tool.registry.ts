@@ -23,6 +23,7 @@ import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
 import {ToolInstance} from './tool.instance';
 import {DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool} from "./tool.types";
 import ToolsListFlow from "./flows/tools-list.flow";
+import CallToolFlow from "./flows/call-tool.flow";
 
 
 export default class ToolRegistry extends RegistryAbstract<
@@ -130,7 +131,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
 
     const scope = this.providers.getActiveScope();
-    await scope.registryFlows(ToolsListFlow)
+    await scope.registryFlows(ToolsListFlow, CallToolFlow)
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */

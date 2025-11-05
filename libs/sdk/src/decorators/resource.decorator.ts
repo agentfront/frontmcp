@@ -13,8 +13,6 @@ import {
 import {
   ReadResourceRequest,
   ReadResourceResult,
-  ListResourceTemplatesResult,
-
 } from '@modelcontextprotocol/sdk/types.js';
 
 /**
@@ -60,7 +58,7 @@ export type FrontMcpResourceExecuteHandler = (
 function frontMcpResource<T extends ResourceMetadata>(providedMetadata: T): (handler: FrontMcpResourceExecuteHandler) => (() => void) {
   return (execute) => {
     const metadata = frontMcpResourceMetadataSchema.parse(providedMetadata);
-    const toolFunction = function() {
+    const toolFunction = function () {
       return execute;
     };
     Object.assign(toolFunction, {

@@ -118,6 +118,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           await stage.method(context);
         }
       }
+
+      for (const post of plan.finalize ?? []) {
+        for (const stage of hooks[post] ?? []) {
+          await stage.method(context);
+        }
+      }
     } catch (e) {
       if (e instanceof FlowControl) {
         switch (e.type) {

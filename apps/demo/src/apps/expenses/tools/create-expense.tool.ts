@@ -14,7 +14,7 @@ type In = z.baseObjectInputType<typeof inputSchema> & { value?: string };
 type Out = z.baseObjectOutputType<typeof outputSchema>;
 
 @Tool({
-  name: 'createExpense',
+  name: 'create-expense',
   description: 'Create an expense',
   inputSchema,
   outputSchema,
@@ -23,14 +23,14 @@ type Out = z.baseObjectOutputType<typeof outputSchema>;
     slideWindow: true,
   },
 })
-export default class CreateExpenseTool implements ToolInterface<In, Out> {
+export default class CreateExpenseTool extends ToolContext<In, Out> {
 
-  async execute(input: In, ctx: ToolContext<In, Out>): Promise<Out> {
-    const red = ctx.get(SessionRedisProvider);
-    await red.setValue('expense-id', input.id);
+  async execute(input): Promise<Out> {
+    // const red = this.get(SessionRedisProvider);
+    // await red.setValue('expense-id', input.id);
 
     return {
-      ok: 'secret',
+      ok: 'secrwdmqwkldmqwlkdet',
     };
   }
 

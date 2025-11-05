@@ -1,6 +1,9 @@
-import {ToolEntry, ToolRecord, EntryOwnerRef} from '@frontmcp/sdk';
+import {
+  EntryOwnerRef, FrontMcpLogger, ToolCallArgs, ToolCallExtra, ToolContext, ToolEntry,
+  ToolFunctionTokenRecord, ToolKind, ToolMetadata, ToolRecord
+} from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
-
+import {z} from "zod";
 
 export class ToolInstance extends ToolEntry<any, any> {
   private readonly providers: ProviderRegistry;
@@ -15,6 +18,8 @@ export class ToolInstance extends ToolEntry<any, any> {
     this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
+    this.inputSchema = z.object(record.metadata.inputSchema);
+    this.outputSchema = record.metadata.outputSchema ? z.object(record.metadata.outputSchema) : z.object({}).passthrough();
     this.ready = this.initialize();
   }
 
@@ -32,13 +37,36 @@ export class ToolInstance extends ToolEntry<any, any> {
     return this.record.metadata;
   }
 
-  execute(session: string) {
-    // TODO:
-    //   - create session scoped providers
-    //   - create request scoped providers
-    //   - create tool invoker run from previously created flow
-    //   - run tool invoker
-    //   - return result
+  override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<any, any> {
+    const metadata = this.metadata;
+    const providers = this.providers;
+    const scope = this.providers.getActiveScope();
+    const logger = scope.logger;
+    const session = ctx.authInfo;
+    switch (this.record.kind) {
+      case ToolKind.CLASS_TOKEN:
+        return new (this.record.provide as any)(metadata, input, providers, logger, session);
+      case ToolKind.FUNCTION:
+        return new FunctionToolContext(this.record, metadata, input, providers, logger, session);
+    }
+  }
+}
+
+
+class FunctionToolContext extends ToolContext<any, any> {
+  constructor(
+    private readonly record: ToolFunctionTokenRecord,
+    metadata: ToolMetadata,
+    input: ToolCallArgs,
+    providers: ProviderRegistry,
+    logger: FrontMcpLogger,
+    session: any,
+  ) {
+    super(metadata, input, providers, logger, session);
   }
 
+  execute(input: any): Promise<any> {
+    return this.record.provide(input, this);
+  }
 }
+
