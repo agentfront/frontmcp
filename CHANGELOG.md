@@ -2,7 +2,7 @@
 
 ### 🚀 Features
 
-- **auth:** support no auth option (development mode only) ([#11](https://github.com/agentfront/frontmcp/pull/11))
+- **auth:** support no auth DCR (development mode only) ([#11](https://github.com/agentfront/frontmcp/pull/11))
 
 ### ❤️ Thank You
 
