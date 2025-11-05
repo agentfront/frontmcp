@@ -45,33 +45,11 @@ interface BaseOptions extends Omit<GetToolsOptions, 'dereference'> {
    * @param body
    */
   bodyMapper?: (authInfo: AuthInfo, body: any) => any;
-  // /**
-  //  * This can be used to map request information to specific
-  //  * input schema values as required by the API.
-  //  * For example, mapping tenantId from authenticated session payload to
-  //  * a specific proprty in the input schema, this key will be hidden to mcp clients
-  //  * and filled by the adapter before sending the request to the API.
-  //  * @param authInfo
-  //  * @param request
-  //  */
-  // inputSchemaMapper?: (inputSchema: any) => any;
 }
 
 interface SpecOptions extends BaseOptions {
   /**
    * The OpenAPI specification the OpenAPI specification.
-   *
-   * @example
-   * ```json
-   * {
-   *   "openapi": "3.0.0",
-   *   "info": {
-   *     "title": "My API",
-   *     "version": "1.0.0"
-   *   },
-   *   "paths": {
-   *     "/users": {
-   `
    */
   spec: OpenAPIV3.Document;
 }

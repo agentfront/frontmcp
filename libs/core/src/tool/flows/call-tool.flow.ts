@@ -24,17 +24,17 @@ const plan = {
     'parseInput',
     'findTool',
     'createToolCallContext',
-  ],
-  execute: [
     'acquireQuota',
     'acquireSemaphore',
+  ],
+  execute: [
     'validateInput',
     'execute',
     'validateOutput',
-    'releaseSemaphore',
-    'releaseQuota',
   ],
   finalize: [
+    'releaseSemaphore',
+    'releaseQuota',
     'finalize',
   ],
 } as const satisfies FlowPlan<string>;
