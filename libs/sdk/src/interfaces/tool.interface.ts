@@ -26,7 +26,7 @@ export type ToolCtorArgs<In> = {
   authInfo: AuthInfo;
 }
 
-export abstract class ToolContext<In, Out> {
+export abstract class ToolContext<In = any, Out= any> {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;
 

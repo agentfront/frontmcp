@@ -1,9 +1,9 @@
-import { RawMetadataShape } from '../types';
-import { FlowHookMetadata } from '../metadata';
-import { tokenFactory } from './base.tokens';
+import {RawMetadataShape} from '../types';
+import {HookMetadata, TokenHookMetadata} from '../metadata';
+import {tokenFactory} from './base.tokens';
 
 export const FrontMcpFlowHookTokens = {
-  type: tokenFactory.type('flow'),
-  hooks: tokenFactory.meta('hooks'),
-} as const satisfies RawMetadataShape<FlowHookMetadata>;
+  type: tokenFactory.type('hooks'),
+  hooks: tokenFactory.meta('hooks'), // used for aggregate hooks in a target class
+} as const satisfies RawMetadataShape<TokenHookMetadata>;
 

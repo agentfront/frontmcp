@@ -8,7 +8,7 @@ export enum HookKind {
 export type HookSMethodToken = {
   kind: HookKind.METHOD_TOKEN;
   provide: HookType;
-  metadata: HookMetadata<never>
+  metadata: HookMetadata
 };
 
 export type HookRecord =

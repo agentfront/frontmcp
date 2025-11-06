@@ -6,7 +6,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import {z} from "zod";
 
 
-export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
+export class ToolInstance<In extends object = any, Out extends object = any> extends ToolEntry<In, Out> {
   private readonly providers: ProviderRegistry;
   readonly name: string;
 
@@ -55,12 +55,12 @@ export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
       case ToolKind.CLASS_TOKEN:
         return new this.record.provide(toolCtorArgs);
       case ToolKind.FUNCTION:
-        return new FunctionToolContext(this.record, toolCtorArgs);
+        return new FunctionToolContext<In, Out>(this.record, toolCtorArgs);
     }
   }
 }
 
-class FunctionToolContext<In = any, Out = any> extends ToolContext<In, Out> {
+class FunctionToolContext<In extends object = any, Out extends object = any> extends ToolContext<In, Out> {
   constructor(
     private readonly record: ToolFunctionTokenRecord,
     args: ToolCtorArgs<In>

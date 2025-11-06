@@ -38,11 +38,11 @@ export function collectFLowHookMap<C>(FlowClass: FlowType): StageMap<C> {
 
   for (const m of sorted) {
     const resolved =
-      m.kind === 'will'
+      m.type === 'will'
         ? `will${cap(m.stage)}`
-        : m.kind === 'did'
+        : m.type === 'did'
           ? `did${cap(m.stage)}`
-          : m.kind === 'around'
+          : m.type === 'around'
             ? `around${cap(m.stage)}`
             : m.stage;
 
@@ -59,7 +59,7 @@ export function collectFLowHookMap<C>(FlowClass: FlowType): StageMap<C> {
         // Filter (supports async)
         if (m.filter && !(await m.filter(ctx))) return;
 
-        if (m.kind === 'around') {
+        if (m.type === 'around') {
           // Provide a no-op next so your current loop signature stays stage.method(context)
           const next = async () => {
           };

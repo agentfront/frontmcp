@@ -15,6 +15,8 @@ import {EntryOwnerRef} from '../../entries';
 import {FrontMcpAuth} from './primary-auth-provider.interface';
 import {FlowName} from '../../metadata';
 import {HookEntry} from "../../entries/hook.entry";
+import {FlowCtxOf, FlowInputOf, FlowStagesOf} from "../flow.interface";
+import {HookRecord} from "../../records";
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -25,9 +27,21 @@ export interface FlowRegistryInterface {
 }
 
 export interface HookRegistryInterface {
-  getClsHooks(token: Token): HookEntry<any, any>[];
+  /**
+   * used to pull hooks registered by a class and related to that class only,
+   * like registering hooks on specific tool execution
+   * @param token
+   */
+  getClsHooks(token: Token): HookEntry[];
 
-  getFlowHooks(flow: FlowName): HookEntry<any,any>[];
+  /**
+   * Used to pull all hooks registered to specific flow by name,
+   * this is used to construct the flow graph and execute hooks in order
+   * @param flow
+   */
+  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+
+  registerHooks(...records: HookRecord[]): Promise<void[]>;
 }
 
 

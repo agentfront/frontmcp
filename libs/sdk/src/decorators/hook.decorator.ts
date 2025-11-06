@@ -1,25 +1,29 @@
-import {HookType, HookOptions, HookMetadata, FlowName} from '../metadata';
+import {HookStageType, HookOptions, FlowName, HookMetadata} from '../metadata';
 import {FrontMcpFlowHookTokens} from '../tokens';
 
 
 function registerFlowHook(target: any, meta: HookMetadata) {
   const ctor = target.constructor;
-  const arr: HookMetadata[] = Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, ctor) ?? [];
+  const arr = Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, ctor) ?? [];
   arr.push(meta);
   Reflect.defineMetadata(FrontMcpFlowHookTokens.hooks, arr, ctor);
 }
 
 /** Base factory (kept internal) */
-function make(flow: FlowName, type: HookType) {
+function make(flow: FlowName, type: HookStageType) {
   return function <Ctx = unknown, T extends string = string>(stage: T, opts: HookOptions<Ctx> = {}): MethodDecorator {
     return (target: any, key, _desc) => {
+      const {priority = 0, filter, ...rest} = opts;
       registerFlowHook(target, {
-        flow,
-        type,
-        stage: String(stage),
+        ...rest,
+        [FrontMcpFlowHookTokens.type]: true,
+        flow: flow,
+        type: type,
+        stage: stage,
         method: String(key),
-        priority: opts.priority ?? 0,
-        filter: opts.filter as any,
+        priority: priority,
+        filter: filter,
+        target: target,
         static: Boolean(target.constructor[key]),
       });
     };
