@@ -100,7 +100,7 @@ declare module "@frontmcp/sdk" {
   // Must extend ToolContext<any, any>
   type __MustExtendCtx<C extends __Ctor> =
     __R<C> extends ToolContext<any, any> ? {} :
-      __Err<"Class must extend ToolContext<any, any>">;
+      __Err<"Class must extend ToolContext">;
 
   // execute param must exactly match In (and not be any)
   type __MustParam<C extends __Ctor, In> =
@@ -124,7 +124,7 @@ declare module "@frontmcp/sdk" {
         : never;
 
   // ---------- the decorator ----------
-  // @ts-ignore
+  // @ts-expect-error - Module augmentation requires decorator overload
   export function Tool<
     I extends __Shape,
     O extends __Shape,

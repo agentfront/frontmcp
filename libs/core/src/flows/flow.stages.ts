@@ -22,7 +22,7 @@ const CACHE: WeakMap<Function, StageMap<any>> = new WeakMap();
  *   - 'didStageName'  for kind==='did'
  *   - 'aroundStageName' for kind==='around'
  */
-export function collectFLowHookMap<C>(FlowClass: FlowType): StageMap<C> {
+export function collectFlowHookMap<C>(FlowClass: FlowType): StageMap<C> {
   const cached = CACHE.get(FlowClass as any);
   if (cached) return cached;
 

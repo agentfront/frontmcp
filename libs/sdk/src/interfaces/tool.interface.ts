@@ -33,7 +33,7 @@ export abstract class ToolContext<In = any, Out= any> {
   protected readonly runId: string;
   protected readonly toolId: string;
   protected readonly toolName: string;
-  protected readonly metadata: ToolMetadata;
+  readonly metadata: ToolMetadata;
   protected readonly logger: FrontMcpLogger;
 
   protected activeStage: string;
@@ -110,7 +110,7 @@ export abstract class ToolContext<In = any, Out= any> {
     return this._outputHistory;
   }
 
-  protected respond(value: Out): never {
+  respond(value: Out): never {
     // record validated output and surface the value via control flow
     this.output = value;
     FlowControl.respond<Out>(value);

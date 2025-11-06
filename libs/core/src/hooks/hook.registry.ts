@@ -11,7 +11,8 @@ import {RegistryAbstract, RegistryBuildMapResult} from "../regsitry";
 import ProviderRegistry from "../provider/provider.registry";
 import {HookInstance} from "./hook.instance";
 
-export default class HookRegistry extends RegistryAbstract<HookInstance<FlowName>, HookRecord, HookType[]> implements HookRegistryInterface {
+export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord, HookType[]>
+  implements HookRegistryInterface {
   scope: ScopeEntry;
 
 
@@ -54,7 +55,7 @@ export default class HookRegistry extends RegistryAbstract<HookInstance<FlowName
     const rec = this.defs.get(token)!;
     const providers = this.providers; // must be nearest token provider registry;
     const instance = new HookInstance(this.scope, providers, rec, token);
-    this.instances.set(`${rec.metadata.flow}-${rec.metadata.stage}`, instance);
+    this.instances.set(token, instance);
 
     // append hook to recordsByCls
     const cls = rec.metadata.target;
@@ -84,14 +85,17 @@ export default class HookRegistry extends RegistryAbstract<HookInstance<FlowName
     if (!records) {
       return [];
     }
-    return records.map(rec => this.instances.get(`${rec.metadata.flow}-${rec.metadata.stage}`)!);
+    return (this.recordsByCls.get(token) ?? []).map(hook => {
+      return this.instances.get(hook.provide)!;
+    })
   }
 
   getHooks(): HookEntry[] {
     return [...this.instances.values()];
   }
 
-  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
-    return this.getHooks().filter(h => h.metadata.flow === flow) as HookEntry<FlowInputOf<Name>, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
+    const filteredHooks: unknown[] = this.getHooks().filter(h => h.metadata.flow === flow);
+    return filteredHooks as HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
   }
 }

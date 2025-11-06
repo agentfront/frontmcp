@@ -12,7 +12,7 @@ import {
   Token, Type,
 } from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
-import {collectFLowHookMap, StageMap} from './flow.stages';
+import {collectFlowHookMap, StageMap} from './flow.stages';
 import {writeHttpResponse} from '../server/server.validation';
 import {Scope} from '../scope';
 
@@ -50,7 +50,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   protected async initialize() {
     const server = this.globalProviders.getActiveServer();
 
-    this.stages = collectFLowHookMap(this.FlowClass);
+    this.stages = collectFlowHookMap(this.FlowClass);
     this.globalDeps = new Map();
 
     const {middleware} = this.metadata;

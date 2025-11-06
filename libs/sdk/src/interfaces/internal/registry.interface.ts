@@ -39,7 +39,7 @@ export interface HookRegistryInterface {
    * this is used to construct the flow graph and execute hooks in order
    * @param flow
    */
-  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
 
   registerHooks(...records: HookRecord[]): Promise<void[]>;
 }

@@ -1,6 +1,5 @@
-import {FlowName} from "./flow.metadata";
 import {Token} from "../interfaces";
-import {z} from "zod";
+import {FlowName} from "./flow.metadata";
 
 export type HookStageType = 'stage' | 'will' | 'did' | 'around';
 export type HookPriority = number;
@@ -15,10 +14,10 @@ export interface TokenHookMetadata {
   hooks: HookMetadata[];
 }
 
-export interface HookMetadata<Ctx = any> extends HookOptions<Ctx> {
+export interface HookMetadata<Name extends FlowName = FlowName, Stage = string, Ctx = any> extends HookOptions<Ctx> {
   type: HookStageType;
-  flow: string,
-  stage: string;
+  flow: Name,
+  stage: Stage;
   target: Token;
   method: string;
   static?: boolean;

@@ -1,4 +1,4 @@
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import {Provider, ProviderScope} from '@frontmcp/sdk';
 
 @Provider({
   name: 'expense-config',
@@ -6,7 +6,7 @@ import { Provider, ProviderScope } from '@frontmcp/sdk';
   scope: ProviderScope.GLOBAL,
 })
 export default class ExpenseConfigProvider {
-  config: Record<string, any> = {
+  config = {
     redis: {
       host: 'localhost',
       port: 6379,
@@ -14,7 +14,7 @@ export default class ExpenseConfigProvider {
     cache: {
       defaultTTL: 50,
     },
-  };
+  } as const;
 
   constructor() {
     console.log('ExpenseConfigProvider');

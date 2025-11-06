@@ -1,5 +1,4 @@
-import {DynamicPlugin, Plugin, ToolHook, ProviderType, ToolHookStage} from '@frontmcp/sdk';
-import {ToolInvokeContext} from '@frontmcp/core';
+import {DynamicPlugin, Plugin, ToolHook, ProviderType, ToolHookStage, ToolContext} from '@frontmcp/sdk';
 import {hashObject} from 'nx/src/hasher/file-hasher';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
@@ -58,7 +57,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 
   @ToolHook(ToolHookStage.willReadCache)
-  async willReadCache(ctx: ToolInvokeContext) {
+  async willReadCache(ctx: ToolContext) {
     const {cache} = ctx.metadata;
     if (!cache) {
       return;
@@ -82,7 +81,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 
   @ToolHook(ToolHookStage.willWriteCache)
-  async willWriteCache(ctx: ToolInvokeContext) {
+  async willWriteCache(ctx: ToolContext) {
     const {cache} = ctx.metadata;
     if (!cache) {
       return;

@@ -10,7 +10,7 @@ import {
 } from '@frontmcp/sdk';
 import {depsOfClass, depsOfFunc, isClass} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
-import { NameCase} from "./tool.types";
+import {NameCase} from "./tool.types";
 
 export function collectToolMetadata(cls: ToolType): ToolMetadata {
   return Object.entries(FrontMcpToolTokens).reduce((metadata, [key, token]) => {
@@ -32,7 +32,7 @@ export function normalizeTool(item: any): ToolRecord {
   if (isClass(item)) {
     // read McpToolMetadata from class
     const metadata = collectToolMetadata(item);
-    return {kind: ToolKind.CLASS_TOKEN, provide: item as Type<ToolContext<any, any>>, metadata};
+    return {kind: ToolKind.CLASS_TOKEN, provide: item as Type<ToolContext>, metadata};
   }
   const name = (item as any)?.name ?? String(item);
   throw new Error(
@@ -56,8 +56,8 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
 }
 
 
-// Allowed chars per MCP spec: a-zA-Z0-9 _ - . /
-const MCP_ALLOWED = /[A-Za-z0-9_\-\.\/]/;
+// Allowed chars per MCP spec: a-zA-Z0-9 _ -. /
+const MCP_ALLOWED = /[A-Za-z0-9_\-.\/]/;
 
 export function splitWords(input: string): string[] {
   const parts: string[] = [];
@@ -108,7 +108,7 @@ export function normalizeSegment(raw: string, kind: NameCase): string {
 
 export function normalizeProviderId(raw: string | undefined, kind: NameCase): string | undefined {
   if (!raw) return undefined;
-  const tokens = raw.split(/[^\w]+/);
+  const tokens = raw.split(/\W+/);
   const cased = toCase(tokens, kind);
   const safe = [...cased].filter(ch => MCP_ALLOWED.test(ch)).join('');
   return safe || undefined;

@@ -1,7 +1,6 @@
 import {Tool, ToolContext} from '@frontmcp/sdk';
 import z from 'zod';
 
-
 @Tool({
   name: 'create-expense',
   description: 'Create an expense',
@@ -18,9 +17,11 @@ import z from 'zod';
 })
 export default class CreateExpenseTool extends ToolContext {
   async execute(input: { id: string }) {
+
     return {
       ok: 'asdasdsd',
     };
+
   }
 
 }
