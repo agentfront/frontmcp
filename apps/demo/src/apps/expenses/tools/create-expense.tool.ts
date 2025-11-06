@@ -1,5 +1,5 @@
 import {FlowHooksOf, StageHookOf, Tool, ToolContext} from '@frontmcp/sdk';
-import {} from '@frontmcp/core';
+import '@frontmcp/core';
 import z from 'zod';
 
 const {Will} = FlowHooksOf('tools:call-tool')

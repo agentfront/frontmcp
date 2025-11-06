@@ -1,5 +1,4 @@
-import {DynamicPlugin, Plugin, ProviderType, FlowCtxOf} from '@frontmcp/sdk';
-import {hashObject} from 'nx/src/hasher/file-hasher';
+import {DynamicPlugin, FlowCtxOf, Plugin, ProviderType} from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
 import {CachePluginOptions} from './cache.types';
@@ -96,4 +95,17 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const hash = hashObject(ctx.input!);
     await redis.setValue(hash, ctx.output, ttl);
   }
+}
+
+function hashObject(obj: any) {
+  const keys = Object.keys(obj).sort();
+  const values = keys.map(key => obj[key]);
+  return values.reduce((acc, val) => {
+    if (typeof val === 'object' && val !== null) {
+      acc += hashObject(val);
+    } else {
+      acc += val;
+    }
+    return acc;
+  }, '');
 }
