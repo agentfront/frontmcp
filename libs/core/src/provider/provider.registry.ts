@@ -863,16 +863,15 @@ export default class ProviderRegistry extends RegistryAbstract<
   }
 
   private getWithParents<T>(token: Token<T>): T {
-    let providers: ProviderRegistry = this
-    while (providers && !providers.instances.has(token)) {
-      if (providers.parentProviders) {
-        providers = providers.parentProviders
-      } else {
-        return providers.get(token)
-      }
-    }
-    return providers.get(token)
-  }
+   if (this.instances.has(token)) {
+     return this.get(token)
+   }
+   const parent = this.parentProviders
+   if (!parent) {
+     return this.get(token)
+   }
+   return parent.getWithParents(token)
+ }
 
   getActiveScope(): Scope {
     return this.getWithParents(Scope)

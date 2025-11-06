@@ -24,10 +24,10 @@ export class HookInstance<Name extends FlowName, In = FlowInputOf<Name>, Stage =
     return Promise.resolve(undefined);
   }
 
-  async run(flowCtx: In): Promise<void> {
+  async run(input: In, ctx: Ctx): Promise<void> {
     const {target, method} = this.metadata;
     this.logger.verbose("start")
-    await target[method](flowCtx);
+    await target[method](input, ctx);
     this.logger.verbose("start")
   }
 }

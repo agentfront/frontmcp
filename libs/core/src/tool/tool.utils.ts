@@ -14,8 +14,8 @@ import {NameCase} from "./tool.types";
 
 export function collectToolMetadata(cls: ToolType): ToolMetadata {
 
-  const extended = getMetadata(extendedToolMetadata, cls)
-
+  const extended = getMetadata(extendedToolMetadata, cls);
+  const seed = (extended ? {...extended} : {}) as ToolMetadata;
   return Object.entries(FrontMcpToolTokens).reduce((metadata, [key, token]) => {
     const value = getMetadata(token, cls);
     if (value) {
@@ -25,7 +25,7 @@ export function collectToolMetadata(cls: ToolType): ToolMetadata {
     } else {
       return metadata;
     }
-  }, extended as ToolMetadata);
+  }, seed);
 }
 
 export function normalizeTool(item: any): ToolRecord {

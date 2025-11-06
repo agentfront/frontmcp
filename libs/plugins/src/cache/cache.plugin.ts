@@ -63,10 +63,10 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const ctx = flowCtx.state.required.toolContext;
     const {cache} = ctx.metadata;
-    if (!cache) {
+    if (!cache ||  !ctx.input) {
       return;
     }
-    const hash = hashObject(ctx.input!);
+    const hash = hashObject(ctx.input);
     const cached = await this.redis.getValue(hash);
 
     if (cache == true || (cache.ttl && cache.slideWindow)) {

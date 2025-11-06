@@ -2,11 +2,10 @@ import {
   PluginMetadata,
   PluginType,
   FrontMcpPluginTokens,
-  Token, PluginRecord, PluginKind, AdapterKind,
+  Token, PluginRecord, PluginKind,
 } from '@frontmcp/sdk';
 import {depsOfClass, isClass, tokenName} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
-import {collectAdapterMetadata} from "../adapter/adapter.utils";
 
 export function collectPluginMetadata(cls: PluginType): PluginMetadata {
   return Object.entries(FrontMcpPluginTokens).reduce((metadata, [key, token]) => {
@@ -62,7 +61,10 @@ export function normalizePlugin(item: PluginType): PluginRecord {
     }
 
     if ('useValue' in item) {
-      const metadata = collectAdapterMetadata(useValue.constructor);
+      if (useValue === undefined || useValue === null) {
+        throw new Error(`'useValue' on plugin '${tokenName(provide)}' must be defined.`);
+      }
+      const metadata = collectPluginMetadata(useValue.constructor);
       return {
         kind: PluginKind.VALUE,
         provide,

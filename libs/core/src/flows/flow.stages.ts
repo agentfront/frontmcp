@@ -1,4 +1,4 @@
-import { HookMetadata, FrontMcpFlowHookTokens } from '@frontmcp/sdk';
+import {HookMetadata, FrontMcpFlowHookTokens} from '@frontmcp/sdk';
 
 export type StageEntry<C> = {
   method: (ctx: C) => Promise<void>;
@@ -41,7 +41,7 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
   const metas = (Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, FlowClass) ?? []) as HookMetadata[];
 
   const sorted = metas
-    .map((m, i) => ({ m, i }))
+    .map((m, i) => ({m, i}))
     .sort((a, b) => (a.m.priority ?? 0) - (b.m.priority ?? 0) || a.i - b.i)
     .map(x => x.m);
 
@@ -65,7 +65,8 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {};
+          const next = async () => {
+          };
           return m.static ? impl.call(FlowClass, ctx, next) : impl.call(ctx, ctx, next);
         } else {
           return m.static ? impl.call(FlowClass, ctx) : impl.call(ctx, ctx);
@@ -90,7 +91,7 @@ export function mergeHookMetasIntoStageMap<C>(
   let order = orderStart;
 
   const sorted = metas
-    .map((m, i) => ({ m, i }))
+    .map((m, i) => ({m, i}))
     .sort((a, b) => (a.m.priority ?? 0) - (b.m.priority ?? 0) || a.i - b.i)
     .map(x => x.m);
 
@@ -101,7 +102,11 @@ export function mergeHookMetasIntoStageMap<C>(
       _priority: m.priority ?? 0,
       _order: order++,
       method: async (ctx: any) => {
-        const target = m.target; // TODO: validate
+        const target = m.target;
+        if (!target) {
+          console.warn(`[flow] Hook target is missing for method ${m.method}`);
+          return;
+        }
         const impl =
           typeof (m as any).method === 'function'
             ? (m as any).method
@@ -111,7 +116,8 @@ export function mergeHookMetasIntoStageMap<C>(
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {};
+          const next = async () => {
+          };
           return m.static ? impl.call(target, ctx, next) : impl.call(target, ctx, next);
         } else {
           return m.static ? impl.call(target, ctx) : impl.call(target, ctx);
