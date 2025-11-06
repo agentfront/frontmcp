@@ -57,7 +57,7 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
 
 
 // Allowed chars per MCP spec: a-zA-Z0-9 _ -. /
-const MCP_ALLOWED = /[A-Za-z0-9_\-.\/]/;
+const MCP_ALLOWED = /[A-Za-z0-9_\-./]/;
 
 export function splitWords(input: string): string[] {
   const parts: string[] = [];

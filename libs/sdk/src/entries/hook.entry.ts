@@ -13,6 +13,10 @@ export abstract class HookEntry<In = any, Name extends FlowName = FlowName, Stag
     super(record, token, metadata as HookMetadata<Name, Stage, Ctx>);
     this.scope = scope;
     this.providers = providers;
+    this.options = {
+      filter: metadata.filter,
+      priority: metadata.priority
+    }
   }
 
   abstract run(input: In, ctx: Ctx): Promise<void>;
