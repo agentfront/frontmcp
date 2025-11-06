@@ -184,7 +184,7 @@ export default class ProviderRegistry extends RegistryAbstract<
       }
 
       try {
-        await this.instantiateOne(token, rec);
+        await this.initiateOne(token, rec);
       } catch (e: any) {
         const msg = e?.message ?? e;
         console.error(`Failed instantiating`, e);
@@ -408,8 +408,8 @@ export default class ProviderRegistry extends RegistryAbstract<
     throw new Error(`Cannot resolve token ${tokenName(t)}: not registered in hierarchy and not constructable.`);
   }
 
-  /** Build a single DEFAULT-scoped singleton (used by incremental instantiate). */
-  private async instantiateOne(token: Token, rec: ProviderRecord): Promise<void> {
+  /** Build a single DEFAULT-scoped singleton (used by incremental instantiating). */
+  private async initiateOne(token: Token, rec: ProviderRecord): Promise<void> {
     switch (rec.kind) {
       case ProviderKind.VALUE: {
         this.instances.set(token, (rec as any).useValue);
@@ -588,130 +588,6 @@ export default class ProviderRegistry extends RegistryAbstract<
     throw new Error(`${tokenName(d)} is not instantiated`);
   }
 
-  /* -------------------- Diffing & Dependents -------------------- */
-
-  // private sameDef(token: Token, prev: ProviderRecord, next: ProviderRecord): boolean {
-  //   const prevScope = (prev as any).scope ?? ProviderScope.GLOBAL;
-  //   const nextScope = (next as any).scope ?? ProviderScope.GLOBAL;
-  //
-  //   if (prev.kind !== next.kind) return false;
-  //   if (prevScope !== nextScope) return false;
-  //
-  //   switch (prev.kind) {
-  //     case ProviderKind.VALUE: {
-  //       const pv = (prev as any).useValue;
-  //       const nv = (next as any).useValue;
-  //       return pv === nv;
-  //     }
-  //     case ProviderKind.FACTORY: {
-  //       const pf = (prev as any).useFactory;
-  //       const nf = (next as any).useFactory;
-  //       return pf === nf;
-  //     }
-  //     case ProviderKind.CLASS: {
-  //       const pc = (prev as any).useClass;
-  //       const nc = (next as any).useClass;
-  //       return pc === nc;
-  //     }
-  //     case ProviderKind.CLASS_TOKEN: {
-  //       const pt = (prev as any).provide;
-  //       const nt = (next as any).provide;
-  //       return pt === nt;
-  //     }
-  //     default:
-  //       return false;
-  //   }
-  // }
-
-  // /** Returns the set of DEFAULT-scope tokens that are new or changed (kind or scope change). */
-  // private diffNewOrChanged(prevDefs: Map<Token, ProviderRecord>, nextDefs: Map<Token, ProviderRecord>): Set<Token> {
-  //   const out = new Set<Token>();
-  //   for (const [tok, next] of nextDefs) {
-  //     const prev = prevDefs.get(tok);
-  //     if (!prev) {
-  //       if (this.getScope(next) === ProviderScope.GLOBAL) out.add(tok);
-  //       continue;
-  //     }
-  //     if (!this.sameDef(tok, prev, next)) {
-  //       if (this.getScope(next) === ProviderScope.GLOBAL) out.add(tok);
-  //     }
-  //   }
-  //   return out;
-  // }
-
-  // /** Reverse adjacency: dep -> set of dependents */
-  // private reverseGraph(): Map<Token, Set<Token>> {
-  //   const rg = new Map<Token, Set<Token>>();
-  //   for (const [u, deps] of this.graph) {
-  //     if (!rg.has(u)) rg.set(u, new Set());
-  //     for (const v of deps) {
-  //       if (!rg.has(v)) rg.set(v, new Set());
-  //       rg.get(v)!.add(u);
-  //     }
-  //   }
-  //   return rg;
-  // }
-
-  // /** Collect DEFAULT-scoped dependents of the given seed tokens (transitively). */
-  // private collectDefaultDependents(seeds: Set<Token>): Set<Token> {
-  //   if (seeds.size === 0) return new Set();
-  //   const rg = this.reverseGraph();
-  //   const out = new Set<Token>();
-  //   const stack = [...seeds];
-  //   while (stack.length) {
-  //     const t = stack.pop()!;
-  //     for (const d of rg.get(t) ?? []) {
-  //       if (!out.has(d)) {
-  //         out.add(d);
-  //         stack.push(d);
-  //       }
-  //     }
-  //   }
-  //   // keep DEFAULT only
-  //   return new Set(
-  //     [...out].filter((tok) => {
-  //       const rec = this.defs.get(tok)!;
-  //       return this.getScope(rec) === ProviderScope.GLOBAL;
-  //     }),
-  //   );
-  // }
-
-  // /* -------------------- Public API -------------------- */
-  //
-  // /** Register/override a single provider record at runtime (no decorator scan).
-  //  *  Rebuilds the graph and (optionally) re-initializes changed tokens + their DEFAULT dependents.
-  //  */
-  // async registerOne(recInput: ProviderType, opts?: { reinitDependents?: boolean }): Promise<void> {
-  //   const rec = normalizeProvider(recInput);
-  //   const token = (rec as any).provide as Token;
-  //
-  //   // Snapshot previous defs for diff
-  //   const prevDefs = new Map(this.defs);
-  //
-  //   // Persist the one record
-  //   this.tokens.add(token);
-  //   this.defs.set(token, rec as any);
-  //   if (!this.graph.has(token)) this.graph.set(token, new Set());
-  //
-  //   // Rebuild graph fresh, then re-toposort
-  //   const fresh = new Map<Token, Set<Token>>();
-  //   for (const tok of this.tokens) fresh.set(tok, new Set());
-  //   this.graph = fresh;
-  //   this.buildGraph();
-  //   this.topoSort();
-  //
-  //   // Compute changed/new DEFAULT providers
-  //   const changedOrNew = this.diffNewOrChanged(prevDefs, this.defs);
-  //
-  //   // Optionally include DEFAULT dependents
-  //   const dependents = opts?.reinitDependents ? this.collectDefaultDependents(changedOrNew) : new Set<Token>();
-  //
-  //   const toInit = new Set<Token>([...changedOrNew, ...dependents]);
-  //   if (toInit.size > 0) {
-  //     await this.initialize({ force: true, onlyTokens: toInit });
-  //   }
-  // }
-
   get<T>(token: Token<T>): T {
     if (this.instances.has(token)) return this.instances.get(token) as T;
 
@@ -862,16 +738,20 @@ export default class ProviderRegistry extends RegistryAbstract<
     this.instances.set(rec.provide, rec.value);
   }
 
+  async addDynamicProviders(dynamicProviders: ProviderRecord[]) {
+    return Promise.all(dynamicProviders.map((rec) => this.initiateOne(rec.provide, rec)))
+  }
+
   private getWithParents<T>(token: Token<T>): T {
-   if (this.instances.has(token)) {
-     return this.get(token)
-   }
-   const parent = this.parentProviders
-   if (!parent) {
-     return this.get(token)
-   }
-   return parent.getWithParents(token)
- }
+    if (this.instances.has(token)) {
+      return this.get(token)
+    }
+    const parent = this.parentProviders
+    if (!parent) {
+      return this.get(token)
+    }
+    return parent.getWithParents(token)
+  }
 
   getActiveScope(): Scope {
     return this.getWithParents(Scope)

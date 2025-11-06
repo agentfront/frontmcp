@@ -150,9 +150,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       pluginInstance.get = providers.get.bind(providers) as any;
       let dynamicProviders = rec.providers;
       if (dynamicProviders) {
-        for (const provider of dynamicProviders) {
-          providers.injectProvider({...provider, value: provider['useValue']})
-        }
+        await providers.addDynamicProviders(dynamicProviders)
       }
       this.instances.set(token, pluginInstance);
 
