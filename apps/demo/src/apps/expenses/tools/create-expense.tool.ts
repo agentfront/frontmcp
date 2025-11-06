@@ -18,7 +18,7 @@ const {Will} = FlowHooksOf('tools:call-tool')
     slideWindow: true,
   },
   authorization: {
-    requiredRoles: ['admin']
+    requiredRoles: ['Admin']
   }
 })
 export default class CreateExpenseTool extends ToolContext {
