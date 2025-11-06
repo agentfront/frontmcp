@@ -17,6 +17,9 @@ const {Will} = FlowHooksOf('tools:call-tool')
     ttl: 1000,
     slideWindow: true,
   },
+  authorization: {
+    requiredRoles: ['admin']
+  }
 })
 export default class CreateExpenseTool extends ToolContext {
   async execute(input: { id: string }) {
@@ -28,8 +31,7 @@ export default class CreateExpenseTool extends ToolContext {
 
   @Will('acquireQuota')
   async willAcquireQuota() {
-   console.log("asdsadsad")
+    console.log("asdsadsad")
   }
-
 
 }

@@ -2,6 +2,7 @@
 import {Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolContext, ToolEntry} from '@frontmcp/sdk';
 import {z} from 'zod';
 import {CallToolRequestSchema, CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
+import {AuthInfo} from "@modelcontextprotocol/sdk/server/auth/types.js";
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -15,6 +16,7 @@ const stateSchema = z.object({
     name: z.string().min(1).max(64),
     arguments: z.object({}).passthrough().optional(),
   }).passthrough(),
+  authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   tool: z.instanceof(ToolEntry),
   toolContext: z.instanceof(ToolContext),
 });
@@ -68,14 +70,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     this.logger.verbose('parseInput:start');
-    const {request: {method, params},} = inputSchema.parse(this.rawInput);
+    const {request: {method, params},ctx} = inputSchema.parse(this.rawInput);
 
     if (method !== 'tools/call') {
       this.logger.warn(`parseInput: invalid method "${method}"`);
       throw new Error('Invalid method');
     }
 
-    this.state.set({input: params});
+    this.state.set({input: params, authInfo: ctx.authInfo});
     this.logger.verbose('parseInput:done');
   }
 
@@ -125,7 +127,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async acquireQuota() {
     this.logger.verbose('acquireQuota:start');
     // used for rate limiting
-    this.state.required.toolContext.mark('acquireQuota')
+    this.state.toolContext?.mark('acquireQuota')
     this.logger.verbose('acquireQuota:done');
   }
 
@@ -133,7 +135,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async acquireSemaphore() {
     this.logger.verbose('acquireSemaphore:start');
     // used for concurrency control
-    this.state.required.toolContext.mark('acquireSemaphore')
+    this.state.toolContext?.mark('acquireSemaphore')
     this.logger.verbose('acquireSemaphore:done');
   }
 
@@ -141,7 +143,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('validateInput')
   async validateInput() {
     this.logger.verbose('validateInput:start');
-    const {tool, input, toolContext} = this.state.required;
+    const {tool, input} = this.state.required;
+    const {toolContext} = this.state;
+    if(!toolContext){
+      return;
+    }
     toolContext.mark('validateInput')
     try {
       toolContext.input = tool.inputSchema.parse(input.arguments ?? {});
@@ -154,7 +160,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('execute')
   async execute() {
     this.logger.verbose('execute:start');
-    const {toolContext} = this.state.required;
+    const toolContext = this.state.toolContext;
+    if(!toolContext){
+      return;
+    }
     toolContext.mark('execute')
     toolContext.output = await toolContext.execute(toolContext.input)
     this.logger.verbose('execute:done');
@@ -163,7 +172,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     this.logger.verbose('validateOutput:start');
-    const {tool, toolContext} = this.state.required;
+    const {tool, toolContext} = this.state;
+    if(!toolContext || !tool){
+      return;
+    }
     toolContext.mark('validateOutput')
     toolContext.output = tool.outputSchema.parse(toolContext.output)
     this.logger.verbose('validateOutput:done');
@@ -173,7 +185,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async releaseSemaphore() {
     this.logger.verbose('releaseSemaphore:start');
     // release concurrency control
-    this.state.required.toolContext.mark('releaseSemaphore')
+    this.state.toolContext?.mark('releaseSemaphore')
     this.logger.verbose('releaseSemaphore:done');
   }
 
@@ -181,15 +193,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async releaseQuota() {
     this.logger.verbose('releaseQuota:start');
     // release rate limiting
-    this.state.required.toolContext.mark('releaseQuota')
+    this.state.toolContext?.mark('releaseQuota')
     this.logger.verbose('releaseQuota:done');
   }
 
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    this.state.required.toolContext.mark('finalize')
-    const {tool, toolContext} = this.state.required;
+    if(!this.state.toolContext){
+      this.fail(new Error("error"))
+      return;
+    }
+    const {tool,toolContext} = this.state.required;
     const success = tool.outputSchema.safeParse(toolContext.output).success;
     if (success) {
       const response = toolContext.output;

@@ -69,13 +69,7 @@ declare module "@frontmcp/sdk" {
   export type __OutputOf<Opt> =
     Opt extends { outputSchema: infer O } ? z.infer<__AsZodObj<O>> : never;
 
-  export type __ToolOptions<I extends __Shape, O extends __Shape> = {
-    name: string;
-    description?: string;
-    inputSchema: I | z.ZodObject<I>;
-    outputSchema: O | z.ZodObject<O>;
-    cache?: { ttl?: number; slideWindow?: boolean };
-  };
+  export type __ToolOptions<I extends __Shape, O extends __Shape> = ExtendFrontMcpToolMetadata & ToolMetadata<I | z.ZodObject<I>, O | z.ZodObject<O>>;
 
   // ---------- ctor & reflection ----------
   type __Ctor = new (...a: any[]) => any | (abstract new (...a: any[]) => any);

@@ -5,8 +5,6 @@ import CacheMemoryProvider from './providers/cache-memory.provider';
 import {CachePluginOptions} from './cache.types';
 import {CacheStoreToken} from './cache.symbol';
 import {ToolHook} from '@frontmcp/core'
-import {JSONRPCMessage} from "@modelcontextprotocol/sdk/types.js";
-import {randomUUID} from "crypto";
 
 @Plugin({
   name: 'cache',

@@ -117,7 +117,6 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       return;
     }
     await transport.handleRequest(request, response);
-    this.handled();
   }
 
 

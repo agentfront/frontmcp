@@ -33,7 +33,7 @@ export class FlowControl extends Error {
   }
 
   static fail(error: Error): never {
-    throw new FlowControl('fail', error);
+    throw new FlowControl('fail', {error: error.message});
   }
 
   static abort(reason: string): never {
@@ -51,7 +51,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
 
   constructor(
     protected readonly metadata: FlowMetadata<N>,
-    protected readonly rawInput: Partial<FlowInputOf<N>> | any,
+    readonly rawInput: Partial<FlowInputOf<N>> | any,
     protected readonly scope: ScopeEntry,
     protected readonly appendContextHooks: (hooks: HookEntry[]) => void,
     protected readonly deps: ReadonlyMap<Token, unknown> = new Map(),
@@ -65,11 +65,11 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     return this.scope.providers.get(token);
   }
 
-  protected respond(output: FlowOutputOf<N>) {
+  respond(output: FlowOutputOf<N>) {
     throw FlowControl.respond((this.metadata.outputSchema as z.ZodObject<any>).parse(output));
   }
 
-  protected fail(error: Error) {
+  fail(error: Error) {
     throw FlowControl.fail(error);
   }
 

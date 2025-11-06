@@ -10,8 +10,12 @@ export default function callToolRequestHandler(
 ): McpHandler<CallToolRequest, CallToolResult> {
   return {
     requestSchema: CallToolRequestSchema,
-    handler: (request: CallToolRequest, ctx) =>
-      scope.runFlowForOutput('tools:call-tool', {request, ctx})
+    handler: async (request: CallToolRequest, ctx) =>{
+
+      const result = await scope.runFlowForOutput('tools:call-tool', {request, ctx})
+      console.log(result)
+      return result;
+    }
   } satisfies McpHandler<CallToolRequest, CallToolResult>
 
 }

@@ -39,6 +39,7 @@ const isStringOrStringArray = (value: any): value is string | string[] =>
 /** Best-effort typed user derivation from claims */
 export function deriveTypedUser(claims: Record<string, any>): UserClaim {
   return {
+    ...claims,
     iss: extractClaimValue(claims, 'iss', isString)!,
     sid: extractClaimValue(claims, 'sid', isString),
     sub: extractClaimValue(claims, 'sub', isString)!,
