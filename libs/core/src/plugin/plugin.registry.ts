@@ -137,7 +137,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
         const args: any[] = [];
         for (const d of deps) args.push(await this.providers.resolveBootstrapDep(d));
         pluginInstance = rec.useFactory(...args);
-      } else if(rec.kind === PluginKind.VALUE){
+      } else if (rec.kind === PluginKind.VALUE) {
         pluginInstance = (rec as any).useValue;
       } else {
         throw Error('Invalid plugin kind');
@@ -145,7 +145,14 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
 
       const hooks = normalizeHooksFromCls(pluginInstance);
       if (hooks.length > 0) {
-        await this.scope.hooks.registerHooks(false,...hooks);
+        await this.scope.hooks.registerHooks(false, ...hooks);
+      }
+      pluginInstance.get = providers.get.bind(providers) as any;
+      let dynamicProviders = rec.providers;
+      if (dynamicProviders) {
+        for (const provider of dynamicProviders) {
+          providers.injectProvider({...provider, value: provider['useValue']})
+        }
       }
       this.instances.set(token, pluginInstance);
 

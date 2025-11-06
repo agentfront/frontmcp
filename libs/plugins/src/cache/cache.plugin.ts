@@ -1,11 +1,11 @@
-import {DynamicPlugin, Plugin, ProviderType, ToolContext, FlowHooksOf, FlowCtxOf} from '@frontmcp/sdk';
+import {DynamicPlugin, Plugin, ProviderType, FlowCtxOf} from '@frontmcp/sdk';
 import {hashObject} from 'nx/src/hasher/file-hasher';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
-import {CachePluginOptions, CacheStoreInterface} from './cache.types';
+import {CachePluginOptions} from './cache.types';
 import {CacheStoreToken} from './cache.symbol';
 import {ToolHook} from '@frontmcp/core'
-import {JSONRPCMessage, RequestId} from "@modelcontextprotocol/sdk/types.js";
+import {JSONRPCMessage} from "@modelcontextprotocol/sdk/types.js";
 import {randomUUID} from "crypto";
 
 @Plugin({
@@ -51,7 +51,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   };
   options: CachePluginOptions;
 
-  constructor(options: CachePluginOptions = CachePlugin.defaultOptions, readonly redis: CacheStoreInterface) {
+  constructor(options: CachePluginOptions = CachePlugin.defaultOptions) {
     super();
     this.options = {
       defaultTTL: 60 * 60 * 24,
@@ -63,15 +63,16 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const ctx = flowCtx.state.required.toolContext;
     const {cache} = ctx.metadata;
-    if (!cache ||  !ctx.input) {
+    if (!cache || !ctx.input) {
       return;
     }
+    const redis = this.get(CacheStoreToken)
     const hash = hashObject(ctx.input);
-    const cached = await this.redis.getValue(hash);
+    const cached = await redis.getValue(hash);
 
     if (cache == true || (cache.ttl && cache.slideWindow)) {
       const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
-      await this.redis.setValue(hash, cached, ttl);
+      await redis.setValue(hash, cached, ttl);
     }
 
     if (cached) {
@@ -90,20 +91,11 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (!cache) {
       return;
     }
+    const redis = this.get(CacheStoreToken)
     console.log('willWriteCache', {cache});
     const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
 
     const hash = hashObject(ctx.input!);
-    await this.redis.setValue(hash, ctx.output, ttl);
+    await redis.setValue(hash, ctx.output, ttl);
   }
 }
-
-
-export const JSON_RPC = '2.0' as const;
-
-export const rpcRequest = (method: string, params: any): JSONRPCMessage => ({
-  jsonrpc: JSON_RPC,
-  id: randomUUID(),
-  method,
-  params,
-});

@@ -2,7 +2,7 @@ import {
   PluginMetadata,
   PluginType,
   FrontMcpPluginTokens,
-  Token, PluginRecord, PluginKind,
+  Token, PluginRecord, PluginKind, ProviderRecord,
 } from '@frontmcp/sdk';
 import {depsOfClass, isClass, tokenName} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
@@ -70,6 +70,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
         provide,
         useValue,
         metadata,
+        providers: (item.providers ?? []) as any
       };
     }
   }
