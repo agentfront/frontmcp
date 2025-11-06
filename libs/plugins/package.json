@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
@@ -14,6 +14,6 @@
   },
   "dependencies": {
     "tslib": "^2.3.0",
-    "@frontmcp/sdk": "^0.2.4"
+    "@frontmcp/sdk": "^0.2.5"
   }
 }
