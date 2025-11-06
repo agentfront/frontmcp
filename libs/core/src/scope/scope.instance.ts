@@ -5,7 +5,7 @@ import {
   FlowType,
   FrontMcpAuth,
   FrontMcpLogger,
-  FrontMcpServer,
+  FrontMcpServer, HookRegistryInterface,
   ProviderScope,
   ScopeEntry,
   ScopeRecord,
@@ -112,6 +112,10 @@ export class Scope extends ScopeEntry {
 
   get auth(): FrontMcpAuth {
     return this.scopeAuth.getPrimary();
+  }
+
+  get hooks(): HookRegistryInterface {
+    return this.scopeHooks;
   }
 
   get authProviders(): AuthRegistry {

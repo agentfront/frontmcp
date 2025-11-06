@@ -1,20 +1,35 @@
 // noinspection ExceptionCaughtLocallyJS
+// flows/flow.instance.ts
 
 import 'reflect-metadata';
 import {
   FlowControl,
-  FlowEntry, FlowInputOf,
-  FlowName, FlowOutputOf, FlowPlan,
+  FlowCtxOf,
+  FlowEntry,
+  FlowInputOf,
+  FlowName,
+  FlowOutputOf,
+  FlowPlan,
   FlowRecord,
+  FlowStagesOf,
   FlowType,
+  HookEntry,
+  HookMetadata,
   Reference,
   ServerRequest,
-  Token, Type,
+  Token,
+  Type,
 } from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
-import {collectFlowHookMap, StageMap} from './flow.stages';
-import {writeHttpResponse} from '../server/server.validation';
-import {Scope} from '../scope';
+import {
+  collectFlowHookMap,
+  StageMap,
+  cloneStageMap,
+  mergeHookMetasIntoStageMap,
+} from './flow.stages';
+import { writeHttpResponse } from '../server/server.validation';
+import { Scope } from '../scope';
+import HookRegistry from '../hooks/hook.registry';
 
 type StageOutcome =
   | 'ok'
@@ -30,30 +45,51 @@ interface StageResult {
   control?: FlowControl | Error;
 }
 
+const CAP = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const WILL = (s: string) => `will${CAP(s)}`;
+const DID = (s: string) => `did${CAP(s)}`;
+const AROUND = (s: string) => `around${CAP(s)}`;
+
+function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' } {
+  const lc = k.toLowerCase();
+  if (lc.startsWith('will') && k.length > 4) return { base: k.slice(4, 5).toLowerCase() + k.slice(5), type: 'will' };
+  if (lc.startsWith('did') && k.length > 3) return { base: k.slice(3, 4).toLowerCase() + k.slice(4), type: 'did' };
+  if (lc.startsWith('around') && k.length > 6) return { base: k.slice(6, 7).toLowerCase() + k.slice(7), type: 'around' };
+  return { base: k };
+}
+
 export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   readonly deps: Reference[];
   readonly globalProviders: ProviderRegistry;
   private plan: FlowPlan<never>;
   private FlowClass: FlowType;
   private stages: StageMap<FlowType>;
+  private hooks: HookRegistry;
   private globalDeps: Map<Token, Type>;
 
-  constructor(scope: Scope, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
+  constructor(
+    scope: Scope,
+    record: FlowRecord,
+    deps: Set<Reference>,
+    globalProviders: ProviderRegistry,
+  ) {
     super(scope, record);
     this.deps = [...deps];
     this.globalProviders = globalProviders;
     this.FlowClass = this.record.provide;
     this.ready = this.initialize();
     this.plan = this.record.metadata.plan;
+    this.hooks = scope.providers.getHooksRegistry();
   }
 
   protected async initialize() {
     const server = this.globalProviders.getActiveServer();
 
     this.stages = collectFlowHookMap(this.FlowClass);
+
     this.globalDeps = new Map();
 
-    const {middleware} = this.metadata;
+    const { middleware } = this.metadata;
     if (middleware) {
       const path = typeof middleware.path === 'string' ? middleware.path : '';
       server.registerMiddleware(path, async (request, response, next) => {
@@ -61,33 +97,35 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (!canActivate) return next();
 
         try {
-          const result = await this.run({request, response, next} as any, new Map());
+          const result = await this.run(
+            { request, response, next } as any,
+            new Map(),
+          );
           if (result) return writeHttpResponse(response, result);
         } catch (e) {
           if (e instanceof FlowControl) {
             switch (e.type) {
               case 'abort':
-                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Aborted'});
+                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Aborted' });
               case 'fail':
-                // e.output is the Error; do not leak details
-                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
+                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
               case 'handled':
-                return; // response already produced by user code
+                return;
               case 'next':
-                // continue middleware chain
                 return next();
               case 'respond':
-                // Shouldn't reach here; run() always consumes respond
                 return writeHttpResponse(response, e.output as any);
             }
           }
-          // Unknown error fallback
           // eslint-disable-next-line no-console
           console.error(e);
-          return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
+          return writeHttpResponse(response, {
+            kind: 'text',
+            status: 500,
+            body: 'Internal Server Error',
+          });
         }
 
-        // Flow didn't control the response → continue
         return next();
       });
     }
@@ -104,125 +142,218 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     }
     if (canActivate.length === 0) return true;
 
-    const results = await Promise.all(canActivate.map(m => m(request, this.scope)));
-    return results.every(r => r);
+    const results = await Promise.all(canActivate.map((m) => m(request, this.scope)));
+    return results.every((r) => r);
   }
 
-  async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
+  async run(
+    input: FlowInputOf<Name>,
+    deps: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
     const scope = this.globalProviders.getActiveScope();
-    const {stages, FlowClass, plan} = this;
+    const { FlowClass, plan, name } = this;
 
-    // Construct user flow instance with deps map
-    const context = new (FlowClass as any)(this.metadata, input, scope, deps) as any;
+    // Clone stages so we can merge injections safely per run.
+    const baseStages = this.stages;
+    let stages: StageMap<any> = cloneStageMap(baseStages);
+
+    // Compute next order base after any class-defined entries.
+    let orderBase =
+      Math.max(
+        0,
+        ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0)),
+      ) + 1;
+
+    const initialInjectedHooks =
+      (this.hooks.getFlowHooks(name) as HookEntry<
+        FlowInputOf<Name>,
+        Name,
+        FlowStagesOf<Name>,
+        FlowCtxOf<Name>
+      >[]) ?? [];
+
+    let context: any;
+    let contextReady = false;
+
+    const materializeAndMerge = async (
+      newHooks: HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[],
+      opts?: { orderStart?: number },
+    ) => {
+      if (!newHooks?.length || !contextReady) return;
+
+      const metas: HookMetadata[] = [];
+      for (const h of newHooks) {
+        try {
+          metas.push(h.metadata);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[flow] Ignoring injected hook that failed to materialize:', e);
+        }
+      }
+
+      if (metas.length) {
+        const start = opts?.orderStart ?? orderBase;
+        mergeHookMetasIntoStageMap(FlowClass, stages, metas, start);
+        if (opts?.orderStart === undefined) orderBase += metas.length;
+      }
+    };
+
+    const appendContextHooks = async (
+      hooks: HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[],
+    ) => {
+      await materializeAndMerge(hooks);
+    };
+
+    // Construct flow instance
+    context = new FlowClass(this.metadata, input, scope, appendContextHooks, deps);
+
+    // Now injections can materialize
+    contextReady = true;
+
+    // Initial registry hooks should not pre-empt stages; they just get registered
+    await materializeAndMerge(initialInjectedHooks, { orderStart: -1_000_000 });
+
+    // Refresh order base to be after everything currently present
+    orderBase =
+      Math.max(
+        0,
+        ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0)),
+      ) + 1;
 
     let responded: FlowOutputOf<Name> | undefined;
 
-    const didKey = (stage: string) => `did${stage.charAt(0).toUpperCase()}${stage.slice(1)}`;
-
-    // Run one stage list and apply "did{Stage}" rule:
-    // - run did* if stage finished OK or threw FlowControl.respond
-    // - do NOT run did* for fail/abort/next/handled/unknown errors
-    const runHookList = async (
+    // Robust list runner (doesn't skip mid-run insertions)
+    const runList = async (
       key: string,
-      opts?: { ignoreRespond?: boolean }
+      opts?: { ignoreRespond?: boolean },
     ): Promise<StageResult> => {
-      const list = (stages as any)[key] ?? [];
-      const didList = (stages as any)[didKey(key)] ?? [];
+      const getList = () => ((stages as any)[key] ?? []) as Array<{ method: (ctx: any) => Promise<void> }>;
+      const seen = new Set<any>();
 
-      for (const item of list) {
+      while (true) {
+        const list = getList();
+        const item = list.find((e) => !seen.has(e));
+        if (!item) break;
+        seen.add(item);
+
         try {
           await item.method(context);
-          // finished → run did{Stage}
-          for (const d of didList) await d.method(context);
         } catch (e: any) {
           if (e instanceof FlowControl) {
             if (e.type === 'respond') {
               if (!opts?.ignoreRespond) {
-                // run did{Stage} on respond
-                for (const d of didList) await d.method(context);
                 responded = e.output as FlowOutputOf<Name>;
-                return {outcome: 'respond', control: e};
+                return { outcome: 'respond', control: e };
               }
-              // explicitly ignore respond in this stage (used by error stage)
-              for (const d of didList) await d.method(context);
               continue;
             }
-            return {outcome: e.type, control: e};
+            return { outcome: e.type, control: e };
           }
-          return {outcome: 'unknown_error', control: e as Error};
+          return { outcome: 'unknown_error', control: e as Error };
         }
       }
-      return {outcome: 'ok'};
+      return { outcome: 'ok' };
     };
 
+    // Run exactly one stage in order: will → around → stage → did (did runs once)
+    const runOneStage = async (
+      stageName: string,
+      stopOnRespond: boolean,
+    ): Promise<StageResult> => {
+      // 1) willStage
+      {
+        const res = await runList(WILL(stageName));
+        if (res.outcome === 'respond' && stopOnRespond) return res;
+        if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
+      }
+
+      // 2) aroundStage (acts as pre-handlers unless you later add true wrapping)
+      {
+        const res = await runList(AROUND(stageName));
+        if (res.outcome === 'respond' && stopOnRespond) return res;
+        if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
+      }
+
+      // 3) stage
+      let bodyOutcome: StageResult = { outcome: 'ok' };
+      {
+        const res = await runList(stageName, { ignoreRespond: false });
+        bodyOutcome = res;
+        if (res.outcome !== 'ok' && res.outcome !== 'respond') {
+          // fail/abort/next/handled/unknown → do NOT run did
+          return res;
+        }
+      }
+
+      // 4) didStage (run once regardless of body respond)
+      {
+        const res = await runList(DID(stageName), { ignoreRespond: true });
+        if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
+      }
+
+      if (bodyOutcome.outcome === 'respond') return bodyOutcome;
+      return { outcome: 'ok' };
+    };
+
+    // IMPORTANT: ignore typed stage names in plan arrays.
+    // Only base stage names in the plan drive execution; typed hooks run *with* their base.
     const runStageGroup = async (
       group: Array<string> | undefined,
       stopOnRespond: boolean,
-      opts?: { ignoreRespond?: boolean }
+      opts?: { ignoreRespond?: boolean },
     ): Promise<StageResult> => {
-      if (!group || group.length === 0) return {outcome: 'ok'};
+      if (!group || group.length === 0) return { outcome: 'ok' };
 
-      let sawRespond = false;
-      let last: StageResult = {outcome: 'ok'};
-
-      for (const key of group) {
-        const res = await runHookList(key, opts);
-        last = res;
-
-        if (res.outcome === 'respond') {
-          sawRespond = true;
-          if (stopOnRespond) return res;
-          // continue running remaining stages in this group
-          continue;
+      const seenBase = new Set<string>();
+      for (const rawKey of group) {
+        const { base, type } = parseTypedKey(rawKey);
+        if (type) {
+          // Soft warning once per typed key occurrence (optional)
+          // console.warn(`[flow] Ignoring typed stage "${rawKey}" in plan; hooks will run with base "${base}".`);
+          continue; // Do not run typed keys as standalone stages
         }
-        if (res.outcome !== 'ok') {
-          return res; // next/handled/fail/abort/unknown_error
+        if (seenBase.has(base)) continue;
+        seenBase.add(base);
+
+        const res = await runOneStage(base, stopOnRespond);
+        if (res.outcome === 'respond') {
+          if (stopOnRespond) return res;
+          // else keep going
+        } else if (res.outcome !== 'ok') {
+          return res;
         }
       }
-
-      return sawRespond ? {outcome: 'respond', control: last.control} : last;
+      return { outcome: 'ok' };
     };
 
     const runErrorStage = async () => {
-      // Only called for unknown exceptions or fail; spec says: run error stage then rethrow.
-      // We **ignore** responds inside error stage (they do not change control flow).
-      await runStageGroup((plan as any).error, /*stopOnRespond*/ false, {ignoreRespond: true});
+      await runStageGroup((plan as any).error, false, { ignoreRespond: true });
     };
 
     const runFinalizeStage = async () => {
-      await runStageGroup((plan as any).finalize, /*stopOnRespond*/ false);
+      await runStageGroup((plan as any).finalize, false);
     };
 
-    // Pipeline controller with guaranteed finalize
     try {
       // ---------- PRE ----------
       {
-        const pre = await runStageGroup(plan.pre as any, /*stopOnRespond*/ true);
+        const pre = await runStageGroup((plan as any).pre, true);
         if (pre.outcome === 'respond') {
-          // skip execute, still run post + finalize
-          const post = await runStageGroup(plan.post as any, /*stopOnRespond*/ false);
+          const post = await runStageGroup((plan as any).post, false);
           if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-            try {
-              await runErrorStage();
-            } finally {
-              await runFinalizeStage();
-            }
+            try { await runErrorStage(); } finally { await runFinalizeStage(); }
             if (post.outcome === 'fail') throw post.control!;
             throw post.control!;
           }
           if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
             await runFinalizeStage();
-            throw post.control as FlowControl; // propagate control
+            throw post.control as FlowControl;
           }
           await runFinalizeStage();
           return responded;
         }
         if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
-          try {
-            await runErrorStage();
-          } finally {
-            await runFinalizeStage();
-          }
+          try { await runErrorStage(); } finally { await runFinalizeStage(); }
           if (pre.outcome === 'fail') throw pre.control!;
           throw pre.control!;
         }
@@ -234,16 +365,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
       // ---------- EXECUTE ----------
       if (!responded) {
-        const exec = await runStageGroup(plan.execute as any, /*stopOnRespond*/ true);
+        const exec = await runStageGroup((plan as any).execute, true);
         if (exec.outcome === 'respond') {
-          // didExecute already ran; proceed with post + finalize
-          // fall-through to post below
+          // continue to post + finalize
         } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
-          try {
-            await runErrorStage();
-          } finally {
-            await runFinalizeStage();
-          }
+          try { await runErrorStage(); } finally { await runFinalizeStage(); }
           if (exec.outcome === 'fail') throw exec.control!;
           throw exec.control!;
         } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
@@ -252,15 +378,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         }
       }
 
-      // ---------- POST (always, even after respond) ----------
+      // ---------- POST ----------
       {
-        const post = await runStageGroup(plan.post as any, /*stopOnRespond*/ false);
+        const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-          try {
-            await runErrorStage();
-          } finally {
-            await runFinalizeStage();
-          }
+          try { await runErrorStage(); } finally { await runFinalizeStage(); }
           if (post.outcome === 'fail') throw post.control!;
           throw post.control!;
         }
@@ -270,12 +392,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         }
       }
 
-      // ---------- FINALIZE (always) ----------
+      // ---------- FINALIZE ----------
       await runFinalizeStage();
 
       return responded;
     } catch (e) {
-      // finalize already run above in all error paths
       throw e;
     }
   }

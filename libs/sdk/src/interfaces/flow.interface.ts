@@ -1,7 +1,7 @@
 import {Token, Type} from './base.interface';
 import {FlowMetadata, FlowName} from '../metadata';
 import {z} from 'zod';
-import {ScopeEntry} from '../entries';
+import {HookEntry, ScopeEntry} from '../entries';
 import {FlowState, FlowStateOf} from './internal/flow.utils';
 import {FrontMcpLogger} from "./logger.interface";
 
@@ -53,6 +53,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     protected readonly metadata: FlowMetadata<N>,
     protected readonly rawInput: Partial<FlowInputOf<N>> | any,
     protected readonly scope: ScopeEntry,
+    protected readonly appendContextHooks: (hooks: HookEntry[]) => void,
     protected readonly deps: ReadonlyMap<Token, unknown> = new Map(),
   ) {
     this.input = (metadata.inputSchema as any)?.parse?.(rawInput);
@@ -83,8 +84,9 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   protected handled() {
     throw FlowControl.handled();
   }
+
 }
 
-export type FlowType<Provide = FlowBase<FlowName>> =
+export type FlowType<Provide = FlowBase> =
   | Type<Provide>
 

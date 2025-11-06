@@ -94,6 +94,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.warn(errorMessage);
       this.fail(new Error(errorMessage))
     }
+    this.logger = this.logger.child(`CallToolFlow(${name})`);
     this.state.set('tool', tool!);
     this.logger.info(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
@@ -105,6 +106,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const {ctx} = this.input
     const {tool, input} = this.state.required;
     const context = tool.create(input, ctx)
+    const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide)
+      .map(hook => {
+        hook.run = async () => {
+          return context[hook.metadata.method]()
+        }
+        return hook;
+      })
+
+    this.appendContextHooks(toolHooks)
     context.input = input;
     context.mark('createToolCallContext')
     this.state.set('toolContext', context)
@@ -180,14 +190,19 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('finalize:start');
     this.state.required.toolContext.mark('finalize')
     const {tool, toolContext} = this.state.required;
-    const response = tool.outputSchema.parse(toolContext.output);
-    this.respond({
-      content: [{
-        type: 'text',
-        text: JSON.stringify(response)
-      }],
-      structuredContent: response
-    })
+    const success = tool.outputSchema.safeParse(toolContext.output).success;
+    if (success) {
+      const response = toolContext.output;
+      this.respond({
+        content: [{
+          type: 'text',
+          text: JSON.stringify(response)
+        }],
+      })
+
+    } else {
+      this.fail(new Error("invalid output schema"))
+    }
     this.logger.verbose('finalize:done');
   }
 }

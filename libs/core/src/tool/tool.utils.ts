@@ -6,18 +6,26 @@ import {
   ToolRecord,
   ToolKind,
   EntryLineage,
-  Type, ToolContext
+  Type, ToolContext, extendedToolMetadata
 } from '@frontmcp/sdk';
 import {depsOfClass, depsOfFunc, isClass} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
 import {NameCase} from "./tool.types";
 
 export function collectToolMetadata(cls: ToolType): ToolMetadata {
+
+  const extended = getMetadata(extendedToolMetadata, cls)
+
   return Object.entries(FrontMcpToolTokens).reduce((metadata, [key, token]) => {
-    return Object.assign(metadata, {
-      [key]: getMetadata(token, cls),
-    });
-  }, {} as ToolMetadata);
+    const value = getMetadata(token, cls);
+    if (value) {
+      return Object.assign(metadata, {
+        [key]: value
+      });
+    } else {
+      return metadata;
+    }
+  }, extended as ToolMetadata);
 }
 
 export function normalizeTool(item: any): ToolRecord {

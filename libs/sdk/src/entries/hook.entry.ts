@@ -9,8 +9,8 @@ export abstract class HookEntry<In = any, Name extends FlowName = FlowName, Stag
   readonly providers: ProviderRegistryInterface;
   readonly options: HookOptions<Ctx>;
 
-  protected constructor(scope: ScopeEntry, providers: ProviderRegistryInterface, record: HookRecord, token: Token, metadata: HookMetadata) {
-    super(record, token, metadata as HookMetadata<Name, Stage, Ctx>);
+  protected constructor(scope: ScopeEntry, providers: ProviderRegistryInterface, record: HookRecord, token: Token, metadata:  HookMetadata<Name, Stage, Ctx>) {
+    super(record, token, metadata);
     this.scope = scope;
     this.providers = providers;
     this.options = {

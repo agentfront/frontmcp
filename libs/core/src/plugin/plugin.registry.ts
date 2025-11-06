@@ -6,7 +6,7 @@ import {
   PluginKind,
   PluginRecord,
   PluginRegistryInterface,
-  PluginType,
+  PluginType, ProviderKind,
   Token,
 } from '@frontmcp/sdk';
 import {normalizePlugin, pluginDiscoveryDeps} from './plugin.utils';
@@ -19,6 +19,8 @@ import PromptRegistry from '../prompt/prompt.registry';
 import {Ctor} from '../types/token.types';
 import {normalizeProvider} from '../provider/provider.utils';
 import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
+import {Scope} from "../scope";
+import {normalizeHooksFromCls} from "../hooks/hooks.utils";
 
 export default class PluginRegistry extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]> implements PluginRegistryInterface {
   /** providers by token */
@@ -34,9 +36,11 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
   /** prompts by token */
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
+  private readonly scope: Scope
 
   constructor(providers: ProviderRegistry, list: PluginType[]) {
     super('PluginRegistry', providers, list);
+    this.scope = providers.getActiveScope();
   }
 
   getPlugins(): PluginEntry[] {
@@ -133,10 +137,16 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
         const args: any[] = [];
         for (const d of deps) args.push(await this.providers.resolveBootstrapDep(d));
         pluginInstance = rec.useFactory(...args);
+      } else if(rec.kind === PluginKind.VALUE){
+        pluginInstance = (rec as any).useValue;
       } else {
         throw Error('Invalid plugin kind');
       }
 
+      const hooks = normalizeHooksFromCls(pluginInstance);
+      if (hooks.length > 0) {
+        await this.scope.hooks.registerHooks(false,...hooks);
+      }
       this.instances.set(token, pluginInstance);
 
     }

@@ -1,5 +1,5 @@
 import {RawMetadataShape} from '../types';
-import {HookMetadata, TokenHookMetadata} from '../metadata';
+import { TokenHookMetadata} from '../metadata';
 import {tokenFactory} from './base.tokens';
 
 export const FrontMcpFlowHookTokens = {

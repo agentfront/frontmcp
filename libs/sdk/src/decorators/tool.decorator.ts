@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import {FrontMcpToolTokens} from '../tokens';
+import {extendedToolMetadata, FrontMcpToolTokens} from '../tokens';
 import {ToolMetadata, frontMcpToolMetadataSchema} from '../metadata';
 import z from 'zod';
 import {ToolContext} from "../interfaces";
@@ -11,12 +11,16 @@ function FrontMcpTool(providedMetadata: ToolMetadata): ClassDecorator {
 
   return (target: any) => {
     const metadata = frontMcpToolMetadataSchema.parse(providedMetadata);
-
     Reflect.defineMetadata(FrontMcpToolTokens.type, true, target);
-
+    const extended = {};
     for (const property in metadata) {
-      Reflect.defineMetadata(FrontMcpToolTokens[property] ?? property, metadata[property], target);
+      if(FrontMcpToolTokens[property]) {
+        Reflect.defineMetadata(FrontMcpToolTokens[property], metadata[property], target);
+      }else {
+        extended[property] = metadata[property];
+      }
     }
+    Reflect.defineMetadata(extendedToolMetadata, extended, target);
   };
 }
 
@@ -49,11 +53,6 @@ export {
   frontMcpTool,
   frontMcpTool as tool,
 };
-
-
-
-
-
 
 
 declare module "@frontmcp/sdk" {
@@ -97,9 +96,9 @@ declare module "@frontmcp/sdk" {
   // ---------- friendly branded errors ----------
   type __Err<M extends string> = { __type_error__: M } & { never?: never };
 
-  // Must extend ToolContext<any, any>
+  // Must extend ToolContext
   type __MustExtendCtx<C extends __Ctor> =
-    __R<C> extends ToolContext<any, any> ? {} :
+    __R<C> extends ToolContext ? {} :
       __Err<"Class must extend ToolContext">;
 
   // execute param must exactly match In (and not be any)

@@ -1,5 +1,5 @@
 // dynamic-plugin.ts
-import { Reference, PluginType, ProviderType } from '../interfaces';
+import {Reference, PluginType, ProviderType, ProviderRegistryInterface} from '../interfaces';
 import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
 
 // keep your original options union; just add optional `providers`
@@ -62,10 +62,11 @@ export abstract class DynamicPlugin<TOptions extends object> {
 
     const dyn = collectDynamicProviders(this, typedOptions);
     const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...(extraProviders ?? [])]);
+    const depsValues = mergedProviders.map(t => t['useValue'])
     return {
       ...typedOptions,
       provide: this,
-      useValue: new this(options),
+      useValue: new this(options, ...depsValues),
       providers: mergedProviders,
     };
   }

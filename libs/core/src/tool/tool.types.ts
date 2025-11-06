@@ -1,5 +1,4 @@
-import {EntryLineage, Token, Type} from '@frontmcp/sdk';
-import {ToolChangeEvent} from './tool.events';
+import {EntryLineage, Token} from '@frontmcp/sdk';
 import {ToolInstance} from "./tool.instance";
 import ToolRegistry from "./tool.registry";
 

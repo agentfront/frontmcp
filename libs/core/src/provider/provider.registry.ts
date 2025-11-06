@@ -19,6 +19,7 @@ import {hasAsyncWith} from '../utils/metadata.utils';
 import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
 import {ProviderViews} from './provider.types';
 import {Scope} from '../scope';
+import HookRegistry from "../hooks/hook.registry";
 
 export default class ProviderRegistry extends RegistryAbstract<
   ProviderEntry,
@@ -740,9 +741,13 @@ export default class ProviderRegistry extends RegistryAbstract<
     return [...this.registries.get(type) ?? []] as any;
   }
 
+  getHooksRegistry() {
+    return this.getRegistries('HookRegistry')[0] as HookRegistry
+  }
+
   // noinspection JSUnusedGlobalSymbols
   getScopeRegistry() {
-    return this.getRegistries('ScopeRegistry')[0];
+    return this.getRegistries('ScopeRegistry')[0]!;
   }
 
   /** bootstrap helper: resolve a dependency usable during app bootstrap (must be GLOBAL). */
@@ -856,17 +861,19 @@ export default class ProviderRegistry extends RegistryAbstract<
     this.graph.set(rec.provide, new Set());
     this.instances.set(rec.provide, rec.value);
   }
+
   private getWithParents<T>(token: Token<T>): T {
     let providers: ProviderRegistry = this
-    while (providers && !providers.instances.has(token)){
-      if(providers.parentProviders){
+    while (providers && !providers.instances.has(token)) {
+      if (providers.parentProviders) {
         providers = providers.parentProviders
-      }else {
+      } else {
         return providers.get(token)
       }
     }
     return providers.get(token)
   }
+
   getActiveScope(): Scope {
     return this.getWithParents(Scope)
   }

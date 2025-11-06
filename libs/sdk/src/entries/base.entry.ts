@@ -8,7 +8,7 @@ export type EntryLineage = EntryOwnerRef[]; // root -> leaf; e.g. [{kind:'app', 
 
 export abstract class BaseEntry<Record extends { provide: any, metadata: any }, Interface, Metadata> {
   ready: Promise<void>;
-  protected readonly record: Record;
+  readonly record: Record;
   protected readonly token: Token<Interface>;
   readonly metadata: Metadata;
 

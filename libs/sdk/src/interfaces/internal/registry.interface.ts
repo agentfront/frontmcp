@@ -41,7 +41,18 @@ export interface HookRegistryInterface {
    */
   getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
 
-  registerHooks(...records: HookRecord[]): Promise<void[]>;
+
+  /**
+   * Used to pull all hooks registered to specific flow and stage by name,
+   * this is used to construct the flow graph and execute hooks in order
+   * @param flow
+   * @param stage
+   */
+  getFlowStageHooks<Name extends FlowName>(
+    flow: Name,
+    stage: FlowStagesOf<Name> | string
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[]
+  registerHooks(embedded:boolean,...records: HookRecord[]): Promise<void[]>;
 }
 
 
@@ -88,7 +99,7 @@ export interface ToolRegistryInterface {
   owner: EntryOwnerRef;
 
   // inline tools plus discovered by nested tool registries
-  getTools(includeHidden?: boolean): ToolEntry<any, any>[];
+  getTools(includeHidden?: boolean): ToolEntry[];
 
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];

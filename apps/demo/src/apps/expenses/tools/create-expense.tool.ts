@@ -1,5 +1,8 @@
-import {Tool, ToolContext} from '@frontmcp/sdk';
+import {FlowHooksOf, StageHookOf, Tool, ToolContext} from '@frontmcp/sdk';
+import {} from '@frontmcp/core';
 import z from 'zod';
+
+const {Will} = FlowHooksOf('tools:call-tool')
 
 @Tool({
   name: 'create-expense',
@@ -17,11 +20,16 @@ import z from 'zod';
 })
 export default class CreateExpenseTool extends ToolContext {
   async execute(input: { id: string }) {
-
     return {
       ok: 'asdasdsd',
     };
-
   }
+
+
+  @Will('acquireQuota')
+  async willAcquireQuota() {
+   console.log("asdsadsad")
+  }
+
 
 }

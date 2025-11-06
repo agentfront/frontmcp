@@ -15,3 +15,5 @@ export const FrontMcpToolTokens = {
   hideFromDiscovery: tokenFactory.meta('hideFromDiscovery'),
   metadata: tokenFactory.meta('metadata'), // used in tool({}) construction
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
+
+export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');
