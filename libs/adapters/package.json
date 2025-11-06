@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/adapters",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "tslib": "^2.3.0",
-    "@frontmcp/sdk": "^0.2.1",
+    "@frontmcp/sdk": "^0.2.2",
     "openapi-mcp-generator": "^3.2.0",
     "json-schema-to-zod": "^2.6.1"
   }
