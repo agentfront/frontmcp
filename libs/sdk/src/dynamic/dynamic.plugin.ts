@@ -1,6 +1,6 @@
 // dynamic-plugin.ts
-import { Reference, PluginType, ProviderType } from '../interfaces';
-import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
+import {Reference, PluginType, ProviderType, ProviderRegistryInterface} from '../interfaces';
+import {collectDynamicProviders, dedupePluginProviders} from './dynamic.utils';
 
 // keep your original options union; just add optional `providers`
 type InitOptions<T> =
@@ -38,6 +38,10 @@ export abstract class DynamicPlugin<TOptions extends object> {
    */
   static dynamicProviders?(options: any): readonly ProviderType[];
 
+  get<T>(token: Reference<T>): T {
+    throw new Error('Method not implemented.');
+  }
+
   /**
    * Static init() method to create a plugin provider.
    * @param options
@@ -56,7 +60,6 @@ export abstract class DynamicPlugin<TOptions extends object> {
         inject: options.inject as () => Reference<any>[],
         useFactory: options.useFactory as any,
         providers: dedupePluginProviders(extraProviders ?? []),
-
       };
     }
 

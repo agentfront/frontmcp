@@ -1,6 +1,7 @@
 export * from './base.entry';
 export * from './scope.entry';
 export * from './flow.entry';
+export * from './hook.entry';
 export * from './app.entry';
 export * from './provider.entry';
 export * from './auth-provider.entry';

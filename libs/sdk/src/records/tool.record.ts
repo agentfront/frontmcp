@@ -9,7 +9,7 @@ export enum ToolKind {
 
 export type ToolClassTokenRecord = {
   kind: ToolKind.CLASS_TOKEN;
-  provide: Type<ToolContext<any, any>>;
+  provide: Type<ToolContext>;
   metadata: ToolMetadata
 };
 

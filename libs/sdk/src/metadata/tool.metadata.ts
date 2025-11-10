@@ -1,8 +1,8 @@
-import { z } from 'zod';
-import { RawZodShape } from '../types';
-import { ToolContext } from '../interfaces';
-import { ToolHookStage } from '../interfaces/tool-hook.interface';
-import type { JSONSchema7 } from 'json-schema';
+import {z} from 'zod';
+import {RawZodShape} from '../types';
+import {ToolContext} from '../interfaces';
+import {ToolHookStage} from '../interfaces/tool-hook.interface';
+import type {JSONSchema7} from 'json-schema';
 
 declare global {
   /**
@@ -15,6 +15,7 @@ declare global {
 
 export interface ToolAnnotations {
   [x: string]: unknown;
+
   /**
    * A human-readable title for the tool.
    */
@@ -128,16 +129,3 @@ export const frontMcpToolMetadataSchema = z.object({
   annotations: mcpToolAnnotationsSchema.optional(),
   hideFromDiscovery: z.boolean().optional().default(false),
 } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>).passthrough();
-
-
-export interface ToolInlineMetadata<In = any, Out = any> extends ToolMetadata<In, Out> {
-  execute(input: In, ctx: ToolContext<In, Out>): Promise<Out> | Out;
-
-  hooks?: [ToolHookStage, ((ctx: ToolContext<In, Out>) => Promise<void> | void)][];
-}
-
-
-export const frontMcpToolInlineMetadataSchema = frontMcpToolMetadataSchema.extend({
-  execute: z.function().args(z.any(), z.any()).returns(z.promise(z.any()).or(z.any())),
-  hooks: z.array(z.tuple([z.nativeEnum(ToolHookStage), z.function().returns(z.promise(z.void()).or(z.void()))])).optional(),
-});

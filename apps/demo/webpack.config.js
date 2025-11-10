@@ -22,7 +22,7 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: false,
-      buildLibsFromSource: false,
+      buildLibsFromSource: true,
     }),
   ],
 };

@@ -1,64 +1,37 @@
-import {Tool, ToolContext} from '@frontmcp/sdk';
+import {FlowHooksOf, StageHookOf, Tool, ToolContext} from '@frontmcp/sdk';
+import '@frontmcp/core';
 import z from 'zod';
 
-
-const inputSchema = {
-  id: z.string().describe('The expense\'s id'),
-};
-const outputSchema = {
-  ok: z.string(),
-};
-
-type In = z.baseObjectInputType<typeof inputSchema> & { value?: string };
-type Out = z.baseObjectOutputType<typeof outputSchema>;
+const {Will} = FlowHooksOf('tools:call-tool')
 
 @Tool({
   name: 'create-expense',
   description: 'Create an expense',
-  inputSchema,
-  outputSchema,
+  inputSchema: {
+    id: z.string().describe('The expense\'s id'),
+  },
+  outputSchema: {
+    ok: z.string(),
+  },
   cache: {
     ttl: 1000,
     slideWindow: true,
   },
+  authorization: {
+    requiredRoles: ['Admin']
+  }
 })
-export default class CreateExpenseTool extends ToolContext<In, Out> {
-
-  async execute(input): Promise<Out> {
-    // const red = this.get(SessionRedisProvider);
-    // await red.setValue('expense-id', input.id);
-
+export default class CreateExpenseTool extends ToolContext {
+  async execute(input: { id: string }) {
     return {
-      ok: 'secrwdmqwkldmqwlkdet',
+      ok: 'asdasdsd',
     };
   }
 
-  // @WillParseInput()
-  // async tracing1(ctx: ToolInvokeContext<In, Out>) {
-  //   ctx.data.set('latencyMs', Date.now());
-  //   console.log('parse', ctx.input);
-  //   ctx.input = { ...ctx.input, value: 'david' };
-  // }
-  //
-  // @WillParseInput()
-  // async tracing2(ctx: ToolInvokeContext<In, Out>) {
-  //   ctx.data.set('latencyMs', Date.now());
-  //   console.log('parse', ctx.input);
-  //   ctx.input = { ...ctx.input, value: 'david' };
-  // }
-  //
-  // @WillValidateInput({ filter: 'onlyWhenExpenseFlagOn' })
-  // validateInput(ctx: ToolInvokeContext<In, Out>) {
-  //   console.log('validateInput', ctx.input);
-  // }
-  //
-  // @OnMetrics()
-  // async metrics(ctx: ToolInvokeContext<In, Out>) {
-  //   const t0 = ctx.data.get('latencyMs') as number | undefined;
-  //   if (t0) {
-  //     const latencyMs = Date.now() - t0;
-  //     console.log('metrics', latencyMs, 'ms');
-  //   }
-  // }
+
+  @Will('acquireQuota')
+  async willAcquireQuota() {
+    console.log("asdsadsad")
+  }
 
 }

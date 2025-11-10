@@ -1,5 +1,6 @@
 export * from './scope.record';
 export * from './flow.record';
+export * from './hook.record';
 export * from './app.record';
 export * from './provider.record';
 export * from './auth-provider.record';

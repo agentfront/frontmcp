@@ -8,6 +8,7 @@
     "strictNullChecks": true,
     "importHelpers": true,
     "noImplicitOverride": true,
+    "strictFunctionTypes": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true

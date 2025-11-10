@@ -9,7 +9,7 @@ import {
 } from '../tokens';
 import {
   frontMcpAdapterMetadataSchema,
-  frontMcpAuthProviderMetadataSchema,
+  frontMcpAuthProviderMetadataSchema, frontMcpPluginMetadataSchema,
   frontMcpProviderMetadataSchema,
 } from '../metadata';
 
@@ -42,7 +42,11 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
 
 export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
   (v): v is Type => {
-    return (typeof v === 'function' && Reflect.hasMetadata(FrontMcpPluginTokens.type, v));
+    return (typeof v === 'function' && Reflect.hasMetadata(FrontMcpPluginTokens.type, v))
+      ||
+      (v['useValue'] && Reflect.hasMetadata(FrontMcpPluginTokens.type, v.useValue.constructor))
+      ||
+      (v['useFactory'] && frontMcpPluginMetadataSchema.passthrough().safeParse(v).success);
   },
   { message: 'plugins items must be annotated with @Plugin() | @FrontMcpPlugin().' },
 );

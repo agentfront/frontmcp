@@ -5,7 +5,7 @@ import {
   FlowType,
   FrontMcpAuth,
   FrontMcpLogger,
-  FrontMcpServer,
+  FrontMcpServer, HookRegistryInterface,
   ProviderScope,
   ScopeEntry,
   ScopeRecord,
@@ -20,6 +20,7 @@ import FlowRegistry from '../flows/flow.registry';
 import HttpRequestFlow from './flows/http.request.flow';
 import {TransportService} from '../transport/transport.registry';
 import ToolRegistry from '../tool/tool.registry';
+import HookRegistry from "../hooks/hook.registry";
 
 
 export class Scope extends ScopeEntry {
@@ -31,6 +32,7 @@ export class Scope extends ScopeEntry {
   private scopeAuth: AuthRegistry;
   private scopeFlows: FlowRegistry;
   private scopeApps: AppRegistry;
+  private scopeHooks: HookRegistry;
   private scopeTools: ToolRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
@@ -54,9 +56,10 @@ export class Scope extends ScopeEntry {
   protected async initialize(): Promise<void> {
     await this.scopeProviders.ready;
 
-    this.scopeFlows = new FlowRegistry(this.scopeProviders, [
-      HttpRequestFlow
-    ]); // add HttpRequestFlow
+    this.scopeHooks = new HookRegistry(this.scopeProviders, []);
+    await this.scopeHooks.ready;
+
+    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]);
     await this.scopeFlows.ready;
 
     this.transportService = new TransportService(this);
@@ -109,6 +112,10 @@ export class Scope extends ScopeEntry {
 
   get auth(): FrontMcpAuth {
     return this.scopeAuth.getPrimary();
+  }
+
+  get hooks(): HookRegistryInterface {
+    return this.scopeHooks;
   }
 
   get authProviders(): AuthRegistry {

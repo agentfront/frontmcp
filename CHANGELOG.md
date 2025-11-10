@@ -1,3 +1,29 @@
+## 0.2.5 (2025-11-06)
+
+This was a version bump only, there were no code changes.
+
+## 0.2.4 (2025-11-06)
+
+This was a version bump only, there were no code changes.
+
+## 0.2.3 (2025-11-06)
+
+This was a version bump only, there were no code changes.
+
+## 0.2.2 (2025-11-06)
+
+### 🚀 Features
+
+- **adapters:** add support for inline spec in opanapi adapter ([#13](https://github.com/agentfront/frontmcp/pull/13))
+
+### 🩹 Fixes
+
+- **core:** fix openapi tool execution ([#12](https://github.com/agentfront/frontmcp/pull/12))
+
+### ❤️ Thank You
+
+- David Antoon @frontegg-david
+
 ## 0.2.1 (2025-11-05)
 
 ### 🚀 Features

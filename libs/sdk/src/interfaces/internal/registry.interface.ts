@@ -10,10 +10,13 @@ import {
   ResourceEntry,
   ToolEntry, LoggerEntry,
 } from '../../entries';
-import { Token } from '../base.interface';
-import { EntryOwnerRef } from '../../entries/base.entry';
-import { FrontMcpAuth } from './primary-auth-provider.interface';
-import { FlowName } from '../../metadata';
+import {Token} from '../base.interface';
+import {EntryOwnerRef} from '../../entries';
+import {FrontMcpAuth} from './primary-auth-provider.interface';
+import {FlowName} from '../../metadata';
+import {HookEntry} from "../../entries/hook.entry";
+import {FlowCtxOf, FlowInputOf, FlowStagesOf} from "../flow.interface";
+import {HookRecord} from "../../records";
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -23,9 +26,38 @@ export interface FlowRegistryInterface {
   getFlows(): FlowEntry<FlowName>[];
 }
 
+export interface HookRegistryInterface {
+  /**
+   * used to pull hooks registered by a class and related to that class only,
+   * like registering hooks on specific tool execution
+   * @param token
+   */
+  getClsHooks(token: Token): HookEntry[];
+
+  /**
+   * Used to pull all hooks registered to specific flow by name,
+   * this is used to construct the flow graph and execute hooks in order
+   * @param flow
+   */
+  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+
+
+  /**
+   * Used to pull all hooks registered to specific flow and stage by name,
+   * this is used to construct the flow graph and execute hooks in order
+   * @param flow
+   * @param stage
+   */
+  getFlowStageHooks<Name extends FlowName>(
+    flow: Name,
+    stage: FlowStagesOf<Name> | string
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[]
+  registerHooks(embedded:boolean,...records: HookRecord[]): Promise<void[]>;
+}
+
 
 export interface ProviderViews {
-  /** App-wide singletons, created at boot. Immutable from invoke’s POV. */
+  /** App-wide singletons, created at boot. Immutable from invokes POV. */
   global: ReadonlyMap<Token, unknown>;
   /** Session-scoped cache for this sessionId. Mutable. */
   session: Map<Token, unknown>;
@@ -57,38 +89,17 @@ export interface AppRegistryInterface {
 
 export interface PluginRegistryInterface {
   getPlugins(): PluginEntry[];
-
-  //
-  // // nested adapters
-  // getAdapters(): AdapterEntry[];
-  //
-  // // plugin tools plus nested adapter's tools
-  // getTools(): ToolEntry<any, any>[];
-  //
-  // // plugin resources plus nested adapter's tools
-  // getResources(): ResourceEntry[];
-  //
-  // // plugin prompts plus nested adapter's tools
-  // getPrompts(): PromptEntry[];
 }
 
 export interface AdapterRegistryInterface {
   getAdapters(): AdapterEntry[];
-
-  //
-  // // nested tools
-  // getTools(): ToolEntry<any, any>[];
-  //
-  // getResources(): ResourceEntry[];
-  //
-  // getPrompts(): PromptEntry[];
 }
 
 export interface ToolRegistryInterface {
   owner: EntryOwnerRef;
 
   // inline tools plus discovered by nested tool registries
-  getTools(includeHidden?:boolean): ToolEntry<any, any>[];
+  getTools(includeHidden?: boolean): ToolEntry[];
 
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];
@@ -127,6 +138,7 @@ export type ScopedRegistryKind =
   | 'AppRegistry'
   | 'AuthRegistry'
   | 'FlowRegistry'
+  | 'HookRegistry'
 
 export type AppRegistryKind =
   | 'ProviderRegistry'
@@ -143,6 +155,7 @@ export type RegistryType = {
   LoggerRegistry: LoggerRegistryInterface;
   ScopeRegistry: ScopeRegistryInterface;
   FlowRegistry: FlowRegistryInterface;
+  HookRegistry: HookRegistryInterface;
   AppRegistry: AppRegistryInterface;
   AuthRegistry: AuthRegistryInterface,
   ProviderRegistry: ProviderRegistryInterface;

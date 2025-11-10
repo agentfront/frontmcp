@@ -4,17 +4,24 @@ import {
 } from '@frontmcp/sdk';
 import ProviderRegistry from '../provider/provider.registry';
 import {z} from "zod";
+import HookRegistry from "../hooks/hook.registry";
+import {Scope} from "../scope";
+import {normalizeHooksFromCls} from "../hooks/hooks.utils";
 
 
-export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
+export class ToolInstance<In extends object = any, Out extends object = any> extends ToolEntry<In, Out> {
   private readonly providers: ProviderRegistry;
   readonly name: string;
+  readonly scope: Scope;
+  readonly hooks: HookRegistry;
 
   constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
+    this.scope = this.providers.getActiveScope()
+    this.hooks = this.scope.providers.getHooksRegistry();
 
     const schema: any = record.metadata.inputSchema
     this.inputSchema = typeof schema.parse === 'function' ? schema : z.object(schema);
@@ -23,13 +30,12 @@ export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
     this.ready = this.initialize();
   }
 
-  protected initialize() {
-    // TODO:
-    //   - create json representation of tool based on metadata
-    //   - read global tool hooks from provider registry that registered via @Hook('tool','stage')
-    //   - read inline tool hooks from cls metadata that registered via @Stage('stage')
-    //   - create tool invoke flow based on scope and providers and set of hooks per stage
-
+  protected async initialize() {
+    const hooks = normalizeHooksFromCls(this.record.provide)
+      .filter(hook => hook.metadata.flow === 'tools:call-tool' || hook.metadata.flow === 'tools:list-tools')
+    if (hooks.length > 0) {
+      await this.hooks.registerHooks(true, ...hooks)
+    }
     return Promise.resolve();
   }
 
@@ -55,12 +61,12 @@ export class ToolInstance<In = any, Out = any> extends ToolEntry<In, Out> {
       case ToolKind.CLASS_TOKEN:
         return new this.record.provide(toolCtorArgs);
       case ToolKind.FUNCTION:
-        return new FunctionToolContext(this.record, toolCtorArgs);
+        return new FunctionToolContext<In, Out>(this.record, toolCtorArgs);
     }
   }
 }
 
-class FunctionToolContext<In = any, Out = any> extends ToolContext<In, Out> {
+class FunctionToolContext<In extends object = any, Out extends object = any> extends ToolContext<In, Out> {
   constructor(
     private readonly record: ToolFunctionTokenRecord,
     args: ToolCtorArgs<In>

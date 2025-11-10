@@ -2,10 +2,10 @@ import {
   PluginMetadata,
   PluginType,
   FrontMcpPluginTokens,
-  Token, PluginRecord, PluginKind,
+  Token, PluginRecord, PluginKind, ProviderRecord,
 } from '@frontmcp/sdk';
-import { depsOfClass, isClass, tokenName } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
+import {depsOfClass, isClass, tokenName} from '../utils/token.utils';
+import {getMetadata} from '../utils/metadata.utils';
 
 export function collectPluginMetadata(cls: PluginType): PluginMetadata {
   return Object.entries(FrontMcpPluginTokens).reduce((metadata, [key, token]) => {
@@ -20,10 +20,10 @@ export function normalizePlugin(item: PluginType): PluginRecord {
   if (isClass(item)) {
     // read McpPluginMetadata from class
     const metadata = collectPluginMetadata(item);
-    return { kind: PluginKind.CLASS_TOKEN, provide: item, metadata };
+    return {kind: PluginKind.CLASS_TOKEN, provide: item, metadata};
   }
   if (item && typeof item === 'object') {
-    const { provide, useClass, useFactory, inject, ...metadata } = item as any;
+    const {provide, useClass, useFactory, useValue, inject, ...metadata} = item as any;
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
@@ -59,6 +59,20 @@ export function normalizePlugin(item: PluginType): PluginRecord {
         metadata,
       };
     }
+
+    if ('useValue' in item) {
+      if (useValue === undefined || useValue === null) {
+        throw new Error(`'useValue' on plugin '${tokenName(provide)}' must be defined.`);
+      }
+      const metadata = collectPluginMetadata(useValue.constructor);
+      return {
+        kind: PluginKind.VALUE,
+        provide,
+        useValue,
+        metadata,
+        providers: (item.providers ?? []) as any
+      };
+    }
   }
 
   const name = (item as any)?.name ?? String(item);
@@ -77,6 +91,8 @@ export function pluginDiscoveryDeps(
   rec: PluginRecord,
 ): Token[] {
   switch (rec.kind) {
+    case PluginKind.VALUE:
+      return []
     case PluginKind.FACTORY: {
       return [...rec.inject()];
     }
