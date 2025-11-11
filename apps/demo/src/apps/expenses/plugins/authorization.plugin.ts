@@ -1,5 +1,5 @@
 import {DynamicPlugin, Plugin, FlowCtxOf, httpRespond} from '@frontmcp/sdk';
-import {ToolHook} from '@frontmcp/core'
+import {ListToolsHook} from '@frontmcp/core'
 
 declare global {
   interface ExtendFrontMcpToolMetadata {
@@ -25,21 +25,22 @@ export default class AuthorizationPlugin extends DynamicPlugin<AuthorizationPlug
     super();
   }
 
-  @ToolHook.Did('findTool')
-  async canActivate(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const {tool, authInfo} = flowCtx.state.required;
-    const metadata = flowCtx.state.required.tool.metadata;
+  @ListToolsHook.Did('findTools')
+  async canActivate(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    const {tools} = flowCtx.state.required;
+    const {ctx:{authInfo}} = flowCtx.rawInput
 
-    if (!metadata.authorization) return;
+    const authorizedTools = tools.filter(({tool}) => {
+      const metadata = tool.metadata;
 
-    const {requiredRoles} = metadata.authorization;
-    const roles = (authInfo.user as any).roles as string[];
+      if (!metadata.authorization) return true;
+      const {requiredRoles} = metadata.authorization;
+      const roles = (authInfo.user as any).roles as string[];
 
-    // check if required roles are present in the user's roles
-    if (requiredRoles.every(role => roles.includes(role))) {
-      return;
-    }
+      // check if required roles are present in the user's roles
+      return requiredRoles.every(role => roles.includes(role));
+    });
 
-    flowCtx.fail(new Error('Unauthorized'))
+    flowCtx.state.set('tools', authorizedTools);
   }
 }

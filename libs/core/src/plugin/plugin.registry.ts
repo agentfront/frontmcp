@@ -6,7 +6,7 @@ import {
   PluginKind,
   PluginRecord,
   PluginRegistryInterface,
-  PluginType, ProviderKind,
+  PluginType,
   Token,
 } from '@frontmcp/sdk';
 import {normalizePlugin, pluginDiscoveryDeps} from './plugin.utils';
@@ -153,7 +153,6 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
         await providers.addDynamicProviders(dynamicProviders)
       }
       this.instances.set(token, pluginInstance);
-
     }
   }
 

@@ -107,7 +107,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
                 return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Aborted'});
               case 'fail':
                 return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
-
               case 'handled':
                 return;
               case 'next':
