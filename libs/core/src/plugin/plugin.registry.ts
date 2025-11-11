@@ -157,16 +157,4 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
   }
 
 
-  /** Unified hook collector for registries — returns the live map for the given kind. */
-  collectHooksByStage<T extends FlowName>(kind: T): any {
-    // let map = this.globalHooksByStage[kind];
-    // if (!map) {
-    //   map = {};
-    //   this.globalHooksByStage[kind] = map;
-    // }
-    // TODO: implement this
-    return new Map();
-  }
-
-
 }

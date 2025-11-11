@@ -2,7 +2,7 @@ import {
   PluginMetadata,
   PluginType,
   FrontMcpPluginTokens,
-  Token, PluginRecord, PluginKind, ProviderRecord,
+  Token, PluginRecord, PluginKind,
 } from '@frontmcp/sdk';
 import {depsOfClass, isClass, tokenName} from '../utils/token.utils';
 import {getMetadata} from '../utils/metadata.utils';
