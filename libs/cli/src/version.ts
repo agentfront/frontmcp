@@ -1,5 +1,8 @@
-/* ------------------------ Self-version detection -------------------------- */
+import {readFileSync} from 'fs';
+import {join} from 'path';
 
 export function getSelfVersion(): string {
-  return '0.2.5';
+  const pkgPath = join(__dirname, '../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  return pkg.version;
 }

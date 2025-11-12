@@ -190,8 +190,11 @@ function isTsLike(p: string): boolean {
 
 function killQuiet(proc?: ChildProcess) {
   try {
-    proc && proc.kill('SIGINT');
+    if (proc) {
+      proc.kill('SIGINT');
+    }
   } catch {
+    // Intentionally ignore shutdown errors.
   }
 }
 
@@ -240,22 +243,30 @@ async function runBuild(opts: ParsedArgs): Promise<void> {
   console.log(`${c('cyan', '[build]')} entry: ${path.relative(cwd, entry)}`);
   console.log(`${c('cyan', '[build]')} outDir: ${path.relative(cwd, outDir)}`);
 
-  const args: string[] = [];
+  const tsconfigPath = path.join(cwd, 'tsconfig.json');
+  const hasTsconfig = await fileExists(tsconfigPath);
+  const args: string[] = ['-y', 'tsc'];
+
+  if (hasTsconfig) {
+    console.log(c('gray', `[build] tsconfig.json detected — compiling with project settings`));
+    args.push('--project', tsconfigPath);
+  } else {
+    args.push(entry);
+    args.push('--rootDir', path.dirname(entry));
+    if (!isTsLike(entry)) {
+      args.push('--allowJs');
+      console.log(c('yellow', '[build] Entry is not TypeScript; enabling --allowJs'));
+    }
+    args.push('--experimentalDecorators', '--emitDecoratorMetadata');
+    args.push('--module', REQUIRED_DECORATOR_FIELDS.module);
+    args.push('--target', REQUIRED_DECORATOR_FIELDS.target);
+  }
+
   args.push('--outDir', outDir);
   args.push('--skipLibCheck');
-  args.push('--rootDir', path.dirname(entry));
 
-  if (!isTsLike(entry)) {
-    args.push('--allowJs');
-    console.log(c('yellow', '[build] Entry is not TypeScript; enabling --allowJs'));
-  }
+  await runCmd('npx', args);
 
-  const tsconfigPath = path.join(cwd, 'tsconfig.json');
-  if (await fileExists(tsconfigPath)) {
-    console.log(c('gray', `[build] tsconfig.json detected (project options will be respected where applicable)`));
-  }
-
-  await runCmd('npx', ['-y', 'tsc', entry, ...args]);
   console.log(c('green', '✅ Build completed.'));
   console.log(c('gray', `Output placed in ${path.relative(cwd, outDir)}`));
 }
@@ -469,14 +480,14 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     dependencies: {
       '@frontmcp/sdk': '^0.2.5',
       '@frontmcp/core': '^0.2.5',
-      zod: '^3.23.8',
+      'zod': '^3.23.8',
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
-      frontmcp: selfVersion,       // exact CLI version used by npx
-      tsx: '^4.20.6',
-      "@types/node": "^20.11.30",
-      typescript: '^5.5.3',
+      'frontmcp': selfVersion,       // exact CLI version used by npx
+      'tsx': '^4.20.6',
+      '@types/node': "^22.0.0",
+      'typescript': '^5.5.3',
     },
   };
 
