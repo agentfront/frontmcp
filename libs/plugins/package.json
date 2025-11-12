@@ -1,6 +1,25 @@
 {
   "name": "@frontmcp/plugins",
   "version": "0.2.5",
+  "description": "FrontMCP plugins to extend the SDK",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "plugins",
+    "agentfront",
+    "frontmcp",
+    "framework",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
