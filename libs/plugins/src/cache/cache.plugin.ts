@@ -1,9 +1,9 @@
-import {DynamicPlugin, FlowCtxOf, Plugin, ProviderType} from '@frontmcp/sdk';
+import {DynamicPlugin, FlowCtxOf, Plugin, ProviderType, ToolHook} from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
 import {CachePluginOptions} from './cache.types';
 import {CacheStoreToken} from './cache.symbol';
-import {ToolHook} from '@frontmcp/core'
+
 
 @Plugin({
   name: 'cache',

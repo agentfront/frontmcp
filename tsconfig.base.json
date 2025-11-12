@@ -27,9 +27,6 @@
       "@frontmcp/sdk": [
         "libs/sdk/src/index.ts"
       ],
-      "@frontmcp/core": [
-        "libs/core/src/index.ts"
-      ],
       "@frontmcp/plugins": [
         "libs/plugins/src/index.ts"
       ],

@@ -1,4 +1,5 @@
-import { Redis as RedisClient } from 'ioredis';
+import {Redis as RedisClient} from 'ioredis';
+
 declare global {
   interface ExtendFrontMcpToolMetadata {
     cache?: CachePluginToolOptions | true;
@@ -26,6 +27,7 @@ export interface RedisClientCachePluginOptions extends BaseCachePluginOptions {
   type: 'redis-client';
   client: RedisClient;
 }
+
 export interface RedisCachePluginOptions extends BaseCachePluginOptions {
   type: 'redis';
   config: {
@@ -35,6 +37,7 @@ export interface RedisCachePluginOptions extends BaseCachePluginOptions {
     db?: number;
   };
 }
+
 export type MemoryCachePluginOptions = BaseCachePluginOptions & {
   type: 'memory';
 };
@@ -45,8 +48,12 @@ export type CachePluginOptions = MemoryCachePluginOptions | RedisCacheOptions;
 
 export interface CacheStoreInterface {
   setValue(key: string, value: any, ttlSeconds?: number): Promise<void>;
+
   getValue<T = any>(key: string, defaultValue?: T): Promise<T | undefined>;
+
   delete(key: string): Promise<void>;
+
   exists(key: string): Promise<boolean>;
+
   close(): Promise<void>;
 }

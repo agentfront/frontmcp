@@ -1,10 +1,12 @@
-import {DynamicPlugin, Plugin, FlowCtxOf, httpRespond} from '@frontmcp/sdk';
-import {ListToolsHook} from '@frontmcp/core'
+import {DynamicPlugin, Plugin, FlowCtxOf, FlowHooksOf} from '@frontmcp/sdk';
+
+
+const ListToolsHook = FlowHooksOf('tools:list-tools');
 
 declare global {
-  interface ExtendFrontMcpToolMetadata {
-    authorization?: AuthorizationToolOptions;
-  }
+    interface ExtendFrontMcpToolMetadata {
+      authorization?: AuthorizationToolOptions;
+    }
 }
 
 export interface AuthorizationPluginOptions {
@@ -28,7 +30,7 @@ export default class AuthorizationPlugin extends DynamicPlugin<AuthorizationPlug
   @ListToolsHook.Did('findTools')
   async canActivate(flowCtx: FlowCtxOf<'tools:list-tools'>) {
     const {tools} = flowCtx.state.required;
-    const {ctx:{authInfo}} = flowCtx.rawInput
+    const {ctx: {authInfo}} = flowCtx.rawInput
 
     const authorizedTools = tools.filter(({tool}) => {
       const metadata = tool.metadata;
