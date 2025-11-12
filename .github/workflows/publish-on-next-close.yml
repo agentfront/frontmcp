@@ -97,14 +97,18 @@ jobs:
       - name: Determine release version
         id: version
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_REF: ${{ github.event.ref }}
         run: |
           set -euo pipefail
 
           # Prefer version from next/{semver} branch name
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            HEADREF='${{ github.event.pull_request.head.ref }}'
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            HEADREF="$PR_HEAD_REF"
           else
-            HEADREF='${{ github.event.ref }}'
+            HEADREF="$EVENT_REF"
           fi
 
           if [[ "$HEADREF" =~ ^next/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
