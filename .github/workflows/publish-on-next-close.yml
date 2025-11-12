@@ -1,0 +1,169 @@
+name: Publish libs on next/* close
+
+on:
+  pull_request:
+    types: [ closed ]
+  delete:
+
+permissions:
+  contents: write   # needed to create tags & releases
+  packages: write
+
+concurrency:
+  group: publish-next-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'next/')) ||
+      (github.event_name == 'delete' &&
+       github.event.ref_type == 'branch' &&
+       startsWith(github.event.ref, 'next/'))
+    runs-on: ubuntu-latest
+    env:
+      NX_DAEMON: "false"
+
+    steps:
+      - name: Checkout base branch (merged result)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Resolve publishable libs (tag: scope:publishable)
+        id: publishable
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECTS=$(node -e "
+            const { execSync } = require('child_process');
+            const out = execSync('npx nx show projects -p tag:scope:publishable --type lib --json', { encoding: 'utf8' });
+            const arr = JSON.parse(out);
+            process.stdout.write(arr.join(','));
+          ")
+          if [ -z "$PROJECTS" ]; then
+            echo 'No libs tagged scope:publishable. Exiting.'
+            echo 'projects=' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "projects=$PROJECTS" >> "$GITHUB_OUTPUT"
+          echo "Found: $PROJECTS"
+
+      - name: Stop if nothing to publish
+        if: ${{ steps.publishable.outputs.projects == '' }}
+        run: echo "Nothing to do."
+
+      # --- npm auth via .npmrc (requested) ---
+      - name: Authenticate to npm via ~/.npmrc
+        if: ${{ steps.publishable.outputs.projects != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is not set. Skipping publish."
+            exit 0
+          fi
+          mkdir -p "$HOME"
+          umask 077
+          cat > "$HOME/.npmrc" <<'NPMRC'
+          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          always-auth=true
+          registry=https://registry.npmjs.org/
+          NPMRC
+          echo "Wrote ~/.npmrc for npm auth."
+
+      - name: Build publishable libs
+        if: ${{ steps.publishable.outputs.projects != '' }}
+        run: |
+          npx nx run-many --targets=build --projects="${{ steps.publishable.outputs.projects }}" --parallel
+
+      # --- Determine release version ---
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Prefer version from next/{semver} branch name
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            HEADREF='${{ github.event.pull_request.head.ref }}'
+          else
+            HEADREF='${{ github.event.ref }}'
+          fi
+
+          if [[ "$HEADREF" =~ ^next/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          else
+            # Fallback: read root package.json version
+            VERSION=$(node -e "console.log(require('./package.json').version || '0.0.0')")
+          fi
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not determine a valid semver version (got: $VERSION)"; exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      # --- Tag the repo if needed ---
+      - name: Create and push git tag if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          git fetch --tags
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            echo "Creating tag $TAG"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      # --- Publish to npm ---
+      - name: Publish to npm (Nx Release preferred; fallback to per-project publish target)
+        if: ${{ steps.publishable.outputs.projects != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is not set. Skipping publish."
+            exit 0
+          fi
+
+          echo "Using Nx Release to publish only selected projects..."
+          yarn nx release publish --projects="${{ steps.publishable.outputs.projects }}" --yes
+
+      # --- Create GitHub Release ---
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "✅ Published projects: ${{ steps.publishable.outputs.projects }}"
+          echo "🏷️  Release tag: v${{ steps.version.outputs.version }}"
