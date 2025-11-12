@@ -1,24 +1,12 @@
-export * from './constants';
-export * from './decorators';
-export * from './types';
-export * from './metadata';
-export * from './interfaces';
-export * from './tokens';
-export * from './dynamic';
-export * from './records';
-export * from './entries';
-export * from './utils';
-export * from './schemas';
+import 'reflect-metadata';
+import {FlowHooksOf} from "./common";
 
-export * from './decorators-old/async-with.decorator';
-export * from './decorators-old/tool-hook.decorator';
-export * from './decorators-old/session-hook.decorator';
-
-export * from './interfaces/tool-hook.interface';
-export * from './interfaces/session-hook.interface';
-export * from './interfaces/auth-hook.interface';
+export {FrontMcpInstance} from './front-mcp';
+export * from "./common";
 
 
-export * from './providers/session.provider';
+export const ToolHook = FlowHooksOf('tools:call-tool')
+export const ListToolsHook = FlowHooksOf('tools:list-tools')
+export const HttpHook = FlowHooksOf('http:request')
 
 
