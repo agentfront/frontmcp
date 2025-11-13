@@ -145,7 +145,7 @@ jobs:
 
 
       - name: Install validator deps
-        run: yarn install @mdx-js/mdx prettier
+        run: npm i -D @mdx-js/mdx prettier
 
       - name: Apply & validate patches
         id: apply

@@ -115,7 +115,12 @@ jobs:
             VERSION="${BASH_REMATCH[1]}"
           else
             # Fallback: read root package.json version
-            VERSION=$(node -e "console.log(require('./package.json').version || '0.0.0')")
+            if [ ! -f "./package.json" ]; then
+              echo "⚠️  Warning: package.json not found in workspace root; using 0.0.0" >&2
+              VERSION="0.0.0"
+            else
+              VERSION=$(node -e "try{console.log(require('./package.json').version||'0.0.0')}catch{console.log('0.0.0')}")
+            fi
           fi
 
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
