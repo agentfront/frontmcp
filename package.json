@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/source",
-  "version": "0.0.0",
+  "version": "0.2.6",
   "license": "MIT",
   "scripts": {
     "dev": "nx serve demo"
