@@ -1,6 +1,6 @@
 {
   "name": "frontmcp",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "FrontMCP command line interface",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -30,9 +30,9 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@frontmcp/sdk": "^0.2.5",
-    "@frontmcp/plugins": "^0.2.5",
-    "@frontmcp/adapters": "^0.2.5"
+    "@frontmcp/sdk": "^0.2.6",
+    "@frontmcp/plugins": "^0.2.6",
+    "@frontmcp/adapters": "^0.2.6"
   },
   "devDependencies": {
     "typescript": "^5.5.3",

@@ -1,3 +1,17 @@
+## 0.2.6 (2025-11-13)
+
+### 🚀 Features
+
+- **hooks:** add support for hook flows with will/did/around hooks ([#14](https://github.com/agentfront/frontmcp/pull/14))
+
+### 🩹 Fixes
+
+- **core:** reorganize libs folder ([#15](https://github.com/agentfront/frontmcp/pull/15))
+
+### ❤️ Thank You
+
+- David Antoon @frontegg-david
+
 ## 0.2.5 (2025-11-06)
 
 This was a version bump only, there were no code changes.
