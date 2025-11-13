@@ -1,0 +1,181 @@
+name: "Codex → PR: update Mintlify docs & changelog (next/*)"
+
+on:
+  push:
+    branches: ["next/*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: codex-docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    env:
+      CODEX_OUT: .codex-docs/patches.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare diff context for Codex
+        id: ctx
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/codex/prompts .codex-docs
+
+          # Base for diff/log
+          BASE=$(git merge-base HEAD origin/${{ github.event.repository.default_branch }}) || BASE=$(git rev-list --max-parents=0 HEAD)
+          echo "$BASE" > .github/codex/prompts/base.txt
+
+          # Unified diff
+          git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
+
+          # Derive release version (prefer next/x.y.z, fallback to package.json)
+          REF="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+          if [[ "$REF" =~ ^next/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          else
+            VERSION=$(node -e "try{console.log(require('./package.json').version||'0.0.0')}catch{console.log('0.0.0')}")
+          fi
+          echo "$VERSION" > .github/codex/prompts/version.txt
+
+          # Commit list (for changelog synthesis)
+          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
+
+          # ISO date
+          date -u +"%Y-%m-%d" > .github/codex/prompts/date.txt
+
+      - name: Add Codex prompt & schema
+        run: |
+          cat > .github/codex/prompts/update-docs.md <<'MDX'
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`) and our root `CHANGELOG.md` for the current release.
+
+          INPUTS (read-only files in workspace):
+          - Unified diff:              `.github/codex/prompts/diff.patch`
+          - Commit list (TSV):         `.github/codex/prompts/commits.txt`  # columns: sha<TAB>subject<TAB>body
+          - Release version:           `.github/codex/prompts/version.txt`  # e.g., 1.2.3
+          - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`     # e.g., 2025-11-13
+
+          SCOPE & PATHS
+          - Docs: only files under `docs/` with `.mdx` or `.md` extensions.
+          - Release notes page: `docs/updates.mdx` (Mintlify). Insert or update a **new top section** for this release.
+          - Changelog: root `CHANGELOG.md` (Keep a Changelog format). Insert a new section for this version/date at the top.
+          - Do NOT touch other files (no config changes).
+
+          RULES
+          - **Release notes (`docs/updates.mdx`)**
+            - Add a new section at the top for `v<version>` with date `<YYYY-MM-DD>`.
+            - Summarize notable user-facing changes derived from commits and diff.
+            - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
+            - Keep MDX valid (frontmatter/imports/components).
+          - **Changelog (`CHANGELOG.md`)**
+            - Follow Keep a Changelog style (Headings: `## [v<version>] - <YYYY-MM-DD>`).
+            - Categorize entries using Conventional Commits (feat/fix/docs/perf/refactor/build/ci/chore) and mark **BREAKING CHANGES** clearly.
+            - Include terse, imperative bullet points. Avoid internal-only noise.
+          - General
+            - Prefer small, surgical edits. If a new doc is needed, create it under `docs/` with clear frontmatter.
+            - If no changes are needed, return an empty patch set.
+
+          OUTPUT (STRICT)
+          - Return JSON that matches the output schema provided by the runner.
+          - Each patch replaces the entire file content.
+
+          HINTS
+          - Use subjects/bodies in `commits.txt` to infer categories; de-duplicate merges.
+          - If the same content belongs in both `docs/updates.mdx` and `CHANGELOG.md`, adapt tone: docs = narrative highlights; changelog = terse, categorized bullets.
+
+          Produce ONLY the JSON per schema.
+          MDX
+
+          cat > .github/codex/codex-output-schema.json <<'JSON'
+          {
+            "type": "object",
+            "properties": {
+              "patches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "pattern": "^(docs\\/.+\\.(md|mdx)|CHANGELOG\\.md)$"
+                    },
+                    "rationale": { "type": "string" },
+                    "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
+                  },
+                  "required": ["path", "content"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["patches"],
+            "additionalProperties": false
+          }
+          JSON
+
+      - name: Run Codex (read-only, structured output)
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/update-docs.md
+          output-file: ${{ env.CODEX_OUT }}
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          output-schema-file: .github/codex/codex-output-schema.json
+          codex-args: '["--max-turns","40"]'
+          # model: gpt-5-codex
+
+      - name: Setup Node (validator)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install validator deps
+        run: npm i -D @mdx-js/mdx prettier
+
+      - name: Apply & validate patches
+        id: apply
+        run: |
+          node scripts/apply-doc-patches.mjs "$CODEX_OUT" | tee .codex-docs/apply.log
+          if git status --porcelain | grep -qE '^( M|A |AM|MM|??)'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR with docs & changelog
+        if: ${{ steps.apply.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: docs/codex/${{ github.ref_name }}-${{ github.run_id }}
+          base: ${{ github.ref_name }}
+          title: "docs: release notes & changelog for ${{ github.ref_name }} (Codex)"
+          commit-message: "docs(codex): update Mintlify release notes & CHANGELOG [auto]"
+          labels: "documentation, automated, codex, release-notes"
+          add-paths: |
+            docs/**
+            CHANGELOG.md
+            .codex-docs/**
+          body: |
+            Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `${{ github.ref_name }}`.
+            See `.codex-docs/apply.log` for validation details.
+
+      - name: Upload artifacts (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-docs-artifacts
+          path: |
+            .codex-docs/**
+            .github/codex/prompts/**
