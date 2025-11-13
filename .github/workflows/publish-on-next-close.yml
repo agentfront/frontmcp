@@ -81,11 +81,11 @@ jobs:
           fi
           mkdir -p "$HOME"
           umask 077
-          cat > "$HOME/.npmrc" <<'NPMRC'
-          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          cat <<EOF > "$HOME/.npmrc"
+          //registry.npmjs.org/:_authToken=${NPM_TOKEN}
           always-auth=true
           registry=https://registry.npmjs.org/
-          NPMRC
+          EOF
           echo "Wrote ~/.npmrc for npm auth."
 
       - name: Build publishable libs
