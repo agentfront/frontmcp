@@ -4,7 +4,8 @@
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
   "tags": [
-    "scope:libs"
+    "scope:libs",
+    "scope:publishable"
   ],
   "targets": {
     "build-tsc": {

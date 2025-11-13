@@ -1,7 +1,7 @@
 {
-  "name": "sdk",
+  "name": "cli",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/sdk/src",
+  "sourceRoot": "libs/cli/src",
   "projectType": "library",
   "tags": [
     "scope:libs",
@@ -14,11 +14,11 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "libs/sdk/dist",
-        "main": "libs/sdk/src/index.ts",
-        "tsConfig": "libs/sdk/tsconfig.lib.json",
+        "outputPath": "libs/cli/dist",
+        "main": "libs/cli/src/index.ts",
+        "tsConfig": "libs/cli/tsconfig.lib.json",
         "assets": [
-          "libs/sdk/*.md"
+          "libs/cli/*.md"
         ]
       }
     },
@@ -28,7 +28,7 @@
         "build-tsc"
       ],
       "options": {
-        "command": "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json"
+        "command": "node scripts/strip-dist-from-pkg.js libs/cli/dist/package.json"
       }
     },
     "publish": {
@@ -37,7 +37,7 @@
         "build"
       ],
       "options": {
-        "command": "npm publish libs/sdk/dist --access public"
+        "command": "npm publish libs/cli/dist --access public"
       }
     }
   }

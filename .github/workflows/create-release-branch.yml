@@ -1,0 +1,97 @@
+name: Create release branch (next/{semver})
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump"
+        required: true
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    env:
+      # Disable Nx daemon in CI for determinism
+      NX_DAEMON: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # we need tags & history
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'yarn'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install deps
+        run: yarn
+
+      - name: Configure git user
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+
+      - name: Compute next semver from root package.json
+        id: next
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUMP="${{ inputs.bump }}"
+          NEXT=$(node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const parts = String(pkg.version || '0.0.0').trim().split('.').map(Number);
+            const [M, m, p] = [parts[0]||0, parts[1]||0, parts[2]||0];
+            const b = process.env.BUMP;
+            let [x, y, z] = [M, m, p];
+            if (b === 'major') { x++; y = 0; z = 0; }
+            else if (b === 'minor') { y++; z = 0; }
+            else { z++; }
+            process.stdout.write([x, y, z].join('.'));
+          ")
+          echo "value=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Create branch next/${{ steps.next.outputs.value }} from base
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="main"
+          NEXT="${{ steps.next.outputs.value }}"
+          git fetch origin "$BASE" --tags
+          git switch -c "next/$NEXT" "origin/$BASE"
+          echo "name=next/$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Version packages with Nx (makes the commit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUMP="${{ inputs.bump }}"
+          # If there are no tags yet, tell Nx it's the first release so it resolves current version from disk.
+          if git tag --list | grep -qE '^[v]?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            FIRST=""
+          else
+            FIRST="--first-release"
+          fi
+          yarn nx release version --specifier "$BUMP" $FIRST --verbose
+
+      - name: Push branch (and tags)
+        shell: bash
+        run: |
+          NEXT="${{ steps.next.outputs.value }}"
+          git push --set-upstream origin "next/$NEXT" --follow-tags
+
+      - name: Summary
+        run: |
+          echo "✅ Created branch: next/${{ steps.next.outputs.value }}"
+          echo "➡️  Bump: ${{ inputs.bump }}"

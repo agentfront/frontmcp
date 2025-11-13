@@ -48,6 +48,15 @@ if (pkg.exports) {
     else delete pkg.exports;
 }
 
++// Fix bin map deeply (strip "./dist/")
+if (pkg.bin) {
+    const cleaned = walk(pkg.bin);
+    if (cleaned !== undefined) pkg.bin = cleaned;
+    else delete pkg.bin;
+}
+
+delete pkg.scripts;
+
 try {
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
     console.log(

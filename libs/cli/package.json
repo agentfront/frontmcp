@@ -1,13 +1,13 @@
 {
-  "name": "@frontmcp/adapters",
+  "name": "frontmcp",
   "version": "0.2.5",
-  "description": "Adapters for the FrontMCP framework",
+  "description": "FrontMCP command line interface",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
   "keywords": [
+    "cli",
     "mcp",
-    "adapters",
     "agentfront",
     "frontmcp",
     "framework",
@@ -21,20 +21,23 @@
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
   "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "development": "./src/index.ts",
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js"
-    }
+  "bin": {
+    "frontmcp": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "prepare": "npm run build"
   },
   "dependencies": {
-    "tslib": "^2.3.0",
     "@frontmcp/sdk": "^0.2.5",
-    "openapi-mcp-generator": "^3.2.0",
-    "json-schema-to-zod": "^2.6.1"
+    "@frontmcp/plugins": "^0.2.5",
+    "@frontmcp/adapters": "^0.2.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^22.0.0",
+    "@modelcontextprotocol/inspector": "^0.17.2"
   }
 }
