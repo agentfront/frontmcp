@@ -82,7 +82,7 @@ jobs:
           mkdir -p "$HOME"
           umask 077
           cat <<EOF > "$HOME/.npmrc"
-          //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
           always-auth=true
           registry=https://registry.npmjs.org/
           EOF
