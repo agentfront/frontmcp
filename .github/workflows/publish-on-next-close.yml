@@ -6,8 +6,9 @@ on:
   delete:
 
 permissions:
-  contents: write   # needed to create tags & releases
+  contents: write
   packages: write
+  id-token: write
 
 concurrency:
   group: publish-next-${{ github.event.pull_request.number || github.ref || github.run_id }}
@@ -41,6 +42,10 @@ jobs:
           cache: 'yarn'
           registry-url: 'https://registry.npmjs.org/'
 
+      # Ensure npm CLI has OIDC / trusted publishing support (>= 11.5.1)
+      - name: Update npm CLI for trusted publishing
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
@@ -67,26 +72,8 @@ jobs:
         if: ${{ steps.publishable.outputs.projects == '' }}
         run: echo "Nothing to do."
 
-      # --- npm auth via .npmrc (requested) ---
-      - name: Authenticate to npm via ~/.npmrc
-        if: ${{ steps.publishable.outputs.projects != '' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN is not set. Skipping publish."
-            exit 0
-          fi
-          mkdir -p "$HOME"
-          umask 077
-          cat <<EOF > "$HOME/.npmrc"
-          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          always-auth=true
-          registry=https://registry.npmjs.org/
-          EOF
-          echo "Wrote ~/.npmrc for npm auth."
+      # 🔴 REMOVED: manual ~/.npmrc + NPM_TOKEN auth
+      # npm will now authenticate via OIDC automatically.
 
       - name: Build publishable libs
         if: ${{ steps.publishable.outputs.projects != '' }}
@@ -146,20 +133,13 @@ jobs:
             git push origin "$TAG"
           fi
 
-      # --- Publish to npm ---
-      - name: Publish to npm (Nx Release preferred; fallback to per-project publish target)
+      # --- Publish to npm via Trusted Publishing ---
+      - name: Publish to npm (Nx Release via OIDC)
         if: ${{ steps.publishable.outputs.projects != '' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN is not set. Skipping publish."
-            exit 0
-          fi
-
-          echo "Using Nx Release to publish only selected projects..."
+          echo "Using Nx Release to publish only selected projects via npm trusted publishing..."
           yarn nx release publish --projects="${{ steps.publishable.outputs.projects }}" --yes
 
       # --- Create GitHub Release ---
