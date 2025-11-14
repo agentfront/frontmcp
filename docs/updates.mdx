@@ -4,6 +4,30 @@ slug: updates
 icon: sparkles
 ---
 
+<Update label="FrontMCP v0.2.6" description="2025-11-14" tags={["Releases"]}>
+    <Card
+        title="FrontMCP v0.2.6: Typed hooks, inline specs, automated releases"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.2.6"
+        cta="Read the release notes"
+    >
+        v0.2.6 folds the runtime into the SDK, introduces typed lifecycle hooks, and automates how releases ship.
+
+        #### Breaking changes
+        - **Core folded into SDK**: `@frontmcp/core` is gone; import runtime exports (hooks, providers, tokens) directly from `@frontmcp/sdk`.
+        - **Hook decorators refreshed**: replace legacy `FlowHook` usage with `FlowHooksOf(...).Will/Did/Around` plus the `ToolHook`, `ListToolsHook`, and `HttpHook` helpers.
+
+        #### Features
+        - **Typed lifecycle hooks**: `FlowHooksOf` now yields strongly-typed Will/Did/Around/Stage hooks so plugins can short-circuit or layer logic with priorities and optional filters.
+        - **Inline OpenAPI specs**: hand the OpenAPI adapter an in-memory `spec` document (or a URL) and keep using `filterFn`, `defaultInclude`, and exclusions without extra dereferencing.
+        - **frontmcp CLI**: dev, build, init, doctor, inspector, and create commands now ship from this repo, keeping generated projects in lockstep with SDK releases.
+
+        #### Build/CI
+        - Automated workflows create `next/*` branches, publish tagged builds with trusted publishing, and prune per-version docs branches once Codex patches land.
+
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
@@ -36,6 +60,7 @@ icon: sparkles
             production.
         </Warning>
     </Card>
+
 </Update>
 
 <Update label="FrontMCP 0.1.0" description="November 2025" tags={["Releases"]}>
@@ -55,5 +80,5 @@ icon: sparkles
         - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
-</Update>
 
+</Update>
