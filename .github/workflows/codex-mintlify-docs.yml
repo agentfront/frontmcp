@@ -30,10 +30,11 @@ jobs:
 
       # Fail fast if env secret is not available
       - name: Ensure CODEX_OPENAI_KEY secret is set
-        if: ${{ secrets.CODEX_OPENAI_KEY == '' }}
         run: |
-          echo "::error::CODEX_OPENAI_KEY (env: release) is not set. Add it under Settings → Environments → release → Secrets." >&2
-          exit 1
+          if [ -z "${{ secrets.CODEX_OPENAI_KEY }}" ]; then
+            echo "::error::CODEX_OPENAI_KEY (env: release) is not set. Add it under Settings → Environments → release → Secrets." >&2
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v6
