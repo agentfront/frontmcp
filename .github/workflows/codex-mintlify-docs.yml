@@ -151,7 +151,6 @@ jobs:
           sandbox: read-only
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
-          codex-args: '["--max-turns","40"]'
 
       - name: Install validator deps
         run: npm i -D @mdx-js/mdx prettier
