@@ -43,6 +43,9 @@ jobs:
           cache: 'yarn'
           registry-url: 'https://registry.npmjs.org/'
 
+      - name: Install validator deps
+        run: yarn install
+
       - name: Prepare diff context for Codex
         id: ctx
         shell: bash
@@ -50,11 +53,32 @@ jobs:
           set -euo pipefail
           mkdir -p .github/codex/prompts .codex-docs
 
-          # Base for diff/log
-          BASE=$(git merge-base HEAD origin/${{ github.event.repository.default_branch }}) || BASE=$(git rev-list --max-parents=0 HEAD)
+          # ----------------------------------------
+          # Base for diff/log = last published tag
+          # ----------------------------------------
+          # Find last stable semver tag reachable from HEAD:
+          # - tags like v1.2.3 or 1.2.3
+          # - no pre-release suffixes (no "-alpha.1", etc)
+          LAST_TAG=$(
+            git tag --merged HEAD \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1 \
+            || true
+          )
+
+          if [ -n "$LAST_TAG" ]; then
+            BASE=$(git rev-list -n 1 "$LAST_TAG")
+            echo "Using last published version tag as base: ${LAST_TAG} (${BASE})"
+          else
+            echo "No semver release tag reachable from HEAD; falling back to default-branch merge-base."
+            BASE=$(git merge-base HEAD "origin/${{ github.event.repository.default_branch }}") || \
+                  BASE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
           echo "$BASE" > .github/codex/prompts/base.txt
 
-          # Unified diff
+          # Unified diff: from last published release -> current next/x.y.z HEAD
           git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
 
           # Derive release version (prefer next/x.y.z, fallback to package.json)
@@ -151,9 +175,6 @@ jobs:
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
 
-      - name: Install validator deps
-        run: npm i -D @mdx-js/mdx prettier
-
       - name: Apply & validate patches
         id: apply
         run: |
@@ -168,12 +189,39 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Delete existing docs branch for this version (if any)
+        if: ${{ steps.apply.outputs.changed == 'true' }}
+        env:
+          VERSION: ${{ steps.ctx.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="docs/codex/v${VERSION}"
+
+          echo "Checking for existing branch ${BRANCH}..."
+
+          # Fetch the branch ref if it exists on origin
+          git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+
+          if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            echo "Remote branch ${BRANCH} exists. Deleting remote..."
+            git push origin --delete "${BRANCH}" || true
+          else
+            echo "No remote branch ${BRANCH}."
+          fi
+
+          if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            echo "Local branch ${BRANCH} exists. Deleting local..."
+            git branch -D "${BRANCH}" || true
+          else
+            echo "No local branch ${BRANCH}."
+          fi
+
       - name: Create PR with docs & changelog
         if: ${{ steps.apply.outputs.changed == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
-          # Use v{semver} from ctx for nicer branch name
-          branch: docs/codex/v${{ steps.ctx.outputs.version }}-${{ github.run_id }}
+          branch: docs/codex/v${{ steps.ctx.outputs.version }}
           base: ${{ github.ref_name }}
           title: "docs: release notes & changelog for v${{ steps.ctx.outputs.version }} (Codex)"
           commit-message: "docs(codex): update Mintlify release notes & CHANGELOG [auto]"
@@ -181,7 +229,7 @@ jobs:
           add-paths: |
             docs/**
             CHANGELOG.md
-            .codex-docs/**
+          delete-branch: true
           body: |
             Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `v${{ steps.ctx.outputs.version }}` (branch `${{ github.ref_name }}`).
             See `.codex-docs/apply.log` for validation details.

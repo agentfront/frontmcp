@@ -29,11 +29,53 @@ jobs:
       NX_DAEMON: "false"
 
     steps:
-      - name: Checkout base branch (merged result)
+      # -------------------------------
+      # 1) Decide which commit is "the release"
+      # -------------------------------
+      - name: Determine release ref (branch or commit)
+        id: release_ref
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # For merged PRs:
+            # - merge_commit_sha is:
+            #   * merge commit for "Merge" strategy
+            #   * squashed commit on base branch for "Squash & merge"
+            #   * updated commit for "Rebase & merge"
+            #   (i.e. the commit that actually landed on the base branch)
+            if [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
+              REF="$MERGE_SHA"
+              echo "Using merge_commit_sha as release ref: $REF"
+            else
+              # Very old repos / edge cases: fall back to the base branch (e.g. main)
+              REF="$BASE_REF"
+              echo "merge_commit_sha missing; falling back to base branch: $REF"
+            fi
+          else
+            # delete event – we don't have PR context; assume default branch HEAD
+            REF="$DEFAULT_BRANCH"
+            echo "Using default branch for delete event: $REF"
+          fi
+
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      # -------------------------------
+      # 2) Checkout the release commit
+      # -------------------------------
+      - name: Checkout release commit
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          # For PRs: this is the merge_commit_sha (squash/merge/rebase commit on base branch)
+          # For delete: this is the default branch name (e.g. main)
+          ref: ${{ steps.release_ref.outputs.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -72,15 +114,14 @@ jobs:
         if: ${{ steps.publishable.outputs.projects == '' }}
         run: echo "Nothing to do."
 
-      # 🔴 REMOVED: manual ~/.npmrc + NPM_TOKEN auth
-      # npm will now authenticate via OIDC automatically.
-
       - name: Build publishable libs
         if: ${{ steps.publishable.outputs.projects != '' }}
         run: |
           npx nx run-many --targets=build --projects="${{ steps.publishable.outputs.projects }}" --parallel
 
-      # --- Determine release version ---
+      # -------------------------------
+      # 3) Determine release version (from next/x.y.z or package.json)
+      # -------------------------------
       - name: Determine release version
         id: version
         shell: bash
@@ -110,30 +151,60 @@ jobs:
             fi
           fi
 
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\$ ]]; then
             echo "Could not determine a valid semver version (got: $VERSION)"; exit 1
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Release version: $VERSION"
 
-      # --- Tag the repo if needed ---
+      # -------------------------------
+      # 4) Work out exact commit SHA to tag
+      # -------------------------------
+      - name: Determine release target SHA
+        id: release_sha
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
+            SHA="$MERGE_SHA"
+            echo "Using merge_commit_sha as release target: $SHA"
+          else
+            # For delete events (or weird edge cases), use the checked-out HEAD
+            SHA=$(git rev-parse HEAD)
+            echo "Using HEAD as release target: $SHA"
+          fi
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      # -------------------------------
+      # 5) Tag that commit (not just whatever HEAD happens to be later)
+      # -------------------------------
       - name: Create and push git tag if missing
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
           TAG="v$VERSION"
+          TARGET_SHA="${{ steps.release_sha.outputs.sha }}"
+
           git fetch --tags
+
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists."
           else
-            echo "Creating tag $TAG"
-            git tag -a "$TAG" -m "Release $TAG"
+            echo "Creating tag $TAG at $TARGET_SHA"
+            git tag -a "$TAG" "$TARGET_SHA" -m "Release $TAG"
             git push origin "$TAG"
           fi
 
-      # --- Publish to npm via Trusted Publishing ---
+      # -------------------------------
+      # 6) Publish to npm via Trusted Publishing
+      # -------------------------------
       - name: Publish to npm (Nx Release via OIDC)
         if: ${{ steps.publishable.outputs.projects != '' }}
         shell: bash
@@ -142,7 +213,9 @@ jobs:
           echo "Using Nx Release to publish only selected projects via npm trusted publishing..."
           yarn nx release publish --projects="${{ steps.publishable.outputs.projects }}" --yes
 
-      # --- Create GitHub Release ---
+      # -------------------------------
+      # 7) Create GitHub Release
+      # -------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -156,3 +229,4 @@ jobs:
         run: |
           echo "✅ Published projects: ${{ steps.publishable.outputs.projects }}"
           echo "🏷️  Release tag: v${{ steps.version.outputs.version }}"
+          echo "🎯 Release commit: ${{ steps.release_sha.outputs.sha }}"
