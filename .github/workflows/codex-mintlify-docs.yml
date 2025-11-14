@@ -43,6 +43,9 @@ jobs:
           cache: 'yarn'
           registry-url: 'https://registry.npmjs.org/'
 
+      - name: Install validator deps
+        run: yarn install
+
       - name: Prepare diff context for Codex
         id: ctx
         shell: bash
@@ -151,9 +154,6 @@ jobs:
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
 
-      - name: Install validator deps
-        run: npm i -D @mdx-js/mdx prettier
-
       - name: Apply & validate patches
         id: apply
         run: |
@@ -168,7 +168,6 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # 🔥 NEW: ensure only one docs branch per version – delete existing branch if it exists
       - name: Delete existing docs branch for this version (if any)
         if: ${{ steps.apply.outputs.changed == 'true' }}
         env:
@@ -209,7 +208,6 @@ jobs:
           add-paths: |
             docs/**
             CHANGELOG.md
-            .codex-docs/**
           delete-branch: true
           body: |
             Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `v${{ steps.ctx.outputs.version }}` (branch `${{ github.ref_name }}`).
