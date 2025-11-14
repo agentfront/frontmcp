@@ -2,7 +2,8 @@ name: "Codex → PR: update Mintlify docs & changelog (next/*)"
 
 on:
   push:
-    branches: [ "next/*" ]
+    branches:
+      - "next/**"
   workflow_dispatch:
 
 permissions:
@@ -16,6 +17,7 @@ concurrency:
 jobs:
   docs:
     runs-on: ubuntu-latest
+    environment: release
 
     env:
       CODEX_OUT: .codex-docs/patches.json
@@ -26,13 +28,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Fail fast if env secret is not available
+      - name: Ensure CODEX_OPENAI_KEY secret is set
+        if: ${{ secrets.CODEX_OPENAI_KEY == '' }}
+        run: |
+          echo "::error::CODEX_OPENAI_KEY (env: release) is not set. Add it under Settings → Environments → release → Secrets." >&2
+          exit 1
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'yarn'
           registry-url: 'https://registry.npmjs.org/'
-
 
       - name: Prepare diff context for Codex
         id: ctx
@@ -56,6 +64,7 @@ jobs:
             VERSION=$(node -e "try{console.log(require('./package.json').version||'0.0.0')}catch{console.log('0.0.0')}")
           fi
           echo "$VERSION" > .github/codex/prompts/version.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # Commit list (for changelog synthesis)
           git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
@@ -135,14 +144,13 @@ jobs:
         id: codex
         uses: openai/codex-action@v1
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}   # 👈 use env secret
           prompt-file: .github/codex/prompts/update-docs.md
           output-file: ${{ env.CODEX_OUT }}
           sandbox: read-only
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
           codex-args: '["--max-turns","40"]'
-
 
       - name: Install validator deps
         run: npm i -D @mdx-js/mdx prettier
@@ -161,9 +169,10 @@ jobs:
         if: ${{ steps.apply.outputs.changed == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
-          branch: docs/codex/${{ github.ref_name }}-${{ github.run_id }}
+          # Use v{semver} from ctx for nicer branch name
+          branch: docs/codex/v${{ steps.ctx.outputs.version }}-${{ github.run_id }}
           base: ${{ github.ref_name }}
-          title: "docs: release notes & changelog for ${{ github.ref_name }} (Codex)"
+          title: "docs: release notes & changelog for v${{ steps.ctx.outputs.version }} (Codex)"
           commit-message: "docs(codex): update Mintlify release notes & CHANGELOG [auto]"
           labels: "documentation, automated, codex, release-notes"
           add-paths: |
@@ -171,7 +180,7 @@ jobs:
             CHANGELOG.md
             .codex-docs/**
           body: |
-            Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `${{ github.ref_name }}`.
+            Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `v${{ steps.ctx.outputs.version }}` (branch `${{ github.ref_name }}`).
             See `.codex-docs/apply.log` for validation details.
 
       - name: Upload artifacts (debug)
