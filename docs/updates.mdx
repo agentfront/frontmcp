@@ -4,6 +4,21 @@ slug: updates
 icon: sparkles
 ---
 
+<Update label="FrontMCP v0.2.6" description="2025-11-14" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.2.6: smoother Codex automation"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.2.6"
+        cta="Read the release notes"
+    >
+        Released on 2025-11-14, this patch hardens the automation that publishes Mintlify docs and changelog updates. No runtime package changes ship in this release.
+
+        #### Build/CI
+        - The Codex Mintlify workflow now runs `yarn install` before validation and prunes any existing `docs/codex/v*` branches before opening the release PR.
+        - Added the `@mdx-js/mdx` toolchain to doc validation and narrowed automated formatting to `.mdx` files to avoid noisy diffs.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
@@ -36,6 +51,7 @@ icon: sparkles
             production.
         </Warning>
     </Card>
+
 </Update>
 
 <Update label="FrontMCP 0.1.0" description="November 2025" tags={["Releases"]}>
@@ -55,5 +71,5 @@ icon: sparkles
         - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
-</Update>
 
+</Update>
