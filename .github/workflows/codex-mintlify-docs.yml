@@ -144,7 +144,7 @@ jobs:
         id: codex
         uses: openai/codex-action@v1
         with:
-          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}   # 👈 use env secret
+          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
           prompt-file: .github/codex/prompts/update-docs.md
           output-file: ${{ env.CODEX_OUT }}
           sandbox: read-only
@@ -157,11 +157,15 @@ jobs:
       - name: Apply & validate patches
         id: apply
         run: |
+          set -euo pipefail
+
           node scripts/apply-doc-patches.mjs "$CODEX_OUT" | tee .codex-docs/apply.log
-          if git status --porcelain | grep -qE '^( M|A |AM|MM|??)'; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+
+          # Any change in the working tree means Codex actually updated something
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create PR with docs & changelog
