@@ -43,7 +43,7 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
     const res = await fetch(url, {
       method: oTool.method,
       headers,
-      body: requestBodyData,
+      body: JSON.stringify(requestBodyData),
     });
     const data = await res.text()
     let result = {data}
