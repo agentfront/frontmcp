@@ -4,7 +4,7 @@ slug: servers/apps
 icon: cube
 ---
 
-Apps are how you **group capabilities** in FrontMCP. Each app can contribute **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. Apps may run *locally* (in this process) or be *remote* (URL/worker).
+Apps are how you **group capabilities** in FrontMCP. Each app can contribute **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. Apps may run _locally_ (in this process) or be _remote_ (URL/worker).
 
 ## Minimal local app
 
@@ -48,10 +48,12 @@ export default class Server {}
 ```
 
 **Scoping & auth**
+
 - If the server uses **`splitByApp: true`**, each app is isolated and **must** configure its own auth (server-level `auth` is disallowed).
 - `standalone: true` makes the app expose its own scope/entry; `'includeInParent'` lists it under the parent while keeping isolation.
 
 **Dependency resolution**
+
 - Providers resolve **tool → app → server**.
 - Plugins/adapters attach at app scope; generated items inherit the app’s policies and provenance.
 
@@ -64,7 +66,7 @@ Define an app that proxies to a **worker file** or a **URL**:
 ```ts
 @App({
   name: 'Remote CRM',
-  urlType: 'url',                // 'url' | 'worker'
+  urlType: 'url', // 'url' | 'worker'
   url: 'https://crm.example.com/mcp',
   auth: { type: 'remote', name: 'crm-idp', baseUrl: 'https://idp.example.com' },
   standalone: true,
@@ -73,6 +75,7 @@ export default class CrmApp {}
 ```
 
 **Fields**
+
 ```ts
 {
   id?: string;
