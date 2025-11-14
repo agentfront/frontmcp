@@ -34,6 +34,9 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
       // prepare body
       if (oTool.requestBodyContentType && typeof input['requestBody'] !== 'undefined') {
         requestBodyData = input['requestBody'];
+        if (oTool.requestBodyContentType?.includes('application/json')) {
+          requestBodyData = JSON.stringify(requestBodyData);
+      }
         headers.set('content-type', oTool.requestBodyContentType);
       }
     }
