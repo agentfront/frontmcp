@@ -34,6 +34,9 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
       // prepare body
       if (oTool.requestBodyContentType && typeof input['requestBody'] !== 'undefined') {
         requestBodyData = input['requestBody'];
+        if (oTool.requestBodyContentType?.includes('application/json')) {
+          requestBodyData = JSON.stringify(requestBodyData);
+      }
         headers.set('content-type', oTool.requestBodyContentType);
       }
     }
@@ -43,7 +46,7 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
     const res = await fetch(url, {
       method: oTool.method,
       headers,
-      body: JSON.stringify(requestBodyData),
+      body: requestBodyData,
     });
     const data = await res.text()
     let result = {data}
