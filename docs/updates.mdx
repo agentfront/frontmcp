@@ -4,6 +4,23 @@ slug: updates
 icon: sparkles
 ---
 
+<Update label="FrontMCP 0.2.6" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.2.6: typed flow hooks everywhere"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.2.6"
+        cta="Read the release notes"
+    >
+        Flow hooks now compose like the core pipeline: intercept any stage with typed `Will`, `Stage`, `Did`, or `Around` helpers, and keep SDK, plugins, and adapters aligned after the workspace reshuffle.
+
+        **Features**
+        - 🪝 Add `FlowHooksOf(...).Will/Did/Around` helpers so plugins can intercept flows without boilerplate.
+
+        **Fixes**
+        - 🧹 Reorganize `libs/` packages (SDK, adapters, CLI, plugins) so existing imports keep working after the move.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
@@ -36,6 +53,7 @@ icon: sparkles
             production.
         </Warning>
     </Card>
+
 </Update>
 
 <Update label="FrontMCP 0.1.0" description="November 2025" tags={["Releases"]}>
@@ -55,5 +73,5 @@ icon: sparkles
         - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
-</Update>
 
+</Update>

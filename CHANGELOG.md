@@ -1,16 +1,12 @@
-## 0.2.6 (2025-11-13)
+## [v0.2.6] - 2025-11-14
 
-### 🚀 Features
+### feat
 
-- **hooks:** add support for hook flows with will/did/around hooks ([#14](https://github.com/agentfront/frontmcp/pull/14))
+- sdk: Add typed `Will`, `Did`, and `Around` flow hook helpers via `FlowHooksOf`.
 
-### 🩹 Fixes
+### fix
 
-- **core:** reorganize libs folder ([#15](https://github.com/agentfront/frontmcp/pull/15))
-
-### ❤️ Thank You
-
-- David Antoon @frontegg-david
+- sdk: Reorganize package layout under `libs/` to keep workspace imports stable.
 
 ## 0.2.5 (2025-11-06)
 
@@ -50,27 +46,23 @@ This was a version bump only, there were no code changes.
 
 ## 0.2.0 (2025-11-05)
 
-FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,
-smarter
+FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector, smarter
 config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
 
-- 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
-  Example: <code>frontmcp dev --no-auth</code>
-- 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
-scripts, and starter files.
+- 🧪 **Dev-only no-auth**: run without auth _in development mode only_. Example: <code>frontmcp dev --no-auth</code>
+- 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json scripts, and
+  starter files.
 - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
-- 🔭 **Inspector, zero setup**: <code>frontmcp
-inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
+- 🔭 **Inspector, zero setup**: <code>frontmcp inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
 - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-- ✨ **Tool schema ergonomics**: pass Zod fields directly
-(<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
+- ✨ **Tool schema ergonomics**: pass Zod fields directly (<code>inputSchema: &#123; ... &#125;</code> /
+  <code>outputSchema: &#123; ... &#125;</code>).
 - ⚡ **Async type checks in dev**: background type-checking while watching files.
-- 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
-builds to <code>./dist</code> (override with <code>--out-dir</code>).
-- 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
-session-aware SSE.
+- 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>; builds
+  to <code>./dist</code> (override with <code>--out-dir</code>).
+- 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and session-aware
+  SSE.
 - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
-
 
 ## 0.1.3 (2025-11-05)
 
