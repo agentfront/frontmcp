@@ -168,12 +168,40 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # 🔥 NEW: ensure only one docs branch per version – delete existing branch if it exists
+      - name: Delete existing docs branch for this version (if any)
+        if: ${{ steps.apply.outputs.changed == 'true' }}
+        env:
+          VERSION: ${{ steps.ctx.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="docs/codex/v${VERSION}"
+
+          echo "Checking for existing branch ${BRANCH}..."
+
+          # Fetch the branch ref if it exists on origin
+          git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+
+          if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            echo "Remote branch ${BRANCH} exists. Deleting remote..."
+            git push origin --delete "${BRANCH}" || true
+          else
+            echo "No remote branch ${BRANCH}."
+          fi
+
+          if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            echo "Local branch ${BRANCH} exists. Deleting local..."
+            git branch -D "${BRANCH}" || true
+          else
+            echo "No local branch ${BRANCH}."
+          fi
+
       - name: Create PR with docs & changelog
         if: ${{ steps.apply.outputs.changed == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
-          # Use v{semver} from ctx for nicer branch name
-          branch: docs/codex/v${{ steps.ctx.outputs.version }}-${{ github.run_id }}
+          branch: docs/codex/v${{ steps.ctx.outputs.version }}
           base: ${{ github.ref_name }}
           title: "docs: release notes & changelog for v${{ steps.ctx.outputs.version }} (Codex)"
           commit-message: "docs(codex): update Mintlify release notes & CHANGELOG [auto]"
@@ -182,6 +210,7 @@ jobs:
             docs/**
             CHANGELOG.md
             .codex-docs/**
+          delete-branch: true
           body: |
             Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `v${{ steps.ctx.outputs.version }}` (branch `${{ github.ref_name }}`).
             See `.codex-docs/apply.log` for validation details.
