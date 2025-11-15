@@ -1,9 +1,8 @@
-name: Publish libs on next/* close
+name: Publish libs on next/* merge
 
 on:
   pull_request:
     types: [ closed ]
-  delete:
 
 permissions:
   contents: write
@@ -11,19 +10,22 @@ permissions:
   id-token: write
 
 concurrency:
-  group: publish-next-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  group: publish-next-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   publish:
-    if: >-
-      (github.event_name == 'pull_request' &&
-       github.event.action == 'closed' &&
-       github.event.pull_request.merged == true &&
-       startsWith(github.event.pull_request.head.ref, 'next/')) ||
-      (github.event_name == 'delete' &&
-       github.event.ref_type == 'branch' &&
-       startsWith(github.event.ref, 'next/'))
+    # Only run when:
+    # - this is a PR close event
+    # - the PR was merged
+    # - the head branch is next/{semver}
+    # - the base branch is the default branch (e.g. main)
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'next/') &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
     runs-on: ubuntu-latest
     env:
       NX_DAEMON: "false"
@@ -36,32 +38,24 @@ jobs:
         id: release_ref
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            # For merged PRs:
-            # - merge_commit_sha is:
-            #   * merge commit for "Merge" strategy
-            #   * squashed commit on base branch for "Squash & merge"
-            #   * updated commit for "Rebase & merge"
-            #   (i.e. the commit that actually landed on the base branch)
-            if [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
-              REF="$MERGE_SHA"
-              echo "Using merge_commit_sha as release ref: $REF"
-            else
-              # Very old repos / edge cases: fall back to the base branch (e.g. main)
-              REF="$BASE_REF"
-              echo "merge_commit_sha missing; falling back to base branch: $REF"
-            fi
+          # For merged PRs:
+          # - merge_commit_sha is:
+          #   * merge commit for "Merge" strategy
+          #   * squashed commit on base branch for "Squash & merge"
+          #   * updated commit for "Rebase & merge"
+          #   (i.e. the commit that actually landed on the base branch)
+          if [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
+            REF="$MERGE_SHA"
+            echo "Using merge_commit_sha as release ref: $REF"
           else
-            # delete event – we don't have PR context; assume default branch HEAD
-            REF="$DEFAULT_BRANCH"
-            echo "Using default branch for delete event: $REF"
+            # Edge cases: fall back to the base branch (e.g. main)
+            REF="$BASE_REF"
+            echo "merge_commit_sha missing; falling back to base branch: $REF"
           fi
 
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -73,8 +67,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # For PRs: this is the merge_commit_sha (squash/merge/rebase commit on base branch)
-          # For delete: this is the default branch name (e.g. main)
+          # This will be merge_commit_sha in normal cases
           ref: ${{ steps.release_ref.outputs.ref }}
 
       - name: Setup Node
@@ -126,18 +119,11 @@ jobs:
         id: version
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          EVENT_REF: ${{ github.event.ref }}
         run: |
           set -euo pipefail
 
-          # Prefer version from next/{semver} branch name
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            HEADREF="$PR_HEAD_REF"
-          else
-            HEADREF="$EVENT_REF"
-          fi
+          HEADREF="$PR_HEAD_REF"
 
           if [[ "$HEADREF" =~ ^next/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             VERSION="${BASH_REMATCH[1]}"
@@ -151,7 +137,7 @@ jobs:
             fi
           fi
 
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\$ ]]; then
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Could not determine a valid semver version (got: $VERSION)"; exit 1
           fi
 
@@ -165,16 +151,15 @@ jobs:
         id: release_sha
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
+          if [ -n "${MERGE_SHA:-}" ] && [ "$MERGE_SHA" != "null" ]; then
             SHA="$MERGE_SHA"
             echo "Using merge_commit_sha as release target: $SHA"
           else
-            # For delete events (or weird edge cases), use the checked-out HEAD
+            # Fallback: HEAD of checked-out ref
             SHA=$(git rev-parse HEAD)
             echo "Using HEAD as release target: $SHA"
           fi
@@ -182,7 +167,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # -------------------------------
-      # 5) Tag that commit (not just whatever HEAD happens to be later)
+      # 5) Tag that commit (not just current HEAD somewhere else)
       # -------------------------------
       - name: Create and push git tag if missing
         shell: bash

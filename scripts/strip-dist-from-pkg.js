@@ -48,7 +48,7 @@ if (pkg.exports) {
     else delete pkg.exports;
 }
 
-+// Fix bin map deeply (strip "./dist/")
+// Fix bin map deeply (strip "./dist/")
 if (pkg.bin) {
     const cleaned = walk(pkg.bin);
     if (cleaned !== undefined) pkg.bin = cleaned;
