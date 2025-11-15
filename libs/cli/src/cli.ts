@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import {promises as fsp} from 'fs';
 import * as path from 'path';
 import {spawn, ChildProcess} from 'child_process';
-import {getSelfVersion} from "./version";
+import {getSelfVersion} from './version';
 
 /* ----------------------------- Types & Helpers ---------------------------- */
 
@@ -144,7 +144,7 @@ async function resolveEntry(cwd: string, explicit?: string): Promise<string> {
   throw new Error(msg);
 }
 
-function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
+function runCmd(cmd: string, args: string[], opts: {cwd?: string} = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {stdio: 'inherit', shell: true, ...opts});
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`))));
@@ -168,7 +168,13 @@ async function isDirEmpty(dir: string): Promise<boolean> {
 
 function sanitizeForFolder(name: string): string {
   const seg = name.startsWith('@') && name.includes('/') ? name.split('/')[1] : name;
-  return seg.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'frontmcp-app';
+  return (
+    seg
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase() || 'frontmcp-app'
+  );
 }
 
 function sanitizeForNpm(name: string): string {
@@ -180,7 +186,6 @@ function sanitizeForNpm(name: string): string {
   }
   return name.replace(/[^a-z0-9._-]/gi, '-').toLowerCase() || 'frontmcp-app';
 }
-
 
 /* --------------------------------- Actions -------------------------------- */
 
@@ -203,13 +208,21 @@ async function runDev(opts: ParsedArgs): Promise<void> {
   const entry = await resolveEntry(cwd, opts.entry);
 
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
-  console.log(`${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c('bold', 'tsc --noEmit --watch')} (async type-checker)`);
+  console.log(
+    `${c('gray', '[dev]')} starting ${c('bold', 'tsx --watch')} and ${c(
+      'bold',
+      'tsc --noEmit --watch',
+    )} (async type-checker)`,
+  );
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
 
   // Start tsx watcher (app run)
   const app = spawn('npx', ['-y', 'tsx', '--watch', entry], {stdio: 'inherit', shell: true});
   // Start tsc in watch mode for async type-checking (non-blocking)
-  const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {stdio: 'inherit', shell: true});
+  const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
+    stdio: 'inherit',
+    shell: true,
+  });
 
   const cleanup = () => {
     killQuiet(checker);
@@ -302,7 +315,10 @@ const RECOMMENDED_TSCONFIG = {
   include: ['src/**/*'],
 } as const;
 
-function deepMerge<T extends Record<string, any>, U extends Record<string, any>>(base: T, patch: U): T & U {
+function deepMerge<T extends Record<string, any>, U extends Record<string, any>>(
+  base: T,
+  patch: U,
+): T & U {
   const out: Record<string, any> = {...base};
   for (const [k, v] of Object.entries(patch)) {
     if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -337,16 +353,20 @@ function checkRequiredTsOptions(compilerOptions: Record<string, any> | undefined
   const edm = compilerOptions?.emitDecoratorMetadata;
   const ed = compilerOptions?.experimentalDecorators;
 
-  if (target === REQUIRED_DECORATOR_FIELDS.target) ok.push(`compilerOptions.target = "${REQUIRED_DECORATOR_FIELDS.target}"`);
+  if (target === REQUIRED_DECORATOR_FIELDS.target)
+    ok.push(`compilerOptions.target = "${REQUIRED_DECORATOR_FIELDS.target}"`);
   else issues.push(`compilerOptions.target should be "${REQUIRED_DECORATOR_FIELDS.target}"`);
 
-  if (moduleVal === REQUIRED_DECORATOR_FIELDS.module) ok.push(`compilerOptions.module = "${REQUIRED_DECORATOR_FIELDS.module}"`);
+  if (moduleVal === REQUIRED_DECORATOR_FIELDS.module)
+    ok.push(`compilerOptions.module = "${REQUIRED_DECORATOR_FIELDS.module}"`);
   else issues.push(`compilerOptions.module should be "${REQUIRED_DECORATOR_FIELDS.module}"`);
 
-  if (edm === REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata) ok.push(`compilerOptions.emitDecoratorMetadata = true`);
+  if (edm === REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata)
+    ok.push(`compilerOptions.emitDecoratorMetadata = true`);
   else issues.push(`compilerOptions.emitDecoratorMetadata should be true`);
 
-  if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators) ok.push(`compilerOptions.experimentalDecorators = true`);
+  if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators)
+    ok.push(`compilerOptions.experimentalDecorators = true`);
   else issues.push(`compilerOptions.experimentalDecorators should be true`);
 
   return {ok, issues};
@@ -358,7 +378,12 @@ async function runInit(baseDir?: string): Promise<void> {
   const existing = await readJSON<Record<string, any>>(tsconfigPath);
 
   if (!existing) {
-    console.log(c('yellow', `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`));
+    console.log(
+      c(
+        'yellow',
+        `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`,
+      ),
+    );
     await writeJSON(tsconfigPath, RECOMMENDED_TSCONFIG);
     console.log(c('green', '✅ Created tsconfig.json with required decorator settings.'));
     return;
@@ -368,7 +393,9 @@ async function runInit(baseDir?: string): Promise<void> {
   merged = ensureRequiredTsOptions(merged);
 
   await writeJSON(tsconfigPath, merged);
-  console.log(c('green', '✅ tsconfig.json verified and updated (required decorator settings enforced).'));
+  console.log(
+    c('green', '✅ tsconfig.json verified and updated (required decorator settings enforced).'),
+  );
 }
 
 function cmpSemver(a: string, b: string): number {
@@ -454,12 +481,24 @@ async function runInspector(): Promise<void> {
 /* --------------------------------- Create --------------------------------- */
 
 function pkgNameFromCwd(cwd: string) {
-  return path.basename(cwd).replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase() || 'frontmcp-app';
+  return (
+    path
+      .basename(cwd)
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .toLowerCase() || 'frontmcp-app'
+  );
 }
 
-async function upsertPackageJson(cwd: string, nameOverride: string | undefined, selfVersion: string) {
+async function upsertPackageJson(
+  cwd: string,
+  nameOverride: string | undefined,
+  selfVersion: string,
+) {
   const pkgPath = path.join(cwd, 'package.json');
   const existing = await readJSON<Record<string, any>>(pkgPath);
+
+  // Use caret range for libs to track the CLI version
+  const frontmcpLibRange = `^${selfVersion}`;
 
   const base = {
     name: nameOverride ?? pkgNameFromCwd(cwd),
@@ -478,27 +517,33 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
       npm: '>=10',
     },
     dependencies: {
-      '@frontmcp/sdk': '^0.2.5',
-      '@frontmcp/core': '^0.2.5',
-      'zod': '^3.23.8',
+      '@frontmcp/sdk': frontmcpLibRange,
+      '@frontmcp/core': frontmcpLibRange,
+      zod: '^3.23.8',
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
-      'frontmcp': selfVersion,       // exact CLI version used by npx
-      'tsx': '^4.20.6',
-      '@types/node': "^22.0.0",
-      'typescript': '^5.5.3',
+      frontmcp: selfVersion, // exact CLI version used by npx
+      tsx: '^4.20.6',
+      '@types/node': '^22.0.0',
+      typescript: '^5.5.3',
     },
   };
 
   if (!existing) {
     await writeJSON(pkgPath, base);
-    console.log(c('green', '✅ Created package.json (pinned versions + exact frontmcp)'));
+    console.log(
+      c(
+        'green',
+        '✅ Created package.json (synced @frontmcp libs to CLI version + exact frontmcp)',
+      ),
+    );
     return;
   }
 
-  const merged = {...base, ...existing};
+  const merged: any = {...base, ...existing};
 
+  // Preserve some user fields if present
   merged.name = existing.name || base.name;
   merged.main = existing.main || base.main;
   merged.type = existing.type || base.type;
@@ -518,23 +563,31 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     npm: existing.engines?.npm || base.engines.npm,
   };
 
+  // Force @frontmcp libs to follow the CLI version range
   merged.dependencies = {
-    ...base.dependencies,
     ...(existing.dependencies || {}),
+    ...base.dependencies,
+    '@frontmcp/sdk': frontmcpLibRange,
+    '@frontmcp/core': frontmcpLibRange,
     zod: '^3.23.8',
     'reflect-metadata': '^0.2.2',
   };
 
   merged.devDependencies = {
-    ...base.devDependencies,
     ...(existing.devDependencies || {}),
+    ...base.devDependencies,
     frontmcp: selfVersion,
     tsx: '^4.20.6',
     typescript: '^5.5.3',
   };
 
   await writeJSON(pkgPath, merged);
-  console.log(c('green', '✅ Updated package.json (ensured exact frontmcp and pinned versions)'));
+  console.log(
+    c(
+      'green',
+      '✅ Updated package.json (synced @frontmcp libs + frontmcp to current CLI version)',
+    ),
+  );
 }
 
 async function scaffoldFileIfMissing(baseDir: string, p: string, content: string) {
@@ -555,11 +608,6 @@ import { CalcApp } from './calc.app';
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [CalcApp],
-  auth: {
-    type: 'remote',
-    name: 'my-remote-auth',
-    baseUrl: 'https://idp.example.com',
-  },
 })
 export default class Server {}
 `;
@@ -577,19 +625,22 @@ export class CalcApp {}
 `;
 
 const TEMPLATE_ADD_TOOL_TS = `
-import { tool } from '@frontmcp/sdk';
-import { z } from 'zod';
+import {Tool, ToolContext} from "@frontmcp/sdk";
+import {z} from "zod";
 
-const AddTool = tool({
+@Tool({
   name: 'add',
   description: 'Add two numbers',
-  inputSchema: { a: z.number(), b: z.number() },
-  outputSchema: { result: z.number() },
-})(async (input, _ctx) => {
-  return { result: input.a + input.b };
-});
-
-export default AddTool;
+  inputSchema: {a: z.number(), b: z.number()},
+  outputSchema: {result: z.number()}
+})
+export default class AddTool extends ToolContext {
+  async execute(input: { a: number, b: number }) {
+    return {
+      result: input.a + input.b,
+    };
+  }
+}
 `;
 
 async function runCreate(projectArg?: string): Promise<void> {
@@ -605,7 +656,15 @@ async function runCreate(projectArg?: string): Promise<void> {
 
   if (await fileExists(targetDir)) {
     if (!(await isDirEmpty(targetDir))) {
-      console.error(c('red', `Refusing to scaffold into non-empty directory: ${path.relative(process.cwd(), targetDir)}`));
+      console.error(
+        c(
+          'red',
+          `Refusing to scaffold into non-empty directory: ${path.relative(
+            process.cwd(),
+            targetDir,
+          )}`,
+        ),
+      );
       console.log(c('gray', 'Pick a different name or start with an empty folder.'));
       process.exit(1);
     }
@@ -613,7 +672,12 @@ async function runCreate(projectArg?: string): Promise<void> {
     await ensureDir(targetDir);
   }
 
-  console.log(`${c('cyan', '[create]')} Creating project in ${c('bold', './' + path.relative(process.cwd(), targetDir))}`);
+  console.log(
+    `${c('cyan', '[create]')} Creating project in ${c(
+      'bold',
+      './' + path.relative(process.cwd(), targetDir),
+    )}`,
+  );
   process.chdir(targetDir);
 
   // 1) tsconfig
@@ -624,9 +688,21 @@ async function runCreate(projectArg?: string): Promise<void> {
   await upsertPackageJson(targetDir, pkgName, selfVersion);
 
   // 3) files
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'main.ts'), TEMPLATE_MAIN_TS);
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'calc.app.ts'), TEMPLATE_CALC_APP_TS);
-  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'tools', 'add.tool.ts'), TEMPLATE_ADD_TOOL_TS);
+  await scaffoldFileIfMissing(
+    targetDir,
+    path.join(targetDir, 'src', 'main.ts'),
+    TEMPLATE_MAIN_TS,
+  );
+  await scaffoldFileIfMissing(
+    targetDir,
+    path.join(targetDir, 'src', 'calc.app.ts'),
+    TEMPLATE_CALC_APP_TS,
+  );
+  await scaffoldFileIfMissing(
+    targetDir,
+    path.join(targetDir, 'src', 'tools', 'add.tool.ts'),
+    TEMPLATE_ADD_TOOL_TS,
+  );
 
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);
@@ -680,7 +756,9 @@ async function main(): Promise<void> {
         process.exitCode = 1;
     }
   } catch (err: any) {
-    console.error('\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)));
+    console.error(
+      '\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)),
+    );
     process.exit(1);
   }
 }

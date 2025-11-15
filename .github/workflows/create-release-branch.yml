@@ -118,6 +118,35 @@ jobs:
 
           echo "Nx version step completed for bump: $BUMP"
 
+      # 🧩 NEW: ensure root package.json version == next/{semver}
+      - name: Sync root package.json version with next/{semver}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.next.outputs.value }}"
+
+          NEXT_VERSION="$NEXT" node - << 'EOF'
+          const fs = require('fs');
+          const path = 'package.json';
+          const next = process.env.NEXT_VERSION;
+
+          if (!next) {
+            console.error('NEXT_VERSION env is missing');
+            process.exit(1);
+          }
+
+          const raw = fs.readFileSync(path, 'utf8');
+          const pkg = JSON.parse(raw);
+
+          if (pkg.version === next) {
+            console.log(`Root package.json already at version ${next}`);
+          } else {
+            pkg.version = next;
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+            console.log(`Updated root package.json version -> ${next}`);
+          }
+          EOF
+
       # ✅ Ensure the branch has at least one commit different from main
       - name: Ensure release branch has a commit
         shell: bash
@@ -125,7 +154,7 @@ jobs:
           set -euo pipefail
           NEXT="${{ steps.next.outputs.value }}"
 
-          # If Nx left changes unstaged/uncommitted, commit them.
+          # If Nx and/or the sync step left changes unstaged/uncommitted, commit them.
           if [ -n "$(git status --porcelain)" ]; then
             echo "Detected uncommitted changes; creating release commit..."
             git add -A
