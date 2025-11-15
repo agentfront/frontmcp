@@ -207,7 +207,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Using Nx Release to publish only selected projects via npm trusted publishing..."
-          yarn nx release publish --yes
+          yarn nx run-many -t publish
 
       # -------------------------------
       # 7) Create GitHub Release
