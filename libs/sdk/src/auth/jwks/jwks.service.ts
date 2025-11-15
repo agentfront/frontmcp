@@ -104,8 +104,6 @@ export class JwksService {
         const {payload, protectedHeader} = await jwtVerify(token, JWKS, {
           issuer: [
             normalizeIssuer(p.issuerUrl),
-
-            // ]
           ].concat((draftPayload?.['iss'] ? [draftPayload['iss']] : []) as string[]), // used because current cloud gateway have invalid issuer
         });
 

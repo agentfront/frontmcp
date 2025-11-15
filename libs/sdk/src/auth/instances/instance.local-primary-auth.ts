@@ -1,7 +1,7 @@
 import {SignJWT} from "jose";
 import {URL} from 'url';
 import {randomBytes, randomUUID} from "crypto";
-import {FrontMcpAuth, FrontMcpLogger, LocalAuthOptions, ProviderScope, ServerRequest} from '../../common';
+import {FrontMcpAuth, FrontMcpLogger, LocalAuthOptions, ProviderScope, ScopeEntry, ServerRequest} from '../../common';
 import ProviderRegistry from '../../provider/provider.registry';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
@@ -24,12 +24,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth {
   readonly logger: FrontMcpLogger;
   private jwks = new JwksService();
 
-  constructor(private providers: ProviderRegistry, metadata: LocalAuthOptions) {
+  constructor(private scope:ScopeEntry,private providers: ProviderRegistry, metadata: LocalAuthOptions) {
     super(metadata);
     this.logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
     this.port = this.providers.getActiveScope().metadata.http?.port ?? 3001;
     this.host = 'localhost';
-    this.issuer = `http://${this.host}:${this.port}`
+    this.issuer = `http://${this.host}:${this.port}${scope.fullPath}`
 
     if (process.env["JWT_SECRET"]) {
       this.secret = new TextEncoder().encode(process.env["JWT_SECRET"])

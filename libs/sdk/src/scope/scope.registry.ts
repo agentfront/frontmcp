@@ -13,6 +13,7 @@ import {FrontMcpConfig} from '../front-mcp/front-mcp.tokens';
 import {normalizeApp} from '../app/app.utils';
 import {normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps} from './scope.utils';
 import {tokenName} from '../utils/token.utils';
+import {Scope} from "./scope.instance";
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
 
@@ -94,7 +95,7 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
       let scope: ScopeEntry;
       switch (rec.kind) {
         case ScopeKind.SPLIT_BY_APP:
-          scope = new rec.provide(rec, this.providers);
+          scope = new Scope(rec, this.providers);
           break;
         case ScopeKind.MULTI_APP:
           scope = new rec.provide(rec, this.providers);

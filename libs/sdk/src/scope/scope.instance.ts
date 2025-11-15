@@ -37,7 +37,7 @@ export class Scope extends ScopeEntry {
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   readonly entryPath: string;
-  readonly routeBase: string = '';
+  readonly routeBase: string;
   readonly orchestrated: boolean = false;
 
   readonly server: FrontMcpServer;
@@ -49,6 +49,13 @@ export class Scope extends ScopeEntry {
     this.globalProviders = globalProviders;
     this.server = this.globalProviders.get(FrontMcpServer);
     this.entryPath = rec.metadata.http?.entryPath ?? '';
+
+    if(rec.kind === 'SPLIT_BY_APP'){
+      this.routeBase = `/${rec.metadata.id}`
+    }else {
+      this.routeBase = '';
+    }
+
     this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders);
     this.ready = this.initialize();
   }
@@ -64,7 +71,7 @@ export class Scope extends ScopeEntry {
 
     this.transportService = new TransportService(this);
 
-    this.scopeAuth = new AuthRegistry(this.scopeProviders, [], {
+    this.scopeAuth = new AuthRegistry(this, this.scopeProviders, [], {
       kind: 'scope',
       id: this.id,
       ref: ScopeEntry,
