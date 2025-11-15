@@ -34,6 +34,11 @@ import {CachePlugin} from "@frontmcp/plugins";
     CreateExpenseTool,
     GetExpenseTool
   ],
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://sample-app.frontegg.com',
+  }
 })
 export default class ExpenseMcpApp {
 }
