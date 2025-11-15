@@ -1,5 +1,4 @@
 import {DynamicPlugin, Plugin, ToolHook, FlowCtxOf} from '@frontmcp/sdk';
-import {z} from 'zod';
 
 declare global {
   interface ExtendFrontMcpToolMetadata {
@@ -21,7 +20,10 @@ export interface SiteAuthorizationPluginOptions {
   description: 'Validates site access and optional admin requirement for site-scoped tools',
 })
 export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthorizationPluginOptions> {
-  constructor(private readonly opts: SiteAuthorizationPluginOptions = { demoAllowAllIfNoClaims: true, siteIdFieldName: 'siteId' }) {
+  constructor(private readonly opts: SiteAuthorizationPluginOptions = {
+    demoAllowAllIfNoClaims: true,
+    siteIdFieldName: 'siteId'
+  }) {
     super();
   }
 
@@ -31,7 +33,14 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
     if (!sites || (Array.isArray(sites) && sites.length === 0)) {
       return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
     }
-    return Array.isArray(sites) ? sites.map(String) : [];
+    if (Array.isArray(sites)) {
+      return sites.map(String);
+    }
+    if (typeof sites === 'string') {
+      return [sites];
+    }
+    return [];
+
   }
 
   private isAdmin(authInfo: any): boolean {
