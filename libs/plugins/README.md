@@ -1,6 +1,6 @@
-# FrontMCP Plugins
+# MCP Gateway — Plugins
 
-Pluggable extensions for FrontMCP live here. Each plugin can contribute **providers**, **hooks**, and optional
+Pluggable extensions for MCP Gateway live here. Each plugin can contribute **providers**, **hooks**, and optional
 **adapters** that extend the platform.
 
 If you want to use a specific plugin, open that plugin’s README for full details. This page serves as an index and a
@@ -15,13 +15,13 @@ contributor guide.
 - [Contributor guide: authoring a plugin](#contributor-guide-authoring-a-plugin)
   - [1) Recommended folder layout](#1-recommended-folder-layout)
   - [2) Export surface (`index.ts`)](#2-export-surface-indexts)
-  - [3) Extend tool metadata](#3-extend-tool-metadata)
+  - [3) Type augmentation for `@McpTool`](#3-type-augmentation-for-mcptool)
   - [4) Implementing the plugin class](#4-implementing-the-plugin-class)
   - [5) Initialization styles (`DynamicPlugin.init`)](#5-initialization-styles-dynamicplugininit)
   - [6) Hooks contributed by plugins](#6-hooks-contributed-by-plugins)
   - [7) Registering your plugin in an app](#7-registering-your-plugin-in-an-app)
   - [8) Documentation checklist](#8-documentation-checklist)
-  - [9) Hook families & roadmap](#9-hook-families--roadmap)
+  - [9) Forward-looking hook families](#9-forward-looking-hook-families)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -41,12 +41,11 @@ contributor guide.
 
 ```ts
 // app.ts
-import { App } from '@frontmcp/sdk';
-import { CachePlugin } from '@frontmcp/plugins';
+import { McpApp } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
 
-@App({
-  id: 'my-app',
-  name: 'My App',
+@McpApp({
+  name: 'my-app',
   plugins: [
     CachePlugin, // or CachePlugin.init({...}) — see below for init styles
   ],
@@ -86,16 +85,16 @@ export { default } from './<your-plugin>.plugin';
 export * from './<your-plugin>.types';
 ```
 
-### 3) Extend tool metadata
+### 3) Type augmentation for `@McpTool`
 
-If your plugin adds tool-level options (e.g., `cache`, `authorization`), augment the ambient
-`ExtendFrontMcpToolMetadata` interface so tool authors get type-safe metadata.
+If your plugin adds tool-level options (e.g., `@McpTool({ myFeature: {...} })`), augment the ambient `ToolMetadata`
+interface so tool authors get type-safe options.
 
 ```ts
 // src/my-feature/my-feature.types.ts
 
 declare global {
-  interface ExtendFrontMcpToolMetadata {
+  interface ToolMetadata {
     /** Enables MyFeature for a tool; `true` uses plugin defaults. */
     myFeature?: MyFeatureToolOptions | true;
   }
@@ -111,23 +110,21 @@ export interface MyFeaturePluginOptions {
 }
 ```
 
-> Why: `declare global` merges into the ambient tool metadata used by `@Tool` / `tool(...)`, so TypeScript validates
-> options wherever tools are defined.
+> Why: `declare global` merges into the ambient `ToolMetadata` used by `@McpTool`, so TypeScript validates options
+> wherever tools are defined.
 
 ### 4) Implementing the plugin class
 
-Plugins are classes decorated with `@Plugin(...)`. For plugins that need configuration and/or generated providers,
+Plugins are classes decorated with `@McpPlugin(...)`. For plugins that need configuration and/or generated providers,
 extend `DynamicPlugin<TOptions>` so you can support both value and factory initialization while contributing dynamic
 providers.
 
 ```ts
 // src/my-feature/my-feature.plugin.ts
-import { Plugin, DynamicPlugin, FlowHooksOf, FlowCtxOf, ProviderType } from '@frontmcp/sdk';
+import { McpPlugin, DynamicPlugin, ToolHook, ToolHookStage, McpProviderType } from '@frontmcp/sdk';
 import { MyFeaturePluginOptions } from './my-feature.types';
 
-const ToolHook = FlowHooksOf('tools:call-tool');
-
-@Plugin({
+@McpPlugin({
   name: 'plugin:my-feature',
   description: 'Does something useful',
   providers: [
@@ -141,8 +138,8 @@ export default class MyFeaturePlugin extends DynamicPlugin<MyFeaturePluginOption
   };
 
   // Contribute providers based on resolved options (runs before instance creation)
-  static override dynamicProviders(options: MyFeaturePluginOptions): readonly ProviderType[] {
-    const providers: ProviderType[] = [];
+  static override dynamicProviders(options: MyFeaturePluginOptions): readonly McpProviderType[] {
+    const providers: McpProviderType[] = [];
     // Decide implementations based on options
     // providers.push({ provide: MyToken, useValue: new MyProvider(options) });
     return providers;
@@ -153,9 +150,9 @@ export default class MyFeaturePlugin extends DynamicPlugin<MyFeaturePluginOption
   }
 
   // Optional: register global tool hooks contributed by the plugin
-  @ToolHook.Will('execute', { priority: 100 })
-  async willExecute(ctx: FlowCtxOf<'tools:call-tool'>) {
-    // Observe/mutate ctx.state.toolContext before tool execution
+  @ToolHook(ToolHookStage.willExecute)
+  async willExecute(ctx: any) {
+    // Observe/mutate ctx.input before tool execution
   }
 }
 ```
@@ -189,46 +186,31 @@ export default class MyFeaturePlugin extends DynamicPlugin<MyFeaturePluginOption
 
 Under the hood (high level):
 
-- Static providers from `@Plugin({ providers: [...] })` are merged first.
+- Static providers from `@McpPlugin({ providers: [...] })` are merged first.
 - In **value**/**factory** styles, the registry evaluates `dynamicProviders(...)` and merges results.
 - Provider tokens are de-duplicated to avoid conflicts.
 
-> Implementation references (repository paths may vary): `libs/sdk/src/common/dynamic/dynamic.plugin.ts` and
-> `libs/sdk/src/plugin/plugin.registry.ts`.
+> Implementation references (repository paths may vary): `../common/src/plugins/dynamic.plugin.ts` and
+> `../core/src/plugin/plugin.registry.ts`.
 
 ### 6) Hooks contributed by plugins
 
-Plugins can register global hooks via `FlowHooksOf(...)`. The SDK exports helpers for the most common flows:
+Plugins can register global tool hooks via `@ToolHook(stage)`. Hooks run for every tool unless filtered by metadata.
+Common stages include (examples; depends on platform version):
 
-```ts
-import { ToolHook, ListToolsHook, HttpHook } from '@frontmcp/sdk';
-
-@ToolHook.Will('validateInput')
-async ensureConstraints(ctx: FlowCtxOf<'tools:call-tool'>) {
-  // ...
-}
-```
-
-Available hook families today include:
-
-- `ToolHook` (`tools:call-tool`) — observe or mutate tool execution.
-- `ListToolsHook` (`tools:list-tools`) — filter/augment the tool catalog during discovery.
-- `HttpHook` (`http:request`) — shape raw inbound HTTP requests before flow execution.
-
-Within each family you can register `Will`, `Stage`, `Did`, or `Around` hooks. Use `FlowCtxOf<'flow-name'>` to access
-typed context/state for that flow.
+- `willReadCache`, `willWriteCache` (see Cache plugin)
+- `willParseInput`, `willValidateInput`, `willExecute`, `didExecute`, `willFinalizeInvoke`
 
 See the cache example hooks in: [`src/cache/cache.plugin.ts`](./src/cache/cache.plugin.ts).
 
 ### 7) Registering your plugin in an app
 
 ```ts
-import { App } from '@frontmcp/sdk';
-import { MyFeaturePlugin } from '@frontmcp/plugins';
+import { McpApp } from '@frontmcp/sdk';
+import MyFeaturePlugin from '@frontmcp/plugins/my-feature';
 
-@App({
-  id: 'my-app',
-  name: 'My App',
+@McpApp({
+  name: 'my-app',
   plugins: [
     MyFeaturePlugin, // or MyFeaturePlugin.init({...})
   ],
@@ -249,11 +231,17 @@ Each plugin must ship a `README.md` that explains:
 
 For a concrete example, see the [Cache Plugin README](./src/cache/README.md).
 
-### 9) Hook families & roadmap
+### 9) Forward-looking hook families
 
-The SDK currently exposes flow hooks for tools (`ToolHook`), tool discovery (`ListToolsHook`), and HTTP requests
-(`HttpHook`). More flows (auth, transports, adapters) will land iteratively. Design plugins so you can adopt new hook
-families by switching to `FlowHooksOf('<future-flow>')` as they ship.
+These hook families are planned. Design plugins with extension points in mind:
+
+- **AppHook** — app bootstrap/shutdown lifecycle.
+- **HttpHook** — inbound/outbound request/response (tracing, auditing, rate limiting, etc.).
+- **AuthHook** — authentication/authorization lifecycle (challenge, success, failure).
+- **AdapterHooks** — participate in adapter initialization/configuration.
+- **IO Hooks** — monitor and optionally block filesystem/native calls (policy/sandbox).
+
+As these land, plugin authors will be able to add `@AppHook`, `@HttpHook`, `@AuthHook`, etc., similarly to `@ToolHook`.
 
 ---
 
