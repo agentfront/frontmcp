@@ -518,7 +518,8 @@ async function upsertPackageJson(
     },
     dependencies: {
       '@frontmcp/sdk': frontmcpLibRange,
-      '@frontmcp/core': frontmcpLibRange,
+      '@frontmcp/plugins': frontmcpLibRange,
+      '@frontmcp/adapters': frontmcpLibRange,
       zod: '^3.23.8',
       'reflect-metadata': '^0.2.2',
     },
@@ -568,7 +569,8 @@ async function upsertPackageJson(
     ...(existing.dependencies || {}),
     ...base.dependencies,
     '@frontmcp/sdk': frontmcpLibRange,
-    '@frontmcp/core': frontmcpLibRange,
+    '@frontmcp/plugins': frontmcpLibRange,
+    '@frontmcp/adapters': frontmcpLibRange,
     zod: '^3.23.8',
     'reflect-metadata': '^0.2.2',
   };

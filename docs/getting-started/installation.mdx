@@ -17,17 +17,17 @@ icon: arrow-down-to-line
 Use the built-in project generator. It **requires** a project name and will create a new folder under your current directory.
 
 <CodeGroup>
-```bash universal
-npx frontmcp create my-app
-````
+    ```bash universal
+    npx frontmcp create my-app
+    ````
 
-```bash pnpm
-pnpm dlx frontmcp create my-app
-```
+    ```bash pnpm
+    pnpm dlx frontmcp create my-app
+    ```
 
-```bash yarn
-yarn dlx frontmcp create my-app
-```
+    ```bash yarn
+    yarn dlx frontmcp create my-app
+    ```
 
 </CodeGroup>
 
@@ -42,11 +42,19 @@ This will:
 
 ## Option B — Add to an existing project
 
-Install the CLI and Node types (FrontMCP bundles compatible `@frontmcp/sdk` and `@frontmcp/core` internally—no separate install needed).
+Install the CLI and Node types (FrontMCP bundles compatible `@frontmcp/sdk` internally—no separate install needed).
 
 <CodeGroup>
-  ```bash npm npm i -D frontmcp @types/node@^20 ``` ```bash pnpm pnpm add -D frontmcp @types/node@^20 ``` ```bash yarn
-  yarn add -D frontmcp @types/node@^20 ```
+    ```bash npm
+    npm i -D frontmcp @types/node@^20
+    ```
+
+    ```bash pnpm
+    pnpm add -D frontmcp @types/node@^20
+    ```
+    ```bash yarn
+    yarn add -D frontmcp @types/node@^20
+    ```
 </CodeGroup>
 
 Then initialize FrontMCP in your project root:
@@ -96,8 +104,8 @@ npm run doctor
 ```
 
 <Info>
-  If anything is missing or misconfigured (Node/npm versions, `tsconfig.json`, scripts), **doctor** will tell you
-  exactly what to fix.
+    If anything is missing or misconfigured (Node/npm versions, `tsconfig.json`, scripts), **doctor** will tell you
+    exactly what to fix.
 </Info>
 
 ---

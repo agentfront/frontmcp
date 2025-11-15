@@ -86,16 +86,8 @@ Choose your package manager:
 
 ```bash
 # npm
-npm i -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
-npm i -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
-
-# yarn
-yarn add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
-yarn add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
-
-# pnpm
-pnpm add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
-pnpm add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
+npm install -s frontmcp @frontmcp/sdk zod reflect-metadata
+npm install -d typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 ```
 
 > Requires **Node 20+**.
@@ -137,7 +129,11 @@ export default class Server {
 import {App} from '@frontmcp/sdk';
 import GreetTool from './tools/greet.tool';
 
-@App({id: 'hello', name: 'Hello', tools: [GreetTool]})
+@App({
+  id: 'hello', 
+  name: 'Hello', 
+  tools: [GreetTool]
+})
 export default class HelloApp {
 }
 ```
@@ -417,8 +413,7 @@ pnpm dev
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core`
-on the **same version** across your workspace.
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/*` on the **same version** across your workspace.
 
 ---
 
