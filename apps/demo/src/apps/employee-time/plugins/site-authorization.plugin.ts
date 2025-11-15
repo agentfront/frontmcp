@@ -36,7 +36,7 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
 
   private isAdmin(authInfo: any): boolean {
     const user = authInfo?.user as any;
-    if (!user) return this.opts.demoAllowAllIfNoClaims ?? false;
+    if (!user) return !!this.opts.demoAllowAllIfNoClaims;
     if (user.isAdmin === true) return true;
     const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
     return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
