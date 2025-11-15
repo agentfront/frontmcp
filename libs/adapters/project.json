@@ -37,7 +37,7 @@
         "build"
       ],
       "options": {
-        "command": "npm publish libs/adapters/dist --access public"
+        "command": "npm publish libs/adapters/dist --access public --registry=https://registry.npmjs.org/"
       }
     }
   }
