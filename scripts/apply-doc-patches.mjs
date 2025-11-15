@@ -67,7 +67,7 @@ async function writeFileSafe(p, content) {
     try {
         if (applied.length > 0) {
             const { spawnSync } = await import("node:child_process");
-            spawnSync("npx", ["prettier", "-w", "docs/**/*.mdx", "docs/**/*.md", "CHANGELOG.md"], { stdio: "inherit" });
+            spawnSync("npx", ["prettier", "-w", "docs/**/*.mdx", "CHANGELOG.md"], { stdio: "inherit" });
         }
     } catch {}
 
