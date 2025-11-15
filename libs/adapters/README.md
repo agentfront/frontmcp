@@ -1,11 +1,14 @@
 # FrontMCP Adapters
 
-This package contains adapters that extend FrontMCP servers with external capabilities by auto-generating, transforming, or delegating MCP tools.
+This package contains adapters that extend FrontMCP servers with external capabilities by auto-generating, transforming,
+or delegating MCP tools.
 
 ## Available adapters
 
 ### OpenAPI Adapter
-Generate MCP tools from an OpenAPI spec. Each operation becomes an MCP tool with strong input validation and automatic request/response handling.
+
+Generate MCP tools from an OpenAPI spec. Each operation becomes an MCP tool with strong input validation and automatic
+request/response handling.
 
 - Code: `libs/adapters/src/openapi`
 - README: `libs/adapters/src/openapi/README.md`
@@ -14,6 +17,7 @@ Generate MCP tools from an OpenAPI spec. Each operation becomes an MCP tool with
 - Generator library: https://www.npmjs.com/package/openapi-mcp-generator
 
 Quick example:
+
 ```ts
 import { OpenapiAdapter } from '@frontmcp/adapters';
 
