@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - "next/**"
+    # 🔥 Prevent loop: if a push only touches docs/** and CHANGELOG.md,
+    # this workflow will NOT run (i.e. when merging the Codex-generated PR).
+    paths-ignore:
+      - "docs/**"
+      - "CHANGELOG.md"
   workflow_dispatch:
 
 permissions:
