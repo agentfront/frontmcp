@@ -86,15 +86,15 @@ Choose your package manager:
 
 ```bash
 # npm
-npm i -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+npm i -E frontmcp @frontmcp/sdk zod reflect-metadata
 npm i -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 
 # yarn
-yarn add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+yarn add -E frontmcp @frontmcp/sdk zod reflect-metadata
 yarn add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 
 # pnpm
-pnpm add -E @frontmcp/sdk @frontmcp/core zod reflect-metadata
+pnpm add -E frontmcp @frontmcp/sdk zod reflect-metadata
 pnpm add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 ```
 
@@ -417,7 +417,7 @@ pnpm dev
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` and `@frontmcp/core`
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk`
 on the **same version** across your workspace.
 
 ---

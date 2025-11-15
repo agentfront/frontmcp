@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - "next/**"
-    # 🔥 Prevent loop: if a push only touches docs/** and CHANGELOG.md,
-    # this workflow will NOT run (i.e. when merging the Codex-generated PR).
+    # Prevent loop: if a push ONLY touches these paths, Codex won't run
     paths-ignore:
       - "docs/**"
       - "CHANGELOG.md"
+      - "libs/**/README.md"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -96,7 +97,7 @@ jobs:
           echo "$VERSION" > .github/codex/prompts/version.txt
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Commit list (for changelog synthesis)
+          # Commit list (for changelog / docs / README synthesis)
           git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
 
           # ISO date
@@ -105,7 +106,7 @@ jobs:
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`) and our root `CHANGELOG.md` for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`), our root `CHANGELOG.md`, and READMEs for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
@@ -114,10 +115,12 @@ jobs:
           - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`     # e.g., 2025-11-13
 
           SCOPE & PATHS
-          - Docs: only files under `docs/` with `.mdx` or `.md` extensions.
+          - Mintlify docs: `docs/**/*.mdx` / `docs/**/*.md`.
           - Release notes page: `docs/updates.mdx` (Mintlify). Insert or update a **new top section** for this release.
           - Changelog: root `CHANGELOG.md` (Keep a Changelog format). Insert a new section for this version/date at the top.
-          - Do NOT touch other files (no config changes).
+          - Root README: `README.md` (repository homepage & npm default readme).
+          - Library READMEs: `libs/**/README.md` (READMEs for libs that may be published to npm).
+          - Do NOT touch other files (no config changes, no code files).
 
           RULES
           - **Release notes (`docs/updates.mdx`)**
@@ -125,12 +128,28 @@ jobs:
             - Summarize notable user-facing changes derived from commits and diff.
             - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
             - Keep MDX valid (frontmatter/imports/components).
+
           - **Changelog (`CHANGELOG.md`)**
             - Follow Keep a Changelog style (Headings: `## [v<version>] - <YYYY-MM-DD>`).
             - Categorize entries using Conventional Commits (feat/fix/docs/perf/refactor/build/ci/chore) and mark **BREAKING CHANGES** clearly.
             - Include terse, imperative bullet points. Avoid internal-only noise.
+
+          - **Root README (`README.md`)**
+            - Reflect the new release where it matters: install commands, quickstart snippets, versioned examples, and top-level feature overview.
+            - Keep content accurate for the whole repo, not just a single lib.
+            - If no meaningful repo-level changes for this release, leave it as-is.
+
+          - **Library READMEs (`libs/**/README.md`)**
+            - Focus on libs that are clearly user-facing or affected by the diff (e.g., their code changed, their package.json version changed, or commits mention them).
+            - For each updated README:
+              - Ensure install instructions are correct (package name, registry, version ranges if relevant).
+              - Update usage examples and API sections to match the current behavior.
+              - Highlight notable changes that impact consumers of that lib.
+            - Keep Markdown valid and simple; avoid large rewrites unless the current content is clearly outdated or misleading.
+
           - General
             - Prefer small, surgical edits. If a new doc is needed, create it under `docs/` with clear frontmatter.
+            - Keep tone consistent with existing docs and READMEs.
             - If no changes are needed, return an empty patch set.
 
           OUTPUT (STRICT)
@@ -139,7 +158,10 @@ jobs:
 
           HINTS
           - Use subjects/bodies in `commits.txt` to infer categories; de-duplicate merges.
-          - If the same content belongs in both `docs/updates.mdx` and `CHANGELOG.md`, adapt tone: docs = narrative highlights; changelog = terse, categorized bullets.
+          - If the same content belongs in multiple places (e.g. `docs/updates.mdx`, `CHANGELOG.md`, and a lib's README), adapt tone:
+            - docs = narrative highlights,
+            - changelog = terse, categorized bullets,
+            - README = practical “how to use this” guidance and install/upgrade notes.
 
           Produce ONLY the JSON per schema.
           MDX
@@ -155,7 +177,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/.+\\.(md|mdx)|CHANGELOG\\.md)$"
+                      "pattern": "^(docs\\/.+\\.(md|mdx)|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -222,21 +244,30 @@ jobs:
             echo "No local branch ${BRANCH}."
           fi
 
-      - name: Create PR with docs & changelog
+      - name: Create PR with docs & changelog & READMEs
         if: ${{ steps.apply.outputs.changed == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
           branch: docs/codex/v${{ steps.ctx.outputs.version }}
           base: ${{ github.ref_name }}
-          title: "docs: release notes & changelog for v${{ steps.ctx.outputs.version }} (Codex)"
-          commit-message: "docs(codex): update Mintlify release notes & CHANGELOG [auto]"
+          title: "docs: release notes, changelog & READMEs for v${{ steps.ctx.outputs.version }} (Codex)"
+          commit-message: "docs(codex): update Mintlify docs, CHANGELOG & READMEs [auto]"
           labels: "documentation, automated, codex, release-notes"
           add-paths: |
             docs/**
             CHANGELOG.md
+            README.md
+            libs/**/README.md
           delete-branch: true
           body: |
-            Codex proposed updates to **docs/updates.mdx** and **CHANGELOG.md** for `v${{ steps.ctx.outputs.version }}` (branch `${{ github.ref_name }}`).
+            Codex proposed updates to:
+            - **docs/updates.mdx** (Mintlify release notes)
+            - **CHANGELOG.md**
+            - **README.md** (root)
+            - **libs/**/README.md** (affected publishable libs)
+
+            for `v${{ steps.ctx.outputs.version }}` on branch `${{ github.ref_name }}`.
+
             See `.codex-docs/apply.log` for validation details.
 
       - name: Upload artifacts (debug)

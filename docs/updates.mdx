@@ -5,29 +5,6 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
-    <Card
-        title="FrontMCP 0.3.0: Stage-aware hooks & release automation"
-        href="https://github.com/agentfront/frontmcp/releases/tag/v0.3.0"
-        cta="Read the release notes"
-    >
-        FrontMCP 0.3.0 lets you wire policy and telemetry straight into flow stages while tightening publish automation.
-
-        **Features**
-        - Compose Will, Stage, Did, and Around hooks with `FlowHooksOf(...)` across `tools:call-tool`, `tools:list-tools`, and `http:request` pipelines, so plugins can prioritize policy, telemetry, and instrumentation per stage.
-
-        **Fixes**
-        - JSON bodies routed through the OpenAPI adapter are now stringified before dispatch, preventing `[object Object]` payloads in downstream services.
-
-        **Docs**
-        - Added a guide on customizing flow stages with hooks to help teams share instrumentation patterns.
-
-        **Build/CI**
-        - Introduced Codex-powered workflows that open docs/changelog PRs and harden release-branch publishing from `next/*`.
-    </Card>
-
-</Update>
-
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."

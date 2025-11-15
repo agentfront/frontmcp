@@ -167,6 +167,16 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # -------------------------------
+      # 4.5) Configure git user for tagging
+      # -------------------------------
+      - name: Configure git user
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+
+      # -------------------------------
       # 5) Tag that commit (not just current HEAD somewhere else)
       # -------------------------------
       - name: Create and push git tag if missing
