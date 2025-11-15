@@ -1,3 +1,24 @@
+## [v0.3.0] - 2025-11-15
+
+### feat
+
+- Expose `FlowHooksOf(...)` helpers so custom hooks can target Will/Did/Around stages across HTTP, transport, auth, and
+  tool flows.
+- Ship the Cache plugin with memory and Redis stores plus per-tool TTL and sliding-window refresh controls.
+
+### fix
+
+- Stringify JSON request bodies before issuing OpenAPI adapter requests so downstream APIs receive valid
+  `application/json`.
+
+### docs
+
+- Document flow hook customization and cache configuration in the Mintlify guides and plugin references.
+
+### build
+
+- Force the npm registry URL and run publish workflows through the dedicated script to stabilize releases.
+
 ## 0.2.5 (2025-11-06)
 
 This was a version bump only, there were no code changes.
