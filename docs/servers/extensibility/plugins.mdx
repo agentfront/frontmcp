@@ -15,10 +15,10 @@ import { Plugin } from '@frontmcp/sdk';
 @Plugin({
   name: 'Cache Plugin',
   description: 'Adds transparent response caching for tools/resources',
-  providers: [CacheProvider],          // plugin-scoped providers
-  exports: [CacheProvider],            // re-export to host app
-  adapters: [SpecNormalizerAdapter],   // optionally attach adapters
-  tools: [WarmCacheTool],              // and tools/resources/prompts if desired
+  providers: [CacheProvider], // plugin-scoped providers
+  exports: [CacheProvider], // re-export to host app
+  adapters: [SpecNormalizerAdapter], // optionally attach adapters
+  tools: [WarmCacheTool], // and tools/resources/prompts if desired
   resources: [],
   prompts: [],
 })
@@ -26,6 +26,7 @@ export default class CachePlugin {}
 ```
 
 Attach a plugin at app scope:
+
 ```ts
 @App({
   name: 'Billing',
@@ -35,15 +36,16 @@ export default class BillingApp {}
 ```
 
 ### What plugins can do
+
 - Register **providers** (and **export** them to the host app)
 - Contribute **adapters**, **tools**, **resources**, **prompts**
-- Participate in lifecycle via **hooks** (see *Advanced → Hooks*)
+- Participate in lifecycle via **hooks** (see _Advanced → Hooks_)
 
 ### Composition
+
 Plugins compose **depth-first** at the app level. Later plugins can depend on providers exported by earlier ones.
 
 <Tip>
-    Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
-    behavior without boilerplate.
+  Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
+  behavior without boilerplate.
 </Tip>
-

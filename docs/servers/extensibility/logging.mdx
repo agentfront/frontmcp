@@ -40,7 +40,7 @@ export interface LogRecord {
 export type LogFn = (msg?: any, ...args: any[]) => void;
 
 export abstract class LogTransportInterface {
-  abstract log(rec: LogRecord): void
+  abstract log(rec: LogRecord): void;
 }
 ```
 
@@ -55,7 +55,7 @@ The default console transport formats messages with ANSI (when TTY) and falls ba
 ```ts
 @LogTransport({
   name: 'ConsoleLogger',
-  description: 'Default console logger'
+  description: 'Default console logger',
 })
 export class ConsoleLogTransportInstance extends LogTransportInterface {
   log(rec: LogRecord): void {
@@ -84,8 +84,8 @@ export class StructuredJsonTransport extends LogTransportInterface {
     try {
       const payload = {
         ts: rec.timestamp.toISOString(),
-        level: rec.levelName,           // e.g. INFO
-        levelValue: rec.level,          // numeric
+        level: rec.levelName, // e.g. INFO
+        levelValue: rec.level, // numeric
         prefix: rec.prefix || undefined,
         msg: stringify(rec.message),
         args: rec.args?.map(stringify),
@@ -125,7 +125,7 @@ import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
 
 @LogTransport({
   name: 'HttpBatchTransport',
-  description: 'POST logs in batches'
+  description: 'POST logs in batches',
 })
 export class HttpBatchTransport extends LogTransportInterface {
   private queue: any[] = [];
@@ -134,7 +134,9 @@ export class HttpBatchTransport extends LogTransportInterface {
   private readonly maxBatch = 50;
   private readonly flushMs = 1000;
 
-  constructor(private endpoint = process.env.LOG_ENDPOINT || 'https://logs.example.com/ingest') { super(); }
+  constructor(private endpoint = process.env.LOG_ENDPOINT || 'https://logs.example.com/ingest') {
+    super();
+  }
 
   log(rec: LogRecord): void {
     this.queue.push({
@@ -164,13 +166,13 @@ function safeArgs(a: unknown[]) {
 
 Notes:
 
-* Keep batches small and time‑bounded; avoid blocking the event loop.
-* On process exit, you may add a `beforeExit`/`SIGTERM` handler to flush synchronously.
+- Keep batches small and time‑bounded; avoid blocking the event loop.
+- On process exit, you may add a `beforeExit`/`SIGTERM` handler to flush synchronously.
 
 ## Prefixes and levels
 
-* `logging.prefix` adds a static scope tag to all records (e.g., app name or environment).
-* Transports receive `rec.level` and `rec.levelName`; the framework already filtered below‑level logs.
+- `logging.prefix` adds a static scope tag to all records (e.g., app name or environment).
+- Transports receive `rec.level` and `rec.levelName`; the framework already filtered below‑level logs.
 
 ```ts
 logging: {
@@ -182,8 +184,8 @@ logging: {
 
 ## Best practices
 
-* Never throw from `log()`; swallow and self‑heal.
-* Avoid heavy sync I/O; prefer buffering and async flush.
-* Redact sensitive fields before emit (tokens, PII).
-* Serialize `Error` objects explicitly (name, message, stack).
-* Apply backpressure: if the sink is down, drop or sample rather than blocking the server.
+- Never throw from `log()`; swallow and self‑heal.
+- Avoid heavy sync I/O; prefer buffering and async flush.
+- Redact sensitive fields before emit (tokens, PII).
+- Serialize `Error` objects explicitly (name, message, stack).
+- Apply backpressure: if the sink is down, drop or sample rather than blocking the server.
