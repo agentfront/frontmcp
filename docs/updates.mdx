@@ -5,6 +5,30 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.3.0: Hooks everywhere, cache what matters."
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.3.0"
+        cta="Read the release notes"
+    >
+        Flow-level hooks now ship with typed Will/Stage/Did/Around helpers, and the Cache plugin can short-circuit repeat tool calls with memory or Redis stores—plus steadier releases out of the box.
+
+        #### Features
+        - Attach Will/Stage/Did/Around hooks across HTTP, transport, auth, and tool flows with the new <code>FlowHooksOf(...)</code> helper, including priority ordering and filters.
+        - Ship the Cache plugin to short-circuit repeat tool calls with memory or Redis stores, per-tool TTLs, and sliding-window refresh.
+
+        #### Fixes
+        - Stringify JSON request bodies before dispatching OpenAPI adapter calls so downstream APIs receive valid payloads.
+
+        #### Docs
+        - Added guides on customizing flow stages and using the cache plugin, and refreshed plugin references.
+
+        #### Build/CI
+        - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."

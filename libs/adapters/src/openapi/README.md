@@ -100,8 +100,8 @@ OpenapiAdapter.init({
 
 - The adapter reads the OpenAPI spec and uses `openapi-mcp-generator` to produce a list of tool definitions.
 - Each tool gets an input schema derived from the spec (validated via Zod at runtime).
-- At execution time, the adapter composes the request URL, applies query/path/header params, attaches a body when
-  needed, and returns parsed JSON if available.
+- At execution time, the adapter composes the request URL, applies query/path/header params, stringifies JSON bodies
+  when needed, and returns parsed JSON if available.
 
 ## Links
 
