@@ -26,6 +26,7 @@ export default class BillingOpenApiAdapter {
 ```
 
 Register the adapter on an app:
+
 ```ts
 @App({
   name: 'Billing',
@@ -35,9 +36,11 @@ export default class BillingApp {}
 ```
 
 ### Behavior
+
 - Generated items inherit the **app’s plugins, providers, and policies** and are tagged with provenance.
 - Adapters can contribute **tools**, **resources**, and **prompts** simultaneously.
 
 <Tip>
-    Keep adapters **pure**: read a spec or source, generate components, and let app-level plugins handle cross-cutting concerns like auth, rate limiting, or caching.
+  Keep adapters **pure**: read a spec or source, generate components, and let app-level plugins handle cross-cutting
+  concerns like auth, rate limiting, or caching.
 </Tip>
