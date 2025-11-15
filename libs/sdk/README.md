@@ -86,8 +86,8 @@ Choose your package manager:
 
 ```bash
 # npm
-npm install -s frontmcp @frontmcp/sdk zod reflect-metadata
-npm install -d typescript tsx @types/node rimraf @modelcontextprotocol/inspector
+npm install -S frontmcp @frontmcp/sdk zod reflect-metadata
+npm install -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
 ```
 
 > Requires **Node 20+**.
