@@ -4,16 +4,16 @@
 
 ### Purpose
 
-Provides **transparent response caching** for tools based on their input payloads — reducing redundant computation and
+Provides **transparent response caching** for tools based on their input payloads  reducing redundant computation and
 improving response time.
 
 ### Storage
 
-Uses **Redis** as the backing store, managed by the plugin’s own providers.
+Uses **Redis** as the backing store, managed by the plugins own providers.
 
 ### Keying
 
-Cache entries are keyed using a **deterministic hash** of each tool’s input (`ctx.input`).
+Cache entries are keyed using a **deterministic hash** of each tools input (`ctx.input`).
 
 ### Lifecycle Hooks
 
@@ -22,7 +22,7 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
 
 ---
 
-## 🔄 How It Works
+## 904 How It Works
 
 1. Before a tool executes, the plugin computes a **stable hash** of `ctx.input` and checks Redis for a cached entry.
 2. On a **cache hit**, the cached output is returned immediately, and a flag
@@ -38,10 +38,10 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
 
 ---
 
-## ⚙️ Requirements
+## 699e0f Requirements
 
 - A running **Redis** instance accessible to your server.
-- No extra setup — the plugin registers its own providers:
+- No extra setup  the plugin registers its own providers:
 
   - `CacheRedisProvider`
   - `CacheConfigProvider`
@@ -50,9 +50,9 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
 
 ---
 
-## 🧩 Registering the Plugin
+## 9e9 Registering the Plugin
 
-Assume your app class is decorated with `@McpApp` and exposes a `plugins` array.
+Assume your app class is decorated with `@App` and exposes a `plugins` array.
 
 ### 1. Default Configuration (1-day TTL)
 
@@ -89,9 +89,9 @@ plugins: [
 
 ---
 
-## 🧠 Tool-Level Configuration
+## 9e0 Tool-Level Configuration
 
-Caching is **opt-in** per tool. Add the `cache` field in your tool’s metadata.
+Caching is **opt-in** per tool. Add the `cache` field in your tools metadata.
 
 ### Minimal Example
 
@@ -118,18 +118,18 @@ Uses plugin defaults.
 
 ---
 
-## ⚖️ Behavior Details
+## 696e0f Behavior Details
 
 | Behavior           | Description                                                            |
 | ------------------ | ---------------------------------------------------------------------- |
 | **Key Derivation** | Deterministic hash from `ctx.input`. Changing input changes cache key. |
 | **Cache Hits**     | Adds `___cached__: true` to the output (for observability only).       |
-| **Default TTL**    | Plugin defaultTTL → falls back to `86400` seconds (1 day).             |
+| **Default TTL**    | Plugin defaultTTL  falls back to `86400` seconds (1 day).              |
 | **Sliding Window** | Extends TTL on reads when `slideWindow` is true.                       |
 
 ---
 
-## 🧹 Invalidation Strategies
+## 9f9 Invalidation Strategies
 
 | Strategy                | Use When                   | Notes                                         |
 | ----------------------- | -------------------------- | --------------------------------------------- |
@@ -139,7 +139,7 @@ Uses plugin defaults.
 
 ---
 
-## 🧩 Troubleshooting
+## 9e9 Troubleshooting
 
 | Symptom                     | Possible Cause                                   | Fix                                                          |
 | --------------------------- | ------------------------------------------------ | ------------------------------------------------------------ |
@@ -149,7 +149,7 @@ Uses plugin defaults.
 
 ---
 
-## 🧾 Reference
+## 9fe Reference
 
 ### Plugin Options (registration)
 

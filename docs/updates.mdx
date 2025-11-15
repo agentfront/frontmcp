@@ -5,32 +5,57 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.3.0: Typed hooks, caching, unified CLI"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.3.0"
+        cta="Read the release notes"
+    >
+        FrontMCP 0.3.0 unifies the runtime around a single SDK, adds typed flow hooks across tool and HTTP flows, and ships a built-in cache plugin plus hardened automation.
+
+        #### Breaking changes
+        - **Import from `@frontmcp/sdk`**: the deprecated `@frontmcp/core` package is removed; update any remaining imports to `@frontmcp/sdk`.
+
+        #### Features
+        - 99d **Typed flow hooks**: use `ToolHook`, `ListToolsHook`, and `HttpHook` helpers for Will/Stage/Did/Around hooks across each flow.
+        - 9e0 **Cache plugin**: register `CachePlugin` for Redis or in-memory caching scoped by tool metadata.
+        - ae0fe0f **frontmcp CLI**: run `frontmcp dev`, `build`, `init`, `doctor`, `inspector`, and `create` directly from the published CLI in this repo.
+
+        #### Fixes
+        - 4e1 **OpenAPI adapter**: JSON request bodies are stringified before fetch, preventing malformed payloads.
+
+        #### Build & CI
+        -  Hardened release workflows for branch creation, publishing, and Codex documentation updates.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
-        title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
+        title="FrontMCP 0.2.0: Create. Inspect. Dev faster."
         href="https://github.com/agentfront/frontmcp/releases/tag/v0.2.0"
         cta="Read the release notes"
     >
         FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,
         smarter
-        config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
+        config checks, and ergonomic tool schemas plus a **dev-only no-auth mode** for quick local testing.
 
-        - 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
+        - 9ea **Dev-only no-auth**: run without auth *in development mode only*.
         Example: <code>frontmcp dev --no-auth</code>
-        - 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
+        - 680 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
         scripts, and starter files.
-        - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
-        - 🔭 **Inspector, zero setup**: <code>frontmcp
+        - 527 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
+        - 52d **Inspector, zero setup**: <code>frontmcp
         inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
-        - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-        - ✨ **Tool schema ergonomics**: pass Zod fields directly
+        - 97a **Doctor**: validates Node 0 22, npm 0 10, entry detection, and configuration.
+        - 31f **Tool schema ergonomics**: pass Zod fields directly
         (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
-        - ⚡ **Async type checks in dev**: background type-checking while watching files.
-        - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
+        - 6a1 **Async type checks in dev**: background type-checking while watching files.
+        - 4e6 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
         builds to <code>./dist</code> (override with <code>--out-dir</code>).
-        - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
+        - 4e1 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
         session-aware SSE.
-        - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
+        - 4dd **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
 
         <Warning>
             The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
@@ -51,10 +76,10 @@ mode: 'center'
         and first-class <strong>adapters/plugins</strong> so you can ship production MCP servers with minimal
         boilerplate.
 
-        - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
-        - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
+        - 699e0f <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
+        - 9e9 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
         capabilities like caching.
-        - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
+        - 99d <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
 

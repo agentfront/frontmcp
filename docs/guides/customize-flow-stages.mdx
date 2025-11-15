@@ -7,30 +7,39 @@ Hook into lifecycle stages to enforce policy, add telemetry, or transform IO.
 
 Concepts
 
-- Flows are named pipelines with stages; hooks run at specific stages.
-- Kinds: Will (before), Stage (in-place), Did (after), Around (wrap).
-- Priority orders execution; higher runs earlier for Will/Stage; Did runs in reverse.
+- Flows are named pipelines with stages; hook helpers expose typed `Will`, `Stage`, `Did`, and `Around` variants.
+- Use `FlowHooksOf('flow:name')` to target a specific flow like `tools:call-tool`, `tools:list-tools`, or `http:request`.
+- Priority orders execution; higher runs earlier for Will/Stage, Did runs in reverse.
 
-Example (pseudocode)
+Example
 
-```
- const Tool = FlowHooksOf('tool.execute');
+```ts
+import { FlowCtxOf, FlowHooksOf } from '@frontmcp/sdk';
 
- class MyHooks {
-   @Tool.Will('validate', { priority: 100 })
-   requireFields(ctx) {
-     // if (!ctx.input.amount) throw new Error('amount required');
-   }
+const ToolHook = FlowHooksOf('tools:call-tool');
 
-   @Tool.Did('execute')
-   redact(ctx) {
-     // ctx.result = redactSensitive(ctx.result);
-   }
- }
+class MyHooks {
+  @ToolHook.Will('validateInput', { priority: 100 })
+  requireFields(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // if (!ctx.state.required.toolContext?.input.amount) throw new Error('amount required');
+  }
+
+  @ToolHook.Did('execute')
+  redact(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // ctx.state.required.toolContext.output = redact(ctx.state.required.toolContext.output);
+  }
+
+  @ToolHook.Around('execute')
+  async trace(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
+    const start = Date.now();
+    await next();
+    ctx.logger.info({ latency: Date.now() - start }, 'tool executed');
+  }
+}
 ```
 
 Tips
 
 - Contribute hooks from a Plugin to reuse across apps.
-- Use context to pass data between stages in the same flow.
-- See servers/flows and servers/hooks for more details.
+- Use the provided context to share data between stages in the same flow.
+- `FlowHooksOf` works for any registered flow; create your own via `FlowHooksOf('http:request')` or custom names.
