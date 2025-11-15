@@ -42,24 +42,47 @@ jobs:
           git config user.name "agentfront[bot]"
           git config user.email "agentfront[bot]@users.noreply.github.com"
 
+      # 🔢 Compute next semver strictly from root package.json + bump input
       - name: Compute next semver from root package.json
         id: next
         shell: bash
         run: |
           set -euo pipefail
-          BUMP="${{ inputs.bump }}"
-          NEXT=$(node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const parts = String(pkg.version || '0.0.0').trim().split('.').map(Number);
-            const [M, m, p] = [parts[0]||0, parts[1]||0, parts[2]||0];
-            const b = process.env.BUMP;
-            let [x, y, z] = [M, m, p];
-            if (b === 'major') { x++; y = 0; z = 0; }
-            else if (b === 'minor') { y++; z = 0; }
-            else { z++; }
-            process.stdout.write([x, y, z].join('.'));
-          ")
+
+          # Run node with BUMP provided as env var
+          NEXT=$(BUMP="${{ inputs.bump }}" node - << 'EOF'
+          const fs = require('fs');
+
+          const bump = (process.env.BUMP || 'patch').trim();
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const raw = String(pkg.version || '0.0.0').trim();
+
+          const parts = raw.split('.').map((n) => {
+            const v = Number.parseInt(n, 10);
+            return Number.isFinite(v) ? v : 0;
+          });
+
+          let [M, m, p] = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+
+          if (bump === 'major') {
+            M += 1;
+            m = 0;
+            p = 0;
+          } else if (bump === 'minor') {
+            m += 1;
+            p = 0;
+          } else {
+            // default: patch
+            p += 1;
+          }
+
+          const next = [M, m, p].join('.');
+          process.stdout.write(next);
+          EOF
+          )
+
+          echo "Next version: $NEXT"
           echo "value=$NEXT" >> "$GITHUB_OUTPUT"
 
       - name: Create branch next/${{ steps.next.outputs.value }} from base
@@ -69,31 +92,59 @@ jobs:
           set -euo pipefail
           BASE="main"   # or ${{ github.event.repository.default_branch }} if you want it dynamic
           NEXT="${{ steps.next.outputs.value }}"
+
           git fetch origin "$BASE" --tags
           git switch -c "next/$NEXT" "origin/$BASE"
+
+          echo "Created branch next/$NEXT from $BASE"
           echo "name=next/$NEXT" >> "$GITHUB_OUTPUT"
 
-      - name: Version packages with Nx (makes the commit)
+      # Let Nx update versions INSIDE this branch (no tags pushed from this workflow)
+      - name: Version packages with Nx (makes or stages changes)
         shell: bash
         run: |
           set -euo pipefail
           BUMP="${{ inputs.bump }}"
-          # If there are no tags yet, tell Nx it's the first release so it resolves current version from disk.
+
+          # If there are no existing semver tags, hint Nx this is the first release
           if git tag --list | grep -qE '^[v]?[0-9]+\.[0-9]+\.[0-9]+$'; then
             FIRST=""
           else
             FIRST="--first-release"
           fi
+
+          echo "Running: yarn nx release version --specifier \"$BUMP\" $FIRST --verbose"
           yarn nx release version --specifier "$BUMP" $FIRST --verbose
 
-      - name: Push branch (and tags)
+          echo "Nx version step completed for bump: $BUMP"
+
+      # ✅ Ensure the branch has at least one commit different from main
+      - name: Ensure release branch has a commit
         shell: bash
         run: |
           set -euo pipefail
           NEXT="${{ steps.next.outputs.value }}"
-          git push --set-upstream origin "next/$NEXT" --follow-tags
 
-      # 🔥 NEW: open PR main <- next/{semver} with title v{semver}
+          # If Nx left changes unstaged/uncommitted, commit them.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Detected uncommitted changes; creating release commit..."
+            git add -A
+            git commit -m "chore(release): start v$NEXT"
+          else
+            echo "No file changes to commit (Nx may have already committed)."
+            echo "Creating an empty release marker commit to ensure branch differs from base..."
+            git commit --allow-empty -m "chore(release): start v$NEXT"
+          fi
+
+      # 🚫 Push ONLY the branch, NOT tags – tags will be created & pushed by the publish workflow on merge
+      - name: Push branch (no tags)
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.next.outputs.value }}"
+          git push --set-upstream origin "next/$NEXT"
+
+      # Open PR main <- next/{semver} with title v{semver}
       - name: Open PR for next/${{ steps.next.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
