@@ -1,11 +1,10 @@
 import {App} from '@frontmcp/sdk';
 
 import {ExpenseConfigProvider,} from './provders';
-// import {CachePlugin} from '@frontmcp/plugins';
 import {OpenapiAdapter} from "@frontmcp/adapters";
 import CreateExpenseTool from './tools/create-expense.tool';
 import GetExpenseTool from './tools/get-expense-fun.tool';
-import {AddTool} from "./tools/add.tool";
+import AddTool from "./tools/add.tool";
 import AuthorizationPlugin from "./plugins/authorization.plugin";
 import {CachePlugin} from "@frontmcp/plugins";
 

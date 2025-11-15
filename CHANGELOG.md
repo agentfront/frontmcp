@@ -1,23 +1,3 @@
-## [v0.3.0] - 2025-11-15
-
-### feat
-
-- Add stage-aware `FlowHooksOf(...)` helpers so you can orchestrate Will/Stage/Did/Around instrumentation across tool
-  and HTTP flows.
-
-### fix
-
-- Stringify OpenAPI adapter request bodies before issuing non-GET calls so remote APIs receive JSON payloads.
-
-### docs
-
-- Document hook-driven flow-stage customization in the Mintlify guide.
-
-### ci
-
-- Automate Mintlify doc and changelog sync on `next/*` release branches.
-- Harden release branch creation and publish workflows to keep the release train unblocked.
-
 ## 0.2.5 (2025-11-06)
 
 This was a version bump only, there were no code changes.
