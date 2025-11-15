@@ -42,44 +42,45 @@ jobs:
           git config user.name "agentfront[bot]"
           git config user.email "agentfront[bot]@users.noreply.github.com"
 
-      # 🔢 Compute next semver strictly from root package.json and bump input
+      # 🔢 Compute next semver strictly from root package.json + bump input
       - name: Compute next semver from root package.json
         id: next
         shell: bash
         run: |
           set -euo pipefail
 
-          NEXT=$(node -e "
-            const fs = require('fs');
+          # Run node with BUMP provided as env var
+          NEXT=$(BUMP="${{ inputs.bump }}" node - << 'EOF'
+          const fs = require('fs');
 
-            // bump type is passed as argv[1]
-            const bump = (process.argv[1] || 'patch').trim();
+          const bump = (process.env.BUMP || 'patch').trim();
 
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const raw = String(pkg.version || '0.0.0').trim();
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const raw = String(pkg.version || '0.0.0').trim();
 
-            const parts = raw.split('.').map((n) => {
-              const v = Number.parseInt(n, 10);
-              return Number.isFinite(v) ? v : 0;
-            });
+          const parts = raw.split('.').map((n) => {
+            const v = Number.parseInt(n, 10);
+            return Number.isFinite(v) ? v : 0;
+          });
 
-            let [M, m, p] = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+          let [M, m, p] = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 
-            if (bump === 'major') {
-              M += 1;
-              m = 0;
-              p = 0;
-            } else if (bump === 'minor') {
-              m += 1;
-              p = 0;
-            } else {
-              // default: patch
-              p += 1;
-            }
+          if (bump === 'major') {
+            M += 1;
+            m = 0;
+            p = 0;
+          } else if (bump === 'minor') {
+            m += 1;
+            p = 0;
+          } else {
+            // default: patch
+            p += 1;
+          }
 
-            const next = [M, m, p].join('.');
-            process.stdout.write(next);
-          " "${{ inputs.bump }}")
+          const next = [M, m, p].join('.');
+          process.stdout.write(next);
+          EOF
+          )
 
           echo "Next version: $NEXT"
           echo "value=$NEXT" >> "$GITHUB_OUTPUT"
@@ -99,7 +100,7 @@ jobs:
           echo "name=next/$NEXT" >> "$GITHUB_OUTPUT"
 
       # Let Nx update versions INSIDE this branch (no tags pushed from this workflow)
-      - name: Version packages with Nx (makes the commit)
+      - name: Version packages with Nx (makes or stages changes)
         shell: bash
         run: |
           set -euo pipefail
@@ -117,14 +118,30 @@ jobs:
 
           echo "Nx version step completed for bump: $BUMP"
 
-      # 🚫 Push ONLY the branch, NOT tags
-      - name: Push branch (no tags)
+      # ✅ Ensure the branch has at least one commit different from main
+      - name: Ensure release branch has a commit
         shell: bash
         run: |
           set -euo pipefail
           NEXT="${{ steps.next.outputs.value }}"
 
-          # Push the new release branch; do NOT push tags here
+          # If Nx left changes unstaged/uncommitted, commit them.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Detected uncommitted changes; creating release commit..."
+            git add -A
+            git commit -m "chore(release): start v$NEXT"
+          else
+            echo "No file changes to commit (Nx may have already committed)."
+            echo "Creating an empty release marker commit to ensure branch differs from base..."
+            git commit --allow-empty -m "chore(release): start v$NEXT"
+          fi
+
+      # 🚫 Push ONLY the branch, NOT tags – tags will be created & pushed by the publish workflow on merge
+      - name: Push branch (no tags)
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.next.outputs.value }}"
           git push --set-upstream origin "next/$NEXT"
 
       # Open PR main <- next/{semver} with title v{semver}
