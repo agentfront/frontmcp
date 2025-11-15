@@ -5,6 +5,29 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.3.0: Flow hooks, caching, and CLI polish"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.3.0"
+        cta="Read the release notes"
+    >
+        #### Features
+        - 🎛️ **Typed flow hooks**: extend tool, list, and HTTP flows with `FlowHooksOf` + `FlowCtxOf` for will/did/around stages.
+        - 🧠 **Cache plugin**: ship Redis or in-memory caching for tool responses with per-tool TTL and sliding windows.
+        - 🛠️ **frontmcp CLI**: scaffold projects and run `dev`, `build`, `init`, `doctor`, and `create` from one binary.
+
+        #### Fixes
+        - 🧾 **OpenAPI adapter**: JSON request bodies are now stringified correctly before hitting upstream APIs.
+
+        #### Docs
+        - 📚 **New guides**: learn flow customization, caching strategies, and OpenAPI adapter setup in the Mintlify docs.
+
+        #### Build/CI
+        - 🏗️ **Release workflows**: hardened publish automation and Codex doc patching to keep 0.3.x releases green.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
