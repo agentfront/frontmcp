@@ -4,7 +4,8 @@
 
 ### Purpose
 
-Provides **transparent response caching** for tools based on their input payloads — reducing redundant computation and improving response time.
+Provides **transparent response caching** for tools based on their input payloads — reducing redundant computation and
+improving response time.
 
 ### Storage
 
@@ -16,8 +17,8 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
 
 ### Lifecycle Hooks
 
-* **Before execution:** Reads from cache (`willReadCache`).
-* **After execution:** Writes new responses to cache (`willWriteCache`).
+- **Before execution:** Reads from cache (`willReadCache`).
+- **After execution:** Writes new responses to cache (`willWriteCache`).
 
 ---
 
@@ -31,6 +32,7 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
    ```
 
    is added to the response (useful for debugging).
+
 3. If no cached entry exists, the tool runs normally, and the output is stored in Redis with a **TTL (time-to-live)**.
 4. When `slideWindow` is enabled, each read **refreshes the TTL**.
 
@@ -38,12 +40,13 @@ Cache entries are keyed using a **deterministic hash** of each tool’s input (`
 
 ## ⚙️ Requirements
 
-* A running **Redis** instance accessible to your server.
-* No extra setup — the plugin registers its own providers:
+- A running **Redis** instance accessible to your server.
+- No extra setup — the plugin registers its own providers:
 
-  * `CacheRedisProvider`
-  * `CacheConfigProvider`
-* Only enable caching for **deterministic** tools (outputs that depend solely on inputs).
+  - `CacheRedisProvider`
+  - `CacheConfigProvider`
+
+- Only enable caching for **deterministic** tools (outputs that depend solely on inputs).
 
 ---
 
@@ -54,9 +57,7 @@ Assume your app class is decorated with `@McpApp` and exposes a `plugins` array.
 ### 1. Default Configuration (1-day TTL)
 
 ```ts
-plugins: [
-  CachePlugin,
-]
+plugins: [CachePlugin];
 ```
 
 ### 2. Custom Default TTL (in seconds)
@@ -68,7 +69,7 @@ plugins: [
   CachePlugin.init({
     defaultTTL: 300, // 5 minutes
   }),
-]
+];
 ```
 
 ### 3. Dynamic Configuration via Factory
@@ -83,7 +84,7 @@ plugins: [
       defaultTTL: config.get<number>('cache.defaultTTL'),
     }),
   }),
-]
+];
 ```
 
 ---
@@ -162,4 +163,3 @@ Uses plugin defaults.
 | ------------- | --------- | ------------------------ |
 | `ttl`         | `number`  | Custom TTL for this tool |
 | `slideWindow` | `boolean` | Refresh TTL on reads     |
-

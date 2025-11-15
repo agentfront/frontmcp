@@ -4,7 +4,7 @@
 
 <strong>The TypeScript-first way to build production-grade MCP servers.</strong>
 
-*Made with ❤️ for TypeScript developers*
+_Made with ❤️ for TypeScript developers_
 
 [![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg?v=2)](https://www.npmjs.com/package/@frontmcp/sdk)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?logo=node.js&logoColor=white)](https://nodejs.org)
@@ -20,18 +20,17 @@ session/auth, and execution flow.
 
 ```ts
 // src/main.ts
-import {FrontMcp, LogLevel} from '@frontmcp/sdk';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
-  info: {name: 'Demo 🚀', version: '0.1.0'},
+  info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [HelloApp],
-  http: {port: 3001},
-  logging: {level: LogLevel.Info},
+  http: { port: 3001 },
+  logging: { level: LogLevel.Info },
 })
-export default class Server {
-}
-````
+export default class Server {}
+```
 
 ---
 
@@ -42,27 +41,27 @@ export default class Server {
 - [Why FrontMCP?](#why-frontmcp)
 - [Installation](#installation)
 - [Quickstart](#quickstart)
-    - [Minimal Server & App](#minimal-server--app)
-    - [Function and Class Tools](#function-and-class-tools)
-    - [Scripts & tsconfig](#scripts--tsconfig)
-    - [MCP Inspector](#mcp-inspector)
+  - [Minimal Server & App](#minimal-server--app)
+  - [Function and Class Tools](#function-and-class-tools)
+  - [Scripts & tsconfig](#scripts--tsconfig)
+  - [MCP Inspector](#mcp-inspector)
 - [Core Concepts](#core-concepts)
-    - [Servers](#servers)
-    - [Apps](#apps)
-    - [Tools](#tools)
-    - [Resources](#resources)
-    - [Prompts](#prompts)
-    - [Providers](#providers)
-    - [Adapters](#adapters)
-    - [Plugins](#plugins)
+  - [Servers](#servers)
+  - [Apps](#apps)
+  - [Tools](#tools)
+  - [Resources](#resources)
+  - [Prompts](#prompts)
+  - [Providers](#providers)
+  - [Adapters](#adapters)
+  - [Plugins](#plugins)
 - [Authentication](#authentication)
-    - [Remote OAuth](#remote-oauth)
-    - [Local OAuth](#local-oauth)
+  - [Remote OAuth](#remote-oauth)
+  - [Local OAuth](#local-oauth)
 - [Sessions & Transport](#sessions--transport)
 - [Logging Transports](#logging-transports)
 - [Deployment](#deployment)
-    - [Local Dev](#local-dev)
-    - [Production](#production)
+  - [Local Dev](#local-dev)
+  - [Production](#production)
 - [Version Alignment](#version-alignment)
 - [Contributing](#contributing)
 - [License](#license)
@@ -71,12 +70,12 @@ export default class Server {
 
 ## Why FrontMCP?
 
-* **TypeScript-native DX** — decorators, Zod validation, strong typing end-to-end
-* **Spec-aligned transports** — Streamable HTTP (GET/POST), streaming, sessions
-* **Scoped invoker + DI** — secure, composable execution with hooks
-* **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
-* **Auth** — remote OAuth (external IdP) or built-in local OAuth
-* **Logging** — pluggable log transports (console, JSONL, HTTP batch, …)
+- **TypeScript-native DX** — decorators, Zod validation, strong typing end-to-end
+- **Spec-aligned transports** — Streamable HTTP (GET/POST), streaming, sessions
+- **Scoped invoker + DI** — secure, composable execution with hooks
+- **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
+- **Auth** — remote OAuth (external IdP) or built-in local OAuth
+- **Logging** — pluggable log transports (console, JSONL, HTTP batch, …)
 
 ---
 
@@ -110,32 +109,30 @@ src/
 
 ```ts
 import 'reflect-metadata';
-import {FrontMcp, LogLevel} from '@frontmcp/sdk';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
-  info: {name: 'Hello MCP', version: '0.1.0'},
+  info: { name: 'Hello MCP', version: '0.1.0' },
   apps: [HelloApp],
-  http: {port: Number(process.env.PORT) || 3001},
-  logging: {level: LogLevel.Info},
+  http: { port: Number(process.env.PORT) || 3001 },
+  logging: { level: LogLevel.Info },
 })
-export default class Server {
-}
+export default class Server {}
 ```
 
 **`src/hello.app.ts`**
 
 ```ts
-import {App} from '@frontmcp/sdk';
+import { App } from '@frontmcp/sdk';
 import GreetTool from './tools/greet.tool';
 
 @App({
-  id: 'hello', 
-  name: 'Hello', 
-  tools: [GreetTool]
+  id: 'hello',
+  name: 'Hello',
+  tools: [GreetTool],
 })
-export default class HelloApp {
-}
+export default class HelloApp {}
 ```
 
 ### Function and Class Tools
@@ -143,29 +140,29 @@ export default class HelloApp {
 **Function tool**
 
 ```ts
-import {tool} from '@frontmcp/sdk';
-import {z} from 'zod';
+import { tool } from '@frontmcp/sdk';
+import { z } from 'zod';
 
 export default tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: z.object({name: z.string()}),
-})(({name}) => `Hello, ${name}!`);
+  inputSchema: z.object({ name: z.string() }),
+})(({ name }) => `Hello, ${name}!`);
 ```
 
 **Class tool**
 
 ```ts
-import {Tool} from '@frontmcp/sdk';
-import {z} from 'zod';
+import { Tool } from '@frontmcp/sdk';
+import { z } from 'zod';
 
 @Tool({
   name: 'add',
   description: 'Add two numbers',
-  inputSchema: z.object({a: z.number(), b: z.number()}),
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
 })
 export default class AddTool {
-  execute({a, b}: { a: number; b: number }) {
+  execute({ a, b }: { a: number; b: number }) {
     return a + b;
   }
 }
@@ -180,9 +177,7 @@ export default class AddTool {
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "lib": [
-      "ES2020"
-    ],
+    "lib": ["ES2020"],
     "rootDir": "src",
     "outDir": "dist",
     "moduleResolution": "Node",
@@ -195,13 +190,8 @@ export default class AddTool {
     "emitDecoratorMetadata": true,
     "sourceMap": true
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "**/*.test.ts",
-    "**/__tests__/**"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/__tests__/**"]
 }
 ```
 
@@ -214,11 +204,7 @@ export default class AddTool {
     "declaration": true,
     "sourceMap": false
   },
-  "exclude": [
-    "**/*.test.ts",
-    "**/__tests__/**",
-    "src/**/*.dev.ts"
-  ]
+  "exclude": ["**/*.test.ts", "**/__tests__/**", "src/**/*.dev.ts"]
 }
 ```
 
@@ -300,7 +286,7 @@ You can configure auth on the server (multi-app shared) or per app (isolated sco
 
 ```ts
 auth: {
-  type: 'remote', 
+  type: 'remote',
   name: 'frontegg',
   baseUrl: 'https://idp.example.com',
   dcrEnabled ? : boolean,
@@ -325,7 +311,7 @@ auth: {
 {
 auth: {
   type: 'local',
-  id: 'local', 
+  id: 'local',
   name: 'Local Auth',
   scopes?: string[],
   grantTypes?: ('authorization_code' | 'refresh_token')[],
@@ -351,9 +337,9 @@ session: {
 }
 ```
 
-* **Stateful**: server-side store for tokens; enables refresh; recommended for short-lived upstream tokens.
-* **Stateless**: tokens embedded in JWT; simpler but no silent refresh.
-* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups).
+- **Stateful**: server-side store for tokens; enables refresh; recommended for short-lived upstream tokens.
+- **Stateless**: tokens embedded in JWT; simpler but no silent refresh.
+- **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups).
 
 ---
 
@@ -362,21 +348,22 @@ session: {
 Add custom log sinks via `@LogTransport`:
 
 ```ts
-import {LogTransport, LogTransportInterface, LogRecord} from '@frontmcp/sdk';
+import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
 
-@LogTransport({name: 'StructuredJson', description: 'JSONL to stdout'})
+@LogTransport({ name: 'StructuredJson', description: 'JSONL to stdout' })
 export class StructuredJsonTransport extends LogTransportInterface {
   log(rec: LogRecord): void {
     try {
-      process.stdout.write(JSON.stringify({
-        ts: rec.timestamp.toISOString(),
-        level: rec.levelName,
-        msg: String(rec.message),
-        prefix: rec.prefix || undefined,
-        args: (rec.args || []).map(String),
-      }) + '\n');
-    } catch {
-    }
+      process.stdout.write(
+        JSON.stringify({
+          ts: rec.timestamp.toISOString(),
+          level: rec.levelName,
+          msg: String(rec.message),
+          prefix: rec.prefix || undefined,
+          args: (rec.args || []).map(String),
+        }) + '\n',
+      );
+    } catch {}
   }
 }
 ```
@@ -385,8 +372,8 @@ Register:
 
 ```ts
 logging: {
-  level: LogLevel.Info, 
-  enableConsole: false, 
+  level: LogLevel.Info,
+  enableConsole: false,
   transports : [StructuredJsonTransport],
 }
 ```
@@ -406,14 +393,15 @@ yarn dev
 pnpm dev
 ```
 
-* HTTP default: `http.port` (e.g., 3001)
-* `http.entryPath` defaults to `''` (set to `/mcp` if you prefer)
+- HTTP default: `http.port` (e.g., 3001)
+- `http.entryPath` defaults to `''` (set to `/mcp` if you prefer)
 
 ---
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/*` on the **same version** across your workspace.
+If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/*` on the **same version**
+across your workspace.
 
 ---
 
@@ -421,13 +409,12 @@ If versions drift, the runtime may throw a "version mismatch" error at boot. Kee
 
 PRs welcome! Please:
 
-* Keep changes focused and tested
-* Run `typecheck`, `build`, and try **MCP Inspector** locally
-* Align `@frontmcp/*` versions in examples
+- Keep changes focused and tested
+- Run `typecheck`, `build`, and try **MCP Inspector** locally
+- Align `@frontmcp/*` versions in examples
 
 ---
 
 ## License
 
 See [LICENSE](./LICENSE).
-
