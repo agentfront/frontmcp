@@ -1,3 +1,27 @@
+## [v0.3.0] - 2025-11-15
+
+### Breaking Changes
+
+- **BREAKING** Drop `@frontmcp/core`; import runtime APIs from `@frontmcp/sdk` and install the `frontmcp` CLI package.
+- **BREAKING** Migrate plugin hooks to Flow Hooks (`ToolHook.Will/Did/Around`) instead of enum-based stages.
+
+### feat
+
+- Ship the `frontmcp` CLI with create/init/dev/build/doctor/inspector commands and Nx-driven automation.
+- Expose `FlowHooksOf` helpers plus `ToolHook`, `ListToolsHook`, and `HttpHook` exports for typed lifecycle hooks.
+
+### fix
+
+- Stringify JSON request bodies before executing OpenAPI adapter requests to remote APIs.
+
+### docs
+
+- Update installation and quickstart docs to reference the CLI and unified SDK package.
+
+### ci
+
+- Add GitHub workflows to automate docs patching, release branching, and publishing from `next/*` merges.
+
 ## 0.2.5 (2025-11-06)
 
 This was a version bump only, there were no code changes.

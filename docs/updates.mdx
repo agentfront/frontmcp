@@ -5,6 +5,35 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
+    <Card
+        title="FrontMCP 0.3.0: Unified SDK, CLI-first workflows"
+        href="https://github.com/agentfront/frontmcp/releases/tag/v0.3.0"
+        cta="Read the release notes"
+    >
+        FrontMCP 0.3.0 consolidates the runtime into a single SDK, adds the project-aware CLI, and ships typed flow
+        hooks alongside targeted fixes.
+
+        **Breaking changes**
+        - **BREAKING** Drop <code>@frontmcp/core</code>; install <code>frontmcp</code> and import runtime APIs from <code>@frontmcp/sdk</code>.
+        - **BREAKING** Migrate plugin hooks to Flow Hooks (<code>Will</code>/<code>Stage</code>/<code>Did</code>/<code>Around</code>) instead of enum-based <code>@ToolHook</code> stages.
+
+        **Features**
+        - Ship the <code>frontmcp</code> CLI with <code>create</code>, <code>init</code>, <code>dev</code>, <code>build</code>, <code>doctor</code>, and <code>inspector</code> commands.
+        - Expose <code>FlowHooksOf</code> helpers plus <code>ToolHook</code>, <code>ListToolsHook</code>, and <code>HttpHook</code> shortcuts for typed lifecycle hooks.
+
+        **Fixes**
+        - Stringify JSON request bodies before executing OpenAPI adapter requests so upstream APIs receive valid payloads.
+
+        **Docs**
+        - Refresh installation and quickstart guides to highlight the CLI and single-package setup.
+
+        **Build/CI**
+        - Add GitHub workflows to auto-draft docs/changelog PRs, create <code>next/&lt;semver&gt;</code> release branches, and publish packages once they merge.
+    </Card>
+
+</Update>
+
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
