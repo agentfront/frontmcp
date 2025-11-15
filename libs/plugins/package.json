@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "FrontMCP plugins to extend the SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -33,6 +33,6 @@
   },
   "dependencies": {
     "tslib": "^2.3.0",
-    "@frontmcp/sdk": "^0.2.5"
+    "@frontmcp/sdk": "^0.3.0"
   }
 }
