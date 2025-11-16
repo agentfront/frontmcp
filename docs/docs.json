@@ -32,7 +32,7 @@
   "navbar": {
     "links": [
       {
-        "href": "https://github.com/agentfront/frontmcp-examples",
+        "href": "https://github.com/agentfront/frontmcp/tree/main/apps/demo",
         "icon": "github",
         "label": "Examples"
       }
@@ -53,7 +53,6 @@
       }
     }
   },
-
   "navigation": {
     "dropdowns": [
       {
@@ -269,12 +268,21 @@
       {
         "dropdown": "Blog",
         "icon": "blog",
-        "groups": [{
-          "group": "November 2025",
-          "pages": [
-            "blog/november-2025/introducing-frontmcp"
-          ]
-        }]
+        "groups": [
+          {
+            "group": "General",
+            "pages": [
+              "blog/index",
+              "blog/external-links"
+            ]
+          },
+          {
+            "group": "November 2025",
+            "pages": [
+              "blog/11-2025/introducing-frontmcp"
+            ]
+          }
+        ]
       }
     ]
   }

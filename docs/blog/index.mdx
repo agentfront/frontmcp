@@ -1,0 +1,29 @@
+---
+title: Blog
+description: Updates, features and explore the world of MCP and FrontMCP framework.
+slug: /blog
+icon: rss
+sidebarTitle: Recent Posts
+mode: frame
+---
+import {BlogCard} from "/snippets/card.jsx";
+
+<div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '2rem 1rem'
+}}>
+    <BlogCard author="David Antoon"
+              date="September 4, 2025"
+              title="Introducing FrontMCP"
+              email="david@frontegg.com"
+              link="/blog/11-2025/introducing-frontmcp"
+              img="../images/banner.dark.png">
+        The TypeScript-first framework for building production-grade MCP servers with decorators, DI, and
+        Streamable HTTP.
+        <br/>
+        If you’ve tried wiring up the Model Context Protocol (MCP) by hand, you already know the drill or define JSON
+        schemas manually, hand-roll HTTP endpoints, keep auth, sessions, logging and transports consistent across tools
+    </BlogCard>
+</div>
