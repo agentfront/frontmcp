@@ -43,18 +43,19 @@ export default class HelloApp {}
 
 ```ts
 // src/tools/greet.tool.ts
-import { tool } from '@frontmcp/sdk';
+import { Tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-export default tool({
+@Tool({
   name: 'greet',
   description: 'Greets a user by name',
   inputSchema: { name: z.string() },
-})(async ({ name }) => {
-  return {
-    result: `Hello, ${name}!`,
-  };
-});
+})
+export default class GreetTool {
+  async execute({ name }: { name: string }) {
+    return `Hello, ${name}!`;
+  }
+}
 ```
 
 ## 4) Run it

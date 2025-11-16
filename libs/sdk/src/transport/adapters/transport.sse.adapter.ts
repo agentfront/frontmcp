@@ -14,7 +14,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
   override createTransport(sessionId: string, res: ServerResponse): SSEServerTransport {
     this.sessionId = sessionId;
     this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
-    const transport = new SSEServerTransport('/message', res, {
+    const scopePath = this.scope.fullPath;
+    const transport = new SSEServerTransport(`${scopePath}/message`, res, {
       sessionId: sessionId,
     });
     transport.onerror = (error) => {

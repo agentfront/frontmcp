@@ -2,6 +2,11 @@
 reviews:
   profile: chill
   high_level_summary: true
+  path_instructions:
+    - path: "apps/demo/**"
+      instructions: "apps/demo directory contains demo application to testing purposes, can be used for sdk usages examples"
+    - path: "docs/**"
+      instructions: "Contains documentation for sdk, using mdx format and hosted by mintlify"
   path_filters:
     - "!**/dist/**"
     - "!**/build/**"

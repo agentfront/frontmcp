@@ -1,4 +1,4 @@
-import { Type } from '../interfaces';
+import {Token, Type} from '../interfaces';
 import { AppScopeMetadata, MultiAppScopeMetadata } from '../metadata';
 import { ScopeEntry } from '../entries';
 
@@ -9,7 +9,7 @@ export enum ScopeKind {
 
 export type SplitByAppScope = {
   kind: ScopeKind.SPLIT_BY_APP;
-  provide: Type<ScopeEntry>;
+  provide: Token;
   metadata: AppScopeMetadata;
 };
 

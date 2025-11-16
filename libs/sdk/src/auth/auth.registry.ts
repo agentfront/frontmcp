@@ -7,7 +7,7 @@ import {
   FrontMcpAuth,
   AuthProviderType,
   Token, AuthProviderEntry, AuthRegistryInterface, AuthProviderRecord, AuthProviderKind, EntryOwnerRef,
-  PrimaryAuthRecord,
+  PrimaryAuthRecord, ScopeEntry,
 } from '../common';
 import {authDiscoveryDeps, normalizeAuth} from './auth.utils';
 import {tokenName} from '../utils/token.utils';
@@ -17,12 +17,12 @@ import {LocalPrimaryAuth} from './instances/instance.local-primary-auth';
 export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProviderRecord, AuthProviderType[]> implements AuthRegistryInterface {
   private readonly primary?: FrontMcpAuth;
 
-  constructor(providers: ProviderRegistry, metadata: AuthProviderType[], owner: EntryOwnerRef, primary?: AuthOptions) {
+  constructor(scope: ScopeEntry, providers: ProviderRegistry, metadata: AuthProviderType[], owner: EntryOwnerRef, primary?: AuthOptions) {
     super('AuthRegistry', providers, metadata, false);
 
     let primaryRecord: PrimaryAuthRecord;
     if (primary) {
-      this.primary = primary.type === 'remote' ? new RemotePrimaryAuth(providers, primary) : new LocalPrimaryAuth(providers, primary);
+      this.primary = primary.type === 'remote' ? new RemotePrimaryAuth(scope,providers, primary) : new LocalPrimaryAuth(scope,providers, primary);
       primaryRecord = {
         kind: AuthProviderKind.PRIMARY,
         provide: FrontMcpAuth,
@@ -31,7 +31,7 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
       }
     } else {
       const defaultMetadata: AuthOptions = {type: 'local', id: 'local', name: 'default-auth', allowAnonymous: true}
-      this.primary = new LocalPrimaryAuth(providers, defaultMetadata);
+      this.primary = new LocalPrimaryAuth(scope,providers, defaultMetadata);
       primaryRecord = {
         kind: AuthProviderKind.PRIMARY,
         provide: FrontMcpAuth,

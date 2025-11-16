@@ -1,4 +1,4 @@
-import {FrontMcpAuth, ProviderScope, RemoteAuthOptions, ServerRequest} from '../../common';
+import {FrontMcpAuth, ProviderScope, RemoteAuthOptions, ScopeEntry, ServerRequest} from '../../common';
 import {URL} from 'url';
 import ProviderRegistry from '../../provider/provider.registry';
 import {JwksService} from '../jwks';
@@ -13,7 +13,7 @@ export class RemotePrimaryAuth extends FrontMcpAuth<RemoteAuthOptions> {
   override ready: Promise<void>;
   private jwks = new JwksService();
 
-  constructor(private readonly providers: ProviderRegistry, options: RemoteAuthOptions) {
+  constructor(private readonly scope: ScopeEntry, private readonly providers: ProviderRegistry, options: RemoteAuthOptions) {
     super(options);
     this.ready = this.initialize();
   }

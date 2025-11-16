@@ -30,15 +30,17 @@ export function normalizeAppScope(appItem: AppType, metadata: FrontMcpMultiAppCo
   if (metadata.splitByApp === true && appMetadata.standalone === 'includeInParent') {
     throw new Error('standalone: includeInParent is not supported for splitByApp scope');
   }
+  const scopeId = appMetadata.id ?? appMetadata.name
+  const token:Token<AppType> = Symbol(scopeId)
   return {
     kind: ScopeKind.SPLIT_BY_APP,
-    provide: Scope,
+    provide: token,
     metadata: {
       ...metadata,
-      id: appMetadata.id ?? appMetadata.name,
+      id:scopeId,
       apps: [appItem],
-      auth: appMetadata.auth
-    } as any as AppScopeMetadata,
+      auth: appMetadata.auth,
+    } as AppScopeMetadata,
   };
 }
 
@@ -62,6 +64,6 @@ export function scopeDiscoveryDeps(rec: ScopeRecord): Token[] {
     case ScopeKind.MULTI_APP:
       return depsOfClass(rec.provide, 'discovery').slice(1);
     case ScopeKind.SPLIT_BY_APP:
-      return depsOfClass(rec.provide, 'discovery').slice(1);
+      return [] // no deps for splitByApp scope;
   }
 }

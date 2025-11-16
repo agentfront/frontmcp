@@ -9,12 +9,19 @@ import {
   Token, FlowInputOf, FlowOutputOf, Type, FlowType, FrontMcpLogger, ToolRegistryInterface, HookRegistryInterface,
 } from '../interfaces';
 import {FlowName, ScopeMetadata} from '../metadata';
+import {normalizeEntryPrefix, normalizeScopeBase} from "../../auth/path.utils";
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;
   abstract readonly entryPath: string;
   abstract readonly routeBase: string;
   abstract readonly logger: FrontMcpLogger;
+
+  get fullPath(): string {
+    const prefix = normalizeEntryPrefix(this.entryPath ?? '');
+    const scope = normalizeScopeBase(this.routeBase ?? '');
+    return `${prefix}${scope}`;
+  }
 
   abstract get auth(): FrontMcpAuth;
 
