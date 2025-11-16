@@ -15,9 +15,6 @@
     max-width: 100%;
 }
 
-.blog-card .blog-by {
-}
-
 .blog-card [data-component-part="card-image"] {
     width: 320px;
     margin: 16px 0 16px 16px;
