@@ -1,0 +1,37 @@
+---
+title: Remote OAuth — Proxy
+slug: servers/authentication/remote-proxy
+icon: share
+---
+
+Some IdPs don’t support **Dynamic Client Registration (DCR)**. FrontMCP can front them with a **local OAuth proxy** that:
+
+1) Exposes OAuth endpoints locally under your server/app scope.
+2) Registers a client using your provided `clientId` (or derives one via function).
+3) Issues/validates tokens while exchanging with the upstream IdP.
+
+### Configure
+```ts
+@FrontMcp({
+  info: { name: 'Suite', version: '1.0.0' },
+  apps: [SalesApp],
+  auth: {
+    type: 'remote',
+    name: 'legacy-idp',
+    baseUrl: 'https://legacy-idp.example.com',
+    dcrEnabled: false,
+    clientId: 'my-preprovisioned-client',
+    consent: true,
+  },
+})
+export default class Server {}
+```
+
+<Info>
+    At runtime, the local proxy maintains client registration and keys while delegating user authentication to the upstream IdP.
+</Info>
+
+---
+
+## Endpoint overrides
+If your IdP requires custom endpoints or static keys, set `authEndpoint`, `tokenEndpoint`, `registrationEndpoint`, `userInfoEndpoint`, `jwks`, or `jwksUri` directly.

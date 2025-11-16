@@ -1,0 +1,108 @@
+---
+title: OpenAPI Adapter
+slug: adapters/openapi-adapter
+sidebarTitle: OpenAPI
+description: Generate MCP tools directly from an OpenAPI spec and call them with strong validation.
+icon: puzzle-piece
+---
+
+The OpenAPI Adapter turns an OpenAPI 3 spec into ready-to-use MCP tools. Each operation in your spec becomes a tool with a Zod-validated input schema and automatic request/response handling.
+
+## Why use it
+- Zero boilerplate to expose REST APIs as tools
+- Runtime validation with Zod (derived from operation params/body)
+- Handles path/query/header params, bodies, and JSON parsing
+- Simple hooks to inject auth headers or shape the body
+
+## Quick start
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP app',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      // Provide either 'url' (string) or 'spec' (OpenAPIV3.Document)
+      url: process.env.OPENAPI_SPEC_URL!,
+      baseUrl: process.env.API_BASE_URL!,
+    })
+  ],
+})
+export default class ExpenseMcpApp {}
+```
+
+This mirrors the example in `apps/demo/src/apps/expenses/index.ts`.
+
+## Options
+Required
+- `name: string` — Identifier for this adapter instance; disambiguates tools when multiple adapters are present.
+- `baseUrl: string` — Base URL for requests (e.g., `process.env.API_BASE_URL`).
+- One of:
+  - `url: string` — Path or URL to the OpenAPI document (local file or remote).
+  - `spec: OpenAPIV3.Document` — An in-memory OpenAPI document.
+
+Common optional fields
+- `additionalHeaders?: Record<string, string>` — Static headers applied to every request.
+- `headersMapper?: (authInfo: AuthInfo, headers: Headers) => Headers` — Map authenticated session data to headers (e.g., `Authorization`, tenant IDs).
+- `bodyMapper?: (authInfo: AuthInfo, body: any) => any` — Transform/augment the request body before sending.
+- `inputSchemaMapper?: (inputSchema: any) => any` — Transform the generated input schema (hide/fill fields, etc.).
+- OpenAPI tool generation controls (passed to `openapi-mcp-generator`):
+- `filterFn?: (op) => boolean`
+- `defaultInclude?: boolean`
+- `excludeOperationIds?: string[]`
+
+## Authentication examples
+Static API key header
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  additionalHeaders: { 'x-api-key': process.env.MY_API_KEY! }
+});
+```
+
+Derive headers from the authenticated context
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  headersMapper: (authInfo, headers) => {
+    if (authInfo.token) headers.set('authorization', `Bearer ${authInfo.token}`);
+    return headers;
+  },
+});
+```
+
+## Filtering which operations become tools
+Only generate tools for specific operations using `filterFn` or exclude by id with `excludeOperationIds`.
+```ts
+OpenapiAdapter.init({
+  name: 'billing',
+  url: 'https://my.api/openapi.json',
+  baseUrl: 'https://my.api',
+  filterFn: (op) => op.path.startsWith('/invoices') || op.operationId === 'getCustomer',
+  excludeOperationIds: ['deprecatedEndpoint'],
+});
+```
+
+## How requests and responses are handled
+- Path params are interpolated into the template (e.g., `/users/{id}`)
+- Query params and headers are taken from validated inputs
+- For non-GET/HEAD/OPTIONS methods, a request body is sent when defined
+- Responses with `content-type: application/json` are parsed to objects; otherwise raw text is returned
+
+## Tips
+- Combine with app-level plugins (logging, caching, metrics) to enhance generated tools.
+- You can attach multiple OpenAPI adapters to one app; set unique `name` values to avoid tool id conflicts.
+- Use `inputSchemaMapper` to hide sensitive fields from the tool interface while still supplying them server-side.
+
+## Links
+- Demo app: `apps/demo/src/apps/expenses/index.ts`
+- Spec used by the demo: https://frontmcp-test.proxy.beeceptor.com/openapi.json
+- Generator library: https://www.npmjs.com/package/openapi-mcp-generator
+- Source code: `libs/adapters/src/openapi`

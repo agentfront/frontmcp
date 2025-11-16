@@ -1,0 +1,189 @@
+---
+title: Logging Transports
+sidebarTitle: Logging
+slug: servers/extensibility/logging
+icon: receipt
+description: Create and register custom log transports for FrontMCP.
+---
+
+FrontMCP logging is extensible. In addition to the default console logger, you can register one or more custom transports via the server config.
+
+## Register a transport
+
+```ts
+@FrontMcp({
+  info: { name: 'Demo', version: '0.1.0' },
+  apps: [App],
+  logging: {
+    level: LogLevel.Info,
+    enableConsole: true, // set false to disable the built‑in console transport
+    transports: [StructuredJsonTransport, HttpBatchTransport],
+  },
+})
+export default class Server {}
+```
+
+## Transport contract
+
+A transport is a class decorated with `@LogTransport({...})` that implements `LogTransportInterface`.
+
+```ts
+export interface LogRecord {
+  level: LogLevel;
+  levelName: string;
+  message: string;
+  args: unknown[];
+  timestamp: Date;
+  prefix: string;
+}
+
+export type LogFn = (msg?: any, ...args: any[]) => void;
+
+export abstract class LogTransportInterface {
+  abstract log(rec: LogRecord): void
+}
+```
+
+The framework filters by the configured `logging.level` before calling transports.
+
+> Transports should never throw. Handle errors internally and keep I/O non‑blocking (use buffering/batching for remote sinks).
+
+## Built‑in: Console
+
+The default console transport formats messages with ANSI (when TTY) and falls back to plain text otherwise.
+
+```ts
+@LogTransport({
+  name: 'ConsoleLogger',
+  description: 'Default console logger'
+})
+export class ConsoleLogTransportInstance extends LogTransportInterface {
+  log(rec: LogRecord): void {
+    const fn = this.bind(rec.level, rec.prefix);
+    fn(String(rec.message), ...rec.args);
+  }
+  // ...see source for details
+}
+```
+
+Disable it by setting `enableConsole: false` in your server config.
+
+## Example: Structured JSON (JSONL)
+
+Emit machine‑readable logs (one JSON per line). Useful for file shipping agents or centralized logging.
+
+```ts
+import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
+
+@LogTransport({
+  name: 'StructuredJsonTransport',
+  description: 'Writes JSONL log records to stdout',
+})
+export class StructuredJsonTransport extends LogTransportInterface {
+  log(rec: LogRecord): void {
+    try {
+      const payload = {
+        ts: rec.timestamp.toISOString(),
+        level: rec.levelName,           // e.g. INFO
+        levelValue: rec.level,          // numeric
+        prefix: rec.prefix || undefined,
+        msg: stringify(rec.message),
+        args: rec.args?.map(stringify),
+      };
+      // Avoid console formatting; write raw line
+      process.stdout.write(JSON.stringify(payload) + '\n');
+    } catch (err) {
+      // Never throw from a transport
+    }
+  }
+}
+
+function stringify(x: unknown) {
+  if (x instanceof Error) {
+    return { name: x.name, message: x.message, stack: x.stack };
+  }
+  try {
+    return typeof x === 'string' ? x : JSON.parse(JSON.stringify(x));
+  } catch {
+    return String(x);
+  }
+}
+```
+
+Register it:
+
+```ts
+logging: { level: LogLevel.Info, enableConsole: false, transports: [StructuredJsonTransport] }
+```
+
+## Example: HTTP batch transport (non‑blocking)
+
+Buffer records in memory and POST them in batches. Implements basic retry with backoff.
+
+```ts
+import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
+
+@LogTransport({
+  name: 'HttpBatchTransport',
+  description: 'POST logs in batches'
+})
+export class HttpBatchTransport extends LogTransportInterface {
+  private queue: any[] = [];
+  private timer: NodeJS.Timeout | null = null;
+  private flushing = false;
+  private readonly maxBatch = 50;
+  private readonly flushMs = 1000;
+
+  constructor(private endpoint = process.env.LOG_ENDPOINT || 'https://logs.example.com/ingest') { super(); }
+
+  log(rec: LogRecord): void {
+    this.queue.push({
+      ts: rec.timestamp.toISOString(),
+      lvl: rec.levelName,
+      pfx: rec.prefix || undefined,
+      msg: String(rec.message),
+      args: safeArgs(rec.args),
+    });
+    if (this.queue.length >= this.maxBatch) this.flush();
+    else if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs);
+  }
+
+  private async flush() {
+    // TODO: Implement batch flush logic
+    // - Extract batch from queue
+    // - POST to this.endpoint
+    // - Handle errors and implement retry with backoff
+    // - Reset flushing flag and timer
+  }
+}
+
+function safeArgs(a: unknown[]) {
+  return (a || []).map((x) => (x instanceof Error ? { name: x.name, message: x.message, stack: x.stack } : x));
+}
+```
+
+Notes:
+
+* Keep batches small and time‑bounded; avoid blocking the event loop.
+* On process exit, you may add a `beforeExit`/`SIGTERM` handler to flush synchronously.
+
+## Prefixes and levels
+
+* `logging.prefix` adds a static scope tag to all records (e.g., app name or environment).
+* Transports receive `rec.level` and `rec.levelName`; the framework already filtered below‑level logs.
+
+```ts
+logging: {
+  level: LogLevel.Warn,
+  prefix: 'billing‑edge',
+  transports: [StructuredJsonTransport]
+}
+```
+
+## Best practices
+
+* Never throw from `log()`; swallow and self‑heal.
+* Avoid heavy sync I/O; prefer buffering and async flush.
+* Redact sensitive fields before emit (tokens, PII).
+* Serialize `Error` objects explicitly (name, message, stack).
+* Apply backpressure: if the sink is down, drop or sample rather than blocking the server.
