@@ -89,7 +89,7 @@ export default class Server {}
 
 ## Installation
 
-**Prereqs:** Node.js ≥ 22, npm ≥ 10. ([AgentFront][1])
+**Prereqs:** Node.js ≥ 22, npm ≥ 10. ([Installation - FrontMCP][1])
 
 ### Option A — New project (recommended)
 
@@ -97,7 +97,7 @@ export default class Server {}
 npx frontmcp create my-app
 ```
 
-This scaffolds a FrontMCP project, writes a modern ESM `tsconfig.json` for decorators, adds helpful package scripts, and installs required dev deps. ([AgentFront][1])
+This scaffolds a FrontMCP project, writes a modern ESM `tsconfig.json` for decorators, adds helpful package scripts, and installs required dev deps. ([Installation - FrontMCP][1])
 
 ### Option B — Add to an existing project
 
@@ -106,7 +106,7 @@ npm i -D frontmcp @types/node@^20
 npx frontmcp init
 ```
 
-`init` adds scripts, verifies your `tsconfig.json`, and checks layout. No need to install `@frontmcp/sdk` directly—the CLI bundles a compatible SDK for you. ([AgentFront][1])
+`init` adds scripts, verifies your `tsconfig.json`, and checks layout. No need to install `@frontmcp/sdk` directly—the CLI bundles a compatible SDK for you. ([Installation - FrontMCP][1])
 
 ---
 
@@ -150,7 +150,7 @@ export default class HelloApp {}
 
 ### Function and Class Tools
 
-> New ergonomic schemas: pass **Zod fields directly** (no `z.object({...})`). ([AgentFront][4])
+> New ergonomic schemas: pass **Zod fields directly** (no `z.object({...})`). ([Tools - FrontMCP][4])
 
 **Function tool**
 
@@ -198,7 +198,7 @@ After `create` or `init`, you’ll have:
 }
 ```
 
-These map to dev watch, production build, zero‑setup Inspector launch, and environment checks. ([AgentFront][1])
+These map to dev watch, production build, zero‑setup Inspector launch, and environment checks. ([Installation - FrontMCP][1])
 
 **Recommended `tsconfig.json` (ESM + decorators)**
 
@@ -224,7 +224,7 @@ These map to dev watch, production build, zero‑setup Inspector launch, and env
 }
 ```
 
-This mirrors what `init` writes for you. ([AgentFront][3])
+This mirrors what `init` writes for you. ([Local Dev Server - FrontMCP][3])
 
 **Optional `tsconfig.build.json`**
 
@@ -247,7 +247,7 @@ Run a browser UI to exercise tools and messages:
 npm run inspect
 ```
 
-This launches the MCP Inspector; point it at your local server (e.g., `http://localhost:3000`). ([AgentFront][3])
+This launches the MCP Inspector; point it at your local server (e.g., `http://localhost:3000`). ([Local Dev Server - FrontMCP][3])
 
 ---
 
@@ -255,33 +255,33 @@ This launches the MCP Inspector; point it at your local server (e.g., `http://lo
 
 ### Servers
 
-`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it minimal or scale up with providers and plugins. ([AgentFront][5])
+`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it minimal or scale up with providers and plugins. ([The FrontMCP Server - FrontMCP][5])
 
 ### Apps
 
-Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With `splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([AgentFront][6])
+Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With `splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([Apps - FrontMCP][6])
 
 ### Tools
 
-Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for `inputSchema`. ([AgentFront][4])
+Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for `inputSchema`. ([Tools - FrontMCP][4])
 
 ### Resources
 
-Readable data by URI or RFC6570 template (see `@Resource` / `@ResourceTemplate`). ([AgentFront][7])
+Readable data by URI or RFC6570 template (see `@Resource` / `@ResourceTemplate`). ([Resources - FrontMCP][7])
 
 ### Prompts
 
-Reusable templates returning MCP `GetPromptResult`, with typed arguments. ([AgentFront][8])
+Reusable templates returning MCP `GetPromptResult`, with typed arguments. ([Prompts - FrontMCP][8])
 
 ### Providers / Adapters / Plugins
 
-Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([AgentFront][9])
+Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([Add OpenAPI Adapter - FrontMCP][9])
 
 ---
 
 ## Authentication
 
-Configure auth at the **server** (shared) or **per app** (isolated). With `splitByApp: true`, define auth **per app** (server‑level `auth` is disallowed). ([AgentFront][10])
+Configure auth at the **server** (shared) or **per app** (isolated). With `splitByApp: true`, define auth **per app** (server‑level `auth` is disallowed). ([Authentication - FrontMCP][10])
 
 ### Remote OAuth
 
@@ -306,7 +306,7 @@ auth: {
 }
 ```
 
-See **Authentication → Remote OAuth** for full details and DCR vs non‑DCR. ([AgentFront][11])
+See **Authentication → Remote OAuth** for full details and DCR vs non‑DCR. ([Remote OAuth - FrontMCP][11])
 
 ### Local OAuth
 
@@ -324,7 +324,7 @@ auth: {
 }
 ```
 
-Use per‑app when isolating scopes. ([AgentFront][12])
+Use per‑app when isolating scopes. ([Local OAuth - FrontMCP][12])
 
 ---
 
@@ -339,7 +339,7 @@ session: {
 
 * **Stateful**: server‑side store (e.g., Redis); supports refresh; best for short‑lived upstream tokens.
 * **Stateless**: embeds session in JWT; simpler but no silent refresh.
-* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups). ([AgentFront][5])
+* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups). ([The FrontMCP Server - FrontMCP][5])
 
 ---
 
@@ -352,7 +352,7 @@ npm run dev
 ```
 
 * Default HTTP port: `3000` unless configured
-* `npm run doctor` checks Node/npm versions, `tsconfig`, and scripts. ([AgentFront][3])
+* `npm run doctor` checks Node/npm versions, `tsconfig`, and scripts. ([Local Dev Server - FrontMCP][3])
 
 ### Production
 
@@ -361,13 +361,13 @@ npm run build
 NODE_ENV=production PORT=8080 npm start
 ```
 
-Builds to `dist/` (uses `tsconfig.build.json`). Consider a process manager and reverse proxy; align all `@frontmcp/*` versions. ([AgentFront][13])
+Builds to `dist/` (uses `tsconfig.build.json`). Consider a process manager and reverse proxy; align all `@frontmcp/*` versions. ([Production Build - FrontMCP][13])
 
 ---
 
 ## Version Alignment
 
-If versions drift, the runtime will throw a clear **“version mismatch”** at boot. Keep `@frontmcp/*` versions aligned. ([AgentFront][13])
+If versions drift, the runtime will throw a clear **“version mismatch”** at boot. Keep `@frontmcp/*` versions aligned. ([Production Build - FrontMCP][13])
 
 ---
 
