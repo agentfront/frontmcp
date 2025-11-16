@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/agentfront-frontmcp-badge.png)](https://mseep.ai/app/agentfront-frontmcp)
+
 <div align="center">
 
 # FrontMCP 🚀
