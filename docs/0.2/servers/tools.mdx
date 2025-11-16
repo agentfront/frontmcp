@@ -15,7 +15,7 @@ import { z } from 'zod';
 @Tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: { name: z.string() }
+  inputSchema: { name: z.string() },
 })
 export default class GreetTool {
   async execute({ name }: { name: string }) {
@@ -40,7 +40,7 @@ import { z } from 'zod';
 export const Add = tool({
   name: 'add',
   description: 'Add two numbers',
-  inputSchema: { a: z.number(), b: z.number() }
+  inputSchema: { a: z.number(), b: z.number() },
 })((input) => input.a + input.b);
 ```
 
@@ -76,12 +76,14 @@ class CalcApp {}
 ```
 
 **Notes**
+
 - `annotations` hint model & UI behavior (read-only, idempotent, etc.).
 - `hideFromDiscovery` keeps a tool callable but off `tool/list`.
-- Tools can attach **per-tool hooks** (see *Advanced → Hooks*).
+- Tools can attach **per-tool hooks** (see _Advanced → Hooks_).
 
 ---
 
 ## Return values
+
 - Return any serializable type; if you provide `outputSchema`, it will validate.
 - Errors are surfaced via MCP error responses; you can also throw typed errors inside executors.

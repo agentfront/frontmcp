@@ -25,6 +25,7 @@ export class DbProvider {
 ```
 
 ### Scopes
+
 - **GLOBAL** (default): one instance per process/worker. Ideal for clients, pools, caches.
 - **SESSION**: one instance per authenticated session. Use for per-user credentials or token-bound clients.
 - **REQUEST**: one instance per inbound request. Use sparingly (e.g., per-request trace/state).
@@ -32,6 +33,7 @@ export class DbProvider {
 ## Register providers
 
 **Server-level** providers (available to all apps):
+
 ```ts
 @FrontMcp({
   info: { name: 'Suite', version: '1.0.0' },
@@ -42,6 +44,7 @@ export default class Server {}
 ```
 
 **App-level** providers (override or add on top of server-level):
+
 ```ts
 @App({
   name: 'Billing',
@@ -51,10 +54,12 @@ export default class BillingApp {}
 ```
 
 <Tip>
-    You can register **class**, **value**, or **factory** providers. Factories are useful for async initialization or composing other providers.
+  You can register **class**, **value**, or **factory** providers. Factories are useful for async initialization or
+  composing other providers.
 </Tip>
 
 ## Using providers from tools/plugins
+
 FrontMCP resolves providers for your executors and hooks. Keep your tool logic pure; read side-effects (DB, queues, secrets) via providers.
 
 - Prefer **GLOBAL** for shared clients.
@@ -62,5 +67,6 @@ FrontMCP resolves providers for your executors and hooks. Keep your tool logic p
 - Reserve **REQUEST** for ephemeral state.
 
 <Info>
-    Provider injection/consumption follows your runtime’s DI rules. In general: register providers at the minimal scope and let the framework resolve them for tools and hooks at execution time.
+  Provider injection/consumption follows your runtime’s DI rules. In general: register providers at the minimal scope
+  and let the framework resolve them for tools and hooks at execution time.
 </Info>

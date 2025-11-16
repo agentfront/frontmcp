@@ -1,3 +1,20 @@
+## [v0.3.1] - 2025-11-16
+
+### feat
+
+- Support split-by-app deployments with scoped base paths so per-app auth providers and transports work without
+  collisions.
+- Expand the demo workspace with calculator and employee time-tracking sample apps to showcase scoped tooling.
+
+### fix
+
+- Prefix the `/message` SSE endpoint with each app scope to keep split-by-app event streams working.
+
+### docs
+
+- Version the Mintlify docs per minor, refresh branding, and wire the navigation for v0.3.
+- Clarify split-by-app auth setup and examples in the 0.3 documentation.
+
 ## [v0.3.0] - 2025-11-15
 
 ### feat

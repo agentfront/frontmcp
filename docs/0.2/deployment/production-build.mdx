@@ -45,11 +45,13 @@ This compiles TypeScript to `dist/` using `tsconfig.build.json`.
 </CodeGroup>
 
 ## Recommended runtime setup
+
 - Use a **process manager** (PM2, systemd) for restarts and logs.
 - Put a **reverse proxy** (NGINX, Traefik, Caddy) in front for TLS and path routing.
 - Pin matching versions of all `@frontmcp/*` packages.
 
 ### Example NGINX snippet
+
 ```nginx
 server {
   listen 443 ssl;
@@ -65,7 +67,7 @@ server {
 ```
 
 ## Troubleshooting
+
 - **Version mismatch** at boot → align all `@frontmcp/*` versions and reinstall.
 - **No decorators** working → ensure `experimentalDecorators` + `emitDecoratorMetadata` and `import 'reflect-metadata'` at the top of `main.ts`.
 - **Port conflicts** → set `http.port` in `@FrontMcp` or use `PORT` env.
-

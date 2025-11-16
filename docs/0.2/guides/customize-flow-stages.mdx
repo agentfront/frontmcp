@@ -6,11 +6,13 @@ slug: guides/customize-flow-stages
 Hook into lifecycle stages to enforce policy, add telemetry, or transform IO.
 
 Concepts
+
 - Flows are named pipelines with stages; hooks run at specific stages.
 - Kinds: Will (before), Stage (in-place), Did (after), Around (wrap).
 - Priority orders execution; higher runs earlier for Will/Stage; Did runs in reverse.
 
 Example (pseudocode)
+
 ```
  const Tool = FlowHooksOf('tool.execute');
 
@@ -28,6 +30,7 @@ Example (pseudocode)
 ```
 
 Tips
+
 - Contribute hooks from a Plugin to reuse across apps.
 - Use context to pass data between stages in the same flow.
 - See servers/flows and servers/hooks for more details.

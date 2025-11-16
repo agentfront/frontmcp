@@ -10,6 +10,12 @@ FrontMCP supports **Remote OAuth** (connect to an external IdP) and a built‑in
 - **Server‑level auth**: a default provider for all apps (only when `splitByApp: false`).
 - **App‑level auth**: each app defines its own provider; required when `splitByApp: true`.
 
+<Tip>
+  With <code>splitByApp: true</code>, FrontMCP mounts each app at its own base path (for example <code>/billing</code>)
+  and reuses that scope for OAuth issuers and the <code>/message</code> SSE endpoint so clients automatically target the
+  right app.
+</Tip>
+
 Auth drives **session creation**, **token propagation**, and optional **consent** for tools/resources/prompts.
 
 <Info>
