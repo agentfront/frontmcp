@@ -58,9 +58,7 @@ export default class Server {}
   * [Tools](#tools)
   * [Resources](#resources)
   * [Prompts](#prompts)
-  * [Providers](#providers)
-  * [Adapters](#adapters)
-  * [Plugins](#plugins)
+  * [Providers / Adapters / Plugins](#providers--adapters--plugins)
 * [Authentication](#authentication)
 
   * [Remote OAuth](#remote-oauth)
