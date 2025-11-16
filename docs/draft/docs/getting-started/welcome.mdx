@@ -1,5 +1,6 @@
 ---
 title: Welcome to FrontMCP
+sidebarTitle: Welcome to FrontMCP
 slug: getting-started/welcome
 icon: hand-wave
 description: The TypeScript way to build MCP servers with decorators, DI, and Streamable HTTP.
@@ -8,18 +9,22 @@ description: The TypeScript way to build MCP servers with decorators, DI, and St
 **FrontMCP is the TypeScript-first framework for MCP.** You write clean, typed code; FrontMCP handles the protocol, transport, and execution flow.
 
 ```ts
-import { FrontMcp, App, tool } from '@frontmcp/sdk';
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const AddTool = tool({
+@Tool({
   name: 'add',
   description: 'Add two numbers',
   inputSchema: { a: z.number(), b: z.number() },
-})(async (input, ctx) => {
-  return {
-    result: input.a + input.b,
-  };
-});
+  outputSchema: { result: z.number() },
+})
+export default class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return {
+      result: input.a + input.b,
+    };
+  }
+}
 
 @App({
   id: 'calc',
