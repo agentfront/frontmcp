@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source width="550" media="(prefers-color-scheme: dark)" srcset="docs/images/frontmcp.dark.svg">
-  <source width="550" media="(prefers-color-scheme: light)" srcset="docs/images/frontmcp.light.svg">
-  <img width="550" alt="FastMCP Logo" src="docs/images/frontmcp.light.svg">
+  <source width="400" media="(prefers-color-scheme: dark)" srcset="docs/images/frontmcp.dark.svg">
+  <source width="400" media="(prefers-color-scheme: light)" srcset="docs/images/frontmcp.light.svg">
+  <img width="400" alt="FastMCP Logo" src="docs/images/frontmcp.light.svg">
 </picture>
 <hr>
 
