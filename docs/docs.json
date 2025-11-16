@@ -15,6 +15,9 @@
   "contextual": {
     "options": [
       "copy",
+      "chatgpt",
+      "cursor",
+      "mcp",
       "view"
     ]
   },
@@ -43,6 +46,11 @@
         "dark": "dark-plus",
         "light": "snazzy-light"
       }
+    }
+  },
+  "errors": {
+    "404": {
+      "redirect": true
     }
   },
   "navigation": {
