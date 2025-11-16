@@ -11,7 +11,7 @@ Use a remote identity provider (IdP) like Frontegg, Auth0, Azure Entra, etc.
 auth: {
   type: 'remote',
   name: 'frontegg',
-  baseUrl: 'https://autheu.davidantoon.me',
+  baseUrl: 'https://auth.example.com',
   dcrEnabled?: boolean,
   clientId?: string | ((clientInfo: { clientId: string }) => string),
   mode?: 'orchestrated' | 'transparent',
@@ -33,7 +33,7 @@ auth: {
 @FrontMcp({
   info: { name: 'Expense MCP', version: '1.0.0' },
   apps: [ExpenseApp],
-  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://autheu.davidantoon.me', consent: true },
+  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://auth.example.com', consent: true },
 })
 export default class Server {}
 ```
