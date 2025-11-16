@@ -14,16 +14,37 @@ import {BlogCard} from "/snippets/card.jsx";
     alignItems: 'center',
     padding: '2rem 1rem'
 }}>
+
+    <h1 className='text-4xl font-bold mb-4 mt-8 text-gray-900 dark:text-gray-300'>Blog</h1>
+
+    <div className='text-lg font-light mb-10 text-gray-800 dark:text-gray-400'>
+        Explore the world of MCP and FrontMCP framework.
+    </div>
+
     <BlogCard author="David Antoon"
-              date="September 4, 2025"
+              date="November 11, 2025"
+              time="9 mins"
+              title="The Day Our MCP Server Ran Out of Sockets"
+              email="david@frontegg.com"
+              link="/blog/11-2025/mcp-run-out-of-socket"
+              img="../assets/banners/mcp-run-out-of-socket.svg">
+        Most SDK examples wire one transport to one client. That collapses when many IDEs, bots, and dashboards need to share
+        one server. FrontMCP flips the default: sessions, transport identity, per‑app scoping, auth, DI, and decorators—so a
+        single server can safely serve many agents across multiple apps.
+    </BlogCard>
+
+
+    <BlogCard author="David Antoon"
+              date="November 4, 2025"
+              time="6 mins"
               title="Introducing FrontMCP"
               email="david@frontegg.com"
               link="/blog/11-2025/introducing-frontmcp"
-              img="../images/banner.dark.png">
+              img="../assets/logo/banner.dark.png">
         The TypeScript-first framework for building production-grade MCP servers with decorators, DI, and
-        Streamable HTTP.
-        <br/>
-        If you’ve tried wiring up the Model Context Protocol (MCP) by hand, you already know the drill or define JSON
-        schemas manually, hand-roll HTTP endpoints, keep auth, sessions, logging and transports consistent across tools
+        Streamable HTTP. If you’ve tried wiring up the Model Context Protocol (MCP) by hand, you already know the drill
+        or define JSON
+        schemas manually,...
     </BlogCard>
+
 </div>

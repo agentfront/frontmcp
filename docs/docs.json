@@ -7,10 +7,10 @@
     "strict": false
   },
   "theme": "almond",
-  "favicon": "/images/favicon-32x32.png",
+  "favicon": "/assets/logo/favicon-32x32.png",
   "logo": {
-    "light": "/images/frontmcp.light.png",
-    "dark": "/images/frontmcp.dark.png"
+    "light": "/assets/logo/frontmcp.light.png",
+    "dark": "/assets/logo/frontmcp.dark.png"
   },
   "colors": {
     "primary": "#16A34A",
@@ -279,6 +279,7 @@
           {
             "group": "November 2025",
             "pages": [
+              "blog/11-2025/mcp-run-out-of-socket",
               "blog/11-2025/introducing-frontmcp"
             ]
           }

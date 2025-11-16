@@ -1,8 +1,8 @@
-export const BlogCard = ({author, date, title, link, img, cta, children}) => {
+export const BlogCard = ({author, date, title, link, img, time, children}) => {
 
-    const By = ({author, date}) => {
+    const By = ({author, date, time}) => {
         return <div className='blog-by text-xs font-medium text-gray-700 dark:text-gray-300 mt-4 text-right'>
-            <span className='date'>{date}</span> · <span className='author'>{author}</span>
+            <span className='date'>{date}</span> · <span className='time'>{time}</span> · <span className='author'>{author}</span>
         </div>
     }
 
@@ -19,7 +19,7 @@ export const BlogCard = ({author, date, title, link, img, cta, children}) => {
             <Title>{title}</Title>
             {children}
             <br/>
-            <By author={author} date={date}/>
+            <By author={author} date={date} time={time}/>
         </Card>
     </div>
 }
