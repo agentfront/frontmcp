@@ -4,11 +4,11 @@ slug: getting-started/quickstart
 icon: rocket-launch
 ---
 
-Welcome! This guide will help you quickly set up FrontMcp, run your first MCP server.
+Welcome! This guide will help you quickly set up FrontMCP and run your first MCP server.
 
-If you haven't already installed FrontMcp, follow the [installation instructions](/getting-started/installation).
+If you haven't already installed FrontMCP, follow the [installation instructions](/getting-started/installation).
 
-## 1) Create you FrontMCP server
+## 1) Create your FrontMCP server
 
 ```ts
 // src/main.ts
@@ -43,19 +43,18 @@ export default class HelloApp {}
 
 ```ts
 // src/tools/greet.tool.ts
-import { Tool } from '@frontmcp/sdk';
+import { tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-@Tool({
+export default tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: { name: z.string() },
+  inputSchema: { name: z.string() }
+})(async ({name}) => {
+  return {
+    result: `Hello, ${name}!`
+  };
 })
-export default class GreetTool {
-  async execute({ name }: { name: string }) {
-    return `Hello, ${name}!`;
-  }
-}
 ```
 
 ## 4) Run it
@@ -86,7 +85,7 @@ npm run dev
 
 ## What’s next
 
-- Add auth (local or remote OAuth)
-- Use **adapters** to load tools from OpenAPI
-- Enable **plugins** like transparent caching
-- Wire **hooks** for logging, rate limits, or request transforms
+* Add auth (local or remote OAuth)
+* Use **adapters** to load tools from OpenAPI
+* Enable **plugins** like transparent caching
+* Wire **hooks** for logging, rate limits, or request transforms

@@ -10,6 +10,18 @@ on:
       - "CHANGELOG.md"
       - "libs/**/README.md"
       - "README.md"
+
+  # Trigger when a PR is opened from next/* into main
+  pull_request:
+    branches:
+      - main
+    # Same loop-prevention for PRs that only touch docs/changelog/READMEs
+    paths-ignore:
+      - "docs/**"
+      - "CHANGELOG.md"
+      - "libs/**/README.md"
+      - "README.md"
+
   workflow_dispatch:
 
 permissions:
@@ -22,6 +34,8 @@ concurrency:
 
 jobs:
   docs:
+    # For PRs: only run if head branch is next/*
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'next/')
     runs-on: ubuntu-latest
     environment: release
 
@@ -60,6 +74,20 @@ jobs:
           mkdir -p .github/codex/prompts .codex-docs
 
           # ----------------------------------------
+          # Resolve branch name for this run
+          # ----------------------------------------
+          if [ -n "${GITHUB_HEAD_REF:-}" ]; then
+            # Pull request: source branch (e.g., next/0.3.1)
+            BRANCH="$GITHUB_HEAD_REF"
+          else
+            # Push: branch name (e.g., next/0.3.1)
+            BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+          fi
+          echo "Using branch: $BRANCH"
+          echo "$BRANCH" > .github/codex/prompts/branch.txt
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          # ----------------------------------------
           # Base for diff/log = last published tag
           # ----------------------------------------
           # Find last stable semver tag reachable from HEAD:
@@ -87,15 +115,19 @@ jobs:
           # Unified diff: from last published release -> current next/x.y.z HEAD
           git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
 
-          # Derive release version (prefer next/x.y.z, fallback to package.json)
-          REF="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
-          if [[ "$REF" =~ ^next/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-          else
-            VERSION=$(node -e "try{console.log(require('./package.json').version||'0.0.0')}catch{console.log('0.0.0')}")
-          fi
+          # ----------------------------------------
+          # Derive release version from package.json
+          # ----------------------------------------
+          VERSION=$(node -e "try{console.log(require('./package.json').version || '0.0.0')}catch{console.log('0.0.0')}")
+          VERSION_MINOR=$(echo "$VERSION" | awk -F. '{print $1"."$2}')
+
+          echo "Resolved version: $VERSION (minor: $VERSION_MINOR)"
+
           echo "$VERSION" > .github/codex/prompts/version.txt
+          echo "$VERSION_MINOR" > .github/codex/prompts/version-minor.txt
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_minor=$VERSION_MINOR" >> "$GITHUB_OUTPUT"
 
           # Commit list (for changelog / docs / README synthesis)
           git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
@@ -106,51 +138,96 @@ jobs:
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`), our root `CHANGELOG.md`, and READMEs for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
-          - Commit list (TSV):         `.github/codex/prompts/commits.txt`  # columns: sha<TAB>subject<TAB>body
-          - Release version:           `.github/codex/prompts/version.txt`  # e.g., 1.2.3
-          - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`     # e.g., 2025-11-13
+          - Commit list (TSV):         `.github/codex/prompts/commits.txt`        # columns: sha<TAB>subject<TAB>body
+          - Release version:           `.github/codex/prompts/version.txt`        # e.g., 0.3.1
+          - Release minor:             `.github/codex/prompts/version-minor.txt`  # e.g., 0.3
+          - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`           # e.g., 2025-11-13
+
+          DOCS VERSIONING
+          - Our Mintlify docs are **versioned per minor**:
+            - `docs/draft/**` – docs on `main` for the upcoming version (unreleased). **Do NOT modify these in this workflow.**
+            - `docs/<minor>/**` – docs for a released minor line, where `<minor>` is `<major>.<minor>` from `version-minor.txt`
+              e.g., `0.3.1` → `<minor> = 0.3` → docs live under `docs/0.3/**`.
+          - `docs/updates.mdx` is a shared global release notes page across versions.
 
           SCOPE & PATHS
-          - Mintlify docs: `docs/**/*.mdx` / `docs/**/*.md`.
-          - Release notes page: `docs/updates.mdx` (Mintlify). Insert or update a **new top section** for this release.
+          - Versioned Mintlify docs for this release:
+            - Only edit or create docs under: `docs/<minor>/**/*.mdx` and `docs/<minor>/**/*.md`
+              where `<minor>` is read from `version-minor.txt`.
+          - Global release notes page (shared): `docs/updates.mdx` (Mintlify). Insert or update a **new top section** for this release.
+          - Site navigation config: `docs/docs.json` (Mintlify navigation and version switcher).
+          - Draft docs: `docs/draft/**` – do **not** modify these.
           - Changelog: root `CHANGELOG.md` (Keep a Changelog format). Insert a new section for this version/date at the top.
           - Root README: `README.md` (repository homepage & npm default readme).
           - Library READMEs: `libs/**/README.md` (READMEs for libs that may be published to npm).
           - Do NOT touch other files (no config changes, no code files).
 
-          RULES
-          - **Release notes (`docs/updates.mdx`)**
-            - Add a new section at the top for `v<version>` with date `<YYYY-MM-DD>`.
-            - Summarize notable user-facing changes derived from commits and diff.
-            - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
-            - Keep MDX valid (frontmatter/imports/components).
+          RULES – RELEASE NOTES (`docs/updates.mdx`)
+          - Add a new section at the top for `v<version>` with date `<YYYY-MM-DD>`.
+          - Summarize notable user-facing changes derived from commits and diff.
+          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
+          - Keep MDX valid (frontmatter/imports/components).
 
-          - **Changelog (`CHANGELOG.md`)**
-            - Follow Keep a Changelog style (Headings: `## [v<version>] - <YYYY-MM-DD>`).
-            - Categorize entries using Conventional Commits (feat/fix/docs/perf/refactor/build/ci/chore) and mark **BREAKING CHANGES** clearly.
-            - Include terse, imperative bullet points. Avoid internal-only noise.
+          RULES – VERSIONED DOCS (`docs/<minor>/**`)
+          - Treat `docs/<minor>/` as the canonical docs root for the release line of `<version>`.
+          - When updating or creating docs, stay inside `docs/<minor>/` and keep the structure consistent with what already exists there.
+          - Do NOT modify `docs/draft/**` or docs for other minors.
 
-          - **Root README (`README.md`)**
-            - Reflect the new release where it matters: install commands, quickstart snippets, versioned examples, and top-level feature overview.
-            - Keep content accurate for the whole repo, not just a single lib.
-            - If no meaningful repo-level changes for this release, leave it as-is.
+          RULES – NAVIGATION (`docs/docs.json`)
+          - This file defines `navigation.versions` and the Mintlify sidebar.
+          - You MUST keep `docs/docs.json` in sync with the actual docs under `docs/<minor>/`:
+            - If you add a new page (file) in `docs/<minor>/...`, add an appropriate entry under the relevant `group.pages` in `navigation.versions` for that `<minor>`.
+            - If you rename or move a page for this minor, update its path in the navigation.
+          - Detect whether this release introduces a **new minor**:
+            - Read `version-minor.txt` (e.g., `0.4`).
+            - Scan `navigation.versions[*].version` for any entry mentioning this minor, e.g. `"Latest (v0.4)"` or `"v0.4"`.
+            - If **no entry** refers to `<minor>`, treat this as a *new minor version*.
+          - When this is a **new minor version**:
+            1. Identify the current "latest" entry:
+               - The entry where `"default": true`, typically `"version": "Latest (vX.Y)"`.
+            2. Insert a **new entry at the top** of `navigation.versions` with:
+               - `"version": "Latest (v<minor>)"` (e.g., `Latest (v0.4)`),
+               - `"default": true`,
+               - `"groups": [...]`:
+                 - Either copy the groups from the previous latest entry and update page paths from the old minor to the new minor (e.g., `0.3/...` → `0.4/...`), or construct groups that reflect the actual docs present under `docs/<minor>/`.
+                 - Keep `"updates"` as a shared page (`"updates"`), not versioned.
+            3. Update the previous "latest" entry:
+               - Change its `"version"` from `"Latest (vX.Y)"` to `"vX.Y"` (e.g., `"v0.3"`).
+               - Ensure it no longer has `"default": true` (either remove `default` or set it to `false`).
+            4. Preserve existing older entries (e.g., `"v0.2"`) as they are, just shifted down.
+          - When this is **not** a new minor (e.g., a patch within the same `<minor>`):
+            - Keep the "Latest (v<minor>)" entry as the default.
+            - Add/adjust page entries within that `<minor>`’s groups so that every new/renamed doc file under `docs/<minor>/` is reflected in `pages`.
+          - Keep `docs/docs.json` valid JSON and preserved formatting as much as possible (but correctness > formatting).
 
-          - **Library READMEs (`libs/**/README.md`)**
-            - Focus on libs that are clearly user-facing or affected by the diff (e.g., their code changed, their package.json version changed, or commits mention them).
-            - For each updated README:
-              - Ensure install instructions are correct (package name, registry, version ranges if relevant).
-              - Update usage examples and API sections to match the current behavior.
-              - Highlight notable changes that impact consumers of that lib.
-            - Keep Markdown valid and simple; avoid large rewrites unless the current content is clearly outdated or misleading.
+          RULES – CHANGELOG (`CHANGELOG.md`)
+          - Follow Keep a Changelog style (Headings: `## [v<version>] - <YYYY-MM-DD>`).
+          - Categorize entries using Conventional Commits (feat/fix/docs/perf/refactor/build/ci/chore) and mark **BREAKING CHANGES** clearly.
+          - Include terse, imperative bullet points. Avoid internal-only noise.
 
-          - General
-            - Prefer small, surgical edits. If a new doc is needed, create it under `docs/` with clear frontmatter.
-            - Keep tone consistent with existing docs and READMEs.
-            - If no changes are needed, return an empty patch set.
+          RULES – ROOT README (`README.md`)
+          - Reflect the new release where it matters: install commands, quickstart snippets, versioned examples, and top-level feature overview.
+          - Keep content accurate for the whole repo, not just a single lib.
+          - If no meaningful repo-level changes for this release, leave it as-is.
+
+          RULES – LIBRARY READMEs (`libs/**/README.md`)
+          - Focus on libs that are clearly user-facing or affected by the diff (e.g., their code changed, their package.json version changed, or commits mention them).
+          - For each updated README:
+            - Ensure install instructions are correct (package name, registry, version ranges if relevant).
+            - Update usage examples and API sections to match the current behavior.
+            - Highlight notable changes that impact consumers of that lib.
+          - Keep Markdown valid and simple; avoid large rewrites unless the current content is clearly outdated or misleading.
+
+          GENERAL
+          - Prefer small, surgical edits. If a new doc is needed, create it under `docs/<minor>/` with clear frontmatter.
+          - Keep tone consistent with existing docs and READMEs.
+          - Never modify `docs/draft/**` or docs for other minors.
+          - Always keep `docs/docs.json` consistent with the actual docs and versions.
+          - If no changes are needed, return an empty patch set.
 
           OUTPUT (STRICT)
           - Return JSON that matches the output schema provided by the runner.
@@ -177,7 +254,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/.+\\.(md|mdx)|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
+                      "pattern": "^(docs\\/.+\\.(md|mdx)|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -249,7 +326,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           branch: docs/codex/v${{ steps.ctx.outputs.version }}
-          base: ${{ github.ref_name }}
+          base: ${{ steps.ctx.outputs.branch }}
           title: "docs: release notes, changelog & READMEs for v${{ steps.ctx.outputs.version }} (Codex)"
           commit-message: "docs(codex): update Mintlify docs, CHANGELOG & READMEs [auto]"
           labels: "documentation, automated, codex, release-notes"
@@ -262,11 +339,12 @@ jobs:
           body: |
             Codex proposed updates to:
             - **docs/updates.mdx** (Mintlify release notes)
+            - **docs/docs.json** (Mintlify navigation / versions)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
 
-            for `v${{ steps.ctx.outputs.version }}` on branch `${{ github.ref_name }}`.
+            for `v${{ steps.ctx.outputs.version }}` on branch `${{ steps.ctx.outputs.branch }}`.
 
             See `.codex-docs/apply.log` for validation details.
 

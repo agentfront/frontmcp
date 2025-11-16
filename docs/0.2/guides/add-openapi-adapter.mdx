@@ -1,0 +1,36 @@
+---
+title: Add OpenAPI Adapter
+slug: guides/add-openapi-adapter
+---
+
+Generate tools automatically from an OpenAPI spec at runtime.
+
+Overview
+- Attach the OpenAPI adapter to an app; it fetches the spec and exposes operations as tools.
+- Input schema is derived from operation parameters/body via JSON Schema → Zod conversion.
+
+Steps
+1. Add the adapter to your app with a URL to the OpenAPI JSON.
+2. Optionally configure include/exclude (future), naming, and dereference behavior.
+
+Example (pseudocode)
+```
+import OpenapiAdapter from '@frontmcp/adapters/openapi'
+
+@App({
+  id: 'expense-2',
+  name: 'Expense MCP 2',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'mock-expense-server',
+      url: 'https://example.com/openapi.json',
+    })
+  ],
+})
+export default class ExpenseMcpApp {}
+```
+
+Notes
+- Adapter-generated tools inherit plugins and providers defined on the app.
+- At runtime, each generated tool validates inputs using derived schemas.
+- See the expenses example for a working setup.

@@ -1,0 +1,42 @@
+---
+title: Caching & Cache Miss
+slug: guides/caching-and-cache-miss
+---
+
+Use the Cache plugin to cache tool results and control TTL/refresh behavior.
+
+Overview
+
+- Opt in per tool via metadata (e.g., `cache: true` or `{ ttl, slideWindow }`).
+- Configure the store at app level: in‑memory or Redis (client or config).
+- Cache keys include tool id and validated input; you can extend via hooks.
+
+Set up (pseudocode)
+
+```
+import CachePlugin from '@frontmcp/plugins/cache'
+
+@App({
+    plugins: [CachePlugin], // or CachePlugin.init({ defaultTTL: 300 })
+})
+class MyApp {}
+```
+
+Opt in per tool (pseudocode)
+
+```
+export const GetReport = tool({
+   id: 'get-report',
+   inputSchema: { id: z.string() },
+   cache: { ttl: 600, slideWindow: true },
+})(async (input, session) => {
+   // expensive computation or remote call
+   return await fetchReport(input.id);
+});
+```
+
+Notes
+
+- Memory store is per‑process; prefer Redis in production.
+- `slideWindow` updates the TTL on access; without it, TTL is absolute.
+- Hooks can decorate the key or short‑circuit on policy.

@@ -7,12 +7,11 @@ icon: user-shield
 Use a remote identity provider (IdP) like Frontegg, Auth0, Azure Entra, etc.
 
 ### Configuration
-
 ```ts
 auth: {
   type: 'remote',
   name: 'frontegg',
-  baseUrl: 'https://autheu.davidantoon.me',
+  baseUrl: 'https://auth.example.com',
   dcrEnabled?: boolean,
   clientId?: string | ((clientInfo: { clientId: string }) => string),
   mode?: 'orchestrated' | 'transparent',
@@ -30,32 +29,31 @@ auth: {
 ```
 
 ### Example (server‑level)
-
 ```ts
 @FrontMcp({
   info: { name: 'Expense MCP', version: '1.0.0' },
   apps: [ExpenseApp],
-  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://autheu.davidantoon.me', consent: true },
+  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://auth.example.com', consent: true },
 })
 export default class Server {}
 ```
 
 ### Example (per app)
-
 ```ts
 @App({
   name: 'CRM',
-  auth: { type: 'remote', name: 'crm', baseUrl: 'https://idp.example.com', scopes: ['openid', 'email'] },
+  auth: { type: 'remote', name: 'crm', baseUrl: 'https://idp.example.com', scopes: ['openid','email'] },
   standalone: true,
 })
 export default class CrmApp {}
 ```
 
-<Tip>Use `standalone: true` to expose the app’s auth surface under its own scope/entry.</Tip>
+<Tip>
+    Use `standalone: true` to expose the app’s auth surface under its own scope/entry.
+</Tip>
 
 ---
 
 ## DCR vs non‑DCR
-
 - **`dcrEnabled: true`** → FrontMCP registers the client dynamically at the IdP.
-- **`dcrEnabled: false`** → supply `clientId` and use a **local OAuth proxy** to handle registration/storage. See _Remote OAuth → Proxy_.
+- **`dcrEnabled: false`** → supply `clientId` and use a **local OAuth proxy** to handle registration/storage. See *Remote OAuth → Proxy*.

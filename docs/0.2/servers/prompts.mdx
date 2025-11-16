@@ -1,0 +1,54 @@
+---
+title: Prompts
+slug: servers/prompts
+icon: message-lines
+---
+
+Prompts are **reusable prompt templates** with typed arguments. They return an MCP `GetPromptResult` for clients to render or send as messages to a model.
+
+## Minimal prompt
+
+```ts
+import { Prompt } from '@frontmcp/sdk';
+
+@Prompt({
+  name: 'Summarize',
+  title: 'Summarize Text',
+  description: 'Create a concise summary',
+  arguments: [
+    { name: 'text', description: 'Input text', required: true },
+  ],
+})
+export default class SummarizePrompt {
+  async execute(args: { text: string }) {
+    return {
+      description: 'Summarize the provided text',
+      messages: [
+        { role: 'system', content: 'You are a concise assistant.' },
+        { role: 'user', content: args.text },
+      ],
+    };
+  }
+}
+```
+
+## Prompt metadata
+
+```ts
+@Prompt({
+  name: string,
+  title?: string,
+  description?: string,
+  arguments?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+  }>,
+  icons?: Icon[],
+})
+```
+
+**Notes**
+- Prompts are discoverable and can be parameterized by clients.
+- Use prompts to standardize instructions for common tasks across tools/apps.
+
