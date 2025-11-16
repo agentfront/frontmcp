@@ -85,7 +85,7 @@ FrontMCP can host **many apps**. Choose how they’re exposed:
   One server scope. You _may_ configure **server-level `auth`** and all apps inherit it (apps can still override with app-level auth).
 
 - **Split-By-App**: `splitByApp: true`
-  Each app is isolated under its own scope/base path. **Server-level `auth` is disallowed**; configure auth per app. (See _Authentication → Overview_.)
+  Each app is isolated under its own scope/base path (for example `/billing`). Streamable HTTP, the `/message` SSE endpoint, and OAuth issuers reuse that scope automatically. **Server-level `auth` is disallowed**; configure auth per app. (See _Authentication → Overview_.)
 
 <Tip>If you’re offering multiple products or tenants, `splitByApp: true` gives clean separation and per-app auth.</Tip>
 
@@ -104,6 +104,7 @@ http: {
 - **Port**: listening port for Streamable HTTP.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
 - **hostFactory**: advanced — provide/construct a custom host implementation.
+- **Split-by-app scopes**: when `splitByApp` is enabled, clients hit `<entryPath>/<appId>` (for example `/mcp/billing`) and subscribe via `<entryPath>/<appId>/message`; FrontMCP handles the prefixing.
 
 ---
 

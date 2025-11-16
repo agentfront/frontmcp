@@ -49,12 +49,12 @@ import { z } from 'zod';
 export default tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: { name: z.string() }
-})(async ({name}) => {
+  inputSchema: { name: z.string() },
+})(async ({ name }) => {
   return {
-    result: `Hello, ${name}!`
+    result: `Hello, ${name}!`,
   };
-})
+});
 ```
 
 ## 4) Run it
@@ -85,7 +85,7 @@ npm run dev
 
 ## What’s next
 
-* Add auth (local or remote OAuth)
-* Use **adapters** to load tools from OpenAPI
-* Enable **plugins** like transparent caching
-* Wire **hooks** for logging, rate limits, or request transforms
+- Add auth (local or remote OAuth)
+- Use **adapters** to load tools from OpenAPI
+- Enable **plugins** like transparent caching
+- Wire **hooks** for logging, rate limits, or request transforms
