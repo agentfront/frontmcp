@@ -21,12 +21,12 @@ reviews:
         These files are generated/updated by the Codex GitHub Action, NOT manually.
         When reviewing a PR:
         - If a contributor edits files under docs/docs/** directly, ask them to revert
-          those changes and instead update the corresponding draft under docs/draft-docs/**.
+          those changes and instead update the corresponding draft under docs/draft/docs/**.
         - Do NOT suggest manual edits here; suggest editing drafts and letting automation
           regenerate docs/docs/**.
         - The release process for a new minor is:
           1) Copy the current docs/docs/** into docs/v/{previous-minor}/** to freeze them.
-          2) Update docs/docs/** based on docs/draft-docs/** and the code changes.
+          2) Update docs/docs/** based on docs/draft/docs/** and the code changes.
 
     # Frozen archived docs for old minors – NEVER EDIT
     - path: "docs/v/**"
@@ -37,11 +37,11 @@ reviews:
         When reviewing a PR:
         - If any file under docs/v/** is modified, treat it as a mistake and ask the author
           to revert. Explain that archived docs are read-only.
-        - If authors want to fix or improve docs, they should work in docs/draft-docs/**
+        - If authors want to fix or improve docs, they should work in docs/draft/docs/**
           and let the release/automation flow handle new minors.
 
     # Drafts – THIS is where humans should edit docs
-    - path: "docs/draft-docs/**"
+    - path: "docs/draft/docs/**"
       instructions: >
         This folder holds the draft/source docs that humans are expected to edit.
         When authors want to add or change documentation, they should do it here.
@@ -87,7 +87,7 @@ reviews:
         See more specific rules for:
         - docs/docs/** (latest rendered docs, automation-only)
         - docs/v/** (archived versions, read-only)
-        - docs/draft-docs/** (human-editable drafts)
+        - docs/draft/docs/** (human-editable drafts)
         - docs/blogs/** (blogs, human edited)
         - docs/docs.json (Mintlify navigation)
 
@@ -96,7 +96,7 @@ reviews:
       instructions: >
         Contains publishable SDK libraries.
         Review for API correctness, breaking changes, and consistency with docs.
-        When public APIs change, ensure there is a matching docs/draft-docs/** update
+        When public APIs change, ensure there is a matching docs/draft/docs/** update
         (not direct edits under docs/docs/**).
 
   path_filters:
