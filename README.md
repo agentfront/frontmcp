@@ -385,3 +385,19 @@ PRs welcome! Please:
 
 See [LICENSE](./LICENSE).
 
+
+
+
+[1]: https://docs.agentfront.dev/0.3/getting-started/installation "Installation - FrontMCP"
+[2]: https://docs.agentfront.dev/0.3/getting-started/quickstart "Quickstart - FrontMCP"
+[3]: https://docs.agentfront.dev/0.3/deployment/local-dev-server "Local Dev Server - FrontMCP"
+[4]: https://docs.agentfront.dev/0.3/servers/tools "Tools - FrontMCP"
+[5]: https://docs.agentfront.dev/0.3/servers/server "The FrontMCP Server - FrontMCP"
+[6]: https://docs.agentfront.dev/0.3/servers/apps "Apps - FrontMCP"
+[7]: https://docs.agentfront.dev/0.3/servers/resources "Resources - FrontMCP"
+[8]: https://docs.agentfront.dev/0.3/servers/prompts "Prompts - FrontMCP"
+[9]: https://docs.agentfront.dev/0.3/guides/add-openapi-adapter "Add OpenAPI Adapter - FrontMCP"
+[10]: https://docs.agentfront.dev/0.3/servers/authentication/overview "Authentication - FrontMCP"
+[11]: https://docs.agentfront.dev/0.3/servers/authentication/remote "Remote OAuth - FrontMCP"
+[12]: https://docs.agentfront.dev/0.3/servers/authentication/local "Local OAuth - FrontMCP"
+[13]: https://docs.agentfront.dev/0.3/deployment/production-build "Production Build - FrontMCP"
