@@ -2,11 +2,103 @@
 reviews:
   profile: chill
   high_level_summary: true
+
   path_instructions:
     - path: "apps/demo/**"
-      instructions: "apps/demo directory contains demo application to testing purposes, can be used for sdk usages examples"
+      instructions: >
+        apps/demo directory contains a demo application for testing purposes.
+        It can be used as a reference for SDK usage examples.
+
+    # ─────────────────────────────────────────────────────────
+    # DOCS HIERARCHY & WORKFLOW
+    # ─────────────────────────────────────────────────────────
+
+    # Latest rendered docs for current minor – GENERATED ONLY
+    - path: "docs/docs/**"
+      instructions: >
+        This folder contains the latest Mintlify documentation for the CURRENT minor
+        version, using SEO-friendly paths (e.g. "docs/getting-started/welcome").
+        These files are generated/updated by the Codex GitHub Action, NOT manually.
+        When reviewing a PR:
+        - If a contributor edits files under docs/docs/** directly, ask them to revert
+          those changes and instead update the corresponding draft under docs/draft/docs/**.
+        - Do NOT suggest manual edits here; suggest editing drafts and letting automation
+          regenerate docs/docs/**.
+        - The release process for a new minor is:
+          1) Copy the current docs/docs/** into docs/v/{previous-minor}/** to freeze them.
+          2) Update docs/docs/** based on docs/draft/docs/** and the code changes.
+
+    # Frozen archived docs for old minors – NEVER EDIT
+    - path: "docs/v/**"
+      instructions: >
+        This folder contains frozen, archived documentation for previous minor versions,
+        e.g. docs/v/0.1/**, docs/v/0.2/**.
+        These are historical snapshots and must NEVER be edited.
+        When reviewing a PR:
+        - If any file under docs/v/** is modified, treat it as a mistake and ask the author
+          to revert. Explain that archived docs are read-only.
+        - If authors want to fix or improve docs, they should work in docs/draft/docs/**
+          and let the release/automation flow handle new minors.
+
+    # Drafts – THIS is where humans should edit docs
+    - path: "docs/draft/docs/**"
+      instructions: >
+        This folder holds the draft/source docs that humans are expected to edit.
+        When authors want to add or change documentation, they should do it here.
+        The Codex workflow uses these drafts, together with the code diff, to generate
+        the latest docs under docs/docs/**.
+        As a reviewer:
+        - Encourage contributors to add/update content here instead of docs/docs/**.
+        - It is fine to do structural/content feedback here (clarity, examples, etc).
+
+    # Blogs – human edited, not touched by Codex
+    - path: "docs/blogs/**"
+      instructions: >
+        This folder contains blog posts (e.g. "docs/blogs/november-2025/...").
+        These are NOT managed by the Codex docs automation.
+        Human-authored changes here are expected and allowed.
+        As a reviewer, ensure the changes look intentional and not like bulk/automated
+        rewrites of the entire blog tree.
+
+    # Mintlify navigation config
+    - path: "docs/docs.json"
+      instructions: >
+        Mintlify navigation configuration.
+        Important structure:
+        - dropdowns[].dropdown == "Documentation":
+          - Contains a "versions" array.
+          - Latest version entry: "version": "vX.Y (latest)", "default": true, with
+            paths like "docs/getting-started/welcome" and "updates" (NO "v/X.Y" prefix).
+          - Older versions: "version": "v0.2", "version": "v0.1", etc., with paths
+            like "docs/v/0.2/getting-started/welcome".
+        - dropdowns[].dropdown == "Blog":
+          - Contains blog groups (e.g. "blog/november-2025/introducing-frontmcp").
+        Review guidelines:
+        - Do NOT suggest editing the Blog dropdown unless the PR explicitly adds/changes blogs.
+        - Ensure latest version uses non-versioned "docs/..." paths, and older versions
+          use "docs/v/{minor}/..." paths.
+        - If you see changes that try to route archived versions away from docs/v/**,
+          flag that as incorrect.
+
+    # Generic docs catch-all (for anything not covered above)
     - path: "docs/**"
-      instructions: "Contains documentation for sdk, using mdx format and hosted by mintlify"
+      instructions: >
+        Repository documentation for the SDK, using MDX and hosted by Mintlify.
+        See more specific rules for:
+        - docs/docs/** (latest rendered docs, automation-only)
+        - docs/v/** (archived versions, read-only)
+        - docs/draft/docs/** (human-editable drafts)
+        - docs/blogs/** (blogs, human edited)
+        - docs/docs.json (Mintlify navigation)
+
+    # SDK libs
+    - path: "libs/**"
+      instructions: >
+        Contains publishable SDK libraries.
+        Review for API correctness, breaking changes, and consistency with docs.
+        When public APIs change, ensure there is a matching docs/draft/docs/** update
+        (not direct edits under docs/docs/**).
+
   path_filters:
     - "!**/dist/**"
     - "!**/build/**"

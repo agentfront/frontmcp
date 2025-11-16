@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source width="400" media="(prefers-color-scheme: dark)" srcset="docs/images/frontmcp.dark.svg">
-  <source width="400" media="(prefers-color-scheme: light)" srcset="docs/images/frontmcp.light.svg">
-  <img width="400" alt="FrontMCP Logo" src="docs/images/frontmcp.light.svg">
+  <source width="400" media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/frontmcp.dark.svg">
+  <source width="400" media="(prefers-color-scheme: light)" srcset="docs/assets/logo/frontmcp.light.svg">
+  <img width="400" alt="FrontMCP Logo" src="docs/assets/logo/frontmcp.light.svg">
 </picture>
 <hr>
 
@@ -43,45 +43,41 @@ export default class Server {}
 
 ## Table of Contents
 
-* [Why FrontMCP?](#why-frontmcp)
-* [Installation](#installation)
-* [Quickstart](#quickstart)
-
-  * [Minimal Server & App](#minimal-server--app)
-  * [Function and Class Tools](#function-and-class-tools)
-  * [Scripts & tsconfig](#scripts--tsconfig)
-  * [Inspector](#inspector)
-* [Core Concepts](#core-concepts)
-
-  * [Servers](#servers)
-  * [Apps](#apps)
-  * [Tools](#tools)
-  * [Resources](#resources)
-  * [Prompts](#prompts)
-  * [Providers / Adapters / Plugins](#providers--adapters--plugins)
-* [Authentication](#authentication)
-
-  * [Remote OAuth](#remote-oauth)
-  * [Local OAuth](#local-oauth)
-* [Sessions & Transport](#sessions--transport)
-* [Deployment](#deployment)
-
-  * [Local Dev](#local-dev)
-  * [Production](#production)
-* [Version Alignment](#version-alignment)
-* [Contributing](#contributing)
-* [License](#license)
+- [Why FrontMCP?](#why-frontmcp)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+  - [Minimal Server & App](#minimal-server--app)
+  - [Function and Class Tools](#function-and-class-tools)
+  - [Scripts & tsconfig](#scripts--tsconfig)
+  - [Inspector](#inspector)
+- [Core Concepts](#core-concepts)
+  - [Servers](#servers)
+  - [Apps](#apps)
+  - [Tools](#tools)
+  - [Resources](#resources)
+  - [Prompts](#prompts)
+  - [Providers / Adapters / Plugins](#providers--adapters--plugins)
+- [Authentication](#authentication)
+  - [Remote OAuth](#remote-oauth)
+  - [Local OAuth](#local-oauth)
+- [Sessions & Transport](#sessions--transport)
+- [Deployment](#deployment)
+  - [Local Dev](#local-dev)
+  - [Production](#production)
+- [Version Alignment](#version-alignment)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
 ## Why FrontMCP?
 
-* **TypeScript-native DX** — decorators, Zod, strong typing end-to-end
-* **Spec-aligned transport** — Streamable HTTP, sessions, server‑pushed events
-* **Scoped invoker + DI** — secure, composable execution with hooks
-* **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
-* **Auth** — remote OAuth (external IdP) or built-in local OAuth
-* **Logging** — pluggable log transports
+- **TypeScript-native DX** — decorators, Zod, strong typing end-to-end
+- **Spec-aligned transport** — Streamable HTTP, sessions, server‑pushed events
+- **Scoped invoker + DI** — secure, composable execution with hooks
+- **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
+- **Auth** — remote OAuth (external IdP) or built-in local OAuth
+- **Logging** — pluggable log transports
 
 ---
 
@@ -335,9 +331,9 @@ session: {
 }
 ```
 
-* **Stateful**: server‑side store (e.g., Redis); supports refresh; best for short‑lived upstream tokens.
-* **Stateless**: embeds session in JWT; simpler but no silent refresh.
-* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups). ([The FrontMCP Server - FrontMCP][5])
+- **Stateful**: server‑side store (e.g., Redis); supports refresh; best for short‑lived upstream tokens.
+- **Stateless**: embeds session in JWT; simpler but no silent refresh.
+- **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups). ([The FrontMCP Server - FrontMCP][5])
 
 ---
 
@@ -349,8 +345,8 @@ session: {
 npm run dev
 ```
 
-* Default HTTP port: `3000` unless configured
-* `npm run doctor` checks Node/npm versions, `tsconfig`, and scripts. ([Local Dev Server - FrontMCP][3])
+- Default HTTP port: `3000` unless configured
+- `npm run doctor` checks Node/npm versions, `tsconfig`, and scripts. ([Local Dev Server - FrontMCP][3])
 
 ### Production
 
@@ -373,9 +369,9 @@ If versions drift, the runtime will throw a clear **“version mismatch”** at 
 
 PRs welcome! Please:
 
-* Keep changes focused and tested
-* Run `doctor`, `dev`, and `build`; try **Inspector** locally
-* Align `@frontmcp/*` versions in examples
+- Keep changes focused and tested
+- Run `doctor`, `dev`, and `build`; try **Inspector** locally
+- Align `@frontmcp/*` versions in examples
 
 ---
 

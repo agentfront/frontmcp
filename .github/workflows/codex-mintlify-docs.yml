@@ -138,7 +138,7 @@ jobs:
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
@@ -147,98 +147,194 @@ jobs:
           - Release minor:             `.github/codex/prompts/version-minor.txt`  # e.g., 0.3
           - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`           # e.g., 2025-11-13
 
-          DOCS VERSIONING
-          - Our Mintlify docs are **versioned per minor**:
-            - `docs/draft/**` – docs on `main` for the upcoming version (unreleased). **Do NOT modify these in this workflow.**
-            - `docs/<minor>/**` – docs for a released minor line, where `<minor>` is `<major>.<minor>` from `version-minor.txt`
-              e.g., `0.3.1` → `<minor> = 0.3` → docs live under `docs/0.3/**`.
-          - `docs/updates.mdx` is a shared global release notes page across versions.
+          DOCS LAYOUT & VERSIONING
+
+          Folders:
+          - `docs/docs/**`
+            - The canonical **latest** docs for the current minor (`version-minor.txt`).
+            - Paths in Mintlify nav for the latest docs use the `docs/...` prefix (e.g., `"docs/getting-started/welcome"`).
+          - `docs/v/<minor>/**`
+            - **Archived** docs for older minor versions, e.g.:
+              - `docs/v/0.2/**`
+              - `docs/v/0.1/**`
+            - These are **read-only** for this workflow. Do **NOT** modify or create files under `docs/v/**`.
+          - `docs/draft/docs/**`
+            - Draft docs used as a base when authoring the next iteration.
+            - You may **read** these for context but must **not** modify them.
+          - `docs/blogs/**`
+            - Blog posts. These must **not** be modified or created by Codex.
+
+          - `docs/updates.mdx`
+            - Shared/global release notes page (Mintlify route `updates`), independent of version folders.
 
           SCOPE & PATHS
-          - Versioned Mintlify docs for this release:
-            - Only edit or create docs under: `docs/<minor>/**/*.mdx` and `docs/<minor>/**/*.md`
-              where `<minor>` is read from `version-minor.txt`.
-          - Global release notes page (shared): `docs/updates.mdx` (Mintlify). Insert or update a **new top section** for this release.
-          - Site navigation config: `docs/docs.json` (Mintlify navigation and version switcher).
-          - Draft docs: `docs/draft/**` – do **not** modify these.
-          - Changelog: root `CHANGELOG.md` (Keep a Changelog format). Insert a new section for this version/date at the top.
-          - Root README: `README.md` (repository homepage & npm default readme).
-          - Library READMEs: `libs/**/README.md` (READMEs for libs that may be published to npm).
-          - Do NOT touch other files (no config changes, no code files).
+
+          You are allowed to modify/create only:
+
+          - Latest version docs:
+            - `docs/docs/**/*.mdx`
+            - `docs/docs/**/*.md`
+          - Shared global release notes:
+            - `docs/updates.mdx`
+          - Navigation:
+            - `docs/docs.json`
+          - Changelog:
+            - `CHANGELOG.md`
+          - Root README:
+            - `README.md`
+          - Library READMEs:
+            - `libs/**/README.md`
+
+          You must **not** touch:
+          - `docs/v/**` (archived versioned docs)
+          - `docs/draft/docs/**`
+          - `docs/blogs/**`
+          or any other file types outside the allowed list.
 
           RULES – RELEASE NOTES (`docs/updates.mdx`)
-          - Add a new section at the top for `v<version>` with date `<YYYY-MM-DD>`.
+
+          - Add a new section at the **top** for `v<version>` with date `<YYYY-MM-DD>`.
           - Summarize notable user-facing changes derived from commits and diff.
           - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
           - Keep MDX valid (frontmatter/imports/components).
 
-          RULES – VERSIONED DOCS (`docs/<minor>/**`)
-          - Treat `docs/<minor>/` as the canonical docs root for the release line of `<version>`.
-          - When updating or creating docs, stay inside `docs/<minor>/` and keep the structure consistent with what already exists there.
-          - Do NOT modify `docs/draft/**` or docs for other minors.
+          RULES – LATEST DOCS (`docs/docs/**`)
+
+          - Treat `docs/docs/` as the **canonical docs root for the current minor** (`version-minor.txt`).
+          - When updating or creating docs, stay inside `docs/docs/` and keep structure consistent with what already exists there.
+          - Do **not** modify `docs/v/**` or `docs/draft/docs/**`.
+          - Keep tone and style consistent with existing docs.
 
           RULES – NAVIGATION (`docs/docs.json`)
-          - This file defines `navigation.versions` and the Mintlify sidebar.
-          - You MUST keep `docs/docs.json` in sync with the actual docs under `docs/<minor>/`:
-            - If you add a new page (file) in `docs/<minor>/...`, add an appropriate entry under the relevant `group.pages` in `navigation.versions` for that `<minor>`.
-            - If you rename or move a page for this minor, update its path in the navigation.
-          - Detect whether this release introduces a **new minor**:
-            - Read `version-minor.txt` (e.g., `0.4`).
-            - Scan `navigation.versions[*].version` for any entry mentioning this minor, e.g. `"Latest (v0.4)"` or `"v0.4"`.
-            - If **no entry** refers to `<minor>`, treat this as a *new minor version*.
-          - When this is a **new minor version**:
-            1. Identify the current "latest" entry:
-               - The entry where `"default": true`, typically `"version": "Latest (vX.Y)"`.
-            2. Insert a **new entry at the top** of `navigation.versions` with:
-               - `"version": "Latest (v<minor>)"` (e.g., `Latest (v0.4)`),
-               - `"default": true`,
-               - `"groups": [...]`:
-                 - Either copy the groups from the previous latest entry and update page paths from the old minor to the new minor (e.g., `0.3/...` → `0.4/...`), or construct groups that reflect the actual docs present under `docs/<minor>/`.
-                 - Keep `"updates"` as a shared page (`"updates"`), not versioned.
-            3. Update the previous "latest" entry:
-               - Change its `"version"` from `"Latest (vX.Y)"` to `"vX.Y"` (e.g., `"v0.3"`).
-               - Ensure it no longer has `"default": true` (either remove `default` or set it to `false`).
-            4. Preserve existing older entries (e.g., `"v0.2"`) as they are, just shifted down.
-          - When this is **not** a new minor (e.g., a patch within the same `<minor>`):
-            - Keep the "Latest (v<minor>)" entry as the default.
-            - Add/adjust page entries within that `<minor>`’s groups so that every new/renamed doc file under `docs/<minor>/` is reflected in `pages`.
-          - Keep `docs/docs.json` valid JSON and preserved formatting as much as possible (but correctness > formatting).
+
+          Structure:
+          - The root has a `dropdowns` array.
+          - There is at least:
+            - One dropdown with `"dropdown": "Documentation"`, containing:
+              - `"icon": "book"`
+              - `"versions": [ ... ]`
+            - One dropdown with `"dropdown": "Blog"`, containing blog groups.
+
+          You MUST:
+          - Only modify the `"Documentation"` dropdown and its `versions` array.
+          - **Do not** modify the `"Blog"` dropdown or any blog navigation.
+
+          Versions:
+          - The documentation dropdown has a `versions` array similar to:
+
+            ```jsonc
+            {
+              "dropdown": "Documentation",
+              "icon": "book",
+              "versions": [
+                {
+                  "version": "v0.3 (latest)",
+                  "default": true,
+                  "groups": [ ... paths like "docs/getting-started/welcome", "updates", ... ]
+                },
+                {
+                  "version": "v0.2",
+                  "groups": [ ... paths like "docs/v/0.2/getting-started/welcome" ... ]
+                },
+                {
+                  "version": "v0.1",
+                  "groups": [ ... ]
+                }
+              ]
+            }
+            ```
+
+          Semantics:
+          - The **latest minor** (matching `version-minor.txt`) must:
+            - Appear as the first entry in `versions`.
+            - Have `"version": "v<minor> (latest)"` (e.g., `"v0.3 (latest)"`).
+            - Have `"default": true`.
+            - Use paths **without** the `/v/<minor>` prefix (latest routes):
+              - e.g., `"docs/getting-started/welcome"`, `"docs/servers/server"`, `"updates"`.
+          - Older minors (archived) must:
+            - Use `"version": "v<minor>"` (no “(latest)”).
+            - Have **no** `"default": true` (or explicitly `false`).
+            - Use paths that start with `docs/v/<minor>/...`:
+              - e.g., `"docs/v/0.2/getting-started/welcome"`.
+
+          When the current `version-minor.txt` **already matches** the existing latest entry:
+          - Example: latest entry is `"v0.3 (latest)"` and `version-minor.txt` is `0.3`.
+          - Treat this release as a **patch** within the same minor.
+          - Keep the `"v0.3 (latest)"` entry as the default.
+          - Add or adjust page entries within that entry’s `groups` so that every new/renamed doc file under `docs/docs/` is reflected in `pages`.
+          - Do **not** add or modify entries for `docs/v/**`.
+
+          If `version-minor.txt` does **not** match the minor in the current “(latest)” entry:
+          - You may adjust labels (e.g., text like `"v0.3 (latest)"` → `"v0.3"`) and create a new `"v<minor> (latest)"` entry.
+          - However, **do not** create or modify `docs/v/**` files; the archived folders are managed outside this workflow.
+          - Assume that any needed `docs/v/<oldMinor>/...` content is created separately.
+          - Your responsibility is to ensure:
+            - The **latest** entry refers to `docs/...` paths and matches `version-minor.txt`.
+            - Older entries refer to `docs/v/<minor>/...` paths and are correctly labeled.
+
+          Tags:
+          - You may see `tag` fields like `"latest"` or `"version 0.2"` on groups.
+          - Preserve and update them logically:
+            - The latest version can have `tag: "latest"`.
+            - Older versions can have `tag: "version <minor>"` (e.g., `"version 0.2"`).
+          - Do not introduce noisy or inconsistent tags.
+
+          Keep `docs/docs.json`:
+          - Valid JSON.
+          - As close as reasonable to existing formatting (but correctness > formatting).
 
           RULES – CHANGELOG (`CHANGELOG.md`)
-          - Follow Keep a Changelog style (Headings: `## [v<version>] - <YYYY-MM-DD>`).
+
+          - Follow Keep a Changelog style.
+          - Add a new section at the top with heading:
+            - `## [v<version>] - <YYYY-MM-DD>`
           - Categorize entries using Conventional Commits (feat/fix/docs/perf/refactor/build/ci/chore) and mark **BREAKING CHANGES** clearly.
-          - Include terse, imperative bullet points. Avoid internal-only noise.
+          - Use short, imperative bullets; avoid internal-only noise.
 
           RULES – ROOT README (`README.md`)
-          - Reflect the new release where it matters: install commands, quickstart snippets, versioned examples, and top-level feature overview.
-          - Keep content accurate for the whole repo, not just a single lib.
-          - If no meaningful repo-level changes for this release, leave it as-is.
+
+          - Update only if there are meaningful repo-level changes for this release.
+          - Ensure:
+            - Install commands, quickstart snippets, and any mentioned versions are accurate for the current release.
+            - Top-level feature overview is up-to-date.
+          - If there are no meaningful changes, leave it unchanged.
 
           RULES – LIBRARY READMEs (`libs/**/README.md`)
-          - Focus on libs that are clearly user-facing or affected by the diff (e.g., their code changed, their package.json version changed, or commits mention them).
+
+          - Focus on libs that are clearly user-facing or affected by the diff:
+            - Their code changed.
+            - Their `package.json` version changed.
+            - Commits explicitly mention them.
           - For each updated README:
             - Ensure install instructions are correct (package name, registry, version ranges if relevant).
-            - Update usage examples and API sections to match the current behavior.
-            - Highlight notable changes that impact consumers of that lib.
-          - Keep Markdown valid and simple; avoid large rewrites unless the current content is clearly outdated or misleading.
+            - Update usage examples and API sections to match current behavior.
+            - Optionally highlight notable changes that impact consumers.
+          - Keep Markdown simple and valid; avoid large rewrites unless the current content is clearly misleading.
 
           GENERAL
-          - Prefer small, surgical edits. If a new doc is needed, create it under `docs/<minor>/` with clear frontmatter.
-          - Keep tone consistent with existing docs and READMEs.
-          - Never modify `docs/draft/**` or docs for other minors.
-          - Always keep `docs/docs.json` consistent with the actual docs and versions.
+
+          - Prefer small, surgical edits.
+          - Never modify:
+            - `docs/v/**`
+            - `docs/draft/docs/**`
+            - `docs/blogs/**`
+          - Always keep:
+            - `docs/docs.json` consistent with actual docs under `docs/docs/`.
+            - `docs/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
           - If no changes are needed, return an empty patch set.
 
           OUTPUT (STRICT)
+
           - Return JSON that matches the output schema provided by the runner.
           - Each patch replaces the entire file content.
 
           HINTS
+
           - Use subjects/bodies in `commits.txt` to infer categories; de-duplicate merges.
-          - If the same content belongs in multiple places (e.g. `docs/updates.mdx`, `CHANGELOG.md`, and a lib's README), adapt tone:
+          - If the same content belongs in multiple places (e.g., `docs/updates.mdx`, `CHANGELOG.md`, and a lib’s README), adapt tone:
             - docs = narrative highlights,
             - changelog = terse, categorized bullets,
-            - README = practical “how to use this” guidance and install/upgrade notes.
+            - README = practical “how to use this” guidance and upgrade notes.
 
           Produce ONLY the JSON per schema.
           MDX
@@ -254,7 +350,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/.+\\.(md|mdx)|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
+                      "pattern": "^(docs\\/docs\\/.+\\.(md|mdx)|docs\\/updates\\.mdx|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -340,6 +436,7 @@ jobs:
             Codex proposed updates to:
             - **docs/updates.mdx** (Mintlify release notes)
             - **docs/docs.json** (Mintlify navigation / versions)
+            - **docs/docs/** (latest docs only)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
