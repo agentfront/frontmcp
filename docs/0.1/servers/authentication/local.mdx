@@ -7,6 +7,7 @@ icon: window
 FrontMCP ships a **built‑in OAuth provider** for first‑party scenarios for development.
 
 ### Configuration
+
 ```ts
 auth: {
   type: 'local',
@@ -22,27 +23,27 @@ auth: {
 ```
 
 ### Example (per app, split‑by‑app server)
+
 ```ts
 @FrontMcp({
   info: { name: 'Workspace', version: '1.0.0' },
-  auth: { type:'local' },
+  auth: { type: 'local' },
   apps: [DocsApp, MailApp],
-  splitByApp: true
+  splitByApp: true,
 })
 export default class Server {}
 
 @App({
-  name: 'Docs'
+  name: 'Docs',
 })
 export default class DocsApp {}
 ```
 
-<Warning>
-    When using `splitByApp: true`, define auth per app; server‑level `auth` is not allowed.
-</Warning>
+<Warning>When using `splitByApp: true`, define auth per app; server‑level `auth` is not allowed.</Warning>
 
 ---
 
 ## Keys & JWKS
+
 - Omit `signKey` to auto‑generate keys (exposed via the local JWKS endpoint).
 - Provide `jwks` or `signKey` to pin keys for stable environments.

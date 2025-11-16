@@ -15,9 +15,7 @@ import { Prompt } from '@frontmcp/sdk';
   name: 'Summarize',
   title: 'Summarize Text',
   description: 'Create a concise summary',
-  arguments: [
-    { name: 'text', description: 'Input text', required: true },
-  ],
+  arguments: [{ name: 'text', description: 'Input text', required: true }],
 })
 export default class SummarizePrompt {
   async execute(args: { text: string }) {
@@ -49,6 +47,6 @@ export default class SummarizePrompt {
 ```
 
 **Notes**
+
 - Prompts are discoverable and can be parameterized by clients.
 - Use prompts to standardize instructions for common tasks across tools/apps.
-
