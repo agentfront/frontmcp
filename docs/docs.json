@@ -7,6 +7,11 @@
     "strict": false
   },
   "theme": "almond",
+  "favicon": "/images/favicon-32x32.png",
+  "logo": {
+    "light": "/images/frontmcp.light.png",
+    "dark": "/images/frontmcp.dark.png"
+  },
   "colors": {
     "primary": "#16A34A",
     "light": "#07C983",
@@ -15,6 +20,9 @@
   "contextual": {
     "options": [
       "copy",
+      "chatgpt",
+      "cursor",
+      "mcp",
       "view"
     ]
   },
@@ -43,6 +51,11 @@
         "dark": "dark-plus",
         "light": "snazzy-light"
       }
+    }
+  },
+  "errors": {
+    "404": {
+      "redirect": true
     }
   },
   "navigation": {
