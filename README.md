@@ -1,13 +1,18 @@
 <div align="center">
 
-# FrontMCP 🚀
+<picture>
+  <source width="550" media="(prefers-color-scheme: dark)" srcset="docs/images/frontmcp.dark.svg">
+  <source width="550" media="(prefers-color-scheme: light)" srcset="docs/images/frontmcp.light.svg">
+  <img width="550" alt="FastMCP Logo" src="docs/images/frontmcp.light.svg">
+</picture>
+<hr>
 
-<strong>The TypeScript-first way to build production-grade MCP servers.</strong>
+<strong>The TypeScript way to build MCP servers with decorators, DI, and Streamable HTTP.</strong>
 
 _Made with ❤️ for TypeScript developers_
 
 [![NPM - @frontmcp/sdk](https://img.shields.io/npm/v/@frontmcp/sdk.svg?v=2)](https://www.npmjs.com/package/@frontmcp/sdk)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License](https://img.shields.io/github/license/agentfront/frontmcp.svg?v=1)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
 </div>
@@ -15,22 +20,22 @@ _Made with ❤️ for TypeScript developers_
 ---
 
 FrontMCP is a **TypeScript-first framework** for the [Model Context Protocol (MCP)](https://modelcontextprotocol.io).
-You describe servers, apps, tools, resources, and prompts with decorators; FrontMCP handles protocol, transport, DI,
-session/auth, and execution flow.
+You write clean, typed code; FrontMCP handles the protocol, transport, DI, session/auth, and execution flow.
 
 ```ts
 // src/main.ts
+import 'reflect-metadata';
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import HelloApp from './hello.app';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [HelloApp],
-  http: { port: 3001 },
+  http: { port: 3000 },
   logging: { level: LogLevel.Info },
 })
 export default class Server {}
-```
+````
 
 ---
 
@@ -38,66 +43,70 @@ export default class Server {}
 
 ## Table of Contents
 
-- [Why FrontMCP?](#why-frontmcp)
-- [Installation](#installation)
-- [Quickstart](#quickstart)
-  - [Minimal Server & App](#minimal-server--app)
-  - [Function and Class Tools](#function-and-class-tools)
-  - [Scripts & tsconfig](#scripts--tsconfig)
-  - [MCP Inspector](#mcp-inspector)
-- [Core Concepts](#core-concepts)
-  - [Servers](#servers)
-  - [Apps](#apps)
-  - [Tools](#tools)
-  - [Resources](#resources)
-  - [Prompts](#prompts)
-  - [Providers](#providers)
-  - [Adapters](#adapters)
-  - [Plugins](#plugins)
-- [Authentication](#authentication)
-  - [Remote OAuth](#remote-oauth)
-  - [Local OAuth](#local-oauth)
-- [Sessions & Transport](#sessions--transport)
-- [Logging Transports](#logging-transports)
-- [Deployment](#deployment)
-  - [Local Dev](#local-dev)
-  - [Production](#production)
-- [Version Alignment](#version-alignment)
-- [Contributing](#contributing)
-- [License](#license)
+* [Why FrontMCP?](#why-frontmcp)
+* [Installation](#installation)
+* [Quickstart](#quickstart)
+
+  * [Minimal Server & App](#minimal-server--app)
+  * [Function and Class Tools](#function-and-class-tools)
+  * [Scripts & tsconfig](#scripts--tsconfig)
+  * [Inspector](#inspector)
+* [Core Concepts](#core-concepts)
+
+  * [Servers](#servers)
+  * [Apps](#apps)
+  * [Tools](#tools)
+  * [Resources](#resources)
+  * [Prompts](#prompts)
+  * [Providers](#providers)
+  * [Adapters](#adapters)
+  * [Plugins](#plugins)
+* [Authentication](#authentication)
+
+  * [Remote OAuth](#remote-oauth)
+  * [Local OAuth](#local-oauth)
+* [Sessions & Transport](#sessions--transport)
+* [Deployment](#deployment)
+
+  * [Local Dev](#local-dev)
+  * [Production](#production)
+* [Version Alignment](#version-alignment)
+* [Contributing](#contributing)
+* [License](#license)
 
 ---
 
 ## Why FrontMCP?
 
-- **TypeScript-native DX** — decorators, Zod validation, strong typing end-to-end
-- **Spec-aligned transports** — Streamable HTTP (GET/POST), streaming, sessions
-- **Scoped invoker + DI** — secure, composable execution with hooks
-- **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
-- **Auth** — remote OAuth (external IdP) or built-in local OAuth
-- **Logging** — pluggable log transports (console, JSONL, HTTP batch, …)
+* **TypeScript-native DX** — decorators, Zod, strong typing end-to-end
+* **Spec-aligned transport** — Streamable HTTP, sessions, server‑pushed events
+* **Scoped invoker + DI** — secure, composable execution with hooks
+* **Adapters & Plugins** — generate tools from OpenAPI; add cross-cutting behavior
+* **Auth** — remote OAuth (external IdP) or built-in local OAuth
+* **Logging** — pluggable log transports
 
 ---
 
 ## Installation
 
-Choose your package manager:
+**Prereqs:** Node.js ≥ 22, npm ≥ 10. ([AgentFront][1])
+
+### Option A — New project (recommended)
 
 ```bash
-# npm
-npm i -E frontmcp @frontmcp/sdk zod reflect-metadata
-npm i -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
-
-# yarn
-yarn add -E frontmcp @frontmcp/sdk zod reflect-metadata
-yarn add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
-
-# pnpm
-pnpm add -E frontmcp @frontmcp/sdk zod reflect-metadata
-pnpm add -D typescript tsx @types/node rimraf @modelcontextprotocol/inspector
+npx frontmcp create my-app
 ```
 
-> Requires **Node 20+**.
+This scaffolds a FrontMCP project, writes a modern ESM `tsconfig.json` for decorators, adds helpful package scripts, and installs required dev deps. ([AgentFront][1])
+
+### Option B — Add to an existing project
+
+```bash
+npm i -D frontmcp @types/node@^20
+npx frontmcp init
+```
+
+`init` adds scripts, verifies your `tsconfig.json`, and checks layout. No need to install `@frontmcp/sdk` directly—the CLI bundles a compatible SDK for you. ([AgentFront][1])
 
 ---
 
@@ -123,7 +132,7 @@ import HelloApp from './hello.app';
 @FrontMcp({
   info: { name: 'Hello MCP', version: '0.1.0' },
   apps: [HelloApp],
-  http: { port: Number(process.env.PORT) || 3001 },
+  http: { port: 3000 },
   logging: { level: LogLevel.Info },
 })
 export default class Server {}
@@ -141,6 +150,8 @@ export default class HelloApp {}
 
 ### Function and Class Tools
 
+> New ergonomic schemas: pass **Zod fields directly** (no `z.object({...})`). ([AgentFront][4])
+
 **Function tool**
 
 ```ts
@@ -150,7 +161,7 @@ import { z } from 'zod';
 export default tool({
   name: 'greet',
   description: 'Greets a user by name',
-  inputSchema: z.object({ name: z.string() }),
+  inputSchema: { name: z.string() }, // shape, not z.object
 })(({ name }) => `Hello, ${name}!`);
 ```
 
@@ -163,10 +174,10 @@ import { z } from 'zod';
 @Tool({
   name: 'add',
   description: 'Add two numbers',
-  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  inputSchema: { a: z.number(), b: z.number() },
 })
 export default class AddTool {
-  execute({ a, b }: { a: number; b: number }) {
+  async execute({ a, b }: { a: number; b: number }) {
     return a + b;
   }
 }
@@ -174,22 +185,36 @@ export default class AddTool {
 
 ### Scripts & tsconfig
 
-**`tsconfig.json`**
+After `create` or `init`, you’ll have:
+
+```json
+{
+  "scripts": {
+    "dev": "frontmcp dev",
+    "build": "frontmcp build",
+    "inspect": "frontmcp inspector",
+    "doctor": "frontmcp doctor"
+  }
+}
+```
+
+These map to dev watch, production build, zero‑setup Inspector launch, and environment checks. ([AgentFront][1])
+
+**Recommended `tsconfig.json` (ESM + decorators)**
 
 ```json
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "CommonJS",
-    "lib": ["ES2020"],
+    "target": "es2021",
+    "module": "esnext",
+    "lib": ["es2021"],
+    "moduleResolution": "bundler",
     "rootDir": "src",
     "outDir": "dist",
-    "moduleResolution": "Node",
     "strict": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
     "resolveJsonModule": true,
+    "skipLibCheck": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "sourceMap": true
@@ -199,7 +224,9 @@ export default class AddTool {
 }
 ```
 
-**`tsconfig.build.json`**
+This mirrors what `init` writes for you. ([AgentFront][3])
+
+**Optional `tsconfig.build.json`**
 
 ```json
 {
@@ -212,35 +239,15 @@ export default class AddTool {
 }
 ```
 
-**`package.json` (scripts)**
+### Inspector
 
-```json
-{
-  "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start:dev": "tsx src/main.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "clean": "rimraf dist",
-    "inspect:dev": "npx @modelcontextprotocol/inspector tsx src/main.ts",
-    "inspect:dist": "npx @modelcontextprotocol/inspector node dist/main.js"
-  }
-}
-```
-
-> Always import **`reflect-metadata` first** in your entry to enable decorator metadata.
-
-### MCP Inspector
-
-Debug your server with a browser UI:
+Run a browser UI to exercise tools and messages:
 
 ```bash
-# Dev (runs TS)
-npm run inspect:dev
-# Dist (runs built JS)
-npm run inspect:dist
+npm run inspect
 ```
+
+This launches the MCP Inspector; point it at your local server (e.g., `http://localhost:3000`). ([AgentFront][3])
 
 ---
 
@@ -248,85 +255,76 @@ npm run inspect:dist
 
 ### Servers
 
-The decorated entry (`@FrontMcp`) defines server **info**, **apps**, **http**, **logging**, **session**, optional **auth
-**, and shared **providers**.
+`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it minimal or scale up with providers and plugins. ([AgentFront][5])
 
 ### Apps
 
-Use `@App` to group **tools**, **resources**, **prompts**, **providers**, **adapters**, and **plugins**. With
-`splitByApp: true`, each app has its own scope/base path and (optionally) its own auth.
+Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With `splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([AgentFront][6])
 
 ### Tools
 
-Active actions with input/output schemas. Use class tools (`@Tool`) or function tools (`tool({...})(handler)`).
+Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for `inputSchema`. ([AgentFront][4])
 
 ### Resources
 
-Expose read-only data by URI. Define with `@Resource` or `resource(...)` (see docs).
+Readable data by URI or RFC6570 template (see `@Resource` / `@ResourceTemplate`). ([AgentFront][7])
 
 ### Prompts
 
-Reusable prompt templates (`@Prompt` / `prompt(...)`) supplying arguments for LLM interactions.
+Reusable templates returning MCP `GetPromptResult`, with typed arguments. ([AgentFront][8])
 
-### Providers
+### Providers / Adapters / Plugins
 
-Dependency-injected singletons for config/DB/Redis/KMS/etc., with scopes: **GLOBAL**, **SESSION**, **REQUEST**.
-
-### Adapters
-
-Generate tools/resources/prompts from external definitions (e.g., **OpenAPI**).
-
-### Plugins
-
-Cross-cutting behavior (caching, tracing, policy). Plugins can contribute providers/adapters/tools/resources/prompts.
+Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([AgentFront][9])
 
 ---
 
 ## Authentication
 
-You can configure auth on the server (multi-app shared) or per app (isolated scopes).
+Configure auth at the **server** (shared) or **per app** (isolated). With `splitByApp: true`, define auth **per app** (server‑level `auth` is disallowed). ([AgentFront][10])
 
 ### Remote OAuth
 
 ```ts
 auth: {
   type: 'remote',
-          name: 'frontegg',
-          baseUrl: 'https://idp.example.com',
-          dcrEnabled ? : boolean,
-          clientId ? : string | ((info: { clientId: string }) => string),
-          mode ? : 'orchestrated' | 'transparent',
-          allowAnonymous ? : boolean,
-          consent ? : boolean,
-          scopes ? : string[],
-          grantTypes ? : ('authorization_code' | 'refresh_token')[],
-          authEndpoint ? : string,
-          tokenEndpoint ? : string,
-          registrationEndpoint ? : string,
-          userInfoEndpoint ? : string,
-          jwks ? : JSONWebKeySet,
-          jwksUri ? : string
+  name: 'frontegg',
+  baseUrl: 'https://idp.example.com',
+  dcrEnabled?: boolean,
+  clientId?: string | ((info: { clientId: string }) => string),
+  mode?: 'orchestrated' | 'transparent',
+  allowAnonymous?: boolean,
+  consent?: boolean,
+  scopes?: string[],
+  grantTypes?: ('authorization_code' | 'refresh_token')[],
+  authEndpoint?: string,
+  tokenEndpoint?: string,
+  registrationEndpoint?: string,
+  userInfoEndpoint?: string,
+  jwks?: JSONWebKeySet,
+  jwksUri?: string
 }
 ```
+
+See **Authentication → Remote OAuth** for full details and DCR vs non‑DCR. ([AgentFront][11])
 
 ### Local OAuth
 
 ```ts
-{
-  auth: {
-    type: 'local',
-            id: 'local',
-            name: 'Local Auth',
-            scopes?: string[],
-            grantTypes?: ('authorization_code' | 'refresh_token')[],
-            allowAnonymous?: boolean, // default true
-            consent?: boolean,
-            jwks?: JSONWebKeySet,
-            signKey?: JWK | Uint8Array
-  }
+auth: {
+  type: 'local',
+  id: 'local',
+  name: 'Local Auth',
+  scopes?: string[],
+  grantTypes?: ('authorization_code' | 'refresh_token')[],
+  allowAnonymous?: boolean, // default true
+  consent?: boolean,
+  jwks?: JSONWebKeySet,
+  signKey?: JWK | Uint8Array
+}
 ```
 
-> With `splitByApp: true`, define auth **per `@App`** (server-level `auth` is disallowed).
+Use per‑app when isolating scopes. ([AgentFront][12])
 
 ---
 
@@ -334,53 +332,14 @@ auth: {
 
 ```ts
 session: {
-  sessionMode ? : 'stateful' | 'stateless' | ((issuer) =>
-...), // default 'stateless'
-  transportIdMode ? : 'uuid' | 'jwt' | ((issuer) =>
-...),       // default 'uuid'
+  sessionMode?: 'stateful' | 'stateless' | ((issuer) => ...), // default 'stateless'
+  transportIdMode?: 'uuid' | 'jwt' | ((issuer) => ...),       // default 'uuid'
 }
 ```
 
-- **Stateful**: server-side store for tokens; enables refresh; recommended for short-lived upstream tokens.
-- **Stateless**: tokens embedded in JWT; simpler but no silent refresh.
-- **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups).
-
----
-
-## Logging Transports
-
-Add custom log sinks via `@LogTransport`:
-
-```ts
-import { LogTransport, LogTransportInterface, LogRecord } from '@frontmcp/sdk';
-
-@LogTransport({ name: 'StructuredJson', description: 'JSONL to stdout' })
-export class StructuredJsonTransport extends LogTransportInterface {
-  log(rec: LogRecord): void {
-    try {
-      process.stdout.write(
-        JSON.stringify({
-          ts: rec.timestamp.toISOString(),
-          level: rec.levelName,
-          msg: String(rec.message),
-          prefix: rec.prefix || undefined,
-          args: (rec.args || []).map(String),
-        }) + '\n',
-      );
-    } catch {}
-  }
-}
-```
-
-Register:
-
-```ts
-logging: {
-  level: LogLevel.Info,
-          enableConsole: false,
-          transports : [StructuredJsonTransport],
-}
-```
+* **Stateful**: server‑side store (e.g., Redis); supports refresh; best for short‑lived upstream tokens.
+* **Stateless**: embeds session in JWT; simpler but no silent refresh.
+* **Transport IDs**: `uuid` (per node) or `jwt` (signed; distributed setups). ([AgentFront][5])
 
 ---
 
@@ -389,23 +348,26 @@ logging: {
 ### Local Dev
 
 ```bash
-# npm
 npm run dev
-# yarn
-yarn dev
-# pnpm
-pnpm dev
 ```
 
-- HTTP default: `http.port` (e.g., 3001)
-- `http.entryPath` defaults to `''` (set to `/mcp` if you prefer)
+* Default HTTP port: `3000` unless configured
+* `npm run doctor` checks Node/npm versions, `tsconfig`, and scripts. ([AgentFront][3])
+
+### Production
+
+```bash
+npm run build
+NODE_ENV=production PORT=8080 npm start
+```
+
+Builds to `dist/` (uses `tsconfig.build.json`). Consider a process manager and reverse proxy; align all `@frontmcp/*` versions. ([AgentFront][13])
 
 ---
 
 ## Version Alignment
 
-If versions drift, the runtime may throw a "version mismatch" error at boot. Keep `@frontmcp/sdk` on the **same
-version** across your workspace.
+If versions drift, the runtime will throw a clear **“version mismatch”** at boot. Keep `@frontmcp/*` versions aligned. ([AgentFront][13])
 
 ---
 
@@ -413,12 +375,13 @@ version** across your workspace.
 
 PRs welcome! Please:
 
-- Keep changes focused and tested
-- Run `typecheck`, `build`, and try **MCP Inspector** locally
-- Align `@frontmcp/*` versions in examples
+* Keep changes focused and tested
+* Run `doctor`, `dev`, and `build`; try **Inspector** locally
+* Align `@frontmcp/*` versions in examples
 
 ---
 
 ## License
 
 See [LICENSE](./LICENSE).
+
