@@ -20,11 +20,15 @@ export interface SiteAuthorizationPluginOptions {
   description: 'Validates site access and optional admin requirement for site-scoped tools',
 })
 export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthorizationPluginOptions> {
-  constructor(private readonly opts: SiteAuthorizationPluginOptions = {
-    demoAllowAllIfNoClaims: true,
-    siteIdFieldName: 'siteId'
-  }) {
+  opts: SiteAuthorizationPluginOptions;
+
+  constructor(opts: SiteAuthorizationPluginOptions = {}) {
+    const mergedOpts: SiteAuthorizationPluginOptions = {
+      demoAllowAllIfNoClaims: opts.demoAllowAllIfNoClaims ?? true,
+      siteIdFieldName: opts.siteIdFieldName ?? 'siteId'
+    };
     super();
+    this.opts = mergedOpts;
   }
 
   private getAllowedSites(authInfo: any): string[] | 'ALL' {
@@ -61,7 +65,8 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
 
     const siteId = input?.[siteField];
     const siteScoped = meta.site?.siteScoped || (siteId !== undefined);
-    const adminRequired = meta.site?.adminRequired || input?.admin === true;
+    const adminRequired = meta.site?.adminRequired === true;
+
 
     if (!siteScoped) {
       // Not a site-scoped tool; nothing to check here.
