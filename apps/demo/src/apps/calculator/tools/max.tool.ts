@@ -5,12 +5,10 @@ import {z} from "zod";
   name: 'max',
   description: 'Maximum value in an array of numbers',
   inputSchema: {values: z.array(z.number()).min(1)},
-  outputSchema: {result: z.number()}
+  outputSchema: 'number'
 })
 export default class MaxTool extends ToolContext {
   async execute(input: { values: number[] }) {
-    return {
-      result: Math.max(...input.values),
-    };
+    return Math.max(...input.values)
   }
 }

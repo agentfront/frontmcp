@@ -1,24 +1,24 @@
-import {App} from '@frontmcp/sdk';
+import { App } from '@frontmcp/sdk';
 
-import {ExpenseConfigProvider,} from './provders';
-import {OpenapiAdapter} from "@frontmcp/adapters";
+import { ExpenseConfigProvider } from './provders';
+import { OpenapiAdapter } from '@frontmcp/adapters';
 import CreateExpenseTool from './tools/create-expense.tool';
 import GetExpenseTool from './tools/get-expense-fun.tool';
-import AddTool from "./tools/add.tool";
-import AuthorizationPlugin from "./plugins/authorization.plugin";
-import {CachePlugin} from "@frontmcp/plugins";
+import AddTool from './tools/add.tool';
+import AuthorizationPlugin from './plugins/authorization.plugin';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @App({
   id: 'expense',
   name: 'Expense MCP app',
-  providers: [
-    ExpenseConfigProvider,
+  providers: [ExpenseConfigProvider],
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
+      baseUrl: 'https://frontmcp-test.proxy.beeceptor.com',
+    }),
   ],
-  adapters: [OpenapiAdapter.init({
-    name: 'backend:api',
-    url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
-    baseUrl: 'https://frontmcp-test.proxy.beeceptor.com'
-  })],
   plugins: [
     AuthorizationPlugin,
     CachePlugin.init({
@@ -26,24 +26,14 @@ import {CachePlugin} from "@frontmcp/plugins";
       config: {
         host: 'localhost',
         port: 6379,
-      }
-    })
+      },
+    }),
   ],
-  tools: [
-    AddTool,
-    CreateExpenseTool,
-    GetExpenseTool
-  ],
+  tools: [AddTool, CreateExpenseTool, GetExpenseTool],
   auth: {
     type: 'remote',
     name: 'frontegg',
     baseUrl: 'https://sample-app.frontegg.com',
-  }
+  },
 })
-export default class ExpenseMcpApp {
-}
-
-
-
-
-
+export default class ExpenseMcpApp {}

@@ -53,7 +53,7 @@ npm install @frontmcp/plugins
 yarn add @frontmcp/plugins
 # or
 pnpm add @frontmcp/plugins
-````
+```
 
 > CodeCall uses [`vm2`](https://github.com/patriksimek/vm2) to run LLM-authored JavaScript in a sandbox.
 
@@ -71,8 +71,8 @@ import CodeCallPlugin from '@frontmcp/plugins/codecall';
   name: 'health:ping',
   description: 'Simple health check',
   codecall: {
-    visibleInListTools: true,  // keep visible as a normal tool
-    enabledInCodeCall: true,   // also available inside CodeCall plans
+    visibleInListTools: true, // keep visible as a normal tool
+    enabledInCodeCall: true, // also available inside CodeCall plans
   },
 })
 class HealthPingTool {
@@ -100,7 +100,7 @@ class HealthPingTool {
       },
 
       vm: {
-        preset: 'secure',  // CSP-like preset
+        preset: 'secure', // CSP-like preset
         timeoutMs: 4000,
         allowLoops: false,
         disabledBuiltins: ['eval', 'Function'],
@@ -115,11 +115,11 @@ export default class ExampleApp {}
 
 From the model’s perspective, `list_tools` now shows:
 
-* `codecall.search`
-* `codecall.describe`
-* `codecall.execute`
-* (optionally) `codecall.invoke`
-* plus any tools with `codecall.visibleInListTools: true`.
+- `codecall.search`
+- `codecall.describe`
+- `codecall.execute`
+- (optionally) `codecall.invoke`
+- plus any tools with `codecall.visibleInListTools: true`.
 
 Everything else is reachable only via CodeCall.
 
@@ -129,25 +129,25 @@ Everything else is reachable only via CodeCall.
 
 CodeCall offers three **modes** that control which tools are:
 
-* Visible in `list_tools`.
-* Usable via `codecall.search/describe/execute`.
+- Visible in `list_tools`.
+- Usable via `codecall.search/describe/execute`.
 
 ### `mode: 'codecall_only'` (default)
 
 **Best when:**
 
-* You have **many tools**.
-* You want to expose **all of them** via CodeCall.
-* You **don’t** want to list them all.
+- You have **many tools**.
+- You want to expose **all of them** via CodeCall.
+- You **don’t** want to list them all.
 
 **Behavior:**
 
-* Hide all tools from `list_tools` by default.
-* Include all tools in CodeCall search/execute by default.
-* Per-tool metadata can:
+- Hide all tools from `list_tools` by default.
+- Include all tools in CodeCall search/execute by default.
+- Per-tool metadata can:
 
-  * Keep a tool visible in `list_tools`.
-  * Disable a tool from CodeCall if needed.
+  - Keep a tool visible in `list_tools`.
+  - Disable a tool from CodeCall if needed.
 
 ---
 
@@ -155,14 +155,14 @@ CodeCall offers three **modes** that control which tools are:
 
 **Best when:**
 
-* You have a large toolbox, but only a **subset** should be usable via CodeCall.
-* You don’t want every tool to be part of the “code surface”.
+- You have a large toolbox, but only a **subset** should be usable via CodeCall.
+- You don’t want every tool to be part of the “code surface”.
 
 **Behavior:**
 
-* Hide all tools from `list_tools` by default.
-* Only tools with `codecall.enabledInCodeCall: true` are available via CodeCall.
-* `codecall.visibleInListTools` controls whether a tool appears in `list_tools`.
+- Hide all tools from `list_tools` by default.
+- Only tools with `codecall.enabledInCodeCall: true` are available via CodeCall.
+- `codecall.visibleInListTools` controls whether a tool appears in `list_tools`.
 
 ---
 
@@ -170,17 +170,17 @@ CodeCall offers three **modes** that control which tools are:
 
 **Best when:**
 
-* You have **up to ~10 tools**.
-* You want to use **both** classic tool calls and CodeCall on the same tools.
-* You’re happy to configure everything per-tool.
+- You have **up to ~10 tools**.
+- You want to use **both** classic tool calls and CodeCall on the same tools.
+- You’re happy to configure everything per-tool.
 
 **Behavior:**
 
-* CodeCall doesn’t assume anything by default.
-* Only tools with:
+- CodeCall doesn’t assume anything by default.
+- Only tools with:
 
-  * `codecall.enabledInCodeCall: true` are used by CodeCall.
-  * `codecall.visibleInListTools: true` appear in `list_tools`.
+  - `codecall.enabledInCodeCall: true` are used by CodeCall.
+  - `codecall.visibleInListTools: true` appear in `list_tools`.
 
 ---
 
@@ -193,7 +193,7 @@ CodeCall adds a `codecall` section to `@Tool` options:
   name: 'users:list',
   description: 'List users with pagination',
   codecall: {
-    enabledInCodeCall: true,   // usable from codecall.execute
+    enabledInCodeCall: true, // usable from codecall.execute
     visibleInListTools: false, // hidden from classic list_tools
   },
 })
@@ -204,19 +204,19 @@ class ListUsersTool {
 
 Fields:
 
-* `codecall.visibleInListTools?: boolean`
+- `codecall.visibleInListTools?: boolean`
 
-  * `true` → keep visible in `list_tools`.
-  * `false` / omitted → plugin may hide it depending on `mode`.
+  - `true` → keep visible in `list_tools`.
+  - `false` / omitted → plugin may hide it depending on `mode`.
 
-* `codecall.enabledInCodeCall?: boolean`
+- `codecall.enabledInCodeCall?: boolean`
 
-  * Controls whether the tool is indexed and callable from CodeCall.
-  * Defaults depend on `mode`:
+  - Controls whether the tool is indexed and callable from CodeCall.
+  - Defaults depend on `mode`:
 
-  * `codecall_only`: default **true**
-  * `codecall_opt_in`: default **false**
-  * `metadata_driven`: default **false**
+  - `codecall_only`: default **true**
+  - `codecall_opt_in`: default **false**
+  - `metadata_driven`: default **false**
 
 ---
 
@@ -224,12 +224,12 @@ Fields:
 
 If your FrontMCP server has **multiple apps** (e.g. `user` app and `billing` app), CodeCall supports app-aware search:
 
-* `codecall.search` accepts an optional `filter` object with `appIds`.
-* The model can:
+- `codecall.search` accepts an optional `filter` object with `appIds`.
+- The model can:
 
-  * Search tools in just the `user` app.
-  * Just the `billing` app.
-  * Or across both.
+  - Search tools in just the `user` app.
+  - Just the `billing` app.
+  - Or across both.
 
 Conceptually:
 
@@ -274,10 +274,10 @@ vm: {
 
 Suggested usage:
 
-* `locked_down` – strictest; highly sensitive environments.
-* `secure` – **default**; safe for untrusted LLM code.
-* `balanced` – more permissive; internal/trusted models.
-* `experimental` – dev-only; very relaxed, not for production.
+- `locked_down` – strictest; highly sensitive environments.
+- `secure` – **default**; safe for untrusted LLM code.
+- `balanced` – more permissive; internal/trusted models.
+- `experimental` – dev-only; very relaxed, not for production.
 
 You can override any fields on top of the preset.
 
@@ -355,12 +355,20 @@ Get input/output schemas for selected tools.
     {
       "name": "users:list",
       "description": "List users with pagination",
-      "inputSchema": { /* JSON schema-like */ },
-      "outputSchema": { /* optional JSON schema-like */ },
+      "inputSchema": {
+        /* JSON schema-like */
+      },
+      "outputSchema": {
+        /* optional JSON schema-like */
+      },
       "examples": [
         {
           "input": { "limit": 10 },
-          "output": { "items": [/* ... */] }
+          "output": {
+            "items": [
+              /* ... */
+            ]
+          }
         }
       ]
     }
@@ -392,15 +400,15 @@ Run a **JavaScript execution plan** that calls tools from inside a sandbox.
 Inside the VM, the script has access to:
 
 ```js
-await callTool("users:list", { limit: 100 });
-const meta = getTool("users:list"); // name, description, schemas
+await callTool('users:list', { limit: 100 });
+const meta = getTool('users:list'); // name, description, schemas
 
 codecallContext.tenantId; // read-only context
 
-console.log("debug info"); // if allowConsole === true
+console.log('debug info'); // if allowConsole === true
 
-mcpLog("info", "Loaded users", { count: 100 });
-mcpNotify("step_started", { step: "load_users" });
+mcpLog('info', 'Loaded users', { count: 100 });
+mcpNotify('step_started', { step: 'load_users' });
 ```
 
 > `console`, `mcpLog`, and `mcpNotify` are available only if enabled in config.
@@ -409,17 +417,17 @@ mcpNotify("step_started", { step: "load_users" });
 
 CodeCall normalizes results into a shape with `status`:
 
-* `ok` – script returned successfully.
-* `syntax_error` – JS parse error.
-* `illegal_access` – attempted to use a blocked builtin/global.
-* `runtime_error` – bug in the JS plan (script-level error).
-* `tool_error` – error thrown by a specific tool call (tool-level error).
-* `timeout` – script exceeded the configured time.
+- `ok` – script returned successfully.
+- `syntax_error` – JS parse error.
+- `illegal_access` – attempted to use a blocked builtin/global.
+- `runtime_error` – bug in the JS plan (script-level error).
+- `tool_error` – error thrown by a specific tool call (tool-level error).
+- `timeout` – script exceeded the configured time.
 
 This allows the LLM and the orchestrator to distinguish:
 
-* “My code is wrong” vs
-* “This specific tool call failed with input X”.
+- “My code is wrong” vs
+- “This specific tool call failed with input X”.
 
 ---
 
@@ -430,7 +438,7 @@ JavaScript plan and spinning up the VM.
 
 When `directCalls.enabled === true`, CodeCall exposes an extra meta-tool:
 
-* e.g. `codecall.invoke`
+- e.g. `codecall.invoke`
 
 **Input (conceptual):**
 
@@ -443,28 +451,29 @@ When `directCalls.enabled === true`, CodeCall exposes an extra meta-tool:
 
 **Behavior:**
 
-* No VM is created.
-* No user-written JS is executed.
-* The call behaves just like a normal MCP tool call:
+- No VM is created.
+- No user-written JS is executed.
+- The call behaves just like a normal MCP tool call:
 
-  * PII plugin still runs.
-  * Auth, rate limiting, logging, etc. still run.
-* On success: you get back the tool result.
-* On error:
+  - PII plugin still runs.
+  - Auth, rate limiting, logging, etc. still run.
 
-  * If the tool doesn’t exist or isn’t allowed, you get a clear “tool not found / not allowed” error.
-  * If the tool throws, the error includes:
+- On success: you get back the tool result.
+- On error:
 
-  * the tool name
-  * the input that was used
-  * optional error code/details
+  - If the tool doesn’t exist or isn’t allowed, you get a clear “tool not found / not allowed” error.
+  - If the tool throws, the error includes:
+
+  - the tool name
+  - the input that was used
+  - optional error code/details
 
 This is ideal when:
 
-* The model just needs a **single tool action**.
-* There’s no need for multi-step orchestration or cross-tool joins.
-* You still want all the benefits of CodeCall’s tooling (modes, PII plugins, etc.)
-without paying the VM cost for simple cases.
+- The model just needs a **single tool action**.
+- There’s no need for multi-step orchestration or cross-tool joins.
+- You still want all the benefits of CodeCall’s tooling (modes, PII plugins, etc.)
+  without paying the VM cost for simple cases.
 
 ---
 
@@ -474,30 +483,30 @@ CodeCall supports two types of visibility into what a plan is doing:
 
 1. **Automatic notifications** for tool calls:
 
- * Every `callTool()` can emit:
+- Every `callTool()` can emit:
 
-  * A “tool call started” event (with tool name + input).
-  * A “tool call finished” event (with tool name + input + status).
- * These can be surfaced by your transport as live updates (e.g. SSE).
+- A “tool call started” event (with tool name + input).
+- A “tool call finished” event (with tool name + input + status).
+- These can be surfaced by your transport as live updates (e.g. SSE).
 
 2. **Script-driven logging/notifications**:
 
- * CodeCall can expose FrontMCP builtin logging/notification methods into the VM.
- * This lets the LLM decide **what** to notify about and **with which parameters**.
+- CodeCall can expose FrontMCP builtin logging/notification methods into the VM.
+- This lets the LLM decide **what** to notify about and **with which parameters**.
 
 Example inside a plan:
 
 ```js
 async function main() {
-  mcpNotify("step_started", { step: "sync_billing" });
+  mcpNotify('step_started', { step: 'sync_billing' });
 
-  const invoices = await callTool("billing:listInvoices", { status: "unpaid" });
+  const invoices = await callTool('billing:listInvoices', { status: 'unpaid' });
 
-  mcpLog("info", "Loaded unpaid invoices", { count: invoices.items.length });
+  mcpLog('info', 'Loaded unpaid invoices', { count: invoices.items.length });
 
-  mcpNotify("step_completed", {
-    step: "sync_billing",
-    count: invoices.items.length
+  mcpNotify('step_completed', {
+    step: 'sync_billing',
+    count: invoices.items.length,
   });
 
   return invoices.items;
@@ -512,25 +521,26 @@ If you don’t want models to emit custom notifications, you can disable these g
 
 ## PII & privacy
 
-CodeCall runs **on top of** your existing FrontMCP tool pipeline – it does *not* bypass it.
+CodeCall runs **on top of** your existing FrontMCP tool pipeline – it does _not_ bypass it.
 
 When a plan calls `callTool('some:tool', input)` inside `codecall.execute`:
 
-* The request still goes through:
+- The request still goes through:
 
-  * Any PII plugins (scrubbing/masking input and output).
-  * Auth plugins.
-  * Logging / audit.
-  * Rate limiting.
-* The response that CodeCall sees is exactly what a normal tool call would see
-after those plugins have run.
+  - Any PII plugins (scrubbing/masking input and output).
+  - Auth plugins.
+  - Logging / audit.
+  - Rate limiting.
+
+- The response that CodeCall sees is exactly what a normal tool call would see
+  after those plugins have run.
 
 This means:
 
-* CodeCall cannot leak more data than a normal tool call.
-* PII redaction logic remains in your **PII plugin**, not inside CodeCall.
-* The results you get from a CodeCall plan are equivalent (in terms of privacy)
-to calling the same tools one-by-one outside of CodeCall.
+- CodeCall cannot leak more data than a normal tool call.
+- PII redaction logic remains in your **PII plugin**, not inside CodeCall.
+- The results you get from a CodeCall plan are equivalent (in terms of privacy)
+  to calling the same tools one-by-one outside of CodeCall.
 
 ---
 
@@ -542,8 +552,8 @@ CodeCall works with both **stateful** and **stateless** clients.
 
 If your transport supports:
 
-* A **transport session ID**, and
-* **Tool list change notifications**,
+- A **transport session ID**, and
+- **Tool list change notifications**,
 
 then the recommended pattern is:
 
@@ -556,11 +566,11 @@ then the recommended pattern is:
 
 If the transport does **not** support notifications:
 
-* The simplest pattern is:
+- The simplest pattern is:
 
 > Before using a tool inside `codecall.execute`, call `codecall.describe` for that tool in the same turn.
 
-* Treat search/describe as ephemeral and re-run them as needed to avoid stale schemas.
+- Treat search/describe as ephemeral and re-run them as needed to avoid stale schemas.
 
 ---
 
@@ -568,27 +578,28 @@ If the transport does **not** support notifications:
 
 Some tools may:
 
-* Be **listed and discoverable** to the user.
-* But require **additional permissions or a separate OAuth flow** before they can be executed.
+- Be **listed and discoverable** to the user.
+- But require **additional permissions or a separate OAuth flow** before they can be executed.
 
 In these cases:
 
-* The tool itself should return a structured “authorization required” result (e.g. including:
+- The tool itself should return a structured “authorization required” result (e.g. including:
 
-  * A URL to start an OAuth flow.
-  * A reason / scope description.
-  * The tool name.
-* CodeCall does **not** handle OAuth directly — it simply returns what the tool returned.
-* A dedicated **authorization/permissions plugin** can be added later to:
+  - A URL to start an OAuth flow.
+  - A reason / scope description.
+  - The tool name.
 
-  * Detect this pattern in tool responses.
-  * Coordinate running the OAuth flow.
-  * Retry execution after permissions are granted.
+- CodeCall does **not** handle OAuth directly — it simply returns what the tool returned.
+- A dedicated **authorization/permissions plugin** can be added later to:
+
+  - Detect this pattern in tool responses.
+  - Coordinate running the OAuth flow.
+  - Retry execution after permissions are granted.
 
 This keeps a clear separation:
 
-* CodeCall: code orchestration + sandboxing.
-* Auth plugin: identity/permissions orchestration.
+- CodeCall: code orchestration + sandboxing.
+- Auth plugin: identity/permissions orchestration.
 
 ---
 
@@ -603,15 +614,15 @@ Even if your REST API doesn’t support this query directly, CodeCall can:
 
 async function main() {
   // 1. Get users from a coarse API
-  const page = await callTool("users:list", { limit: 500 });
+  const page = await callTool('users:list', { limit: 500 });
 
   // 2. Filter in JS
   const today = new Date().toISOString().slice(0, 10);
 
   const matching = page.items.filter((user) => {
-    const firstName = (user.firstName || "").toLowerCase();
-    const lastLogin = (user.lastLogin || "").slice(0, 10);
-    return firstName.startsWith("me") && lastLogin === today;
+    const firstName = (user.firstName || '').toLowerCase();
+    const lastLogin = (user.lastLogin || '').slice(0, 10);
+    return firstName.startsWith('me') && lastLogin === today;
   });
 
   // 3. Return just IDs
@@ -631,19 +642,21 @@ The LLM can generate this plan after:
 
 ## Summary
 
-* Use **CodeCall** when you want to:
+- Use **CodeCall** when you want to:
 
-  * Hide large toolsets.
-  * Expose a small, code-first meta-API.
-  * Let the LLM orchestrate tools across one or more apps in JavaScript.
-* Choose a **mode** based on your tool count and control preferences:
+  - Hide large toolsets.
+  - Expose a small, code-first meta-API.
+  - Let the LLM orchestrate tools across one or more apps in JavaScript.
 
-  * `codecall_only` – many tools, expose all via CodeCall.
-  * `codecall_opt_in` – many tools, only some via CodeCall.
-  * `metadata_driven` – few tools, mix classic tool calls + CodeCall.
-* Use **VM presets** to balance power and safety.
-* Use **direct calls (`codecall.invoke`)** for simple, single-tool actions without running a VM.
-* Rely on your existing **PII and lifecycle plugins** for privacy and policy enforcement — CodeCall reuses the same pipeline.
-* If your transport supports **tool list change notifications**, cache described tools per session and refresh on change; if not, re-describe before execution.
+- Choose a **mode** based on your tool count and control preferences:
+
+  - `codecall_only` – many tools, expose all via CodeCall.
+  - `codecall_opt_in` – many tools, only some via CodeCall.
+  - `metadata_driven` – few tools, mix classic tool calls + CodeCall.
+
+- Use **VM presets** to balance power and safety.
+- Use **direct calls (`codecall.invoke`)** for simple, single-tool actions without running a VM.
+- Rely on your existing **PII and lifecycle plugins** for privacy and policy enforcement — CodeCall reuses the same pipeline.
+- If your transport supports **tool list change notifications**, cache described tools per session and refresh on change; if not, re-describe before execution.
 
 This gives you a scalable, safe, and flexible way to expose your entire tool universe to LLMs without overwhelming them.

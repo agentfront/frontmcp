@@ -4,17 +4,18 @@ description: One server, many agents. How FrontMCP makes multi-agent, multi-app 
 mode: center
 ---
 
-<img className='blog-full-image' src="../../assets/banners/mcp-run-out-of-socket.svg" alt="One server, many agents"/>
+<img className="blog-full-image" src="../../assets/banners/mcp-run-out-of-socket.svg" alt="One server, many agents" />
 
 # One Server, Many Agents
+
 Turn your MCP server into a shared, multi-app service—without transport gymnastics
 
-**TL;DR**: The MCP spec and official SDKs give you transports and sessions, but most examples wire a **single connection** to a **single server instance**. That’s fine until you want *several IDEs, bots, and dashboards* to share **one** server—and to host **multiple apps** behind clean auth and scopes. **FrontMCP** makes that the default with **sessions, transport identity, per-app scoping, DI, decorators, and authentication** out of the box.
+**TL;DR**: The MCP spec and official SDKs give you transports and sessions, but most examples wire a **single connection** to a **single server instance**. That’s fine until you want _several IDEs, bots, and dashboards_ to share **one** server—and to host **multiple apps** behind clean auth and scopes. **FrontMCP** makes that the default with **sessions, transport identity, per-app scoping, DI, decorators, and authentication** out of the box.
 
 <Note>
-    This is <b>not</b> a “stdio vs SSE” post. The issue is the <i>connection model</i> and defaults most examples
-    encourage—regardless of transport. Streamable HTTP + sessions is the spec-aligned path for multi-client servers;
-    FrontMCP productizes it and layers scoping, auth, and DI on top.
+  This is <b>not</b> a “stdio vs SSE” post. The issue is the <i>connection model</i> and defaults most examples
+  encourage—regardless of transport. Streamable HTTP + sessions is the spec-aligned path for multi-client servers;
+  FrontMCP productizes it and layers scoping, auth, and DI on top.
 </Note>
 
 ---
@@ -116,21 +117,25 @@ What you actually want is:
 If you strip away the noise, most teams want their MCP server to behave like a modern web backend:
 
 1. **Multi-client by design**
+
    - Many IDEs, agents, and services share one server.
    - Sessions keep each client isolated and resumable.
    - Transport identity is stable across reconnections and nodes.
 
 2. **Multi-app composition**
+
    - Group tools into apps by product/domain/tenant.
    - Sometimes expose a unified toolbox.
    - Sometimes isolate apps with separate auth and base paths.
    - Sometimes expose an app as a standalone MCP server.
 
 3. **Auth-aware tool surface**
-   - The tools a client sees are based on *who is logged in*, not just what’s deployed.
+
+   - The tools a client sees are based on _who is logged in_, not just what’s deployed.
    - OAuth scopes and identities matter.
 
 4. **Typed code with DI**
+
    - Tools look like clean TypeScript handlers.
    - Inputs/outputs are validated with Zod.
    - Dependencies (DB, caches, external APIs) are injected via DI.
@@ -168,6 +173,7 @@ FrontMCP is a TypeScript-first framework that treats MCP servers like proper ser
         <code>SESSION</code>, or <code>REQUEST</code> scope. Add hooks for logging, rates, and policy without
         boilerplate.
     </Card>
+
 </Columns>
 
 ---
@@ -176,8 +182,16 @@ FrontMCP is a TypeScript-first framework that treats MCP servers like proper ser
 
 Sometimes it’s easier to just see it:
 
-<img className='blog-full-image dark-img' src="../../assets/banners/frontmcp-vs-standardmcp.dark.png" alt="Before vs. after"/>
-<img className='blog-full-image light-img' src="../../assets/banners/frontmcp-vs-standardmcp.light.png" alt="Before vs. after"/>
+<img
+  className="blog-full-image dark-img"
+  src="../../assets/banners/frontmcp-vs-standardmcp.dark.png"
+  alt="Before vs. after"
+/>
+<img
+  className="blog-full-image light-img"
+  src="../../assets/banners/frontmcp-vs-standardmcp.light.png"
+  alt="Before vs. after"
+/>
 
 - On the left: the “one client, one server” pattern duplicated per agent.
 - On the right: one FrontMCP server hosting many apps and many agents in a spec-aligned way.
@@ -216,7 +230,7 @@ import DocsApp from './docs.app';
   logging: { level: LogLevel.INFO },
 })
 export default class Server {}
-````
+```
 
 ```ts title="src/billing.app.ts"
 import { App } from '@frontmcp/sdk';
@@ -255,10 +269,10 @@ export default class CreateInvoice extends ToolContext {
 
 From here, any number of MCP-capable clients can:
 
-* Connect over Streamable HTTP.
-* Create their own sessions.
-* Call `billing.create_invoice` (if authorized).
-* Share the same app code and server instance.
+- Connect over Streamable HTTP.
+- Create their own sessions.
+- Call `billing.create_invoice` (if authorized).
+- Share the same app code and server instance.
 
 No more “one agent, one server” as an architectural constraint.
 
@@ -272,17 +286,17 @@ The most underrated part of FrontMCP is how you can expose the same apps in diff
 
 When `splitByApp` is **false** (the default):
 
-* All your applications are combined under **one MCP server**.
-* A connected client can **list all tools** the **logged-in OAuth user** is allowed to see, regardless of which app defines them.
-* Auth still applies, but the visible tools and resources are filtered by the user’s identity and scopes.
-* If two apps define tools with the same name, FrontMCP automatically **prefixes the tool name with the app id**
-—for example: `billing.create_invoice` vs `ops.create_invoice`.
+- All your applications are combined under **one MCP server**.
+- A connected client can **list all tools** the **logged-in OAuth user** is allowed to see, regardless of which app defines them.
+- Auth still applies, but the visible tools and resources are filtered by the user’s identity and scopes.
+- If two apps define tools with the same name, FrontMCP automatically **prefixes the tool name with the app id**
+  —for example: `billing.create_invoice` vs `ops.create_invoice`.
 
 This mode is perfect when you want:
 
-* A single, large toolbox in the IDE.
-* Agents that can orchestrate across many domains (billing + docs + ops).
-* One “MCP endpoint” for the whole suite, with per-user filtering.
+- A single, large toolbox in the IDE.
+- Agents that can orchestrate across many domains (billing + docs + ops).
+- One “MCP endpoint” for the whole suite, with per-user filtering.
 
 Under the hood, your apps are still cleanly separated. The unified tool surface is a **view**, not a monolith.
 
@@ -290,33 +304,33 @@ Under the hood, your apps are still cleanly separated. The unified tool surface 
 
 When `splitByApp` is **true**:
 
-* Each app gets its own **base path** and can define its own **auth**.
-* You can run multiple products/tenants under one server but with clearly separated surfaces.
-* Clients can connect directly to the specific app they care about, while you still deploy just one server process.
+- Each app gets its own **base path** and can define its own **auth**.
+- You can run multiple products/tenants under one server but with clearly separated surfaces.
+- Clients can connect directly to the specific app they care about, while you still deploy just one server process.
 
 This is ideal when:
 
-* Apps have distinct consumers and security boundaries.
-* You want a “microservices-like” feel, but still prefer one deployment unit.
-* You’re onboarding teams gradually and want a clear line between their responsibilities.
+- Apps have distinct consumers and security boundaries.
+- You want a “microservices-like” feel, but still prefer one deployment unit.
+- You’re onboarding teams gradually and want a clear line between their responsibilities.
 
 ### Standalone apps under `/{appId}`
 
 Some apps need to serve double duty:
 
-* They live inside a grouped server (for internal or cross-app usage).
-* They also need to behave as **standalone MCP servers** for specific clients.
+- They live inside a grouped server (for internal or cross-app usage).
+- They also need to behave as **standalone MCP servers** for specific clients.
 
 FrontMCP supports apps that are **standalone and excluded from the grouped surface**:
 
-* The app is served under the prefix `/{appId}` as if it were its own MCP server.
-* From the client’s perspective, `/{appId}` is a standalone MCP endpoint with its own discovery and tools.
-* From your perspective, it’s still the same app class and the same deployment.
+- The app is served under the prefix `/{appId}` as if it were its own MCP server.
+- From the client’s perspective, `/{appId}` is a standalone MCP endpoint with its own discovery and tools.
+- From your perspective, it’s still the same app class and the same deployment.
 
 This lets you:
 
-* Expose a clean `/{appId}` endpoint for partners while keeping internal tools under a unified host.
-* Gradually carve out apps from a single MCP server into more “independent” endpoints without duplicating code.
+- Expose a clean `/{appId}` endpoint for partners while keeping internal tools under a unified host.
+- Gradually carve out apps from a single MCP server into more “independent” endpoints without duplicating code.
 
 One deployment, one codebase, multiple MCP “faces” tuned to who’s calling you.
 
@@ -370,9 +384,9 @@ You can find the full details in the docs:
 
 This is the fastest path to:
 
-* Making your existing API “MCP-native.”
-* Letting agents and IDEs call it via tools.
-* Avoiding a full parallel tool implementation.
+- Making your existing API “MCP-native.”
+- Letting agents and IDEs call it via tools.
+- Avoiding a full parallel tool implementation.
 
 ---
 
@@ -381,31 +395,33 @@ This is the fastest path to:
 If you already have MCP servers or REST APIs, here’s a practical way to move into FrontMCP without a rewrite:
 
 <Steps>
-    <Step title="Lift your tools into an app">
-        Wrap existing handlers with <code>@Tool</code> or <code>tool()(handler)</code> and group them
-        under <code>@App</code>. Or plug in the OpenAPI adapter to generate tools from your REST API.
-    </Step>
-    <Step title="Choose composition">
-        Start with <code>splitByApp: false</code> for a unified tool surface, then introduce
-        <code>splitByApp: true</code> or standalone apps under <code>/{'{'}appId{'}'}</code> where isolation is needed.
-    </Step>
-    <Step title="Wire auth once">
-        Decide on <b>remote</b> vs <b>local</b> OAuth. Make your tool surface depend on the logged-in user and scopes,
-        not just the server process.
-    </Step>
-    <Step title="Expose discovery cleanly">
-        Keep <code>entryPath</code> in sync with your <code>.well-known</code> PRM <code>resourcePath</code>. Test behind
-        your real proxy/load balancer to validate streaming and keep-alives.
-    </Step>
-    <Step title="Turn on observability">
-        Add DI providers and hooks for logging, metrics, and tracing so you can see which apps and tools your agents
-        actually use.
-    </Step>
+  <Step title="Lift your tools into an app">
+    Wrap existing handlers with <code>@Tool</code> or <code>tool()(handler)</code> and group them under{' '}
+    <code>@App</code>. Or plug in the OpenAPI adapter to generate tools from your REST API.
+  </Step>
+  <Step title="Choose composition">
+    Start with <code>splitByApp: false</code> for a unified tool surface, then introduce
+    <code>splitByApp: true</code> or standalone apps under <code>
+      /{'{'}appId{'}'}
+    </code> where isolation is needed.
+  </Step>
+  <Step title="Wire auth once">
+    Decide on <b>remote</b> vs <b>local</b> OAuth. Make your tool surface depend on the logged-in user and scopes, not
+    just the server process.
+  </Step>
+  <Step title="Expose discovery cleanly">
+    Keep <code>entryPath</code> in sync with your <code>.well-known</code> PRM <code>resourcePath</code>. Test behind
+    your real proxy/load balancer to validate streaming and keep-alives.
+  </Step>
+  <Step title="Turn on observability">
+    Add DI providers and hooks for logging, metrics, and tracing so you can see which apps and tools your agents
+    actually use.
+  </Step>
 </Steps>
 
 <Tip>
-    Already running locally? Use <code>frontmcp dev</code> to boot the host and attach multiple MCP clients at once.
-    Multi-agent scenarios stop being hypothetical when you can open two clients and see them share one server.
+  Already running locally? Use <code>frontmcp dev</code> to boot the host and attach multiple MCP clients at once.
+  Multi-agent scenarios stop being hypothetical when you can open two clients and see them share one server.
 </Tip>
 
 ---
@@ -427,23 +443,43 @@ See: <a href="/docs/adapters/openapi-adapter">OpenAPI Adapter docs</a> (based on
 ## Where to go next
 
 <Columns cols={2}>
-    <Card title="Read the Welcome doc" href="/docs/getting-started/welcome" icon="book-open" arrow="true"
-          cta="Start here">
-        Get the high-level overview of FrontMCP’s concepts and how it fits into MCP.
-    </Card>
-    <Card title="Follow the Quickstart" href="/docs/getting-started/quickstart" icon="rocket" arrow="true"
-          cta="Build your first server">
-        Go step-by-step from empty folder to a running MCP server with a real tool.
-    </Card>
+  <Card
+    title="Read the Welcome doc"
+    href="/docs/getting-started/welcome"
+    icon="book-open"
+    arrow="true"
+    cta="Start here"
+  >
+    Get the high-level overview of FrontMCP’s concepts and how it fits into MCP.
+  </Card>
+  <Card
+    title="Follow the Quickstart"
+    href="/docs/getting-started/quickstart"
+    icon="rocket"
+    arrow="true"
+    cta="Build your first server"
+  >
+    Go step-by-step from empty folder to a running MCP server with a real tool.
+  </Card>
 </Columns>
 
 <Columns cols={2}>
-    <Card title="Check out the examples" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo"
-          icon="code-branch" arrow="true" cta="Browse demos">
-        Explore example apps and tools that showcase patterns you can reuse in your own servers.
-    </Card>
-    <Card title="Star the repo & contribute" href="https://github.com/agentfront/frontmcp" icon="star" arrow="true"
-          cta="Join the project">
-        FrontMCP is open source (Apache-2.0). Issues, PRs, and feedback are very welcome.
-    </Card>
+  <Card
+    title="Check out the examples"
+    href="https://github.com/agentfront/frontmcp/tree/main/apps/demo"
+    icon="code-branch"
+    arrow="true"
+    cta="Browse demos"
+  >
+    Explore example apps and tools that showcase patterns you can reuse in your own servers.
+  </Card>
+  <Card
+    title="Star the repo & contribute"
+    href="https://github.com/agentfront/frontmcp"
+    icon="star"
+    arrow="true"
+    cta="Join the project"
+  >
+    FrontMCP is open source (Apache-2.0). Issues, PRs, and feedback are very welcome.
+  </Card>
 </Columns>

@@ -1,12 +1,11 @@
-import {Tool, ToolContext} from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import z from 'zod';
-
 
 @Tool({
   name: 'create-expense',
   description: 'Create an expense',
   inputSchema: {
-    id: z.string().describe('The expense\'s id'),
+    id: z.string().describe("The expense's id"),
   },
   outputSchema: {
     ok: z.string(),
@@ -16,15 +15,13 @@ import z from 'zod';
     slideWindow: true,
   },
   authorization: {
-    requiredRoles: ['Admin']
-  }
+    requiredRoles: ['Admin'],
+  },
 })
 export default class CreateExpenseTool extends ToolContext {
   async execute(input: { id: string }) {
     return {
-      ok: 'asdasdsd',
+      ok: 'OK',
     };
   }
-
-
 }

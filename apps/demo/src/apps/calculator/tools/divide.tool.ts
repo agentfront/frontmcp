@@ -5,12 +5,10 @@ import {z} from "zod";
   name: 'divide',
   description: 'Divide a by b',
   inputSchema: {a: z.number(), b: z.number().refine((n) => n !== 0, 'Division by zero is not allowed')},
-  outputSchema: {result: z.number()}
+  outputSchema: 'number'
 })
 export default class DivideTool extends ToolContext {
   async execute(input: { a: number, b: number }) {
-    return {
-      result: input.a / input.b,
-    };
+    return input.a / input.b
   }
 }

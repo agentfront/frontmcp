@@ -5,12 +5,10 @@ import {z} from "zod";
   name: 'add',
   description: 'Add two numbers',
   inputSchema: {a: z.number(), b: z.number()},
-  outputSchema: {result: z.number()}
+  outputSchema: 'number'
 })
 export default class AddTool extends ToolContext {
   async execute(input: { a: number, b: number }) {
-    return {
-      result: input.a + input.b,
-    };
+    return input.a + input.b
   }
 }

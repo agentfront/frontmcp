@@ -5,12 +5,10 @@ import {z} from "zod";
   name: 'ceil',
   description: 'Ceil of x (smallest integer ≥ x)',
   inputSchema: {x: z.number()},
-  outputSchema: {result: z.number()}
+  outputSchema: 'number'
 })
 export default class CeilTool extends ToolContext {
   async execute(input: { x: number }) {
-    return {
-      result: Math.ceil(input.x),
-    };
+    return  Math.ceil(input.x)
   }
 }

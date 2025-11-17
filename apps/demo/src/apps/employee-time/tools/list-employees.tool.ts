@@ -1,5 +1,5 @@
-import {Tool, ToolContext} from '@frontmcp/sdk';
-import {z} from 'zod';
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
 
 @Tool({
@@ -11,27 +11,44 @@ import EmployeeDirectoryProvider from '../providers/employee-directory.provider'
     offset: z.number().int().min(0).optional(),
     limit: z.number().int().min(1).max(200).optional(),
   },
-  outputSchema: {} as any,
+  outputSchema: z.object({
+    total: z.number().int().min(0),
+    items: z.array(
+      z.object({
+        employeeId: z.string(),
+        sites: z.array(z.string()),
+      }),
+    ),
+    page: z.object({
+      offset: z.number().int().min(0),
+      limit: z.number().int().min(1).max(200),
+    }),
+  }),
 })
 export default class ListEmployeesTool extends ToolContext {
   async execute(input: { siteId?: string; search?: string; offset?: number; limit?: number }) {
     const dir = this.get(EmployeeDirectoryProvider);
-    const { total, items } = await dir.listEmployees({ siteId: input.siteId, search: input.search, offset: input.offset, limit: input.limit });
+    const { total, items } = await dir.listEmployees({
+      siteId: input.siteId,
+      search: input.search,
+      offset: input.offset,
+      limit: input.limit,
+    });
 
-    const withSites = await Promise.all(items.map(async (employeeId) => {
-      const sites = await dir.listSitesForEmployee(employeeId);
-      return { employeeId, sites };
-    }));
+    const withSites = await Promise.all(
+      items.map(async (employeeId) => {
+        const sites = await dir.listSitesForEmployee(employeeId);
+        return { employeeId, sites };
+      }),
+    );
 
     return {
-      result: {
-        total,
-        items: withSites,
-        page: {
-          offset: input.offset ?? 0,
-          limit: Math.min(200, Math.max(1, input.limit ?? 50)),
-        },
-      }
+      total,
+      items: withSites,
+      page: {
+        offset: input.offset ?? 0,
+        limit: Math.min(200, Math.max(1, input.limit ?? 50)),
+      },
     };
   }
 }

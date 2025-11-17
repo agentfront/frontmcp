@@ -1,9 +1,8 @@
-import {DynamicPlugin, FlowCtxOf, Plugin, ProviderType, ToolHook} from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ProviderType, ToolHook } from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
-import {CachePluginOptions} from './cache.types';
-import {CacheStoreToken} from './cache.symbol';
-
+import { CachePluginOptions } from './cache.types';
+import { CacheStoreToken } from './cache.symbol';
 
 @Plugin({
   name: 'cache',
@@ -56,14 +55,14 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     };
   }
 
-  @ToolHook.Will('execute', {priority: 1000})
+  @ToolHook.Will('execute', { priority: 1000 })
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const ctx = flowCtx.state.required.toolContext;
-    const {cache} = ctx.metadata;
+    const { cache } = ctx.metadata;
     if (!cache || !ctx.input) {
       return;
     }
-    const redis = this.get(CacheStoreToken)
+    const redis = this.get(CacheStoreToken);
     const hash = hashObject(ctx.input);
     const cached = await redis.getValue(hash);
 
@@ -73,7 +72,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     }
 
     if (cached) {
-      console.log('return from cache', {cached});
+      console.log('return from cache', { cached });
       ctx.respond({
         ...cached,
         ___cached__: true,
@@ -81,15 +80,15 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     }
   }
 
-  @ToolHook.Did('execute', {priority: 1000})
+  @ToolHook.Did('execute', { priority: 1000 })
   async willWriteCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const ctx = flowCtx.state.required.toolContext;
-    const {cache} = ctx.metadata;
+    const { cache } = ctx.metadata;
     if (!cache) {
       return;
     }
-    const redis = this.get(CacheStoreToken)
-    console.log('willWriteCache', {cache});
+    const redis = this.get(CacheStoreToken);
+    console.log('willWriteCache', { cache });
     const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
 
     const hash = hashObject(ctx.input!);
@@ -99,7 +98,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
 function hashObject(obj: any) {
   const keys = Object.keys(obj).sort();
-  const values = keys.map(key => obj[key]);
+  const values = keys.map((key) => obj[key]);
   return values.reduce((acc, val) => {
     if (typeof val === 'object' && val !== null) {
       acc += hashObject(val);

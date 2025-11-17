@@ -1,6 +1,6 @@
 import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 import EmployeeRedisProvider from './redis.provider';
-import {SITES_SET, siteEmployeesSetKey, employeeSitesSetKey} from '../utils/keys';
+import { SITES_SET, siteEmployeesSetKey, employeeSitesSetKey } from '../utils/keys';
 
 export default class EmployeeDirectoryProvider {
   constructor(private readonly redis: EmployeeRedisProvider) {}
@@ -28,7 +28,12 @@ export default class EmployeeDirectoryProvider {
     return this.redis.smembers(employeeSitesSetKey(employeeId));
   }
 
-  async listEmployees(opts?: { siteId?: string; offset?: number; limit?: number; search?: string }): Promise<{ total: number; items: string[] }> {
+  async listEmployees(opts?: {
+    siteId?: string;
+    offset?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<{ total: number; items: string[] }> {
     const offset = Math.max(0, opts?.offset ?? 0);
     const limit = Math.min(200, Math.max(1, opts?.limit ?? 50));
 
@@ -47,7 +52,7 @@ export default class EmployeeDirectoryProvider {
 
     if (opts?.search) {
       const q = opts.search.toLowerCase();
-      all = all.filter(id => id.toLowerCase().includes(q));
+      all = all.filter((id) => id.toLowerCase().includes(q));
     }
 
     const total = all.length;
