@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { SchemaHandler, TypeRegistry, JSONSchemaObject } from '../../types';
+import { createSafePatternValidator } from '../../security';
 
 /**
  * Detects an implicit string type from string-specific constraints
@@ -18,10 +19,10 @@ export class ImplicitStringHandler implements SchemaHandler {
    * @param schema - JSON Schema to check for string constraints
    */
   apply(types: TypeRegistry, schema: JSONSchemaObject): void {
-    if (
-      schema.type === undefined &&
-      (schema.minLength !== undefined || schema.maxLength !== undefined || schema.pattern !== undefined)
-    ) {
+    if (schema.type === undefined &&
+      (schema.minLength !== undefined ||
+        schema.maxLength !== undefined ||
+        schema.pattern !== undefined)) {
       if (types.string === undefined) {
         types.string = z.string();
       }
@@ -53,7 +54,7 @@ export class MinLengthHandler implements SchemaHandler {
           const graphemeLength = Array.from(value).length;
           return graphemeLength >= schema.minLength!;
         },
-        { message: `String must be at least ${schema.minLength} characters long` },
+        { message: `String must be at least ${schema.minLength} characters long` }
       );
     }
   }
@@ -83,7 +84,7 @@ export class MaxLengthHandler implements SchemaHandler {
           const graphemeLength = Array.from(value).length;
           return graphemeLength <= schema.maxLength!;
         },
-        { message: `String must be at most ${schema.maxLength} characters long` },
+        { message: `String must be at most ${schema.maxLength} characters long` }
       );
     }
   }
@@ -91,12 +92,14 @@ export class MaxLengthHandler implements SchemaHandler {
 
 /**
  * Handles the 'pattern' constraint for strings
- * Applies regular expression validation
+ * Applies regular expression validation with ReDoS protection
  */
 export class PatternHandler implements SchemaHandler {
   /**
-   * Applies regex pattern constraint to string type
-   * Converts JSON Schema pattern string to JavaScript RegExp
+   * Applies regex pattern constraint to a string type with ReDoS protection
+   *
+   * SECURITY: Patterns are validated before use to prevent ReDoS attacks.
+   * Unsafe patterns are rejected and logged as warnings.
    *
    * @param types - Type registry to modify
    * @param schema - JSON Schema containing a pattern
@@ -107,8 +110,12 @@ export class PatternHandler implements SchemaHandler {
 
     const currentString = types.string || z.string();
     if (currentString instanceof z.ZodString) {
-      const regex = new RegExp(schema.pattern);
-      types.string = currentString.regex(regex);
+      // Use safe pattern validator that includes ReDoS protection
+      const validator = createSafePatternValidator(schema.pattern);
+      types.string = currentString.refine(
+        validator,
+        { message: `String must match pattern: ${schema.pattern}` }
+      );
     }
   }
 }

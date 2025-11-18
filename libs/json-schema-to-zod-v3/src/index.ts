@@ -17,7 +17,7 @@
  * };
  *
  * const zodSchema = convertJsonSchemaToZod(jsonSchema);
- * a const result = zodSchema.parse("hello world");
+ * const result = zodSchema.parse("hello world");
  * ```
  *
  * @example Object schema
@@ -44,7 +44,36 @@ import { convertJsonSchemaToZod } from './converter';
 import { JSONSchemaObject } from './types';
 
 // Re-export utilities
-export { createUniqueItemsValidator, isValidWithSchema, deepEqual } from './utils';
+export {
+  createUniqueItemsValidator,
+  isValidWithSchema,
+  deepEqual
+} from './utils';
+
+// Re-export security utilities
+export {
+  validatePattern,
+  createSafeRegExp,
+  createSafePatternValidator,
+  setSecurityConfig,
+  getSecurityConfig,
+  DEFAULT_SECURITY_CONFIG,
+} from './security';
+
+export type {
+  PatternValidationResult,
+  PatternSecurityConfig,
+} from './security';
+
+// Re-export types
+export type {
+  JSONSchema,
+  JSONSchemaObject,
+  JSONSchemaType,
+  TypeRegistry,
+  SchemaHandler,
+  RefinementHandler
+} from './types';
 
 // Re-export main converter
 export { convertJsonSchemaToZod };
@@ -75,9 +104,9 @@ export { convertJsonSchemaToZod };
  *
  * // Resulting schema:
  * // {
- * // name: z.string().min(1), // required
- * // email: z.string(), // required
- * // age: z.number().min(0).optional() // optional
+ * //   name: z.string().min(1),           // required
+ * //   email: z.string(),                  // required
+ * //   age: z.number().min(0).optional()   // optional
  * // }
  * ```
  *
@@ -87,7 +116,9 @@ export { convertJsonSchemaToZod };
  * - If 'required' is not specified, all fields are optional
  * - Undefined property values are skipped
  */
-export function jsonSchemaObjectToZodRawShape(schema: JSONSchemaObject): Record<string, z.ZodTypeAny> {
+export function jsonSchemaObjectToZodRawShape(
+  schema: JSONSchemaObject
+): Record<string, z.ZodTypeAny> {
   const raw: Record<string, z.ZodTypeAny> = {};
 
   const requiredArray = Array.isArray(schema.required) ? schema.required : [];
@@ -100,7 +131,7 @@ export function jsonSchemaObjectToZodRawShape(schema: JSONSchemaObject): Record<
     // Convert the property schema to Zod
     let zodType = convertJsonSchemaToZod(value);
 
-    // Make the field optional if not in a required array
+    // Make field optional if not in required array
     if (requiredArray.length > 0) {
       if (!requiredFields.has(key)) {
         zodType = zodType.optional();
@@ -115,3 +146,19 @@ export function jsonSchemaObjectToZodRawShape(schema: JSONSchemaObject): Record<
 
   return raw;
 }
+
+/**
+ * Default export for convenience
+ */
+export default {
+  convertJsonSchemaToZod,
+  jsonSchemaObjectToZodRawShape,
+  createUniqueItemsValidator: () => {
+    const { createUniqueItemsValidator: fn } = require('./utils');
+    return fn();
+  },
+  isValidWithSchema: (schema: z.ZodTypeAny, value: any) => {
+    const { isValidWithSchema: fn } = require('./utils');
+    return fn(schema, value);
+  },
+};
