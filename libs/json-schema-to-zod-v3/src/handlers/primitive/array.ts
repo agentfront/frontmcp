@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { SchemaHandler, TypeRegistry, JSONSchemaObject } from '../../types';
-import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+import { convertJsonSchemaToZod } from '../../converter';
 
 /**
  * Detects an implicit array type from array-specific constraints

@@ -98,7 +98,7 @@ export function isPlainObject(value: any): boolean {
 }
 
 /**
- * Safely gets a property from an object using Object.getOwnPropertyDescriptor
+ * Safely gets a property from an object using Object.hasOwnProperty
  * This is more robust than simple property access for special properties
  *
  * @param obj - Object to get property from

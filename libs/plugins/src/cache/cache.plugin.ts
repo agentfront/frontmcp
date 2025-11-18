@@ -112,12 +112,15 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 function hashObject(obj: any) {
   const keys = Object.keys(obj).sort();
   const values = keys.map((key) => obj[key]);
-  return values.reduce((acc, val) => {
+  return keys.reduce((acc, key) => {
+    acc += key + ':';
+    const val = obj[key];
     if (typeof val === 'object' && val !== null) {
       acc += hashObject(val);
     } else {
       acc += val;
     }
+    acc += ';';
     return acc;
   }, '');
 }

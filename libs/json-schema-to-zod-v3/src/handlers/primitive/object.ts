@@ -41,6 +41,8 @@ export class ImplicitObjectHandler implements SchemaHandler {
    * @param schema - JSON Schema to check for object constraints
    */
   apply(types: TypeRegistry, schema: JSONSchemaObject): void {
+    if (types.object === false) return;
+
     if (schema.type === undefined &&
       (schema.maxProperties !== undefined ||
         schema.minProperties !== undefined)) {

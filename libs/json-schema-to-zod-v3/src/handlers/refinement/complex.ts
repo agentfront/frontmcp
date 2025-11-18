@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { RefinementHandler, JSONSchemaObject } from '../../types';
 import { isValidWithSchema, createUniqueItemsValidator, propertyExists } from '../../utils';
-import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+import { convertJsonSchemaToZod } from '../../converter';
 
 /**
  * Handles the 'uniqueItems' constraint for arrays

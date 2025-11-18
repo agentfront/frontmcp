@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import { RefinementHandler, JSONSchemaObject } from '../../types';
 import { isValidWithSchema } from '../../utils';
-import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+import { convertJsonSchemaToZod } from '../../converter';
 
 /**
  * Handles the 'allOf' keyword

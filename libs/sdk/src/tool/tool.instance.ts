@@ -45,7 +45,8 @@ export class ToolInstance<
 
     const schema: any = record.metadata.inputSchema;
     // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = schema ? schema : {};
+    this.inputSchema = schema instanceof z.ZodObject ? schema.shape : schema ?? {};
+
     // Whatever JSON schema representation you’re storing for inputs
     this.rawInputSchema = (record.metadata as any).rawInputSchema;
 
@@ -93,7 +94,7 @@ export class ToolInstance<
     };
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:
-        return new this.record.provide(toolCtorArgs);
+        return new this.record.provide(toolCtorArgs) as ToolContext<InSchema, OutSchema, In, Out>;
       case ToolKind.FUNCTION:
         return new FunctionToolContext<InSchema, OutSchema, In, Out>(this.record, toolCtorArgs);
     }

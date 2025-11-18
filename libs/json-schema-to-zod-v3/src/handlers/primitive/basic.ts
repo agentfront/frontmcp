@@ -151,6 +151,9 @@ export class EnumHandler implements SchemaHandler {
     }
 
     if (type === 'boolean') {
+      if (values.length === 1) {
+        return z.literal(values[0]);
+      }
       return z.union([z.literal(true), z.literal(false)]);
     }
 
