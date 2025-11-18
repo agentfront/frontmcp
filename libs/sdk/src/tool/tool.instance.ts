@@ -49,10 +49,10 @@ export class ToolInstance<
     this.inputSchema = schema instanceof z.ZodObject ? schema.shape : schema ?? {};
 
     // Whatever JSON schema representation you’re storing for inputs
-    this.rawInputSchema = (record.metadata as any).rawInputSchema;
+    this.rawInputSchema = record.metadata.rawInputSchema;
 
     // IMPORTANT: keep the *raw* outputSchema (string literal, zod, raw shape, or array)
-    this.outputSchema = (record.metadata as any).outputSchema;
+    this.outputSchema = record.metadata.outputSchema as OutSchema;
 
     this.ready = this.initialize();
   }

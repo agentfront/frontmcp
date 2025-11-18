@@ -1,6 +1,5 @@
 // file: libs/sdk/src/common/entries/tool.entry.ts
 
-import { z } from 'zod';
 import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { ToolRecord } from '../records';
 import { ToolContext } from '../interfaces';
