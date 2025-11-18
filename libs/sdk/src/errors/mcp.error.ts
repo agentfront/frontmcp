@@ -25,7 +25,7 @@ export abstract class McpError extends Error {
    */
   abstract readonly code: string;
 
-  constructor(message: string, errorId?: string) {
+  protected constructor(message: string, errorId?: string) {
     super(message);
     this.name = this.constructor.name;
     this.errorId = errorId || this.generateErrorId();
@@ -51,7 +51,7 @@ export abstract class McpError extends Error {
   /**
    * Convert to MCP error response format
    */
-  toMcpError(isDevelopment: boolean = false): {
+  toMcpError(isDevelopment = false): {
     content: Array<{ type: 'text'; text: string }>;
     isError: true;
     _meta?: {
@@ -90,7 +90,7 @@ export class PublicMcpError extends McpError {
   readonly statusCode: number;
   readonly code: string;
 
-  constructor(message: string, code: string = 'PUBLIC_ERROR', statusCode: number = 400) {
+  constructor(message: string, code = 'PUBLIC_ERROR', statusCode = 400) {
     super(message);
     this.code = code;
     this.statusCode = statusCode;
@@ -110,7 +110,7 @@ export class InternalMcpError extends McpError {
   readonly statusCode = 500;
   readonly code: string;
 
-  constructor(message: string, code: string = 'INTERNAL_ERROR') {
+  constructor(message: string, code = 'INTERNAL_ERROR') {
     super(message);
     this.code = code;
   }
@@ -125,7 +125,7 @@ export class InternalMcpError extends McpError {
 // ============================================================================
 
 /**
- * Tool not found error
+ * Tool didn't find an error
  */
 export class ToolNotFoundError extends PublicMcpError {
   constructor(toolName: string) {
@@ -139,7 +139,7 @@ export class ToolNotFoundError extends PublicMcpError {
 export class InvalidInputError extends PublicMcpError {
   readonly validationErrors?: any;
 
-  constructor(message: string = 'Invalid input: validation failed', validationErrors?: any) {
+  constructor(message = 'Invalid input: validation failed', validationErrors?: any) {
     super(message, 'INVALID_INPUT', 400);
     this.validationErrors = validationErrors;
   }
@@ -213,7 +213,7 @@ export class RateLimitError extends PublicMcpError {
  * Quota exceeded error
  */
 export class QuotaExceededError extends PublicMcpError {
-  constructor(quotaType: string = 'usage') {
+  constructor(quotaType = 'usage') {
     super(`${quotaType} quota exceeded`, 'QUOTA_EXCEEDED', 429);
   }
 }
@@ -222,7 +222,7 @@ export class QuotaExceededError extends PublicMcpError {
  * Unauthorized error
  */
 export class UnauthorizedError extends PublicMcpError {
-  constructor(message: string = 'Unauthorized') {
+  constructor(message = 'Unauthorized') {
     super(message, 'UNAUTHORIZED', 401);
   }
 }
@@ -251,7 +251,7 @@ export class GenericServerError extends InternalMcpError {
 // ============================================================================
 
 /**
- * Check if error is a public error that can be safely shown to users
+ * Check if the error is a public error that can be safely shown to users
  */
 export function isPublicError(error: any): error is PublicMcpError {
   return error instanceof McpError && error.isPublic;

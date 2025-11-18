@@ -27,8 +27,8 @@ import { buildParsedToolResult } from './tool.utils';
 export class ToolInstance<
   InSchema extends ToolInputType = ToolInputType,
   OutSchema extends ToolOutputType = ToolOutputType,
-  In = ToolInputOf<InSchema>,
-  Out = ToolOutputOf<OutSchema>,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends ToolEntry<InSchema, OutSchema, In, Out> {
   private readonly providers: ProviderRegistry;
   readonly scope: Scope;
@@ -133,8 +133,8 @@ export class ToolInstance<
 class FunctionToolContext<
   InSchema extends ToolInputType,
   OutSchema extends ToolOutputType,
-  In = ToolInputOf<InSchema>,
-  Out = ToolOutputOf<OutSchema>,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends ToolContext<InSchema, OutSchema, In, Out> {
   constructor(private readonly record: ToolFunctionTokenRecord, args: ToolCtorArgs<In>) {
     super(args);

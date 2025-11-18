@@ -37,8 +37,8 @@ function FrontMcpTool(providedMetadata: ToolMetadata): ClassDecorator {
 export type FrontMcpToolExecuteHandler<
   InSchema extends ToolInputType,
   OutSchema extends ToolOutputType,
-  In = ToolInputOf<InSchema>,
-  Out = ToolOutputOf<OutSchema>,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > = (input: In, ctx: ToolContext<InSchema, OutSchema>) => Out | Promise<Out>;
 
 /**

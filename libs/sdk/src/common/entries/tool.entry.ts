@@ -20,8 +20,8 @@ export type ParsedToolResult = CallToolResult;
 export abstract class ToolEntry<
   InSchema extends ToolInputType = ToolInputType,
   OutSchema extends ToolOutputType = ToolOutputType,
-  In = ToolInputOf<InSchema>,
-  Out = ToolOutputOf<OutSchema>,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends BaseEntry<ToolRecord, ToolContext<InSchema, OutSchema, In, Out>, ToolMetadata> {
   owner: EntryOwnerRef;
   /**

@@ -28,8 +28,8 @@ export type ToolCtorArgs<In> = {
 export abstract class ToolContext<
   InSchema extends ToolInputType = ToolInputType,
   OutSchema extends ToolOutputType = ToolOutputType,
-  In = ToolInputOf<InSchema>,
-  Out = ToolOutputOf<OutSchema>,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;

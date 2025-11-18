@@ -4,9 +4,7 @@
 
 import { z } from 'zod';
 import { SchemaHandler, TypeRegistry, JSONSchemaObject } from '../../types';
-
-// Forward declaration - will be defined in converter
-declare function convertJsonSchemaToZod(schema: any): z.ZodTypeAny;
+import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
 
 /**
  * Detects an implicit array type from array-specific constraints
