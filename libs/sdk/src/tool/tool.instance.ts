@@ -31,7 +31,6 @@ export class ToolInstance<
   Out = ToolOutputOf<OutSchema>,
 > extends ToolEntry<InSchema, OutSchema, In, Out> {
   private readonly providers: ProviderRegistry;
-  readonly name: string;
   readonly scope: Scope;
   readonly hooks: HookRegistry;
 
@@ -40,12 +39,13 @@ export class ToolInstance<
     this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.id || record.metadata.name;
+    this.fullName = this.owner.id + ':' + this.name;
     this.scope = this.providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
     const schema: any = record.metadata.inputSchema;
     // Support both Zod objects and raw ZodRawShape
-    this.inputSchema = schema && typeof schema.parse === 'function' ? schema : z.object(schema ?? {});
+    this.inputSchema = schema ? schema : {};
     // Whatever JSON schema representation you’re storing for inputs
     this.rawInputSchema = (record.metadata as any).rawInputSchema;
 
@@ -101,7 +101,7 @@ export class ToolInstance<
 
   override parseInput(input: CallToolRequest['params']): CallToolRequest['params']['arguments'] {
     const inputSchema = z.object(this.inputSchema);
-    return inputSchema.safeParse(input.arguments);
+    return inputSchema.parse(input.arguments);
   }
   /**
    * Turn the raw tool function result into an MCP-compliant CallToolResult:

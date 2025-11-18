@@ -26,11 +26,14 @@ import ToolsListFlow from "./flows/tools-list.flow";
 import CallToolFlow from "./flows/call-tool.flow";
 
 
-export default class ToolRegistry extends RegistryAbstract<
-  ToolInstance,        // IMPORTANT: instances map holds ToolInstance (not the interface)
-  ToolRecord,
-  ToolType[]
-> implements ToolRegistryInterface {
+export default class ToolRegistry
+  extends RegistryAbstract<
+    ToolInstance, // IMPORTANT: instances map holds ToolInstance (not the interface)
+    ToolRecord,
+    ToolType[]
+  >
+  implements ToolRegistryInterface
+{
   /** Who owns this registry (used for provenance). Optional. */
   owner: EntryOwnerRef;
 
@@ -44,11 +47,11 @@ export default class ToolRegistry extends RegistryAbstract<
   private children = new Set<ToolRegistry>();
 
   // ---- O(1) indexes over EFFECTIVE set (local + adopted) ----
-  private byQualifiedId = new Map<string, IndexedTool>();        // qualifiedId -> row
-  private byName = new Map<string, IndexedTool[]>();             // baseName -> rows
-  private byOwnerAndName = new Map<string, IndexedTool>();       // "ownerKey:name" -> row
-  private byProviderAndName = new Map<string, IndexedTool>();    // "providerId:name" -> row (best-effort)
-  private byOwner = new Map<string, IndexedTool[]>();            // ownerKey -> rows
+  private byQualifiedId = new Map<string, IndexedTool>(); // qualifiedId -> row
+  private byName = new Map<string, IndexedTool[]>(); // baseName -> rows
+  private byOwnerAndName = new Map<string, IndexedTool>(); // "ownerKey:name" -> row
+  private byProviderAndName = new Map<string, IndexedTool>(); // "providerId:name" -> row (best-effort)
+  private byOwner = new Map<string, IndexedTool[]>(); // ownerKey -> rows
 
   // version + emitter
   private version = 0;
@@ -77,7 +80,7 @@ export default class ToolRegistry extends RegistryAbstract<
       defs.set(provide, rec);
       graph.set(provide, new Set());
     }
-    return {tokens, defs, graph};
+    return { tokens, defs, graph };
   }
 
   protected buildGraph() {
@@ -110,28 +113,31 @@ export default class ToolRegistry extends RegistryAbstract<
     }
 
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
-    childAppRegistries.forEach(appRegistry => {
+    childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
         const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
-        appToolsRegistries.filter(t => t.owner.kind === 'app').forEach(appToolRegistry => {
-          this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
-        });
+        appToolsRegistries
+          .filter((t) => t.owner.kind === 'app')
+          .forEach((appToolRegistry) => {
+            this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
+          });
       }
     });
 
     const childToolRegistries = this.providers.getRegistries('ToolRegistry');
-    childToolRegistries.filter(t => t != this).forEach(toolRegistry => {
-      this.adoptFromChild(toolRegistry as ToolRegistry, toolRegistry.owner);
-    });
+    childToolRegistries
+      .filter((t) => t != this)
+      .forEach((toolRegistry) => {
+        this.adoptFromChild(toolRegistry as ToolRegistry, toolRegistry.owner);
+      });
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
     this.bump('reset');
 
-
     const scope = this.providers.getActiveScope();
-    await scope.registryFlows(ToolsListFlow, CallToolFlow)
+    await scope.registryFlows(ToolsListFlow, CallToolFlow);
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -150,14 +156,14 @@ export default class ToolRegistry extends RegistryAbstract<
     const childRows = child.listAllIndexed(); // includes child's lineage
     const prepend: EntryLineage = this.owner ? [this.owner] : [];
 
-    const adoptedRows = childRows.map(r => this.relineage(r, prepend));
+    const adoptedRows = childRows.map((r) => this.relineage(r, prepend));
 
     this.adopted.set(child, adoptedRows);
     this.children.add(child);
 
     // keep live if child changes
-    child.subscribe({immediate: false}, () => {
-      const latest = child.listAllIndexed().map(r => this.relineage(r, prepend));
+    child.subscribe({ immediate: false }, () => {
+      const latest = child.listAllIndexed().map((r) => this.relineage(r, prepend));
       this.adopted.set(child, latest);
       this.reindex();
       this.bump('reset');
@@ -217,12 +223,12 @@ export default class ToolRegistry extends RegistryAbstract<
 
   /** List all instances (locals + adopted). */
   listAllInstances(): readonly ToolInstance[] {
-    return this.listAllIndexed().map(r => r.instance);
+    return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
   listByOwner(ownerPath: string): readonly ToolInstance[] {
-    return (this.byOwner.get(ownerPath) ?? []).map(r => r.instance);
+    return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
   /* -------------------- Conflict-aware exported names -------------------- */
@@ -235,14 +241,14 @@ export default class ToolRegistry extends RegistryAbstract<
    *    - Children with same base get prefixed by providerId (or owner path)
    */
   exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolInstance }> {
-    const cfg = {...DEFAULT_EXPORT_OPTS, ...(opts ?? {})};
+    const cfg = { ...DEFAULT_EXPORT_OPTS, ...(opts ?? {}) };
 
-    const rows = this.listAllIndexed().map(r => {
+    const rows = this.listAllIndexed().map((r) => {
       const base = normalizeSegment(r.baseName, cfg.case);
       const isLocal = r.source === this;
       const provider = normalizeProviderId(this.providerIdOf(r.instance), cfg.case);
       const ownerPath = normalizeOwnerPath(r.ownerKey, cfg.case);
-      return {base, row: r, isLocal, provider, ownerPath};
+      return { base, row: r, isLocal, provider, ownerPath };
     });
 
     // group by standardized base
@@ -262,8 +268,8 @@ export default class ToolRegistry extends RegistryAbstract<
         continue;
       }
 
-      const locals = group.filter(g => g.isLocal);
-      const children = group.filter(g => !g.isLocal);
+      const locals = group.filter((g) => g.isLocal);
+      const children = group.filter((g) => !g.isLocal);
 
       if (cfg.prefixChildrenOnConflict && locals.length > 0) {
         // Locals
@@ -280,27 +286,21 @@ export default class ToolRegistry extends RegistryAbstract<
 
         // Children
         for (const c of children) {
-          const pre = cfg.prefixSource === 'provider'
-            ? (c.provider ?? c.ownerPath)
-            : c.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? c.provider ?? c.ownerPath : c.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), c.row.instance);
         }
       } else {
         // Prefix everyone by source
         for (const r of group) {
-          const pre = cfg.prefixSource === 'provider'
-            ? (r.provider ?? r.ownerPath)
-            : r.ownerPath;
+          const pre = cfg.prefixSource === 'provider' ? r.provider ?? r.ownerPath : r.ownerPath;
           const name = ensureMaxLen(`${pre}${sepFor(cfg.case)}${base}`, cfg.maxLen);
           out.set(disambiguate(name, out, cfg), r.row.instance);
         }
       }
     }
 
-    return [...out.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, instance]) => ({name, instance}));
+    return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, instance]) => ({ name, instance }));
 
     function disambiguate(candidate: string, pool: Map<string, any>, cfg: Required<ExportNameOptions>): string {
       if (!pool.has(candidate)) return candidate;
@@ -316,7 +316,7 @@ export default class ToolRegistry extends RegistryAbstract<
   /** Lookup by the exported (resolved) name. */
   getExported(name: string, opts?: ExportNameOptions): ToolInstance | undefined {
     const pairs = this.exportResolvedNames(opts);
-    return pairs.find(p => p.name === name)?.instance;
+    return pairs.find((p) => p.name === name)?.instance;
   }
 
   /* -------------------- Subscriptions -------------------- */
@@ -334,12 +334,12 @@ export default class ToolRegistry extends RegistryAbstract<
         snapshot: this.listAllInstances().filter(filter),
       });
     }
-    return this.emitter.on((e) => cb({...e, snapshot: this.listAllInstances().filter(filter)}));
+    return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
   }
 
   private bump(kind: ToolChangeEvent['kind']) {
     const version = ++this.version;
-    this.emitter.emit({kind, scope: 'global', version, snapshot: this.listAllInstances()});
+    this.emitter.emit({ kind, scope: 'global', version, snapshot: this.listAllInstances() });
   }
 
   /* -------------------- Helpers -------------------- */
@@ -350,7 +350,7 @@ export default class ToolRegistry extends RegistryAbstract<
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
     const qualifiedId = `${ownerKey}:${tokenName(token)}`;
-    return {token, instance, baseName, lineage, ownerKey, qualifiedName, qualifiedId, source};
+    return { token, instance, baseName, lineage, ownerKey, qualifiedName, qualifiedId, source };
   }
 
   /** Clone a child row and prepend lineage (with adjacent de-dup to avoid double prefixes). */
@@ -363,13 +363,13 @@ export default class ToolRegistry extends RegistryAbstract<
     const qualifiedId = `${ownerKey}:${tokenName(row.token)}`;
     return {
       token: row.token,
-      instance: row.instance,      // REFERENCE the same instance
+      instance: row.instance, // REFERENCE the same instance
       baseName: row.baseName,
       lineage,
       ownerKey,
       qualifiedName,
       qualifiedId,
-      source: row.source,          // keep original source (who constructed instance)
+      source: row.source, // keep original source (who constructed instance)
     };
   }
 
@@ -381,7 +381,7 @@ export default class ToolRegistry extends RegistryAbstract<
       const maybe = meta?.providerId ?? meta?.provider ?? meta?.ownerId ?? undefined;
       if (typeof maybe === 'string' && maybe.length) return maybe;
 
-      const cls: any = (meta && meta.cls) ? meta.cls : undefined;
+      const cls: any = meta && meta.cls ? meta.cls : undefined;
       if (cls) {
         const id = getMetadata('id', cls);
         if (typeof id === 'string' && id.length) return id;

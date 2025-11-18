@@ -24,6 +24,14 @@ export abstract class ToolEntry<
   Out = ToolOutputOf<OutSchema>,
 > extends BaseEntry<ToolRecord, ToolContext<InSchema, OutSchema, In, Out>, ToolMetadata> {
   owner: EntryOwnerRef;
+  /**
+   * The name of the tool, as declared in the metadata.
+   */
+  name: string;
+  /**
+   * The full name of the tool, including the owner name as prefix.
+   */
+  fullName: string;
 
   inputSchema: InSchema;
   // This is whatever JSON-schema-ish thing you store for input; keeping type loose

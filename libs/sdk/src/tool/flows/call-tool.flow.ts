@@ -21,6 +21,9 @@ const stateSchema = z.object({
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   tool: z.instanceof(ToolEntry),
   toolContext: z.instanceof(ToolContext),
+  // Store the raw execute output for plugins to see
+  rawOutput: z.any().optional(),
+  output: outputSchema,
 });
 
 const plan = {
@@ -79,7 +82,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
 
     const { name } = this.state.required.input;
-    const tool = activeTools.find((t) => t.metadata.name === name);
+    const tool = activeTools.find((entry) => {
+      return entry.fullName === name || entry.name === name;
+    });
     if (!tool) {
       const errorMessage = `Tool "${name}" not found`;
       this.logger.warn(errorMessage);
@@ -96,7 +101,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('createToolCallContext:start');
     const { ctx } = this.input;
     const { tool, input } = this.state.required;
-    const context = tool.create(input, ctx);
+    const context = tool.create(input.arguments, ctx);
     const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
       hook.run = async () => {
         return context[hook.metadata.method]();
@@ -105,7 +110,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     });
 
     this.appendContextHooks(toolHooks);
-    context.input = input.arguments ?? {};
     context.mark('createToolCallContext');
     this.state.set('toolContext', context);
     this.logger.verbose('createToolCallContext:done');
@@ -159,12 +163,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     this.logger.verbose('validateOutput:start');
-    const { tool, toolContext } = this.state;
-    if (!toolContext || !tool) {
+    const { toolContext } = this.state;
+    if (!toolContext) {
       return;
     }
     toolContext.mark('validateOutput');
-    toolContext.output = tool.parseOutput(toolContext.output);
+
+    // Store the RAW output for plugins (cache, PII, etc.) to inspect
+    this.state.set('rawOutput', toolContext.output);
+
     this.logger.verbose('validateOutput:done');
   }
 
@@ -187,19 +194,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    if (!this.state.toolContext) {
-      this.fail(new Error('Tool context not found. This should never happen. Please report this to the FrontMCP team'));
+    const { tool, rawOutput } = this.state;
+
+    if (!tool) {
+      this.fail(new Error('Tool not found. This should never happen. Please report this to the FrontMCP team'));
       return;
     }
-    const { tool, toolContext } = this.state.required;
 
-    const { data, success } = tool.safeParseOutput(toolContext.output);
-
-    if (success) {
-      this.respond(data);
-    } else {
-      this.fail(new Error('invalid output schema'));
+    if (rawOutput === undefined) {
+      this.fail(new Error('Tool output not found. This should never happen. Please report this to the FrontMCP team'));
+      return;
     }
+
+    // Parse and construct the MCP-compliant output using safeParseOutput
+    const parseResult = tool.safeParseOutput(rawOutput);
+
+    if (!parseResult.success) {
+      this.logger.error('finalize: output validation failed', parseResult.error);
+      this.fail(new Error('Invalid output schema'));
+      return;
+    }
+
+    // Respond with the properly formatted MCP result
+    this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
   }
 }

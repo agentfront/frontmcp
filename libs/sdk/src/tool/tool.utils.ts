@@ -184,7 +184,7 @@ export function qualifiedNameOf(lineage: EntryLineage, name: string): string {
 
 export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult {
   const content: ContentBlock[] = [];
-  let hasJsonStructured = false;
+  let structuredData: Record<string, any> | undefined;
 
   // No outputSchema → the best effort: treat the result as structured JSON and text fallback
   if (!descriptor) {
@@ -197,26 +197,70 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
   if (Array.isArray(descriptor)) {
     // Multiple content items; expect raw to be an array of the same length.
     const values = Array.isArray(raw) ? raw : [raw];
+    const parsedItems: Array<{ blocks: ContentBlock[]; parsedValue?: any; isPrimitive: boolean }> = [];
 
+    // Parse all items first
     descriptor.forEach((singleDescriptor: any, idx: number) => {
       const value = values[idx];
-      const { blocks, isJson } = parseSingleValue(singleDescriptor, value);
+      const { blocks, parsedValue, isPrimitive } = parseSingleValue(singleDescriptor, value);
+      parsedItems.push({ blocks, parsedValue, isPrimitive });
       content.push(...blocks);
-      if (isJson) {
-        hasJsonStructured = true;
-      }
     });
+
+    // Check if we have at least one non-primitive item
+    const hasNonPrimitive = parsedItems.some(item => !item.isPrimitive);
+
+    if (hasNonPrimitive && parsedItems.length > 1) {
+      // Multiple items with at least one non-string/primitive: use numeric indices
+      structuredData = {};
+      parsedItems.forEach((item, idx) => {
+        if (item.parsedValue !== undefined) {
+          structuredData![idx] = item.parsedValue;
+        }
+      });
+    } else if (parsedItems.length === 1 && parsedItems[0].parsedValue !== undefined) {
+      // Single item: wrap primitives in {content: value}, use objects directly
+      if (parsedItems[0].isPrimitive) {
+        structuredData = { content: parsedItems[0].parsedValue };
+      } else if (typeof parsedItems[0].parsedValue === 'object' && parsedItems[0].parsedValue !== null) {
+        // Non-primitive object (date, json, etc.) - use directly
+        structuredData = parsedItems[0].parsedValue;
+      } else {
+        // Non-primitive but not an object (shouldn't happen, but handle it)
+        structuredData = { content: parsedItems[0].parsedValue };
+      }
+    } else if (hasNonPrimitive) {
+      // Multiple items but only one has a value
+      structuredData = {};
+      parsedItems.forEach((item, idx) => {
+        if (item.parsedValue !== undefined) {
+          structuredData![idx] = item.parsedValue;
+        }
+      });
+    }
   } else {
-    const { blocks, isJson } = parseSingleValue(descriptor, raw);
+    const { blocks, parsedValue, isPrimitive } = parseSingleValue(descriptor, raw);
     content.push(...blocks);
-    hasJsonStructured = isJson;
+
+    // Single item: wrap primitives in {content: value}, use objects directly
+    if (parsedValue !== undefined) {
+      if (isPrimitive) {
+        structuredData = { content: parsedValue };
+      } else if (typeof parsedValue === 'object' && parsedValue !== null) {
+        // Non-primitive object (date, json, etc.) - use directly
+        structuredData = parsedValue;
+      } else {
+        // Non-primitive but not an object (number, boolean, etc.) - wrap it
+        structuredData = { content: parsedValue };
+      }
+    }
   }
 
   const result: ParsedToolResult = { content };
 
-  // If any schema entry is JSON-like, expose the *whole* raw value as structuredContent.
-  if (hasJsonStructured) {
-    result.structuredContent = getStructuredContent(raw);
+  // Add structuredContent if we have structured data
+  if (structuredData !== undefined) {
+    result.structuredContent = structuredData;
   }
 
   return result;
@@ -227,67 +271,187 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
  *
  * Returns:
  *   - blocks: content blocks to append
- *   - isJson: whether this descriptor should trigger structuredContent
+ *   - parsedValue: the parsed/validated value (for structuredContent)
+ *   - isPrimitive: whether this is a primitive string type
  */
-function parseSingleValue(descriptor: any, value: unknown): { blocks: ContentBlock[]; isJson: boolean } {
+function parseSingleValue(
+  descriptor: any,
+  value: unknown
+): { blocks: ContentBlock[]; parsedValue?: any; isPrimitive: boolean } {
   // Literal primitives + special content types
   if (typeof descriptor === 'string') {
     switch (descriptor) {
       case 'string':
-      case 'number':
-      case 'boolean':
-      case 'date':
         return {
           blocks: [makePrimitiveTextContent(value)],
-          isJson: false,
+          parsedValue: value,
+          isPrimitive: true,
         };
 
+      case 'number': {
+        const numValue = typeof value === 'number' ? value : Number(value);
+        return {
+          blocks: [makePrimitiveTextContent(value)],
+          parsedValue: isNaN(numValue) ? null : numValue,
+          isPrimitive: false,
+        };
+      }
+
+      case 'boolean': {
+        const boolValue = typeof value === 'boolean' ? value : Boolean(value);
+        return {
+          blocks: [makePrimitiveTextContent(value)],
+          parsedValue: boolValue,
+          isPrimitive: false,
+        };
+      }
+
+      case 'date': {
+        let dateValue: Date | null = null;
+        if (value instanceof Date) {
+          dateValue = value;
+        } else if (typeof value === 'string' || typeof value === 'number') {
+          const parsed = new Date(value);
+          if (!isNaN(parsed.getTime())) {
+            dateValue = parsed;
+          }
+        }
+
+        return {
+          blocks: [makePrimitiveTextContent(value)],
+          parsedValue: dateValue ? {
+            iso: dateValue.toISOString(),
+            timeInMilli: dateValue.getTime(),
+          } : null,
+          isPrimitive: false,
+        };
+      }
+
       case 'image':
-        return { blocks: toContentArray<ImageContent>('image', value), isJson: false };
+        return {
+          blocks: toContentArray<ImageContent>('image', value),
+          parsedValue: undefined,
+          isPrimitive: false,
+        };
 
       case 'audio':
-        return { blocks: toContentArray<AudioContent>('audio', value), isJson: false };
+        return {
+          blocks: toContentArray<AudioContent>('audio', value),
+          parsedValue: undefined,
+          isPrimitive: false,
+        };
 
       case 'resource':
         return {
           blocks: toContentArray<EmbeddedResource>('resource', value),
-          isJson: false,
+          parsedValue: undefined,
+          isPrimitive: false,
         };
 
       case 'resource_link':
         return {
           blocks: toContentArray<ResourceLink>('resource_link', value),
-          isJson: false,
+          parsedValue: undefined,
+          isPrimitive: false,
         };
 
       default:
         // Unknown literal: just stringify as text
         return {
           blocks: [makePrimitiveTextContent(value)],
-          isJson: false,
+          parsedValue: value,
+          isPrimitive: true,
         };
     }
   }
 
-  // Zod primitive → treat as primitive text
-  if (
-    descriptor instanceof ZodString ||
-    descriptor instanceof ZodNumber ||
-    descriptor instanceof ZodBoolean ||
-    descriptor instanceof ZodBigInt ||
-    descriptor instanceof ZodDate
-  ) {
+  // Zod primitives
+  if (descriptor instanceof ZodString) {
     return {
       blocks: [makePrimitiveTextContent(value)],
-      isJson: false,
+      parsedValue: value,
+      isPrimitive: true,
+    };
+  }
+
+  if (descriptor instanceof ZodNumber) {
+    const parseResult = descriptor.safeParse(value);
+    const numValue = parseResult.success ? parseResult.data : (typeof value === 'number' ? value : Number(value));
+    return {
+      blocks: [makePrimitiveTextContent(value)],
+      parsedValue: isNaN(numValue) ? null : numValue,
+      isPrimitive: false,
+    };
+  }
+
+  if (descriptor instanceof ZodBoolean) {
+    const parseResult = descriptor.safeParse(value);
+    const boolValue = parseResult.success ? parseResult.data : Boolean(value);
+    return {
+      blocks: [makePrimitiveTextContent(value)],
+      parsedValue: boolValue,
+      isPrimitive: false,
+    };
+  }
+
+  if (descriptor instanceof ZodBigInt) {
+    const parseResult = descriptor.safeParse(value);
+    const bigIntValue = parseResult.success ? parseResult.data : (typeof value === 'bigint' ? value : null);
+    return {
+      blocks: [makePrimitiveTextContent(value)],
+      parsedValue: bigIntValue !== null ? bigIntValue.toString() : null,
+      isPrimitive: false,
+    };
+  }
+
+  if (descriptor instanceof ZodDate) {
+    const parseResult = descriptor.safeParse(value);
+    const dateValue = parseResult.success ? parseResult.data : (value instanceof Date ? value : null);
+    return {
+      blocks: [makePrimitiveTextContent(value)],
+      parsedValue: dateValue ? {
+        iso: dateValue.toISOString(),
+        timeInMilli: dateValue.getTime(),
+      } : null,
+      isPrimitive: false,
     };
   }
 
   // Anything else (Zod object/array/union, ZodRawShape, plain object) → JSON/structured
-  const sanitized = getStructuredContent(value);
+  // Use Zod parsing if it's a Zod schema
+  let parsedValue: any;
+
+  if (descriptor instanceof z.ZodType) {
+    // Use Zod to parse and validate
+    const parseResult = descriptor.safeParse(value);
+    if (parseResult.success) {
+      parsedValue = getStructuredContent(parseResult.data);
+    } else {
+      // Validation failed, use sanitized raw value
+      parsedValue = getStructuredContent(value);
+    }
+  } else if (typeof descriptor === 'object' && descriptor !== null) {
+    // ZodRawShape or plain object - try to create a Zod object schema
+    try {
+      const schema = z.object(descriptor);
+      const parseResult = schema.safeParse(value);
+      if (parseResult.success) {
+        parsedValue = getStructuredContent(parseResult.data);
+      } else {
+        parsedValue = getStructuredContent(value);
+      }
+    } catch {
+      // Fallback to sanitized content
+      parsedValue = getStructuredContent(value);
+    }
+  } else {
+    parsedValue = getStructuredContent(value);
+  }
+
   return {
-    blocks: [makeJsonTextContent(sanitized)],
-    isJson: true,
+    blocks: [makeJsonTextContent(parsedValue)],
+    parsedValue,
+    isPrimitive: false,
   };
 }
 
@@ -301,7 +465,7 @@ function makePrimitiveTextContent(value: unknown): TextContent {
 function makeJsonTextContent(jsonValue: unknown): TextContent {
   let text: string;
   try {
-    text = JSON.stringify(jsonValue, null, 2);
+    text = JSON.stringify(jsonValue);
   } catch {
     text = jsonValue == null ? '' : String(jsonValue);
   }
@@ -310,7 +474,7 @@ function makeJsonTextContent(jsonValue: unknown): TextContent {
 
 /**
  * Normalize any `value` into an array of content objects with the given MCP `type`.
- * If `value` is already a single content object (with a matching type), it’s wrapped.
+ * If `value` is already a single content object (with a matching type), it's wrapped.
  * If it's an array, every element is assumed to already be a content object.
  */
 function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: unknown): ContentBlock[] {
@@ -340,10 +504,10 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
  *   - Set → array.
  *   - Protect against circular references via WeakSet.
  */
-function getStructuredContent(value: unknown): z.ParseResult['data'] | undefined {
+function getStructuredContent(value: unknown): any | undefined {
   const seen = new WeakSet<object>();
 
-  const replacer = (_key: string, val: any) => {
+  function sanitize(val: any): any {
     if (typeof val === 'function' || typeof val === 'symbol') {
       return undefined;
     }
@@ -365,11 +529,19 @@ function getStructuredContent(value: unknown): z.ParseResult['data'] | undefined
     }
 
     if (val instanceof Map) {
-      return Object.fromEntries(val);
+      const obj: Record<string, any> = {};
+      for (const [k, v] of val.entries()) {
+        obj[String(k)] = sanitize(v);
+      }
+      return obj;
     }
 
     if (val instanceof Set) {
-      return Array.from(val);
+      return Array.from(val).map(sanitize);
+    }
+
+    if (Array.isArray(val)) {
+      return val.map(sanitize);
     }
 
     if (val && typeof val === 'object') {
@@ -378,17 +550,20 @@ function getStructuredContent(value: unknown): z.ParseResult['data'] | undefined
         return undefined;
       }
       seen.add(val);
+
+      const sanitized: Record<string, any> = {};
+      for (const [key, value] of Object.entries(val)) {
+        const clean = sanitize(value);
+        if (clean !== undefined) {
+          sanitized[key] = clean;
+        }
+      }
+      return sanitized;
     }
 
+    // Primitives pass through
     return val;
-  };
-
-  try {
-    const json = JSON.stringify(value, replacer);
-    if (json === undefined) return undefined;
-    return JSON.parse(json);
-  } catch {
-    // Last-resort fallback: readable string
-    return undefined;
   }
+
+  return sanitize(value);
 }

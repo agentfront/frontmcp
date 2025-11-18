@@ -55,13 +55,18 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook.Will('execute', { priority: 1000 })
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const ctx = flowCtx.state.required.toolContext;
-    const { cache } = ctx.metadata;
-    if (!cache || !ctx.input) {
+    const { toolContext, tool } = flowCtx.state;
+
+    if (!tool || !toolContext) {
+      return;
+    }
+    const { cache } = toolContext.metadata;
+    if (!cache || !toolContext.input) {
+      // no cache or no input, skip
       return;
     }
     const cacheStore = this.get(CacheStoreToken);
-    const hash = hashObject(ctx.input);
+    const hash = hashObject(toolContext.input);
     const cached = await cacheStore.getValue(hash);
 
     if (cached) {
@@ -69,10 +74,23 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
         await cacheStore.setValue(hash, cached, ttl);
       }
-      ctx.respond({
-        ...cached,
-        ___cached__: true,
-      });
+
+      /**
+       * double check if cache still valid based on tool output schema
+       */
+      if (tool.safeParseOutput(cached).error) {
+        await cacheStore.delete(hash);
+        return;
+      }
+      /**
+       * cache hit, set output to main flow context
+       */
+      flowCtx.state.rawOutput = cached;
+
+      /**
+       * call respond to bypass tool execution
+       */
+      toolContext.respond(cached);
     }
   }
 
