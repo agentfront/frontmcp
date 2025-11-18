@@ -1,24 +1,22 @@
-import {z} from "zod";
-import {McpToolDefinition} from "openapi-mcp-generator";
-import {tool} from "@frontmcp/sdk";
-import {convertJsonSchemaToZod} from "zod-from-json-schema";
-import {OpenApiAdapterOptions} from "./openapi.types";
-
+import { z } from 'zod';
+import { McpToolDefinition } from 'openapi-mcp-generator';
+import { tool } from '@frontmcp/sdk';
+import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+import { OpenApiAdapterOptions } from './openapi.types';
 
 export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdapterOptions) => {
   const inputSchema = getZodSchemaFromJsonSchema(oTool.inputSchema, oTool.name);
 
-  const {additionalHeaders, headersMapper} = options;
+  const { additionalHeaders, headersMapper } = options;
   return tool({
     id: oTool.name,
     name: oTool.name,
     description: oTool.description,
-    inputSchema: inputSchema as any,
+    inputSchema: inputSchema.shape,
     rawInputSchema: oTool.inputSchema as any,
     // outputSchema: outputSchema.shape
   })(async (input, ctx) => {
-
-    let {urlPath, headers, queryParams} = prepareUrl(oTool, input);
+    let { urlPath, headers, queryParams } = prepareUrl(oTool, input);
     let requestBodyData: any = undefined;
 
     if (additionalHeaders) {
@@ -27,7 +25,7 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
       }
     }
     if (typeof headersMapper === 'function') {
-      headers = headersMapper(ctx.authInfo, headers)
+      headers = headersMapper(ctx.authInfo, headers);
     }
 
     if (!['HEAD', 'GET', 'OPTIONS'].includes(oTool.method)) {
@@ -36,32 +34,31 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
         requestBodyData = input['requestBody'];
         if (oTool.requestBodyContentType?.includes('application/json')) {
           requestBodyData = JSON.stringify(requestBodyData);
-      }
+        }
         headers.set('content-type', oTool.requestBodyContentType);
       }
     }
 
-    const query = queryParams.toString()
+    const query = queryParams.toString();
     const url = `${options.baseUrl}${urlPath}${query ? `?${query}` : ''}`;
     const res = await fetch(url, {
       method: oTool.method,
       headers,
       body: requestBodyData,
     });
-    const data = await res.text()
-    let result = {data}
+    const data = await res.text();
+    let result = { data };
     if (res.headers.get('content-type')?.includes('application/json')) {
       try {
-        result.data = JSON.parse(data)
+        result.data = JSON.parse(data);
       } catch (e) {
-        console.error("failed to parse api response")// migrate to logger
-        result.data = data
+        console.error('failed to parse api response'); // migrate to logger
+        result.data = data;
       }
     }
-    return result
+    return result;
   });
 };
-
 
 /**
  * Converts a JSON Schema to a Zod schema for runtime validation
@@ -89,9 +86,8 @@ function getZodSchemaFromJsonSchema(jsonSchema: any, toolName: string): z.ZodObj
 const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
   // Prepare URL, query parameters, headers, and request body
   let urlPath = definition.pathTemplate;
-  const queryParams = new URLSearchParams({"v": '1'})
-  const headers = new Headers({'accept': 'application/json'})
-
+  const queryParams = new URLSearchParams({ v: '1' });
+  const headers = new Headers({ accept: 'application/json' });
 
   // Apply parameters to the URL path, query, or headers
   definition.executionParameters.forEach((param) => {
@@ -100,7 +96,7 @@ const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
       if (param.in === 'path') {
         urlPath = urlPath.replace(`{${param.name}}`, encodeURIComponent(String(value)));
       } else if (param.in === 'query') {
-        queryParams.set(param.name, value)
+        queryParams.set(param.name, value);
       } else if (param.in === 'header') {
         headers.append(param.name.toLowerCase(), String(value));
       }
@@ -112,5 +108,5 @@ const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
     throw new Error(`Failed to resolve path parameters: ${urlPath}`);
   }
 
-  return {urlPath, headers, queryParams};
-}
+  return { urlPath, headers, queryParams };
+};

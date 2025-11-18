@@ -26,7 +26,7 @@ import { buildParsedToolResult } from './tool.utils';
 
 export class ToolInstance<
   InSchema extends ToolInputType = ToolInputType,
-  OutSchema extends ToolOutputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
   In = ToolInputOf<InSchema>,
   Out = ToolOutputOf<OutSchema>,
 > extends ToolEntry<InSchema, OutSchema, In, Out> {
@@ -120,7 +120,7 @@ export class ToolInstance<
     return buildParsedToolResult(descriptor, raw);
   }
 
-  override safeParseOutput(raw: Out | Partial<Out> | any): z.SafeParseReturnType<In, ParsedToolResult> {
+  override safeParseOutput(raw: Out | Partial<Out> | any): z.SafeParseReturnType<Out, ParsedToolResult> {
     const descriptor = this.outputSchema as any;
     try {
       return { success: true, data: buildParsedToolResult(descriptor, raw) };
@@ -134,7 +134,7 @@ class FunctionToolContext<
   InSchema extends ToolInputType,
   OutSchema extends ToolOutputType,
   In = ToolInputOf<InSchema>,
-  Out = ToolInputOf<OutSchema>,
+  Out = ToolOutputOf<OutSchema>,
 > extends ToolContext<InSchema, OutSchema, In, Out> {
   constructor(private readonly record: ToolFunctionTokenRecord, args: ToolCtorArgs<In>) {
     super(args);

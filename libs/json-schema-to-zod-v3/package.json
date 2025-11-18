@@ -1,20 +1,23 @@
 {
-  "name": "@frontmcp/sdk",
+  "name": "json-schema-to-zod-v3",
   "version": "0.3.1",
-  "description": "FrontMCP SDK",
+  "description": "Production-ready converter from JSON Schema (Draft 7+) to Zod v3 schemas with full TypeScript support",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
   "keywords": [
-    "mcp",
-    "dependency injection",
-    "sdk",
-    "adapters",
-    "plugins",
-    "agentfront",
-    "frontmcp",
-    "framework",
-    "typescript"
+    "json-schema",
+    "zod",
+    "zod-v3",
+    "validation",
+    "schema",
+    "converter",
+    "typescript",
+    "json-schema-to-zod",
+    "schema-validation",
+    "openapi",
+    "api-validation",
+    "type-safety",
+    "runtime-validation"
   ],
   "repository": {
     "type": "git",
@@ -23,6 +26,8 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/json-schema-to-zod-v3/README.md",
+
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
@@ -34,22 +39,13 @@
       "default": "./dist/src/index.js"
     }
   },
+
   "peerDependencies": {
-    "zod": "^3.25.76"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.22.0",
-    "axios": "^1.6.0",
-    "ioredis": "^5.8.0",
-    "jose": "^6.1.0",
-    "openapi-mcp-generator": "^3.2.0",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.0",
-    "json-schema-to-zod-v3": "0.3.1",
-    "zod-to-json-schema": "^3.25.0",
-    "tslib": "^2.3.0"
+    "zod": "^3.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "zod": "^3.23.8"
   }
 }

@@ -70,7 +70,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const cached = await cacheStore.getValue(hash);
 
     if (cached) {
-      if (cache == true || (cache.ttl && cache.slideWindow)) {
+      if (cache === true || (cache.ttl && cache.slideWindow)) {
         const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
         await cacheStore.setValue(hash, cached, ttl);
       }

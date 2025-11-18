@@ -3,6 +3,13 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolContext, Too
 import { z } from 'zod';
 import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import {
+  InvalidMethodError,
+  ToolNotFoundError,
+  InvalidInputError,
+  InvalidOutputError,
+  ToolExecutionError,
+} from '../../errors';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -21,7 +28,7 @@ const stateSchema = z.object({
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   tool: z.instanceof(ToolEntry),
   toolContext: z.instanceof(ToolContext),
-  // Store the raw execute output for plugins to see
+  // Store the raw executed output for plugins to see
   rawOutput: z.any().optional(),
   output: outputSchema,
 });
@@ -60,14 +67,22 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
   async parseInput() {
     this.logger.verbose('parseInput:start');
-    const {
-      request: { method, params },
-      ctx,
-    } = inputSchema.parse(this.rawInput);
+
+    let method!: string;
+    let params: any;
+    let ctx: any;
+    try {
+      const inputData = inputSchema.parse(this.rawInput);
+      method = inputData.request.method;
+      params = inputData.request.params;
+      ctx = inputData.ctx;
+    } catch (e) {
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+    }
 
     if (method !== 'tools/call') {
       this.logger.warn(`parseInput: invalid method "${method}"`);
-      throw new Error('Invalid method');
+      throw new InvalidMethodError(method, 'tools/call');
     }
 
     this.state.set({ input: params, authInfo: ctx.authInfo });
@@ -85,13 +100,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const tool = activeTools.find((entry) => {
       return entry.fullName === name || entry.name === name;
     });
+
     if (!tool) {
-      const errorMessage = `Tool "${name}" not found`;
-      this.logger.warn(errorMessage);
-      this.fail(new Error(errorMessage));
+      this.logger.warn(`findTool: tool "${name}" not found`);
+      throw new ToolNotFoundError(name);
     }
+
     this.logger = this.logger.child(`CallToolFlow(${name})`);
-    this.state.set('tool', tool!);
+    this.state.set('tool', tool);
     this.logger.info(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
   }
@@ -101,18 +117,24 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('createToolCallContext:start');
     const { ctx } = this.input;
     const { tool, input } = this.state.required;
-    const context = tool.create(input.arguments, ctx);
-    const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
-      hook.run = async () => {
-        return context[hook.metadata.method]();
-      };
-      return hook;
-    });
 
-    this.appendContextHooks(toolHooks);
-    context.mark('createToolCallContext');
-    this.state.set('toolContext', context);
-    this.logger.verbose('createToolCallContext:done');
+    try {
+      const context = tool.create(input.arguments, ctx);
+      const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
+        hook.run = async () => {
+          return context[hook.metadata.method]();
+        };
+        return hook;
+      });
+
+      this.appendContextHooks(toolHooks);
+      context.mark('createToolCallContext');
+      this.state.set('toolContext', context);
+      this.logger.verbose('createToolCallContext:done');
+    } catch (error) {
+      this.logger.error('createToolCallContext: failed to create context', error);
+      throw new ToolExecutionError(tool.metadata.name, error instanceof Error ? error : undefined);
+    }
   }
 
   @Stage('acquireQuota')
@@ -140,12 +162,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
     toolContext.mark('validateInput');
+
     try {
       toolContext.input = tool.parseInput(input);
+      this.logger.verbose('validateInput:done');
     } catch (err) {
-      this.fail(new Error(`Invalid input: validation failed`));
+      if (err instanceof z.ZodError) {
+        throw new InvalidInputError('Invalid tool input', err.errors);
+      }
+
+      this.logger.error('validateInput: failed to parse input', err);
+      throw new InvalidInputError('Unknown error occurred when trying to parse input');
     }
-    this.logger.verbose('validateInput:done');
   }
 
   @Stage('execute')
@@ -156,8 +184,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
     toolContext.mark('execute');
-    toolContext.output = await toolContext.execute(toolContext.input);
-    this.logger.verbose('execute:done');
+
+    try {
+      toolContext.output = await toolContext.execute(toolContext.input);
+      this.logger.verbose('execute:done');
+    } catch (error) {
+      this.logger.error('execute: tool execution failed', error);
+      throw new ToolExecutionError(
+        this.state.tool?.metadata.name || 'unknown',
+        error instanceof Error ? error : undefined,
+      );
+    }
   }
 
   @Stage('validateOutput')
@@ -197,22 +234,27 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { tool, rawOutput } = this.state;
 
     if (!tool) {
-      this.fail(new Error('Tool not found. This should never happen. Please report this to the FrontMCP team'));
-      return;
+      this.logger.error('finalize: tool not found in state');
+      throw new ToolExecutionError('unknown', new Error('Tool not found in state'));
     }
 
     if (rawOutput === undefined) {
-      this.fail(new Error('Tool output not found. This should never happen. Please report this to the FrontMCP team'));
-      return;
+      this.logger.error('finalize: tool output not found in state');
+      throw new ToolExecutionError(tool.metadata.name, new Error('Tool output not found'));
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
     const parseResult = tool.safeParseOutput(rawOutput);
 
     if (!parseResult.success) {
-      this.logger.error('finalize: output validation failed', parseResult.error);
-      this.fail(new Error('Invalid output schema'));
-      return;
+      // add support for request id in error messages
+      this.logger.error('finalize: output validation failed', {
+        tool: tool.metadata.name,
+        errors: parseResult.error,
+      });
+
+      // Use InvalidOutputError, which hides internal details in production
+      throw new InvalidOutputError();
     }
 
     // Respond with the properly formatted MCP result

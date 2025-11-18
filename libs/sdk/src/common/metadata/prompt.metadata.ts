@@ -60,7 +60,7 @@ export interface FrontMcpPromptMetadata extends ExtendFrontMcpPromptMetadata {
   /**
    * A description of what this resource represents.
    *
-   * This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
+   * Clients can use this to improve the LLM's understanding of available resources. It can be thought of as a "hint" to the model.
    */
   description?: string;
 

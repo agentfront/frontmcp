@@ -35,6 +35,6 @@
     "tslib": "^2.3.0",
     "@frontmcp/sdk": "^0.3.1",
     "openapi-mcp-generator": "^3.2.0",
-    "json-schema-to-zod": "^2.6.1"
+    "json-schema-to-zod-v3": "0.3.1"
   }
 }

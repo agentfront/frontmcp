@@ -32,7 +32,6 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
   }
 
   async handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
-
     const authInfo = this.ensureAuthInfo(req, this);
 
     if (this.handleIfElicitResult(req)) {
@@ -53,12 +52,11 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
     message: string,
     requestedSchema: T,
   ): Promise<TypedElicitResult<T>> {
-
     console.log('sendElicitRequest', { relatedRequestId });
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: zodToJsonSchema(requestedSchema),
+        requestedSchema: zodToJsonSchema(requestedSchema as any),
       }),
     );
 

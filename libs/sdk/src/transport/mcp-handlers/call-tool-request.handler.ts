@@ -1,5 +1,6 @@
-import { CallToolRequestSchema, CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequest, CallToolRequestSchema, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
+import { formatMcpErrorResponse } from '../../errors';
 
 export default function callToolRequestHandler({
   scope,
@@ -8,11 +9,10 @@ export default function callToolRequestHandler({
     requestSchema: CallToolRequestSchema,
     handler: async (request: CallToolRequest, ctx) => {
       try {
-        const result = await scope.runFlowForOutput('tools:call-tool', { request, ctx });
-        console.log(result);
-        return result;
+        return await scope.runFlowForOutput('tools:call-tool', { request, ctx });
       } catch (e) {
-        throw e
+        scope.logger.error("CallTool Failed", e);
+        return formatMcpErrorResponse(e);
       }
     },
   } satisfies McpHandler<CallToolRequest, CallToolResult>;

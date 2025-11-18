@@ -67,5 +67,5 @@ export abstract class ToolEntry<
    * Convert the raw tool return value (Out) into an MCP CallToolResult-shaped object.
    * Concrete logic is implemented in ToolInstance.
    */
-  abstract safeParseOutput(result: Out | Partial<Out> | any): z.SafeParseReturnType<In, ParsedToolResult>;
+  abstract safeParseOutput(result: Out | Partial<Out> | any): z.SafeParseReturnType<Out, ParsedToolResult>;
 }

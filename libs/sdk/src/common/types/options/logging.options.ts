@@ -1,7 +1,7 @@
-import {z} from 'zod';
-import {annotatedFrontMcpLoggerSchema} from '../../schemas';
-import {LogTransportType} from "../../interfaces";
-import {RawZodShape} from "../common.types";
+import { z } from 'zod';
+import { annotatedFrontMcpLoggerSchema } from '../../schemas';
+import { LogTransportType } from '../../interfaces';
+import { RawZodShape } from '../common.types';
 
 export enum LogLevel {
   Debug = 0,
@@ -21,16 +21,6 @@ export const LogLevelName: Record<LogLevel, string> = {
   [LogLevel.Off]: 'off',
 };
 
-export const LogLevelValue: Record<string, LogLevel> = {
-  'debug': LogLevel.Debug,
-  'verbose': LogLevel.VERBOSE,
-  'info': LogLevel.Info,
-  'warn': LogLevel.Warn,
-  'error': LogLevel.Error,
-  'off': LogLevel.Off,
-};
-
-
 export type LoggingOptions = {
   level?: LogLevel; // default to 'info'
   enableConsole?: boolean;
@@ -39,7 +29,7 @@ export type LoggingOptions = {
    * Additional custom LogTransport types to register.
    * @default []
    */
-  transports?: LogTransportType[]
+  transports?: LogTransportType[];
 };
 
 export const loggingOptionsSchema = z.object({
@@ -48,6 +38,5 @@ export const loggingOptionsSchema = z.object({
   enableConsole: z.boolean().optional().default(true),
   transports: z.array(annotatedFrontMcpLoggerSchema).optional().default([]),
 } satisfies RawZodShape<LoggingOptions>);
-
 
 export type LoggingConfigType = Omit<z.infer<typeof loggingOptionsSchema>, 'transports'>;

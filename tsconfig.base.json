@@ -17,26 +17,15 @@
     "importHelpers": true,
     "target": "es2021",
     "module": "esnext",
-    "lib": [
-      "es2021",
-      "dom"
-    ],
+    "lib": ["es2021", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@frontmcp/sdk": [
-        "libs/sdk/src/index.ts"
-      ],
-      "@frontmcp/plugins": [
-        "libs/plugins/src/index.ts"
-      ],
-      "@frontmcp/adapters": [
-        "libs/adapters/src/index.ts"
-      ]
+      "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
+      "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
+      "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
+      "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"]
     }
   },
-  "exclude": [
-    "node_modules",
-    "tmp"
-  ]
+  "exclude": ["node_modules", "tmp"]
 }

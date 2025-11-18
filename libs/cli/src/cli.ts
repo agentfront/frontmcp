@@ -5,10 +5,10 @@
  */
 
 import * as fs from 'fs';
-import {promises as fsp} from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
-import {spawn, ChildProcess} from 'child_process';
-import {getSelfVersion} from './version';
+import { spawn, ChildProcess } from 'child_process';
+import { getSelfVersion } from './version';
 
 /* ----------------------------- Types & Helpers ---------------------------- */
 
@@ -66,7 +66,7 @@ ${c('bold', 'Examples')}
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = {_: []};
+  const out: ParsedArgs = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out-dir' || a === '-o') out.outDir = argv[++i];
@@ -144,16 +144,16 @@ async function resolveEntry(cwd: string, explicit?: string): Promise<string> {
   throw new Error(msg);
 }
 
-function runCmd(cmd: string, args: string[], opts: {cwd?: string} = {}): Promise<void> {
+function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {stdio: 'inherit', shell: true, ...opts});
+    const child = spawn(cmd, args, { stdio: 'inherit', shell: true, ...opts });
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`))));
     child.on('error', reject);
   });
 }
 
 async function ensureDir(p: string): Promise<void> {
-  await fsp.mkdir(p, {recursive: true});
+  await fsp.mkdir(p, { recursive: true });
 }
 
 async function isDirEmpty(dir: string): Promise<boolean> {
@@ -217,7 +217,7 @@ async function runDev(opts: ParsedArgs): Promise<void> {
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
 
   // Start tsx watcher (app run)
-  const app = spawn('npx', ['-y', 'tsx', '--watch', entry], {stdio: 'inherit', shell: true});
+  const app = spawn('npx', ['-y', 'tsx', '--watch', entry], { stdio: 'inherit', shell: true });
   // Start tsc in watch mode for async type-checking (non-blocking)
   const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
     stdio: 'inherit',
@@ -315,11 +315,8 @@ const RECOMMENDED_TSCONFIG = {
   include: ['src/**/*'],
 } as const;
 
-function deepMerge<T extends Record<string, any>, U extends Record<string, any>>(
-  base: T,
-  patch: U,
-): T & U {
-  const out: Record<string, any> = {...base};
+function deepMerge<T extends Record<string, any>, U extends Record<string, any>>(base: T, patch: U): T & U {
+  const out: Record<string, any> = { ...base };
   for (const [k, v] of Object.entries(patch)) {
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = deepMerge(base[k] ?? {}, v as Record<string, any>);
@@ -331,8 +328,8 @@ function deepMerge<T extends Record<string, any>, U extends Record<string, any>>
 }
 
 function ensureRequiredTsOptions(obj: Record<string, any>): Record<string, any> {
-  const next = {...obj};
-  next.compilerOptions = {...(next.compilerOptions || {})};
+  const next = { ...obj };
+  next.compilerOptions = { ...(next.compilerOptions || {}) };
   next.compilerOptions.target = REQUIRED_DECORATOR_FIELDS.target;
   next.compilerOptions.module = REQUIRED_DECORATOR_FIELDS.module;
   next.compilerOptions.emitDecoratorMetadata = REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata;
@@ -361,15 +358,13 @@ function checkRequiredTsOptions(compilerOptions: Record<string, any> | undefined
     ok.push(`compilerOptions.module = "${REQUIRED_DECORATOR_FIELDS.module}"`);
   else issues.push(`compilerOptions.module should be "${REQUIRED_DECORATOR_FIELDS.module}"`);
 
-  if (edm === REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata)
-    ok.push(`compilerOptions.emitDecoratorMetadata = true`);
+  if (edm === REQUIRED_DECORATOR_FIELDS.emitDecoratorMetadata) ok.push(`compilerOptions.emitDecoratorMetadata = true`);
   else issues.push(`compilerOptions.emitDecoratorMetadata should be true`);
 
-  if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators)
-    ok.push(`compilerOptions.experimentalDecorators = true`);
+  if (ed === REQUIRED_DECORATOR_FIELDS.experimentalDecorators) ok.push(`compilerOptions.experimentalDecorators = true`);
   else issues.push(`compilerOptions.experimentalDecorators should be true`);
 
-  return {ok, issues};
+  return { ok, issues };
 }
 
 async function runInit(baseDir?: string): Promise<void> {
@@ -378,12 +373,7 @@ async function runInit(baseDir?: string): Promise<void> {
   const existing = await readJSON<Record<string, any>>(tsconfigPath);
 
   if (!existing) {
-    console.log(
-      c(
-        'yellow',
-        `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`,
-      ),
-    );
+    console.log(c('yellow', `tsconfig.json not found — creating one in ${path.relative(process.cwd(), cwd) || '.'}.`));
     await writeJSON(tsconfigPath, RECOMMENDED_TSCONFIG);
     console.log(c('green', '✅ Created tsconfig.json with required decorator settings.'));
     return;
@@ -393,9 +383,7 @@ async function runInit(baseDir?: string): Promise<void> {
   merged = ensureRequiredTsOptions(merged);
 
   await writeJSON(tsconfigPath, merged);
-  console.log(
-    c('green', '✅ tsconfig.json verified and updated (required decorator settings enforced).'),
-  );
+  console.log(c('green', '✅ tsconfig.json verified and updated (required decorator settings enforced).'));
 }
 
 function cmpSemver(a: string, b: string): number {
@@ -426,7 +414,7 @@ async function runDoctor(): Promise<void> {
   let npmVer = 'unknown';
   try {
     npmVer = await new Promise<string>((resolve, reject) => {
-      const child = spawn('npm', ['-v'], {shell: true});
+      const child = spawn('npm', ['-v'], { shell: true });
       let out = '';
       child.stdout?.on('data', (d) => (out += String(d)));
       child.on('close', () => resolve(out.trim()));
@@ -447,7 +435,7 @@ async function runDoctor(): Promise<void> {
   if (await fileExists(tsconfigPath)) {
     console.log(`✅ tsconfig.json found`);
     const tsconfig = await readJSON<Record<string, any>>(tsconfigPath);
-    const {ok: oks, issues} = checkRequiredTsOptions(tsconfig?.compilerOptions);
+    const { ok: oks, issues } = checkRequiredTsOptions(tsconfig?.compilerOptions);
     for (const line of oks) console.log(c('green', `  ✓ ${line}`));
     if (issues.length) {
       ok = false;
@@ -489,11 +477,7 @@ function pkgNameFromCwd(cwd: string) {
   );
 }
 
-async function upsertPackageJson(
-  cwd: string,
-  nameOverride: string | undefined,
-  selfVersion: string,
-) {
+async function upsertPackageJson(cwd: string, nameOverride: string | undefined, selfVersion: string) {
   const pkgPath = path.join(cwd, 'package.json');
   const existing = await readJSON<Record<string, any>>(pkgPath);
 
@@ -520,7 +504,7 @@ async function upsertPackageJson(
       '@frontmcp/sdk': frontmcpLibRange,
       '@frontmcp/plugins': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
-      zod: '^3.23.8',
+      zod: '^3.25.76',
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
@@ -533,16 +517,11 @@ async function upsertPackageJson(
 
   if (!existing) {
     await writeJSON(pkgPath, base);
-    console.log(
-      c(
-        'green',
-        '✅ Created package.json (synced @frontmcp libs to CLI version + exact frontmcp)',
-      ),
-    );
+    console.log(c('green', '✅ Created package.json (synced @frontmcp libs to CLI version + exact frontmcp)'));
     return;
   }
 
-  const merged: any = {...base, ...existing};
+  const merged: any = { ...base, ...existing };
 
   // Preserve some user fields if present
   merged.name = existing.name || base.name;
@@ -571,7 +550,7 @@ async function upsertPackageJson(
     '@frontmcp/sdk': frontmcpLibRange,
     '@frontmcp/plugins': frontmcpLibRange,
     '@frontmcp/adapters': frontmcpLibRange,
-    zod: '^3.23.8',
+    zod: '^3.25.76',
     'reflect-metadata': '^0.2.2',
   };
 
@@ -584,12 +563,7 @@ async function upsertPackageJson(
   };
 
   await writeJSON(pkgPath, merged);
-  console.log(
-    c(
-      'green',
-      '✅ Updated package.json (synced @frontmcp libs + frontmcp to current CLI version)',
-    ),
-  );
+  console.log(c('green', '✅ Updated package.json (synced @frontmcp libs + frontmcp to current CLI version)'));
 }
 
 async function scaffoldFileIfMissing(baseDir: string, p: string, content: string) {
@@ -659,13 +633,7 @@ async function runCreate(projectArg?: string): Promise<void> {
   if (await fileExists(targetDir)) {
     if (!(await isDirEmpty(targetDir))) {
       console.error(
-        c(
-          'red',
-          `Refusing to scaffold into non-empty directory: ${path.relative(
-            process.cwd(),
-            targetDir,
-          )}`,
-        ),
+        c('red', `Refusing to scaffold into non-empty directory: ${path.relative(process.cwd(), targetDir)}`),
       );
       console.log(c('gray', 'Pick a different name or start with an empty folder.'));
       process.exit(1);
@@ -675,10 +643,7 @@ async function runCreate(projectArg?: string): Promise<void> {
   }
 
   console.log(
-    `${c('cyan', '[create]')} Creating project in ${c(
-      'bold',
-      './' + path.relative(process.cwd(), targetDir),
-    )}`,
+    `${c('cyan', '[create]')} Creating project in ${c('bold', './' + path.relative(process.cwd(), targetDir))}`,
   );
   process.chdir(targetDir);
 
@@ -690,21 +655,9 @@ async function runCreate(projectArg?: string): Promise<void> {
   await upsertPackageJson(targetDir, pkgName, selfVersion);
 
   // 3) files
-  await scaffoldFileIfMissing(
-    targetDir,
-    path.join(targetDir, 'src', 'main.ts'),
-    TEMPLATE_MAIN_TS,
-  );
-  await scaffoldFileIfMissing(
-    targetDir,
-    path.join(targetDir, 'src', 'calc.app.ts'),
-    TEMPLATE_CALC_APP_TS,
-  );
-  await scaffoldFileIfMissing(
-    targetDir,
-    path.join(targetDir, 'src', 'tools', 'add.tool.ts'),
-    TEMPLATE_ADD_TOOL_TS,
-  );
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'main.ts'), TEMPLATE_MAIN_TS);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'calc.app.ts'), TEMPLATE_CALC_APP_TS);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'tools', 'add.tool.ts'), TEMPLATE_ADD_TOOL_TS);
 
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);
@@ -758,9 +711,7 @@ async function main(): Promise<void> {
         process.exitCode = 1;
     }
   } catch (err: any) {
-    console.error(
-      '\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)),
-    );
+    console.error('\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)));
     process.exit(1);
   }
 }
