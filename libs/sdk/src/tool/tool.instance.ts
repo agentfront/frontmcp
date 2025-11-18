@@ -13,6 +13,8 @@ import {
   ToolOutputType,
   ToolRecord,
   ParsedToolResult,
+  ToolInputOf,
+  ToolOutputOf,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import { z, ZodString, ZodNumber, ZodBoolean, ZodBigInt, ZodDate } from 'zod';
@@ -26,9 +28,15 @@ import type {
   ResourceLink,
   EmbeddedResource,
   ContentBlock,
+  CallToolRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-export class ToolInstance<In extends ToolInputType, Out extends ToolOutputType> extends ToolEntry<In, Out> {
+export class ToolInstance<
+  InSchema extends ToolInputType,
+  OutSchema extends ToolOutputType,
+  In = ToolInputOf<InSchema>,
+  Out = ToolOutputOf<OutSchema>,
+> extends ToolEntry<InSchema, OutSchema, In, Out> {
   private readonly providers: ProviderRegistry;
   readonly name: string;
   readonly scope: Scope;
@@ -76,7 +84,7 @@ export class ToolInstance<In extends ToolInputType, Out extends ToolOutputType> 
     return this.outputSchema;
   }
 
-  override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<In, Out> {
+  override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
     const providers = this.providers;
     const scope = this.providers.getActiveScope();
@@ -94,10 +102,14 @@ export class ToolInstance<In extends ToolInputType, Out extends ToolOutputType> 
       case ToolKind.CLASS_TOKEN:
         return new this.record.provide(toolCtorArgs);
       case ToolKind.FUNCTION:
-        return new FunctionToolContext<In, Out>(this.record, toolCtorArgs);
+        return new FunctionToolContext<InSchema, OutSchema, In, Out>(this.record, toolCtorArgs);
     }
   }
 
+  override parseInput(input: CallToolRequest['params']): CallToolRequest['params']['arguments'] {
+    const inputSchema = z.object(this.inputSchema);
+    return inputSchema.safeParse(input.arguments);
+  }
   /**
    * Turn the raw tool function result into an MCP-compliant CallToolResult:
    *   - `content`: list of ContentBlocks (text / image / audio / resource / resource_link)
@@ -109,14 +121,28 @@ export class ToolInstance<In extends ToolInputType, Out extends ToolOutputType> 
    *   - image/audio/resource/resource_link → passed through as-is.
    *   - JSON / structured → JSON.stringify for text, and full sanitized JSON in structuredContent.
    */
-  override parseOutput(raw: Out): ParsedToolResult {
+  override parseOutput(raw: Out | Partial<Out> | any): ParsedToolResult {
     const descriptor = this.outputSchema as any;
 
     return buildParsedToolResult(descriptor, raw);
   }
+
+  override safeParseOutput(raw: Out | Partial<Out> | any): z.SafeParseReturnType<In, ParsedToolResult> {
+    const descriptor = this.outputSchema as any;
+    try {
+      return { success: true, data: buildParsedToolResult(descriptor, raw) };
+    } catch (error: any) {
+      return { success: false, error };
+    }
+  }
 }
 
-class FunctionToolContext<In extends object = any, Out = any> extends ToolContext<In, Out> {
+class FunctionToolContext<
+  InSchema extends ToolInputType,
+  OutSchema extends ToolOutputType,
+  In = ToolInputOf<InSchema>,
+  Out = ToolInputOf<OutSchema>,
+> extends ToolContext<InSchema, OutSchema, In, Out> {
   constructor(private readonly record: ToolFunctionTokenRecord, args: ToolCtorArgs<In>) {
     super(args);
   }
@@ -136,12 +162,10 @@ function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult 
 
   // No outputSchema → the best effort: treat the result as structured JSON and text fallback
   if (!descriptor) {
-    const sanitized = sanitizeForJson(raw);
+    const structuredContent = getStructuredContent(raw);
+    const sanitized = structuredContent ?? raw;
     content.push(makeJsonTextContent(sanitized));
-    return {
-      content,
-      structuredContent: sanitized,
-    };
+    return { content, structuredContent };
   }
 
   if (Array.isArray(descriptor)) {
@@ -166,7 +190,7 @@ function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult 
 
   // If any schema entry is JSON-like, expose the *whole* raw value as structuredContent.
   if (hasJsonStructured) {
-    result.structuredContent = sanitizeForJson(raw);
+    result.structuredContent = getStructuredContent(raw);
   }
 
   return result;
@@ -234,7 +258,7 @@ function parseSingleValue(descriptor: any, value: unknown): { blocks: ContentBlo
   }
 
   // Anything else (Zod object/array/union, ZodRawShape, plain object) → JSON/structured
-  const sanitized = sanitizeForJson(value);
+  const sanitized = getStructuredContent(value);
   return {
     blocks: [makeJsonTextContent(sanitized)],
     isJson: true,
@@ -290,7 +314,7 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
  *   - Set → array.
  *   - Protect against circular references via WeakSet.
  */
-function sanitizeForJson(value: unknown): unknown {
+function getStructuredContent(value: unknown): z.ParseResult['data'] | undefined {
   const seen = new WeakSet<object>();
 
   const replacer = (_key: string, val: any) => {
@@ -339,6 +363,6 @@ function sanitizeForJson(value: unknown): unknown {
     return JSON.parse(json);
   } catch {
     // Last-resort fallback: readable string
-    return value == null ? undefined : String(value);
+    return undefined;
   }
 }
