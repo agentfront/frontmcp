@@ -1,6 +1,6 @@
 import { App } from '@frontmcp/sdk';
 
-import { ExpenseConfigProvider } from './provders';
+import { ExpenseConfigProvider } from './providers';
 import { OpenapiAdapter } from '@frontmcp/adapters';
 import CreateExpenseTool from './tools/create-expense.tool';
 import GetExpenseTool from './tools/get-expense-fun.tool';

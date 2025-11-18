@@ -1,3 +1,5 @@
+// file: libs/sdk/src/tool/tool.instance.ts
+
 import {
   EntryOwnerRef, ToolCallArgs, ToolCallExtra, ToolContext,
   ToolCtorArgs, ToolEntry, ToolFunctionTokenRecord, ToolKind, ToolRecord
@@ -25,7 +27,7 @@ export class ToolInstance<In extends object = any, Out extends object = any> ext
 
     const schema: any = record.metadata.inputSchema
     this.inputSchema = typeof schema.parse === 'function' ? schema : z.object(schema);
-    this.rawInputSchema = record.metadata.rawInputSchema as any;
+    this.inputJsonSchema = record.metadata.inputJsonSchema as any;
     this.outputSchema = record.metadata.outputSchema ? z.object(record.metadata.outputSchema) : z.object({}).passthrough();
     this.ready = this.initialize();
   }

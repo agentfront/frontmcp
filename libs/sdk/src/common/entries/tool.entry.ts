@@ -1,3 +1,5 @@
+// file: libs/sdk/src/common/entries/tool.entry.ts
+
 import {z} from 'zod';
 import {BaseEntry, EntryOwnerRef} from './base.entry';
 import {ToolRecord} from '../records';
@@ -16,7 +18,7 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
 export abstract class ToolEntry<In extends object = any, Out extends object = any> extends BaseEntry<ToolRecord, ToolContext<In, Out>, ToolMetadata> {
   owner: EntryOwnerRef;
   inputSchema: z.ZodObject<any>;
-  rawInputSchema: z.ZodObject<any>;
+  inputJsonSchema: z.ZodObject<any>;
   outputSchema: z.ZodObject<any>;
 
   abstract create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<In, Out>;

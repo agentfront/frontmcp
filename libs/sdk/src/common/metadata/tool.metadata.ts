@@ -135,7 +135,7 @@ export type ToolInputType = z.ZodRawShape;
 /**
  * Declarative metadata describing what an McpTool contributes.
  */
-export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = z.ZodRawShape>
+export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = ToolOutputType>
   extends ExtendFrontMcpToolMetadata {
   /**
    * Optional unique identifier for the tool.
@@ -162,7 +162,7 @@ export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = z
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
    */
-  rawInputSchema?: JSONSchema7;
+  inputJsonSchema?: JSONSchema7;
 
   /**
    * Zod schema describing the structure of the tool's successful output.
@@ -185,14 +185,48 @@ export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = z
   hideFromDiscovery?: boolean;
 }
 
+
+
+/**
+ * Runtime schema for ToolSingleOutputType:
+ *  - literals ('string', 'image', ...)
+ *  - any Zod schema (ZodObject, ZodArray, etc.)
+ *  - raw shapes (Record<string, ZodTypeAny>)
+ */
+
+const primitiveOutputLiteralSchema = z.enum(['string', 'number', 'date', 'boolean']);
+const specialOutputLiteralSchema = z.enum(['image', 'audio', 'resource', 'resource_link']);
+
+const outputLiteralSchema = z.union([
+  primitiveOutputLiteralSchema,
+  specialOutputLiteralSchema,
+]);
+
+// Any Zod schema instance (object, array, union, etc.)
+const zodSchemaInstanceSchema = z.instanceof(z.ZodType);
+
+// Raw shape: { field: z.string(), ... }
+const zodRawShapeSchema = z.record(zodSchemaInstanceSchema);
+
+const toolSingleOutputSchema = z.union([
+  outputLiteralSchema,
+  zodSchemaInstanceSchema,
+  zodRawShapeSchema,
+]);
+
+// ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[]
+const toolOutputSchema = z.union([
+  toolSingleOutputSchema,
+  z.array(toolSingleOutputSchema),
+]);
 export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
-    rawInputSchema: z.any().optional(),
-    outputSchema: z.instanceof(Object).optional(),
+    inputJsonSchema: z.any().optional(),
+    outputSchema: toolOutputSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
     hideFromDiscovery: z.boolean().optional().default(false),

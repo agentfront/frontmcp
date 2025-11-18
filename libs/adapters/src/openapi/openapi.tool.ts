@@ -14,7 +14,7 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
     name: oTool.name,
     description: oTool.description,
     inputSchema: inputSchema as any,
-    rawInputSchema: oTool.inputSchema as any,
+    inputJsonSchema: oTool.inputSchema as any,
     // outputSchema: outputSchema.shape
   })(async (input, ctx) => {
 

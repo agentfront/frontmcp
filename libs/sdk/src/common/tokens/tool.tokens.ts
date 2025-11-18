@@ -8,7 +8,7 @@ export const FrontMcpToolTokens = {
   name: tokenFactory.meta('name'),
   description: tokenFactory.meta('description'),
   inputSchema: tokenFactory.meta('inputSchema'),
-  rawInputSchema: tokenFactory.meta('rawInputSchema'),
+  inputJsonSchema: tokenFactory.meta('inputJsonSchema'),
   outputSchema: tokenFactory.meta('outputSchema'),
   tags: tokenFactory.meta('tags'),
   annotations: tokenFactory.meta('annotations'),
