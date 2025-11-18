@@ -10,16 +10,10 @@
  * These patterns are checked before allowing regex creation
  */
 const REDOS_PATTERNS = [
-  // Nested quantifiers
-  /(\*|\+|\{[^}]*})\s*(\*|\+|\{[^}]*})/,
-  // Alternation with overlapping patterns
-  /\([^)]*\|[^)]*\)\s*(\*|\+|\{[^}]*})/,
-  // Excessive backtracking potential
-  /(\(.*\)){3,}/,
-  // Catastrophic backtracking patterns
-  /(\w+\*)+/,
-  /(a+)+/,
-  /(\d+\*)+/,
+  // Nested quantifiers: (a+)+, (a*)*, (\d+)* - closing paren followed by quantifier
+  /\)\s*[*+]/,
+  // Alternation with quantifier is already caught by above, but keep for clarity
+  /\([^)]*\|[^)]*\)\s*[*+]/,
 ];
 
 /**
@@ -68,7 +62,7 @@ export interface PatternValidationResult {
  * ```
  */
 export function validatePattern(pattern: string): PatternValidationResult {
-  // Check pattern length
+  // Check pattern length first
   if (pattern.length > MAX_PATTERN_LENGTH) {
     return {
       safe: false,
@@ -76,18 +70,18 @@ export function validatePattern(pattern: string): PatternValidationResult {
     };
   }
 
-  // Check for known dangerous patterns
-  for (const dangerousPattern of REDOS_PATTERNS) {
-    if (dangerousPattern.test(pattern)) {
-      return {
-        safe: false,
-        reason: 'Pattern contains potentially dangerous constructs (nested quantifiers or alternations)'
-      };
-    }
+  // Try to create the regex first to catch syntax errors
+  try {
+    new RegExp(pattern);
+  } catch (error) {
+    return {
+      safe: false,
+      reason: `Invalid regex syntax: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   }
 
-  // Check for excessive quantifiers
-  const quantifierMatch = pattern.match(/\{(\d+),?(\d+)?}/g);
+  // Check for excessive quantifiers before checking dangerous patterns
+  const quantifierMatch = pattern.match(/\{(\d+),?(\d+)?\}/g);
   if (quantifierMatch) {
     for (const q of quantifierMatch) {
       const nums = q.match(/\d+/g);
@@ -100,14 +94,14 @@ export function validatePattern(pattern: string): PatternValidationResult {
     }
   }
 
-  // Try to create the regex to catch syntax errors
-  try {
-    new RegExp(pattern);
-  } catch (error) {
-    return {
-      safe: false,
-      reason: `Invalid regex syntax: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
+  // Check for known dangerous patterns
+  for (const dangerousPattern of REDOS_PATTERNS) {
+    if (dangerousPattern.test(pattern)) {
+      return {
+        safe: false,
+        reason: 'Pattern contains potentially dangerous constructs (nested quantifiers or alternations)'
+      };
+    }
   }
 
   return {

@@ -16,6 +16,7 @@ export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
 };
 
 export type ParsedToolResult = CallToolResult;
+export type SafeTransformResult<T> = { success: true; data: T } | { success: false; error: Error };
 
 export abstract class ToolEntry<
   InSchema extends ToolInputType = ToolInputType,
@@ -67,5 +68,5 @@ export abstract class ToolEntry<
    * Convert the raw tool return value (Out) into an MCP CallToolResult-shaped object.
    * Concrete logic is implemented in ToolInstance.
    */
-  abstract safeParseOutput(result: Out | Partial<Out> | any): z.SafeParseReturnType<Out, ParsedToolResult>;
+  abstract safeParseOutput(raw: Out | Partial<Out> | any): SafeTransformResult<ParsedToolResult>;
 }

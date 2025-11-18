@@ -15,6 +15,7 @@ import {
   ParsedToolResult,
   ToolInputOf,
   ToolOutputOf,
+  SafeTransformResult,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import { z } from 'zod';
@@ -70,10 +71,6 @@ export class ToolInstance<
     return this.record.metadata;
   }
 
-  /**
-   * Expose the raw metadata.outputSchema through the wrapper.
-   * This is what you'll later turn into MCP JSON Schema for tools/list.
-   */
   override getOutputSchema() {
     return this.outputSchema;
   }
@@ -121,7 +118,7 @@ export class ToolInstance<
     return buildParsedToolResult(descriptor, raw);
   }
 
-  override safeParseOutput(raw: Out | Partial<Out> | any): z.SafeParseReturnType<Out, ParsedToolResult> {
+  override safeParseOutput(raw: Out | Partial<Out> | any): SafeTransformResult<ParsedToolResult> {
     const descriptor = this.outputSchema as any;
     try {
       return { success: true, data: buildParsedToolResult(descriptor, raw) };

@@ -55,18 +55,16 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook.Will('execute', { priority: 1000 })
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const { toolContext, tool } = flowCtx.state;
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
 
-    if (!tool || !toolContext) {
-      return;
-    }
     const { cache } = toolContext.metadata;
     if (!cache || !toolContext.input) {
       // no cache or no input, skip
       return;
     }
     const cacheStore = this.get(CacheStoreToken);
-    const hash = hashObject(toolContext.input);
+    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
     const cached = await cacheStore.getValue(hash);
 
     if (cached) {
@@ -78,7 +76,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       /**
        * double check if cache still valid based on tool output schema
        */
-      if (tool.safeParseOutput(cached).error) {
+      if (!tool.safeParseOutput(cached).success) {
         await cacheStore.delete(hash);
         return;
       }
@@ -96,22 +94,22 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook.Did('execute', { priority: 1000 })
   async willWriteCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const ctx = flowCtx.state.required.toolContext;
-    const { cache } = ctx.metadata;
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+    const { cache } = toolContext.metadata;
     if (!cache) {
       return;
     }
     const cacheStore = this.get(CacheStoreToken);
     const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
 
-    const hash = hashObject(ctx.input!);
-    await cacheStore.setValue(hash, ctx.output, ttl);
+    const hash = hashObject({ tool: tool.fullName, input: toolContext.input! });
+    await cacheStore.setValue(hash, toolContext.output, ttl);
   }
 }
 
 function hashObject(obj: any) {
   const keys = Object.keys(obj).sort();
-  const values = keys.map((key) => obj[key]);
   return keys.reduce((acc, key) => {
     acc += key + ':';
     const val = obj[key];

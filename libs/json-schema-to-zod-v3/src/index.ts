@@ -8,7 +8,7 @@
  *
  * @example Basic usage
  * ```typescript
- * import { convertJsonSchemaToZod } from 'json-schema-to-zod';
+ * import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
  *
  * const jsonSchema = {
  *   type: "string",
@@ -22,7 +22,7 @@
  *
  * @example Object schema
  * ```typescript
- * import { jsonSchemaObjectToZodRawShape } from 'json-schema-to-zod';
+ * import { jsonSchemaObjectToZodRawShape } from 'json-schema-to-zod-v3';
  * import { z } from 'zod';
  *
  * const userSchema = {
