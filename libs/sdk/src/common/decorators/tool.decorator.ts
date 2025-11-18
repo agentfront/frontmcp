@@ -124,7 +124,7 @@ type __InferFromArraySchema<A> = A extends readonly any[] ? { [K in keyof A]: __
 export type ToolOutputOf<Opt> = Opt extends { outputSchema: infer O }
   ? O extends readonly any[] // Check for array/tuple first
     ? __InferFromArraySchema<O>
-    : __InferFromSingleSchema<O> // Handle single schema
+    : __InferFromSingleSchema<O> // Handle a single schema
   : any; // no outputSchema property at all -> allow anything
 
 // --- Define the schema types locally to constrain the generic ---
@@ -163,7 +163,7 @@ type __ToolSingleOutputType =
 type __OutputSchema = __ToolSingleOutputType | __ToolSingleOutputType[];
 
 export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
-  I | z.ZodObject<I>, // inputSchema can be raw shape or ZodObject
+  I | z.ZodObject<I>, // inputSchema can be a raw shape or ZodObject
   O // outputSchema: any of the allowed forms
 >;
 
@@ -188,21 +188,21 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 
 // Must extend ToolContext (assuming ToolContext is exported by the SDK)
 type __MustExtendCtx<C extends __Ctor> = __R<C> extends ToolContext
-  ? {}
+  ? unknown
   : { 'Tool class error': 'Class must extend ToolContext' };
 
 // execute param must exactly match In (and not be any)
 type __MustParam<C extends __Ctor, In> =
   // 1. If 'In' (from schema) is 'any', we can't check, so allow.
   __IsAny<In> extends true
-    ? {}
+    ? unknown
     : // 2. Check if the actual param type is 'any'. This is an error.
     __IsAny<__Param<C>> extends true
     ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
-    : // 3. Check for exact match: Param extends In AND In extends Param
+    : // 3. Check for the exact match: Param extends In AND In extends Param
     __Param<C> extends In
     ? In extends __Param<C>
-      ? {} // OK, exact match
+        ? unknown // OK, exact match
       : {
           'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
           expected_input_type: In;
@@ -216,12 +216,12 @@ type __MustParam<C extends __Ctor, In> =
 
 // execute return must be Out or Promise<Out>
 type __MustReturn<C extends __Ctor, Out> =
-  // 1. If 'Out' (from schema) is 'any', no check needed.
+  // 1. If 'Out' (from schema) is 'any', no check is needed.
   __IsAny<Out> extends true
-    ? {}
+    ? unknown
     : // 2. Check if the unwrapped return type is assignable to Out.
     __Unwrap<__Return<C>> extends Out
-    ? {} // OK
+      ? unknown // OK
     : {
         'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
         expected_output_type: Out;
@@ -248,8 +248,8 @@ declare module '@frontmcp/sdk' {
   ): <C extends __Ctor>(
     cls: C &
       __MustExtendCtx<C> &
-      __MustParam<C, ToolInputOf<T>> & // <-- Will now show rich error
-      __MustReturn<C, ToolOutputOf<T>>, // <-- Will now show rich error
+      __MustParam<C, ToolInputOf<T>> & // <-- Will now show a rich error
+      __MustReturn<C, ToolOutputOf<T>>, // <-- Will now show a rich error
   ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
 
   // 2) Overload: outputSchema NOT PROVIDED → execute() can return any
@@ -263,7 +263,7 @@ declare module '@frontmcp/sdk' {
   ): <C extends __Ctor>(
     cls: C &
       __MustExtendCtx<C> &
-      __MustParam<C, ToolInputOf<T>> & // <-- Will now show rich error
+      __MustParam<C, ToolInputOf<T>> & // <-- Will now show a rich error
       __MustReturn<C, ToolOutputOf<T>>, // <-- Will now show 'any'
   ) => __Rewrap<C, ToolInputOf<T>, ToolOutputOf<T>>;
 }

@@ -10,7 +10,7 @@ import { CacheStoreToken } from './cache.symbol';
   providers: [
     /* add providers that always loaded with the plugin or default providers */
     {
-      // this is default provider for cache, will be overridden if dynamicProviders based on config
+      // this is a default provider for cache, will be overridden if dynamicProviders based on config
       name: 'cache:memory',
       provide: CacheStoreToken,
       useValue: new CacheMemoryProvider(60 * 60 * 24),
@@ -18,8 +18,6 @@ import { CacheStoreToken } from './cache.symbol';
   ],
 })
 export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
-  private readonly defaultTTL: number;
-
   static override dynamicProviders = (options: CachePluginOptions) => {
     const providers: ProviderType[] = [];
     switch (options.type) {
@@ -62,17 +60,15 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (!cache || !ctx.input) {
       return;
     }
-    const redis = this.get(CacheStoreToken);
+    const cacheStore = this.get(CacheStoreToken);
     const hash = hashObject(ctx.input);
-    const cached = await redis.getValue(hash);
-
-    if (cache == true || (cache.ttl && cache.slideWindow)) {
-      const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
-      await redis.setValue(hash, cached, ttl);
-    }
+    const cached = await cacheStore.getValue(hash);
 
     if (cached) {
-      console.log('return from cache', { cached });
+      if (cache == true || (cache.ttl && cache.slideWindow)) {
+        const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
+        await cacheStore.setValue(hash, cached, ttl);
+      }
       ctx.respond({
         ...cached,
         ___cached__: true,
@@ -87,12 +83,11 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (!cache) {
       return;
     }
-    const redis = this.get(CacheStoreToken);
-    console.log('willWriteCache', { cache });
-    const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
+    const cacheStore = this.get(CacheStoreToken);
+    const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
 
     const hash = hashObject(ctx.input!);
-    await redis.setValue(hash, ctx.output, ttl);
+    await cacheStore.setValue(hash, ctx.output, ttl);
   }
 }
 
