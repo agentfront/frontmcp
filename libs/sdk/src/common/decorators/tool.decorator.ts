@@ -9,6 +9,8 @@ import {
   AudioOutputSchema,
   ResourceOutputSchema,
   ResourceLinkOutputSchema,
+  ToolInputType,
+  ToolOutputType,
 } from '../metadata';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
@@ -32,19 +34,19 @@ function FrontMcpTool(providedMetadata: ToolMetadata): ClassDecorator {
   };
 }
 
-export type FrontMcpToolExecuteHandler<In = unknown, Out = unknown> = (
-  input: In,
-  ctx: ToolContext<In, Out>,
-) => Out | Promise<Out>;
+export type FrontMcpToolExecuteHandler<
+  InSchema extends ToolInputType,
+  OutSchema extends ToolOutputType,
+  In = ToolInputOf<InSchema>,
+  Out = ToolOutputOf<OutSchema>,
+> = (input: In, ctx: ToolContext<InSchema, OutSchema>) => Out | Promise<Out>;
 
 /**
  * Decorator that marks a class as a McpTool module and provides metadata
  */
-function frontMcpTool<
-  T extends ToolMetadata,
-  In extends object = z.baseObjectInputType<T['inputSchema']>,
-  Out = ToolOutputOf<T>,
->(providedMetadata: T): (handler: FrontMcpToolExecuteHandler<In, Out>) => () => void {
+function frontMcpTool<T extends ToolMetadata, InSchema extends ToolInputType= T['inputSchema'], OutSchema extends ToolOutputType = T['outputSchema'] >(
+  providedMetadata: T,
+): (handler: FrontMcpToolExecuteHandler<InSchema, OutSchema>) => () => void {
   return (execute) => {
     const metadata = frontMcpToolMetadataSchema.parse(providedMetadata);
     const toolFunction = function () {
@@ -229,10 +231,10 @@ type __MustReturn<C extends __Ctor, Out> =
       };
 
 // Rewrapped constructor
-type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
-  ? C & (abstract new (...a: __A<C>) => ToolContext<In, Out> & __R<C>)
+type __Rewrap<C extends __Ctor, InSchema extends ToolInputType, OutSchema extends ToolOutputType> = C extends abstract new (...a: __A<C>) => __R<C>
+  ? C & (abstract new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
-  ? C & (new (...a: __A<C>) => ToolContext<In, Out> & __R<C>)
+  ? C & (new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)
   : never;
 declare module '@frontmcp/sdk' {
   // ---------- the decorator (overloads) ----------

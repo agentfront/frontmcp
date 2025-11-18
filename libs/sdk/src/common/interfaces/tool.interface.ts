@@ -25,7 +25,12 @@ export type ToolCtorArgs<In> = {
   authInfo: AuthInfo;
 };
 
-export abstract class ToolContext<InSchema extends ToolInputType, OutSchema extends ToolOutputType, In = ToolInputOf<InSchema>, Out = ToolOutputOf<OutSchema>> {
+export abstract class ToolContext<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+  In = ToolInputOf<InSchema>,
+  Out = ToolOutputOf<OutSchema>,
+> {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;
 

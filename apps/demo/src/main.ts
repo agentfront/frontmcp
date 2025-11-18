@@ -7,9 +7,13 @@ import EmployeeTimeMcpApp from './apps/employee-time';
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.VERBOSE },
-  splitByApp: true,
   http: {
     port: 3002,
+  },
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://sample-app.frontegg.com',
   },
 })
 export default class Server {}

@@ -129,13 +129,13 @@ export type ToolSingleOutputType =
 /**
  * Default default tool schema is {}
  */
-export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[];
+export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[] | undefined;
 export type ToolInputType = z.ZodRawShape;
 
 /**
  * Declarative metadata describing what an McpTool contributes.
  */
-export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = ToolOutputType>
+export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOutputType = ToolOutputType>
   extends ExtendFrontMcpToolMetadata {
   /**
    * Optional unique identifier for the tool.
@@ -157,7 +157,7 @@ export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = T
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
    */
-  inputSchema: In;
+  inputSchema: InSchema;
   /**
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
@@ -167,7 +167,7 @@ export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = T
   /**
    * Zod schema describing the structure of the tool's successful output.
    */
-  outputSchema?: Out;
+  outputSchema?: OutSchema;
 
   /**
    * Optional list of tags/labels that categorize the tool for discovery and filtering.
