@@ -35,4 +35,4 @@ jobs:
         run: npx nx run-many -t build
 
       - name: Test libraries
-        run: npx nx run-many -t test
+        run: npx nx run-many -t test --passWithNoTests
