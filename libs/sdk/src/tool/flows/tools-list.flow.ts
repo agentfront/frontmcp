@@ -153,7 +153,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       description: tool.metadata.description,
       annotations: tool.metadata.annotations,
       inputSchema:
-        (tool.metadata as any).inputJsonSchema ??
+        (tool.metadata as any).rawInputSchema ??
         (zodToJsonSchema(z.object(tool.metadata.inputSchema) as any) as any),
     }));
 

@@ -32,7 +32,7 @@ function FrontMcpTool(providedMetadata: ToolMetadata): ClassDecorator {
   };
 }
 
-export type FrontMcpToolExecuteHandler<In extends unknown, Out extends unknown> = (
+export type FrontMcpToolExecuteHandler<In = unknown, Out = unknown> = (
   input: In,
   ctx: ToolContext<In, Out>,
 ) => Out | Promise<Out>;
@@ -202,7 +202,7 @@ type __MustParam<C extends __Ctor, In> =
     : // 3. Check for the exact match: Param extends In AND In extends Param
     __Param<C> extends In
     ? In extends __Param<C>
-        ? unknown // OK, exact match
+      ? unknown // OK, exact match
       : {
           'execute() parameter error': 'Parameter type is too wide. It must exactly match the input schema.';
           expected_input_type: In;
@@ -221,7 +221,7 @@ type __MustReturn<C extends __Ctor, Out> =
     ? unknown
     : // 2. Check if the unwrapped return type is assignable to Out.
     __Unwrap<__Return<C>> extends Out
-      ? unknown // OK
+    ? unknown // OK
     : {
         'execute() return type error': "The method's return type is not assignable to the expected output schema type.";
         expected_output_type: Out;

@@ -162,7 +162,7 @@ export interface ToolMetadata<In = ToolInputType, Out extends ToolOutputType = T
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
    */
-  inputJsonSchema?: JSONSchema7;
+  rawInputSchema?: JSONSchema7;
 
   /**
    * Zod schema describing the structure of the tool's successful output.
@@ -225,7 +225,7 @@ export const frontMcpToolMetadataSchema = z
     name: z.string().min(1),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
-    inputJsonSchema: z.any().optional(),
+    rawInputSchema: z.any().optional(),
     outputSchema: toolOutputSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),

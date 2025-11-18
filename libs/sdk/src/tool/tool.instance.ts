@@ -46,7 +46,7 @@ export class ToolInstance<In extends ToolInputType, Out extends ToolOutputType> 
     // Support both Zod objects and raw ZodRawShape
     this.inputSchema = schema && typeof schema.parse === 'function' ? schema : z.object(schema ?? {});
     // Whatever JSON schema representation you’re storing for inputs
-    this.inputJsonSchema = (record.metadata as any).inputJsonSchema;
+    this.rawInputSchema = (record.metadata as any).rawInputSchema;
 
     // IMPORTANT: keep the *raw* outputSchema (string literal, zod, raw shape, or array)
     this.outputSchema = (record.metadata as any).outputSchema;

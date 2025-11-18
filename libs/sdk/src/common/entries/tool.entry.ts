@@ -30,7 +30,7 @@ export abstract class ToolEntry<In extends ToolInputType, Out extends ToolOutput
 
   inputSchema: z.ZodObject<any>;
   // This is whatever JSON-schema-ish thing you store for input; keeping type loose
-  inputJsonSchema: any;
+  rawInputSchema: any;
   // This is your *metadata* outputSchema (literals / zod / raw shapes / arrays)
   outputSchema?: ToolMetadata['outputSchema'];
 
