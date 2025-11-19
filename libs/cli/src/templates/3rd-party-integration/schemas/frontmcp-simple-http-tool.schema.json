@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frontmcp.dev/schemas/frontmcp-simple-http-tool.schema.json",
+  "title": "FrontMCP Simple HTTP Tool",
+  "type": "object",
+  "required": ["name", "description", "auth", "http", "input", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+
+    "auth": {
+      "type": "string",
+      "enum": ["oauth2", "bearer", "apiKey"]
+    },
+
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional override for the integration base URL"
+    },
+
+    "http": {
+      "type": "object",
+      "required": ["method", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        "path": {
+          "type": "string",
+          "description": "Endpoint path, e.g. /tenants/{tenantId}/resources"
+        },
+        "pathParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/paramMapping"
+          }
+        },
+        "queryParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/paramMapping"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/paramMapping"
+          }
+        }
+      }
+    },
+
+    "input": {
+      "type": "object",
+      "required": ["fields"],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Fields visible to MCP as tool input",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["string", "integer", "number", "boolean"]
+              },
+              "required": {
+                "type": "boolean",
+                "default": false
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "output": {
+      "type": "object",
+      "required": ["schemaFile", "cases"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaFile": {
+          "type": "string",
+          "description": "Path to JSON Schema describing {status, headers, body}"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/outputCase"
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "paramMapping": {
+      "type": "object",
+      "required": ["from"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Where the value comes from (e.g. input.limit, auth.jwt.tenantId, context.requestId)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "If true and value is missing, this is an error"
+        },
+        "hiddenFromInput": {
+          "type": "boolean",
+          "description": "If true, this field is NOT exposed in MCP input"
+        },
+        "default": {
+          "description": "Default value to use when missing"
+        }
+      }
+    },
+
+    "outputCase": {
+      "type": "object",
+      "required": ["name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "status": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          }
+        },
+        "contentType": {
+          "type": "string",
+          "description": "Optional content-type match, e.g. application/json"
+        },
+
+        "bodyFrom": {
+          "type": "string",
+          "description": "Path expression to pick body root (e.g. res.json)"
+        },
+
+        "itemsFrom": {
+          "type": "string",
+          "description": "Path to array of items (e.g. res.json.items)"
+        },
+        "itemFields": {
+          "type": "object",
+          "description": "Map of output field name -> field in each array item (e.g. {\"id\":\"id\",\"name\":\"name\"})",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

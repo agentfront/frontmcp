@@ -1,0 +1,75 @@
+{
+  "$schema": "../../schemas/frontmcp-simple-http-tool.schema.json",
+
+  "name": "example.list",
+  "description": "List resources for the current tenant.",
+  "auth": "__AUTH_TYPE__",
+
+  "http": {
+    "method": "GET",
+    "path": "/tenants/{tenantId}/resources",
+
+    "pathParams": {
+      "tenantId": {
+        "from": "auth.jwt.tenantId",
+        "required": true,
+        "hiddenFromInput": true
+      }
+    },
+
+    "queryParams": {
+      "limit": {
+        "from": "input.limit",
+        "default": 50
+      },
+      "query": {
+        "from": "input.query"
+      }
+    },
+
+    "headers": {
+      "X-Request-Id": {
+        "from": "context.requestId"
+      }
+    }
+  },
+
+  "input": {
+    "fields": {
+      "limit": {
+        "type": "integer",
+        "required": false,
+        "description": "Maximum number of items to return (default 50)."
+      },
+      "query": {
+        "type": "string",
+        "required": false,
+        "description": "Filter string or search term."
+      }
+    }
+  },
+
+  "output": {
+    "schemaFile": "../../schemas/example.list.output.schema.json",
+    "cases": [
+      {
+        "name": "success",
+        "status": [200],
+        "contentType": "application/json",
+        "bodyFrom": "res.json",
+        "itemsFrom": "res.json.items",
+        "itemFields": {
+          "id": "id",
+          "name": "name",
+          "type": "type"
+        }
+      },
+      {
+        "name": "error",
+        "status": [400, 401, 403, 404, 500],
+        "contentType": "application/json",
+        "bodyFrom": "res.json"
+      }
+    ]
+  }
+}
