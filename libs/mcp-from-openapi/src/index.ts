@@ -4,6 +4,7 @@ export { SchemaBuilder } from './schema-builder';
 export { ParameterResolver } from './parameter-resolver';
 export { ResponseBuilder } from './response-builder';
 export { Validator } from './validator';
+export { SecurityResolver, createSecurityContext } from './security-resolver';
 
 // Error exports
 export {
@@ -23,6 +24,7 @@ export type {
   ToolMetadata,
   SerializationInfo,
   SecurityRequirement,
+  SecurityParameterInfo,
   ServerInfo,
 
   // Configuration types
@@ -64,6 +66,16 @@ export type {
   ValidationErrorDetail,
   ValidationWarning,
 } from './types';
+
+// Security resolver types
+export type {
+  SecurityContext,
+  ResolvedSecurity,
+  DigestAuthCredentials,
+  ClientCertificate,
+  AWSCredentials,
+  SignatureData,
+} from './security-resolver';
 
 // Utility exports
 export { isReferenceObject, toJSONSchema7 } from './types';

@@ -1,113 +1,101 @@
 import { z } from 'zod';
-import { McpToolDefinition } from 'openapi-mcp-generator';
 import { tool } from '@frontmcp/sdk';
 import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
-import { OpenApiAdapterOptions } from './openapi.types';
+import type { McpOpenAPITool } from 'mcp-from-openapi';
+import type { OpenApiAdapterOptions } from './openapi.types';
+import type { JSONSchema7 } from 'json-schema';
+import { buildRequest, applyAdditionalHeaders, parseResponse } from './openapi.utils';
+import { resolveToolSecurity } from './openapi.security';
 
-export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdapterOptions) => {
-  const inputSchema = getZodSchemaFromJsonSchema(oTool.inputSchema, oTool.name);
+/**
+ * Create a FrontMCP tool from an OpenAPI tool definition
+ *
+ * @param openapiTool - OpenAPI tool with mapper
+ * @param options - Adapter options
+ * @returns FrontMCP tool
+ */
+export function createOpenApiTool(
+  openapiTool: McpOpenAPITool,
+  options: OpenApiAdapterOptions
+) {
+  // Convert JSON Schema to Zod schema for input validation
+  const inputSchema = getZodSchemaFromJsonSchema(openapiTool.inputSchema, openapiTool.name);
 
-  const { additionalHeaders, headersMapper } = options;
   return tool({
-    id: oTool.name,
-    name: oTool.name,
-    description: oTool.description,
-    inputSchema: inputSchema.shape,
-    rawInputSchema: oTool.inputSchema as any,
-    // outputSchema: outputSchema.shape
+    id: openapiTool.name,
+    name: openapiTool.name,
+    description: openapiTool.description,
+    inputSchema: inputSchema.shape || {},
+    rawInputSchema: openapiTool.inputSchema,
   })(async (input, ctx) => {
-    const { urlPath, headers: urlHeaders, queryParams } = prepareUrl(oTool, input);
-    let headers = urlHeaders;
-    let requestBodyData: any = undefined;
+    // 1. Resolve security from context
+    const security = await resolveToolSecurity(openapiTool, ctx.authInfo);
 
-    if (additionalHeaders) {
-      for (const [key, value] of Object.entries(additionalHeaders)) {
-        headers.append(key, value);
-      }
-    }
-    if (typeof headersMapper === 'function') {
-      headers = headersMapper(ctx.authInfo, headers);
-    }
+    // 2. Build request from mapper
+    const { url, headers, body: requestBody } = buildRequest(
+      openapiTool,
+      input,
+      security,
+      options.baseUrl
+    );
 
-    if (!['HEAD', 'GET', 'OPTIONS'].includes(oTool.method)) {
-      // prepare body
-      if (oTool.requestBodyContentType && typeof input['requestBody'] !== 'undefined') {
-        requestBodyData = input['requestBody'];
-        if (oTool.requestBodyContentType?.includes('application/json')) {
-          requestBodyData = JSON.stringify(requestBodyData);
-        }
-        headers.set('content-type', oTool.requestBodyContentType);
-      }
+    // 3. Apply additional headers
+    applyAdditionalHeaders(headers, options.additionalHeaders);
+
+    // 4. Apply custom headers mapper
+    if (options.headersMapper) {
+      const mappedHeaders = options.headersMapper(ctx.authInfo, headers);
+      mappedHeaders.forEach((value, key) => {
+        headers.set(key, value);
+      });
     }
 
-    const query = queryParams.toString();
-    const url = `${options.baseUrl}${urlPath}${query ? `?${query}` : ''}`;
-    const res = await fetch(url, {
-      method: oTool.method,
+    // 5. Apply custom body mapper
+    let finalBody = requestBody;
+    if (options.bodyMapper && requestBody) {
+      finalBody = options.bodyMapper(ctx.authInfo, requestBody);
+    }
+
+    // 6. Set content-type if we have a body
+    if (finalBody && !headers.has('content-type')) {
+      headers.set('content-type', 'application/json');
+    }
+
+    // 7. Execute request
+    const response = await fetch(url, {
+      method: openapiTool.metadata.method.toUpperCase(),
       headers,
-      body: requestBodyData,
+      body: finalBody ? JSON.stringify(finalBody) : undefined,
     });
-    const data = await res.text();
-    const result = { data };
-    if (res.headers.get('content-type')?.includes('application/json')) {
-      try {
-        result.data = JSON.parse(data);
-      } catch (e) {
-        console.error('failed to parse api response', e); // TODO: migrate to logger
-        result.data = data;
-      }
-    }
-    return result;
+
+    // 8. Parse and return response
+    return await parseResponse(response);
   });
-};
+}
 
 /**
  * Converts a JSON Schema to a Zod schema for runtime validation
  *
- * @param jsonSchema JSON Schema
- * @param toolName Tool name for error reporting
+ * @param jsonSchema - JSON Schema
+ * @param toolName - Tool name for error reporting
  * @returns Zod schema
  */
-function getZodSchemaFromJsonSchema(jsonSchema: any, toolName: string): z.ZodObject<any> {
+function getZodSchemaFromJsonSchema(
+  jsonSchema: JSONSchema7,
+  toolName: string
+): z.ZodObject<z.ZodRawShape> {
   if (typeof jsonSchema !== 'object' || jsonSchema === null) {
     return z.object({}).passthrough();
   }
+
   try {
     const zodSchema = convertJsonSchemaToZod(jsonSchema);
     if (typeof zodSchema?.parse !== 'function') {
-      throw new Error('Eval did not produce a valid Zod schema.');
+      throw new Error('Conversion did not produce a valid Zod schema.');
     }
-    return zodSchema as any;
-  } catch (err: any) {
-    console.error(`Failed to generate/evaluate Zod schema for '${toolName}':`, err);
+    return zodSchema as z.ZodObject<z.ZodRawShape>;
+  } catch (err: unknown) {
+    console.error(`Failed to generate Zod schema for '${toolName}':`, err);
     return z.object({}).passthrough();
   }
 }
-
-const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
-  // Prepare URL, query parameters, headers, and request body
-  let urlPath = definition.pathTemplate;
-  const queryParams = new URLSearchParams();
-  const headers = new Headers({ accept: 'application/json' });
-
-  // Apply parameters to the URL path, query, or headers
-  definition.executionParameters.forEach((param) => {
-    const value = validatedArgs[param.name];
-    if (typeof value !== 'undefined' && value !== null) {
-      if (param.in === 'path') {
-        urlPath = urlPath.replace(`{${param.name}}`, encodeURIComponent(String(value)));
-      } else if (param.in === 'query') {
-        queryParams.set(param.name, String(value));
-      } else if (param.in === 'header') {
-        headers.append(param.name.toLowerCase(), String(value));
-      }
-    }
-  });
-
-  // Ensure all path parameters are resolved
-  if (urlPath.includes('{')) {
-    throw new Error(`Failed to resolve path parameters: ${urlPath}`);
-  }
-
-  return { urlPath, headers, queryParams };
-};

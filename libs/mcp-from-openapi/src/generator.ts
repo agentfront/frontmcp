@@ -10,6 +10,9 @@ import type {
   ValidationResult,
   HTTPMethod,
   ParameterObject,
+  SecurityRequirement,
+  SecuritySchemeObject,
+  AuthType,
 } from './types';
 import { isReferenceObject } from './types';
 import { ParameterResolver } from './parameter-resolver';
@@ -268,9 +271,21 @@ export class OpenAPIToolGenerator {
       ) as ParameterObject[];
     }
 
+    // Extract security requirements
+    let securityRequirements: SecurityRequirement[] | undefined = undefined;
+    const securitySpec = operation.security ?? document.security;
+    if (securitySpec) {
+      securityRequirements = this.extractSecurityRequirements(
+        securitySpec as Record<string, string[]>[],
+        document
+      );
+    }
+
     const { inputSchema, mapper } = parameterResolver.resolve(
       operation,
-      pathParameters
+      pathParameters,
+      securityRequirements,
+      options.includeSecurityInInput
     );
 
     // Build response schema
@@ -422,27 +437,41 @@ export class OpenAPIToolGenerator {
   private extractSecurityRequirements(
     security: Record<string, string[]>[],
     document: OpenAPIDocument
-  ): any[] {
+  ): SecurityRequirement[] {
     if (!security || !document.components?.securitySchemes) {
       return [];
     }
 
     return security.flatMap((req) =>
-      Object.entries(req).map(([scheme, scopes]) => {
+      Object.entries(req).map(([scheme, scopes]): SecurityRequirement => {
         const securityScheme = document.components!.securitySchemes![scheme];
 
         // Skip if it's a reference object
         if (isReferenceObject(securityScheme)) {
-          return { scheme, type: 'unknown' as any, scopes };
+          return { scheme, type: 'http', scopes };
         }
 
-        return {
+        const apiKeyIn = 'in' in securityScheme ? securityScheme.in : undefined;
+        const result: SecurityRequirement = {
           scheme,
-          type: securityScheme.type,
+          type: securityScheme.type as AuthType,
           scopes,
           name: 'name' in securityScheme ? securityScheme.name : undefined,
-          in: 'in' in securityScheme ? securityScheme.in : undefined,
+          in: apiKeyIn && (apiKeyIn === 'query' || apiKeyIn === 'header' || apiKeyIn === 'cookie')
+            ? apiKeyIn
+            : undefined,
         };
+
+        // Add HTTP-specific metadata
+        if (securityScheme.type === 'http') {
+          result.httpScheme = 'scheme' in securityScheme ? securityScheme.scheme : undefined;
+          result.bearerFormat = 'bearerFormat' in securityScheme ? securityScheme.bearerFormat : undefined;
+        }
+
+        // Add description if available
+        result.description = 'description' in securityScheme ? securityScheme.description : undefined;
+
+        return result;
       })
     );
   }

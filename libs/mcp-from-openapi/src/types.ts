@@ -161,6 +161,12 @@ export interface ParameterMapper {
    * Custom serialization info
    */
   serialization?: SerializationInfo;
+
+  /**
+   * Security scheme information (if this is an auth parameter)
+   * This allows frameworks to resolve auth from context, env vars, etc.
+   */
+  security?: SecurityParameterInfo;
 }
 
 /**
@@ -176,6 +182,52 @@ export interface SerializationInfo {
    * Encoding rules
    */
   encoding?: Record<string, EncodingObject>;
+}
+
+/**
+ * Security parameter information for framework-agnostic auth resolution
+ */
+export interface SecurityParameterInfo {
+  /**
+   * Security scheme name from OpenAPI (e.g., "BearerAuth")
+   */
+  scheme: string;
+
+  /**
+   * Security type (apiKey, http, oauth2, openIdConnect)
+   */
+  type: AuthType;
+
+  /**
+   * HTTP authentication scheme (for type: "http")
+   * e.g., "bearer", "basic"
+   */
+  httpScheme?: string;
+
+  /**
+   * Bearer token format (e.g., "JWT")
+   */
+  bearerFormat?: string;
+
+  /**
+   * Required OAuth2 scopes
+   */
+  scopes?: string[];
+
+  /**
+   * API key parameter name (for type: "apiKey")
+   */
+  apiKeyName?: string;
+
+  /**
+   * API key location (for type: "apiKey")
+   */
+  apiKeyIn?: 'query' | 'header' | 'cookie';
+
+  /**
+   * Description of the security scheme
+   */
+  description?: string;
 }
 
 /**
@@ -256,6 +308,22 @@ export interface SecurityRequirement {
    * Parameter location (for API key)
    */
   in?: 'query' | 'header' | 'cookie';
+
+  /**
+   * HTTP authentication scheme (for type: "http")
+   * e.g., "bearer", "basic"
+   */
+  httpScheme?: string;
+
+  /**
+   * Bearer token format (e.g., "JWT")
+   */
+  bearerFormat?: string;
+
+  /**
+   * Description of the security scheme
+   */
+  description?: string;
 }
 
 /**
@@ -380,6 +448,14 @@ export interface GenerateOptions {
    * @default false
    */
   includeExamples?: boolean;
+
+  /**
+   * Whether to include security requirements as input parameters
+   * If false, security is only in mapper (frameworks resolve from context/env/etc.)
+   * If true, security is added to inputSchema as explicit parameters
+   * @default false
+   */
+  includeSecurityInInput?: boolean;
 }
 
 /**

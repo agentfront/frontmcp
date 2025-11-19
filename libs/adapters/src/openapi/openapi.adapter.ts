@@ -1,16 +1,15 @@
 import { Adapter, DynamicAdapter, FrontMcpAdapterResponse } from '@frontmcp/sdk';
 import { OpenApiAdapterOptions } from './openapi.types';
-import { getToolsFromOpenApi, McpToolDefinition } from 'openapi-mcp-generator';
 import { OpenAPIToolGenerator } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
-import { OpenAPIV3 } from 'openapi-types';
 
 @Adapter({
   name: 'openapi',
-  description: 'OpenAPI adapter that  plugin for expense-mcp',
+  description: 'OpenAPI adapter for FrontMCP - Automatically generates MCP tools from OpenAPI specifications',
 })
 export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions> {
-  options: OpenApiAdapterOptions;
+  private generator?: OpenAPIToolGenerator;
+  public options: OpenApiAdapterOptions;
 
   constructor(options: OpenApiAdapterOptions) {
     super();
@@ -18,43 +17,55 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   async fetch(): Promise<FrontMcpAdapterResponse> {
-    let urlOrSpec: string | OpenAPIV3.Document = '';
-    if ('url' in this.options) {
-      urlOrSpec = this.options.url;
-    } else if ('spec' in this.options) {
-      urlOrSpec = this.options.spec;
-    } else {
-      throw new Error('Either url or spec must be provided');
+    // Lazy load: Initialize generator on first fetch if not already initialized
+    if (!this.generator) {
+      this.generator = await this.initializeGenerator();
     }
-    const { baseUrl, filterFn, defaultInclude, excludeOperationIds } = this.options;
-    const openApiTools = await OpenAPIToolGenerator.fromURL(urlOrSpec as string, {
-      baseUrl,
-      validate: true,
-      dereference: false,
+
+    // Generate tools from OpenAPI spec
+    const openapiTools = await this.generator.generateTools({
+      includeOperations: this.options.generateOptions?.includeOperations,
+      excludeOperations: this.options.generateOptions?.excludeOperations,
+      filterFn: this.options.generateOptions?.filterFn,
+      namingStrategy: this.options.generateOptions?.namingStrategy,
+      preferredStatusCodes: this.options.generateOptions?.preferredStatusCodes ?? [200, 201, 202, 204],
+      includeDeprecated: this.options.generateOptions?.includeDeprecated ?? false,
+      includeAllResponses: this.options.generateOptions?.includeAllResponses ?? true,
+      includeSecurityInInput: this.options.generateOptions?.includeSecurityInInput ?? false,
+      maxSchemaDepth: this.options.generateOptions?.maxSchemaDepth,
+      includeExamples: this.options.generateOptions?.includeExamples,
     });
 
-    const tools = await openApiTools.generateTools({
-      preferredStatusCodes: [200, 201, 202, 204],
-    });
+    // Convert OpenAPI tools to FrontMCP tools
+    const tools = openapiTools.map((openapiTool) =>
+      createOpenApiTool(openapiTool, this.options)
+    );
 
-    console.log('tools', tools);
-
-    // const openApiTools = await getToolsFromOpenApi(urlOrSpec, {
-    //   baseUrl,
-    //   filterFn,
-    //   defaultInclude,
-    //   excludeOperationIds,
-    //   dereference: false,
-    // });
-
-    return {
-      tools: [] //this.parseTools(openApiTools),
-    };
+    return { tools };
   }
 
-  private parseTools(openApiTools: McpToolDefinition[]) {
-    return openApiTools.map((tool) => {
-      return createOpenApiTool(tool, this.options);
-    });
+  /**
+   * Initialize the OpenAPI tool generator from URL or spec
+   * @private
+   */
+  private async initializeGenerator(): Promise<OpenAPIToolGenerator> {
+    if ('url' in this.options) {
+      return await OpenAPIToolGenerator.fromURL(this.options.url, {
+        baseUrl: this.options.baseUrl,
+        validate: this.options.loadOptions?.validate ?? true,
+        dereference: this.options.loadOptions?.dereference ?? true,
+        headers: this.options.loadOptions?.headers,
+        timeout: this.options.loadOptions?.timeout,
+        followRedirects: this.options.loadOptions?.followRedirects,
+      });
+    } else if ('spec' in this.options) {
+      return await OpenAPIToolGenerator.fromJSON(this.options.spec, {
+        baseUrl: this.options.baseUrl,
+        validate: this.options.loadOptions?.validate ?? true,
+        dereference: this.options.loadOptions?.dereference ?? true,
+      });
+    } else {
+      throw new Error('Either url or spec must be provided in OpenApiAdapterOptions');
+    }
   }
 }

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nx build:*)",
+      "Bash(find:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npx nx build:*)",
+      "Bash(npx nx test:*)",
+      "Bash(npx nx lint:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

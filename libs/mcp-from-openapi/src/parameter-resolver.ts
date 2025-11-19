@@ -7,8 +7,11 @@ import type {
   ParameterLocation,
   SchemaObject,
   ReferenceObject,
+  SecurityRequirement,
+  SecurityParameterInfo,
+  SecuritySchemeObject,
 } from './types';
-import { toJSONSchema7 } from './types';
+import { toJSONSchema7, isReferenceObject } from './types';
 
 /**
  * Resolves parameters and handles naming conflicts
@@ -46,7 +49,9 @@ export class ParameterResolver {
    */
   resolve(
     operation: any,
-    pathParameters?: ParameterObject[]
+    pathParameters?: ParameterObject[],
+    securityRequirements?: SecurityRequirement[],
+    includeSecurityInInput?: boolean
   ): {
     inputSchema: JSONSchema7;
     mapper: ParameterMapper[];
@@ -146,6 +151,17 @@ export class ParameterResolver {
           });
         });
       }
+    }
+
+    // Process security requirements
+    if (securityRequirements && securityRequirements.length > 0) {
+      this.processSecurityRequirements(
+        securityRequirements,
+        properties,
+        required,
+        mapper,
+        includeSecurityInInput ?? false
+      );
     }
 
     const inputSchema: JSONSchema7 = {
@@ -268,6 +284,103 @@ export class ParameterResolver {
       throw new Error('No content type available in request body');
     }
     return firstKey;
+  }
+
+  /**
+   * Process security requirements and add to mapper/inputSchema
+   */
+  private processSecurityRequirements(
+    securityRequirements: SecurityRequirement[],
+    properties: Record<string, JSONSchema7>,
+    required: string[],
+    mapper: ParameterMapper[],
+    includeInInput: boolean
+  ): void {
+    for (const secReq of securityRequirements) {
+      const { scheme, type, name: apiKeyName, in: apiKeyIn, scopes } = secReq;
+
+      // Build security parameter info
+      const securityInfo: SecurityParameterInfo = {
+        scheme,
+        type,
+        scopes,
+      };
+
+      // Determine parameter details based on security type
+      let inputKey: string;
+      let headerKey: string;
+      let paramLocation: ParameterLocation;
+      let description: string;
+      let schema: JSONSchema7;
+
+      if (type === 'http') {
+        // HTTP auth (bearer, basic, etc.)
+        inputKey = scheme;
+        headerKey = 'Authorization';
+        paramLocation = 'header';
+
+        const httpScheme = 'httpScheme' in secReq && secReq.httpScheme ? secReq.httpScheme : 'bearer';
+        const bearerFormat = 'bearerFormat' in secReq ? secReq.bearerFormat : undefined;
+
+        securityInfo.httpScheme = httpScheme;
+        if (bearerFormat) {
+          securityInfo.bearerFormat = bearerFormat;
+        }
+
+        description = `${httpScheme.charAt(0).toUpperCase()}${httpScheme.slice(1)} authentication token`;
+        if (bearerFormat) {
+          description += ` (${bearerFormat})`;
+        }
+
+        schema = {
+          type: 'string',
+          description,
+        };
+      } else if (type === 'apiKey') {
+        // API Key auth
+        inputKey = scheme;
+        headerKey = apiKeyName || 'X-API-Key';
+        paramLocation = (apiKeyIn || 'header') as ParameterLocation;
+
+        securityInfo.apiKeyName = apiKeyName;
+        securityInfo.apiKeyIn = apiKeyIn;
+
+        description = `API key for ${scheme}`;
+        schema = {
+          type: 'string',
+          description,
+        };
+      } else if (type === 'oauth2' || type === 'openIdConnect') {
+        // OAuth2 / OpenID Connect
+        inputKey = scheme;
+        headerKey = 'Authorization';
+        paramLocation = 'header';
+
+        description = `OAuth2 access token${scopes && scopes.length > 0 ? ` (scopes: ${scopes.join(', ')})` : ''}`;
+        schema = {
+          type: 'string',
+          description,
+        };
+      } else {
+        // Unknown type, skip
+        continue;
+      }
+
+      // Add to mapper (always)
+      mapper.push({
+        inputKey,
+        type: paramLocation,
+        key: headerKey,
+        required: true,
+        security: securityInfo,
+      });
+
+      // Add to inputSchema (only if includeInInput is true)
+      if (includeInInput) {
+        properties[inputKey] = schema;
+        required.push(inputKey);
+      }
+    }
   }
 }
 
