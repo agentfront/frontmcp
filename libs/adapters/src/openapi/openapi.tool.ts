@@ -97,7 +97,7 @@ const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
       if (param.in === 'path') {
         urlPath = urlPath.replace(`{${param.name}}`, encodeURIComponent(String(value)));
       } else if (param.in === 'query') {
-        queryParams.set(param.name, value);
+        queryParams.set(param.name, String(value));
       } else if (param.in === 'header') {
         headers.append(param.name.toLowerCase(), String(value));
       }
