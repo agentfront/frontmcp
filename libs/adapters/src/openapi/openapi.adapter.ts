@@ -1,12 +1,9 @@
-import {
-  Adapter,
-  DynamicAdapter,
-  FrontMcpAdapterResponse,
-} from '@frontmcp/sdk';
-import {OpenApiAdapterOptions} from './openapi.types';
-import {getToolsFromOpenApi, McpToolDefinition} from 'openapi-mcp-generator';
-import {createOpenApiTool} from "./openapi.tool";
-import {OpenAPIV3} from "openapi-types";
+import { Adapter, DynamicAdapter, FrontMcpAdapterResponse } from '@frontmcp/sdk';
+import { OpenApiAdapterOptions } from './openapi.types';
+import { getToolsFromOpenApi, McpToolDefinition } from 'openapi-mcp-generator';
+import { OpenAPIToolGenerator } from 'mcp-from-openapi';
+import { createOpenApiTool } from './openapi.tool';
+import { OpenAPIV3 } from 'openapi-types';
 
 @Adapter({
   name: 'openapi',
@@ -20,9 +17,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     this.options = options;
   }
 
-
   async fetch(): Promise<FrontMcpAdapterResponse> {
-    let urlOrSpec: string | OpenAPIV3.Document = ''
+    let urlOrSpec: string | OpenAPIV3.Document = '';
     if ('url' in this.options) {
       urlOrSpec = this.options.url;
     } else if ('spec' in this.options) {
@@ -30,22 +26,34 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     } else {
       throw new Error('Either url or spec must be provided');
     }
-    const {baseUrl, filterFn, defaultInclude, excludeOperationIds} = this.options;
-    const openApiTools = await getToolsFromOpenApi(urlOrSpec, {
+    const { baseUrl, filterFn, defaultInclude, excludeOperationIds } = this.options;
+    const openApiTools = await OpenAPIToolGenerator.fromURL(urlOrSpec as string, {
       baseUrl,
-      filterFn,
-      defaultInclude,
-      excludeOperationIds,
+      validate: true,
       dereference: false,
     });
 
+    const tools = await openApiTools.generateTools({
+      preferredStatusCodes: [200, 201, 202, 204],
+    });
+
+    console.log('tools', tools);
+
+    // const openApiTools = await getToolsFromOpenApi(urlOrSpec, {
+    //   baseUrl,
+    //   filterFn,
+    //   defaultInclude,
+    //   excludeOperationIds,
+    //   dereference: false,
+    // });
+
     return {
-      tools: this.parseTools(openApiTools),
+      tools: [] //this.parseTools(openApiTools),
     };
   }
 
   private parseTools(openApiTools: McpToolDefinition[]) {
-    return openApiTools.map(tool => {
+    return openApiTools.map((tool) => {
       return createOpenApiTool(tool, this.options);
     });
   }
