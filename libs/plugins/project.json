@@ -3,39 +3,28 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
-  "tags": [
-    "scope:libs",
-    "scope:publishable"
-  ],
+  "tags": ["scope:libs", "scope:publishable"],
   "targets": {
     "build-tsc": {
       "executor": "@nx/js:tsc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/plugins/dist",
         "main": "libs/plugins/src/index.ts",
         "tsConfig": "libs/plugins/tsconfig.lib.json",
-        "assets": [
-          "libs/plugins/*.md"
-        ]
+        "assets": ["libs/plugins/**/*.md", "LICENSE"]
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": [
-        "build-tsc"
-      ],
+      "dependsOn": ["build-tsc"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
       }
     },
     "publish": {
       "executor": "nx:run-commands",
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "options": {
         "command": "npm publish libs/plugins/dist --access public --registry=https://registry.npmjs.org/"
       }

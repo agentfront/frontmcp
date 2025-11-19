@@ -3,6 +3,10 @@
 A production-ready TypeScript library for converting JSON Schema (Draft 7+) to Zod v3 validation schemas with full type
 safety and comprehensive feature support.
 
+[![npm version](https://badge.fury.io/js/json-schema-to-zod-v3.svg)](https://www.npmjs.com/package/json-schema-to-zod-v3)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/license/apache-2-0)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+
 ## Features
 
 ✅ **Full Zod v3 Support** - Works seamlessly with Zod 3.x  
