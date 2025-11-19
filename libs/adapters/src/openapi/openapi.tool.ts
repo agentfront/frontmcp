@@ -87,7 +87,7 @@ function getZodSchemaFromJsonSchema(jsonSchema: any, toolName: string): z.ZodObj
 const prepareUrl = (definition: McpToolDefinition, validatedArgs: any) => {
   // Prepare URL, query parameters, headers, and request body
   let urlPath = definition.pathTemplate;
-  const queryParams = new URLSearchParams({ v: '1' });
+  const queryParams = new URLSearchParams();
   const headers = new Headers({ accept: 'application/json' });
 
   // Apply parameters to the URL path, query, or headers

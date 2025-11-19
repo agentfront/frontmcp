@@ -101,7 +101,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     filter: ({state: {requestType}}) => requestType === 'elicitResult',
   })
   async onElicitResult() {
-    // TODO: implement elicit result handling
+    this.fail(new Error('Not implemented'));
   }
 
   @Stage('onMessage', {

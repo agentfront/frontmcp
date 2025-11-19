@@ -65,7 +65,7 @@ export default class PluginRegistry
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Adapter ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new Error(`Plugin ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
         }
         this.graph.get(token)!.add(d);
       }

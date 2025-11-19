@@ -10,7 +10,7 @@ export default [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
-      '@typescript-eslint/no-explicit-any':'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@nx/enforce-module-boundaries': [
         'error',
         {
@@ -27,16 +27,14 @@ export default [
     },
   },
   {
-    files: [
-      '**/*.ts',
-      '**/*.tsx',
-      '**/*.cts',
-      '**/*.mts',
-      '**/*.js',
-      '**/*.jsx',
-      '**/*.cjs',
-      '**/*.mjs',
-    ],
+    // Allow `any` only in json-schema-to-zod library where dynamic typing is necessary
+    files: ['libs/json-schema-to-zod-v3/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.cts', '**/*.mts', '**/*.js', '**/*.jsx', '**/*.cjs', '**/*.mjs'],
     // Override or add rules here
     rules: {
       '@typescript-eslint/no-unsafe-function-type': 'off',
