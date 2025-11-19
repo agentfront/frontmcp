@@ -62,11 +62,12 @@ export interface PatternValidationResult {
  * ```
  */
 export function validatePattern(pattern: string): PatternValidationResult {
-  // Check pattern length first
-  if (pattern.length > MAX_PATTERN_LENGTH) {
+  // Check pattern length using config
+  const maxLength = globalConfig.maxPatternLength;
+  if (pattern.length > maxLength) {
     return {
       safe: false,
-      reason: `Pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`
+      reason: `Pattern exceeds maximum length of ${maxLength} characters`
     };
   }
 
@@ -80,15 +81,16 @@ export function validatePattern(pattern: string): PatternValidationResult {
     };
   }
 
-  // Check for excessive quantifiers before checking dangerous patterns
+  // Check for excessive quantifiers using config
+  const maxQuant = globalConfig.maxQuantifier;
   const quantifierMatch = pattern.match(/\{(\d+),?(\d+)?\}/g);
   if (quantifierMatch) {
     for (const q of quantifierMatch) {
       const nums = q.match(/\d+/g);
-      if (nums && nums.some(n => parseInt(n) > MAX_QUANTIFIER)) {
+      if (nums && nums.some(n => parseInt(n) > maxQuant)) {
         return {
           safe: false,
-          reason: `Quantifier exceeds maximum value of ${MAX_QUANTIFIER}`
+          reason: `Quantifier exceeds maximum value of ${maxQuant}`
         };
       }
     }
@@ -135,10 +137,32 @@ export function createSafeRegExp(
   flags?: string,
   timeoutMs = 100
 ): RegExp | null {
-  // First, validate the pattern
+  // Check if protection is enabled
+  if (!globalConfig.enableProtection) {
+    // Protection disabled - create regex without validation
+    try {
+      return new RegExp(pattern, flags);
+    } catch (error) {
+      if (globalConfig.warnOnUnsafe) {
+        console.warn(`[ReDoS Protection] Failed to create regex:`, error);
+      }
+      return null;
+    }
+  }
+
+  // Protection enabled - validate the pattern
   const validation = validatePattern(pattern);
   if (!validation.safe) {
-    console.warn(`[ReDoS Protection] Rejected unsafe pattern: ${validation.reason}`);
+    const message = `[ReDoS Protection] Rejected unsafe pattern: ${validation.reason}`;
+
+    if (globalConfig.throwOnUnsafe) {
+      throw new Error(message);
+    }
+
+    if (globalConfig.warnOnUnsafe) {
+      console.warn(message);
+    }
+
     return null;
   }
 
@@ -146,24 +170,36 @@ export function createSafeRegExp(
     // Create the regex
     const regex = new RegExp(pattern, flags);
 
+    // Use configured timeout or parameter timeout
+    const timeout = timeoutMs || globalConfig.timeoutMs;
+
     // Test the regex with a simple string to catch runtime issues
     const testStart = Date.now();
     try {
       regex.test('test');
       const elapsed = Date.now() - testStart;
 
-      if (elapsed > timeoutMs) {
-        console.warn(`[ReDoS Protection] Regex took ${elapsed}ms to test, rejecting pattern`);
+      if (elapsed > timeout) {
+        const message = `[ReDoS Protection] Regex took ${elapsed}ms to test, rejecting pattern`;
+
+        if (globalConfig.warnOnUnsafe) {
+          console.warn(message);
+        }
+
         return null;
       }
     } catch (error) {
-      console.warn(`[ReDoS Protection] Regex test failed:`, error);
+      if (globalConfig.warnOnUnsafe) {
+        console.warn(`[ReDoS Protection] Regex test failed:`, error);
+      }
       return null;
     }
 
     return regex;
   } catch (error) {
-    console.warn(`[ReDoS Protection] Failed to create regex:`, error);
+    if (globalConfig.warnOnUnsafe) {
+      console.warn(`[ReDoS Protection] Failed to create regex:`, error);
+    }
     return null;
   }
 }
@@ -246,7 +282,9 @@ export function createSafePatternValidator(pattern: string): (value: string) => 
 
   if (!regex) {
     // Pattern is unsafe, return a validator that always fails
-    console.warn(`[ReDoS Protection] Pattern rejected, validator will always return false`);
+    if (globalConfig.warnOnUnsafe) {
+      console.warn(`[ReDoS Protection] Pattern rejected, validator will always return false`);
+    }
     return () => false;
   }
 
@@ -257,13 +295,17 @@ export function createSafePatternValidator(pattern: string): (value: string) => 
       const elapsed = Date.now() - testStart;
 
       if (elapsed > globalConfig.timeoutMs) {
-        console.warn(`[ReDoS Protection] Regex test took ${elapsed}ms, rejecting input`);
+        if (globalConfig.warnOnUnsafe) {
+          console.warn(`[ReDoS Protection] Regex test took ${elapsed}ms, rejecting input`);
+        }
         return false;
       }
 
       return result;
     } catch (error) {
-      console.warn(`[ReDoS Protection] Regex test failed:`, error);
+      if (globalConfig.warnOnUnsafe) {
+        console.warn(`[ReDoS Protection] Regex test failed:`, error);
+      }
       return false;
     }
   };
