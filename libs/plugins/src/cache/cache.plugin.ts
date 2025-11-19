@@ -59,7 +59,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     if (!tool || !toolContext) return;
 
     const { cache } = toolContext.metadata;
-    if (!cache || !toolContext.input) {
+    if (!cache || typeof toolContext.input === 'undefined') {
       // no cache or no input, skip
       return;
     }
@@ -67,7 +67,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
     const cached = await cacheStore.getValue(hash);
 
-    if (cached) {
+    if (cached !== undefined && cached !== null) {
       if (cache === true || (cache.ttl && cache.slideWindow)) {
         const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
         await cacheStore.setValue(hash, cached, ttl);
@@ -81,7 +81,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         return;
       }
       /**
-       * cache hit, set output to main flow context
+       * cache hit, set output to the main flow context
        */
       flowCtx.state.rawOutput = cached;
 
@@ -97,13 +97,13 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     const { tool, toolContext } = flowCtx.state;
     if (!tool || !toolContext) return;
     const { cache } = toolContext.metadata;
-    if (!cache) {
+    if (!cache || typeof toolContext.input === 'undefined') {
       return;
     }
     const cacheStore = this.get(CacheStoreToken);
     const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
 
-    const hash = hashObject({ tool: tool.fullName, input: toolContext.input! });
+    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
     await cacheStore.setValue(hash, toolContext.output, ttl);
   }
 }

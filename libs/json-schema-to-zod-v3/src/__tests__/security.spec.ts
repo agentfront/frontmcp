@@ -107,6 +107,7 @@ describe('Security - ReDoS Protection', () => {
 
     it('should timeout on slow patterns', () => {
       // This pattern might be slow on certain inputs
+      // noinspection JSUnusedLocalSymbols
       const regex = createSafeRegExp('^(a|a)*$', undefined, 1);
 
       // The regex might be created but will timeout during testing

@@ -1,5 +1,3 @@
-// @ts-ignore
-
 import 'reflect-metadata';
 import { extendedToolMetadata, FrontMcpToolTokens } from '../tokens';
 import {
@@ -44,9 +42,11 @@ export type FrontMcpToolExecuteHandler<
 /**
  * Decorator that marks a class as a McpTool module and provides metadata
  */
-function frontMcpTool<T extends ToolMetadata, InSchema extends ToolInputType= T['inputSchema'], OutSchema extends ToolOutputType = T['outputSchema'] >(
-  providedMetadata: T,
-): (handler: FrontMcpToolExecuteHandler<InSchema, OutSchema>) => () => void {
+function frontMcpTool<
+  T extends ToolMetadata,
+  InSchema extends ToolInputType = T['inputSchema'],
+  OutSchema extends ToolOutputType = T['outputSchema'],
+>(providedMetadata: T): (handler: FrontMcpToolExecuteHandler<InSchema, OutSchema>) => () => void {
   return (execute) => {
     const metadata = frontMcpToolMetadataSchema.parse(providedMetadata);
     const toolFunction = function () {
@@ -231,7 +231,11 @@ type __MustReturn<C extends __Ctor, Out> =
       };
 
 // Rewrapped constructor
-type __Rewrap<C extends __Ctor, InSchema extends ToolInputType, OutSchema extends ToolOutputType> = C extends abstract new (...a: __A<C>) => __R<C>
+type __Rewrap<
+  C extends __Ctor,
+  InSchema extends ToolInputType,
+  OutSchema extends ToolOutputType,
+> = C extends abstract new (...a: __A<C>) => __R<C>
   ? C & (abstract new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
   ? C & (new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)

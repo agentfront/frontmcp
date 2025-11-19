@@ -23,7 +23,7 @@ export default class PromptRegistry extends RegistryAbstract<PromptEntry, Prompt
   }
 
   buildGraph() {
-
+    // TODO: implement graph building
   }
 
   protected initialize() {

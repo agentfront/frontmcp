@@ -30,7 +30,7 @@ export default class ResourceRegistry extends RegistryAbstract<ResourceEntry, Re
   }
 
   buildGraph() {
-
+    // TODO: implement graph building
   }
 
   protected initialize() {

@@ -16,7 +16,8 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
     rawInputSchema: oTool.inputSchema as any,
     // outputSchema: outputSchema.shape
   })(async (input, ctx) => {
-    let { urlPath, headers, queryParams } = prepareUrl(oTool, input);
+    const { urlPath, headers: urlHeaders, queryParams } = prepareUrl(oTool, input);
+    let headers = urlHeaders;
     let requestBodyData: any = undefined;
 
     if (additionalHeaders) {
@@ -47,12 +48,12 @@ export const createOpenApiTool = (oTool: McpToolDefinition, options: OpenApiAdap
       body: requestBodyData,
     });
     const data = await res.text();
-    let result = { data };
+    const result = { data };
     if (res.headers.get('content-type')?.includes('application/json')) {
       try {
         result.data = JSON.parse(data);
       } catch (e) {
-        console.error('failed to parse api response'); // migrate to logger
+        console.error('failed to parse api response', e); // TODO: migrate to logger
         result.data = data;
       }
     }

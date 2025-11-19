@@ -11,7 +11,9 @@ export class ScopedInMemoryStore extends StoreBaseAdapter {
   private map = new Map<string, Entry>();
   private bus = new EventEmitter();
 
-  async connect(): Promise<void> {}
+  async connect(): Promise<void> {
+    // nothing to do
+  }
   async disconnect(): Promise<void> {
     this.map.clear();
     this.bus.removeAllListeners();

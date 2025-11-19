@@ -173,7 +173,7 @@ export default class ToolRegistry
     this.bump('reset');
   }
 
-  getTools(includeHidden: boolean = false): ToolEntry<any, any>[] {
+  getTools(includeHidden = false): ToolEntry<any, any>[] {
     const local = [...this.localRows].flat().map(t => t.instance);
     const adopted = [...this.adopted.values()].flat().map(t => t.instance);
     return [...local, ...adopted].filter(t => t.metadata.hideFromDiscovery !== true || includeHidden);

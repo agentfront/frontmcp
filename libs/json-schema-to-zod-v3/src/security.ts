@@ -133,9 +133,9 @@ export function validatePattern(pattern: string): PatternValidationResult {
 export function createSafeRegExp(
   pattern: string,
   flags?: string,
-  timeoutMs: number = 100
+  timeoutMs = 100
 ): RegExp | null {
-  // First validate the pattern
+  // First, validate the pattern
   const validation = validatePattern(pattern);
   if (!validation.safe) {
     console.warn(`[ReDoS Protection] Rejected unsafe pattern: ${validation.reason}`);

@@ -32,7 +32,7 @@
     }
   },
   "dependencies": {
-    "tslib": "^2.3.0",
+    "ioredis":"^5.8.0",
     "@frontmcp/sdk": "^0.3.1"
   }
 }
