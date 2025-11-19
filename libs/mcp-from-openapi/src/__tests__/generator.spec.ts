@@ -199,7 +199,7 @@ paths:
       const tool = await generator.generateTool('/users/{id}', 'post');
 
       // Check that all 'id' parameters are present with different names
-      expect(tool.mapper).toHaveLength(5); // path id, query id, body id, body name
+      expect(tool.mapper).toHaveLength(4); // path id, query id, body id, body name
 
       const pathParam = tool.mapper.find((m) => m.type === 'path' && m.key === 'id');
       const queryParam = tool.mapper.find((m) => m.type === 'query' && m.key === 'id');

@@ -85,7 +85,7 @@ export class SchemaBuilder {
     }
 
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
+      if (key in obj) {
         const value = obj[key];
         if (value && typeof value === 'object') {
           this.removeRefsRecursive(value);

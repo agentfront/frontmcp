@@ -1,5 +1,4 @@
 import type { OpenAPIDocument, ValidationResult, ValidationErrorDetail, ValidationWarning } from './types';
-import { ValidationError } from './errors';
 
 /**
  * Validates OpenAPI documents
@@ -100,7 +99,7 @@ export class Validator {
   private validatePaths(
     paths: Record<string, any>,
     errors: ValidationErrorDetail[],
-    warnings: ValidationWarning[],
+    warnings: ValidationWarning[]
   ): void {
     for (const [path, pathItem] of Object.entries(paths)) {
       if (!pathItem) continue;
@@ -144,7 +143,7 @@ export class Validator {
     path: string,
     method: string,
     errors: ValidationErrorDetail[],
-    warnings: ValidationWarning[],
+    warnings: ValidationWarning[]
   ): void {
     const basePath = `/paths/${path}/${method}`;
 
@@ -174,7 +173,9 @@ export class Validator {
     // Check for path parameters in path string
     const pathParams = path.match(/\{([^}]+)\}/g)?.map((p) => p.slice(1, -1)) ?? [];
     const definedPathParams = new Set(
-      operation.parameters?.filter((p: any) => p.in === 'path').map((p: any) => p.name) ?? [],
+      operation.parameters
+        ?.filter((p: any) => p.in === 'path')
+        .map((p: any) => p.name) ?? []
     );
 
     for (const param of pathParams) {
@@ -196,7 +197,7 @@ export class Validator {
     path: string,
     method: string,
     errors: ValidationErrorDetail[],
-    warnings: ValidationWarning[],
+    warnings: ValidationWarning[]
   ): void {
     const basePath = `/paths/${path}/${method}/parameters`;
 
