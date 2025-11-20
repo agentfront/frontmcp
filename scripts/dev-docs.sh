@@ -7,16 +7,24 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-DOCS_DIR="docs"
-PROD_DOCS="$DOCS_DIR/docs.json"
-DRAFT_DOCS="$DOCS_DIR/docs.draft.json"
-BACKUP_DOCS="$DOCS_DIR/docs.backup.json"
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DOCS_DIR="$PROJECT_ROOT/docs"
+
+# File names (will be used relative to DOCS_DIR)
+PROD_DOCS="docs.json"
+DRAFT_DOCS="docs.draft.json"
+BACKUP_DOCS="docs.backup.json"
 
 # Cleanup function to restore backup
 cleanup() {
   local exit_code=$?
   echo ""
   echo -e "${YELLOW}Cleaning up...${NC}"
+
+  # Navigate to docs directory for cleanup
+  cd "$DOCS_DIR"
 
   if [ -f "$BACKUP_DOCS" ]; then
     echo -e "${GREEN}Restoring original docs.json from backup${NC}"
@@ -37,16 +45,27 @@ main() {
   echo -e "${GREEN}Starting Mintlify dev server with draft docs...${NC}"
   echo ""
 
+  # Check if docs directory exists
+  if [ ! -d "$DOCS_DIR" ]; then
+    echo -e "${RED}Error: docs directory not found at $DOCS_DIR${NC}"
+    exit 1
+  fi
+
+  # Navigate to docs directory
+  cd "$DOCS_DIR"
+  echo -e "${GREEN}Working directory: $DOCS_DIR${NC}"
+  echo ""
+
   # Check if draft docs exist
   if [ ! -f "$DRAFT_DOCS" ]; then
-    echo -e "${RED}Error: $DRAFT_DOCS not found${NC}"
+    echo -e "${RED}Error: $DRAFT_DOCS not found in docs directory${NC}"
     echo "Please ensure docs.draft.json exists before running this script."
     exit 1
   fi
 
   # Check if production docs exist
   if [ ! -f "$PROD_DOCS" ]; then
-    echo -e "${RED}Error: $PROD_DOCS not found${NC}"
+    echo -e "${RED}Error: $PROD_DOCS not found in docs directory${NC}"
     echo "Please ensure docs.json exists before running this script."
     exit 1
   fi
