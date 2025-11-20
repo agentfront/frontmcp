@@ -23,6 +23,16 @@
   "interaction": {
     "drilldown": true
   },
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "canonical": "https://agentfront.dev",
+      "og:image": "/assets/logo/banner.dark.png",
+      "charset": "UTF-8",
+      "viewport": "width=device-width, initial-scale=1.0",
+      "keywords": "mcp, dependencyinjection, sdk, adapters, plugins, agentfront, frontmcp, framework, typescript, json-schema, zod, zod-v3, schemavalidation, openapi, apivalidation, typesafety, runtimevalidation"
+    }
+  },
   "navbar": {
     "links": [
       {

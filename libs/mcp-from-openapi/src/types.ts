@@ -114,6 +114,37 @@ export function toJSONSchema7(schema: SchemaObject | ReferenceObject): JSONSchem
     result['minimum'] = minimum;
   }
 
+  // Recursively convert nested schemas to ensure all nested schemas are valid JSONSchema7
+  if (result['properties'] && typeof result['properties'] === 'object') {
+    const props: Record<string, JSONSchema7> = {};
+    for (const [key, value] of Object.entries(result['properties'] as Record<string, SchemaObject | ReferenceObject>)) {
+      props[key] = toJSONSchema7(value);
+    }
+    result['properties'] = props;
+  }
+
+  if (result['items']) {
+    if (Array.isArray(result['items'])) {
+      result['items'] = (result['items'] as (SchemaObject | ReferenceObject)[]).map(toJSONSchema7);
+    } else {
+      result['items'] = toJSONSchema7(result['items'] as SchemaObject | ReferenceObject);
+    }
+  }
+
+  if (result['additionalProperties'] && typeof result['additionalProperties'] === 'object') {
+    result['additionalProperties'] = toJSONSchema7(result['additionalProperties'] as SchemaObject | ReferenceObject);
+  }
+
+  for (const key of ['allOf', 'anyOf', 'oneOf'] as const) {
+    if (result[key] && Array.isArray(result[key])) {
+      result[key] = (result[key] as (SchemaObject | ReferenceObject)[]).map(toJSONSchema7);
+    }
+  }
+
+  if (result['not']) {
+    result['not'] = toJSONSchema7(result['not'] as SchemaObject | ReferenceObject);
+  }
+
   return result as JSONSchema7;
 }
 
