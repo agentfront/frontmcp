@@ -49,3 +49,5 @@ test-output
 
 # Docs backup (local development only)
 docs/docs.backup.json
+
+.claude/settings.local.json
