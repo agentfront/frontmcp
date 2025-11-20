@@ -8,7 +8,11 @@ export class OpenAPIToolError extends Error {
     super(message);
     this.name = this.constructor.name;
     this.context = context;
-    Error.captureStackTrace(this, this.constructor);
+
+    // captureStackTrace is Node.js-specific, guard against non-Node environments
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
