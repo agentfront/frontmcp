@@ -247,8 +247,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         bodyOutcome = res;
         if (res.outcome !== 'ok' && res.outcome !== 'respond') {
           // fail/abort/next/handled/unknown → do NOT run did
-          // return res;/
-          throw res.control;
+          return res;
         }
       }
 
@@ -287,7 +286,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           if (stopOnRespond) return res;
           // else keep going
         } else if (res.outcome !== 'ok') {
-          return res.control?.['output'] ?? res.outcome;
+          return res;
         }
       }
       return { outcome: 'ok' };

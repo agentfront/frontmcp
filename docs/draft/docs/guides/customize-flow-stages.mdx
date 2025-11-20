@@ -424,6 +424,129 @@ async useEnrichedContext(ctx: FlowCtxOf<'tools:call-tool'>) {
 
 ---
 
+## Hook Registry API
+
+For advanced use cases, you can programmatically access and manage hooks using the Hook Registry API. This is useful when building custom flow orchestration or when you need to dynamically query which hooks are registered.
+
+### Accessing the Hook Registry
+
+```ts
+import { FlowCtxOf } from '@frontmcp/sdk';
+
+class MyPlugin {
+  @ToolHook.Will('execute')
+  async checkRegisteredHooks(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const hookRegistry = ctx.scope.providers.getHooksRegistry();
+
+    // Now you can use registry methods
+    const hooks = hookRegistry.getFlowHooks('tools:call-tool');
+  }
+}
+```
+
+### Registry Methods
+
+<Tabs>
+  <Tab title="getFlowHooks">
+    Retrieves all hooks registered for a specific flow.
+
+    ```ts
+    const hooks = hookRegistry.getFlowHooks('tools:call-tool');
+    // Returns: HookEntry[] - all hooks for this flow
+    ```
+  </Tab>
+
+  <Tab title="getFlowHooksForOwner">
+    Retrieves hooks for a specific flow, optionally filtered by owner ID. This is particularly useful for multi-tenant scenarios or when you need to isolate hooks by context.
+
+    **Parameters:**
+    - `flow`: The flow name (e.g., `'tools:call-tool'`)
+    - `ownerId` (optional): The owner ID to filter by
+
+    **Behavior:**
+    - If no `ownerId` is provided, returns all hooks for the flow
+    - If `ownerId` is provided, returns:
+      - Hooks belonging to the specified owner
+      - Global hooks (hooks with no owner)
+
+    ```ts
+    // Get all hooks for a flow
+    const allHooks = hookRegistry.getFlowHooksForOwner('tools:call-tool');
+
+    // Get hooks for a specific owner (e.g., a specific tool or plugin)
+    const ownerHooks = hookRegistry.getFlowHooksForOwner(
+      'tools:call-tool',
+      'my-plugin-id'
+    );
+    // Returns only hooks owned by 'my-plugin-id' + global hooks
+    ```
+
+    **Use Cases:**
+    - **Tool-specific hooks**: When a tool registers hooks that should only apply to its own execution
+    - **Multi-tenant isolation**: Filter hooks by tenant ID to ensure proper isolation
+    - **Plugin scoping**: Get hooks that belong to a specific plugin
+  </Tab>
+
+  <Tab title="getFlowStageHooks">
+    Retrieves hooks for a specific flow and stage combination.
+
+    ```ts
+    const executeHooks = hookRegistry.getFlowStageHooks(
+      'tools:call-tool',
+      'execute'
+    );
+    // Returns: HookEntry[] - all hooks for the 'execute' stage
+    ```
+  </Tab>
+
+  <Tab title="getClsHooks">
+    Retrieves hooks defined on a specific class.
+
+    ```ts
+    const classHooks = hookRegistry.getClsHooks(MyPlugin);
+    // Returns: HookEntry[] - all hooks defined on MyPlugin class
+    ```
+  </Tab>
+</Tabs>
+
+### Example: Owner-Scoped Hook Filtering
+
+```ts
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'tool-isolation-plugin',
+  description: 'Demonstrates owner-scoped hook retrieval',
+})
+export default class ToolIsolationPlugin {
+  @ToolHook.Will('execute')
+  async filterHooksByOwner(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { toolContext } = ctx.state;
+    if (!toolContext) return;
+
+    const hookRegistry = ctx.scope.providers.getHooksRegistry();
+    const toolOwnerId = toolContext.tool?.metadata.owner?.id;
+
+    // Get only hooks relevant to this specific tool
+    const relevantHooks = hookRegistry.getFlowHooksForOwner(
+      'tools:call-tool',
+      toolOwnerId
+    );
+
+    ctx.logger.info(`Found ${relevantHooks.length} hooks for this tool`, {
+      toolOwnerId,
+      hooks: relevantHooks.map(h => h.metadata.stage),
+    });
+  }
+}
+```
+
+<Warning>
+  The Hook Registry API is an advanced feature primarily intended for framework developers and complex plugin authors. Most users should use the decorator-based approach (`@ToolHook`, `@HttpHook`, etc.) instead.
+</Warning>
+
+---
+
 ## Best Practices
 
 <AccordionGroup>
