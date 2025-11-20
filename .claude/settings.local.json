@@ -8,7 +8,8 @@
       "Bash(npx nx test:*)",
       "Bash(npx nx lint:*)",
       "Bash(cp:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(npx nx run:*)"
     ],
     "deny": [],
     "ask": []
