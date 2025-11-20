@@ -1,6 +1,6 @@
 import z from 'zod';
 import {tool} from '@frontmcp/sdk';
-import {ExpenseConfigProvider} from "../provders";
+import {ExpenseConfigProvider} from "../providers";
 
 
 export default tool({

@@ -85,33 +85,116 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: "Resolve publishable libs (tag: scope:publishable)"
-        id: publishable
+      - name: "Resolve synchronized libs (tag: versioning:synchronized)"
+        id: synchronized
         shell: bash
         run: |
           set -euo pipefail
           PROJECTS=$(node -e "
             const { execSync } = require('child_process');
-            const out = execSync('npx nx show projects -p tag:scope:publishable --type lib --json', { encoding: 'utf8' });
+            const out = execSync('npx nx show projects -p tag:versioning:synchronized --type lib --json', { encoding: 'utf8' });
             const arr = JSON.parse(out);
             process.stdout.write(arr.join(','));
           ")
           if [ -z "$PROJECTS" ]; then
-            echo 'No libs tagged scope:publishable. Exiting.'
-            echo 'projects=' >> "$GITHUB_OUTPUT"
+            echo 'synchronized_projects=' >> "$GITHUB_OUTPUT"
+          else
+            echo "synchronized_projects=$PROJECTS" >> "$GITHUB_OUTPUT"
+            echo "Found synchronized libs: $PROJECTS"
+          fi
+
+      - name: "Resolve affected independent libs (tag: versioning:independent)"
+        id: independent
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Get all independent libraries
+          ALL_INDEPENDENT=$(node -e "
+            const { execSync } = require('child_process');
+            const out = execSync('npx nx show projects -p tag:versioning:independent --type lib --json', { encoding: 'utf8' });
+            const arr = JSON.parse(out);
+            process.stdout.write(arr.join(','));
+          ")
+
+          if [ -z "$ALL_INDEPENDENT" ]; then
+            echo 'independent_projects=' >> "$GITHUB_OUTPUT"
+            echo "No independent libraries found"
             exit 0
           fi
-          echo "projects=$PROJECTS" >> "$GITHUB_OUTPUT"
-          echo "Found: $PROJECTS"
+
+          echo "All independent libs: $ALL_INDEPENDENT"
+
+          # Get affected libraries
+          AFFECTED=$(node -e "
+            const { execSync } = require('child_process');
+            try {
+              const out = execSync('npx nx show projects --affected --type lib --json', { encoding: 'utf8' });
+              const arr = JSON.parse(out);
+              process.stdout.write(arr.join(','));
+            } catch (e) {
+              process.stdout.write('');
+            }
+          ")
+
+          if [ -z "$AFFECTED" ]; then
+            echo 'independent_projects=' >> "$GITHUB_OUTPUT"
+            echo "No affected independent libraries"
+            exit 0
+          fi
+
+          echo "Affected libs: $AFFECTED"
+
+          # Find intersection: affected AND independent
+          AFFECTED_INDEPENDENT=$(node -e "
+            const all = '$ALL_INDEPENDENT'.split(',');
+            const affected = '$AFFECTED'.split(',');
+            const intersection = all.filter(lib => affected.includes(lib));
+            process.stdout.write(intersection.join(','));
+          ")
+
+          echo "independent_projects=$AFFECTED_INDEPENDENT" >> "$GITHUB_OUTPUT"
+          if [ -n "$AFFECTED_INDEPENDENT" ]; then
+            echo "Affected independent libs to publish: $AFFECTED_INDEPENDENT"
+          else
+            echo "No affected independent libraries to publish"
+          fi
+
+      - name: "Collect all projects to publish"
+        id: to_publish
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SYNC="${{ steps.synchronized.outputs.synchronized_projects }}"
+          INDEP="${{ steps.independent.outputs.independent_projects }}"
+
+          # Combine both lists
+          if [ -n "$SYNC" ] && [ -n "$INDEP" ]; then
+            ALL="$SYNC,$INDEP"
+          elif [ -n "$SYNC" ]; then
+            ALL="$SYNC"
+          elif [ -n "$INDEP" ]; then
+            ALL="$INDEP"
+          else
+            ALL=""
+          fi
+
+          echo "projects=$ALL" >> "$GITHUB_OUTPUT"
+          if [ -n "$ALL" ]; then
+            echo "Projects to publish: $ALL"
+          else
+            echo "No projects to publish"
+          fi
 
       - name: Stop if nothing to publish
-        if: ${{ steps.publishable.outputs.projects == '' }}
-        run: echo "Nothing to do."
+        if: ${{ steps.to_publish.outputs.projects == '' }}
+        run: echo "Nothing to publish."
 
-      - name: Build publishable libs
-        if: ${{ steps.publishable.outputs.projects != '' }}
+      - name: Build all projects to publish
+        if: ${{ steps.to_publish.outputs.projects != '' }}
         run: |
-          npx nx run-many --targets=build --projects="${{ steps.publishable.outputs.projects }}" --parallel
+          npx nx run-many --targets=build --projects="${{ steps.to_publish.outputs.projects }}" --parallel
 
       # -------------------------------
       # 3) Determine release version (from next/x.y.z or package.json)
@@ -199,18 +282,112 @@ jobs:
           fi
 
       # -------------------------------
-      # 6) Publish to npm via Trusted Publishing
+      # 6) Remove draft attributes from blog cards
       # -------------------------------
-      - name: Publish to npm (Nx Release via OIDC)
-        if: ${{ steps.publishable.outputs.projects != '' }}
+      - name: Remove draft blog cards
         shell: bash
         run: |
           set -euo pipefail
-          echo "Using Nx Release to publish only selected projects via npm trusted publishing..."
-          yarn nx run-many -t publish
+          echo "Removing draft attributes from BlogCard components..."
+          node scripts/remove-blog-drafts.mjs
+
+          # Check if there are changes
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git add docs/
+            git commit -m "docs: remove draft attributes from blog cards for release"
+            echo "✅ Draft blog cards removed and committed"
+          else
+            echo "ℹ️  No draft blog cards to remove"
+          fi
 
       # -------------------------------
-      # 7) Create GitHub Release
+      # 7) Bump versions before publishing
+      # -------------------------------
+      - name: Bump synchronized library versions
+        if: ${{ steps.synchronized.outputs.synchronized_projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Bumping synchronized libraries to version $VERSION..."
+          node scripts/bump-synchronized-versions.mjs "$VERSION"
+
+      - name: Bump affected independent library versions (patch)
+        if: ${{ steps.independent.outputs.independent_projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INDEPENDENT="${{ steps.independent.outputs.independent_projects }}"
+          if [ -z "$INDEPENDENT" ]; then
+            echo "No independent libraries to bump"
+            exit 0
+          fi
+
+          # Split by comma and bump each library
+          IFS=',' read -ra LIBS <<< "$INDEPENDENT"
+          for lib in "${LIBS[@]}"; do
+            echo "Bumping $lib (patch)..."
+            node scripts/bump-version.mjs "$lib" patch
+          done
+
+      - name: Commit version bumps
+        if: ${{ steps.to_publish.outputs.projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Check if there are version changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: bump versions for release ${{ steps.version.outputs.version }}"
+            echo "✅ Version bumps committed"
+          else
+            echo "ℹ️  No version changes to commit"
+          fi
+
+      - name: Rebuild after version bumps
+        if: ${{ steps.to_publish.outputs.projects != '' }}
+        run: |
+          npx nx run-many --targets=build --projects="${{ steps.to_publish.outputs.projects }}" --parallel
+
+      # -------------------------------
+      # 8) Publish to npm via Trusted Publishing
+      # -------------------------------
+      - name: Publish to npm
+        if: ${{ steps.to_publish.outputs.projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Publishing selected projects via npm trusted publishing..."
+
+          # Publish each project individually to ensure proper ordering
+          IFS=',' read -ra PROJECTS <<< "${{ steps.to_publish.outputs.projects }}"
+          for project in "${PROJECTS[@]}"; do
+            echo "Publishing $project..."
+            yarn nx run "$project:publish"
+          done
+
+      # -------------------------------
+      # 9) Push release commits (version bumps & draft removals)
+      # -------------------------------
+      - name: Push version bumps and draft removals
+        if: ${{ steps.to_publish.outputs.projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Check if there are any commits to push
+          if [ -n "$(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --oneline)" ]; then
+            git push origin ${{ github.event.pull_request.base.ref }}
+            echo "✅ Commits pushed"
+          else
+            echo "ℹ️  No commits to push"
+          fi
+
+      # -------------------------------
+      # 10) Create GitHub Release
       # -------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -223,6 +400,8 @@ jobs:
 
       - name: Summary
         run: |
-          echo "✅ Published projects: ${{ steps.publishable.outputs.projects }}"
+          echo "✅ Published projects: ${{ steps.to_publish.outputs.projects }}"
+          echo "📦 Synchronized libs: ${{ steps.synchronized.outputs.synchronized_projects }}"
+          echo "🔄 Independent libs (affected): ${{ steps.independent.outputs.independent_projects }}"
           echo "🏷️  Release tag: v${{ steps.version.outputs.version }}"
           echo "🎯 Release commit: ${{ steps.release_sha.outputs.sha }}"

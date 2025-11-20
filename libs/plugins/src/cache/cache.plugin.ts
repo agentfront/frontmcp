@@ -10,7 +10,7 @@ import { CacheStoreToken } from './cache.symbol';
   providers: [
     /* add providers that always loaded with the plugin or default providers */
     {
-      // this is default provider for cache, will be overridden if dynamicProviders based on config
+      // this is a default provider for cache, will be overridden if dynamicProviders based on config
       name: 'cache:memory',
       provide: CacheStoreToken,
       useValue: new CacheMemoryProvider(60 * 60 * 24),
@@ -18,8 +18,6 @@ import { CacheStoreToken } from './cache.symbol';
   ],
 })
 export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
-  private readonly defaultTTL: number;
-
   static override dynamicProviders = (options: CachePluginOptions) => {
     const providers: ProviderType[] = [];
     switch (options.type) {
@@ -57,54 +55,70 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   @ToolHook.Will('execute', { priority: 1000 })
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const ctx = flowCtx.state.required.toolContext;
-    const { cache } = ctx.metadata;
-    if (!cache || !ctx.input) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+
+    const { cache } = toolContext.metadata;
+    if (!cache || typeof toolContext.input === 'undefined') {
+      // no cache or no input, skip
       return;
     }
-    const redis = this.get(CacheStoreToken);
-    const hash = hashObject(ctx.input);
-    const cached = await redis.getValue(hash);
+    const cacheStore = this.get(CacheStoreToken);
+    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
+    const cached = await cacheStore.getValue(hash);
 
-    if (cache == true || (cache.ttl && cache.slideWindow)) {
-      const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
-      await redis.setValue(hash, cached, ttl);
-    }
+    if (cached !== undefined && cached !== null) {
+      if (cache === true || (cache.ttl && cache.slideWindow)) {
+        const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
+        await cacheStore.setValue(hash, cached, ttl);
+      }
 
-    if (cached) {
-      console.log('return from cache', { cached });
-      ctx.respond({
-        ...cached,
-        ___cached__: true,
-      });
+      /**
+       * double check if cache still valid based on tool output schema
+       */
+      if (!tool.safeParseOutput(cached).success) {
+        await cacheStore.delete(hash);
+        return;
+      }
+      /**
+       * cache hit, set output to the main flow context
+       */
+      flowCtx.state.rawOutput = cached;
+
+      /**
+       * call respond to bypass tool execution
+       */
+      toolContext.respond(cached);
     }
   }
 
   @ToolHook.Did('execute', { priority: 1000 })
   async willWriteCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
-    const ctx = flowCtx.state.required.toolContext;
-    const { cache } = ctx.metadata;
-    if (!cache) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+    const { cache } = toolContext.metadata;
+    if (!cache || typeof toolContext.input === 'undefined') {
       return;
     }
-    const redis = this.get(CacheStoreToken);
-    console.log('willWriteCache', { cache });
-    const ttl = cache === true ? this.defaultTTL : cache.ttl ?? this.defaultTTL;
+    const cacheStore = this.get(CacheStoreToken);
+    const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
 
-    const hash = hashObject(ctx.input!);
-    await redis.setValue(hash, ctx.output, ttl);
+    const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
+    await cacheStore.setValue(hash, toolContext.output, ttl);
   }
 }
 
 function hashObject(obj: any) {
   const keys = Object.keys(obj).sort();
-  const values = keys.map((key) => obj[key]);
-  return values.reduce((acc, val) => {
+  return keys.reduce((acc, key) => {
+    acc += key + ':';
+    const val = obj[key];
     if (typeof val === 'object' && val !== null) {
       acc += hashObject(val);
     } else {
       acc += val;
     }
+    acc += ';';
     return acc;
   }, '');
 }

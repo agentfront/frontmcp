@@ -80,7 +80,7 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Adapter ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new Error(`Scope ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
         }
         this.graph.get(token)!.add(d);
       }

@@ -57,7 +57,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: zodToJsonSchema(requestedSchema),
+        requestedSchema: zodToJsonSchema(requestedSchema as any),
       }),
       { relatedRequestId },
     );

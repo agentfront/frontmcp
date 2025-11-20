@@ -21,30 +21,49 @@ import { BlogCard } from '/snippets/card.jsx';
     <div className='text-lg font-light mb-10 text-gray-800 dark:text-gray-400'>
         Explore the world of MCP and FrontMCP framework.
     </div>
-    <BlogCard author="David Antoon"
-              date="November 17, 2025"
-              time="14 mins"
-              title="From Tool Lists to Code Plans — CodeCall for FrontMCP"
-              email="david@frontegg.com"
-              link="/blog/11-2025/codecall-plugin"
-              img="../assets/banners/codecall-plugin/code-call-plugin.png">
-        Anthropic’s “Code execution with MCP” treats tools as code. CodeCall brings that pattern into FrontMCP: hide huge
-        toolsets behind a tiny meta-API, let models search and describe tools, then run JavaScript plans in a sandbox that
-        call your real tools across multiple apps.
-    </BlogCard>
 
-    <BlogCard author="David Antoon"
-              date="November 11, 2025"
-              time="13 mins"
-              title="The Day Our MCP Server Ran Out of Sockets"
-              email="david@frontegg.com"
-              link="/blog/11-2025/mcp-run-out-of-socket"
-              img="../assets/banners/mcp-run-out-of-socket.svg">
-        Most SDK examples wire one transport to one client. That collapses when many IDEs, bots, and dashboards need to share
-        one server. FrontMCP flips the default: sessions, transport identity, per‑app scoping, auth, DI, and decorators—so a
-        single server can safely serve many agents across multiple apps.
-    </BlogCard>
+<BlogCard
+  author="David Antoon"
+  draft
+  date="November 17, 2025"
+  time="14 mins"
+  title="From Tool Lists to Code Plans — CodeCall for FrontMCP"
+  email="david@frontegg.com"
+  link="/blog/11-2025/codecall-plugin"
+  img="../assets/banners/codecall-plugin/code-call-plugin.png"
+>
+  Anthropic’s “Code execution with MCP” treats tools as code. CodeCall brings that pattern into FrontMCP: hide huge
+  toolsets behind a tiny meta-API, let models search and describe tools, then run JavaScript plans in a sandbox that
+  call your real tools across multiple apps.
+</BlogCard>
 
+<BlogCard
+  author="David Antoon"
+  draft
+  date="November 18, 2025"
+  time="18 mins"
+  title="The OpenAPI-to-MCP Security Nightmare You Didn't Know You Had"
+  email="david@frontegg.com"
+  link="/blog/11-2025/openapi-mcp-security-nightmare"
+  img="../assets/banners/openapi-mcp-security.png"
+>
+  Why most OpenAPI-to-MCP tools are leaking your credentials, mixing headers between requests, and routing your customer
+  tokens through someone else's cloud—and how FrontMCP fixes it with authentication never exposed to clients, request
+  isolation guarantees, and security validation out of the box.
+</BlogCard>
+<BlogCard
+  author="David Antoon"
+  date="November 11, 2025"
+  time="13 mins"
+  title="The Day Our MCP Server Ran Out of Sockets"
+  email="david@frontegg.com"
+  link="/blog/11-2025/mcp-run-out-of-socket"
+  img="../assets/banners/mcp-run-out-of-socket.svg"
+>
+  Most SDK examples wire one transport to one client. That collapses when many IDEs, bots, and dashboards need to share
+  one server. FrontMCP flips the default: sessions, transport identity, per‑app scoping, auth, DI, and decorators—so a
+  single server can safely serve many agents across multiple apps.
+</BlogCard>
 
     <BlogCard author="David Antoon"
               date="November 4, 2025"
@@ -57,8 +76,7 @@ import { BlogCard } from '/snippets/card.jsx';
     >
         The TypeScript-first framework for building production-grade MCP servers with decorators, DI, and
         Streamable HTTP. If you’ve tried wiring up the Model Context Protocol (MCP) by hand, you already know the drill
-        or define JSON
-        schemas manually,...
+        or define JSON schemas manually,...
     </BlogCard>
 
 </div>

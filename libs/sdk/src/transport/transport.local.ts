@@ -21,6 +21,7 @@ export class LocalTransporter implements Transporter {
     this.tokenHash = key.tokenHash;
 
     const defaultOnDispose = () => {
+      /* empty */
     };
 
     switch (this.type) {

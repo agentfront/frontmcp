@@ -8,8 +8,12 @@ export const BlogCard = ({
   img, // light image
   imgDark, // optional dark image
   time,
+  draft,
   children,
 }) => {
+  if (draft) {
+    return null;
+  }
   return (
     <div className="blog-card">
       <a

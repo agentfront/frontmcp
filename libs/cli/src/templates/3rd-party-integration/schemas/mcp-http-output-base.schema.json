@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frontmcp.dev/schemas/mcp-http-output-base.schema.json",
+  "title": "Standard HTTP Output Wrapper",
+  "type": "object",
+  "required": ["status", "body"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "body": {}
+  }
+}

@@ -1,6 +1,6 @@
 import { App } from '@frontmcp/sdk';
 
-import { ExpenseConfigProvider } from './provders';
+import { ExpenseConfigProvider } from './providers';
 import { OpenapiAdapter } from '@frontmcp/adapters';
 import CreateExpenseTool from './tools/create-expense.tool';
 import GetExpenseTool from './tools/get-expense-fun.tool';
@@ -29,11 +29,6 @@ import { CachePlugin } from '@frontmcp/plugins';
       },
     }),
   ],
-  tools: [AddTool, CreateExpenseTool, GetExpenseTool],
-  auth: {
-    type: 'remote',
-    name: 'frontegg',
-    baseUrl: 'https://sample-app.frontegg.com',
-  },
+  tools: [AddTool, CreateExpenseTool, GetExpenseTool]
 })
 export default class ExpenseMcpApp {}

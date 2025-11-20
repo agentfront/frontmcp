@@ -63,7 +63,7 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
     const siteField = meta.site?.siteIdFieldName || this.opts.siteIdFieldName || 'siteId';
 
     const siteId = input?.[siteField];
-    const siteScoped = meta.site?.siteScoped || siteId !== undefined;
+    const siteScoped = meta.site?.siteScoped ?? (siteId !== undefined);
     const adminRequired = meta.site?.adminRequired === true;
 
     if (!siteScoped) {

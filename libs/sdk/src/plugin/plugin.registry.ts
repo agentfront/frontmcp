@@ -1,28 +1,23 @@
 // plugin-registry.ts
 import 'reflect-metadata';
-import {
-  FlowName,
-  PluginEntry,
-  PluginKind,
-  PluginRecord,
-  PluginRegistryInterface,
-  PluginType,
-  Token,
-} from '../common';
-import {normalizePlugin, pluginDiscoveryDeps} from './plugin.utils';
+import { PluginEntry, PluginKind, PluginRecord, PluginRegistryInterface, PluginType, Token } from '../common';
+import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
-import {tokenName} from '../utils/token.utils';
+import { tokenName } from '../utils/token.utils';
 import AdapterRegistry from '../adapter/adapter.regsitry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
-import {Ctor} from '../types/token.types';
-import {normalizeProvider} from '../provider/provider.utils';
-import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
-import {Scope} from "../scope";
-import {normalizeHooksFromCls} from "../hooks/hooks.utils";
+import { Ctor } from '../types/token.types';
+import { normalizeProvider } from '../provider/provider.utils';
+import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import { Scope } from '../scope';
+import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 
-export default class PluginRegistry extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]> implements PluginRegistryInterface {
+export default class PluginRegistry
+  extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]>
+  implements PluginRegistryInterface
+{
   /** providers by token */
   private readonly pProviders: Map<Token, ProviderRegistry> = new Map();
   /** providers by token */
@@ -36,7 +31,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
   /** prompts by token */
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
-  private readonly scope: Scope
+  private readonly scope: Scope;
 
   constructor(providers: ProviderRegistry, list: PluginType[]) {
     super('PluginRegistry', providers, list);
@@ -60,7 +55,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       graph.set(provide, new Set());
     }
 
-    return {tokens, defs, graph};
+    return { tokens, defs, graph };
   }
 
   protected buildGraph() {
@@ -70,7 +65,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`Adapter ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new Error(`Plugin ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
         }
         this.graph.get(token)!.add(d);
       }
@@ -78,7 +73,6 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
   }
 
   protected async initialize() {
-
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
       const deps = this.graph.get(token)!;
@@ -100,11 +94,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? []);
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? []);
 
-      await Promise.all([
-        tools.ready,
-        resources.ready,
-        prompts.ready,
-      ]);
+      await Promise.all([tools.ready, resources.ready, prompts.ready]);
 
       this.pProviders.set(token, providers);
       this.pPlugins.set(token, plugins);
@@ -116,7 +106,7 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
       /**
        * Register exported providers to the parent providers registry.
        */
-      const exported = (rec.metadata.exports ?? []).map(rawToken => {
+      const exported = (rec.metadata.exports ?? []).map((rawToken) => {
         const token = normalizeProvider(rawToken);
         return providers.getProviderInfo(token.provide);
       });
@@ -148,13 +138,11 @@ export default class PluginRegistry extends RegistryAbstract<PluginEntry, Plugin
         await this.scope.hooks.registerHooks(false, ...hooks);
       }
       pluginInstance.get = providers.get.bind(providers) as any;
-      let dynamicProviders = rec.providers;
+      const dynamicProviders = rec.providers;
       if (dynamicProviders) {
-        await providers.addDynamicProviders(dynamicProviders)
+        await providers.addDynamicProviders(dynamicProviders);
       }
       this.instances.set(token, pluginInstance);
     }
   }
-
-
 }

@@ -37,7 +37,7 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
           this.graph.get(token)!.add(ScopeEntry);
         } else {
           if (!this.providers.get(d)) {
-            throw new Error(`Adapter ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+            throw new Error(`Flow ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
           }
           this.graph.get(token)!.add(d);
         }

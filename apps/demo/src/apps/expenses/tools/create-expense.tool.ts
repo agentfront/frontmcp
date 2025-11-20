@@ -5,7 +5,7 @@ import z from 'zod';
   name: 'create-expense',
   description: 'Create an expense',
   inputSchema: {
-    id: z.string().describe("The expense's id"),
+    id: z.string().min(1).describe("The expense's id"),
   },
   outputSchema: {
     ok: z.string(),

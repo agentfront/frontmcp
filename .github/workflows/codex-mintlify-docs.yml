@@ -176,7 +176,7 @@ jobs:
             - `docs/docs/**/*.md`
           - Shared global release notes:
             - `docs/updates.mdx`
-          - Navigation:
+          - Navigation (production):
             - `docs/docs.json`
           - Changelog:
             - `CHANGELOG.md`
@@ -218,6 +218,7 @@ jobs:
           You MUST:
           - Only modify the `"Documentation"` dropdown and its `versions` array.
           - **Do not** modify the `"Blog"` dropdown or any blog navigation.
+          - This is the production navigation file that will be published immediately.
 
           Versions:
           - The documentation dropdown has a `versions` array similar to:
@@ -435,13 +436,15 @@ jobs:
           body: |
             Codex proposed updates to:
             - **docs/updates.mdx** (Mintlify release notes)
-            - **docs/docs.json** (Mintlify navigation / versions)
+            - **docs/docs.json** (Mintlify navigation / versions - production)
             - **docs/docs/** (latest docs only)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
 
             for `v${{ steps.ctx.outputs.version }}` on branch `${{ steps.ctx.outputs.branch }}`.
+
+            Note: `docs/docs.json` is the production configuration and will be published directly.
 
             See `.codex-docs/apply.log` for validation details.
 
