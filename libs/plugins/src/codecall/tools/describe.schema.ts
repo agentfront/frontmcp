@@ -6,7 +6,7 @@ export const describeToolDescription = `Get detailed schemas and usage examples 
 
 WHEN TO USE:
 - After using codecall:search to find relevant tools
-- Before writing a code-call:execute script that uses those tools
+- Before writing a codecall:execute script that uses those tools
 - When you need to understand the exact input/output structure of a tool
 
 WHAT YOU GET:
@@ -46,7 +46,7 @@ export const describeToolOutputSchema = z.object({
   tools: z
     .array(
       z.object({
-        name: z.string().describe('Tool name to be used in callTool() within code-call:execute scripts'),
+        name: z.string().describe('Tool name to be used in callTool() within codecall:execute scripts'),
         appId: z.string().describe('The app ID this tool belongs to'),
         description: z.string().describe('Detailed description of what this tool does'),
         inputSchema: z.any().describe('JSON Schema object describing the tool input parameters'),
@@ -61,7 +61,7 @@ export const describeToolOutputSchema = z.object({
                 'JavaScript code example showing how to call this tool using callTool(). Format: const result = await callTool("tool:name", { ...params });',
               ),
           })
-          .describe('A practical example of how to use this tool in a code-call:execute script'),
+          .describe('A practical example of how to use this tool in a codecall:execute script'),
       }),
     )
     .describe('Array of tool descriptions with schemas and usage examples'),
