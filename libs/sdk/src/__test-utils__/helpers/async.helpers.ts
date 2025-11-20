@@ -6,10 +6,9 @@
 /**
  * Waits for a promise to settle and returns the result or error
  */
-export async function settled<T>(promise: Promise<T>): Promise<
-  | { status: 'fulfilled'; value: T }
-  | { status: 'rejected'; reason: any }
-> {
+export async function settled<T>(
+  promise: Promise<T>,
+): Promise<{ status: 'fulfilled'; value: T } | { status: 'rejected'; reason: any }> {
   try {
     const value = await promise;
     return { status: 'fulfilled', value };
@@ -23,7 +22,7 @@ export async function settled<T>(promise: Promise<T>): Promise<
  */
 export async function waitFor(
   condition: () => boolean | Promise<boolean>,
-  options: { timeout?: number; interval?: number } = {}
+  options: { timeout?: number; interval?: number } = {},
 ): Promise<void> {
   const { timeout = 5000, interval = 50 } = options;
   const start = Date.now();
@@ -69,11 +68,10 @@ export function createDeferred<T>() {
  */
 export async function expectToThrow<T>(
   fn: () => T | Promise<T>,
-  expectedError?: string | RegExp | (new (...args: any[]) => Error)
+  expectedError?: string | RegExp | (new (...args: any[]) => Error),
 ): Promise<Error> {
   try {
     await fn();
-    throw new Error('Expected function to throw an error, but it did not');
   } catch (error) {
     if (expectedError) {
       if (typeof expectedError === 'string') {
@@ -86,6 +84,8 @@ export async function expectToThrow<T>(
     }
     return error as Error;
   }
+
+  throw new Error('Expected function to throw an error, but it did not');
 }
 
 /**
