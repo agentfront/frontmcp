@@ -125,7 +125,7 @@ npx frontmcp template
 ```
 
 **Prompts & Answers:**
-```
+```text
 📦 Service owner/provider: slack
 🔧 Service/product name: api
 📂 Primary resource path: messages
@@ -133,7 +133,7 @@ npx frontmcp template
 ```
 
 **Generates:**
-```
+```text
 integrations/slack/api/
 ├── README.md                    # Slack API documentation
 ├── tools/

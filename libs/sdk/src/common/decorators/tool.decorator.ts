@@ -230,16 +230,13 @@ type __MustReturn<C extends __Ctor, Out> =
         'actual_return_type (unwrapped)': __Unwrap<__Return<C>>;
       };
 
-// Rewrapped constructor
-type __Rewrap<
-  C extends __Ctor,
-  InSchema extends ToolInputType,
-  OutSchema extends ToolOutputType,
-> = C extends abstract new (...a: __A<C>) => __R<C>
-  ? C & (abstract new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)
+// Rewrapped constructor with updated ToolContext generic params
+type __Rewrap<C extends __Ctor, In, Out> = C extends abstract new (...a: __A<C>) => __R<C>
+  ? C & (abstract new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
   : C extends new (...a: __A<C>) => __R<C>
-  ? C & (new (...a: __A<C>) => ToolContext<InSchema, OutSchema> & __R<C>)
+  ? C & (new (...a: __A<C>) => ToolContext<any, any, In, Out> & __R<C>)
   : never;
+
 declare module '@frontmcp/sdk' {
   // ---------- the decorator (overloads) ----------
 

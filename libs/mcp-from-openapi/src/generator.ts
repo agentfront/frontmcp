@@ -414,13 +414,20 @@ export class OpenAPIToolGenerator {
       metadata.servers = [{ url: this.options.baseUrl }];
     }
 
-    // Extract response status codes
-    if (outputSchema && outputSchema.oneOf) {
-      metadata.responseStatusCodes = outputSchema.oneOf
-        .map((schema: any) => schema['x-status-code'])
-        .filter(Boolean);
-    } else if (outputSchema?.['x-status-code']) {
-      metadata.responseStatusCodes = [outputSchema['x-status-code']];
+    // Extract response status codes (preserve 0 for default responses)
+    if (outputSchema && Array.isArray((outputSchema as any).oneOf)) {
+      const codes = (outputSchema as any).oneOf
+        .map((schema: any) => (schema as any)['x-status-code'])
+        .filter((code: unknown) => code !== undefined && code !== null);
+      if (codes.length > 0) {
+        metadata.responseStatusCodes = codes;
+      }
+    } else if (
+      outputSchema &&
+      (outputSchema as any)['x-status-code'] !== undefined &&
+      (outputSchema as any)['x-status-code'] !== null
+    ) {
+      metadata.responseStatusCodes = [(outputSchema as any)['x-status-code']];
     }
 
     // External docs

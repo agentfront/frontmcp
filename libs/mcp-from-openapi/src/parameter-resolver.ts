@@ -197,7 +197,7 @@ export class ParameterResolver {
         const fullName = prefix ? `${prefix}.${propName}` : propName;
         const isRequired = required && requiredFields.has(propName);
 
-        if (typeof propSchema === 'object' && !('$ref' in propSchema)) {
+        if (typeof propSchema === 'object') {
           const info: ParameterInfo = {
             name: fullName,
             location: 'body',
