@@ -67,25 +67,54 @@ export function toJSONSchema7(schema: SchemaObject | ReferenceObject): JSONSchem
   }
 
   // Handle OpenAPI 3.0 boolean exclusiveMaximum/exclusiveMinimum
-  const result: JSONSchema7 = { ...schema } as any;
+  // by converting them to JSON Schema Draft 7 numeric format
+  const { exclusiveMaximum, exclusiveMinimum, maximum, minimum, ...rest } = schema;
 
-  // Convert boolean exclusiveMaximum to number format (JSON Schema Draft 7)
-  if ('exclusiveMaximum' in schema && typeof schema.exclusiveMaximum === 'boolean') {
-    if (schema.exclusiveMaximum && 'maximum' in schema) {
-      result.exclusiveMaximum = schema.maximum as number;
-      delete result.maximum;
+  const result: Record<string, unknown> = { ...rest };
+
+  // Handle exclusiveMaximum conversion
+  if (typeof exclusiveMaximum === 'boolean') {
+    if (exclusiveMaximum && maximum !== undefined) {
+      // true + maximum present -> convert to numeric exclusiveMaximum
+      result.exclusiveMaximum = maximum;
+    } else if (maximum !== undefined) {
+      // false or true without maximum -> keep maximum only
+      result.maximum = maximum;
     }
+    // Boolean exclusiveMaximum is never added (invalid in JSON Schema 7)
+  } else if (exclusiveMaximum !== undefined) {
+    // Already numeric (OpenAPI 3.1) - keep as is
+    result.exclusiveMaximum = exclusiveMaximum;
+    if (maximum !== undefined) {
+      result.maximum = maximum;
+    }
+  } else if (maximum !== undefined) {
+    // No exclusiveMaximum, just maximum
+    result.maximum = maximum;
   }
 
-  // Convert boolean exclusiveMinimum to number format (JSON Schema Draft 7)
-  if ('exclusiveMinimum' in schema && typeof schema.exclusiveMinimum === 'boolean') {
-    if (schema.exclusiveMinimum && 'minimum' in schema) {
-      result.exclusiveMinimum = schema.minimum as number;
-      delete result.minimum;
+  // Handle exclusiveMinimum conversion
+  if (typeof exclusiveMinimum === 'boolean') {
+    if (exclusiveMinimum && minimum !== undefined) {
+      // true + minimum present -> convert to numeric exclusiveMinimum
+      result.exclusiveMinimum = minimum;
+    } else if (minimum !== undefined) {
+      // false or true without minimum -> keep minimum only
+      result.minimum = minimum;
     }
+    // Boolean exclusiveMinimum is never added (invalid in JSON Schema 7)
+  } else if (exclusiveMinimum !== undefined) {
+    // Already numeric (OpenAPI 3.1) - keep as is
+    result.exclusiveMinimum = exclusiveMinimum;
+    if (minimum !== undefined) {
+      result.minimum = minimum;
+    }
+  } else if (minimum !== undefined) {
+    // No exclusiveMinimum, just minimum
+    result.minimum = minimum;
   }
 
-  return result;
+  return result as JSONSchema7;
 }
 
 /**
