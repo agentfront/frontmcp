@@ -32,10 +32,16 @@ export default class PluginRegistry
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
   private readonly scope: Scope;
+  private readonly owner?: { kind: 'app' | 'plugin'; id: string; ref: Token };
 
-  constructor(providers: ProviderRegistry, list: PluginType[]) {
+  constructor(
+    providers: ProviderRegistry,
+    list: PluginType[],
+    owner?: { kind: 'app' | 'plugin'; id: string; ref: Token },
+  ) {
     super('PluginRegistry', providers, list);
     this.scope = providers.getActiveScope();
+    this.owner = owner;
   }
 
   getPlugins(): PluginEntry[] {
@@ -80,7 +86,14 @@ export default class PluginRegistry
       const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
 
-      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? []);
+      // Pass the owner context to nested plugins (plugins can be owned by apps or other plugins)
+      const pluginOwner = this.owner || {
+        kind: 'plugin' as const,
+        id: rec.metadata.name,
+        ref: token,
+      };
+
+      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], pluginOwner);
       await plugins.ready;
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
@@ -135,7 +148,15 @@ export default class PluginRegistry
 
       const hooks = normalizeHooksFromCls(pluginInstance);
       if (hooks.length > 0) {
-        await this.scope.hooks.registerHooks(false, ...hooks);
+        // Add owner information to each hook before registering
+        const hooksWithOwner = hooks.map((hook) => ({
+          ...hook,
+          metadata: {
+            ...hook.metadata,
+            owner: this.owner,
+          },
+        }));
+        await this.scope.hooks.registerHooks(false, ...hooksWithOwner);
       }
       pluginInstance.get = providers.get.bind(providers) as any;
       const dynamicProviders = rec.providers;

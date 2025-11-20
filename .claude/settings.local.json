@@ -9,6 +9,7 @@
       "Bash(npx nx lint:*)",
       "Bash(cp:*)",
       "Bash(chmod:*)",
+      "Bash(npx nx run:*)",
       "Bash(nx test:*)"
     ],
     "deny": [],

@@ -11,14 +11,15 @@ import {
   HookType,
   ScopeEntry,
   Token,
-} from "../common";
-import {RegistryAbstract, RegistryBuildMapResult} from "../regsitry";
-import ProviderRegistry from "../provider/provider.registry";
-import {HookInstance} from "./hook.instance";
+} from '../common';
+import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import ProviderRegistry from '../provider/provider.registry';
+import { HookInstance } from './hook.instance';
 
 export default class HookRegistry
   extends RegistryAbstract<HookEntry, HookRecord, HookType[]>
-  implements HookRegistryInterface {
+  implements HookRegistryInterface
+{
   scope: ScopeEntry;
 
   /** Historical records by class (kept if you still want access to raw records) */
@@ -30,7 +31,7 @@ export default class HookRegistry
   private hooksByFlowStage: Map<FlowName, Map<string, HookEntry[]>> = new Map();
 
   constructor(providers: ProviderRegistry, list: HookType[]) {
-    super("HookRegistry", providers, list);
+    super('HookRegistry', providers, list);
     this.scope = this.providers.getActiveScope();
   }
 
@@ -42,7 +43,7 @@ export default class HookRegistry
      * No need to build graph for hooks,
      * hooks are injected by other tokens
      */
-    return {tokens, defs, graph};
+    return { tokens, defs, graph };
   }
 
   protected buildGraph() {
@@ -62,7 +63,7 @@ export default class HookRegistry
   }
 
   /** Priority helper (default 0) */
-  private getPriority(entry: Pick<HookEntry, "metadata"> | Pick<HookRecord, "metadata">): number {
+  private getPriority(entry: Pick<HookEntry, 'metadata'> | Pick<HookRecord, 'metadata'>): number {
     return entry.metadata?.priority ?? 0;
   }
 
@@ -123,8 +124,7 @@ export default class HookRegistry
 
     // Build fast indexes of *instances*, sorted by priority
     const entry = this.instances.get(token)!;
-    const {flow, stage, target} = rec.metadata;
-
+    const { flow, stage, target } = rec.metadata;
 
     if (embedded) {
       this.indexByClass(target.constructor ?? target, entry);
@@ -136,7 +136,7 @@ export default class HookRegistry
     return instance.ready;
   }
 
-  registerHooks(embedded:boolean,...records: HookRecord[]) {
+  registerHooks(embedded: boolean, ...records: HookRecord[]) {
     const readyArr: Promise<void>[] = [];
     for (const record of records) {
       this.defs.set(record.provide, record);
@@ -145,6 +145,22 @@ export default class HookRegistry
       readyArr.push(this.initializeOne(embedded, record.provide));
     }
     return Promise.all(readyArr);
+  }
+
+  /** Hooks for a given *flow*, filtered by owner if provided, sorted by priority (desc). */
+  getFlowHooksForOwner<Name extends FlowName>(
+    flow: Name,
+    ownerId?: string,
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
+    const allHooks = this.getFlowHooks(flow);
+    if (!ownerId) {
+      return allHooks;
+    }
+    // Filter hooks to only include those that belong to the same owner or have no owner (global hooks)
+    return allHooks.filter((hook) => {
+      const hookOwner = hook.metadata.owner;
+      return !hookOwner || hookOwner.id === ownerId;
+    });
   }
 
   /** Hooks defined on a given *class* (metadata.target), sorted by priority (desc). */
@@ -159,7 +175,7 @@ export default class HookRegistry
 
   /** Hooks for a given *flow*, sorted by priority (desc). */
   getFlowHooks<Name extends FlowName>(
-    flow: Name
+    flow: Name,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
     const list = this.hooksByFlow.get(flow) ?? [];
     return list as HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
@@ -168,7 +184,7 @@ export default class HookRegistry
   /** Hooks for a specific *flow + stage*, sorted by priority (desc). */
   getFlowStageHooks<Name extends FlowName>(
     flow: Name,
-    stage: FlowStagesOf<Name> | string
+    stage: FlowStagesOf<Name> | string,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
     const byStage = this.hooksByFlowStage.get(flow);
     const list = byStage?.get(String(stage)) ?? [];
