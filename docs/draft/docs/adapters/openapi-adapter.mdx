@@ -491,11 +491,13 @@ export default class ExpenseMcpApp {}
   </Card>
 
 {' '}
+
 <Card title="Never Hardcode Credentials" icon="triangle-exclamation">
   Always store credentials in environment variables or secrets manager. Never commit credentials to source control.
 </Card>
 
 {' '}
+
 <Card title="Avoid includeSecurityInInput" icon="xmark">
   Setting `generateOptions.includeSecurityInInput: true` exposes auth fields to MCP clients (**HIGH risk**). Only use
   for development/testing.
@@ -633,11 +635,13 @@ interface AuthInfo {
   </Card>
 
 {' '}
+
 <Card title="Example OpenAPI Spec" icon="file-code" href="https://frontmcp-test.proxy.beeceptor.com/openapi.json">
   OpenAPI spec used in the demo application
 </Card>
 
 {' '}
+
 <Card title="Generator Library" icon="npm" href="https://www.npmjs.com/package/mcp-from-openapi">
   Underlying library for OpenAPI to MCP conversion
 </Card>
