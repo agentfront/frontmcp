@@ -5,6 +5,7 @@ import {
   describeToolInputSchema,
   DescribeToolOutput,
   describeToolOutputSchema,
+  describeToolDescription,
 } from './describe.schema';
 
 @Tool({
@@ -13,34 +14,7 @@ import {
     ttl: 60, // 1 minute
     slideWindow: false,
   },
-  description: `Get detailed schemas and usage examples for specific tools discovered through search.
-
-WHEN TO USE:
-- After using codecall:search to find relevant tools
-- Before writing a code-call:execute script that uses those tools
-- When you need to understand the exact input/output structure of a tool
-
-WHAT YOU GET:
-- Input schema: What parameters the tool accepts
-- Output schema: What data structure the tool returns
-- Usage example: Ready-to-use JavaScript code showing how to call the tool with callTool()
-- App context: Which app the tool belongs to
-
-WORKFLOW:
-1. codecall:search → Discover tool names
-2. codecall:describe → Get schemas and examples for those tools
-3. codecall:execute → Write and run JavaScript that calls the tools
-
-IMPORTANT:
-- Only request tools you found via codecall:search
-- The usage examples show the exact callTool() syntax you'll use in codecall:execute
-- If a tool is not found, check the notFound array for typos in tool names
-
-EXAMPLE:
-After searching and finding "users:list", describe it to see:
-- What input parameters it needs (e.g., { limit: number, offset: number })
-- What output it returns (e.g., { items: User[], total: number })
-- How to call it: const users = await callTool('users:list', { limit: 10 });`,
+  description: describeToolDescription,
   inputSchema: describeToolInputSchema,
   outputSchema: describeToolOutputSchema,
 })

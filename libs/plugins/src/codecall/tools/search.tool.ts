@@ -1,6 +1,13 @@
 // file: libs/plugins/src/codecall/tools/search.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { SearchToolInput, searchToolInputSchema, SearchToolOutput, searchToolOutputSchema } from './search.schema';
+import {
+  SearchToolInput,
+  searchToolInputSchema,
+  SearchToolOutput,
+  searchToolOutputSchema,
+  searchToolDescription,
+} from './search.schema';
+import { invokeToolDescription } from './invoke.schema';
 
 @Tool({
   name: 'codecall:search',
@@ -8,27 +15,7 @@ import { SearchToolInput, searchToolInputSchema, SearchToolOutput, searchToolOut
     ttl: 60, // 1 minute
     slideWindow: false,
   },
-  description: `Search for tools that match your current task requirements. Use this to discover what tools are available before calling them.
-
-WORKFLOW GUIDELINES:
-1. FIRST TIME SEARCH: When starting a new task, search for relevant tools using a descriptive query
-2. AVOID RE-SEARCHING: Do NOT search for tools you have already discovered in this conversation
-3. USE excludeToolNames: When searching again, ALWAYS include tool names you've already fetched to avoid redundant results
-4. NARROW YOUR SCOPE: Use filter.appIds to search within specific apps (e.g., ["user", "billing"]) when you know the domain
-5. HANDLE WARNINGS: Check the warnings array - if excluded tools don't exist, you may have made an assumption error
-
-SEARCH STRATEGY:
-- Start broad, then narrow down with filters
-- Use specific, action-oriented queries (e.g., "get user profile", "list invoices")
-- Track tool names you discover and exclude them in subsequent searches
-- Only re-search if you need different functionality or the describe tool failed for a specific tool
-
-EXAMPLE FLOW:
-1. Search: "get user information" → Get results
-2. Describe: Check schemas for found tools
-3. Later search: "update user settings" with excludeToolNames: ["users:getById", "users:list"] → Get NEW tools only
-
-The search returns tools sorted by relevance with scores. Higher scores mean better matches to your query.`,
+  description: searchToolDescription,
   inputSchema: searchToolInputSchema,
   outputSchema: searchToolOutputSchema,
 })
