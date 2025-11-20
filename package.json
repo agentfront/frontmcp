@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
-    "docs:local": "bash scripts/dev-docs.sh"
+    "docs:local": "bash scripts/dev-docs.sh",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
   },
   "private": true,
   "dependencies": {
@@ -13,15 +17,16 @@
     "axios": "^1.6.0",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",
+    "json-schema-to-zod-v3": "1.0.0",
     "openapi-mcp-generator": "^3.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
     "zod": "^3.25.76",
-    "json-schema-to-zod-v3": "1.0.0",
     "zod-to-json-schema": "^3.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",
+    "@mdx-js/mdx": "^3.1.1",
     "@nx/eslint": "21.6.3",
     "@nx/eslint-plugin": "21.6.3",
     "@nx/jest": "21.6.3",
@@ -39,10 +44,13 @@
     "@types/node": "^22.0.0",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^10.0.0",
+    "husky": "^9.1.7",
     "jest": "^30.0.2",
     "jest-environment-node": "^30.0.2",
     "jest-util": "^30.0.2",
     "jsonc-eslint-parser": "^2.1.0",
+    "lint-staged": "^16.2.7",
+    "mint": "^4.2.202",
     "nx": "21.6.3",
     "prettier": "^2.6.2",
     "ts-jest": "^29.4.0",
@@ -50,9 +58,7 @@
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
-    "webpack-cli": "^5.1.4",
-    "@mdx-js/mdx": "^3.1.1",
-    "mint": "^4.2.202"
+    "webpack-cli": "^5.1.4"
   },
   "workspaces": [
     "apps/*",
