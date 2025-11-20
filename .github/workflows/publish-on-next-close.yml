@@ -370,20 +370,20 @@ jobs:
           done
 
       # -------------------------------
-      # 9) Push version bump commit
+      # 9) Push release commits (version bumps & draft removals)
       # -------------------------------
-      - name: Push version bumps
+      - name: Push version bumps and draft removals
         if: ${{ steps.to_publish.outputs.projects != '' }}
         shell: bash
         run: |
           set -euo pipefail
 
-          # Check if there are commits to push
-          if git log origin/${{ github.event.pull_request.base.ref }}..HEAD --oneline | grep -q "chore: bump versions"; then
+          # Check if there are any commits to push
+          if [ -n "$(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --oneline)" ]; then
             git push origin ${{ github.event.pull_request.base.ref }}
-            echo "✅ Version bumps pushed"
+            echo "✅ Commits pushed"
           else
-            echo "ℹ️  No version bump commits to push"
+            echo "ℹ️  No commits to push"
           fi
 
       # -------------------------------
