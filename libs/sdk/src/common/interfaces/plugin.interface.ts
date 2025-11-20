@@ -15,5 +15,5 @@ export type PluginType<Provide extends PluginInterface = PluginInterface> =
   | Type<Provide>
   | PluginClassType<Provide>
   | PluginValueType<Provide>
-  | PluginFactoryType<Provide, any[]>
+  | PluginFactoryType<Provide, readonly any[]>
 
