@@ -1,0 +1,38 @@
+name: On Push
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NX_DAEMON: "false"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run linter
+        run: npx nx run-many -t lint
+        continue-on-error: true
+
+      - name: Run prettier
+        run: npx prettier --check .
+        continue-on-error: true
+
+      - name: Build libraries
+        run: npx nx run-many -t build
+
+      - name: Test libraries
+        run: npx nx run-many -t test --passWithNoTests

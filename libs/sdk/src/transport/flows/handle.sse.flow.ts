@@ -1,28 +1,28 @@
 import {
-  Flow, httpInputSchema, FlowRunOptions, httpOutputSchema, FlowPlan,
-  FlowBase, FlowHooksOf,
-  sessionIdSchema, httpRespond, ServerRequestTokens, Authorization, normalizeEntryPrefix, normalizeScopeBase,
+  Flow,
+  httpInputSchema,
+  FlowRunOptions,
+  httpOutputSchema,
+  FlowPlan,
+  FlowBase,
+  FlowHooksOf,
+  sessionIdSchema,
+  httpRespond,
+  ServerRequestTokens,
+  Authorization,
+  normalizeEntryPrefix,
+  normalizeScopeBase,
 } from '../../common';
-import {z} from 'zod';
-import {Scope} from '../../scope';
-import {createSessionId} from '../../auth/session/utils/session-id.utils';
+import { z } from 'zod';
+import { Scope } from '../../scope';
+import { createSessionId } from '../../auth/session/utils/session-id.utils';
 
 export const plan = {
-  pre: [
-    'parseInput',
-    'router',
-  ],
-  execute: [
-    'onInitialize',
-    'onMessage',
-    'onElicitResult',
-  ],
+  pre: ['parseInput', 'router'],
+  execute: ['onInitialize', 'onMessage', 'onElicitResult'],
   post: [],
-  finalize: [
-    'cleanup',
-  ],
+  finalize: ['cleanup'],
 } as const satisfies FlowPlan<string>;
-
 
 export const stateSchema = z.object({
   token: z.string(),
@@ -31,8 +31,7 @@ export const stateSchema = z.object({
 });
 
 const name = 'handle:legacy-sse' as const;
-const {Stage} = FlowHooksOf(name);
-
+const { Stage } = FlowHooksOf(name);
 
 declare global {
   interface ExtendFlows {
@@ -54,23 +53,24 @@ declare global {
   plan,
 })
 export default class HandleSseFlow extends FlowBase<typeof name> {
-
   @Stage('parseInput')
   async paseInput() {
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
 
-    let {token, session} = request[ServerRequestTokens.auth] as Authorization;
+    const authorization = request[ServerRequestTokens.auth] as Authorization;
+    const { token } = authorization;
+    let { session } = authorization;
 
     if (!session) {
       session = createSessionId('legacy-sse', token);
       request[ServerRequestTokens.auth].session = session;
     }
-    this.state.set(stateSchema.parse({token, session}));
+    this.state.set(stateSchema.parse({ token, session }));
   }
 
   @Stage('router')
   async router() {
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
     const scope = this.scope as Scope;
     const requestPath = normalizeEntryPrefix(request.path);
     const prefix = normalizeEntryPrefix(scope.entryPath);
@@ -83,20 +83,20 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
   }
 
   @Stage('onInitialize', {
-    filter: ({state: {requestType}}) => requestType === 'initialize',
+    filter: ({ state: { requestType } }) => requestType === 'initialize',
   })
   async onInitialize() {
     const transportService = (this.scope as Scope).transportService;
 
-    const {request, response} = this.rawInput;
-    const {token, session} = this.state.required;
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
     const transport = await transportService.createTransporter('sse', token, session.id, response);
     await transport.initialize(request, response);
     this.handled();
   }
 
   @Stage('onElicitResult', {
-    filter: ({state: {requestType}}) => requestType === 'elicitResult',
+    filter: ({ state: { requestType } }) => requestType === 'elicitResult',
   })
   async onElicitResult() {
     // const transport = await transportService.getTransporter('sse', token, session.id);
@@ -109,13 +109,13 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
   }
 
   @Stage('onMessage', {
-    filter: ({state: {requestType}}) => requestType === 'message',
+    filter: ({ state: { requestType } }) => requestType === 'message',
   })
   async onMessage() {
     const transportService = (this.scope as Scope).transportService;
 
-    const {request, response} = this.rawInput;
-    const {token, session} = this.state.required;
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
     const transport = await transportService.getTransporter('sse', token, session.id);
     if (!transport) {
       this.respond(httpRespond.rpcError('session not initialized'));
@@ -124,6 +124,4 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     await transport.handleRequest(request, response);
     this.handled();
   }
-
-
 }

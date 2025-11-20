@@ -7,7 +7,7 @@
     "strict": false
   },
   "theme": "almond",
-  "favicon": "/assets/logo/favicon-32x32.png",
+  "favicon": "/assets/logo/logo.light.png",
   "logo": {
     "light": "/assets/logo/frontmcp.light.png",
     "dark": "/assets/logo/frontmcp.dark.png"
@@ -18,13 +18,7 @@
     "dark": "#15803D"
   },
   "contextual": {
-    "options": [
-      "copy",
-      "chatgpt",
-      "cursor",
-      "mcp",
-      "view"
-    ]
+    "options": ["copy", "chatgpt", "cursor", "mcp", "view"]
   },
   "interaction": {
     "drilldown": true
@@ -112,10 +106,7 @@
               },
               {
                 "group": "Deployment",
-                "pages": [
-                  "docs/deployment/local-dev-server",
-                  "docs/deployment/production-build"
-                ]
+                "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
               },
               {
                 "group": "Guides",
@@ -127,9 +118,7 @@
               },
               {
                 "group": "Adapters",
-                "pages": [
-                  "docs/adapters/openapi-adapter"
-                ]
+                "pages": ["docs/adapters/openapi-adapter"]
               }
             ]
           },
@@ -185,16 +174,11 @@
               },
               {
                 "group": "Deployment",
-                "pages": [
-                  "docs/v/0.2/deployment/local-dev-server",
-                  "docs/v/0.2/deployment/production-build"
-                ]
+                "pages": ["docs/v/0.2/deployment/local-dev-server", "docs/v/0.2/deployment/production-build"]
               },
               {
                 "group": "Adapters",
-                "pages": [
-                  "docs/v/0.2/adapters/openapi-adapter"
-                ]
+                "pages": ["docs/v/0.2/adapters/openapi-adapter"]
               }
             ]
           },
@@ -250,16 +234,77 @@
               },
               {
                 "group": "Deployment",
+                "pages": ["docs/v/0.1/deployment/local-dev-server", "docs/v/0.1/deployment/production-build"]
+              },
+              {
+                "group": "Adapters",
+                "pages": ["docs/v/0.1/adapters/openapi-adapter"]
+              }
+            ]
+          },
+          {
+            "version": "main (draft)",
+            "hidden": true,
+            "default": false,
+            "groups": [
+              {
+                "tag": "latest",
+                "group": "Get Started",
                 "pages": [
-                  "docs/v/0.1/deployment/local-dev-server",
-                  "docs/v/0.1/deployment/production-build"
+                  "draft/docs/getting-started/welcome",
+                  "draft/docs/getting-started/installation",
+                  "draft/docs/getting-started/quickstart",
+                  "updates"
+                ]
+              },
+              {
+                "group": "Servers",
+                "pages": [
+                  "draft/docs/servers/server",
+                  {
+                    "group": "Core Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "draft/docs/servers/apps",
+                      "draft/docs/servers/tools",
+                      "draft/docs/servers/resources",
+                      "draft/docs/servers/prompts"
+                    ]
+                  },
+                  {
+                    "group": "Authentication",
+                    "icon": "shield-check",
+                    "pages": [
+                      "draft/docs/servers/authentication/overview",
+                      "draft/docs/servers/authentication/token",
+                      "draft/docs/servers/authentication/remote",
+                      "draft/docs/servers/authentication/remote-proxy",
+                      "draft/docs/servers/authentication/local"
+                    ]
+                  },
+                  {
+                    "group": "Extensibility Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "draft/docs/servers/extensibility/providers",
+                      "draft/docs/servers/extensibility/adapters",
+                      "draft/docs/servers/extensibility/plugins",
+                      "draft/docs/servers/extensibility/logging"
+                    ]
+                  }
                 ]
               },
               {
                 "group": "Adapters",
-                "pages": [
-                  "docs/v/0.1/adapters/openapi-adapter"
-                ]
+                "pages": ["draft/docs/adapters/openapi-adapter"]
+              },
+              {
+                "group": "Plugins",
+                "pages": ["draft/docs/plugins/cache-plugin", "draft/docs/plugins/codecall-plugin"]
+              },
+              {
+                "group": "Deployment",
+                "pages": ["draft/docs/deployment/local-dev-server", "draft/docs/deployment/production-build"]
               }
             ]
           }
@@ -271,10 +316,7 @@
         "groups": [
           {
             "group": "General",
-            "pages": [
-              "blog/index",
-              "blog/external-links"
-            ]
+            "pages": ["blog/index", "blog/external-links"]
           },
           {
             "group": "November 2025",

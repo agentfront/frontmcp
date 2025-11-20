@@ -1,16 +1,19 @@
-import {z} from 'zod';
-import {RawZodShape} from '../types';
-import type {JSONSchema7} from 'json-schema';
+import { z, ZodObject } from 'zod';
+import { RawZodShape } from '../types';
+import type { JSONSchema7 } from 'json-schema';
+import {
+  ImageContentSchema,
+  AudioContentSchema,
+  ResourceLinkSchema,
+  EmbeddedResourceSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 declare global {
   /**
    * Declarative metadata extends to the an McpTool decorator.
    */
-  interface ExtendFrontMcpToolMetadata {
-
-  }
+  interface ExtendFrontMcpToolMetadata {}
 }
-
 
 export interface ToolAnnotations {
   [x: string]: unknown;
@@ -54,20 +57,86 @@ export interface ToolAnnotations {
   openWorldHint?: boolean;
 }
 
+const mcpToolAnnotationsSchema = z
+  .object({
+    title: z.string().optional(),
+    readOnlyHint: z.boolean().optional(),
+    destructiveHint: z.boolean().optional(),
+    idempotentHint: z.boolean().optional(),
+    openWorldHint: z.boolean().optional(),
+  } satisfies RawZodShape<ToolAnnotations>)
+  .passthrough();
 
-const mcpToolAnnotationsSchema = z.object({
-  title: z.string().optional(),
-  readOnlyHint: z.boolean().optional(),
-  destructiveHint: z.boolean().optional(),
-  idempotentHint: z.boolean().optional(),
-  openWorldHint: z.boolean().optional(),
-} satisfies RawZodShape<ToolAnnotations>).passthrough();
+/**
+ * Tool response type text: include if outputSchema is zod primitive types
+ */
+type PrimitiveOutputType =
+  | 'string'
+  | 'number'
+  | 'date'
+  | 'boolean'
+  | z.ZodString
+  | z.ZodNumber
+  | z.ZodBoolean
+  | z.ZodBigInt
+  | z.ZodDate;
+/**
+ * Tool response type image, will use the ImageContentSchema from MCP types
+ */
+type ImageOutputType = 'image';
+export const ImageOutputSchema = ImageContentSchema;
+export type ImageOutput = z.output<typeof ImageOutputSchema>;
 
+/**
+ * Tool response type audio, will use the AudioContentSchema from MCP types
+ */
+type AudioOutputType = 'audio';
+export const AudioOutputSchema = AudioContentSchema;
+export type AudioOutput = z.output<typeof AudioOutputSchema>;
+
+/**
+ * Tool response type resource, will use the EmbeddedResourceSchema from MCP types
+ */
+type ResourceOutputType = 'resource';
+export const ResourceOutputSchema = EmbeddedResourceSchema;
+export type ResourceOutput = z.output<typeof ResourceOutputSchema>;
+
+/**
+ * Tool response type resource_link, will use the ResourceLinkSchema from MCP types
+ */
+type ResourceLinkOutputType = 'resource_link';
+export const ResourceLinkOutputSchema = ResourceLinkSchema;
+export type ResourceLinkOutput = z.output<typeof ResourceLinkOutputSchema>;
+
+/**
+ * Tool response type json, ZodRawShape for fast usage
+ */
+type StructuredOutputType =
+  | z.ZodRawShape
+  | z.ZodObject<any>
+  | z.ZodArray<any>
+  | z.ZodUnion<[ZodObject<any>, ...ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<any, any>;
+
+export type ToolSingleOutputType =
+  | PrimitiveOutputType
+  | ImageOutputType
+  | AudioOutputType
+  | ResourceOutputType
+  | ResourceLinkOutputType
+  | StructuredOutputType;
+
+/**
+ * Default default tool schema is {}
+ */
+export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[] | undefined;
+export type ToolInputType = z.ZodRawShape;
 
 /**
  * Declarative metadata describing what an McpTool contributes.
  */
-export interface ToolMetadata<In = z.ZodRawShape, Out = z.ZodRawShape> extends ExtendFrontMcpToolMetadata {
+export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOutputType = ToolOutputType>
+  extends ExtendFrontMcpToolMetadata {
   /**
    * Optional unique identifier for the tool.
    * If omitted, a consumer may derive an ID from the class or file name.
@@ -88,7 +157,7 @@ export interface ToolMetadata<In = z.ZodRawShape, Out = z.ZodRawShape> extends E
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
    */
-  inputSchema: In;
+  inputSchema: InSchema;
   /**
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
@@ -98,7 +167,7 @@ export interface ToolMetadata<In = z.ZodRawShape, Out = z.ZodRawShape> extends E
   /**
    * Zod schema describing the structure of the tool's successful output.
    */
-  outputSchema?: Out;
+  outputSchema?: OutSchema;
 
   /**
    * Optional list of tags/labels that categorize the tool for discovery and filtering.
@@ -117,14 +186,49 @@ export interface ToolMetadata<In = z.ZodRawShape, Out = z.ZodRawShape> extends E
 }
 
 
-export const frontMcpToolMetadataSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  inputSchema: z.instanceof(Object),
-  rawInputSchema: z.any().optional(),
-  outputSchema: z.instanceof(Object).optional(),
-  tags: z.array(z.string().min(1)).optional(),
-  annotations: mcpToolAnnotationsSchema.optional(),
-  hideFromDiscovery: z.boolean().optional().default(false),
-} satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>).passthrough();
+
+/**
+ * Runtime schema for ToolSingleOutputType:
+ *  - literals ('string', 'image', ...)
+ *  - any Zod schema (ZodObject, ZodArray, etc.)
+ *  - raw shapes (Record<string, ZodTypeAny>)
+ */
+
+const primitiveOutputLiteralSchema = z.enum(['string', 'number', 'date', 'boolean']);
+const specialOutputLiteralSchema = z.enum(['image', 'audio', 'resource', 'resource_link']);
+
+const outputLiteralSchema = z.union([
+  primitiveOutputLiteralSchema,
+  specialOutputLiteralSchema,
+]);
+
+// Any Zod schema instance (object, array, union, etc.)
+const zodSchemaInstanceSchema = z.instanceof(z.ZodType);
+
+// Raw shape: { field: z.string(), ... }
+const zodRawShapeSchema = z.record(zodSchemaInstanceSchema);
+
+const toolSingleOutputSchema = z.union([
+  outputLiteralSchema,
+  zodSchemaInstanceSchema,
+  zodRawShapeSchema,
+]);
+
+// ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[]
+const toolOutputSchema = z.union([
+  toolSingleOutputSchema,
+  z.array(toolSingleOutputSchema),
+]);
+export const frontMcpToolMetadataSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    inputSchema: z.instanceof(Object),
+    rawInputSchema: z.any().optional(),
+    outputSchema: toolOutputSchema.optional(),
+    tags: z.array(z.string().min(1)).optional(),
+    annotations: mcpToolAnnotationsSchema.optional(),
+    hideFromDiscovery: z.boolean().optional().default(false),
+  } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
+  .passthrough();

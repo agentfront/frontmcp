@@ -1,15 +1,14 @@
-import {randomUUID} from "crypto";
-import {FuncType, Token, Type} from "./base.interface";
-import {ProviderRegistryInterface} from "./internal";
-import {ToolMetadata} from "../metadata";
-import {FrontMcpLogger} from "./logger.interface";
-import {FlowControl} from "./flow.interface";
-import {URL} from "url";
-import {AuthInfo} from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { randomUUID } from 'crypto';
+import { FuncType, Token, Type } from './base.interface';
+import { ProviderRegistryInterface } from './internal';
+import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
+import { FrontMcpLogger } from './logger.interface';
+import { FlowControl } from './flow.interface';
+import { URL } from 'url';
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ToolInputOf, ToolOutputOf } from '../decorators';
 
-export type ToolType<T = any> =
-  | Type<T>
-  | FuncType<T>
+export type ToolType<T = any> = Type<T> | FuncType<T>;
 
 type HistoryEntry<T> = {
   at: number;
@@ -22,11 +21,16 @@ export type ToolCtorArgs<In> = {
   metadata: ToolMetadata;
   input: In;
   providers: ProviderRegistryInterface;
-  logger: FrontMcpLogger
+  logger: FrontMcpLogger;
   authInfo: AuthInfo;
-}
+};
 
-export abstract class ToolContext<In = any, Out= any> {
+export abstract class ToolContext<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+  In = ToolInputOf<{ inputSchema: InSchema }>,
+  Out = ToolOutputOf<{ outputSchema: OutSchema }>,
+> {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;
 
@@ -52,9 +56,8 @@ export abstract class ToolContext<In = any, Out= any> {
   private readonly _inputHistory: HistoryEntry<In>[] = [];
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
-
   constructor(args: ToolCtorArgs<In>) {
-    const {metadata, input, providers, logger, authInfo} = args;
+    const { metadata, input, providers, logger, authInfo } = args;
     this.runId = randomUUID();
     this.toolName = metadata.name;
     this.toolId = metadata.id ?? metadata.name;
@@ -103,7 +106,7 @@ export abstract class ToolContext<In = any, Out= any> {
 
   public set output(v: Out | undefined) {
     this._output = v;
-    this._outputHistory.push({at: Date.now(), stage: this.activeStage, value: v,});
+    this._outputHistory.push({ at: Date.now(), stage: this.activeStage, value: v });
   }
 
   public get outputHistory(): ReadonlyArray<HistoryEntry<Out>> {
@@ -130,4 +133,3 @@ export abstract class ToolContext<In = any, Out= any> {
     return fetch(input, init);
   }
 }
-

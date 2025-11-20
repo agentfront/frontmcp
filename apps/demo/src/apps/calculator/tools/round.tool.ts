@@ -1,5 +1,5 @@
-import {Tool, ToolContext} from "@frontmcp/sdk";
-import {z} from "zod";
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
 
 @Tool({
   name: 'round',
@@ -8,16 +8,15 @@ import {z} from "zod";
     x: z.number(),
     digits: z.number().int().min(0).max(15).optional(),
   },
-  outputSchema: {result: z.number()}
+  outputSchema: 'number',
 })
 export default class RoundTool extends ToolContext {
-  async execute(input: { x: number, digits?: number }) {
+  async execute(input: { x: number; digits?: number }) {
     const { x, digits } = input;
     if (digits === undefined) {
-      return { result: Math.round(x) };
+      return Math.round(x);
     }
     const factor = Math.pow(10, digits);
-    const result = Math.round((x + Number.EPSILON) * factor) / factor;
-    return { result };
+    return Math.round((x + Number.EPSILON) * factor) / factor;
   }
 }

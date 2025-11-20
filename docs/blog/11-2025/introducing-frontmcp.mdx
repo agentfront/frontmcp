@@ -4,16 +4,17 @@ description: The TypeScript-first framework for building production-grade MCP se
 mode: center
 ---
 
-<img className='blog-full-image' src="../../assets/logo/banner.dark.png"/>
+<img className="blog-full-image light-img" src="../../assets/logo/banner.light.png" />
+<img className="blog-full-image dark-img" src="../../assets/logo/banner.dark.png" />
 
 ## Why another MCP framework?
 
 If you’ve tried wiring up the Model Context Protocol (MCP) by hand, you already know the drill:
 
-* Define JSON schemas manually
-* Hand-roll HTTP endpoints
-* Keep auth, sessions, logging and transports consistent across tools
-* Copy-paste boilerplate just to expose “one more” operation ([GitHub][1])
+- Define JSON schemas manually
+- Hand-roll HTTP endpoints
+- Keep auth, sessions, logging and transports consistent across tools
+- Copy-paste boilerplate just to expose “one more” operation ([GitHub][1])
 
 That’s fine for a weekend experiment, but painful for a real agentic backend.
 
@@ -22,8 +23,8 @@ That’s fine for a weekend experiment, but painful for a real agentic backend.
 FrontMCP is a **TypeScript-first framework for MCP**: you describe servers, apps, tools, resources and prompts with decorators, and the framework handles protocol details, transport, dependency injection, sessions/auth, and execution flow for you. ([FrontMCP][2])
 
 <Note>
-    If you’re new to MCP: it’s an open specification for how LLM clients talk to tools and data sources in a consistent
-    way. FrontMCP gives you a batteries-included way to implement those servers in TypeScript.
+  If you’re new to MCP: it’s an open specification for how LLM clients talk to tools and data sources in a consistent
+  way. FrontMCP gives you a batteries-included way to implement those servers in TypeScript.
 </Note>
 
 ---
@@ -34,14 +35,12 @@ FrontMCP is a **TypeScript-first framework for MCP**: you describe servers, apps
 
 You write clean, typed code; FrontMCP takes care of:
 
-* Protocol & transport (MCP Streamable HTTP)
-* Sessions & streaming
-* Auth & security (remote and local OAuth)
-* Logging, hooks, and extensibility via adapters and plugins ([FrontMCP][2])
+- Protocol & transport (MCP Streamable HTTP)
+- Sessions & streaming
+- Auth & security (remote and local OAuth)
+- Logging, hooks, and extensibility via adapters and plugins ([FrontMCP][2])
 
-<Tip>
-    Already sold? You can skip ahead to the Quickstart docs and have a server running in a few minutes.
-</Tip>
+<Tip>Already sold? You can skip ahead to the Quickstart docs and have a server running in a few minutes.</Tip>
 
 ---
 
@@ -70,6 +69,7 @@ You write clean, typed code; FrontMCP takes care of:
         turning
         your codebase into a tangle of middleware.
     </Card>
+
 </Columns>
 
 ---
@@ -108,6 +108,7 @@ At the heart of FrontMCP there are a few concepts you’ll see everywhere in the
         and <b>plugins</b> layer on cross-cutting behavior such as caching or tracing—without polluting your business
         logic.
     </Step>
+
 </Steps>
 
 ---
@@ -122,41 +123,38 @@ import { App, FrontMcp, Tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Tool({
-name: 'greet',
-    description: 'Greets a user by name',
-    inputSchema: z.object({name: z.string()}),
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: z.object({ name: z.string() }),
 })
 class GreetTool {
-async execute({name}: {
-    name: string
-}) {
+  async execute({ name }: { name: string }) {
     return `Hello, ${name}!`;
-}
+  }
 }
 
 @App({
-id: 'hello',
-    name: 'Hello App',
-    tools: [GreetTool],
+  id: 'hello',
+  name: 'Hello App',
+  tools: [GreetTool],
 })
 class HelloApp {}
 
 @FrontMcp({
-info: {
-    name: 'Hello MCP', version
-:
-    '0.1.0'
-},
-apps: [HelloApp],
+  info: {
+    name: 'Hello MCP',
+    version: '0.1.0',
+  },
+  apps: [HelloApp],
 })
 export default class HelloServer {}
 ```
 
 With less than a screenful of code you’ve just:
 
-* Defined a strongly typed tool
-* Grouped it into an app
-* Exposed a fully MCP-compatible server entrypoint with a clean contract ([FrontMCP][2])
+- Defined a strongly typed tool
+- Grouped it into an app
+- Exposed a fully MCP-compatible server entrypoint with a clean contract ([FrontMCP][2])
 
 ---
 
@@ -172,10 +170,10 @@ npx frontmcp create my-app
 
 This will:
 
-* Scaffold a new project under `./my-app`
-* Configure `tsconfig.json` correctly for decorators and modern ESM
-* Generate a `package.json` with useful scripts
-* Install dev dependencies like TypeScript, `tsx`, `zod`, and `reflect-metadata` for you ([FrontMCP][3])
+- Scaffold a new project under `./my-app`
+- Configure `tsconfig.json` correctly for decorators and modern ESM
+- Generate a `package.json` with useful scripts
+- Install dev dependencies like TypeScript, `tsx`, `zod`, and `reflect-metadata` for you ([FrontMCP][3])
 
 ### Option B — Add to an existing project
 
@@ -197,31 +195,22 @@ After using `create` or `init`, your `package.json` will include scripts like:
 
 ```json title="package.json (scripts)"
 {
-"scripts": {
-    "dev"
-:
-    "frontmcp dev",
-        "build"
-:
-    "frontmcp build",
-        "inspect"
-:
-    "frontmcp inspector",
-        "doctor"
-:
-    "frontmcp doctor"
-}
+  "scripts": {
+    "dev": "frontmcp dev",
+    "build": "frontmcp build",
+    "inspect": "frontmcp inspector",
+    "doctor": "frontmcp doctor"
+  }
 }
 ```
 
-* `frontmcp dev` – run your server in watch mode
-* `frontmcp build` – compile your entry to `dist`
-* `frontmcp inspector` – launch the MCP Inspector to explore tools live
-* `frontmcp doctor` – validate Node/npm versions, tsconfig, and project setup ([FrontMCP][3])
+- `frontmcp dev` – run your server in watch mode
+- `frontmcp build` – compile your entry to `dist`
+- `frontmcp inspector` – launch the MCP Inspector to explore tools live
+- `frontmcp doctor` – validate Node/npm versions, tsconfig, and project setup ([FrontMCP][3])
 
 <Tip>
-    Once things look healthy, run <code>npm run dev</code> and connect any MCP-capable client to start calling your
-    tools.
+  Once things look healthy, run <code>npm run dev</code> and connect any MCP-capable client to start calling your tools.
 </Tip>
 
 ---
@@ -232,18 +221,19 @@ FrontMCP is designed so that the same primitives you use for a toy project scale
 
 Some of the features you get out of the box:
 
-* **Sessions & Transport**
-Choose between stateful and stateless session modes and configure how transport IDs are issued (`uuid` or `jwt`), depending on whether you run a single node or a distributed cluster. ([GitHub][1])
+- **Sessions & Transport**
+  Choose between stateful and stateless session modes and configure how transport IDs are issued (`uuid` or `jwt`), depending on whether you run a single node or a distributed cluster. ([GitHub][1])
 
-* **Authentication**
-Use **remote OAuth** to integrate with an external IdP (like your B2B identity provider), or **local OAuth** for projects that want to keep everything inside the MCP server. Either way, you can scope auth per server or per app. ([GitHub][1])
+- **Authentication**
+  Use **remote OAuth** to integrate with an external IdP (like your B2B identity provider), or **local OAuth** for projects that want to keep everything inside the MCP server. Either way, you can scope auth per server or per app. ([GitHub][1])
 
-* **Logging transports**
-Ship logs to console, JSONL, or custom HTTP sinks by defining
-<code>@LogTransport</code> providers and wiring them into your server config. ([GitHub][1])
+- **Logging transports**
+  Ship logs to console, JSONL, or custom HTTP sinks by defining
 
-* **Adapters & plugins**
-Use the OpenAPI adapter to turn existing REST APIs into MCP tools, and plug in caching, tracing, or policy engines as plugins—no need to wrap every tool manually. ([FrontMCP][4])
+  <code>@LogTransport</code> providers and wiring them into your server config. ([GitHub][1])
+
+- **Adapters & plugins**
+  Use the OpenAPI adapter to turn existing REST APIs into MCP tools, and plug in caching, tracing, or policy engines as plugins—no need to wrap every tool manually. ([FrontMCP][4])
 
 All of this is accessible from TypeScript, with type inference helping you stay honest as your server grows.
 
@@ -255,14 +245,14 @@ This is the **first post in the AgentFront blog**, and FrontMCP is a big part of
 
 We’re betting on a future where:
 
-* MCP is the default protocol for LLM tools and data access
-* TypeScript is the default language for web-scale infrastructure
-* Agentic systems are composed of many small, well-typed servers, not one giant monolith
+- MCP is the default protocol for LLM tools and data access
+- TypeScript is the default language for web-scale infrastructure
+- Agentic systems are composed of many small, well-typed servers, not one giant monolith
 
 FrontMCP is our open-source foundation for that world:
 
-* 📦 **Source code**: [`agentfront/frontmcp` on GitHub](https://github.com/agentfront/frontmcp) ([GitHub][1])
-* 📚 **Docs**: [`/docs`](/docs/getting-started/welcome) for the latest 0.3 series ([FrontMCP][2])
+- 📦 **Source code**: [`agentfront/frontmcp` on GitHub](https://github.com/agentfront/frontmcp) ([GitHub][1])
+- 📚 **Docs**: [`/docs`](/docs/getting-started/welcome) for the latest 0.3 series ([FrontMCP][2])
 
 We’ll be using this blog to share patterns, real-world architectures, and deep dives into features like adapters, auth, and deployment.
 
@@ -289,6 +279,7 @@ We’ll be using this blog to share patterns, real-world architectures, and deep
         cta="Build your first server">
         Go step-by-step from empty folder to a running MCP server with a real tool.
     </Card>
+
 </Columns>
 
 <Columns cols={2}>
@@ -310,20 +301,21 @@ We’ll be using this blog to share patterns, real-world architectures, and deep
         cta="Join the project">
         FrontMCP is open source (Apache-2.0). Issues, PRs, and feedback are very welcome.
     </Card>
+
 </Columns>
 
 ---
 
 This is just the beginning. In upcoming posts, we’ll dig into:
 
-* Designing tool interfaces your LLMs actually use
-* Using adapters to wrap existing APIs
-* Building secure multi-tenant MCP servers with remote OAuth
-* Observability patterns with custom logging transports and hooks
+- Designing tool interfaces your LLMs actually use
+- Using adapters to wrap existing APIs
+- Building secure multi-tenant MCP servers with remote OAuth
+- Observability patterns with custom logging transports and hooks
 
 If you build something cool with FrontMCP, we’d love to hear about it—and maybe feature it here.
 
-[1] https://github.com/agentfront/frontmcp "GitHub - agentfront/frontmcp: FrontMCP Framework"
-[2] /docs/getting-started/welcome "Welcome to FrontMCP - FrontMCP"
-[3] /docs/getting-started/installation "Installation - FrontMCP"
-[4] /docs/getting-started/quickstart "Quickstart - FrontMCP"
+[1]: https://github.com/agentfront/frontmcp 'GitHub - agentfront/frontmcp: FrontMCP Framework'
+[2]: /docs/getting-started/welcome 'Welcome to FrontMCP - FrontMCP'
+[3]: /docs/getting-started/installation 'Installation - FrontMCP'
+[4]: /docs/getting-started/quickstart 'Quickstart - FrontMCP'

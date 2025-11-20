@@ -1,4 +1,4 @@
-import {DynamicPlugin, Plugin, ToolHook, FlowCtxOf} from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 
 declare global {
   interface ExtendFrontMcpToolMetadata {
@@ -6,7 +6,7 @@ declare global {
       siteScoped?: boolean;
       adminRequired?: boolean;
       siteIdFieldName?: string;
-    }
+    };
   }
 }
 
@@ -25,7 +25,7 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
   constructor(opts: SiteAuthorizationPluginOptions = {}) {
     const mergedOpts: SiteAuthorizationPluginOptions = {
       demoAllowAllIfNoClaims: opts.demoAllowAllIfNoClaims ?? true,
-      siteIdFieldName: opts.siteIdFieldName ?? 'siteId'
+      siteIdFieldName: opts.siteIdFieldName ?? 'siteId',
     };
     super();
     this.opts = mergedOpts;
@@ -44,7 +44,6 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
       return [sites];
     }
     return [];
-
   }
 
   private isAdmin(authInfo: any): boolean {
@@ -55,7 +54,7 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
     return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
   }
 
-  @ToolHook.Will('execute', {priority: 900})
+  @ToolHook.Will('execute', { priority: 900 })
   async validateSiteAccess(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const ctx = flowCtx.state.required.toolContext;
     const input: any = ctx.input;
@@ -64,9 +63,8 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
     const siteField = meta.site?.siteIdFieldName || this.opts.siteIdFieldName || 'siteId';
 
     const siteId = input?.[siteField];
-    const siteScoped = meta.site?.siteScoped || (siteId !== undefined);
+    const siteScoped = meta.site?.siteScoped ?? (siteId !== undefined);
     const adminRequired = meta.site?.adminRequired === true;
-
 
     if (!siteScoped) {
       // Not a site-scoped tool; nothing to check here.

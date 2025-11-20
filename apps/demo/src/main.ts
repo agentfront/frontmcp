@@ -1,17 +1,19 @@
-import {FrontMcp, LogLevel} from '@frontmcp/sdk';
-import ExpenseMcpApp from "./apps/expenses";
-import CalculatorMcpApp from "./apps/calculator";
-import EmployeeTimeMcpApp from "./apps/employee-time";
-
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import ExpenseMcpApp from './apps/expenses';
+import CalculatorMcpApp from './apps/calculator';
+import EmployeeTimeMcpApp from './apps/employee-time';
 
 @FrontMcp({
-  info: {name: 'Demo 🚀', version: '0.1.0'},
+  info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
-  logging: {level: LogLevel.VERBOSE},
-  splitByApp: true,
+  logging: { level: LogLevel.VERBOSE },
   http: {
-    port: 3002
-  }
+    port: 3002,
+  },
+  auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://sample-app.frontegg.com',
+  },
 })
-export default class Server {
-}
+export default class Server {}

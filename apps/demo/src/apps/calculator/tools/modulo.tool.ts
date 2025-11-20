@@ -5,12 +5,10 @@ import {z} from "zod";
   name: 'modulo',
   description: 'Remainder of a divided by b (JavaScript % semantics)',
   inputSchema: {a: z.number(), b: z.number().refine((n) => n !== 0, 'Modulo by zero is not allowed')},
-  outputSchema: {result: z.number()}
+  outputSchema: 'number'
 })
 export default class ModuloTool extends ToolContext {
   async execute(input: { a: number, b: number }) {
-    return {
-      result: input.a % input.b,
-    };
+    return input.a % input.b;
   }
 }
