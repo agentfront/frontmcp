@@ -17,7 +17,6 @@
     "light": "#07C983",
     "dark": "#15803D"
   },
-
   "contextual": {
     "options": ["copy", "chatgpt", "cursor", "mcp", "view"]
   },

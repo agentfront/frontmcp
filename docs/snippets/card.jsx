@@ -27,14 +27,12 @@ export const BlogCard = ({
             <>
               {/* light mode image */}
               <img
-                noZoom
                 src={img}
                 alt={title}
                 className="blog-full-image light-img w-full h-full object-cover object-center not-prose"
               />
               {/* dark mode image */}
               <img
-                noZoom
                 src={imgDark}
                 alt={title}
                 className="blog-full-image dark-img w-full h-full object-cover object-center not-prose"
@@ -42,19 +40,19 @@ export const BlogCard = ({
             </>
           ) : (
             // single image if you don't pass imgDark
-            <img
-              noZoom
-              src={img}
-              alt={title}
-              className="blog-full-image w-full h-full object-cover object-center not-prose"
-            />
+            <img src={img} alt={title} className="blog-full-image w-full h-full object-cover object-center not-prose" />
           )}
         </div>
 
         {/* CONTENT */}
         <div className="px-6 py-5 relative flex-1" data-component-part="card-content-container">
           {/* arrow icon */}
-          <div className="absolute text-gray-400 dark:text-gray-500 group-hover:text-primary dark:group-hover:text-primary-light top-5 right-5">
+          <div
+            id="card-link-arrow-icon"
+            className="absolute text-gray-400 dark:text-gray-500
+                       group-hover:text-primary dark:group-hover:text-primary-light
+                       top-5 right-5"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -74,13 +72,14 @@ export const BlogCard = ({
 
           <div style={{ height: 'calc(100% - 1.5rem)' }}>
             <div
-              className="prose mt-1 font-normal text-base leading-6 text-gray-700 dark:text-gray-300 flex flex-col h-full"
+              className="prose mt-1 font-normal text-base leading-6
+                         text-gray-700 dark:text-gray-300
+                         flex flex-col h-full"
               data-component-part="card-content"
             >
               <h2
                 data-component-part="card-title"
                 className="not-prose font-semibold text-base text-gray-800 dark:text-white group-hover:text-primary dark:group-hover:text-primary-light"
-                style={{ paddingRight: '1rem', lineHeight: '1.3' }}
               >
                 {title}
               </h2>
