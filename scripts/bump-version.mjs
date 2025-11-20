@@ -37,6 +37,11 @@ try {
   // Parse version
   const [major, minor, patch] = oldVersion.split(".").map(Number);
 
+  if (isNaN(major) || isNaN(minor) || isNaN(patch)) {
+    console.error(`Invalid semver format in ${libPath}: ${oldVersion}`);
+    process.exit(1);
+  }
+
   // Bump version
   let newVersion;
   switch (bumpType) {
@@ -59,8 +64,10 @@ try {
   console.log(`✓ Bumped ${libName} from ${oldVersion} to ${newVersion}`);
 
   // Output the new version for use in workflows
-  console.log(`::set-output name=new_version::${newVersion}`);
-  console.log(`::set-output name=old_version::${oldVersion}`);
+  if (process.env.GITHUB_OUTPUT) {
+    await fs.appendFile(process.env.GITHUB_OUTPUT, `new_version=${newVersion}\n`);
+    await fs.appendFile(process.env.GITHUB_OUTPUT, `old_version=${oldVersion}\n`);
+  }
 
 } catch (error) {
   console.error(`Error bumping version for ${libName}:`, error.message);
