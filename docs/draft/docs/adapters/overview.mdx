@@ -15,13 +15,15 @@ Adapters are powerful components that automatically convert external APIs and se
     Generate hundreds of tools from a single specification without writing code for each endpoint.
   </Card>
 
-  <Card title="Type Safety" icon="shield-check">
-    Automatic schema validation using Zod ensures type-safe inputs and outputs.
-  </Card>
+{' '}
+<Card title="Type Safety" icon="shield-check">
+  Automatic schema validation using Zod ensures type-safe inputs and outputs.
+</Card>
 
-  <Card title="Consistency" icon="layer-group">
-    All tools follow the same patterns for authentication, error handling, and validation.
-  </Card>
+{' '}
+<Card title="Consistency" icon="layer-group">
+  All tools follow the same patterns for authentication, error handling, and validation.
+</Card>
 
   <Card title="Maintainability" icon="arrows-rotate">
     Update your spec and regenerate tools automatically — no manual updates needed.
@@ -44,19 +46,19 @@ These adapters are maintained by the FrontMCP team and included in `@frontmcp/ad
     - Custom headers and body mapping
 
     **Best for:** REST APIs, microservices, third-party integrations
+
   </Card>
 </CardGroup>
 
-<Note>
-  More official adapters are coming soon! GraphQL, gRPC, and database adapters are in development.
-</Note>
+<Note>More official adapters are coming soon! GraphQL, gRPC, and database adapters are in development.</Note>
 
 ## Community Adapters
 
 Community adapters are created and maintained by the FrontMCP community. While not officially supported, they extend FrontMCP's capabilities to new APIs and services.
 
 <Warning>
-  Community adapters are not maintained by the FrontMCP team. Please review the code and security practices before using them in production.
+  Community adapters are not maintained by the FrontMCP team. Please review the code and security practices before using
+  them in production.
 </Warning>
 
 ### How to Find Community Adapters
@@ -69,9 +71,10 @@ Community adapters are created and maintained by the FrontMCP community. While n
     ```
   </Step>
 
-  <Step title="Check GitHub Topics">
-    Browse repositories tagged with [`frontmcp-adapter`](https://github.com/topics/frontmcp-adapter) on GitHub.
-  </Step>
+{' '}
+<Step title="Check GitHub Topics">
+  Browse repositories tagged with [`frontmcp-adapter`](https://github.com/topics/frontmcp-adapter) on GitHub.
+</Step>
 
   <Step title="Join the Community">
     Visit the [FrontMCP Discussions](https://github.com/agentfront/frontmcp/discussions) to discover and share adapters.
@@ -144,27 +147,23 @@ export class MyCustomAdapter extends BaseAdapter {
     - Implement proper error handling
   </Accordion>
 
-  <Accordion title="2. Type Safety">
-    - Generate Zod schemas from specifications
-    - Validate inputs at runtime
-    - Provide TypeScript types for all options
-    - Use strict type checking
-  </Accordion>
+{' '}
+<Accordion title="2. Type Safety">
+  - Generate Zod schemas from specifications - Validate inputs at runtime - Provide TypeScript types for all options -
+  Use strict type checking
+</Accordion>
 
-  <Accordion title="3. Performance">
-    - Use lazy loading for specifications
-    - Cache generated tools when possible
-    - Implement connection pooling
-    - Handle rate limiting gracefully
-  </Accordion>
+{' '}
+<Accordion title="3. Performance">
+  - Use lazy loading for specifications - Cache generated tools when possible - Implement connection pooling - Handle
+  rate limiting gracefully
+</Accordion>
 
-  <Accordion title="4. Developer Experience">
-    - Provide clear documentation
-    - Include working examples
-    - Support common authentication patterns
-    - Add helpful error messages
-    - Write comprehensive tests
-  </Accordion>
+{' '}
+<Accordion title="4. Developer Experience">
+  - Provide clear documentation - Include working examples - Support common authentication patterns - Add helpful error
+  messages - Write comprehensive tests
+</Accordion>
 
   <Accordion title="5. Maintainability">
     - Follow the official adapter structure
@@ -191,13 +190,7 @@ When publishing a community adapter:
   "name": "@yourscope/frontmcp-adapter-myapi",
   "version": "1.0.0",
   "description": "FrontMCP adapter for MyAPI",
-  "keywords": [
-    "frontmcp",
-    "frontmcp-adapter",
-    "mcp",
-    "adapter",
-    "myapi"
-  ],
+  "keywords": ["frontmcp", "frontmcp-adapter", "mcp", "adapter", "myapi"],
   "peerDependencies": {
     "@frontmcp/sdk": "^0.3.0"
   }
@@ -208,10 +201,10 @@ When publishing a community adapter:
 
 Choose the right adapter for your use case:
 
-| Adapter | Best For | Authentication | Type Safety | Complexity |
-|---------|----------|----------------|-------------|------------|
-| **OpenAPI** | REST APIs with specs | Multi-provider | Auto-generated | Low |
-| **Custom** | Any API/service | Fully customizable | Manual schemas | Medium-High |
+| Adapter     | Best For             | Authentication     | Type Safety    | Complexity  |
+| ----------- | -------------------- | ------------------ | -------------- | ----------- |
+| **OpenAPI** | REST APIs with specs | Multi-provider     | Auto-generated | Low         |
+| **Custom**  | Any API/service      | Fully customizable | Manual schemas | Medium-High |
 
 ## Next Steps
 
@@ -220,9 +213,10 @@ Choose the right adapter for your use case:
     Learn how to use the OpenAPI adapter
   </Card>
 
-  <Card title="Browse Examples" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
-    See adapters in action with real examples
-  </Card>
+{' '}
+<Card title="Browse Examples" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
+  See adapters in action with real examples
+</Card>
 
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
     Get help and share your adapters
@@ -236,13 +230,15 @@ Choose the right adapter for your use case:
     Learn about the FrontMCP SDK and adapter interfaces
   </Card>
 
-  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/adapters">
-    View the official adapters source code
-  </Card>
+{' '}
+<Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/adapters">
+  View the official adapters source code
+</Card>
 
-  <Card title="npm Package" icon="npm" href="https://www.npmjs.com/package/@frontmcp/adapters">
-    Install the official adapters package
-  </Card>
+{' '}
+<Card title="npm Package" icon="npm" href="https://www.npmjs.com/package/@frontmcp/adapters">
+  Install the official adapters package
+</Card>
 
   <Card title="Contributing Guide" icon="code-pull-request" href="https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md">
     Contribute to FrontMCP adapters

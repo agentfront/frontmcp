@@ -35,7 +35,7 @@ import HelloApp from './hello.app';
   logging: { level: LogLevel.Info },
 })
 export default class Server {}
-````
+```
 
 ---
 
@@ -91,7 +91,8 @@ export default class Server {}
 npx frontmcp create my-app
 ```
 
-This scaffolds a FrontMCP project, writes a modern ESM `tsconfig.json` for decorators, adds helpful package scripts, and installs required dev deps. ([Installation - FrontMCP][1])
+This scaffolds a FrontMCP project, writes a modern ESM `tsconfig.json` for decorators, adds helpful package scripts, and
+installs required dev deps. ([Installation - FrontMCP][1])
 
 ### Option B — Add to an existing project
 
@@ -100,7 +101,8 @@ npm i -D frontmcp @types/node@^20
 npx frontmcp init
 ```
 
-`init` adds scripts, verifies your `tsconfig.json`, and checks layout. No need to install `@frontmcp/sdk` directly—the CLI bundles a compatible SDK for you. ([Installation - FrontMCP][1])
+`init` adds scripts, verifies your `tsconfig.json`, and checks layout. No need to install `@frontmcp/sdk` directly—the
+CLI bundles a compatible SDK for you. ([Installation - FrontMCP][1])
 
 ---
 
@@ -192,7 +194,8 @@ After `create` or `init`, you’ll have:
 }
 ```
 
-These map to dev watch, production build, zero‑setup Inspector launch, and environment checks. ([Installation - FrontMCP][1])
+These map to dev watch, production build, zero‑setup Inspector launch, and environment checks. ([Installation -
+FrontMCP][1])
 
 **Recommended `tsconfig.json` (ESM + decorators)**
 
@@ -241,7 +244,8 @@ Run a browser UI to exercise tools and messages:
 npm run inspect
 ```
 
-This launches the MCP Inspector; point it at your local server (e.g., `http://localhost:3000`). ([Local Dev Server - FrontMCP][3])
+This launches the MCP Inspector; point it at your local server (e.g., `http://localhost:3000`). ([Local Dev Server -
+FrontMCP][3])
 
 ---
 
@@ -249,15 +253,18 @@ This launches the MCP Inspector; point it at your local server (e.g., `http://lo
 
 ### Servers
 
-`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it minimal or scale up with providers and plugins. ([The FrontMCP Server - FrontMCP][5])
+`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it
+minimal or scale up with providers and plugins. ([The FrontMCP Server - FrontMCP][5])
 
 ### Apps
 
-Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With `splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([Apps - FrontMCP][6])
+Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With
+`splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([Apps - FrontMCP][6])
 
 ### Tools
 
-Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for `inputSchema`. ([Tools - FrontMCP][4])
+Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for
+`inputSchema`. ([Tools - FrontMCP][4])
 
 ### Resources
 
@@ -269,13 +276,15 @@ Reusable templates returning MCP `GetPromptResult`, with typed arguments. ([Prom
 
 ### Providers / Adapters / Plugins
 
-Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([Add OpenAPI Adapter - FrontMCP][9])
+Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([Add
+OpenAPI Adapter - FrontMCP][9])
 
 ---
 
 ## Authentication
 
-Configure auth at the **server** (shared) or **per app** (isolated). With `splitByApp: true`, define auth **per app** (server‑level `auth` is disallowed). ([Authentication - FrontMCP][10])
+Configure auth at the **server** (shared) or **per app** (isolated). With `splitByApp: true`, define auth **per app**
+(server‑level `auth` is disallowed). ([Authentication - FrontMCP][10])
 
 ### Remote OAuth
 
@@ -355,13 +364,15 @@ npm run build
 NODE_ENV=production PORT=8080 npm start
 ```
 
-Builds to `dist/` (uses `tsconfig.build.json`). Consider a process manager and reverse proxy; align all `@frontmcp/*` versions. ([Production Build - FrontMCP][13])
+Builds to `dist/` (uses `tsconfig.build.json`). Consider a process manager and reverse proxy; align all `@frontmcp/*`
+versions. ([Production Build - FrontMCP][13])
 
 ---
 
 ## Version Alignment
 
-If versions drift, the runtime will throw a clear **“version mismatch”** at boot. Keep `@frontmcp/*` versions aligned. ([Production Build - FrontMCP][13])
+If versions drift, the runtime will throw a clear **“version mismatch”** at boot. Keep `@frontmcp/*` versions aligned.
+([Production Build - FrontMCP][13])
 
 ---
 
@@ -379,19 +390,16 @@ PRs welcome! Please:
 
 See [LICENSE](./LICENSE).
 
-
-
-
-[1]: https://docs.agentfront.dev/0.3/getting-started/installation "Installation - FrontMCP"
-[2]: https://docs.agentfront.dev/0.3/getting-started/quickstart "Quickstart - FrontMCP"
-[3]: https://docs.agentfront.dev/0.3/deployment/local-dev-server "Local Dev Server - FrontMCP"
-[4]: https://docs.agentfront.dev/0.3/servers/tools "Tools - FrontMCP"
-[5]: https://docs.agentfront.dev/0.3/servers/server "The FrontMCP Server - FrontMCP"
-[6]: https://docs.agentfront.dev/0.3/servers/apps "Apps - FrontMCP"
-[7]: https://docs.agentfront.dev/0.3/servers/resources "Resources - FrontMCP"
-[8]: https://docs.agentfront.dev/0.3/servers/prompts "Prompts - FrontMCP"
-[9]: https://docs.agentfront.dev/0.3/guides/add-openapi-adapter "Add OpenAPI Adapter - FrontMCP"
-[10]: https://docs.agentfront.dev/0.3/servers/authentication/overview "Authentication - FrontMCP"
-[11]: https://docs.agentfront.dev/0.3/servers/authentication/remote "Remote OAuth - FrontMCP"
-[12]: https://docs.agentfront.dev/0.3/servers/authentication/local "Local OAuth - FrontMCP"
-[13]: https://docs.agentfront.dev/0.3/deployment/production-build "Production Build - FrontMCP"
+[1]: https://docs.agentfront.dev/0.3/getting-started/installation 'Installation - FrontMCP'
+[2]: https://docs.agentfront.dev/0.3/getting-started/quickstart 'Quickstart - FrontMCP'
+[3]: https://docs.agentfront.dev/0.3/deployment/local-dev-server 'Local Dev Server - FrontMCP'
+[4]: https://docs.agentfront.dev/0.3/servers/tools 'Tools - FrontMCP'
+[5]: https://docs.agentfront.dev/0.3/servers/server 'The FrontMCP Server - FrontMCP'
+[6]: https://docs.agentfront.dev/0.3/servers/apps 'Apps - FrontMCP'
+[7]: https://docs.agentfront.dev/0.3/servers/resources 'Resources - FrontMCP'
+[8]: https://docs.agentfront.dev/0.3/servers/prompts 'Prompts - FrontMCP'
+[9]: https://docs.agentfront.dev/0.3/guides/add-openapi-adapter 'Add OpenAPI Adapter - FrontMCP'
+[10]: https://docs.agentfront.dev/0.3/servers/authentication/overview 'Authentication - FrontMCP'
+[11]: https://docs.agentfront.dev/0.3/servers/authentication/remote 'Remote OAuth - FrontMCP'
+[12]: https://docs.agentfront.dev/0.3/servers/authentication/local 'Local OAuth - FrontMCP'
+[13]: https://docs.agentfront.dev/0.3/deployment/production-build 'Production Build - FrontMCP'

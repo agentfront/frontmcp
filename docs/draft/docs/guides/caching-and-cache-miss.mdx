@@ -10,6 +10,7 @@ The Cache Plugin provides transparent response caching for tools, dramatically i
 ## What You'll Learn
 
 By the end of this guide, you'll know how to:
+
 - ✅ Enable caching for specific tools
 - ✅ Configure TTL (time-to-live) per tool
 - ✅ Use sliding windows to keep hot data cached
@@ -17,7 +18,8 @@ By the end of this guide, you'll know how to:
 - ✅ Handle cache misses and invalidation
 
 <Tip>
-  Caching is perfect for tools that make expensive computations, database queries, or third-party API calls with deterministic outputs.
+  Caching is perfect for tools that make expensive computations, database queries, or third-party API calls with
+  deterministic outputs.
 </Tip>
 
 ---
@@ -50,7 +52,9 @@ import CachePlugin from '@frontmcp/plugins/cache';
   id: 'my-app',
   name: 'My App',
   plugins: [CachePlugin], // Default: memory store, 1-day TTL
-  tools: [/* your tools */],
+  tools: [
+    /* your tools */
+  ],
 })
 export default class MyApp {}
 ```
@@ -68,7 +72,9 @@ import CachePlugin from '@frontmcp/plugins/cache';
       defaultTTL: 300, // 5 minutes
     }),
   ],
-  tools: [/* your tools */],
+  tools: [
+    /* your tools */
+  ],
 })
 export default class MyApp {}
 ```
@@ -91,7 +97,9 @@ import CachePlugin from '@frontmcp/plugins/cache';
       },
     }),
   ],
-  tools: [/* your tools */],
+  tools: [
+    /* your tools */
+  ],
 })
 export default class MyApp {}
 ```
@@ -123,6 +131,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       }
     }
     ```
+
   </Tab>
 
   <Tab title="Function-based Tool">
@@ -140,6 +149,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       return await database.getUserProfile(input.userId);
     });
     ```
+
   </Tab>
 
   <Tab title="Custom TTL">
@@ -205,14 +215,13 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     ```
 
     The first call executes the tool normally (cache miss).
+
   </Step>
 
-  <Step title="Observe cache hit">
-    The second call returns instantly from cache! Check your logs for:
-    ```
-    [DEBUG] Cache hit for get-user-profile
-    ```
-  </Step>
+{' '}
+<Step title="Observe cache hit">
+  The second call returns instantly from cache! Check your logs for: ``` [DEBUG] Cache hit for get-user-profile ```
+</Step>
 
   <Step title="Test cache expiration">
     Wait for the TTL to expire, then call again. The cache will miss and the tool will execute.
@@ -230,26 +239,26 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     - Validated input (e.g., `{ userId: "user-123" }`)
 
     Same input = Same cache key
+
   </Step>
 
-  <Step title="Before Execution (Will Hook)">
-    The plugin checks the cache store for the key:
-    - **Cache Hit**: Return cached result immediately, skip execution
-    - **Cache Miss**: Allow tool to execute normally
-  </Step>
+{' '}
+<Step title="Before Execution (Will Hook)">
+  The plugin checks the cache store for the key: - **Cache Hit**: Return cached result immediately, skip execution -
+  **Cache Miss**: Allow tool to execute normally
+</Step>
 
-  <Step title="After Execution (Did Hook)">
-    If the tool executed, the plugin stores the result in the cache with the configured TTL
-  </Step>
+{' '}
+<Step title="After Execution (Did Hook)">
+  If the tool executed, the plugin stores the result in the cache with the configured TTL
+</Step>
 
   <Step title="Sliding Window (Optional)">
     If `slideWindow: true`, each cache read refreshes the TTL, keeping popular data cached longer
   </Step>
 </Steps>
 
-<Info>
-  The cache operates at the **hook level**, so it works transparently without modifying your tool code.
-</Info>
+<Info>The cache operates at the **hook level**, so it works transparently without modifying your tool code.</Info>
 
 ---
 
@@ -260,28 +269,30 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
 <ParamField path="cache" type="boolean | object">
   Enable caching for this tool
 
-  - `true` - Use plugin's default TTL
-  - `{ ttl, slideWindow }` - Custom configuration
-</ParamField>
+- `true` - Use plugin's default TTL
+- `{ ttl, slideWindow }` - Custom configuration
+  </ParamField>
 
 <ParamField path="cache.ttl" type="number">
   Time-to-live in seconds. Overrides plugin's `defaultTTL`.
 
-  **Examples:**
-  - `60` - 1 minute
-  - `300` - 5 minutes
-  - `3600` - 1 hour
-  - `86400` - 1 day
-</ParamField>
+**Examples:**
+
+- `60` - 1 minute
+- `300` - 5 minutes
+- `3600` - 1 hour
+- `86400` - 1 day
+  </ParamField>
 
 <ParamField path="cache.slideWindow" type="boolean" default="false">
   When `true`, reading from cache refreshes the TTL
 
-  **Use cases:**
-  - Trending/popular data
-  - Frequently accessed reports
-  - User dashboards
-</ParamField>
+**Use cases:**
+
+- Trending/popular data
+- Frequently accessed reports
+- User dashboards
+  </ParamField>
 
 ---
 
@@ -305,6 +316,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       }
     }
     ```
+
   </Accordion>
 
   <Accordion title="Pattern 2: Expensive Reports (Long TTL)">
@@ -328,6 +340,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       }
     }
     ```
+
   </Accordion>
 
   <Accordion title="Pattern 3: Hot Data with Sliding Window">
@@ -348,6 +361,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       }
     }
     ```
+
   </Accordion>
 
   <Accordion title="Pattern 4: Multi-Tenant Isolation">
@@ -373,6 +387,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     ```
 
     Each tenant's data is cached separately!
+
   </Accordion>
 </AccordionGroup>
 
@@ -387,22 +402,22 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     Perfect for local development and testing
   </Card>
 
-  <Card title="Single Instance" icon="server">
-    When running one server instance
-  </Card>
+{' '}
+<Card title="Single Instance" icon="server">
+  When running one server instance
+</Card>
 
-  <Card title="Non-Critical Data" icon="circle-info">
-    Data loss on restart is acceptable
-  </Card>
+{' '}
+<Card title="Non-Critical Data" icon="circle-info">
+  Data loss on restart is acceptable
+</Card>
 
   <Card title="Simple Setup" icon="check">
     No external dependencies needed
   </Card>
 </CardGroup>
 
-<Warning>
-  Memory cache resets when the server restarts. Not shared across multiple instances.
-</Warning>
+<Warning>Memory cache resets when the server restarts. Not shared across multiple instances.</Warning>
 
 ### When to Use Redis
 
@@ -411,22 +426,22 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     Recommended for production deployments
   </Card>
 
-  <Card title="Multi-Instance" icon="layer-group">
-    Cache shared across multiple server instances
-  </Card>
+{' '}
+<Card title="Multi-Instance" icon="layer-group">
+  Cache shared across multiple server instances
+</Card>
 
-  <Card title="Persistence" icon="database">
-    Cache survives server restarts
-  </Card>
+{' '}
+<Card title="Persistence" icon="database">
+  Cache survives server restarts
+</Card>
 
   <Card title="Better Eviction" icon="broom">
     Redis handles memory limits gracefully
   </Card>
 </CardGroup>
 
-<Check>
-  Redis provides persistence, sharing, and better memory management for production use.
-</Check>
+<Check>Redis provides persistence, sharing, and better memory management for production use.</Check>
 
 ---
 
@@ -446,6 +461,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       level: LogLevel.DEBUG, // See cache hit/miss logs
     }
     ```
+
   </Accordion>
 
   <Accordion title="Stale data being returned">
@@ -457,6 +473,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       ttl: 60, // Shorter TTL = fresher data
     }
     ```
+
   </Accordion>
 
   <Accordion title="Cache not shared across instances">
@@ -469,6 +486,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       config: { host: 'localhost', port: 6379 },
     })
     ```
+
   </Accordion>
 
   <Accordion title="Non-deterministic tools being cached">
@@ -481,6 +499,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       // No cache field - don't cache this!
     })
     ```
+
   </Accordion>
 </AccordionGroup>
 
@@ -502,6 +521,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     - Tools that return current time/date
     - Tools with random output
     - Tools with side effects (mutations)
+
   </Accordion>
 
   <Accordion title="2. Choose Appropriate TTLs">
@@ -513,6 +533,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     | User profiles | 5-15 minutes |
     | Reports | 30 minutes - 1 hour |
     | Static content | Hours to days |
+
   </Accordion>
 
   <Accordion title="3. Include Scoping Fields">
@@ -531,6 +552,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       reportId: z.string(),
     }
     ```
+
   </Accordion>
 
   <Accordion title="4. Use Redis for Production">
@@ -552,6 +574,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
       },
     })
     ```
+
   </Accordion>
 
   <Accordion title="5. Monitor Cache Performance">
@@ -566,6 +589,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     Look for:
     - High miss rates (TTL too short? Tool not deterministic?)
     - Memory growth (TTL too long?)
+
   </Accordion>
 </AccordionGroup>
 
@@ -652,12 +676,7 @@ class GenerateReportTool extends ToolContext {
       },
     }),
   ],
-  tools: [
-    GetStockPriceTool,
-    GetUserTool,
-    GetTrendingTool,
-    GenerateReportTool,
-  ],
+  tools: [GetStockPriceTool, GetUserTool, GetTrendingTool, GenerateReportTool],
 })
 class AnalyticsApp {}
 
@@ -678,9 +697,10 @@ export default class Server {}
     Full Cache Plugin reference documentation
   </Card>
 
-  <Card title="Custom Hooks" icon="link" href="/docs/guides/customize-flow-stages">
-    Learn how the cache plugin uses hooks internally
-  </Card>
+{' '}
+<Card title="Custom Hooks" icon="link" href="/docs/guides/customize-flow-stages">
+  Learn how the cache plugin uses hooks internally
+</Card>
 
   <Card title="Plugin Development" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
     Create your own plugins with custom behavior

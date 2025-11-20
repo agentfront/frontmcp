@@ -84,7 +84,8 @@ export default class MyApiApp {}
 </ParamField>
 
 <ParamField path="url" type="string">
-  URL or file path to the OpenAPI specification. Can be a local file path or remote URL. Use either `spec` or `url`, not both.
+  URL or file path to the OpenAPI specification. Can be a local file path or remote URL. Use either `spec` or `url`, not
+  both.
 </ParamField>
 
 ### Optional Configuration
@@ -102,7 +103,8 @@ export default class MyApiApp {}
 </ParamField>
 
 <ParamField path="loadOptions" type="LoadOptions">
-  Options for loading the OpenAPI specification (headers, timeout, etc.). See [mcp-from-openapi](https://www.npmjs.com/package/mcp-from-openapi) for details.
+  Options for loading the OpenAPI specification (headers, timeout, etc.). See
+  [mcp-from-openapi](https://www.npmjs.com/package/mcp-from-openapi) for details.
 </ParamField>
 
 <ParamField path="generateOptions" type="GenerateOptions">
@@ -124,14 +126,12 @@ OpenapiAdapter.init({
   baseUrl: 'https://api.example.com',
   additionalHeaders: {
     'x-api-key': process.env.API_KEY!,
-    'authorization': `Bearer ${process.env.API_TOKEN}`,
+    authorization: `Bearer ${process.env.API_TOKEN}`,
   },
-})
+});
 ```
 
-<Warning>
-  Store credentials in environment variables or secrets manager, never hardcode them.
-</Warning>
+<Warning>Store credentials in environment variables or secrets manager, never hardcode them.</Warning>
 
 ### Strategy 2: Auth Provider Mapper (Low Risk) ⭐ Recommended
 
@@ -146,18 +146,19 @@ OpenapiAdapter.init({
   baseUrl: 'https://api.example.com',
   authProviderMapper: {
     // Map security scheme 'GitHubAuth' to GitHub token from user context
-    'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
 
     // Map security scheme 'SlackAuth' to Slack token from user context
-    'SlackAuth': (authInfo) => authInfo.user?.slackToken,
+    SlackAuth: (authInfo) => authInfo.user?.slackToken,
 
     // Map security scheme 'ApiKeyAuth' to API key from user context
-    'ApiKeyAuth': (authInfo) => authInfo.user?.apiKey,
+    ApiKeyAuth: (authInfo) => authInfo.user?.apiKey,
   },
-})
+});
 ```
 
 **How it works:**
+
 1. Extracts security scheme names from OpenAPI spec (e.g., `GitHubAuth`, `SlackAuth`)
 2. For each tool, looks up the required security scheme
 3. Calls the corresponding extractor function to get the token from `authInfo`
@@ -195,12 +196,10 @@ OpenapiAdapter.init({
     // Default to main JWT token
     return { jwt: authInfo.token };
   },
-})
+});
 ```
 
-<Check>
-  **Security Risk: LOW** — Full control over authentication resolution from user context.
-</Check>
+<Check>**Security Risk: LOW** — Full control over authentication resolution from user context.</Check>
 
 ### Strategy 4: Static Auth (Medium Risk)
 
@@ -215,12 +214,10 @@ OpenapiAdapter.init({
     jwt: process.env.API_JWT_TOKEN,
     apiKey: process.env.API_KEY,
   },
-})
+});
 ```
 
-<Warning>
-  **Security Risk: MEDIUM** — Store credentials securely in environment variables or secrets manager.
-</Warning>
+<Warning>**Security Risk: MEDIUM** — Store credentials securely in environment variables or secrets manager.</Warning>
 
 ### Strategy 5: Dynamic Headers & Body Mapping (Low Risk)
 
@@ -252,12 +249,10 @@ OpenapiAdapter.init({
       tenantId: authInfo.user?.tenantId,
     };
   },
-})
+});
 ```
 
-<Check>
-  **Security Risk: LOW** — User-specific data is injected server-side, hidden from MCP clients.
-</Check>
+<Check>**Security Risk: LOW** — User-specific data is injected server-side, hidden from MCP clients.</Check>
 
 ### Default Behavior (Medium Risk)
 
@@ -269,11 +264,12 @@ OpenapiAdapter.init({
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
   // No auth config - will use authInfo.token by default
-})
+});
 ```
 
 <Warning>
-  **Security Risk: MEDIUM** — Only works for single Bearer auth. For multiple auth providers, use `authProviderMapper` or `securityResolver`.
+  **Security Risk: MEDIUM** — Only works for single Bearer auth. For multiple auth providers, use `authProviderMapper`
+  or `securityResolver`.
 </Warning>
 
 ## Advanced Features
@@ -292,7 +288,7 @@ OpenapiAdapter.init({
   generateOptions: {
     filterFn: (op) => op.path.startsWith('/invoices') || op.path.startsWith('/customers'),
   },
-})
+});
 ```
 
 ```ts Exclude specific operations
@@ -303,7 +299,7 @@ OpenapiAdapter.init({
   generateOptions: {
     excludeOperationIds: ['deprecatedEndpoint', 'internalOnly'],
   },
-})
+});
 ```
 
 ```ts Include only specific operations
@@ -315,7 +311,7 @@ OpenapiAdapter.init({
     defaultInclude: false,
     filterFn: (op) => ['getUser', 'createUser', 'updateUser'].includes(op.operationId),
   },
-})
+});
 ```
 
 </CodeGroup>
@@ -345,7 +341,7 @@ OpenapiAdapter.init({
       return schema;
     },
   },
-})
+});
 ```
 
 ### Load Options
@@ -359,11 +355,11 @@ OpenapiAdapter.init({
   baseUrl: 'https://api.example.com',
   loadOptions: {
     headers: {
-      'authorization': `Bearer ${process.env.SPEC_ACCESS_TOKEN}`,
+      authorization: `Bearer ${process.env.SPEC_ACCESS_TOKEN}`,
     },
     timeout: 10000, // 10 seconds
   },
-})
+});
 ```
 
 ## How It Works
@@ -400,7 +396,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       url: 'https://api.github.com/openapi.json',
       baseUrl: 'https://api.github.com',
       authProviderMapper: {
-        'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+        GitHubAuth: (authInfo) => authInfo.user?.githubToken,
       },
     }),
 
@@ -410,7 +406,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       url: 'https://api.slack.com/openapi.json',
       baseUrl: 'https://api.slack.com',
       authProviderMapper: {
-        'SlackAuth': (authInfo) => authInfo.user?.slackToken,
+        SlackAuth: (authInfo) => authInfo.user?.slackToken,
       },
     }),
   ],
@@ -494,13 +490,16 @@ export default class ExpenseMcpApp {}
     For multi-provider authentication, use `authProviderMapper` to map each security scheme to the correct auth provider. This provides **LOW security risk**.
   </Card>
 
-  <Card title="Never Hardcode Credentials" icon="triangle-exclamation">
-    Always store credentials in environment variables or secrets manager. Never commit credentials to source control.
-  </Card>
+{' '}
+<Card title="Never Hardcode Credentials" icon="triangle-exclamation">
+  Always store credentials in environment variables or secrets manager. Never commit credentials to source control.
+</Card>
 
-  <Card title="Avoid includeSecurityInInput" icon="xmark">
-    Setting `generateOptions.includeSecurityInInput: true` exposes auth fields to MCP clients (**HIGH risk**). Only use for development/testing.
-  </Card>
+{' '}
+<Card title="Avoid includeSecurityInInput" icon="xmark">
+  Setting `generateOptions.includeSecurityInInput: true` exposes auth fields to MCP clients (**HIGH risk**). Only use
+  for development/testing.
+</Card>
 
   <Card title="Validate User Context" icon="user-check">
     Always validate that `authInfo.user` contains the expected fields before extracting tokens. Handle missing tokens gracefully.
@@ -511,11 +510,11 @@ export default class ExpenseMcpApp {}
 
 The adapter automatically validates your security configuration and assigns a risk score:
 
-| Risk Level | Configuration | Description |
-|------------|---------------|-------------|
-| **LOW** ✅ | `authProviderMapper` or `securityResolver` | Auth resolved from user context, not exposed to clients |
-| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default | Static credentials or default behavior |
-| **HIGH** 🚨 | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended) |
+| Risk Level    | Configuration                                  | Description                                             |
+| ------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
+| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
 
 ## Troubleshooting
 
@@ -532,6 +531,7 @@ The adapter automatically validates your security configuration and assigns a ri
       // Add all security schemes from your spec
     }
     ```
+
   </Accordion>
 
   <Accordion title="Error: Authentication required but no auth configuration found">
@@ -543,12 +543,14 @@ The adapter automatically validates your security configuration and assigns a ri
     2. Add `securityResolver` (for custom logic)
     3. Add `staticAuth` (for server-to-server)
     4. Add `additionalHeaders` (for static API keys)
+
   </Accordion>
 
   <Accordion title="Tools not appearing">
     **Cause:** Tools may be filtered out by `filterFn` or `excludeOperationIds`.
 
     **Solution:** Check your filter configuration or remove filters to include all operations.
+
   </Accordion>
 
   <Accordion title="Request fails with 401 Unauthorized">
@@ -559,6 +561,7 @@ The adapter automatically validates your security configuration and assigns a ri
     2. Check that token extraction returns a valid value
     3. Verify the token is not expired
     4. Check API logs for specific auth errors
+
   </Accordion>
 
   <Accordion title="TypeScript errors with OpenAPI spec">
@@ -571,6 +574,7 @@ The adapter automatically validates your security configuration and assigns a ri
 
     const spec = require('./openapi.json') as OpenAPIV3.Document;
     ```
+
   </Accordion>
 </AccordionGroup>
 
@@ -581,6 +585,7 @@ The adapter automatically validates your security configuration and assigns a ri
 Creates a new OpenAPI adapter instance.
 
 **Parameters:**
+
 - `options: OpenApiAdapterOptions` — Adapter configuration
 
 **Returns:** Adapter instance ready for use in `@App({ adapters: [...] })`
@@ -612,16 +617,13 @@ interface AuthInfo {
 ## Performance Tips
 
 <Tip>
-  The adapter uses lazy loading — the OpenAPI spec is only loaded and tools are only generated on first use, not during initialization.
+  The adapter uses lazy loading — the OpenAPI spec is only loaded and tools are only generated on first use, not during
+  initialization.
 </Tip>
 
-<Tip>
-  Combine with app-level plugins (caching, logging, metrics) to enhance all generated tools automatically.
-</Tip>
+<Tip>Combine with app-level plugins (caching, logging, metrics) to enhance all generated tools automatically.</Tip>
 
-<Tip>
-  Use `filterFn` to generate only the tools you need, reducing initialization time and memory usage.
-</Tip>
+<Tip>Use `filterFn` to generate only the tools you need, reducing initialization time and memory usage.</Tip>
 
 ## Links & Resources
 
@@ -630,13 +632,15 @@ interface AuthInfo {
     See the expense management demo app using the OpenAPI adapter
   </Card>
 
-  <Card title="Example OpenAPI Spec" icon="file-code" href="https://frontmcp-test.proxy.beeceptor.com/openapi.json">
-    OpenAPI spec used in the demo application
-  </Card>
+{' '}
+<Card title="Example OpenAPI Spec" icon="file-code" href="https://frontmcp-test.proxy.beeceptor.com/openapi.json">
+  OpenAPI spec used in the demo application
+</Card>
 
-  <Card title="Generator Library" icon="npm" href="https://www.npmjs.com/package/mcp-from-openapi">
-    Underlying library for OpenAPI to MCP conversion
-  </Card>
+{' '}
+<Card title="Generator Library" icon="npm" href="https://www.npmjs.com/package/mcp-from-openapi">
+  Underlying library for OpenAPI to MCP conversion
+</Card>
 
   <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/adapters/src/openapi">
     View the adapter source code
