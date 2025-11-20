@@ -29,7 +29,7 @@ export function createOpenApiTool(
     rawInputSchema: openapiTool.inputSchema,
   })(async (input, ctx) => {
     // 1. Resolve security from context
-    const security = await resolveToolSecurity(openapiTool, ctx.authInfo);
+    const security = await resolveToolSecurity(openapiTool, ctx.authInfo, options);
 
     // 2. Build request from mapper
     const { url, headers, body: requestBody } = buildRequest(

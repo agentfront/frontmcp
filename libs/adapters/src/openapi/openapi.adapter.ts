@@ -2,6 +2,7 @@ import { Adapter, DynamicAdapter, FrontMcpAdapterResponse } from '@frontmcp/sdk'
 import { OpenApiAdapterOptions } from './openapi.types';
 import { OpenAPIToolGenerator } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
+import { validateSecurityConfiguration } from './openapi.security';
 
 @Adapter({
   name: 'openapi',
@@ -35,6 +36,43 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       maxSchemaDepth: this.options.generateOptions?.maxSchemaDepth,
       includeExamples: this.options.generateOptions?.includeExamples,
     });
+
+    // Validate security configuration
+    const validation = validateSecurityConfiguration(openapiTools, this.options);
+
+    // Log security information
+    console.log(`\n[OpenAPI Adapter: ${this.options.name}] Security Analysis:`);
+    console.log(`  Security Risk Score: ${validation.securityRiskScore.toUpperCase()}`);
+    console.log(`  Valid Configuration: ${validation.valid ? 'YES' : 'NO'}`);
+
+    if (validation.warnings.length > 0) {
+      console.log('\n  Messages:');
+      validation.warnings.forEach((warning) => {
+        console.log(`    - ${warning}`);
+      });
+    }
+
+    // Fail if configuration is invalid and security is required
+    if (!validation.valid) {
+      throw new Error(
+        `[OpenAPI Adapter: ${this.options.name}] Invalid security configuration.\n` +
+          `Missing auth provider mappings for security schemes: ${validation.missingMappings.join(', ')}\n\n` +
+          `Your OpenAPI spec requires these security schemes, but no auth configuration was provided.\n\n` +
+          `Add one of the following to your adapter configuration:\n\n` +
+          `1. authProviderMapper (recommended):\n` +
+          `   authProviderMapper: {\n` +
+          validation.missingMappings.map((s) => `     '${s}': (authInfo) => authInfo.user?.${s.toLowerCase()}Token,`).join('\n') +
+          `\n   }\n\n` +
+          `2. securityResolver:\n` +
+          `   securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })\n\n` +
+          `3. staticAuth:\n` +
+          `   staticAuth: { jwt: process.env.API_TOKEN }\n\n` +
+          `4. Include security in input (NOT recommended for production):\n` +
+          `   generateOptions: { includeSecurityInInput: true }`
+      );
+    }
+
+    console.log(''); // Empty line for readability
 
     // Convert OpenAPI tools to FrontMCP tools
     const tools = openapiTools.map((openapiTool) =>

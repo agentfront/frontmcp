@@ -1,6 +1,6 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { OpenAPIV3 } from 'openapi-types';
-import type { LoadOptions, GenerateOptions } from 'mcp-from-openapi';
+import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext } from 'mcp-from-openapi';
 
 interface BaseOptions {
   /**
@@ -48,6 +48,71 @@ interface BaseOptions {
    * @param body
    */
   bodyMapper?: (authInfo: AuthInfo, body: Record<string, unknown>) => Record<string, unknown>;
+
+  /**
+   * Custom security resolver for resolving authentication from context.
+   * This allows you to map different auth providers to different tools/security schemes.
+   *
+   * Use this when:
+   * - You have multiple auth providers (e.g., GitHub OAuth, Google OAuth, API keys)
+   * - Different tools need different authentication
+   * - You need custom logic to select the right auth provider
+   *
+   * @example
+   * ```typescript
+   * securityResolver: (tool, authInfo) => {
+   *   // Use GitHub token for GitHub API tools
+   *   if (tool.name.startsWith('github_')) {
+   *     return { jwt: authInfo.user?.githubToken };
+   *   }
+   *   // Use Google token for Google API tools
+   *   if (tool.name.startsWith('google_')) {
+   *     return { jwt: authInfo.user?.googleToken };
+   *   }
+   *   // Default to main JWT token
+   *   return { jwt: authInfo.token };
+   * }
+   * ```
+   */
+  securityResolver?: (
+    tool: McpOpenAPITool,
+    authInfo: AuthInfo
+  ) => SecurityContext | Promise<SecurityContext>;
+
+  /**
+   * Map security scheme names to auth provider extractors.
+   * This allows different security schemes to use different auth providers.
+   *
+   * Use this when your OpenAPI spec has multiple security schemes
+   * and each should use a different auth provider from the context.
+   *
+   * @example
+   * ```typescript
+   * authProviderMapper: {
+   *   // GitHub OAuth security scheme
+   *   'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+   *   // Google OAuth security scheme
+   *   'GoogleAuth': (authInfo) => authInfo.user?.googleToken,
+   *   // API Key security scheme
+   *   'ApiKeyAuth': (authInfo) => authInfo.user?.apiKey,
+   * }
+   * ```
+   */
+  authProviderMapper?: Record<string, (authInfo: AuthInfo) => string | undefined>;
+
+  /**
+   * Static authentication configuration when not using dynamic auth from context.
+   * Useful for server-to-server APIs with static credentials.
+   *
+   * @example
+   * ```typescript
+   * staticAuth: {
+   *   jwt: process.env.API_JWT_TOKEN,
+   *   apiKey: process.env.API_KEY,
+   * }
+   * ```
+   */
+  staticAuth?: Partial<SecurityContext>;
 
   /**
    * Options for loading the OpenAPI specification

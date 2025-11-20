@@ -12,7 +12,7 @@ import {
   type McpOpenAPITool,
   type SecurityContext,
   type ParameterMapper,
-} from 'mcp-from-openapi';
+} from '../src';
 
 /**
  * FrontMCP context (simplified example)
@@ -43,11 +43,11 @@ export class OpenAPIToolExecutor {
     // 1. Build security context from FrontMCP context
     const securityContext = this.buildSecurityContext(context);
 
-    // 2. Resolve security (handles ANY OpenAPI security scheme name)
-    const security = this.securityResolver.resolve(tool.mapper, securityContext);
-
-    // 3. Validate required auth is available
+    // 2. Validate required auth is available
     this.validateSecurity(tool, securityContext);
+
+    // 3. Resolve security (handles ANY OpenAPI security scheme name)
+    const security = await this.securityResolver.resolve(tool.mapper, securityContext);
 
     // 4. Build the HTTP request
     const request = this.buildRequest(tool, input, security);
@@ -72,7 +72,7 @@ export class OpenAPIToolExecutor {
           return context.authInfo.jwt || this.extractTokenFromSession(context);
         }
 
-        // Example: resolve API key from different sources
+        // Example: resolve an API key from different sources
         if (security.type === 'apiKey') {
           return (
             context.authInfo.apiKey ||
@@ -90,14 +90,36 @@ export class OpenAPIToolExecutor {
    * Validate that all required security is available
    */
   private validateSecurity(tool: McpOpenAPITool, context: SecurityContext): void {
-    const missing = this.securityResolver.checkMissingSecurity(tool.mapper, context);
+    // Check if this tool requires security
+    const requiresSecurity = tool.mapper.some((m) => m.security && m.required);
 
-    if (missing.length > 0) {
+    if (!requiresSecurity) {
+      return; // No security required
+    }
+
+    // Validate that we have some form of auth
+    const hasAuth =
+      context.jwt ||
+      context.apiKey ||
+      context.basic ||
+      context.oauth2Token ||
+      (context.apiKeys && Object.keys(context.apiKeys).length > 0) ||
+      (context.customHeaders && Object.keys(context.customHeaders).length > 0);
+
+    if (!hasAuth) {
+      // Extract required security scheme names
+      const schemes = tool.mapper
+        .filter((m) => m.security && m.required)
+        .map((m) => m.security?.scheme ?? 'unknown')
+        .join(', ');
+
       throw new Error(
         `Authentication required for ${tool.name}:\n` +
-        `Missing: ${missing.join(', ')}\n\n` +
-        `Please provide authentication via context.authInfo or environment variables:\n` +
-        missing.map(scheme => `  - ${scheme}: Set context.authInfo.jwt or process.env.JWT_TOKEN`).join('\n')
+          `Required security schemes: ${schemes}\n\n` +
+          `Please provide authentication via context.authInfo or environment variables:\n` +
+          `  - Set context.authInfo.jwt for Bearer authentication\n` +
+          `  - Set context.authInfo.apiKey for API Key authentication\n` +
+          `  - Or use customResolver in security context`
       );
     }
   }
@@ -108,7 +130,7 @@ export class OpenAPIToolExecutor {
   private buildRequest(
     tool: McpOpenAPITool,
     input: Record<string, unknown>,
-    security: ReturnType<typeof this.securityResolver.resolve>
+    security: Awaited<ReturnType<typeof this.securityResolver.resolve>>
   ) {
     // Get base URL from tool metadata
     const baseUrl = tool.metadata.servers?.[0]?.url || '';
@@ -116,7 +138,7 @@ export class OpenAPIToolExecutor {
     // Build path with path parameters
     const path = this.buildPath(tool.metadata.path, tool.mapper, input);
 
-    // Build query parameters (from input + security)
+    // Build query parameters (from input and security)
     const query = {
       ...security.query,
       ...this.buildQuery(tool.mapper, input),
@@ -128,7 +150,7 @@ export class OpenAPIToolExecutor {
       url.searchParams.set(key, String(value));
     });
 
-    // Build headers (from input + security)
+    // Build headers (from input and security)
     const headers = {
       ...security.headers,
       ...this.buildHeaders(tool.mapper, input),
@@ -253,10 +275,10 @@ export class OpenAPIToolExecutor {
   }
 
   /**
-   * Example: Extract token from session (custom logic)
+   * Example: Extract token from a session (custom logic)
    */
   private extractTokenFromSession(context: FrontMcpContext): string | undefined {
-    // Custom logic to extract token from session
+    // Custom logic to extract token from a session
     return context.authInfo.sessionId
       ? `session_${context.authInfo.sessionId}`
       : undefined;
