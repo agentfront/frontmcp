@@ -35,6 +35,22 @@ export const describeToolInputSchema = z.object({
   toolNames: z
     .array(z.string())
     .min(1)
+    .superRefine((toolNames, ctx) => {
+      const seen = new Set<string>();
+      const duplicates = new Set<string>();
+      for (const name of toolNames) {
+        if (seen.has(name)) {
+          duplicates.add(name);
+        }
+        seen.add(name);
+      }
+      if (duplicates.size > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate tool names are not allowed: ${Array.from(duplicates).join(', ')}`,
+        });
+      }
+    })
     .describe(
       'Array of unique tool names (from codecall:search results) to fetch their detailed schemas and usage examples. Example: ["users:list", "billing:getInvoice"]',
     ),
