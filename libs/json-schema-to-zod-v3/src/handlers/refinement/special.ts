@@ -4,11 +4,11 @@
 
 import { z } from 'zod';
 import { RefinementHandler, JSONSchemaObject } from '../../types';
-import { deepEqual, hasOwnProperty } from '../../utils';
+import { deepEqual, objectHasOwn as hasOwn } from '../../utils';
 
 /**
  * Handles complex const values (arrays and objects)
- * Primitive const values are handled in primitive phase
+ * Primitive const values are handled in the primitive phase
  */
 export class ConstComplexHandler implements RefinementHandler {
   /**
@@ -92,9 +92,9 @@ export class ProtoRequiredHandler implements RefinementHandler {
       return zodSchema;
     }
 
-    return z
-      .any()
-      .refine((value) => this.validateRequired(value, schema.required!), { message: 'Missing required properties' });
+    return zodSchema.refine((value) => this.validateRequired(value, schema.required!), {
+      message: 'Missing required properties',
+    });
   }
 
   /**
@@ -110,7 +110,7 @@ export class ProtoRequiredHandler implements RefinementHandler {
       return true;
     }
 
-    return required.every((prop) => hasOwnProperty(value, prop));
+    return required.every((prop) => hasOwn(value, prop));
   }
 }
 

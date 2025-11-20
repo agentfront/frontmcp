@@ -1,6 +1,6 @@
 // errors/error-handler.ts
 import { FlowControl } from '../common';
-import { McpError, formatMcpErrorResponse } from './mcp.error';
+import { McpError, formatMcpErrorResponse, toMcpError} from './mcp.error';
 
 export interface ErrorHandlerOptions {
   /**
@@ -108,8 +108,6 @@ export class ErrorHandler {
       }
     }
 
-    // Default transformation
-    const { toMcpError } = require('./mcp.error');
     return toMcpError(error);
   }
 }

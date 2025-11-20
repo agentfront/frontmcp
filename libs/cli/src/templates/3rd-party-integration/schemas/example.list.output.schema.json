@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frontmcp.dev/schemas/example.list.output.schema.json",
+  "title": "Example List Output",
+  "allOf": [
+    {
+      "$ref": "./mcp-http-output-base.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "required": ["items"],
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "name"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "type": { "type": "string" }
+                }
+              }
+            },
+            "nextCursor": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

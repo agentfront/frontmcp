@@ -339,7 +339,7 @@ function logSchemaConversion(schema: any, userId: string) {
 
 ## 🆘 Reporting Security Issues
 
-If you discover a security vulnerability, please email [your-security-email] instead of using the issue tracker.
+If you discover a security vulnerability, please email <david@frontegg.com> instead of using the issue tracker.
 
 ---
 

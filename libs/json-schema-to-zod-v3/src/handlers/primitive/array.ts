@@ -107,10 +107,17 @@ export class ItemsHandler implements SchemaHandler {
     // Object schema - all items must match this schema
     if (schema.items && typeof schema.items !== 'boolean' && !schema.prefixItems) {
       const itemSchema = convertJsonSchemaToZod(schema.items);
-      types.array = z.array(itemSchema);
+      let arraySchema = z.array(itemSchema) as z.ZodArray<any>;
 
-      // Note: Min/max constraints should be applied via MinItemsHandler and MaxItemsHandler,
-      // which run before this handler in the pipeline
+      // Reapply min/max constraints from the JSON schema to preserve them
+      if (schema.minItems !== undefined) {
+        arraySchema = arraySchema.min(schema.minItems);
+      }
+      if (schema.maxItems !== undefined) {
+        arraySchema = arraySchema.max(schema.maxItems);
+      }
+
+      types.array = arraySchema;
       return;
     }
 

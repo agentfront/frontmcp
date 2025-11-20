@@ -46,3 +46,6 @@ Thumbs.db
 test-output
 
 .codex-docs
+
+# Docs backup (local development only)
+docs/docs.backup.json

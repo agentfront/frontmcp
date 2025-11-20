@@ -197,11 +197,21 @@ export class ObjectPropertiesHandler implements RefinementHandler {
       }
 
       // Control additional properties
+      const baseObject = z.object(shape);
+
       if (schema.additionalProperties === false) {
-        return z.object(shape);
-      } else {
-        return z.object(shape).passthrough();
+        // Reject unknown properties (JSON Schema: additionalProperties: false)
+        return baseObject.strict();
       }
+
+      if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+        // Validate additional properties against a schema
+        const additionalSchema = convertJsonSchemaToZod(schema.additionalProperties);
+        return baseObject.catchall(additionalSchema);
+      }
+
+      // Default: allow unknown properties
+      return baseObject.passthrough();
     }
 
     // For other schema types, use refinement

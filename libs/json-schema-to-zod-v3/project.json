@@ -12,7 +12,7 @@
         "outputPath": "libs/json-schema-to-zod-v3/dist",
         "main": "libs/json-schema-to-zod-v3/src/index.ts",
         "tsConfig": "libs/json-schema-to-zod-v3/tsconfig.lib.json",
-        "assets": ["README.md"]
+        "assets": ["libs/json-schema-to-zod-v3/*.md", "LICENSE"]
       }
     },
     "build": {

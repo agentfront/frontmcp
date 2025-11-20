@@ -1,10 +1,11 @@
 {
   "name": "@frontmcp/source",
   "version": "0.3.1",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "nx serve demo",
-    "build": "nx run-many -t build"
+    "build": "nx run-many -t build",
+    "docs:local": "bash scripts/dev-docs.sh"
   },
   "private": true,
   "dependencies": {

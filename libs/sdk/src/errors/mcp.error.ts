@@ -159,15 +159,23 @@ export class InvalidInputError extends PublicMcpError {
  * Invalid output validation error (internal - don't expose schema details)
  */
 export class InvalidOutputError extends InternalMcpError {
+  private readonly hasCustomErrorId: boolean;
+
   constructor(errorId?: string) {
     super('Tool output validation failed', 'INVALID_OUTPUT');
+    this.hasCustomErrorId = !!errorId;
     if (errorId) {
       this.errorId = errorId;
     }
   }
 
   override getPublicMessage(): string {
-    return `Output validation failed. Please contact support with error ID: ${this.errorId}`;
+    // If a custom errorId was provided (e.g., request ID), include it for correlation
+    // Otherwise, use a simpler message since the auto-generated ID isn't meaningful to users
+    if (this.hasCustomErrorId) {
+      return `Output validation failed. Please contact support with error ID: ${this.errorId}`;
+    }
+    return 'Output validation failed. Please contact support.';
   }
 }
 

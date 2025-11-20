@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frontmcp.dev/schemas/mcp-json-tool.schema.json",
+  "title": "FrontMCP JSON HTTP Tool",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "description",
+    "servers",
+    "auth",
+    "request",
+    "input_schema",
+    "outputs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "servers": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "minItems": 1
+    },
+    "auth": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "oauth2" },
+            "token_source": { "enum": ["access_token", "id_token"] },
+            "jwt_from": { "enum": ["id_token", "access_token"] },
+            "inject": {
+              "type": "object",
+              "required": ["into", "name", "format"],
+              "properties": {
+                "into": { "enum": ["header"] },
+                "name": { "type": "string" },
+                "format": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "inject"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "bearer" },
+            "inject": {
+              "type": "object",
+              "required": ["into", "name", "format"],
+              "properties": {
+                "into": { "enum": ["header"] },
+                "name": { "type": "string" },
+                "format": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "inject"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "apiKey" },
+            "inject": {
+              "type": "object",
+              "required": ["into", "name", "format"],
+              "properties": {
+                "into": { "enum": ["header", "query"] },
+                "name": { "type": "string" },
+                "format": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "inject"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "request": {
+      "type": "object",
+      "required": ["method", "path_template", "static_headers", "mappings"],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        "path_template": { "type": "string" },
+        "static_headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "mappings": {
+          "type": "object",
+          "required": ["path_params", "query", "headers", "body"],
+          "additionalProperties": false,
+          "properties": {
+            "path_params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["src"],
+                "additionalProperties": false,
+                "properties": {
+                  "src": { "type": "string" },
+                  "required": { "type": "boolean" },
+                  "exclude_from_input": { "type": "boolean" },
+                  "default": {},
+                  "if_missing": {
+                    "type": "string",
+                    "enum": ["omit", "use_default", "error"]
+                  }
+                }
+              }
+            },
+            "query": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "required": ["src"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "src": { "type": "string" },
+                      "coerce": {
+                        "type": "string",
+                        "enum": ["string", "integer", "number", "boolean"]
+                      },
+                      "default": {},
+                      "if_missing": {
+                        "type": "string",
+                        "enum": ["omit", "use_default", "error"]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "string" },
+                  {
+                    "type": "object",
+                    "required": ["src"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "src": { "type": "string" },
+                      "default": {},
+                      "if_missing": {
+                        "type": "string",
+                        "enum": ["omit", "use_default", "error"]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "body": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "oneOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "required": ["src"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "src": { "type": "string" },
+                          "default": {},
+                          "if_missing": {
+                            "type": "string",
+                            "enum": ["omit", "use_default", "error"]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "input_schema": {
+      "type": "object"
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "when", "schema", "map"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "when": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "array",
+                "items": { "type": "integer" }
+              },
+              "content_type": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "schema": {
+            "type": "object"
+          },
+          "map": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string" },
+              "headers": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "object" }
+                ]
+              },
+              "body": {}
+            },
+            "required": ["status", "body"],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  }
+}
