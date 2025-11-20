@@ -287,7 +287,6 @@
                     "icon": "toolbox",
                     "pages": [
                       "draft/docs/servers/extensibility/providers",
-                      "draft/docs/servers/extensibility/adapters",
                       "draft/docs/servers/extensibility/plugins",
                       "draft/docs/servers/extensibility/logging"
                     ]
@@ -296,7 +295,10 @@
               },
               {
                 "group": "Adapters",
-                "pages": ["draft/docs/adapters/openapi-adapter"]
+                "pages": [
+                  "draft/docs/adapters/overview",
+                  "draft/docs/adapters/openapi-adapter"
+                ]
               },
               {
                 "group": "Plugins",
