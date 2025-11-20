@@ -3,6 +3,8 @@
  * Custom assertion helpers for testing SDK components
  */
 
+const NO_EXPECTED = Symbol('assertResolves.noExpected');
+
 /**
  * Asserts that a value is defined (not null or undefined)
  */
@@ -15,15 +17,11 @@ export function assertDefined<T>(value: T | null | undefined, message?: string):
 /**
  * Asserts that a value is an instance of a class
  */
-export function assertInstanceOf<T>(
-  value: any,
-  constructor: new (...args: any[]) => T,
-  message?: string,
-): asserts value is T {
-  if (!(value instanceof constructor)) {
+export function assertInstanceOf<T>(value: any, Ctor: new (...args: any[]) => T, message?: string): asserts value is T {
+  if (!(value instanceof Ctor)) {
     throw new Error(
       message ||
-        `Expected value to be an instance of ${constructor.name}, but got ${value?.constructor?.name || typeof value}`,
+        `Expected value to be an instance of ${Ctor.name}, but got ${value?.constructor?.name || typeof value}`,
     );
   }
 }
@@ -38,19 +36,42 @@ export function assertContains<T>(array: T[], item: T, message?: string): void {
 }
 
 /**
- * Asserts that two arrays have the same elements (order doesn't matter)
+ * Asserts that two arrays have the same elements with the same counts (order doesn't matter)
  */
 export function assertSameElements<T>(actual: T[], expected: T[], message?: string): void {
-  const actualSet = new Set(actual);
-  const expectedSet = new Set(expected);
-
-  if (actualSet.size !== expectedSet.size) {
-    throw new Error(message || `Expected arrays to have same length: ${actualSet.size} vs ${expectedSet.size}`);
+  if (actual.length !== expected.length) {
+    throw new Error(message || `Expected arrays to have same length: ${actual.length} vs ${expected.length}`);
   }
 
-  for (const item of expectedSet) {
-    if (!actualSet.has(item)) {
-      throw new Error(message || `Expected array to contain ${item}`);
+  // Count occurrences of each element in both arrays
+  const actualCounts = new Map<T, number>();
+  const expectedCounts = new Map<T, number>();
+
+  for (const item of actual) {
+    actualCounts.set(item, (actualCounts.get(item) || 0) + 1);
+  }
+
+  for (const item of expected) {
+    expectedCounts.set(item, (expectedCounts.get(item) || 0) + 1);
+  }
+
+  // Check that all expected items exist with the correct counts
+  for (const [item, count] of expectedCounts) {
+    const actualCount = actualCounts.get(item) || 0;
+    if (actualCount !== count) {
+      throw new Error(
+        message || `Expected array to contain ${count} occurrence(s) of ${item}, but found ${actualCount}`,
+      );
+    }
+  }
+
+  // Check that actual doesn't have extra items
+  for (const [item, count] of actualCounts) {
+    const expectedCount = expectedCounts.get(item) || 0;
+    if (expectedCount !== count) {
+      throw new Error(
+        message || `Expected array to contain ${expectedCount} occurrence(s) of ${item}, but found ${count}`,
+      );
     }
   }
 }
@@ -93,8 +114,10 @@ export async function assertRejects(
  */
 export async function assertResolves<T>(promise: Promise<T>, expectedValue?: T): Promise<T> {
   const value = await promise;
-  if (expectedValue !== undefined) {
-    expect(value).toEqual(expectedValue);
+  const finalExpected: T | typeof NO_EXPECTED = arguments.length > 1 ? (expectedValue as T) : NO_EXPECTED;
+
+  if (finalExpected !== NO_EXPECTED) {
+    expect(value).toEqual(finalExpected as T);
   }
   return value;
 }

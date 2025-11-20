@@ -5,9 +5,8 @@
 
 import 'reflect-metadata';
 import { Scope } from '../../scope';
-import { FrontMcpLogger } from '../../common';
-import HookRegistry from '../../hooks/hook.registry';
 import ProviderRegistry from '../../provider/provider.registry';
+import { ProviderScope } from '@frontmcp/sdk';
 
 /**
  * Creates a mock Scope for testing
@@ -52,7 +51,7 @@ export async function createProviderRegistryWithScope(providers: any[] = []) {
       provide: Scope,
       useValue: mockScope,
       name: 'MockScope',
-      scope: 'GLOBAL' as any,
+      scope: ProviderScope.GLOBAL,
     },
     ...providers,
   ]);
