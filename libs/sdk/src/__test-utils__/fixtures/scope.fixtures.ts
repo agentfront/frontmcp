@@ -51,7 +51,7 @@ export async function createProviderRegistryWithScope(providers: any[] = []) {
       provide: Scope,
       useValue: mockScope,
       name: 'MockScope',
-      scope: ProviderScope.GLOBAL
+      scope: ProviderScope.GLOBAL,
     },
     ...providers,
   ]);

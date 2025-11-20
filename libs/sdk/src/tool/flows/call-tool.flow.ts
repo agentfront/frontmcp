@@ -85,6 +85,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'tools/call');
     }
 
+    // Find the tool early to get its owner ID for hook filtering
+    const { name } = params;
+    const activeTools = this.scope.tools.getTools(true);
+    const tool = activeTools.find((entry) => {
+      return entry.fullName === name || entry.name === name;
+    });
+
+    // Store tool owner ID in the flow input for hook filtering
+    if (tool?.owner) {
+      (this.rawInput as any)._toolOwnerId = tool.owner.id;
+    }
+
     this.state.set({ input: params, authInfo: ctx.authInfo });
     this.logger.verbose('parseInput:done');
   }

@@ -17,11 +17,7 @@ export function assertDefined<T>(value: T | null | undefined, message?: string):
 /**
  * Asserts that a value is an instance of a class
  */
-export function assertInstanceOf<T>(
-  value: any,
-  Ctor: new (...args: any[]) => T,
-  message?: string,
-): asserts value is T {
+export function assertInstanceOf<T>(value: any, Ctor: new (...args: any[]) => T, message?: string): asserts value is T {
   if (!(value instanceof Ctor)) {
     throw new Error(
       message ||
@@ -44,9 +40,7 @@ export function assertContains<T>(array: T[], item: T, message?: string): void {
  */
 export function assertSameElements<T>(actual: T[], expected: T[], message?: string): void {
   if (actual.length !== expected.length) {
-    throw new Error(
-      message || `Expected arrays to have same length: ${actual.length} vs ${expected.length}`,
-    );
+    throw new Error(message || `Expected arrays to have same length: ${actual.length} vs ${expected.length}`);
   }
 
   // Count occurrences of each element in both arrays
@@ -66,8 +60,7 @@ export function assertSameElements<T>(actual: T[], expected: T[], message?: stri
     const actualCount = actualCounts.get(item) || 0;
     if (actualCount !== count) {
       throw new Error(
-        message ||
-          `Expected array to contain ${count} occurrence(s) of ${item}, but found ${actualCount}`,
+        message || `Expected array to contain ${count} occurrence(s) of ${item}, but found ${actualCount}`,
       );
     }
   }
@@ -77,8 +70,7 @@ export function assertSameElements<T>(actual: T[], expected: T[], message?: stri
     const expectedCount = expectedCounts.get(item) || 0;
     if (expectedCount !== count) {
       throw new Error(
-        message ||
-          `Expected array to contain ${expectedCount} occurrence(s) of ${item}, but found ${count}`,
+        message || `Expected array to contain ${expectedCount} occurrence(s) of ${item}, but found ${count}`,
       );
     }
   }
@@ -122,8 +114,7 @@ export async function assertRejects(
  */
 export async function assertResolves<T>(promise: Promise<T>, expectedValue?: T): Promise<T> {
   const value = await promise;
-  const finalExpected: T | typeof NO_EXPECTED =
-    arguments.length > 1 ? (expectedValue as T) : NO_EXPECTED;
+  const finalExpected: T | typeof NO_EXPECTED = arguments.length > 1 ? (expectedValue as T) : NO_EXPECTED;
 
   if (finalExpected !== NO_EXPECTED) {
     expect(value).toEqual(finalExpected as T);

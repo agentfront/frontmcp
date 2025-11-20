@@ -1,5 +1,5 @@
-import {AppEntry, AppRecord, LocalAppMetadata} from '../../common';
-import {idFromString} from '../../utils/string.utils';
+import { AppEntry, AppRecord, LocalAppMetadata } from '../../common';
+import { idFromString } from '../../utils/string.utils';
 import ProviderRegistry from '../../provider/provider.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import ResourceRegistry from '../../resource/resource.registry';
@@ -18,7 +18,6 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   private appResources: ResourceRegistry;
   private appPrompts: PromptRegistry;
 
-
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
     this.scopeProviders = scopeProviders;
@@ -26,33 +25,29 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     this.ready = this.initialize();
   }
 
-
   protected async initialize() {
     this.appProviders = new ProviderRegistry(this.metadata.providers ?? [], this.scopeProviders);
     await this.appProviders.ready; // wait for providers to be ready
     // this.authProviders = new AuthRegistry(this.providers, this.metadata.authProviders ?? []);
     // await this.authProviders.ready; // wait for providers to be ready
 
-    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? []);
+    const appOwner = {
+      kind: 'app' as const,
+      id: this.id,
+      ref: this.token,
+    };
+
+    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner);
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready
 
     this.appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);
     await this.appAdapters.ready;
 
-    this.appTools = new ToolRegistry(this.appProviders, this.metadata.tools ?? [], {
-      kind: 'app',
-      id: this.id,
-      ref: this.token,
-    });
+    this.appTools = new ToolRegistry(this.appProviders, this.metadata.tools ?? [], appOwner);
     this.appResources = new ResourceRegistry(this.appProviders, this.metadata.resources ?? []);
     this.appPrompts = new PromptRegistry(this.appProviders, this.metadata.prompts ?? []);
 
-    await Promise.all([
-      this.appTools.ready,
-      this.appResources.ready,
-      this.appPrompts.ready,
-    ]);
-
+    await Promise.all([this.appTools.ready, this.appResources.ready, this.appPrompts.ready]);
   }
 
   get providers(): Readonly<ProviderRegistry> {
@@ -67,7 +62,6 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     return this.appPlugins;
   }
 
-
   get tools(): Readonly<ToolRegistry> {
     return this.appTools;
   }
@@ -79,5 +73,4 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   get prompts(): Readonly<PromptRegistry> {
     return this.appPrompts;
   }
-
 }

@@ -21,25 +21,13 @@ import {
   Type,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
-import {
-  collectFlowHookMap,
-  StageMap,
-  cloneStageMap,
-  mergeHookMetasIntoStageMap,
-} from './flow.stages';
-import {writeHttpResponse} from '../server/server.validation';
-import {Scope} from '../scope';
+import { collectFlowHookMap, StageMap, cloneStageMap, mergeHookMetasIntoStageMap } from './flow.stages';
+import { writeHttpResponse } from '../server/server.validation';
+import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
-import {rpcError} from "../transport/transport.error";
+import { rpcError } from '../transport/transport.error';
 
-type StageOutcome =
-  | 'ok'
-  | 'respond'
-  | 'next'
-  | 'handled'
-  | 'fail'
-  | 'abort'
-  | 'unknown_error';
+type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
 interface StageResult {
   outcome: StageOutcome;
@@ -53,10 +41,11 @@ const AROUND = (s: string) => `around${CAP(s)}`;
 
 function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' | 'around' } {
   const lc = k.toLowerCase();
-  if (lc.startsWith('will') && k.length > 4) return {base: k.slice(4, 5).toLowerCase() + k.slice(5), type: 'will'};
-  if (lc.startsWith('did') && k.length > 3) return {base: k.slice(3, 4).toLowerCase() + k.slice(4), type: 'did'};
-  if (lc.startsWith('around') && k.length > 6) return {base: k.slice(6, 7).toLowerCase() + k.slice(7), type: 'around'};
-  return {base: k};
+  if (lc.startsWith('will') && k.length > 4) return { base: k.slice(4, 5).toLowerCase() + k.slice(5), type: 'will' };
+  if (lc.startsWith('did') && k.length > 3) return { base: k.slice(3, 4).toLowerCase() + k.slice(4), type: 'did' };
+  if (lc.startsWith('around') && k.length > 6)
+    return { base: k.slice(6, 7).toLowerCase() + k.slice(7), type: 'around' };
+  return { base: k };
 }
 
 export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
@@ -67,12 +56,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   private stages: StageMap<FlowType>;
   private hooks: HookRegistry;
 
-  constructor(
-    scope: Scope,
-    record: FlowRecord,
-    deps: Set<Reference>,
-    globalProviders: ProviderRegistry,
-  ) {
+  constructor(scope: Scope, record: FlowRecord, deps: Set<Reference>, globalProviders: ProviderRegistry) {
     super(scope, record);
     this.deps = [...deps];
     this.globalProviders = globalProviders;
@@ -87,7 +71,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     this.stages = collectFlowHookMap(this.FlowClass);
 
-    const {middleware} = this.metadata;
+    const { middleware } = this.metadata;
     if (middleware) {
       const path = typeof middleware.path === 'string' ? middleware.path : '';
       server.registerMiddleware(path, async (request, response, next) => {
@@ -95,18 +79,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         if (!canActivate) return next();
 
         try {
-          const result = await this.run(
-            {request, response, next} as any,
-            new Map(),
-          );
+          const result = await this.run({ request, response, next } as any, new Map());
           if (result) return writeHttpResponse(response, result);
         } catch (e) {
           if (e instanceof FlowControl) {
             switch (e.type) {
               case 'abort':
-                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Aborted'});
+                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Aborted' });
               case 'fail':
-                return writeHttpResponse(response, {kind: 'text', status: 500, body: 'Internal Server Error'});
+                return writeHttpResponse(response, { kind: 'text', status: 500, body: 'Internal Server Error' });
               case 'handled':
                 return;
               case 'next':
@@ -144,26 +125,23 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     return results.every((r) => r);
   }
 
-  async run(
-    input: FlowInputOf<Name>,
-    deps: Map<Token, Type>,
-  ): Promise<FlowOutputOf<Name> | undefined> {
+  async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     const scope = this.globalProviders.getActiveScope();
-    const {FlowClass, plan, name} = this;
+    const { FlowClass, plan, name } = this;
 
     // Clone stages so we can merge injections safely per run.
     const baseStages = this.stages;
     let stages: StageMap<any> = cloneStageMap(baseStages);
 
     // Compute next order base after any class-defined entries.
-    let orderBase =
-      Math.max(
-        0,
-        ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0)),
-      ) + 1;
+    let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
+
+    // Get tool owner ID if this is a tool call flow
+    // The tool owner ID is set by the CallToolFlow.findTool stage
+    const toolOwnerId = (input as any)?._toolOwnerId;
 
     const initialInjectedHooks =
-      (this.hooks.getFlowHooks(name) as HookEntry<
+      (this.hooks.getFlowHooksForOwner(name, toolOwnerId) as HookEntry<
         FlowInputOf<Name>,
         Name,
         FlowStagesOf<Name>,
@@ -209,22 +187,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     contextReady = true;
 
     // Initial registry hooks should not pre-empt stages; they just get registered
-    await materializeAndMerge(initialInjectedHooks, {orderStart: -1_000_000});
+    await materializeAndMerge(initialInjectedHooks, { orderStart: -1_000_000 });
 
     // Refresh order base to be after everything currently present
-    orderBase =
-      Math.max(
-        0,
-        ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0)),
-      ) + 1;
+    orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
 
     let responded: FlowOutputOf<Name> | undefined;
 
     // Robust list runner (doesn't skip mid-run insertions)
-    const runList = async (
-      key: string,
-      opts?: { ignoreRespond?: boolean },
-    ): Promise<StageResult> => {
+    const runList = async (key: string, opts?: { ignoreRespond?: boolean }): Promise<StageResult> => {
       const getList = () => ((stages as any)[key] ?? []) as Array<{ method: (ctx: any) => Promise<void> }>;
       const seen = new Set<any>();
 
@@ -241,23 +212,20 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
             if (e.type === 'respond') {
               if (!opts?.ignoreRespond) {
                 responded = e.output as FlowOutputOf<Name>;
-                return {outcome: 'respond', control: e};
+                return { outcome: 'respond', control: e };
               }
               continue;
             }
-            return {outcome: e.type, control: e};
+            return { outcome: e.type, control: e };
           }
-          return {outcome: 'unknown_error', control: e as Error};
+          return { outcome: 'unknown_error', control: e as Error };
         }
       }
-      return {outcome: 'ok'};
+      return { outcome: 'ok' };
     };
 
     // Run exactly one stage in order: will → around → stage → did (did runs once)
-    const runOneStage = async (
-      stageName: string,
-      stopOnRespond: boolean,
-    ): Promise<StageResult> => {
+    const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
       // 1) willStage
       {
         const res = await runList(WILL(stageName));
@@ -273,25 +241,24 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       }
 
       // 3) stage
-      let bodyOutcome: StageResult = {outcome: 'ok'};
+      let bodyOutcome: StageResult = { outcome: 'ok' };
       {
-        const res = await runList(stageName, {ignoreRespond: false});
+        const res = await runList(stageName, { ignoreRespond: false });
         bodyOutcome = res;
         if (res.outcome !== 'ok' && res.outcome !== 'respond') {
           // fail/abort/next/handled/unknown → do NOT run did
-          // return res;/
-          throw res.control
+          return res;
         }
       }
 
       // 4) didStage (run once regardless of body respond)
       {
-        const res = await runList(DID(stageName), {ignoreRespond: true});
+        const res = await runList(DID(stageName), { ignoreRespond: true });
         if (res.outcome !== 'ok' && res.outcome !== 'respond') return res;
       }
 
       if (bodyOutcome.outcome === 'respond') return bodyOutcome;
-      return {outcome: 'ok'};
+      return { outcome: 'ok' };
     };
 
     // IMPORTANT: ignore typed stage names in plan arrays.
@@ -301,11 +268,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       stopOnRespond: boolean,
       opts?: { ignoreRespond?: boolean },
     ): Promise<StageResult> => {
-      if (!group || group.length === 0) return {outcome: 'ok'};
+      if (!group || group.length === 0) return { outcome: 'ok' };
 
       const seenBase = new Set<string>();
       for (const rawKey of group) {
-        const {base, type} = parseTypedKey(rawKey);
+        const { base, type } = parseTypedKey(rawKey);
         if (type) {
           // Soft warning once per typed key occurrence (optional)
           // console.warn(`[flow] Ignoring typed stage "${rawKey}" in plan; hooks will run with base "${base}".`);
@@ -319,14 +286,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           if (stopOnRespond) return res;
           // else keep going
         } else if (res.outcome !== 'ok') {
-          return res.control?.['output'] ?? res.outcome;
+          return res;
         }
       }
-      return {outcome: 'ok'};
+      return { outcome: 'ok' };
     };
 
     const runErrorStage = async () => {
-      await runStageGroup((plan as any).error, false, {ignoreRespond: true});
+      await runStageGroup((plan as any).error, false, { ignoreRespond: true });
     };
 
     const runFinalizeStage = async () => {

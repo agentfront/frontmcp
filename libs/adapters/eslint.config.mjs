@@ -17,6 +17,18 @@ export default [
     },
   },
   {
-    ignores: ['**/out-tsc'],
+    // Allow mcp-from-openapi imports despite being mocked in tests
+    files: ['**/*.ts', '**/*.tsx'],
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          allow: ['mcp-from-openapi'],
+        },
+      ],
+    },
+  },
+  {
+    ignores: ['**/out-tsc', '**/__tests__'],
   },
 ];
