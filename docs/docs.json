@@ -17,6 +17,7 @@
     "light": "#07C983",
     "dark": "#15803D"
   },
+
   "contextual": {
     "options": ["copy", "chatgpt", "cursor", "mcp", "view"]
   },
@@ -295,10 +296,7 @@
               },
               {
                 "group": "Adapters",
-                "pages": [
-                  "draft/docs/adapters/overview",
-                  "draft/docs/adapters/openapi-adapter"
-                ]
+                "pages": ["draft/docs/adapters/overview", "draft/docs/adapters/openapi-adapter"]
               },
               {
                 "group": "Plugins",
@@ -323,6 +321,7 @@
           {
             "group": "November 2025",
             "pages": [
+              "blog/11-2025/openapi-mcp-security-nightmare",
               "blog/11-2025/mcp-run-out-of-socket",
               "blog/11-2025/introducing-frontmcp"
             ]

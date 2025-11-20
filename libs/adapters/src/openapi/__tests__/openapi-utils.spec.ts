@@ -257,7 +257,8 @@ describe('OpenapiAdapter - Utilities', () => {
       const headers = new Headers();
       applyAdditionalHeaders(headers, undefined);
 
-      expect(headers.entries()).toEqual(new Headers().entries());
+      // Headers should be empty
+      expect(Array.from(headers.keys())).toEqual([]);
     });
 
     it('should override existing headers', () => {
