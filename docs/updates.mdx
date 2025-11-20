@@ -5,22 +5,30 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-## v0.4.0 — 2025-11-20
+<Update label="FrontMCP 0.4.0" description="November 2025" tags={["Releases"]}>
+  <Card
+    title="FrontMCP 0.4.0: New OpenAPI adapter with new tool output schema options."
+    href="/docs"
+    cta="Read the release notes"
+  >
+    ### Features
 
-### Features
+    - Upgrade the OpenAPI adapter to run on top of `mcp-from-openapi`, unlocking automatic parameter conflict resolution, mapper visibility, and per-scheme authentication strategies.
+    - Allow `@frontmcp/sdk` tools to declare literal output schemas (primitives, tuples, resource/image/audio descriptors) for tighter typing and structured responses.
 
-- Upgrade the OpenAPI adapter to run on top of `mcp-from-openapi`, unlocking automatic parameter conflict resolution, mapper visibility, and per-scheme authentication strategies.
-- Allow `@frontmcp/sdk` tools to declare literal output schemas (primitives, tuples, resource/image/audio descriptors) for tighter typing and structured responses.
+    ### Docs
 
-### Docs
+    - Document the new OpenAPI adapter security strategies, mapper behavior, and configuration knobs, plus refresh the “Add OpenAPI Adapter” guide.
+    - Update the tools reference to cover raw input shapes, literal output schemas, and tuple-style responses.
 
-- Document the new OpenAPI adapter security strategies, mapper behavior, and configuration knobs, plus refresh the “Add OpenAPI Adapter” guide.
-- Update the tools reference to cover raw input shapes, literal output schemas, and tuple-style responses.
+    ### Build/CI
 
-### Build/CI
+    - Teach the publish workflow to separate synchronized vs independent libraries, bump versions, rebuild after bumps, remove draft blog cards, and push the resulting commits automatically.
+    - Add a push-time guard that blocks accidental docs backups and wire husky/lint-staged so contributors run formatting before each commit.
 
-- Teach the publish workflow to separate synchronized vs independent libraries, bump versions, rebuild after bumps, remove draft blog cards, and push the resulting commits automatically.
-- Add a push-time guard that blocks accidental docs backups and wire husky/lint-staged so contributors run formatting before each commit.
+  </Card>
+
+</Update>
 
 <Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
     <Card
