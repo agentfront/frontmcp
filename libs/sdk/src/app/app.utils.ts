@@ -1,18 +1,9 @@
-import {
-  LocalAppMetadata,
-  FrontMcpLocalAppTokens,
-  AppType,
-  Type,
-  Token,
-  AppRecord,
-  AppKind,
-} from '../common';
+import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, Type, Token, AppRecord, AppKind } from '../common';
 import { getMetadata } from '../utils/metadata.utils';
 import { depsOfClass, isClass } from '../utils/token.utils';
 import { AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
-
   return Object.entries(FrontMcpLocalAppTokens).reduce((metadata, [key, token]) => {
     return Object.assign(metadata, {
       [key]: getMetadata(token, cls),
@@ -50,7 +41,6 @@ export function normalizeApp(item: AppType): AppRecord {
   const name = (item as any)?.name ?? String(item);
   throw new Error(`Invalid app '${name}'. Expected a class or remote app config object.`);
 }
-
 
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.

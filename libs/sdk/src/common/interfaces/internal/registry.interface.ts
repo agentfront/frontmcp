@@ -11,13 +11,13 @@ import {
   ToolEntry,
   LoggerEntry,
   EntryOwnerRef,
-  HookEntry
+  HookEntry,
 } from '../../entries';
-import {Token} from '../base.interface';
-import {FrontMcpAuth} from './primary-auth-provider.interface';
-import {FlowName} from '../../metadata';
-import {FlowCtxOf, FlowInputOf, FlowStagesOf} from "../flow.interface";
-import {HookRecord} from "../../records";
+import { Token } from '../base.interface';
+import { FrontMcpAuth } from './primary-auth-provider.interface';
+import { FlowName } from '../../metadata';
+import { FlowCtxOf, FlowInputOf, FlowStagesOf } from '../flow.interface';
+import { HookRecord } from '../../records';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -40,8 +40,9 @@ export interface HookRegistryInterface {
    * this is used to construct the flow graph and execute hooks in order
    * @param flow
    */
-  getFlowHooks<Name extends FlowName>(flow: Name): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
-
+  getFlowHooks<Name extends FlowName>(
+    flow: Name,
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
 
   /**
    * Used to pull all hooks registered to specific flow and stage by name,
@@ -51,12 +52,23 @@ export interface HookRegistryInterface {
    */
   getFlowStageHooks<Name extends FlowName>(
     flow: Name,
-    stage: FlowStagesOf<Name> | string
-  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[]
+    stage: FlowStagesOf<Name> | string,
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+
+  /**
+   * Used to pull hooks for a specific flow, optionally filtered by owner ID.
+   * Returns all hooks if no ownerId is provided, or only hooks belonging to
+   * the specified owner or global hooks (no owner) if ownerId is provided.
+   * @param flow
+   * @param ownerId
+   */
+  getFlowHooksForOwner<Name extends FlowName>(
+    flow: Name,
+    ownerId?: string,
+  ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
 
   registerHooks(embedded: boolean, ...records: HookRecord[]): Promise<void[]>;
 }
-
 
 export interface ProviderViews {
   /** App-wide singletons, created at boot. Immutable from invokes POV. */
@@ -66,7 +78,6 @@ export interface ProviderViews {
   /** Request-scoped providers for this single invocation. Mutable. */
   request: Map<Token, unknown>;
 }
-
 
 export interface ProviderRegistryInterface {
   get<T>(token: Token<T>): T;
@@ -107,7 +118,6 @@ export interface ToolRegistryInterface {
   getInlineTools(): ToolEntry<any, any>[];
 }
 
-
 export interface ResourceRegistryInterface {
   // inline resources plus discovered by nested tool registries
   getResources(): ResourceEntry<any, any>[];
@@ -115,7 +125,6 @@ export interface ResourceRegistryInterface {
   // inline resources only
   getInlineResources(): ResourceEntry<any, any>[];
 }
-
 
 export interface PromptRegistryInterface {
   // inline prompts plus discovered by nested tool registries
@@ -125,22 +134,13 @@ export interface PromptRegistryInterface {
   getInlinePrompts(): PromptEntry[];
 }
 
-
 export interface LoggerRegistryInterface {
   getLoggers(): LoggerEntry[];
-
 }
 
+export type GlobalRegistryKind = 'LoggerRegistry' | 'ScopeRegistry';
 
-export type GlobalRegistryKind =
-  | 'LoggerRegistry'
-  | 'ScopeRegistry'
-
-export type ScopedRegistryKind =
-  | 'AppRegistry'
-  | 'AuthRegistry'
-  | 'FlowRegistry'
-  | 'HookRegistry'
+export type ScopedRegistryKind = 'AppRegistry' | 'AuthRegistry' | 'FlowRegistry' | 'HookRegistry';
 
 export type AppRegistryKind =
   | 'ProviderRegistry'
@@ -148,8 +148,7 @@ export type AppRegistryKind =
   | 'AdapterRegistry'
   | 'ToolRegistry'
   | 'PromptRegistry'
-  | 'ResourceRegistry'
-
+  | 'ResourceRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
 
@@ -159,11 +158,11 @@ export type RegistryType = {
   FlowRegistry: FlowRegistryInterface;
   HookRegistry: HookRegistryInterface;
   AppRegistry: AppRegistryInterface;
-  AuthRegistry: AuthRegistryInterface,
+  AuthRegistry: AuthRegistryInterface;
   ProviderRegistry: ProviderRegistryInterface;
   PluginRegistry: PluginRegistryInterface;
   AdapterRegistry: AdapterRegistryInterface;
   ToolRegistry: ToolRegistryInterface;
   ResourceRegistry: ResourceRegistryInterface;
   PromptRegistry: PromptRegistryInterface;
-}
+};
