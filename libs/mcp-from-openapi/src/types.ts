@@ -76,42 +76,42 @@ export function toJSONSchema7(schema: SchemaObject | ReferenceObject): JSONSchem
   if (typeof exclusiveMaximum === 'boolean') {
     if (exclusiveMaximum && maximum !== undefined) {
       // true + maximum present -> convert to numeric exclusiveMaximum
-      result.exclusiveMaximum = maximum;
+      result['exclusiveMaximum'] = maximum;
     } else if (maximum !== undefined) {
       // false or true without maximum -> keep maximum only
-      result.maximum = maximum;
+      result['maximum'] = maximum;
     }
     // Boolean exclusiveMaximum is never added (invalid in JSON Schema 7)
   } else if (exclusiveMaximum !== undefined) {
     // Already numeric (OpenAPI 3.1) - keep as is
-    result.exclusiveMaximum = exclusiveMaximum;
+    result['exclusiveMaximum'] = exclusiveMaximum;
     if (maximum !== undefined) {
-      result.maximum = maximum;
+      result['maximum'] = maximum;
     }
   } else if (maximum !== undefined) {
     // No exclusiveMaximum, just maximum
-    result.maximum = maximum;
+    result['maximum'] = maximum;
   }
 
   // Handle exclusiveMinimum conversion
   if (typeof exclusiveMinimum === 'boolean') {
     if (exclusiveMinimum && minimum !== undefined) {
       // true + minimum present -> convert to numeric exclusiveMinimum
-      result.exclusiveMinimum = minimum;
+      result['exclusiveMinimum'] = minimum;
     } else if (minimum !== undefined) {
       // false or true without minimum -> keep minimum only
-      result.minimum = minimum;
+      result['minimum'] = minimum;
     }
     // Boolean exclusiveMinimum is never added (invalid in JSON Schema 7)
   } else if (exclusiveMinimum !== undefined) {
     // Already numeric (OpenAPI 3.1) - keep as is
-    result.exclusiveMinimum = exclusiveMinimum;
+    result['exclusiveMinimum'] = exclusiveMinimum;
     if (minimum !== undefined) {
-      result.minimum = minimum;
+      result['minimum'] = minimum;
     }
   } else if (minimum !== undefined) {
     // No exclusiveMinimum, just minimum
-    result.minimum = minimum;
+    result['minimum'] = minimum;
   }
 
   return result as JSONSchema7;
