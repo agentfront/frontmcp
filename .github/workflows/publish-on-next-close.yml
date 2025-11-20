@@ -282,7 +282,26 @@ jobs:
           fi
 
       # -------------------------------
-      # 6) Bump versions before publishing
+      # 6) Remove draft attributes from blog cards
+      # -------------------------------
+      - name: Remove draft blog cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Removing draft attributes from BlogCard components..."
+          node scripts/remove-blog-drafts.mjs
+
+          # Check if there are changes
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git add docs/
+            git commit -m "docs: remove draft attributes from blog cards for release"
+            echo "✅ Draft blog cards removed and committed"
+          else
+            echo "ℹ️  No draft blog cards to remove"
+          fi
+
+      # -------------------------------
+      # 7) Bump versions before publishing
       # -------------------------------
       - name: Bump synchronized library versions
         if: ${{ steps.synchronized.outputs.synchronized_projects != '' }}
@@ -334,7 +353,7 @@ jobs:
           npx nx run-many --targets=build --projects="${{ steps.to_publish.outputs.projects }}" --parallel
 
       # -------------------------------
-      # 7) Publish to npm via Trusted Publishing
+      # 8) Publish to npm via Trusted Publishing
       # -------------------------------
       - name: Publish to npm
         if: ${{ steps.to_publish.outputs.projects != '' }}
@@ -351,7 +370,7 @@ jobs:
           done
 
       # -------------------------------
-      # 8) Push version bump commit
+      # 9) Push version bump commit
       # -------------------------------
       - name: Push version bumps
         if: ${{ steps.to_publish.outputs.projects != '' }}
@@ -368,7 +387,7 @@ jobs:
           fi
 
       # -------------------------------
-      # 9) Create GitHub Release
+      # 10) Create GitHub Release
       # -------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
