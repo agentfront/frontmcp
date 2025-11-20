@@ -138,7 +138,7 @@ jobs:
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.draft.json`) for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
@@ -176,8 +176,8 @@ jobs:
             - `docs/docs/**/*.md`
           - Shared global release notes:
             - `docs/updates.mdx`
-          - Navigation:
-            - `docs/docs.json`
+          - Navigation (draft):
+            - `docs/docs.draft.json` (this will be promoted to `docs/docs.json` when the release is published)
           - Changelog:
             - `CHANGELOG.md`
           - Root README:
@@ -205,7 +205,7 @@ jobs:
           - Do **not** modify `docs/v/**` or `docs/draft/docs/**`.
           - Keep tone and style consistent with existing docs.
 
-          RULES – NAVIGATION (`docs/docs.json`)
+          RULES – NAVIGATION (`docs/docs.draft.json`)
 
           Structure:
           - The root has a `dropdowns` array.
@@ -218,6 +218,7 @@ jobs:
           You MUST:
           - Only modify the `"Documentation"` dropdown and its `versions` array.
           - **Do not** modify the `"Blog"` dropdown or any blog navigation.
+          - Note: `docs/docs.draft.json` will be promoted to `docs/docs.json` when the release is published.
 
           Versions:
           - The documentation dropdown has a `versions` array similar to:
@@ -279,7 +280,7 @@ jobs:
             - Older versions can have `tag: "version <minor>"` (e.g., `"version 0.2"`).
           - Do not introduce noisy or inconsistent tags.
 
-          Keep `docs/docs.json`:
+          Keep `docs/docs.draft.json`:
           - Valid JSON.
           - As close as reasonable to existing formatting (but correctness > formatting).
 
@@ -319,7 +320,7 @@ jobs:
             - `docs/draft/docs/**`
             - `docs/blogs/**`
           - Always keep:
-            - `docs/docs.json` consistent with actual docs under `docs/docs/`.
+            - `docs/docs.draft.json` consistent with actual docs under `docs/docs/`.
             - `docs/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
           - If no changes are needed, return an empty patch set.
 
@@ -350,7 +351,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/docs\\/.+\\.(md|mdx)|docs\\/updates\\.mdx|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
+                      "pattern": "^(docs\\/docs\\/.+\\.(md|mdx)|docs\\/updates\\.mdx|docs\\/docs\\.draft\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -435,13 +436,15 @@ jobs:
           body: |
             Codex proposed updates to:
             - **docs/updates.mdx** (Mintlify release notes)
-            - **docs/docs.json** (Mintlify navigation / versions)
+            - **docs/docs.draft.json** (Mintlify navigation / versions - draft)
             - **docs/docs/** (latest docs only)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
 
             for `v${{ steps.ctx.outputs.version }}` on branch `${{ steps.ctx.outputs.branch }}`.
+
+            Note: `docs.draft.json` will be promoted to `docs.json` when the release is published.
 
             See `.codex-docs/apply.log` for validation details.
 

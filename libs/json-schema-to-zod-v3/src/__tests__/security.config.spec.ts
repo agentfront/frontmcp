@@ -176,7 +176,7 @@ describe('Security Configuration Wiring', () => {
 
   describe('Combined configuration changes', () => {
     it('should honor multiple config changes simultaneously', () => {
-      let consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       setSecurityConfig({
         maxPatternLength: 20,

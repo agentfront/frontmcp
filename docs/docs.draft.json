@@ -320,6 +320,7 @@
           {
             "group": "November 2025",
             "pages": [
+              "blog/11-2025/openapi-mcp-security-nightmare",
               "blog/11-2025/mcp-run-out-of-socket",
               "blog/11-2025/introducing-frontmcp"
             ]

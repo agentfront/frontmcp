@@ -14,6 +14,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check for docs backup file
+        run: |
+          if [ -f "docs/docs.backup.json" ]; then
+            echo "::error::docs/docs.backup.json should not be committed to the repository"
+            echo "::error::This file is for local development only (used by scripts/dev-docs.sh)"
+            echo "::error::Please remove it before pushing"
+            exit 1
+          fi
+          echo "✓ No docs backup file found"
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:

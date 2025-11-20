@@ -6,7 +6,9 @@
       "Bash(xargs cat:*)",
       "Bash(npx nx build:*)",
       "Bash(npx nx test:*)",
-      "Bash(npx nx lint:*)"
+      "Bash(npx nx lint:*)",
+      "Bash(cp:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
