@@ -22,7 +22,7 @@ export function buildRequest(
   tool: McpOpenAPITool,
   input: Record<string, unknown>,
   security: Awaited<ReturnType<SecurityResolver['resolve']>>,
-  baseUrl: string
+  baseUrl: string,
 ): RequestConfig {
   const apiBaseUrl = tool.metadata.servers?.[0]?.url || baseUrl;
   let path = tool.metadata.path;
@@ -43,9 +43,7 @@ export function buildRequest(
     // Check required parameters
     if (value === undefined || value === null) {
       if (mapper.required) {
-        throw new Error(
-          `Required parameter '${mapper.inputKey}' is missing for operation ${tool.name}`
-        );
+        throw new Error(`Required parameter '${mapper.inputKey}' is missing for operation ${tool.name}`);
       }
       continue;
     }
@@ -63,6 +61,15 @@ export function buildRequest(
       case 'header':
         headers.set(mapper.key, String(value));
         break;
+      case 'cookie':
+        // Simple cookie header merge; you may want a more robust cookie encoder.
+        {
+          const existing = headers.get('cookie') ?? headers.get('Cookie');
+          const cookiePair = `${mapper.key}=${encodeURIComponent(String(value))}`;
+          const combined = existing ? `${existing}; ${cookiePair}` : cookiePair;
+          headers.set('Cookie', combined);
+        }
+        break;
 
       case 'body':
         if (!body) body = {};
@@ -76,11 +83,19 @@ export function buildRequest(
     queryParams.set(key, value);
   });
 
+  // Add cookies from a security context
+  if (security.cookies && Object.keys(security.cookies).length > 0) {
+    const existing = headers.get('cookie') ?? headers.get('Cookie');
+    const securityCookieString = Object.entries(security.cookies)
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .join('; ');
+    const combined = existing ? `${existing}; ${securityCookieString}` : securityCookieString;
+    headers.set('Cookie', combined);
+  }
+
   // Ensure all path parameters are resolved
   if (path.includes('{')) {
-    throw new Error(
-      `Failed to resolve all path parameters in ${path} for operation ${tool.name}`
-    );
+    throw new Error(`Failed to resolve all path parameters in ${path} for operation ${tool.name}`);
   }
 
   // Build final URL
@@ -96,10 +111,7 @@ export function buildRequest(
  * @param headers - Current headers
  * @param additionalHeaders - Additional static headers to add
  */
-export function applyAdditionalHeaders(
-  headers: Headers,
-  additionalHeaders?: Record<string, string>
-): void {
+export function applyAdditionalHeaders(headers: Headers, additionalHeaders?: Record<string, string>): void {
   if (!additionalHeaders) return;
 
   Object.entries(additionalHeaders).forEach(([key, value]) => {
@@ -119,9 +131,7 @@ export async function parseResponse(response: Response): Promise<{ data: unknown
 
   // Check for error responses
   if (!response.ok) {
-    throw new Error(
-      `API request failed: ${response.status} ${response.statusText}\n${text}`
-    );
+    throw new Error(`API request failed: ${response.status} ${response.statusText}\n${text}`);
   }
 
   // Parse JSON responses

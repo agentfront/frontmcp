@@ -561,6 +561,7 @@ export function createSecurityContext(
   auth: Partial<SecurityContext>
 ): SecurityContext {
   return {
+    ...auth,
     jwt: auth.jwt,
     basic: auth.basic,
     apiKey: auth.apiKey,

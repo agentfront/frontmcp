@@ -73,7 +73,7 @@ export async function resolveEntry(cwd: string, explicit?: string): Promise<stri
 
 export function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: 'inherit', shell: true, ...opts });
+    const child = spawn(cmd, args, { stdio: 'inherit', shell: false, ...opts });
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`))));
     child.on('error', reject);
   });

@@ -24,7 +24,7 @@ export type ParameterLocation = 'path' | 'query' | 'header' | 'cookie' | 'body';
 /**
  * Authentication types supported
  */
-export type AuthType = 'apiKey' | 'http' | 'oauth2' | 'openIdConnect';
+export type AuthType = 'apiKey' | 'http' | 'oauth2' | 'openIdConnect' | 'mutualTLS';
 
 // Re-export OpenAPI types for convenience
 export type OperationObject = OpenAPIV3.OperationObject | OpenAPIV3_1.OperationObject;
@@ -41,7 +41,9 @@ export type ServerObject = OpenAPIV3.ServerObject | OpenAPIV3_1.ServerObject;
 export type SecuritySchemeObject = OpenAPIV3.SecuritySchemeObject | OpenAPIV3_1.SecuritySchemeObject;
 export type ReferenceObject = OpenAPIV3.ReferenceObject | OpenAPIV3_1.ReferenceObject;
 export type TagObject = OpenAPIV3.TagObject | OpenAPIV3_1.TagObject;
-export type ExternalDocumentationObject = OpenAPIV3.ExternalDocumentationObject | OpenAPIV3_1.ExternalDocumentationObject;
+export type ExternalDocumentationObject =
+  | OpenAPIV3.ExternalDocumentationObject
+  | OpenAPIV3_1.ExternalDocumentationObject;
 export type ServerVariableObject = OpenAPIV3.ServerVariableObject | OpenAPIV3_1.ServerVariableObject;
 export type EncodingObject = OpenAPIV3.EncodingObject | OpenAPIV3_1.EncodingObject;
 export type SecurityRequirementObject = OpenAPIV3.SecurityRequirementObject | OpenAPIV3_1.SecurityRequirementObject;
@@ -469,11 +471,7 @@ export interface NamingStrategy {
    * @param index - Index of conflicting parameter (0-based)
    * @returns New parameter name
    */
-  conflictResolver: (
-    paramName: string,
-    location: ParameterLocation,
-    index: number
-  ) => string;
+  conflictResolver: (paramName: string, location: ParameterLocation, index: number) => string;
 
   /**
    * Function to generate tool names
@@ -482,11 +480,7 @@ export interface NamingStrategy {
    * @param operationId - Operation ID if available
    * @returns Tool name
    */
-  toolNameGenerator?: (
-    path: string,
-    method: HTTPMethod,
-    operationId?: string
-  ) => string;
+  toolNameGenerator?: (path: string, method: HTTPMethod, operationId?: string) => string;
 }
 
 /**

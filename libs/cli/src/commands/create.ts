@@ -186,7 +186,15 @@ export async function runCreate(projectArg?: string): Promise<void> {
   const pkgName = sanitizeForNpm(projectArg);
   const targetDir = path.resolve(process.cwd(), folder);
 
-  if (await fileExists(targetDir)) {
+  try {
+    const stat = await fsp.stat(targetDir);
+    if (!stat.isDirectory()) {
+      console.error(
+        c('red', `Refusing to scaffold into non-directory path: ${path.relative(process.cwd(), targetDir)}`),
+      );
+      console.log(c('gray', 'Pick a different project name or remove/rename the existing file.'));
+      process.exit(1);
+    }
     if (!(await isDirEmpty(targetDir))) {
       console.error(
         c('red', `Refusing to scaffold into non-empty directory: ${path.relative(process.cwd(), targetDir)}`),
@@ -194,8 +202,12 @@ export async function runCreate(projectArg?: string): Promise<void> {
       console.log(c('gray', 'Pick a different name or start with an empty folder.'));
       process.exit(1);
     }
-  } else {
-    await ensureDir(targetDir);
+  } catch (e: any) {
+    if (e?.code === 'ENOENT') {
+      await ensureDir(targetDir);
+    } else {
+      throw e;
+    }
   }
 
   console.log(

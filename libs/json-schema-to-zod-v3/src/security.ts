@@ -67,7 +67,7 @@ export function validatePattern(pattern: string): PatternValidationResult {
   if (pattern.length > maxLength) {
     return {
       safe: false,
-      reason: `Pattern exceeds maximum length of ${maxLength} characters`
+      reason: `Pattern exceeds maximum length of ${maxLength} characters`,
     };
   }
 
@@ -77,7 +77,7 @@ export function validatePattern(pattern: string): PatternValidationResult {
   } catch (error) {
     return {
       safe: false,
-      reason: `Invalid regex syntax: ${error instanceof Error ? error.message : 'Unknown error'}`
+      reason: `Invalid regex syntax: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 
@@ -87,10 +87,10 @@ export function validatePattern(pattern: string): PatternValidationResult {
   if (quantifierMatch) {
     for (const q of quantifierMatch) {
       const nums = q.match(/\d+/g);
-      if (nums && nums.some(n => parseInt(n) > maxQuant)) {
+      if (nums && nums.some((n) => parseInt(n) > maxQuant)) {
         return {
           safe: false,
-          reason: `Quantifier exceeds maximum value of ${maxQuant}`
+          reason: `Quantifier exceeds maximum value of ${maxQuant}`,
         };
       }
     }
@@ -101,14 +101,14 @@ export function validatePattern(pattern: string): PatternValidationResult {
     if (dangerousPattern.test(pattern)) {
       return {
         safe: false,
-        reason: 'Pattern contains potentially dangerous constructs (nested quantifiers or alternations)'
+        reason: 'Pattern contains potentially dangerous constructs (nested quantifiers or alternations)',
       };
     }
   }
 
   return {
     safe: true,
-    pattern
+    pattern,
   };
 }
 
@@ -132,11 +132,7 @@ export function validatePattern(pattern: string): PatternValidationResult {
  * }
  * ```
  */
-export function createSafeRegExp(
-  pattern: string,
-  flags?: string,
-  timeoutMs = 100
-): RegExp | null {
+export function createSafeRegExp(pattern: string, flags?: string, timeoutMs = 100): RegExp | null {
   // Check if protection is enabled
   if (!globalConfig.enableProtection) {
     // Protection disabled - create regex without validation
@@ -171,7 +167,7 @@ export function createSafeRegExp(
     const regex = new RegExp(pattern, flags);
 
     // Use configured timeout or parameter timeout
-    const timeout = timeoutMs || globalConfig.timeoutMs;
+    const timeout = timeoutMs ?? globalConfig.timeoutMs;
 
     // Test the regex with a simple string to catch runtime issues
     const testStart = Date.now();
@@ -231,7 +227,7 @@ export const DEFAULT_SECURITY_CONFIG: PatternSecurityConfig = {
   throwOnUnsafe: false,
   maxPatternLength: MAX_PATTERN_LENGTH,
   maxQuantifier: MAX_QUANTIFIER,
-  timeoutMs: 100
+  timeoutMs: 100,
 };
 
 /**

@@ -109,7 +109,7 @@ export function isPlainObject(value: any): boolean {
  * hasOwnProperty({ a: 1 }, 'a') // true
  * hasOwnProperty({ a: 1 }, 'b') // false
  */
-export function hasOwnProperty(obj: any, prop: string): boolean {
+export function objectHasOwn(obj: any, prop: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, prop);
 }
 

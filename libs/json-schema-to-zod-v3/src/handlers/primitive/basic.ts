@@ -101,14 +101,12 @@ export class EnumHandler implements SchemaHandler {
 
     // Empty enum means no values are valid
     if (schema.enum.length === 0) {
-      if (!schema.type) {
-        types.string = false;
-        types.number = false;
-        types.boolean = false;
-        types.null = false;
-        types.array = false;
-        types.object = false;
-      }
+      types.string = false;
+      types.number = false;
+      types.boolean = false;
+      types.null = false;
+      types.array = false;
+      types.object = false;
       return;
     }
 

@@ -76,7 +76,7 @@ export const execute: ToolExecute<Input, Body> = async ({ input, ctx }) => {
     }
   });
 
-  // Treat non-2xx as error; still return {status, headers, body} but with an error body.
+  // Treat non-2xx as an error: normalize upstream error details and throw.
   if (res.status < 200 || res.status >= 300) {
     const errorBody = ErrorBodySchema.safeParse(
       res.json ?? { error: { message: res.text ?? "Unknown error" } }
