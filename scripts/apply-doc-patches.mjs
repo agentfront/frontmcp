@@ -21,7 +21,7 @@ function isAllowedPath(p) {
     const norm = p.replaceAll("\\", "/");
     return (
         /^docs\/.+\.(md|mdx)$/.test(norm) ||
-        norm === "docs/docs.draft.json" ||
+        norm === "docs/docs.json" ||
         norm === "CHANGELOG.md" ||
         norm === "README.md" ||
         /^libs\/.+\/README\.md$/.test(norm)

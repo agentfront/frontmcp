@@ -210,39 +210,7 @@ jobs:
           yarn nx run-many -t publish
 
       # -------------------------------
-      # 7) Promote draft docs to production
-      # -------------------------------
-      - name: Promote docs.draft.json to docs.json
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -f "docs/docs.draft.json" ]; then
-            echo "Promoting docs.draft.json to docs.json..."
-            cp docs/docs.draft.json docs/docs.json
-            rm docs/docs.draft.json
-
-            # Check if there are changes to commit
-            if [ -n "$(git status --porcelain docs/docs.json)" ]; then
-              git add docs/docs.json
-
-              # Check if docs.draft.json still exists to stage its deletion
-              if [ ! -f "docs/docs.draft.json" ]; then
-                git add docs/docs.draft.json || true
-              fi
-
-              git commit -m "docs: promote draft docs to production for v${{ steps.version.outputs.version }}"
-              git push origin ${{ github.event.pull_request.base.ref }}
-              echo "✅ Draft docs promoted to production"
-            else
-              echo "ℹ️  No changes in draft docs to promote"
-            fi
-          else
-            echo "ℹ️  No docs.draft.json found, skipping promotion"
-          fi
-
-      # -------------------------------
-      # 8) Create GitHub Release
+      # 7) Create GitHub Release
       # -------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

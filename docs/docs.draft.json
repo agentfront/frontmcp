@@ -62,260 +62,64 @@
       {
         "dropdown": "Documentation",
         "icon": "book",
-        "versions": [
+        "groups": [
           {
-            "version": "v0.3 (latest)",
-            "default": true,
-            "groups": [
+            "tag": "draft",
+            "group": "Get Started",
+            "pages": [
+              "draft/docs/getting-started/welcome",
+              "draft/docs/getting-started/installation",
+              "draft/docs/getting-started/quickstart",
+              "updates"
+            ]
+          },
+          {
+            "group": "Servers",
+            "pages": [
+              "draft/docs/servers/server",
               {
-                "tag": "latest",
-                "group": "Get Started",
+                "group": "Core Components",
+                "icon": "toolbox",
                 "pages": [
-                  "docs/getting-started/welcome",
-                  "docs/getting-started/installation",
-                  "docs/getting-started/quickstart",
-                  "updates"
+                  "draft/docs/servers/apps",
+                  "draft/docs/servers/tools",
+                  "draft/docs/servers/resources",
+                  "draft/docs/servers/prompts"
                 ]
               },
               {
-                "group": "Servers",
+                "group": "Authentication",
+                "icon": "shield-check",
                 "pages": [
-                  "docs/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/apps",
-                      "docs/servers/tools",
-                      "docs/servers/resources",
-                      "docs/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "docs/servers/authentication/overview",
-                      "docs/servers/authentication/token",
-                      "docs/servers/authentication/remote",
-                      "docs/servers/authentication/remote-proxy",
-                      "docs/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/extensibility/providers",
-                      "docs/servers/extensibility/adapters",
-                      "docs/servers/extensibility/plugins",
-                      "docs/servers/extensibility/logging"
-                    ]
-                  }
+                  "draft/docs/servers/authentication/overview",
+                  "draft/docs/servers/authentication/token",
+                  "draft/docs/servers/authentication/remote",
+                  "draft/docs/servers/authentication/remote-proxy",
+                  "draft/docs/servers/authentication/local"
                 ]
               },
               {
-                "group": "Deployment",
-                "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
-              },
-              {
-                "group": "Guides",
+                "group": "Extensibility Components",
+                "icon": "toolbox",
                 "pages": [
-                  "docs/guides/add-openapi-adapter",
-                  "docs/guides/caching-and-cache-miss",
-                  "docs/guides/customize-flow-stages"
+                  "draft/docs/servers/extensibility/providers",
+                  "draft/docs/servers/extensibility/plugins",
+                  "draft/docs/servers/extensibility/logging"
                 ]
-              },
-              {
-                "group": "Adapters",
-                "pages": ["docs/adapters/openapi-adapter"]
               }
             ]
           },
           {
-            "version": "v0.2",
-            "groups": [
-              {
-                "tag": "version 0.2",
-                "group": "Get Started",
-                "pages": [
-                  "docs/v/0.2/getting-started/welcome",
-                  "docs/v/0.2/getting-started/installation",
-                  "docs/v/0.2/getting-started/quickstart",
-                  "updates"
-                ]
-              },
-              {
-                "group": "Servers",
-                "pages": [
-                  "docs/v/0.2/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/v/0.2/servers/apps",
-                      "docs/v/0.2/servers/tools",
-                      "docs/v/0.2/servers/resources",
-                      "docs/v/0.2/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "docs/v/0.2/servers/authentication/overview",
-                      "docs/v/0.2/servers/authentication/token",
-                      "docs/v/0.2/servers/authentication/remote",
-                      "docs/v/0.2/servers/authentication/remote-proxy",
-                      "docs/v/0.2/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/v/0.2/servers/extensibility/providers",
-                      "docs/v/0.2/servers/extensibility/adapters",
-                      "docs/v/0.2/servers/extensibility/plugins",
-                      "docs/v/0.2/servers/extensibility/logging"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Deployment",
-                "pages": ["docs/v/0.2/deployment/local-dev-server", "docs/v/0.2/deployment/production-build"]
-              },
-              {
-                "group": "Adapters",
-                "pages": ["docs/v/0.2/adapters/openapi-adapter"]
-              }
-            ]
+            "group": "Adapters",
+            "pages": ["draft/docs/adapters/overview", "draft/docs/adapters/openapi-adapter"]
           },
           {
-            "version": "v0.1",
-            "groups": [
-              {
-                "tag": "version 0.1",
-                "group": "Get Started",
-                "pages": [
-                  "docs/v/0.1/getting-started/welcome",
-                  "docs/v/0.1/getting-started/installation",
-                  "docs/v/0.1/getting-started/quickstart",
-                  "updates"
-                ]
-              },
-              {
-                "group": "Servers",
-                "pages": [
-                  "docs/v/0.1/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/v/0.1/servers/apps",
-                      "docs/v/0.1/servers/tools",
-                      "docs/v/0.1/servers/resources",
-                      "docs/v/0.1/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "docs/v/0.1/servers/authentication/overview",
-                      "docs/v/0.1/servers/authentication/token",
-                      "docs/v/0.1/servers/authentication/remote",
-                      "docs/v/0.1/servers/authentication/remote-proxy",
-                      "docs/v/0.1/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/v/0.1/servers/extensibility/providers",
-                      "docs/v/0.1/servers/extensibility/adapters",
-                      "docs/v/0.1/servers/extensibility/plugins",
-                      "docs/v/0.1/servers/extensibility/logging"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Deployment",
-                "pages": ["docs/v/0.1/deployment/local-dev-server", "docs/v/0.1/deployment/production-build"]
-              },
-              {
-                "group": "Adapters",
-                "pages": ["docs/v/0.1/adapters/openapi-adapter"]
-              }
-            ]
+            "group": "Plugins",
+            "pages": ["draft/docs/plugins/cache-plugin"]
           },
           {
-            "version": "main (draft)",
-            "hidden": true,
-            "default": false,
-            "groups": [
-              {
-                "tag": "latest",
-                "group": "Get Started",
-                "pages": [
-                  "draft/docs/getting-started/welcome",
-                  "draft/docs/getting-started/installation",
-                  "draft/docs/getting-started/quickstart",
-                  "updates"
-                ]
-              },
-              {
-                "group": "Servers",
-                "pages": [
-                  "draft/docs/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "draft/docs/servers/apps",
-                      "draft/docs/servers/tools",
-                      "draft/docs/servers/resources",
-                      "draft/docs/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "draft/docs/servers/authentication/overview",
-                      "draft/docs/servers/authentication/token",
-                      "draft/docs/servers/authentication/remote",
-                      "draft/docs/servers/authentication/remote-proxy",
-                      "draft/docs/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "draft/docs/servers/extensibility/providers",
-                      "draft/docs/servers/extensibility/plugins",
-                      "draft/docs/servers/extensibility/logging"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Adapters",
-                "pages": ["draft/docs/adapters/overview", "draft/docs/adapters/openapi-adapter"]
-              },
-              {
-                "group": "Plugins",
-                "pages": ["draft/docs/plugins/cache-plugin", "draft/docs/plugins/codecall-plugin"]
-              },
-              {
-                "group": "Deployment",
-                "pages": ["draft/docs/deployment/local-dev-server", "draft/docs/deployment/production-build"]
-              }
-            ]
+            "group": "Deployment",
+            "pages": ["draft/docs/deployment/local-dev-server", "draft/docs/deployment/production-build"]
           }
         ]
       },
