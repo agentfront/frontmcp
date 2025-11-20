@@ -1,8 +1,7 @@
+/// <reference types="jest" />
 /**
  * Test fixtures and mocks for OpenAPI adapter tests
  */
-
-/// <reference types="jest" />
 
 import type { OpenAPIV3 } from 'openapi-types';
 /**
