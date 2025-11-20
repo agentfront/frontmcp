@@ -28,7 +28,7 @@ You'll be asked:
 
 ## 📦 Generated Structure
 
-```
+```text
 integrations/<owner>/<service>/
 ├── README.md                    # Customized documentation
 ├── package.json                 # NPM configuration

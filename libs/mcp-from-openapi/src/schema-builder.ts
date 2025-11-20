@@ -105,20 +105,6 @@ export class SchemaBuilder {
   }
 
   /**
-   * Mark schema as required
-   */
-  static required(schema: JSONSchema7): JSONSchema7 {
-    return schema;
-  }
-
-  /**
-   * Mark schema as optional
-   */
-  static optional(schema: JSONSchema7): JSONSchema7 {
-    return schema;
-  }
-
-  /**
    * Add example to schema
    */
   static withExample(schema: JSONSchema7, example: any): JSONSchema7 {
@@ -334,6 +320,14 @@ export class SchemaBuilder {
         return sub.anyOf ? sub.anyOf : [sub];
       });
       cloned.anyOf = flattened as JSONSchema7[];
+    }
+
+    if (cloned.allOf) {
+      const flattened = cloned.allOf.flatMap((s) => {
+        const sub = this.flatten(s as JSONSchema7, maxDepth - 1);
+        return sub.allOf ? sub.allOf : [sub];
+      });
+      cloned.allOf = flattened as JSONSchema7[];
     }
 
     return cloned;

@@ -87,8 +87,8 @@ export async function isDirEmpty(dir: string): Promise<boolean> {
   try {
     const items = await fsp.readdir(dir);
     return items.length === 0;
-  } catch (e: any) {
-    if (e?.code === 'ENOENT') return true;
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return true;
     throw e;
   }
 }
