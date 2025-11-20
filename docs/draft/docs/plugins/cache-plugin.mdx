@@ -13,13 +13,15 @@ The Cache Plugin provides transparent response caching for tools based on their 
     Return cached results instantly without re-executing expensive operations
   </Card>
 
-  <Card title="Reduce Load" icon="server">
-    Minimize API calls, database queries, and computational overhead
-  </Card>
+{' '}
+<Card title="Reduce Load" icon="server">
+  Minimize API calls, database queries, and computational overhead
+</Card>
 
-  <Card title="Cost Savings" icon="dollar-sign">
-    Lower infrastructure costs by reducing redundant processing
-  </Card>
+{' '}
+<Card title="Cost Savings" icon="dollar-sign">
+  Lower infrastructure costs by reducing redundant processing
+</Card>
 
   <Card title="Better UX" icon="user-check">
     Improve perceived performance with instant responses for repeated queries
@@ -39,13 +41,11 @@ npm install @frontmcp/plugins
     The plugin hashes the tool's validated input and checks the cache store
   </Step>
 
-  <Step title="Cache Hit">
-    If a cached result exists, it's returned immediately, bypassing tool execution entirely
-  </Step>
+{' '}
+<Step title="Cache Hit">If a cached result exists, it's returned immediately, bypassing tool execution entirely</Step>
 
-  <Step title="Cache Miss">
-    The tool executes normally, and the result is stored with the configured TTL
-  </Step>
+{' '}
+<Step title="Cache Miss">The tool executes normally, and the result is stored with the configured TTL</Step>
 
   <Step title="Sliding Window (Optional)">
     When enabled, each cache read refreshes the TTL to keep hot entries alive longer
@@ -53,7 +53,8 @@ npm install @frontmcp/plugins
 </Steps>
 
 <Info>
-  Cache entries are keyed using a **deterministic hash** of the tool's validated input. The same input always produces the same cache key.
+  Cache entries are keyed using a **deterministic hash** of the tool's validated input. The same input always produces
+  the same cache key.
 </Info>
 
 ---
@@ -70,7 +71,9 @@ import CachePlugin from '@frontmcp/plugins/cache';
   id: 'my-app',
   name: 'My App',
   plugins: [CachePlugin], // Default: memory store, 1-day TTL
-  tools: [/* your tools */],
+  tools: [
+    /* your tools */
+  ],
 })
 export default class MyApp {}
 ```
@@ -128,12 +131,10 @@ Best for: Single-instance deployments, development, non-critical caching
 CachePlugin.init({
   type: 'memory',
   defaultTTL: 300, // 5 minutes (default: 86400 = 1 day)
-})
+});
 ```
 
-<Warning>
-  Memory cache resets when the process restarts. Not shared across multiple instances.
-</Warning>
+<Warning>Memory cache resets when the process restarts. Not shared across multiple instances.</Warning>
 
 ### Redis (Recommended for Production)
 
@@ -151,7 +152,7 @@ CachePlugin.init({
     password: process.env.REDIS_PASSWORD, // optional
     db: 0, // optional
   },
-})
+});
 ```
 
 ```ts Reuse existing Redis client
@@ -166,14 +167,12 @@ CachePlugin.init({
   type: 'redis-client',
   defaultTTL: 900, // 15 minutes
   client: redis,
-})
+});
 ```
 
 </CodeGroup>
 
-<Check>
-  Redis enables cache sharing across multiple server instances and persists cache across restarts.
-</Check>
+<Check>Redis enables cache sharing across multiple server instances and persists cache across restarts.</Check>
 
 ---
 
@@ -251,9 +250,9 @@ Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
 <ParamField path="cache" type="boolean | object">
   Enable caching for this tool
 
-  - `true` - Use plugin defaults
-  - `object` - Custom configuration
-</ParamField>
+- `true` - Use plugin defaults
+- `object` - Custom configuration
+  </ParamField>
 
 <ParamField path="cache.ttl" type="number">
   Time-to-live in seconds for this tool's cache entries (overrides plugin default)
@@ -342,18 +341,17 @@ Use short TTLs for frequently changing data:
     - Have side effects (mutations, API calls that change state)
   </Accordion>
 
-  <Accordion title="2. Choose Appropriate TTLs">
-    - **Short TTLs (5-60s)**: Real-time data, frequently changing content
-    - **Medium TTLs (5-30min)**: User dashboards, reports, analytics
-    - **Long TTLs (hours-days)**: Static content, configuration, reference data
-  </Accordion>
+{' '}
+<Accordion title="2. Choose Appropriate TTLs">
+  - **Short TTLs (5-60s)**: Real-time data, frequently changing content - **Medium TTLs (5-30min)**: User dashboards,
+  reports, analytics - **Long TTLs (hours-days)**: Static content, configuration, reference data
+</Accordion>
 
-  <Accordion title="3. Use Redis for Production">
-    Redis provides:
-    - Cache persistence across restarts
-    - Sharing across multiple server instances
-    - Better memory management with eviction policies
-  </Accordion>
+{' '}
+<Accordion title="3. Use Redis for Production">
+  Redis provides: - Cache persistence across restarts - Sharing across multiple server instances - Better memory
+  management with eviction policies
+</Accordion>
 
   <Accordion title="4. Include Scoping in Inputs">
     Always include tenant IDs, user IDs, or other scoping fields in your tool inputs:
@@ -364,6 +362,7 @@ Use short TTLs for frequently changing data:
     // Bad: no scoping, shared across tenants
     { reportId: "r-456" }
     ```
+
   </Accordion>
 
   <Accordion title="5. Use Sliding Windows for Hot Data">
@@ -381,14 +380,14 @@ Use short TTLs for frequently changing data:
 
 ## Cache Behavior Reference
 
-| Behavior | Description |
-|----------|-------------|
+| Behavior           | Description                                                          |
+| ------------------ | -------------------------------------------------------------------- |
 | **Key Derivation** | Deterministic hash from validated input. Same input = same cache key |
-| **Cache Hits** | Bypasses tool execution entirely, returns cached result instantly |
-| **Default TTL** | 86400 seconds (1 day) if not specified |
-| **Sliding Window** | Extends TTL on reads when enabled |
-| **Store Choice** | Memory is node-local; Redis enables multi-instance sharing |
-| **Invalidation** | Automatic after TTL expires, or manually by restarting (memory) |
+| **Cache Hits**     | Bypasses tool execution entirely, returns cached result instantly    |
+| **Default TTL**    | 86400 seconds (1 day) if not specified                               |
+| **Sliding Window** | Extends TTL on reads when enabled                                    |
+| **Store Choice**   | Memory is node-local; Redis enables multi-instance sharing           |
+| **Invalidation**   | Automatic after TTL expires, or manually by restarting (memory)      |
 
 ---
 
@@ -405,6 +404,7 @@ Use short TTLs for frequently changing data:
     - Verify `cache` field is set in tool metadata
     - Check Redis connection if using Redis backend
     - Ensure input structure is consistent
+
   </Accordion>
 
   <Accordion title="Stale data being returned">
@@ -416,6 +416,7 @@ Use short TTLs for frequently changing data:
     - Reduce TTL for the tool
     - Consider input-based cache busting (include timestamp or version in input)
     - Restart server to clear memory cache (or flush Redis)
+
   </Accordion>
 
   <Accordion title="Cache not shared across instances">
@@ -424,6 +425,7 @@ Use short TTLs for frequently changing data:
 
     **Solution:**
     - Switch to Redis backend for multi-instance deployments
+
   </Accordion>
 
   <Accordion title="Need to invalidate specific cache entries">
@@ -472,10 +474,7 @@ class GenerateMonthlyReportTool extends ToolContext {
     this.logger.info('Generating report', input);
 
     // Expensive operation: aggregate data, generate charts, etc.
-    const report = await this.database.generateReport(
-      input.tenantId,
-      input.month
-    );
+    const report = await this.database.generateReport(input.tenantId, input.month);
 
     return report;
   }
@@ -496,10 +495,7 @@ class GenerateMonthlyReportTool extends ToolContext {
 })
 class GetTrendingProductsTool extends ToolContext {
   async execute(input: { category: string; limit: number }) {
-    return await this.analytics.getTrendingProducts(
-      input.category,
-      input.limit
-    );
+    return await this.analytics.getTrendingProducts(input.category, input.limit);
   }
 }
 
@@ -528,13 +524,15 @@ export default class Server {}
     View the cache plugin source code
   </Card>
 
-  <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
-    See caching in action with real examples
-  </Card>
+{' '}
+<Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
+  See caching in action with real examples
+</Card>
 
-  <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
-    Learn more about FrontMCP plugins
-  </Card>
+{' '}
+<Card title="Plugin Guide" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+  Learn more about FrontMCP plugins
+</Card>
 
   <Card title="Redis Documentation" icon="database" href="https://redis.io/docs/">
     Official Redis documentation

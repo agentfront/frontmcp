@@ -14,13 +14,15 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
     Named execution pipelines with defined stages (e.g., `tools:call-tool`, `http:request`)
   </Card>
 
-  <Card title="Hook Types" icon="link">
-    **Will** (before), **Did** (after), **Around** (wrap), **Stage** (replace)
-  </Card>
+{' '}
+<Card title="Hook Types" icon="link">
+  **Will** (before), **Did** (after), **Around** (wrap), **Stage** (replace)
+</Card>
 
-  <Card title="Priority" icon="arrow-up-1-9">
-    Higher priority runs first for Will/Stage; Did runs in reverse order
-  </Card>
+{' '}
+<Card title="Priority" icon="arrow-up-1-9">
+  Higher priority runs first for Will/Stage; Did runs in reverse order
+</Card>
 
   <Card title="Context" icon="database">
     Shared state object passed through all stages, allowing data flow between hooks
@@ -51,6 +53,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
       }
     }
     ```
+
   </Tab>
 
   <Tab title="Did (After)">
@@ -76,6 +79,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
       }
     }
     ```
+
   </Tab>
 
   <Tab title="Around (Wrap)">
@@ -102,6 +106,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
       }
     }
     ```
+
   </Tab>
 
   <Tab title="Stage (Replace)">
@@ -121,6 +126,7 @@ Hooks allow you to intercept and modify tool execution at specific lifecycle sta
       await this.validateSchema(toolContext.input, tool.inputSchema);
     }
     ```
+
   </Tab>
 </Tabs>
 
@@ -239,10 +245,7 @@ import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
 })
 export default class ResiliencePlugin {
   @ToolHook.Around('execute')
-  async withRetry(
-    ctx: FlowCtxOf<'tools:call-tool'>,
-    next: () => Promise<void>
-  ) {
+  async withRetry(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
     const { tool, toolContext } = ctx.state;
     if (!tool || !toolContext) return await next();
 
@@ -454,6 +457,7 @@ class MyPlugin {
     const hooks = hookRegistry.getFlowHooks('tools:call-tool');
     // Returns: HookEntry[] - all hooks for this flow
     ```
+
   </Tab>
 
   <Tab title="getFlowHooksForOwner">
@@ -485,6 +489,7 @@ class MyPlugin {
     - **Tool-specific hooks**: When a tool registers hooks that should only apply to its own execution
     - **Multi-tenant isolation**: Filter hooks by tenant ID to ensure proper isolation
     - **Plugin scoping**: Get hooks that belong to a specific plugin
+
   </Tab>
 
   <Tab title="getFlowStageHooks">
@@ -497,6 +502,7 @@ class MyPlugin {
     );
     // Returns: HookEntry[] - all hooks for the 'execute' stage
     ```
+
   </Tab>
 
   <Tab title="getClsHooks">
@@ -506,6 +512,7 @@ class MyPlugin {
     const classHooks = hookRegistry.getClsHooks(MyPlugin);
     // Returns: HookEntry[] - all hooks defined on MyPlugin class
     ```
+
   </Tab>
 </Tabs>
 
@@ -528,21 +535,19 @@ export default class ToolIsolationPlugin {
     const toolOwnerId = toolContext.tool?.metadata.owner?.id;
 
     // Get only hooks relevant to this specific tool
-    const relevantHooks = hookRegistry.getFlowHooksForOwner(
-      'tools:call-tool',
-      toolOwnerId
-    );
+    const relevantHooks = hookRegistry.getFlowHooksForOwner('tools:call-tool', toolOwnerId);
 
     ctx.logger.info(`Found ${relevantHooks.length} hooks for this tool`, {
       toolOwnerId,
-      hooks: relevantHooks.map(h => h.metadata.stage),
+      hooks: relevantHooks.map((h) => h.metadata.stage),
     });
   }
 }
 ```
 
 <Warning>
-  The Hook Registry API is an advanced feature primarily intended for framework developers and complex plugin authors. Most users should use the decorator-based approach (`@ToolHook`, `@HttpHook`, etc.) instead.
+  The Hook Registry API is an advanced feature primarily intended for framework developers and complex plugin authors.
+  Most users should use the decorator-based approach (`@ToolHook`, `@HttpHook`, etc.) instead.
 </Warning>
 
 ---
@@ -570,6 +575,7 @@ export default class ToolIsolationPlugin {
       plugins: [MyHooksPlugin],
     })
     ```
+
   </Accordion>
 
   <Accordion title="2. Set Appropriate Priorities">
@@ -578,6 +584,7 @@ export default class ToolIsolationPlugin {
     - **Logging/Metrics**: Low priority (1-20)
 
     This ensures validation runs before transformation, and logging captures everything.
+
   </Accordion>
 
   <Accordion title="3. Handle Errors Gracefully">
@@ -607,6 +614,7 @@ export default class ToolIsolationPlugin {
       this.logger.info(`Execution took ${duration}ms`);
     }
     ```
+
   </Accordion>
 
   <Accordion title="5. Avoid Heavy Computation in Hooks">
@@ -626,9 +634,10 @@ export default class ToolIsolationPlugin {
     Learn more about FrontMCP plugins
   </Card>
 
-  <Card title="Tool Documentation" icon="wrench" href="/docs/servers/tools">
-    Understand tool lifecycle and execution
-  </Card>
+{' '}
+<Card title="Tool Documentation" icon="wrench" href="/docs/servers/tools">
+  Understand tool lifecycle and execution
+</Card>
 
   <Card title="Cache Plugin" icon="database" href="/docs/plugins/cache-plugin">
     See hooks in action with the Cache Plugin

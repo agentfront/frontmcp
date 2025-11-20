@@ -1,3 +1,23 @@
+## [v0.4.0] - 2025-11-20
+
+### feat
+
+- Replace the OpenAPI adapter backend with the new `mcp-from-openapi` generator so every tool inherits request mappers,
+  security validation, parameter conflict resolution, and naming controls.
+- Let `@Tool` output schemas use literal primitives, resource descriptors, or tuple-style arrays to tighten typing and
+  emit structured responses without wrapping objects.
+
+### docs
+
+- Document the OpenAPI adapter's authentication strategies, mapper behavior, and configuration knobs, and refresh the
+  tools reference to cover the new schema ergonomics.
+
+### build
+
+- Update publish-on-next-close to separate synchronized vs independent libraries, bump versions, rebuild after bumps,
+  remove draft blog cards, and push the release commit automatically.
+- Add lint-staged via husky and a push workflow that blocks committing local docs backups to keep releases clean.
+
 ## [v0.3.1] - 2025-11-16
 
 ### feat
