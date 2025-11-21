@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
-    "docs:local": "bash scripts/dev-docs.sh",
+    "docs:live": "cd docs/live && mint dev",
+    "docs:draft": "cd docs/draft && mint dev",
     "prepare": "husky"
   },
   "lint-staged": {

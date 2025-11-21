@@ -1,0 +1,79 @@
+---
+title: Authentication
+sidebarTitle: Overview
+slug: servers/authentication/overview
+icon: users-between-lines
+---
+
+FrontMCP supports **Remote OAuth** (connect to an external IdP) and a built‑in **Local OAuth** provider. You can configure auth **at the server** or **per app**:
+
+- **Server‑level auth**: a default provider for all apps (only when `splitByApp: false`).
+- **App‑level auth**: each app defines its own provider; required when `splitByApp: true`.
+
+Auth drives **session creation**, **token propagation**, and optional **consent** for tools/resources/prompts.
+
+<Info>
+  If an external provider **doesn’t support Dynamic Client Registration (DCR)**, FrontMCP can front it with a **local
+  OAuth proxy** that registers/holds the client on your behalf. See *Remote OAuth → Proxy*.
+</Info>
+
+---
+
+## Where to configure auth
+
+**Server (multi‑app, shared auth):**
+
+```ts
+@FrontMcp({
+  info: { name: 'Expense', version: '1.0.0' },
+  apps: [BillingApp, AnalyticsApp],
+  auth: { type: 'remote', name: 'frontegg', baseUrl: 'https://idp.example.com' },
+})
+export default class Server {}
+```
+
+**Per app (isolated scopes):**
+
+```ts
+@App({ name: 'Billing', auth: { type: 'local', id: 'local', name: 'Local Auth' } })
+export default class BillingApp {}
+
+@FrontMcp({ info: { name: 'Suite', version: '1.0.0' }, apps: [BillingApp, AnalyticsApp], splitByApp: true })
+export default class Server {}
+```
+
+---
+
+## Consent & scopes
+
+Enable consent to let users select the **tools/resources/prompts** they grant, producing a **scoped token**.
+
+```ts
+auth: {
+    type: 'remote',
+    name: 'frontegg',
+    baseUrl: 'https://idp.example.com',
+    consent: true
+}
+```
+
+You can still send classic OAuth scopes via `scopes: string[]`.
+
+---
+
+## Sessions & transport
+
+Auth integrates with server sessions (see _Server Overview → Sessions_):
+
+- `session.sessionMode`: `stateful` keeps tokens server‑side (recommended for nested providers); `stateless` embeds in JWT (simpler).
+- `session.transportIdMode`: `uuid` (per‑node) or `jwt` (signed transport IDs for distributed setups).
+
+<Tip>
+  Use **stateful** sessions when working with short‑lived upstream tokens—you’ll get refresh without round‑trips.
+</Tip>
+
+---
+
+## Discovery & well‑known
+
+Remote providers typically self‑describe via `/.well-known/oauth-authorization-server` and `/.well-known/jwks.json`. You may override endpoints and JWKS inline when needed.
