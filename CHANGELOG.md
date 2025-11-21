@@ -6,13 +6,12 @@
   mappers, conflict-free schemas, and per-scheme authentication validation.
 - Allow `@Tool` output schemas to use literal primitives, tuple-style arrays, and resource descriptors so responses stay
   structured without wrapping objects.
-- Extract `json-schema-to-zod-v3` from the repo with built-in regex safeguards so JSON Schema → Zod conversions can be
+- Extract `json-schema-to-zod-v3` from the repo with built-in regex safeguards so JSON Schema  Zod conversions can be
   reused across FrontMCP projects.
 
 ### docs
 
-- Expand the OpenAPI adapter guide with authentication strategies, mapper visibility tips, and generator tuning advice,
-  and refresh the “Add OpenAPI Adapter” walkthrough accordingly.
+- Document the CodeCall plugin’s search/describe/execute workflow, sandbox presets, and direct invoke mode so large toolboxes stay approachable.
 - Update the tools reference to cover raw input shapes, literal output schemas, and tuple-style responses introduced in
   this release.
 

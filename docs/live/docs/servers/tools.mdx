@@ -60,9 +60,29 @@ class CalcApp {}
   id?: string,
   name: string,
   description?: string,
-  inputSchema: ZodSchema,
+  inputSchema: { [key: string]: z.ZodTypeAny } | z.ZodObject<any>,
   rawInputSchema?: JSONSchema7,
-  outputSchema?: ZodSchema,
+  outputSchema?:
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'date'
+    | 'image'
+    | 'audio'
+    | 'resource'
+    | 'resource_link'
+    | z.ZodTypeAny
+    | readonly (
+        | 'string'
+        | 'number'
+        | 'boolean'
+        | 'date'
+        | 'image'
+        | 'audio'
+        | 'resource'
+        | 'resource_link'
+        | z.ZodTypeAny
+      )[],
   tags?: string[],
   annotations?: {
     title?: string,
@@ -80,10 +100,47 @@ class CalcApp {}
 - `annotations` hint model & UI behavior (read-only, idempotent, etc.).
 - `hideFromDiscovery` keeps a tool callable but off `tool/list`.
 - Tools can attach **per-tool hooks** (see _Advanced → Hooks_).
+- `rawInputSchema` lets you share a JSON Schema version of the input (handy for the Inspector or adapters) while still passing a raw Zod shape to `inputSchema`.
+
+### Input & output schema shapes
+
+`inputSchema` can be a full `z.object({...})` or just the raw shape (`{ name: z.string() }`). The SDK wraps raw shapes into an object internally, so you can keep declarations terse and still get proper validation.
+
+Set `rawInputSchema` when you also want to expose the JSON Schema equivalent of your input — the OpenAPI adapter and Inspector will reuse it without needing to reverse-engineer your Zod types.
+
+`outputSchema` accepts:
+
+- Literal primitives (`'string'`, `'number'`, `'boolean'`, `'date'`) when you return scalars.
+- `'image'`, `'audio'`, `'resource'`, or `'resource_link'` when you emit MCP resource descriptors.
+- Any Zod schema (objects, unions, arrays, discriminated unions, etc.).
+- An array of the above to build tuple-like responses; each entry becomes a separate structured content item in the MCP response.
+
+```ts
+@Tool({
+  name: 'add',
+  description: 'Add two numbers and echo the math',
+  inputSchema: { a: z.number(), b: z.number() },
+  rawInputSchema: {
+    type: 'object',
+    properties: {
+      a: { type: 'number' },
+      b: { type: 'number' },
+    },
+    required: ['a', 'b'],
+  },
+  outputSchema: ['string', 'number'],
+})
+export default class AddTool {
+  async execute({ a, b }: { a: number; b: number }) {
+    const result = a + b;
+    return [`${a} + ${b} = ${result}`, result];
+  }
+}
+```
 
 ---
 
 ## Return values
 
-- Return any serializable type; if you provide `outputSchema`, it will validate.
+- Return primitives, structured objects, tuples, or MCP resources. When `outputSchema` is provided (literal, array, or Zod), the SDK validates the response and propagates the right metadata to clients.
 - Errors are surfaced via MCP error responses; you can also throw typed errors inside executors.
