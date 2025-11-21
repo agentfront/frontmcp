@@ -1,22 +1,27 @@
-## [v0.4.0] - 2025-11-20
+## [v0.4.0] - 2025-11-21
 
 ### feat
 
-- Replace the OpenAPI adapter backend with the new `mcp-from-openapi` generator so every tool inherits request mappers,
-  security validation, parameter conflict resolution, and naming controls.
-- Let `@Tool` output schemas use literal primitives, resource descriptors, or tuple-style arrays to tighten typing and
-  emit structured responses without wrapping objects.
+- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits request
+  mappers, conflict-free schemas, and per-scheme authentication validation.
+- Allow `@Tool` output schemas to use literal primitives, tuple-style arrays, and resource descriptors so responses stay
+  structured without wrapping objects.
+- Extract `json-schema-to-zod-v3` from the repo with built-in regex safeguards so JSON Schema → Zod conversions can be
+  reused across FrontMCP projects.
 
 ### docs
 
-- Document the OpenAPI adapter's authentication strategies, mapper behavior, and configuration knobs, and refresh the
-  tools reference to cover the new schema ergonomics.
+- Expand the OpenAPI adapter guide with authentication strategies, mapper visibility tips, and generator tuning advice,
+  and refresh the “Add OpenAPI Adapter” walkthrough accordingly.
+- Update the tools reference to cover raw input shapes, literal output schemas, and tuple-style responses introduced in
+  this release.
 
 ### build
 
-- Update publish-on-next-close to separate synchronized vs independent libraries, bump versions, rebuild after bumps,
-  remove draft blog cards, and push the release commit automatically.
-- Add lint-staged via husky and a push workflow that blocks committing local docs backups to keep releases clean.
+- Let release automation archive the previous minor docs, copy `docs/draft/docs/**` into `docs/docs/**`, and coordinate
+  independent version bumps/publishes for packages such as `json-schema-to-zod-v3`.
+- Add husky + lint-staged pre-commit hooks and push-time guards that block accidental docs backups to keep release
+  commits clean.
 
 ## [v0.3.1] - 2025-11-16
 
