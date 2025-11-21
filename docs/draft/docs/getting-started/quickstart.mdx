@@ -220,7 +220,7 @@ npm run doctor
 ## Test Your Server
 
 <Steps>
-  <Step title="Start the server">
+  <Step stepNumber={1} title="Start the server">
     ```bash
     npm run dev
     ```
@@ -233,7 +233,7 @@ npm run doctor
 
   </Step>
 
-  <Step title="Launch the Inspector">
+  <Step stepNumber={2} title="Launch the Inspector">
     Open a new terminal and run:
 
     ```bash
@@ -244,12 +244,10 @@ npm run doctor
 
   </Step>
 
-{' '}
-
-<Step title="Connect to your server">
-  In the Inspector: 1. Enter server URL: `http://localhost:3000` 2. Click "Connect" 3. You should see your `greet` tool
-  listed
-</Step>
+  <Step stepNumber={3} title="Connect to your server">
+    In the Inspector: 1. Enter server URL: `http://localhost:3000` 2. Click "Connect" 3. You should see your `greet` tool
+    listed
+  </Step>
 
   <Step title="Call your tool">
     1. Select the `greet` tool

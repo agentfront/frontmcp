@@ -7,7 +7,7 @@ on:
         description: "Semver bump"
         required: true
         type: choice
-        options: [ patch, minor, major ]
+        options: [patch, minor, major]
         default: patch
 
 permissions:
@@ -17,6 +17,7 @@ permissions:
 jobs:
   create:
     runs-on: ubuntu-latest
+    environment: release
     env:
       # Disable Nx daemon in CI for determinism
       NX_DAEMON: "false"
@@ -25,14 +26,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # we need tags & history
+          fetch-depth: 0 # we need tags & history
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'yarn'
-          registry-url: 'https://registry.npmjs.org/'
+          node-version-file: ".nvmrc"
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
 
       - name: Install deps
         run: yarn
@@ -85,12 +86,41 @@ jobs:
           echo "Next version: $NEXT"
           echo "value=$NEXT" >> "$GITHUB_OUTPUT"
 
+      - name: Get current and last release versions
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.next.outputs.value }}"
+
+          # Get last release tag
+          LAST_TAG=$(git tag --list "v*" --sort=-version:refname | head -n1 || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            # Extract version from tag (remove 'v' prefix)
+            LAST_VERSION="${LAST_TAG#v}"
+            # Get minor version (e.g., 0.3 from 0.3.1)
+            LAST_MINOR=$(echo "$LAST_VERSION" | awk -F. '{print $1"."$2}')
+          else
+            LAST_VERSION=""
+            LAST_MINOR=""
+          fi
+
+          NEXT_MINOR=$(echo "$NEXT" | awk -F. '{print $1"."$2}')
+
+          echo "last_version=$LAST_VERSION" >> "$GITHUB_OUTPUT"
+          echo "last_minor=$LAST_MINOR" >> "$GITHUB_OUTPUT"
+          echo "next_version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "next_minor=$NEXT_MINOR" >> "$GITHUB_OUTPUT"
+
+          echo "Last release: $LAST_VERSION (minor: $LAST_MINOR)"
+          echo "Next release: $NEXT (minor: $NEXT_MINOR)"
+
       - name: Create branch next/${{ steps.next.outputs.value }} from base
         id: branch
         shell: bash
         run: |
           set -euo pipefail
-          BASE="main"   # or ${{ github.event.repository.default_branch }} if you want it dynamic
+          BASE="main"
           NEXT="${{ steps.next.outputs.value }}"
 
           git fetch origin "$BASE" --tags
@@ -99,70 +129,438 @@ jobs:
           echo "Created branch next/$NEXT from $BASE"
           echo "name=next/$NEXT" >> "$GITHUB_OUTPUT"
 
-      # Let Nx update versions INSIDE this branch (no tags pushed from this workflow)
-      - name: Version packages with Nx (makes or stages changes)
+      # ========================================
+      # STEP 1: Identify affected independent libraries
+      # ========================================
+      - name: Identify affected independent libraries
+        id: independent
         shell: bash
         run: |
           set -euo pipefail
-          BUMP="${{ inputs.bump }}"
 
-          # If there are no existing semver tags, hint Nx this is the first release
-          if git tag --list | grep -qE '^[v]?[0-9]+\.[0-9]+\.[0-9]+$'; then
-            FIRST=""
-          else
-            FIRST="--first-release"
+          # Get all independent libraries
+          ALL_INDEPENDENT=$(node -e "
+            const { execSync } = require('child_process');
+            try {
+              const out = execSync('npx nx show projects -p tag:versioning:independent --type lib --json', { encoding: 'utf8' });
+              const arr = JSON.parse(out);
+              process.stdout.write(arr.join(','));
+            } catch (e) {
+              process.stdout.write('');
+            }
+          ")
+
+          if [ -z "$ALL_INDEPENDENT" ]; then
+            echo 'independent_projects=' >> "$GITHUB_OUTPUT"
+            echo "No independent libraries found"
+            exit 0
           fi
 
-          echo "Running: yarn nx release version --specifier \"$BUMP\" $FIRST --verbose"
-          yarn nx release version --specifier "$BUMP" $FIRST --verbose
+          echo "All independent libs: $ALL_INDEPENDENT"
 
-          echo "Nx version step completed for bump: $BUMP"
+          # Get affected libraries (changed since last release)
+          LAST_TAG="${{ steps.versions.outputs.last_version }}"
+          if [ -n "$LAST_TAG" ]; then
+            LAST_TAG="v$LAST_TAG"
+          else
+            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
 
-      # 🧩 NEW: ensure root package.json version == next/{semver}
-      - name: Sync root package.json version with next/{semver}
+          AFFECTED=$(node -e "
+            const { execSync } = require('child_process');
+            try {
+              const out = execSync('npx nx show projects --affected --base=\"${LAST_TAG}\" --type lib --json', { encoding: 'utf8' });
+              const arr = JSON.parse(out);
+              process.stdout.write(arr.join(','));
+            } catch (e) {
+              process.stdout.write('');
+            }
+          ")
+
+          # Find intersection: affected AND independent
+          AFFECTED_INDEPENDENT=$(node -e "
+            const all = '$ALL_INDEPENDENT'.split(',').filter(Boolean);
+            const affected = '$AFFECTED'.split(',').filter(Boolean);
+            const intersection = all.filter(lib => affected.includes(lib));
+            process.stdout.write(intersection.join(','));
+          ")
+
+          echo "independent_projects=$AFFECTED_INDEPENDENT" >> "$GITHUB_OUTPUT"
+          if [ -n "$AFFECTED_INDEPENDENT" ]; then
+            echo "Affected independent libs: $AFFECTED_INDEPENDENT"
+          else
+            echo "No affected independent libraries"
+          fi
+
+      # ========================================
+      # STEP 2: Use Codex to analyze independent libs
+      # ========================================
+      - name: Prepare context for Codex lib analysis
+        if: ${{ steps.independent.outputs.independent_projects != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
+          mkdir -p .github/codex/lib-analysis
 
-          NEXT_VERSION="$NEXT" node - << 'EOF'
-          const fs = require('fs');
-          const path = 'package.json';
-          const next = process.env.NEXT_VERSION;
+          INDEPENDENT="${{ steps.independent.outputs.independent_projects }}"
+          LAST_TAG="${{ steps.versions.outputs.last_version }}"
+          if [ -n "$LAST_TAG" ]; then
+            LAST_TAG="v$LAST_TAG"
+          else
+            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          TODAY=$(date -u +"%Y-%m-%d")
 
-          if (!next) {
-            console.error('NEXT_VERSION env is missing');
-            process.exit(1);
-          }
+          # Collect changes for all independent libraries
+          IFS=',' read -ra LIBS <<< "$INDEPENDENT"
+          LIBS_DATA=""
 
-          const raw = fs.readFileSync(path, 'utf8');
-          const pkg = JSON.parse(raw);
+          for lib in "${LIBS[@]}"; do
+            DIFF=$(git diff "$LAST_TAG"...HEAD -- "libs/$lib" 2>/dev/null || echo "")
+            COMMITS=$(git log "$LAST_TAG"...HEAD --oneline -- "libs/$lib" 2>/dev/null || echo "")
 
-          if (pkg.version === next) {
-            console.log(`Root package.json already at version ${next}`);
-          } else {
-            pkg.version = next;
-            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
-            console.log(`Updated root package.json version -> ${next}`);
-          }
+            if [ -z "$DIFF" ] && [ -z "$COMMITS" ]; then
+              continue
+            fi
+
+            CURRENT_VERSION=$(node -e "console.log(require('./libs/$lib/package.json').version)")
+
+            LIBS_DATA+="
+          ================================================================================
+          LIBRARY: $lib
+          CURRENT VERSION: $CURRENT_VERSION
+          ================================================================================
+
+          COMMITS:
+          $COMMITS
+
+          DIFF (truncated to 8000 chars):
+          ${DIFF:0:8000}
+
+          "
+          done
+
+          # Create single prompt for all libraries
+          cat > .github/codex/lib-analysis/prompt.md <<EOF
+          Analyze the following independent libraries and determine:
+          1. The appropriate semantic version bump (MAJOR/MINOR/PATCH)
+          2. A changelog entry for each library
+
+          Today's date: $TODAY
+
+          Semantic Versioning Rules:
+          - MAJOR: Breaking changes, incompatible API changes
+          - MINOR: New features, backwards-compatible functionality additions
+          - PATCH: Backwards-compatible bug fixes, documentation, refactoring, minor improvements
+
+          Libraries to analyze:
+          $LIBS_DATA
+
+          For each library, respond with version bump recommendation and changelog.
+          The changelog should start with ## [NEW_VERSION] - $TODAY and include appropriate sections.
           EOF
 
-      # ✅ Ensure the branch has at least one commit different from main
-      - name: Ensure release branch has a commit
+          # Create output schema
+          cat > .github/codex/lib-analysis/schema.json <<'SCHEMA'
+          {
+            "type": "object",
+            "properties": {
+              "libraries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "bump": { "type": "string", "enum": ["major", "minor", "patch"] },
+                    "changelog": { "type": "string", "minLength": 10 }
+                  },
+                  "required": ["name", "bump", "changelog"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["libraries"],
+            "additionalProperties": false
+          }
+          SCHEMA
+
+      - name: Run Codex to analyze independent libraries
+        if: ${{ steps.independent.outputs.independent_projects != '' }}
+        id: codex_libs
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
+          prompt-file: .github/codex/lib-analysis/prompt.md
+          output-file: .github/codex/lib-analysis/results.json
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          output-schema-file: .github/codex/lib-analysis/schema.json
+
+      # ========================================
+      # STEP 3: Apply all version bumps
+      # ========================================
+      - name: Bump synchronized libraries
         shell: bash
         run: |
           set -euo pipefail
           NEXT="${{ steps.next.outputs.value }}"
 
-          # If Nx and/or the sync step left changes unstaged/uncommitted, commit them.
+          echo "Bumping synchronized libraries to version $NEXT..."
+          node scripts/bump-synchronized-versions.mjs "$NEXT"
+
+      - name: Bump independent libraries and write changelogs
+        if: ${{ steps.independent.outputs.independent_projects != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESULTS_FILE=".github/codex/lib-analysis/results.json"
+          if [ ! -f "$RESULTS_FILE" ]; then
+            echo "No Codex results found, skipping independent lib bumps"
+            exit 0
+          fi
+
+          # Process each library from Codex results
+          LIBS_COUNT=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries.length)")
+
+          for ((i=0; i<LIBS_COUNT; i++)); do
+            LIB_NAME=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].name)")
+            BUMP_TYPE=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].bump)")
+            CHANGELOG_ENTRY=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].changelog)")
+
+            echo "================================"
+            echo "Processing: $LIB_NAME"
+            echo "Bump: $BUMP_TYPE"
+            echo "================================"
+
+            # Bump version
+            node scripts/bump-version.mjs "$LIB_NAME" "$BUMP_TYPE"
+
+            # Get new version after bump
+            NEW_VERSION=$(node -e "console.log(require('./libs/${LIB_NAME}/package.json').version)")
+            CHANGELOG_PATH="libs/$LIB_NAME/CHANGELOG.md"
+
+            echo "Writing CHANGELOG for $LIB_NAME v$NEW_VERSION..."
+
+            if [ -f "$CHANGELOG_PATH" ]; then
+              # Prepend to existing changelog
+              echo "$CHANGELOG_ENTRY" > "$CHANGELOG_PATH.new"
+              echo "" >> "$CHANGELOG_PATH.new"
+              cat "$CHANGELOG_PATH" >> "$CHANGELOG_PATH.new"
+              mv "$CHANGELOG_PATH.new" "$CHANGELOG_PATH"
+            else
+              # Create new changelog
+              cat > "$CHANGELOG_PATH" <<CLEOF
+          # Changelog
+
+          All notable changes to $LIB_NAME will be documented in this file.
+
+          $CHANGELOG_ENTRY
+          CLEOF
+            fi
+
+            echo "✓ Bumped $LIB_NAME to $NEW_VERSION and updated CHANGELOG"
+          done
+
+      # ========================================
+      # STEP 4: Archive old docs and update docs.json
+      # ========================================
+      - name: Archive previous version docs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LAST_MINOR="${{ steps.versions.outputs.last_minor }}"
+          NEXT_MINOR="${{ steps.next.outputs.next_minor }}"
+
+          if [ -z "$LAST_MINOR" ]; then
+            echo "No previous version to archive"
+            exit 0
+          fi
+
+          # Only archive if this is a new minor version
+          if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
+            echo "Same minor version ($NEXT_MINOR), skipping docs archival"
+            exit 0
+          fi
+
+          echo "Archiving v$LAST_MINOR docs to docs/v/$LAST_MINOR/"
+
+          # Create archive directory
+          mkdir -p "docs/v/$LAST_MINOR"
+
+          # Move current docs to archive (if not already there)
+          if [ -d "docs/docs" ]; then
+            cp -r docs/docs/* "docs/v/$LAST_MINOR/" || true
+            echo "✓ Archived docs/docs/ to docs/v/$LAST_MINOR/"
+          fi
+
+      - name: Copy draft docs to current docs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "docs/draft/docs" ]; then
+            echo "No draft docs found, skipping"
+            exit 0
+          fi
+
+          echo "Copying docs/draft/docs/ to docs/docs/"
+
+          # Clear current docs and copy from draft
+          rm -rf docs/docs
+          cp -r docs/draft/docs docs/docs
+
+          echo "✓ Copied draft docs to docs/docs/"
+
+      - name: Update docs.json versioning
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LAST_MINOR="${{ steps.versions.outputs.last_minor }}"
+          NEXT_MINOR="${{ steps.next.outputs.next_minor }}"
+
+          if [ -z "$LAST_MINOR" ]; then
+            echo "No previous version, skipping docs.json update"
+            exit 0
+          fi
+
+          # Only update if this is a new minor version
+          if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
+            echo "Same minor version, skipping docs.json version update"
+            exit 0
+          fi
+
+          echo "Updating docs.json: v$LAST_MINOR -> v$NEXT_MINOR"
+
+          node - <<'NODESCRIPT'
+          const fs = require('fs');
+          const lastMinor = process.env.LAST_MINOR;
+          const nextMinor = process.env.NEXT_MINOR;
+
+          const docsPath = 'docs/docs.json';
+          const docs = JSON.parse(fs.readFileSync(docsPath, 'utf8'));
+
+          // Find Documentation dropdown
+          const docDropdown = docs.navigation.dropdowns.find(d => d.dropdown === 'Documentation');
+          if (!docDropdown || !docDropdown.versions) {
+            console.log('No Documentation dropdown with versions found');
+            process.exit(0);
+          }
+
+          // Find current latest version
+          const latestIndex = docDropdown.versions.findIndex(v => v.default === true);
+          if (latestIndex === -1) {
+            console.log('No default version found');
+            process.exit(0);
+          }
+
+          const oldLatest = docDropdown.versions[latestIndex];
+
+          // Update old latest to archived version
+          oldLatest.version = `v${lastMinor}`;
+          oldLatest.default = false;
+          oldLatest.tag = undefined;
+
+          // Update all paths in old latest to point to archived location
+          function updatePaths(groups, prefix) {
+            for (const group of groups) {
+              if (group.pages) {
+                group.pages = group.pages.map(page => {
+                  if (typeof page === 'string') {
+                    if (page.startsWith('docs/') && !page.startsWith('docs/v/')) {
+                      return page.replace('docs/', `docs/v/${lastMinor}/`);
+                    }
+                    return page;
+                  } else if (page.pages) {
+                    updatePaths([page], prefix);
+                    return page;
+                  }
+                  return page;
+                });
+              }
+              if (group.tag === 'latest') {
+                group.tag = `version ${lastMinor}`;
+              }
+            }
+          }
+
+          updatePaths(oldLatest.groups);
+
+          // Create new latest version (copy structure from old latest)
+          const newLatest = {
+            version: `v${nextMinor} (latest)`,
+            default: true,
+            groups: JSON.parse(JSON.stringify(oldLatest.groups))
+          };
+
+          // Restore paths in new latest to point to current docs
+          function restorePaths(groups) {
+            for (const group of groups) {
+              if (group.pages) {
+                group.pages = group.pages.map(page => {
+                  if (typeof page === 'string') {
+                    if (page.startsWith(`docs/v/${lastMinor}/`)) {
+                      return page.replace(`docs/v/${lastMinor}/`, 'docs/');
+                    }
+                    return page;
+                  } else if (page.pages) {
+                    restorePaths([page]);
+                    return page;
+                  }
+                  return page;
+                });
+              }
+              if (group.tag === `version ${lastMinor}`) {
+                group.tag = 'latest';
+              }
+            }
+          }
+
+          restorePaths(newLatest.groups);
+
+          // Insert new latest at the beginning
+          docDropdown.versions.unshift(newLatest);
+
+          // Write updated docs.json
+          fs.writeFileSync(docsPath, JSON.stringify(docs, null, 2) + '\n', 'utf8');
+
+          console.log(`✓ Updated docs.json: added v${nextMinor} (latest), moved v${lastMinor} to archive`);
+          NODESCRIPT
+        env:
+          LAST_MINOR: ${{ steps.versions.outputs.last_minor }}
+          NEXT_MINOR: ${{ steps.next.outputs.next_minor }}
+
+      # ========================================
+      # STEP 5: Commit all changes
+      # ========================================
+      - name: Commit release preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT="${{ steps.next.outputs.value }}"
+
+          # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then
-            echo "Detected uncommitted changes; creating release commit..."
             git add -A
-            git commit -m "chore(release): start v$NEXT"
+
+            # Create detailed commit message
+            cat > /tmp/commit-msg <<COMMITMSG
+          chore(release): prepare v$NEXT
+
+          - Bump synchronized libs to v$NEXT
+          - Bump independent libs (Codex-analyzed)
+          - Update CHANGELOGs for independent libs
+          - Archive v${{ steps.versions.outputs.last_minor }} docs
+          - Update docs.json versioning
+          COMMITMSG
+
+            git commit -F /tmp/commit-msg
+            echo "✓ Created release preparation commit"
           else
-            echo "No file changes to commit (Nx may have already committed)."
-            echo "Creating an empty release marker commit to ensure branch differs from base..."
-            git commit --allow-empty -m "chore(release): start v$NEXT"
+            echo "No changes to commit"
+            git commit --allow-empty -m "chore(release): prepare v$NEXT"
           fi
 
       # 🚫 Push ONLY the branch, NOT tags – tags will be created & pushed by the publish workflow on merge
@@ -177,7 +575,7 @@ jobs:
       - name: Open PR for next/${{ steps.next.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh CLI will use this
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh CLI will use this
         shell: bash
         run: |
           set -euo pipefail

@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "1.1.0",
+  "version": "0.4.0",
   "description": "FrontMCP plugins to extend the SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -33,6 +33,6 @@
   },
   "dependencies": {
     "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "^1.1.0"
+    "@frontmcp/sdk": "^0.4.0"
   }
 }

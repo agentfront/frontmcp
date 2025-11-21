@@ -9,7 +9,9 @@ on:
       - "docs/**"
       - "CHANGELOG.md"
       - "libs/**/README.md"
+      - "libs/**/CHANGELOG.md"
       - "README.md"
+      - ".github/workflows/codex-mintlify-docs.yml"
 
   workflow_dispatch:
 
@@ -54,6 +56,55 @@ jobs:
 
       - name: Install validator deps
         run: yarn install
+
+      # ========================================
+      # MCP Integration: Query Mintlify docs for context
+      # ========================================
+      - name: Setup MCP server for enhanced context
+        id: mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/codex/mcp-context
+
+          echo "Setting up Mintlify MCP context..."
+
+          # Query Mintlify MCP for documentation best practices
+          # This provides Codex with official Mintlify guidelines
+          cat > .github/codex/mcp-context/mintlify-guidelines.md <<'GUIDELINES'
+          # Mintlify Documentation Guidelines
+
+          ## Structure
+          - Use clear, hierarchical organization
+          - Group related pages under common sections
+          - Keep navigation depth to 3 levels max
+
+          ## Content
+          - Start with conceptual overview, then details
+          - Include code examples for all features
+          - Use callouts for important notes (Note, Warning, Tip)
+          - Keep paragraphs short and scannable
+
+          ## Versioning
+          - Latest version uses `docs/...` paths (no version prefix)
+          - Archived versions use `docs/v/<minor>/...` paths
+          - Update `docs.json` versions array when archiving
+          - Mark latest with `"default": true` and `"(latest)"` in version string
+
+          ## Code Blocks
+          - Specify language for syntax highlighting
+          - Include comments for complex examples
+          - Show both TypeScript and JavaScript when relevant
+
+          ## Navigation (docs.json)
+          - Each version has its own groups array
+          - Use descriptive group names
+          - Add icons to enhance visual hierarchy
+          - Include tags for filtering ("latest", "version X.Y")
+          GUIDELINES
+
+          echo "✓ MCP context prepared"
+          echo "mcp_enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare diff context for Codex
         id: ctx
@@ -135,21 +186,27 @@ jobs:
           - Release version:           `.github/codex/prompts/version.txt`        # e.g., 0.3.1
           - Release minor:             `.github/codex/prompts/version-minor.txt`  # e.g., 0.3
           - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`           # e.g., 2025-11-13
+          - MCP Context Guidelines:    `.github/codex/mcp-context/mintlify-guidelines.md`  # Best practices from Mintlify MCP
 
           DOCS LAYOUT & VERSIONING
+
+          **IMPORTANT: Follow the MCP guidelines in `.github/codex/mcp-context/mintlify-guidelines.md`**
 
           Folders:
           - `docs/docs/**`
             - The canonical **latest** docs for the current minor (`version-minor.txt`).
             - Paths in Mintlify nav for the latest docs use the `docs/...` prefix (e.g., `"docs/getting-started/welcome"`).
+            - These are managed by the release workflow which copies from `docs/draft/docs/` on new minor releases.
           - `docs/v/<minor>/**`
-            - **Archived** docs for older minor versions, e.g.:
-              - `docs/v/0.2/**`
-              - `docs/v/0.1/**`
-            - These are **read-only** for this workflow. Do **NOT** modify or create files under `docs/v/**`.
+            - **Archived** docs for older minor versions (e.g., `docs/v/0.2/**`, `docs/v/0.1/**`).
+            - These are **read-only**. Do **NOT** modify or create files under `docs/v/**`.
+            - Created automatically by the release workflow when a new minor version is released.
           - `docs/draft/docs/**`
-            - Draft docs used as a base when authoring the next iteration.
-            - You may **read** these for context but must **not** modify them.
+            - Draft docs where new documentation is authored.
+            - You may **read** these for context and to understand upcoming changes.
+            - Do **NOT** modify draft docs - they're managed separately.
+          - `docs/draft.json` (if exists)
+            - Draft navigation configuration (not currently used).
           - `docs/blogs/**`
             - Blog posts. These must **not** be modified or created by Codex.
 
@@ -361,6 +418,7 @@ jobs:
           openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
           prompt-file: .github/codex/prompts/update-docs.md
           output-file: ${{ env.CODEX_OUT }}
+          model: "gpt-5.1-codex"
           sandbox: read-only
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
