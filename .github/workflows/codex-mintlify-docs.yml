@@ -178,7 +178,7 @@ jobs:
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/live/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/live/docs.json`) for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
@@ -193,37 +193,39 @@ jobs:
           **IMPORTANT: Follow the MCP guidelines in `.github/codex/mcp-context/mintlify-guidelines.md`**
 
           Folders:
-          - `docs/docs/**`
+          - `docs/live/docs/**`
             - The canonical **latest** docs for the current minor (`version-minor.txt`).
             - Paths in Mintlify nav for the latest docs use the `docs/...` prefix (e.g., `"docs/getting-started/welcome"`).
-            - These are managed by the release workflow which copies from `docs/draft/docs/` on new minor releases.
-          - `docs/v/<minor>/**`
-            - **Archived** docs for older minor versions (e.g., `docs/v/0.2/**`, `docs/v/0.1/**`).
-            - These are **read-only**. Do **NOT** modify or create files under `docs/v/**`.
+            - These are published to production and managed by the release workflow.
+          - `docs/live/docs/v/<minor>/**`
+            - **Archived** docs for older minor versions (e.g., `docs/live/docs/v/0.2/**`).
+            - These are **read-only**. Do **NOT** modify or create files under `docs/live/docs/v/**`.
             - Created automatically by the release workflow when a new minor version is released.
           - `docs/draft/docs/**`
             - Draft docs where new documentation is authored.
             - You may **read** these for context and to understand upcoming changes.
-            - Do **NOT** modify draft docs - they're managed separately.
-          - `docs/draft.json` (if exists)
-            - Draft navigation configuration (not currently used).
-          - `docs/blogs/**`
+            - Do **NOT** modify draft docs - they're managed by a separate workflow on main branch.
+          - `docs/live/blog/**`
             - Blog posts. These must **not** be modified or created by Codex.
+          - `docs/draft/blog/**`
+            - Draft blog posts. These must **not** be modified or created by Codex.
 
-          - `docs/updates.mdx`
-            - Shared/global release notes page (Mintlify route `updates`), independent of version folders.
+          - `docs/live/updates.mdx`
+            - **Production** release notes page (Mintlify route `updates`), independent of version folders.
+          - `docs/draft/updates.mdx`
+            - Draft release notes (do NOT modify - managed separately)
 
           SCOPE & PATHS
 
           You are allowed to modify/create only:
 
-          - Latest version docs:
-            - `docs/docs/**/*.mdx`
-            - `docs/docs/**/*.md`
-          - Shared global release notes:
-            - `docs/updates.mdx`
+          - Latest version docs (live/production):
+            - `docs/live/docs/**/*.mdx`
+            - `docs/live/docs/**/*.md`
+          - Shared global release notes (live/production):
+            - `docs/live/updates.mdx`
           - Navigation (production):
-            - `docs/docs.json`
+            - `docs/live/docs.json`
           - Changelog:
             - `CHANGELOG.md`
           - Root README:
@@ -232,26 +234,27 @@ jobs:
             - `libs/**/README.md`
 
           You must **not** touch:
-          - `docs/v/**` (archived versioned docs)
-          - `docs/draft/docs/**`
-          - `docs/blogs/**`
+          - `docs/live/docs/v/**` (archived versioned docs)
+          - `docs/draft/**` (draft docs - managed separately)
+          - `docs/live/blog/**` (blog posts)
+          - `docs/draft/blog/**` (draft blog posts)
           or any other file types outside the allowed list.
 
-          RULES – RELEASE NOTES (`docs/updates.mdx`)
+          RULES – RELEASE NOTES (`docs/live/updates.mdx`)
 
           - Add a new section at the **top** for `v<version>` with date `<YYYY-MM-DD>`.
           - Summarize notable user-facing changes derived from commits and diff.
           - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
           - Keep MDX valid (frontmatter/imports/components).
 
-          RULES – LATEST DOCS (`docs/docs/**`)
+          RULES – LATEST DOCS (`docs/live/docs/**`)
 
-          - Treat `docs/docs/` as the **canonical docs root for the current minor** (`version-minor.txt`).
-          - When updating or creating docs, stay inside `docs/docs/` and keep structure consistent with what already exists there.
-          - Do **not** modify `docs/v/**` or `docs/draft/docs/**`.
+          - Treat `docs/live/docs/` as the **canonical docs root for the current minor** (`version-minor.txt`).
+          - When updating or creating docs, stay inside `docs/live/docs/` and keep structure consistent with what already exists there.
+          - Do **not** modify `docs/live/docs/v/**` or `docs/draft/**`.
           - Keep tone and style consistent with existing docs.
 
-          RULES – NAVIGATION (`docs/docs.json`)
+          RULES – NAVIGATION (`docs/live/docs.json`)
 
           Structure:
           - The root has a `dropdowns` array.
@@ -308,16 +311,15 @@ jobs:
           - Example: latest entry is `"v0.3 (latest)"` and `version-minor.txt` is `0.3`.
           - Treat this release as a **patch** within the same minor.
           - Keep the `"v0.3 (latest)"` entry as the default.
-          - Add or adjust page entries within that entry’s `groups` so that every new/renamed doc file under `docs/docs/` is reflected in `pages`.
-          - Do **not** add or modify entries for `docs/v/**`.
+          - Add or adjust page entries within that entry's `groups` so that every new/renamed doc file under `docs/live/docs/` is reflected in `pages`.
+          - Do **not** add or modify entries for `docs/live/docs/v/**`.
 
-          If `version-minor.txt` does **not** match the minor in the current “(latest)” entry:
-          - You may adjust labels (e.g., text like `"v0.3 (latest)"` → `"v0.3"`) and create a new `"v<minor> (latest)"` entry.
-          - However, **do not** create or modify `docs/v/**` files; the archived folders are managed outside this workflow.
-          - Assume that any needed `docs/v/<oldMinor>/...` content is created separately.
+          If `version-minor.txt` does **not** match the minor in the current "(latest)" entry:
+          - The archival is handled by a separate script, so you only need to update the navigation.
           - Your responsibility is to ensure:
             - The **latest** entry refers to `docs/...` paths and matches `version-minor.txt`.
             - Older entries refer to `docs/v/<minor>/...` paths and are correctly labeled.
+          - However, **do not** create or modify `docs/live/docs/v/**` files; the archived folders are managed by a separate script.
 
           Tags:
           - You may see `tag` fields like `"latest"` or `"version 0.2"` on groups.
@@ -326,7 +328,7 @@ jobs:
             - Older versions can have `tag: "version <minor>"` (e.g., `"version 0.2"`).
           - Do not introduce noisy or inconsistent tags.
 
-          Keep `docs/docs.json`:
+          Keep `docs/live/docs.json`:
           - Valid JSON.
           - As close as reasonable to existing formatting (but correctness > formatting).
 
@@ -362,12 +364,13 @@ jobs:
 
           - Prefer small, surgical edits.
           - Never modify:
-            - `docs/v/**`
-            - `docs/draft/docs/**`
-            - `docs/blogs/**`
+            - `docs/live/docs/v/**` (archived docs)
+            - `docs/draft/**` (draft docs - managed separately)
+            - `docs/live/blog/**` (blog posts)
+            - `docs/draft/blog/**` (draft blog posts)
           - Always keep:
-            - `docs/docs.json` consistent with actual docs under `docs/docs/`.
-            - `docs/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
+            - `docs/live/docs.json` consistent with actual docs under `docs/live/docs/`.
+            - `docs/live/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
           - If no changes are needed, return an empty patch set.
 
           OUTPUT (STRICT)
@@ -378,10 +381,10 @@ jobs:
           HINTS
 
           - Use subjects/bodies in `commits.txt` to infer categories; de-duplicate merges.
-          - If the same content belongs in multiple places (e.g., `docs/updates.mdx`, `CHANGELOG.md`, and a lib’s README), adapt tone:
+          - If the same content belongs in multiple places (e.g., `docs/live/updates.mdx`, `CHANGELOG.md`, and a lib's README), adapt tone:
             - docs = narrative highlights,
             - changelog = terse, categorized bullets,
-            - README = practical “how to use this” guidance and upgrade notes.
+            - README = practical "how to use this" guidance and upgrade notes.
 
           Produce ONLY the JSON per schema.
           MDX
@@ -397,7 +400,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/docs\\/.+\\.(md|mdx)|docs\\/updates\\.mdx|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
+                      "pattern": "^(docs\\/live\\/docs\\/.+\\.(md|mdx)|docs\\/live\\/updates\\.mdx|docs\\/live\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -475,23 +478,23 @@ jobs:
           commit-message: "docs(codex): update Mintlify docs, CHANGELOG & READMEs [auto]"
           labels: "documentation, automated, codex, release-notes"
           add-paths: |
-            docs/**
+            docs/live/**
             CHANGELOG.md
             README.md
             libs/**/README.md
           delete-branch: true
           body: |
             Codex proposed updates to:
-            - **docs/updates.mdx** (Mintlify release notes)
-            - **docs/docs.json** (Mintlify navigation / versions - production)
-            - **docs/docs/** (latest docs only)
+            - **docs/live/updates.mdx** (Mintlify release notes - production)
+            - **docs/live/docs.json** (Mintlify navigation / versions - production)
+            - **docs/live/docs/** (latest docs only - production)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
 
             for `v${{ steps.ctx.outputs.version }}` on branch `${{ steps.ctx.outputs.branch }}`.
 
-            Note: `docs/docs.json` is the production configuration and will be published directly.
+            Note: `docs/live/` is the production documentation and will be published directly to Mintlify.
 
             See `.codex-docs/apply.log` for validation details.
 

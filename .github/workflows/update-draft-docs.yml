@@ -1,0 +1,377 @@
+name: "Codex → PR: update draft docs (main)"
+
+on:
+  push:
+    branches:
+      - main
+    # Prevent loop: if a push ONLY touches these paths, Codex won't run
+    paths-ignore:
+      - "docs/draft/**"
+      - "docs/live/**"
+      - "CHANGELOG.md"
+      - "libs/**/README.md"
+      - "libs/**/CHANGELOG.md"
+      - "README.md"
+      - ".github/workflows/update-draft-docs.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: codex-draft-docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update-draft:
+    # Don't run for release merges (those already have their docs)
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    runs-on: ubuntu-latest
+    environment: release
+
+    env:
+      CODEX_OUT: .codex-draft-docs/patches.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Fail fast if env secret is not available
+      - name: Ensure CODEX_OPENAI_KEY secret is set
+        run: |
+          if [ -z "${{ secrets.CODEX_OPENAI_KEY }}" ]; then
+            echo "::error::CODEX_OPENAI_KEY (env: release) is not set. Add it under Settings → Environments → release → Secrets." >&2
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ".nvmrc"
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Install validator deps
+        run: yarn install
+
+      # ========================================
+      # MCP Integration: Query Mintlify docs for context
+      # ========================================
+      - name: Setup MCP server for enhanced context
+        id: mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/codex/mcp-context
+
+          echo "Setting up Mintlify MCP context..."
+
+          # Query Mintlify MCP for documentation best practices
+          cat > .github/codex/mcp-context/mintlify-guidelines.md <<'GUIDELINES'
+          # Mintlify Documentation Guidelines
+
+          ## Structure
+          - Use clear, hierarchical organization
+          - Group related pages under common sections
+          - Keep navigation depth to 3 levels max
+
+          ## Content
+          - Start with conceptual overview, then details
+          - Include code examples for all features
+          - Use callouts for important notes (Note, Warning, Tip)
+          - Keep paragraphs short and scannable
+
+          ## Versioning
+          - Draft docs are for the next release
+          - Use current paths (no version prefix) in draft docs
+          - Draft content will be moved to live on release
+
+          ## Code Blocks
+          - Specify language for syntax highlighting
+          - Include comments for complex examples
+          - Show both TypeScript and JavaScript when relevant
+
+          ## Navigation (docs.json)
+          - Each version has its own groups array
+          - Use descriptive group names
+          - Add icons to enhance visual hierarchy
+          GUIDELINES
+
+          echo "✓ MCP context prepared"
+          echo "mcp_enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare diff context for Codex
+        id: ctx
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/codex/prompts .codex-draft-docs
+
+          # ----------------------------------------
+          # Base for diff/log = last published tag
+          # ----------------------------------------
+          LAST_TAG=$(
+            git tag --merged HEAD \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1 \
+            || true
+          )
+
+          if [ -n "$LAST_TAG" ]; then
+            BASE=$(git rev-list -n 1 "$LAST_TAG")
+            echo "Using last published version tag as base: ${LAST_TAG} (${BASE})"
+          else
+            echo "No semver release tag reachable from HEAD; falling back to last 10 commits."
+            BASE=$(git rev-parse HEAD~10) || BASE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "$BASE" > .github/codex/prompts/base.txt
+
+          # Unified diff: from last published release -> current main HEAD
+          git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
+
+          # ----------------------------------------
+          # Derive next version from package.json
+          # ----------------------------------------
+          VERSION=$(node -e "try{console.log(require('./package.json').version || '0.0.0')}catch{console.log('0.0.0')}")
+          echo "Current version: $VERSION (this is the next release version for draft docs)"
+
+          echo "$VERSION" > .github/codex/prompts/version.txt
+
+          # Commit list (for documentation synthesis)
+          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
+
+          # ISO date
+          date -u +"%Y-%m-%d" > .github/codex/prompts/date.txt
+
+      - name: Add Codex prompt & schema
+        run: |
+          cat > .github/codex/prompts/update-draft-docs.md <<'MDX'
+          You are Codex. Task: update **draft** documentation (under `docs/draft/`) based on changes merged to the main branch.
+
+          INPUTS (read-only files in workspace):
+          - Unified diff:              `.github/codex/prompts/diff.patch`
+          - Commit list (TSV):         `.github/codex/prompts/commits.txt`        # columns: sha<TAB>subject<TAB>body
+          - Next version:              `.github/codex/prompts/version.txt`        # e.g., 0.4.1
+          - Date (UTC, ISO):           `.github/codex/prompts/date.txt`           # e.g., 2025-11-22
+          - MCP Context Guidelines:    `.github/codex/mcp-context/mintlify-guidelines.md`
+
+          DOCS LAYOUT
+
+          **IMPORTANT: Follow the MCP guidelines in `.github/codex/mcp-context/mintlify-guidelines.md`**
+
+          Folders:
+          - `docs/draft/docs/**`
+            - **Draft** documentation for the next release
+            - Paths use `docs/...` prefix (no version prefix)
+            - These docs will be moved to `docs/live/docs/` on release
+          - `docs/draft/blog/**`
+            - Draft blog posts (do NOT modify)
+          - `docs/draft/assets/**`
+            - Draft assets (images, etc.)
+          - `docs/draft/snippets/**`
+            - Draft code snippets
+          - `docs/draft/docs.json`
+            - Draft navigation configuration (currently same as live, will be used in future)
+          - `docs/draft/updates.mdx`
+            - Draft release notes for the next version
+          - `docs/live/**`
+            - **Production** docs (do NOT modify)
+
+          SCOPE & PATHS
+
+          You are allowed to modify/create only:
+
+          - Draft docs:
+            - `docs/draft/docs/**/*.mdx`
+            - `docs/draft/docs/**/*.md`
+          - Draft release notes:
+            - `docs/draft/updates.mdx`
+          - Draft assets (if needed):
+            - `docs/draft/assets/**`
+          - Draft snippets (if needed):
+            - `docs/draft/snippets/**`
+
+          You must **not** touch:
+          - `docs/live/**` (production docs)
+          - `docs/draft/blog/**` (blog posts)
+          - `docs/draft/docs.json` (for now, we'll use it later)
+          or any other files outside the allowed list.
+
+          RULES – DRAFT RELEASE NOTES (`docs/draft/updates.mdx`)
+
+          - Update the first <Update> block (labeled "draft") with the latest changes
+          - Summarize notable user-facing changes derived from commits and diff
+          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups)
+          - Keep MDX valid (frontmatter/imports/components)
+          - The release notes should be cumulative (all changes since last release)
+
+          Format example:
+          ```mdx
+          <Update label="draft" description="2025-11-22" tags={["Releases"]}>
+            <Card
+              title="FrontMCP draft"
+              href="/docs"
+              cta="Read the release notes"
+            >
+              ### Features
+              - New feature 1
+              - New feature 2
+
+              ### Fixes
+              - Bug fix 1
+
+              ### Docs
+              - Documentation update 1
+            </Card>
+          </Update>
+          ```
+
+          RULES – DRAFT DOCS (`docs/draft/docs/**`)
+
+          - Update documentation to reflect the latest changes in the codebase
+          - Add new pages for new features
+          - Update existing pages for changed features
+          - Keep tone and style consistent with existing docs
+          - Use clear, concise language
+          - Include code examples for new features
+          - Use callouts (Note, Warning, Tip) appropriately
+
+          GENERAL
+
+          - Prefer small, surgical edits
+          - Never modify:
+            - `docs/live/**`
+            - `docs/draft/blog/**`
+          - Always keep:
+            - `docs/draft/docs/**` consistent with actual code behavior
+            - `docs/draft/updates.mdx` up-to-date with latest changes
+          - If no changes are needed, return an empty patch set
+
+          OUTPUT (STRICT)
+
+          - Return JSON that matches the output schema provided by the runner
+          - Each patch replaces the entire file content
+
+          HINTS
+
+          - Use subjects/bodies in `commits.txt` to infer what changed
+          - Focus on user-facing changes (new APIs, changed behavior, new features)
+          - Skip internal refactoring unless it affects public API
+          - De-duplicate merge commits
+
+          Produce ONLY the JSON per schema.
+          MDX
+
+          cat > .github/codex/codex-output-schema.json <<'JSON'
+          {
+            "type": "object",
+            "properties": {
+              "patches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "pattern": "^docs\\/draft\\/(docs\\/.+\\.(md|mdx)|updates\\.mdx|assets\\/.+|snippets\\/.+)$"
+                    },
+                    "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
+                  },
+                  "required": ["path", "content"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["patches"],
+            "additionalProperties": false
+          }
+          JSON
+
+      - name: Run Codex (read-only, structured output)
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
+          prompt-file: .github/codex/prompts/update-draft-docs.md
+          output-file: ${{ env.CODEX_OUT }}
+          model: "gpt-5.1-codex"
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          output-schema-file: .github/codex/codex-output-schema.json
+
+      - name: Apply & validate patches
+        id: apply
+        run: |
+          set -euo pipefail
+
+          node scripts/apply-doc-patches.mjs "$CODEX_OUT" | tee .codex-draft-docs/apply.log
+
+          # Any change in the working tree means Codex actually updated something
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete existing draft docs branch (if any)
+        if: ${{ steps.apply.outputs.changed == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="docs/codex/draft-update"
+
+          echo "Checking for existing branch ${BRANCH}..."
+
+          # Fetch the branch ref if it exists on origin
+          git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+
+          if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            echo "Remote branch ${BRANCH} exists. Deleting remote..."
+            git push origin --delete "${BRANCH}" || true
+          else
+            echo "No remote branch ${BRANCH}."
+          fi
+
+          if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            echo "Local branch ${BRANCH} exists. Deleting local..."
+            git branch -D "${BRANCH}" || true
+          else
+            echo "No local branch ${BRANCH}."
+          fi
+
+      - name: Create PR with draft docs updates
+        if: ${{ steps.apply.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: docs/codex/draft-update
+          base: main
+          title: "docs: update draft docs for next release (Codex)"
+          commit-message: "docs(codex): update draft docs [auto]"
+          labels: "documentation, automated, codex, draft"
+          add-paths: |
+            docs/draft/**
+          delete-branch: true
+          body: |
+            Codex proposed updates to draft documentation based on recent changes to main:
+            - **docs/draft/docs/** (draft docs for next release)
+            - **docs/draft/updates.mdx** (draft release notes)
+            - **docs/draft/assets/** (draft assets)
+            - **docs/draft/snippets/** (draft snippets)
+
+            These changes will be published to live docs on the next release.
+
+            See `.codex-draft-docs/apply.log` for validation details.
+
+      - name: Upload artifacts (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-draft-docs-artifacts
+          path: |
+            .codex-draft-docs/**
+            .github/codex/prompts/**

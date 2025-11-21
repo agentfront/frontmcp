@@ -363,9 +363,9 @@ jobs:
           done
 
       # ========================================
-      # STEP 4: Archive old docs and update docs.json
+      # STEP 4: Archive docs and publish draft to live
       # ========================================
-      - name: Archive previous version docs
+      - name: Archive and publish docs
         shell: bash
         run: |
           set -euo pipefail
@@ -374,163 +374,18 @@ jobs:
           NEXT_MINOR="${{ steps.next.outputs.next_minor }}"
 
           if [ -z "$LAST_MINOR" ]; then
-            echo "No previous version to archive"
+            echo "No previous version to archive, skipping docs archival"
             exit 0
           fi
 
-          # Only archive if this is a new minor version
+          # Only archive and publish if this is a new minor version
           if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
-            echo "Same minor version ($NEXT_MINOR), skipping docs archival"
+            echo "Same minor version ($NEXT_MINOR), skipping docs archival and publishing"
             exit 0
           fi
 
-          echo "Archiving v$LAST_MINOR docs to docs/v/$LAST_MINOR/"
-
-          # Create archive directory
-          mkdir -p "docs/v/$LAST_MINOR"
-
-          # Move current docs to archive (if not already there)
-          if [ -d "docs/docs" ]; then
-            cp -r docs/docs/* "docs/v/$LAST_MINOR/" || true
-            echo "✓ Archived docs/docs/ to docs/v/$LAST_MINOR/"
-          fi
-
-      - name: Copy draft docs to current docs
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ ! -d "docs/draft/docs" ]; then
-            echo "No draft docs found, skipping"
-            exit 0
-          fi
-
-          echo "Copying docs/draft/docs/ to docs/docs/"
-
-          # Clear current docs and copy from draft
-          rm -rf docs/docs
-          cp -r docs/draft/docs docs/docs
-
-          echo "✓ Copied draft docs to docs/docs/"
-
-      - name: Update docs.json versioning
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          LAST_MINOR="${{ steps.versions.outputs.last_minor }}"
-          NEXT_MINOR="${{ steps.next.outputs.next_minor }}"
-
-          if [ -z "$LAST_MINOR" ]; then
-            echo "No previous version, skipping docs.json update"
-            exit 0
-          fi
-
-          # Only update if this is a new minor version
-          if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
-            echo "Same minor version, skipping docs.json version update"
-            exit 0
-          fi
-
-          echo "Updating docs.json: v$LAST_MINOR -> v$NEXT_MINOR"
-
-          node - <<'NODESCRIPT'
-          const fs = require('fs');
-          const lastMinor = process.env.LAST_MINOR;
-          const nextMinor = process.env.NEXT_MINOR;
-
-          const docsPath = 'docs/docs.json';
-          const docs = JSON.parse(fs.readFileSync(docsPath, 'utf8'));
-
-          // Find Documentation dropdown
-          const docDropdown = docs.navigation.dropdowns.find(d => d.dropdown === 'Documentation');
-          if (!docDropdown || !docDropdown.versions) {
-            console.log('No Documentation dropdown with versions found');
-            process.exit(0);
-          }
-
-          // Find current latest version
-          const latestIndex = docDropdown.versions.findIndex(v => v.default === true);
-          if (latestIndex === -1) {
-            console.log('No default version found');
-            process.exit(0);
-          }
-
-          const oldLatest = docDropdown.versions[latestIndex];
-
-          // Update old latest to archived version
-          oldLatest.version = `v${lastMinor}`;
-          oldLatest.default = false;
-          oldLatest.tag = undefined;
-
-          // Update all paths in old latest to point to archived location
-          function updatePaths(groups, prefix) {
-            for (const group of groups) {
-              if (group.pages) {
-                group.pages = group.pages.map(page => {
-                  if (typeof page === 'string') {
-                    if (page.startsWith('docs/') && !page.startsWith('docs/v/')) {
-                      return page.replace('docs/', `docs/v/${lastMinor}/`);
-                    }
-                    return page;
-                  } else if (page.pages) {
-                    updatePaths([page], prefix);
-                    return page;
-                  }
-                  return page;
-                });
-              }
-              if (group.tag === 'latest') {
-                group.tag = `version ${lastMinor}`;
-              }
-            }
-          }
-
-          updatePaths(oldLatest.groups);
-
-          // Create new latest version (copy structure from old latest)
-          const newLatest = {
-            version: `v${nextMinor} (latest)`,
-            default: true,
-            groups: JSON.parse(JSON.stringify(oldLatest.groups))
-          };
-
-          // Restore paths in new latest to point to current docs
-          function restorePaths(groups) {
-            for (const group of groups) {
-              if (group.pages) {
-                group.pages = group.pages.map(page => {
-                  if (typeof page === 'string') {
-                    if (page.startsWith(`docs/v/${lastMinor}/`)) {
-                      return page.replace(`docs/v/${lastMinor}/`, 'docs/');
-                    }
-                    return page;
-                  } else if (page.pages) {
-                    restorePaths([page]);
-                    return page;
-                  }
-                  return page;
-                });
-              }
-              if (group.tag === `version ${lastMinor}`) {
-                group.tag = 'latest';
-              }
-            }
-          }
-
-          restorePaths(newLatest.groups);
-
-          // Insert new latest at the beginning
-          docDropdown.versions.unshift(newLatest);
-
-          // Write updated docs.json
-          fs.writeFileSync(docsPath, JSON.stringify(docs, null, 2) + '\n', 'utf8');
-
-          console.log(`✓ Updated docs.json: added v${nextMinor} (latest), moved v${lastMinor} to archive`);
-          NODESCRIPT
-        env:
-          LAST_MINOR: ${{ steps.versions.outputs.last_minor }}
-          NEXT_MINOR: ${{ steps.next.outputs.next_minor }}
+          echo "Running archive and publish docs script..."
+          node scripts/archive-and-publish-docs.mjs "$LAST_MINOR" "$NEXT_MINOR"
 
       # ========================================
       # STEP 5: Commit all changes
@@ -552,8 +407,11 @@ jobs:
           - Bump synchronized libs to v$NEXT
           - Bump independent libs (Codex-analyzed)
           - Update CHANGELOGs for independent libs
-          - Archive v${{ steps.versions.outputs.last_minor }} docs
-          - Update docs.json versioning
+          - Archive v${{ steps.versions.outputs.last_minor }} docs to docs/live/docs/v/${{ steps.versions.outputs.last_minor }}
+          - Publish draft docs to live (docs/draft → docs/live)
+          - Update docs/live/docs.json versioning
+
+          Note: updates.mdx will be updated by Codex workflow
           COMMITMSG
 
             git commit -F /tmp/commit-msg
