@@ -7,27 +7,27 @@ mode: 'center'
 
 <Update label="v0.4.0" description="2025-11-21" tags={["Releases"]}>
   <Card
-    title="FrontMCP v0.4.0: Generator-powered adapters and safer schema tooling."
+    title="FrontMCP v0.4.0: Generator-first adapters and safer schemas."
     href="/docs"
     cta="Read the release notes"
   >
     ### Features
 
-    - Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every generated tool inherits request mappers, parameter conflict resolution, and multi-scheme authentication checks.
-    - Extract and release `json-schema-to-zod-v3`, a hardened converter with built-in regex safety, reusable TypeScript helpers, and zero-dependency distribution for any MCP project.
+    - Power the OpenAPI adapter with the standalone `mcp-from-openapi` generator so every generated tool inherits request mappers, conflict resolution, and per-scheme authentication metadata.
+    - Extract and publish `json-schema-to-zod-v3`, a hardened converter with regex guards, reusable TypeScript helpers, and zero-dependency builds that any MCP project can embed.
+    - Let `@Tool` output schemas declare literal primitives, tuple arrays, and resource/resource_link content so responses stay structured without wrapping everything in objects.
 
     ### Docs
 
-    - Expand the OpenAPI adapter guide with authentication strategies, mapper visibility tips, and generator tuning advice inspired by the new `mcp-from-openapi` flow.
-    - Refresh the tools reference to spell out literal output schemas, tuple responses, and raw input shapes so SDK upgrades are immediately actionable.
+    - Document the CodeCall plugin’s search/describe/execute workflow, sandbox presets, and direct invoke mode so large toolboxes stay approachable.
+    - Clarify the tools reference with raw input shapes, literal output schemas, and tuple examples to match the new SDK behavior.
 
     ### Build/CI
 
-    - Archive the previous minor docs, sync the latest content from `docs/draft/docs`, and ship Mintlify MCP guidance as part of the release workflow so navigation stays accurate.
-    - Add independent library version bumps plus husky/lint-staged and push-time guards to keep publishing clean (covering packages like `json-schema-to-zod-v3`).
+    - Split Mintlify docs into draft/live trees, publish the release workflow runbook, and teach the automation to archive the previous minor before publishing.
+    - Add independent-library version detection plus husky/lint-staged guards so release branches only carry intentional changes.
 
   </Card>
-
 </Update>
 
 <Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
