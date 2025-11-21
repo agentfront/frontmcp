@@ -163,14 +163,14 @@ export default class GreetTool {
 
 ### 4) Run It
 
-Add scripts (if you didn’t use `frontmcp create`):
+Add scripts (if you didn't use `frontmcp create`):
 
 ```json
 {
   "scripts": {
-    "dev": "tsx src/main.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/apps/hello/main.js"
+    "dev": "frontmcp dev",
+    "build": "frontmcp build",
+    "start": "node dist/main.js"
   }
 }
 ```
