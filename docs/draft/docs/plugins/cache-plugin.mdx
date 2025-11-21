@@ -14,11 +14,13 @@ The Cache Plugin provides transparent response caching for tools based on their 
   </Card>
 
 {' '}
+
 <Card title="Reduce Load" icon="server">
   Minimize API calls, database queries, and computational overhead
 </Card>
 
 {' '}
+
 <Card title="Cost Savings" icon="dollar-sign">
   Lower infrastructure costs by reducing redundant processing
 </Card>
@@ -42,9 +44,11 @@ npm install @frontmcp/plugins
   </Step>
 
 {' '}
+
 <Step title="Cache Hit">If a cached result exists, it's returned immediately, bypassing tool execution entirely</Step>
 
 {' '}
+
 <Step title="Cache Miss">The tool executes normally, and the result is stored with the configured TTL</Step>
 
   <Step title="Sliding Window (Optional)">
@@ -342,12 +346,14 @@ Use short TTLs for frequently changing data:
   </Accordion>
 
 {' '}
+
 <Accordion title="2. Choose Appropriate TTLs">
   - **Short TTLs (5-60s)**: Real-time data, frequently changing content - **Medium TTLs (5-30min)**: User dashboards,
   reports, analytics - **Long TTLs (hours-days)**: Static content, configuration, reference data
 </Accordion>
 
 {' '}
+
 <Accordion title="3. Use Redis for Production">
   Redis provides: - Cache persistence across restarts - Sharing across multiple server instances - Better memory
   management with eviction policies
@@ -525,11 +531,13 @@ export default class Server {}
   </Card>
 
 {' '}
+
 <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
   See caching in action with real examples
 </Card>
 
 {' '}
+
 <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
   Learn more about FrontMCP plugins
 </Card>

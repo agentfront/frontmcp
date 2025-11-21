@@ -219,6 +219,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   </Step>
 
 {' '}
+
 <Step title="Observe cache hit">
   The second call returns instantly from cache! Check your logs for: ``` [DEBUG] Cache hit for get-user-profile ```
 </Step>
@@ -243,12 +244,14 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   </Step>
 
 {' '}
+
 <Step title="Before Execution (Will Hook)">
   The plugin checks the cache store for the key: - **Cache Hit**: Return cached result immediately, skip execution -
   **Cache Miss**: Allow tool to execute normally
 </Step>
 
 {' '}
+
 <Step title="After Execution (Did Hook)">
   If the tool executed, the plugin stores the result in the cache with the configured TTL
 </Step>
@@ -403,11 +406,13 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   </Card>
 
 {' '}
+
 <Card title="Single Instance" icon="server">
   When running one server instance
 </Card>
 
 {' '}
+
 <Card title="Non-Critical Data" icon="circle-info">
   Data loss on restart is acceptable
 </Card>
@@ -427,11 +432,13 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
   </Card>
 
 {' '}
+
 <Card title="Multi-Instance" icon="layer-group">
   Cache shared across multiple server instances
 </Card>
 
 {' '}
+
 <Card title="Persistence" icon="database">
   Cache survives server restarts
 </Card>
@@ -698,6 +705,7 @@ export default class Server {}
   </Card>
 
 {' '}
+
 <Card title="Custom Hooks" icon="link" href="/docs/guides/customize-flow-stages">
   Learn how the cache plugin uses hooks internally
 </Card>

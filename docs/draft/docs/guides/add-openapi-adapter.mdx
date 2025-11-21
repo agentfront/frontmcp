@@ -151,6 +151,7 @@ export default class Server {}
   </Step>
 
 {' '}
+
 <Step title="Verify tools are loaded">
   Check the console output for messages like: ``` [INFO] Generated 15 tools from expense-api [INFO] Server listening on
   http://localhost:3000 ```
@@ -294,12 +295,14 @@ OpenapiAdapter.init({
   </Step>
 
 {' '}
+
 <Step title="Generate Tools">
   Each operation in the spec becomes an MCP tool with: - Automatic input schema (path params, query params, headers,
   body) - Type-safe validation using Zod - Description from the operation summary
 </Step>
 
 {' '}
+
 <Step title="Register Tools">
   Generated tools are registered with your app and inherit: - App-level plugins (caching, logging, etc.) - App-level
   providers - App-level authentication
@@ -447,11 +450,13 @@ OpenapiAdapter.init({
   </Card>
 
 {' '}
+
 <Card title="Authentication Setup" icon="lock" href="/docs/servers/authentication/overview">
   Learn how to configure authentication for your APIs
 </Card>
 
 {' '}
+
 <Card title="Plugin System" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
   Add caching, logging, and other features to generated tools
 </Card>
