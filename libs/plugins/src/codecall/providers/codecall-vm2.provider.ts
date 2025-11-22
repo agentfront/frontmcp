@@ -1,4 +1,4 @@
-// file: libs/plugins/src/codecall/vm/codecall-vm2.provider.ts
+// file: libs/plugins/src/codecall/providers/codecall-vm2.provider.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { VM } from 'vm2';
@@ -26,13 +26,13 @@ export default class CodeCallVm2Runner {
 
     if (this.vmOptions.allowConsole) {
       // If caller passes a console, use it; otherwise capture logs.
-      // sandbox.console =
-      //   env.console ??
-      //   ({
-      //     log: (...args: unknown[]) => logs.push(['log', ...args].map(String).join(' ')),
-      //     warn: (...args: unknown[]) => logs.push(['warn', ...args].map(String).join(' ')),
-      //     error: (...args: unknown[]) => logs.push(['error', ...args].map(String).join(' ')),
-      //   } satisfies Console);
+      sandbox.console =
+        env.console ??
+        ({
+          log: (...args: unknown[]) => logs.push(['log', ...args].map(String).join(' ')),
+          warn: (...args: unknown[]) => logs.push(['warn', ...args].map(String).join(' ')),
+          error: (...args: unknown[]) => logs.push(['error', ...args].map(String).join(' ')),
+        } as Console);
     }
 
     if (env.mcpLog) sandbox.mcpLog = env.mcpLog;

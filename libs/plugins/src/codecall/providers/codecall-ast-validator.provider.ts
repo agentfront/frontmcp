@@ -1,4 +1,4 @@
-// file: libs/plugins/src/codecall/vm/codecall-ast-validator.provider.ts
+// file: libs/plugins/src/codecall/providers/codecall-ast-validator.provider.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import * as acorn from 'acorn';
@@ -51,9 +51,7 @@ export default class CodeCallAstValidatorProvider implements CodeCallAstValidato
           issues.push({
             kind: disabledGlobals.includes(node.name) ? 'DisallowedGlobal' : 'IllegalBuiltinAccess',
             message: `Access to "${node.name}" is not allowed in CodeCall scripts.`,
-            location: node.loc
-              ? { line: node.loc.start.line, column: node.loc.start.column }
-              : undefined,
+            location: node.loc ? { line: node.loc.start.line, column: node.loc.start.column } : undefined,
             identifier: node.name,
           });
         }
@@ -73,18 +71,13 @@ export default class CodeCallAstValidatorProvider implements CodeCallAstValidato
     };
   }
 
-  private checkLoop(
-    issues: CodeCallAstValidationIssue[],
-    allowLoops: boolean
-  ): (node: any) => void {
+  private checkLoop(issues: CodeCallAstValidationIssue[], allowLoops: boolean): (node: any) => void {
     return (node: any) => {
       if (allowLoops) return;
       issues.push({
         kind: 'DisallowedLoop',
         message: 'Loops are not allowed in this CodeCall VM preset.',
-        location: node.loc
-          ? { line: node.loc.start.line, column: node.loc.start.column }
-          : undefined,
+        location: node.loc ? { line: node.loc.start.line, column: node.loc.start.column } : undefined,
       });
     };
   }
