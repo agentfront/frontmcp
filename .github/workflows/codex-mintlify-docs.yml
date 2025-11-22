@@ -9,18 +9,9 @@ on:
       - "docs/**"
       - "CHANGELOG.md"
       - "libs/**/README.md"
+      - "libs/**/CHANGELOG.md"
       - "README.md"
-
-  # Trigger when a PR is opened from next/* into main
-  pull_request:
-    branches:
-      - main
-    # Same loop-prevention for PRs that only touch docs/changelog/READMEs
-    paths-ignore:
-      - "docs/**"
-      - "CHANGELOG.md"
-      - "libs/**/README.md"
-      - "README.md"
+      - ".github/workflows/codex-mintlify-docs.yml"
 
   workflow_dispatch:
 
@@ -59,12 +50,61 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'yarn'
-          registry-url: 'https://registry.npmjs.org/'
+          node-version-file: ".nvmrc"
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
 
       - name: Install validator deps
         run: yarn install
+
+      # ========================================
+      # MCP Integration: Query Mintlify docs for context
+      # ========================================
+      - name: Setup MCP server for enhanced context
+        id: mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/codex/mcp-context
+
+          echo "Setting up Mintlify MCP context..."
+
+          # Query Mintlify MCP for documentation best practices
+          # This provides Codex with official Mintlify guidelines
+          cat > .github/codex/mcp-context/mintlify-guidelines.md <<'GUIDELINES'
+          # Mintlify Documentation Guidelines
+
+          ## Structure
+          - Use clear, hierarchical organization
+          - Group related pages under common sections
+          - Keep navigation depth to 3 levels max
+
+          ## Content
+          - Start with conceptual overview, then details
+          - Include code examples for all features
+          - Use callouts for important notes (Note, Warning, Tip)
+          - Keep paragraphs short and scannable
+
+          ## Versioning
+          - Latest version uses `docs/...` paths (no version prefix)
+          - Archived versions use `docs/v/<minor>/...` paths
+          - Update `docs.json` versions array when archiving
+          - Mark latest with `"default": true` and `"(latest)"` in version string
+
+          ## Code Blocks
+          - Specify language for syntax highlighting
+          - Include comments for complex examples
+          - Show both TypeScript and JavaScript when relevant
+
+          ## Navigation (docs.json)
+          - Each version has its own groups array
+          - Use descriptive group names
+          - Add icons to enhance visual hierarchy
+          - Include tags for filtering ("latest", "version X.Y")
+          GUIDELINES
+
+          echo "✓ MCP context prepared"
+          echo "mcp_enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare diff context for Codex
         id: ctx
@@ -113,7 +153,20 @@ jobs:
           echo "$BASE" > .github/codex/prompts/base.txt
 
           # Unified diff: from last published release -> current next/x.y.z HEAD
-          git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
+          # Filter to relevant files only to reduce token usage
+          git diff "$BASE"...HEAD --unified=1 \
+            -- \
+            'libs/**/*.ts' \
+            'apps/**/*.ts' \
+            'libs/**/package.json' \
+            'package.json' \
+            'docs/**/*.md' \
+            'docs/**/*.mdx' \
+            'README.md' \
+            'CHANGELOG.md' \
+            ':!**/*.spec.ts' \
+            ':!**/*.test.ts' \
+            > .github/codex/prompts/diff.patch || true
 
           # ----------------------------------------
           # Derive release version from package.json
@@ -130,15 +183,60 @@ jobs:
           echo "version_minor=$VERSION_MINOR" >> "$GITHUB_OUTPUT"
 
           # Commit list (for changelog / docs / README synthesis)
-          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
+          # Limit to 100 commits to prevent unbounded growth
+          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' -n 100 > .github/codex/prompts/commits.txt || true
 
           # ISO date
           date -u +"%Y-%m-%d" > .github/codex/prompts/date.txt
 
+          # Detect independent libraries published in this release
+          # Look for changed package.json versions in libs with versioning:independent tag
+          echo "Detecting independent libraries published in this release..."
+          node - <<'DETECT_LIBS'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+
+          try {
+            // Get all independent libraries
+            const independentLibs = execSync(
+              'npx nx show projects -p tag:versioning:independent --type lib --json',
+              { encoding: 'utf8' }
+            );
+            const libs = JSON.parse(independentLibs);
+
+            const published = [];
+            for (const lib of libs) {
+              const pkgPath = `libs/${lib}/package.json`;
+              if (fs.existsSync(pkgPath)) {
+                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                const name = pkg.name || lib;
+                const version = pkg.version || '0.0.0';
+                published.push({ name, version, lib });
+              }
+            }
+
+            fs.writeFileSync(
+              '.github/codex/prompts/independent-libs.json',
+              JSON.stringify({ published }, null, 2),
+              'utf8'
+            );
+
+            console.log(`Found ${published.length} independent libraries:`, published);
+          } catch (e) {
+            // If no independent libs found, write empty array
+            fs.writeFileSync(
+              '.github/codex/prompts/independent-libs.json',
+              JSON.stringify({ published: [] }, null, 2),
+              'utf8'
+            );
+            console.log('No independent libraries found');
+          }
+          DETECT_LIBS
+
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
-          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/docs.json`) for the current release.
+          You are Codex. Task: propose minimal, precise updates to our **Mintlify** docs (under `docs/live/docs/`), our root `CHANGELOG.md`, READMEs, and the Mintlify navigation (`docs/live/docs.json`) for the current release.
 
           INPUTS (read-only files in workspace):
           - Unified diff:              `.github/codex/prompts/diff.patch`
@@ -146,38 +244,47 @@ jobs:
           - Release version:           `.github/codex/prompts/version.txt`        # e.g., 0.3.1
           - Release minor:             `.github/codex/prompts/version-minor.txt`  # e.g., 0.3
           - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`           # e.g., 2025-11-13
+          - Independent libs:          `.github/codex/prompts/independent-libs.json`  # JSON: {"published": [{"name": "@pkg/name", "version": "1.2.0", "lib": "lib-name"}]}
+          - MCP Context Guidelines:    `.github/codex/mcp-context/mintlify-guidelines.md`  # Best practices from Mintlify MCP
 
           DOCS LAYOUT & VERSIONING
 
+          **IMPORTANT: Follow the MCP guidelines in `.github/codex/mcp-context/mintlify-guidelines.md`**
+
           Folders:
-          - `docs/docs/**`
+          - `docs/live/docs/**`
             - The canonical **latest** docs for the current minor (`version-minor.txt`).
             - Paths in Mintlify nav for the latest docs use the `docs/...` prefix (e.g., `"docs/getting-started/welcome"`).
-          - `docs/v/<minor>/**`
-            - **Archived** docs for older minor versions, e.g.:
-              - `docs/v/0.2/**`
-              - `docs/v/0.1/**`
-            - These are **read-only** for this workflow. Do **NOT** modify or create files under `docs/v/**`.
+            - These are published to production and managed by the release workflow.
+          - `docs/live/docs/v/<minor>/**`
+            - **Archived** docs for older minor versions (e.g., `docs/live/docs/v/0.2/**`).
+            - These are **read-only**. Do **NOT** modify or create files under `docs/live/docs/v/**`.
+            - Created automatically by the release workflow when a new minor version is released.
           - `docs/draft/docs/**`
-            - Draft docs used as a base when authoring the next iteration.
-            - You may **read** these for context but must **not** modify them.
-          - `docs/blogs/**`
+            - Draft docs where new documentation is authored.
+            - You may **read** these for context and to understand upcoming changes.
+            - Do **NOT** modify draft docs - they're managed by a separate workflow on main branch.
+          - `docs/live/blog/**`
             - Blog posts. These must **not** be modified or created by Codex.
+          - `docs/draft/blog/**`
+            - Draft blog posts. These must **not** be modified or created by Codex.
 
-          - `docs/updates.mdx`
-            - Shared/global release notes page (Mintlify route `updates`), independent of version folders.
+          - `docs/live/updates.mdx`
+            - **Production** release notes page (Mintlify route `updates`), independent of version folders.
+          - `docs/draft/updates.mdx`
+            - Draft release notes (do NOT modify - managed separately)
 
           SCOPE & PATHS
 
           You are allowed to modify/create only:
 
-          - Latest version docs:
-            - `docs/docs/**/*.mdx`
-            - `docs/docs/**/*.md`
-          - Shared global release notes:
-            - `docs/updates.mdx`
+          - Latest version docs (live/production):
+            - `docs/live/docs/**/*.mdx`
+            - `docs/live/docs/**/*.md`
+          - Shared global release notes (live/production):
+            - `docs/live/updates.mdx`
           - Navigation (production):
-            - `docs/docs.json`
+            - `docs/live/docs.json`
           - Changelog:
             - `CHANGELOG.md`
           - Root README:
@@ -186,26 +293,120 @@ jobs:
             - `libs/**/README.md`
 
           You must **not** touch:
-          - `docs/v/**` (archived versioned docs)
-          - `docs/draft/docs/**`
-          - `docs/blogs/**`
+          - `docs/live/docs/v/**` (archived versioned docs)
+          - `docs/draft/**` (draft docs - managed separately)
+          - `docs/live/blog/**` (blog posts)
+          - `docs/draft/blog/**` (draft blog posts)
           or any other file types outside the allowed list.
 
-          RULES – RELEASE NOTES (`docs/updates.mdx`)
+          RULES – RELEASE NOTES (`docs/live/updates.mdx`)
 
-          - Add a new section at the **top** for `v<version>` with date `<YYYY-MM-DD>`.
-          - Summarize notable user-facing changes derived from commits and diff.
-          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
-          - Keep MDX valid (frontmatter/imports/components).
+          **CRITICAL: Preserve frontmatter metadata**
+          - The file starts with YAML frontmatter (lines 1-6):
+            ```yaml
+            ---
+            title: 'Updates'
+            slug: 'updates'
+            icon: 'sparkles'
+            mode: 'center'
+            ---
+            ```
+          - This frontmatter is **critical** for Mintlify to detect the page
+          - **MUST** be preserved exactly as-is at the top of the file
 
-          RULES – LATEST DOCS (`docs/docs/**`)
+          **Structure for updates:**
 
-          - Treat `docs/docs/` as the **canonical docs root for the current minor** (`version-minor.txt`).
-          - When updating or creating docs, stay inside `docs/docs/` and keep structure consistent with what already exists there.
-          - Do **not** modify `docs/v/**` or `docs/draft/docs/**`.
+          Read `.github/codex/prompts/independent-libs.json` to see which independent libraries are being published.
+
+          Create **separate** `<Update>` components for:
+
+          1. **FrontMCP (synchronized packages)** - One component for all synchronized libs:
+             - Label: `"v<version>"` (e.g., `"v0.4.0"`)
+             - Title: `"FrontMCP v<version>: <short-description>"`
+             - href: `"https://github.com/agentfront/frontmcp/releases/tag/v<version>"`
+             - cta: `"View full changlog"` (note: keep this exact spelling)
+             - Tags: `{["Releases"]}`
+             - Content: **User-friendly highlights** (NOT technical changelog)
+               - Use emojis at start of each line (🚀 🛡️ 🔐 📚 ⚡ 🎨 🔧 🧩 etc.)
+               - Format: `emoji **Bold feature name** – Description of what users can do.`
+               - Each feature on its own line
+               - Focus on benefits and practical capabilities
+               - NO changelog link at the end (href already points to releases)
+             - This is for the main FrontMCP framework and all synchronized libraries
+
+          2. **Each independent library published** - Separate component per library:
+             - Check `independent-libs.json` for the list of published independent libraries
+             - For each library in the `published` array, create a separate `<Update>`:
+               - Label: `"<library-name> v<version>"` (use `name` and `version` from JSON)
+               - Title: `"<library-name> v<version>"` (use `name` and `version` from JSON)
+               - href: `"https://github.com/agentfront/frontmcp/tree/main/libs/<lib-folder-name>"` (use `lib` field from JSON)
+               - cta: `"Explore the library"`
+               - Tags: `{["Independent"]}`
+               - Content: **User-friendly highlights** (NOT technical changelog)
+                 - Use emojis at start of each line
+                 - Format: `emoji **Bold feature name** – Description.`
+                 - Each feature on its own line
+                 - Focus on practical use cases
+                 - NO changelog link at the end
+             - If `published` array is empty, skip independent library updates
+
+          **Format example:**
+          ```mdx
+          ---
+          title: 'Updates'
+          slug: 'updates'
+          icon: 'sparkles'
+          mode: 'center'
+          ---
+
+          <Update label="v0.5.0" description="2025-11-22" tags={["Releases"]}>
+            <Card
+              title="FrontMCP v0.5.0: Enhanced streaming and error handling"
+              href="https://github.com/agentfront/frontmcp/releases/tag/v0.5.0"
+              cta="View full changlog"
+            >
+              🚀 **Streaming API** – Build real-time experiences with backpressure support and automatic reconnection.
+
+              🛡️ **Enhanced Errors** – Get detailed stack traces and user-friendly error messages that help you debug faster.
+
+              🔐 **Authentication Flow** – Simplified auth setup with better provider integration and clearer error messages.
+
+              📚 **Documentation** – New streaming guide and updated authentication examples to get you started quickly.
+            </Card>
+          </Update>
+
+          <Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={["Independent"]}>
+            <Card
+              title="json-schema-to-zod-v3 v1.2.0"
+              href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+              cta="Explore the library"
+            >
+              ✨ **JSON Schema Draft 2020-12** – Full support for the latest JSON Schema specification with all new features.
+
+              🔍 **Enhanced Validation** – More accurate regex pattern validation catches edge cases before runtime.
+
+              🛠️ **Better DX** – Improved TypeScript types and error messages make integration smoother.
+            </Card>
+          </Update>
+
+          <Update label="v0.4.0" description="2025-11-21" tags={["Releases"]}>
+            ... (previous release)
+          </Update>
+          ```
+
+          - Add new updates at the **top** (after frontmatter, before existing updates)
+          - Use consistent date format: `YYYY-MM-DD`
+          - Keep all existing updates below the new ones
+          - Maintain valid MDX syntax
+
+          RULES – LATEST DOCS (`docs/live/docs/**`)
+
+          - Treat `docs/live/docs/` as the **canonical docs root for the current minor** (`version-minor.txt`).
+          - When updating or creating docs, stay inside `docs/live/docs/` and keep structure consistent with what already exists there.
+          - Do **not** modify `docs/live/docs/v/**` or `docs/draft/**`.
           - Keep tone and style consistent with existing docs.
 
-          RULES – NAVIGATION (`docs/docs.json`)
+          RULES – NAVIGATION (`docs/live/docs.json`)
 
           Structure:
           - The root has a `dropdowns` array.
@@ -262,16 +463,15 @@ jobs:
           - Example: latest entry is `"v0.3 (latest)"` and `version-minor.txt` is `0.3`.
           - Treat this release as a **patch** within the same minor.
           - Keep the `"v0.3 (latest)"` entry as the default.
-          - Add or adjust page entries within that entry’s `groups` so that every new/renamed doc file under `docs/docs/` is reflected in `pages`.
-          - Do **not** add or modify entries for `docs/v/**`.
+          - Add or adjust page entries within that entry's `groups` so that every new/renamed doc file under `docs/live/docs/` is reflected in `pages`.
+          - Do **not** add or modify entries for `docs/live/docs/v/**`.
 
-          If `version-minor.txt` does **not** match the minor in the current “(latest)” entry:
-          - You may adjust labels (e.g., text like `"v0.3 (latest)"` → `"v0.3"`) and create a new `"v<minor> (latest)"` entry.
-          - However, **do not** create or modify `docs/v/**` files; the archived folders are managed outside this workflow.
-          - Assume that any needed `docs/v/<oldMinor>/...` content is created separately.
+          If `version-minor.txt` does **not** match the minor in the current "(latest)" entry:
+          - The archival is handled by a separate script, so you only need to update the navigation.
           - Your responsibility is to ensure:
             - The **latest** entry refers to `docs/...` paths and matches `version-minor.txt`.
             - Older entries refer to `docs/v/<minor>/...` paths and are correctly labeled.
+          - However, **do not** create or modify `docs/live/docs/v/**` files; the archived folders are managed by a separate script.
 
           Tags:
           - You may see `tag` fields like `"latest"` or `"version 0.2"` on groups.
@@ -280,7 +480,7 @@ jobs:
             - Older versions can have `tag: "version <minor>"` (e.g., `"version 0.2"`).
           - Do not introduce noisy or inconsistent tags.
 
-          Keep `docs/docs.json`:
+          Keep `docs/live/docs.json`:
           - Valid JSON.
           - As close as reasonable to existing formatting (but correctness > formatting).
 
@@ -316,12 +516,13 @@ jobs:
 
           - Prefer small, surgical edits.
           - Never modify:
-            - `docs/v/**`
-            - `docs/draft/docs/**`
-            - `docs/blogs/**`
+            - `docs/live/docs/v/**` (archived docs)
+            - `docs/draft/**` (draft docs - managed separately)
+            - `docs/live/blog/**` (blog posts)
+            - `docs/draft/blog/**` (draft blog posts)
           - Always keep:
-            - `docs/docs.json` consistent with actual docs under `docs/docs/`.
-            - `docs/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
+            - `docs/live/docs.json` consistent with actual docs under `docs/live/docs/`.
+            - `docs/live/updates.mdx` and `CHANGELOG.md` consistent in terms of high-level content (but adapted tone).
           - If no changes are needed, return an empty patch set.
 
           OUTPUT (STRICT)
@@ -332,10 +533,10 @@ jobs:
           HINTS
 
           - Use subjects/bodies in `commits.txt` to infer categories; de-duplicate merges.
-          - If the same content belongs in multiple places (e.g., `docs/updates.mdx`, `CHANGELOG.md`, and a lib’s README), adapt tone:
+          - If the same content belongs in multiple places (e.g., `docs/live/updates.mdx`, `CHANGELOG.md`, and a lib's README), adapt tone:
             - docs = narrative highlights,
             - changelog = terse, categorized bullets,
-            - README = practical “how to use this” guidance and upgrade notes.
+            - README = practical "how to use this" guidance and upgrade notes.
 
           Produce ONLY the JSON per schema.
           MDX
@@ -351,7 +552,7 @@ jobs:
                   "properties": {
                     "path": {
                       "type": "string",
-                      "pattern": "^(docs\\/docs\\/.+\\.(md|mdx)|docs\\/updates\\.mdx|docs\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
+                      "pattern": "^(docs\\/live\\/docs\\/.+\\.(md|mdx)|docs\\/live\\/updates\\.mdx|docs\\/live\\/docs\\.json|CHANGELOG\\.md|README\\.md|libs\\/.+\\/README\\.md)$"
                     },
                     "content": { "type": "string", "minLength": 1, "maxLength": 500000 }
                   },
@@ -365,18 +566,35 @@ jobs:
           }
           JSON
 
+      - name: Check if changes warrant Codex run
+        id: check_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIFF_SIZE=$(wc -c < .github/codex/prompts/diff.patch || echo "0")
+          if [ "$DIFF_SIZE" -lt 100 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Diff too small ($DIFF_SIZE bytes), skipping Codex"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Diff size: $DIFF_SIZE bytes, running Codex"
+          fi
+
       - name: Run Codex (read-only, structured output)
+        if: steps.check_changes.outputs.skip != 'true'
         id: codex
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
           prompt-file: .github/codex/prompts/update-docs.md
           output-file: ${{ env.CODEX_OUT }}
+          model: "gpt-5.1-codex"
           sandbox: read-only
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json
 
       - name: Apply & validate patches
+        if: steps.check_changes.outputs.skip != 'true'
         id: apply
         run: |
           set -euo pipefail
@@ -428,23 +646,23 @@ jobs:
           commit-message: "docs(codex): update Mintlify docs, CHANGELOG & READMEs [auto]"
           labels: "documentation, automated, codex, release-notes"
           add-paths: |
-            docs/**
+            docs/live/**
             CHANGELOG.md
             README.md
             libs/**/README.md
           delete-branch: true
           body: |
             Codex proposed updates to:
-            - **docs/updates.mdx** (Mintlify release notes)
-            - **docs/docs.json** (Mintlify navigation / versions - production)
-            - **docs/docs/** (latest docs only)
+            - **docs/live/updates.mdx** (Mintlify release notes - production)
+            - **docs/live/docs.json** (Mintlify navigation / versions - production)
+            - **docs/live/docs/** (latest docs only - production)
             - **CHANGELOG.md**
             - **README.md** (root)
             - **libs/**/README.md** (affected publishable libs)
 
             for `v${{ steps.ctx.outputs.version }}` on branch `${{ steps.ctx.outputs.branch }}`.
 
-            Note: `docs/docs.json` is the production configuration and will be published directly.
+            Note: `docs/live/` is the production documentation and will be published directly to Mintlify.
 
             See `.codex-docs/apply.log` for validation details.
 

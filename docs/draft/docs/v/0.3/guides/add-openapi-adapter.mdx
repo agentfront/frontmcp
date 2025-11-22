@@ -1,0 +1,131 @@
+---
+title: Add OpenAPI Adapter
+slug: guides/add-openapi-adapter
+---
+
+The OpenAPI adapter is powered by [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi) and can turn any OpenAPI 3.x document into ready-to-run MCP tools. Follow the steps below to add it to your server.
+
+## 1. Install the adapter
+
+```bash
+npm install @frontmcp/adapters
+```
+
+(If you scaffolded your project with `frontmcp create`, it is already part of the workspace.)
+
+## 2. Initialize the adapter inside an app
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP app',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      url: 'https://frontmcp-test.proxy.beeceptor.com/openapi.json',
+      baseUrl: 'https://frontmcp-test.proxy.beeceptor.com',
+    }),
+  ],
+})
+export default class ExpenseMcpApp {}
+```
+
+Set `name` to something unique per adapter and always provide `baseUrl` so the adapter can build absolute request URLs.
+
+## 3. Map authentication
+
+Start with static headers for server-to-server APIs:
+
+```ts
+OpenapiAdapter.init({
+  name: 'billing',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  additionalHeaders: {
+    'x-api-key': process.env.BILLING_API_KEY!,
+  },
+});
+```
+
+For user-scoped APIs, prefer `authProviderMapper` or a custom `securityResolver` so each security scheme pulls the right token from `authInfo`:
+
+```ts
+OpenapiAdapter.init({
+  name: 'integrations',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  authProviderMapper: {
+    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+    SlackAuth: (authInfo) => authInfo.user?.slackToken,
+  },
+});
+```
+
+```ts
+OpenapiAdapter.init({
+  name: 'multi-auth',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  securityResolver: (tool, authInfo) => {
+    if (tool.name.startsWith('github_')) return { jwt: authInfo.user?.githubToken };
+    if (tool.name.startsWith('google_')) return { jwt: authInfo.user?.googleToken };
+    return { jwt: authInfo.token };
+  },
+});
+```
+
+Avoid leaking credentials through tool inputs; the adapter will flag that configuration as high risk.
+
+## 4. Tune load & generate options
+
+You can pass any [`mcp-from-openapi` option](https://www.npmjs.com/package/mcp-from-openapi) via `loadOptions` or `generateOptions`.
+
+```ts
+OpenapiAdapter.init({
+  name: 'backend:api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  loadOptions: {
+    validate: true,
+    dereference: true,
+    headers: { Authorization: `Bearer ${process.env.SPEC_TOKEN}` },
+    timeout: 8000,
+    followRedirects: true,
+  },
+  generateOptions: {
+    defaultInclude: true,
+    excludeOperationIds: ['deprecatedThing'],
+    filterFn: (op) => op.path.startsWith('/invoices'),
+    preferredStatusCodes: [200, 201, 202],
+    includeExamples: true,
+  },
+});
+```
+
+Use these flags to exclude endpoints, rename tools, or include additional response metadata.
+
+## 5. Watch the mapper & security logs
+
+Run `frontmcp dev` and look for the adapter banner. It prints:
+
+- A security **risk score** (`low`, `medium`, `high`).
+- Warnings when a required security scheme cannot be satisfied.
+- The number of generated tools.
+
+Fix warnings before promoting the server.
+
+## 6. Validate before shipping
+
+- Keep `generateOptions.includeSecurityInInput` set to `false` in production so credentials never appear in tool inputs.
+- If your API requires multiple auth providers, supply an `authProviderMapper` entry for each security scheme.
+- When you filter operations, make sure you still expose the operations referenced by your client prompts.
+
+## Common gotchas
+
+- Always set `baseUrl`; otherwise the adapter cannot build outbound URLs.
+- `filterFn` runs before `excludeOperationIds`. Use the combination to include a subset by default and explicitly drop legacy operations.
+- The adapter will throw if a required security scheme lacks a mapping. This is intentional—fix the mapping instead of ignoring the warning.
+- `includeSecurityInInput` is for local debugging only. It is logged as **high risk** and should not be deployed.

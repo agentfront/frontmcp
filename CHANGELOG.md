@@ -1,3 +1,21 @@
+## [v0.4.0] - 2025-11-22
+
+### feat
+
+- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits request mappers, conflict-free schemas, and per-scheme authentication analysis.
+- Allow `@Tool` metadata to declare literal primitives, tuple-style arrays, and MCP resources (plus `rawInputSchema`) so clients get typed responses without wrapping outputs in placeholder objects.
+- Add a typed MCP error hierarchy and error handler so transports emit traceable IDs, consistent public/internal messages, and FlowControl-aware stop semantics.
+- Extract `json-schema-to-zod-v3` with built-in regex guards so adapters and apps can reuse the hardened JSON Schema → Zod converter.
+
+### docs
+
+- Document OpenAPI adapter security scoring, auth-provider mapping, generator options, and the CodeCall plugin’s search/describe/execute workflow.
+- Publish maintainer runbooks for the release workflow and doc versioning so contributors know when to edit draft vs live docs.
+
+### build
+
+- Split draft/live Mintlify trees, auto-archive previous minors, and enforce husky + lint-staged guards so release branches stay focused on intentional changes.
+
 ## [v0.3.1] - 2025-11-16
 
 ### feat

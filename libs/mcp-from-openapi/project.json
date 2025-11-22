@@ -12,7 +12,7 @@
         "outputPath": "libs/mcp-from-openapi/dist",
         "main": "libs/mcp-from-openapi/src/index.ts",
         "tsConfig": "libs/mcp-from-openapi/tsconfig.lib.json",
-        "assets": ["libs/mcp-from-openapi/*.md", "LICENSE"]
+        "assets": ["libs/mcp-from-openapi/README.md", "libs/mcp-from-openapi/CHANGELOG.md", "LICENSE"]
       }
     },
     "build": {

@@ -19,9 +19,32 @@ function die(msg) {
 
 function isAllowedPath(p) {
     const norm = p.replaceAll("\\", "/");
+
+    // CRITICAL: Reject blog files explicitly (must NOT be modified by Codex)
+    if (/^docs\/(live|draft)\/blog\//.test(norm)) {
+        return false;
+    }
+
+    // CRITICAL: Reject archived versioned docs explicitly (read-only)
+    if (/^docs\/live\/docs\/v\//.test(norm)) {
+        return false;
+    }
+
     return (
-        /^docs\/.+\.(md|mdx)$/.test(norm) ||
-        norm === "docs/docs.json" ||
+        // Live docs (production) - specific to docs/ subdirectory only
+        /^docs\/live\/docs\/.+\.(md|mdx)$/.test(norm) ||
+        norm === "docs/live/docs.json" ||
+        norm === "docs/live/updates.mdx" ||
+        // Draft docs (next release) - specific to docs/ subdirectory only
+        /^docs\/draft\/docs\/.+\.(md|mdx)$/.test(norm) ||
+        norm === "docs/draft/docs.json" ||
+        norm === "docs/draft/updates.mdx" ||
+        // Assets and snippets (both live and draft)
+        /^docs\/live\/assets\/.+/.test(norm) ||
+        /^docs\/live\/snippets\/.+/.test(norm) ||
+        /^docs\/draft\/assets\/.+/.test(norm) ||
+        /^docs\/draft\/snippets\/.+/.test(norm) ||
+        // Other allowed files
         norm === "CHANGELOG.md" ||
         norm === "README.md" ||
         /^libs\/.+\/README\.md$/.test(norm)

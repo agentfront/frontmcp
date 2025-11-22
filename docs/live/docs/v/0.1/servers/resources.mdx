@@ -1,0 +1,72 @@
+---
+title: Resources
+slug: servers/resources
+icon: book-open
+---
+
+Resources provide **readable data** to load into the model’s context. Define fixed `Resource`s (a concrete `uri`) or `ResourceTemplate`s (an RFC 6570 `uriTemplate`).
+
+## Minimal resource
+
+```ts
+import { Resource } from '@frontmcp/sdk';
+
+@Resource({
+  name: 'docs-home',
+  title: 'Docs Home',
+  uri: 'https://example.com/docs',
+  mimeType: 'text/html',
+})
+export default class DocsHome {
+  async execute(uri: string) {
+    return { contents: [{ uri, text: 'Welcome to the docs!' }] };
+  }
+}
+```
+
+## Minimal resource template
+
+```ts
+import { ResourceTemplate } from '@frontmcp/sdk';
+
+@ResourceTemplate({
+  name: 'repo-readme',
+  title: 'GitHub README',
+  uriTemplate: 'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md',
+  mimeType: 'text/markdown',
+})
+export default class RepoReadme {}
+```
+
+---
+
+## Resource metadata
+
+```ts
+@Resource({
+  name: string,
+  title?: string,
+  uri: string,
+  description?: string,
+  mimeType?: string,
+  icons?: Icon[],
+})
+```
+
+## Resource template metadata
+
+```ts
+@ResourceTemplate({
+  name: string,
+  title?: string,
+  uriTemplate: string,    // RFC 6570
+  description?: string,
+  mimeType?: string,
+  icons?: Icon[],
+})
+```
+
+**Tips**
+
+- Use resources to preload long-form text, schemas, or docs the model should see before calling tools.
+- Prefer templates when the shape is stable but the identifiers vary.
