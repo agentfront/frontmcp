@@ -1,662 +1,706 @@
 ---
 title: CodeCall Plugin
-description: Hide large toolsets behind a small, code-first meta-API using CodeCall Plugin.
+description: Hide large toolsets behind a code-first meta-API that lets models search, describe, and orchestrate tools using JavaScript execution plans.
+icon: code
 ---
 
-Instead of listing every tool in `list_tools`, CodeCall:
+The CodeCall Plugin transforms how you expose large toolsets to models. Instead of listing hundreds of tools in `list_tools`, CodeCall provides a small meta-API that lets models discover tools dynamically, then orchestrate them using JavaScript execution plans running in a secure sandbox.
 
-- Hides most tools.
-- Exposes three main meta-tools:
-- `codecall.search`
-- `codecall.describe`
-- `codecall.execute`
-- And optionally, a direct-call helper:
-- `codecall.invoke` (no code, no VM)
+## Why Use CodeCall?
 
-The model then:
+<CardGroup cols={2}>
+  <Card title="Scale Beyond Context Limits" icon="arrows-maximize">
+    Expose hundreds or thousands of tools without overwhelming the model's context window
+  </Card>
+  <Card title="Enable Complex Workflows" icon="diagram-project">
+    Let models build multi-step workflows, joins, and filters that your API doesn't support directly
+  </Card>
 
-1. Searches for relevant tools.
-2. Describes selected tools (schemas).
-3. Writes a JavaScript execution plan.
-4. Executes that plan in a sandbox via `codecall.execute`, which calls your real tools.
+  <Card title="Multi-App Orchestration" icon="layer-group">
+    Search and call tools across multiple apps in the same server with app-aware filtering
+  </Card>
 
-This lets you:
-
-- Expose **dozens or hundreds of tools** (including OpenAPI-generated ones).
-- Avoid blowing up the context window.
-- Let the LLM build richer workflows, joins, and filters in code.
-- Work across **multiple apps** in the same FrontMCP server (e.g. `user` app + `billing` app).
-
----
-
-## When to use CodeCall
-
-Use CodeCall if:
-
-- You have **many tools** (inline + adapters).
-- You don’t want to dump them all into `list_tools`.
-- You want the LLM to:
-- Combine multiple tools.
-- Filter and post-process results.
-- Build logic your API doesn’t support directly.
-- You run **multiple apps** (e.g. `user`, `billing`) and want the model to:
-- Search tools within a specific app.
-- Or search across all apps, depending on the task.
-
----
+  <Card title="Safe Code Execution" icon="shield-check">
+    Run model-generated JavaScript in a vm2 sandbox with CSP-style security presets
+  </Card>
+</CardGroup>
 
 ## Installation
 
 ```bash
 npm install @frontmcp/plugins
-# or
-yarn add @frontmcp/plugins
-# or
-pnpm add @frontmcp/plugins
 ```
 
-> CodeCall uses [`vm2`](https://github.com/patriksimek/vm2) to run LLM-authored JavaScript in a sandbox.
+## How It Works
+
+<Steps>
+  <Step title="Search for Tools">
+    Model calls `codecall.search` with natural language to discover relevant tools across apps
+  </Step>
+  <Step title="Describe Schemas">
+    Model calls `codecall.describe` to get input/output schemas for selected tools
+  </Step>
+
+  <Step title="Generate Execution Plan">
+    Model writes a JavaScript plan that orchestrates multiple tools, filters results, and builds custom logic
+  </Step>
+
+  <Step title="Execute in Sandbox">
+    CodeCall runs the plan in a secure vm2 sandbox, calling your real tools through the normal FrontMCP pipeline
+  </Step>
+</Steps>
+
+<Info>
+  CodeCall uses [vm2](https://github.com/patriksimek/vm2) to run model-generated JavaScript in a secure sandbox with configurable security presets.
+</Info>
 
 ---
 
-## Quick start
+## Quick Start
 
-### 1. Add CodeCallPlugin to your app
+### Basic Setup
 
 ```ts
-import { App, Tool } from '@frontmcp/sdk';
+import { App, Tool, ToolContext } from '@frontmcp/sdk';
 import CodeCallPlugin from '@frontmcp/plugins/codecall';
+import { z } from 'zod';
 
 @Tool({
-  name: 'health:ping',
-  description: 'Simple health check',
+  name: 'users:list',
+  description: 'List users with pagination',
+  inputSchema: { limit: z.number().default(100) },
   codecall: {
-    visibleInListTools: true, // keep visible as a normal tool
-    enabledInCodeCall: true, // also available inside CodeCall plans
+    visibleInListTools: false, // Hidden from list_tools
+    enabledInCodeCall: true, // Available via CodeCall
   },
 })
-class HealthPingTool {
-  async run() {
-    return { status: 'ok' };
+class ListUsersTool extends ToolContext {
+  async execute(input: { limit: number }) {
+    return await this.database.getUsers(input.limit);
   }
 }
 
 @App({
-  id: 'example',
-  name: 'Example App',
-  tools: [HealthPingTool],
+  id: 'user',
+  name: 'User App',
+  tools: [ListUsersTool],
   plugins: [
     CodeCallPlugin.init({
-      // Recommended default: many tools, all accessible via CodeCall
-      mode: 'codecall_only',
-
-      topK: 8,
-      maxDefinitions: 8,
-
-      directCalls: {
-        enabled: true,
-        // optional allowlist, otherwise defaults to tools enabled for CodeCall
-        allowedTools: ['users:getById', 'billing:getInvoice'],
-      },
-
+      mode: 'codecall_only', // Recommended: many tools, all via CodeCall
+      topK: 8, // Return top 8 search results
+      maxDefinitions: 8, // Max tools to describe at once
       vm: {
-        preset: 'secure', // CSP-like preset
+        preset: 'secure', // CSP-style security preset
         timeoutMs: 4000,
-        allowLoops: false,
-        disabledBuiltins: ['eval', 'Function'],
-        disabledGlobals: ['require', 'process', 'fetch', 'setTimeout', 'setInterval'],
         allowConsole: true,
       },
     }),
   ],
 })
-export default class ExampleApp {}
+export default class UserApp {}
 ```
 
-From the model’s perspective, `list_tools` now shows:
+From the model's perspective, `list_tools` now shows:
 
-- `codecall.search`
-- `codecall.describe`
-- `codecall.execute`
-- (optionally) `codecall.invoke`
-- plus any tools with `codecall.visibleInListTools: true`.
+- `codecall.search` - Find tools by natural language
+- `codecall.describe` - Get tool schemas
+- `codecall.execute` - Run JavaScript execution plans
+- (Optional) `codecall.invoke` - Direct tool calls without VM
 
-Everything else is reachable only via CodeCall.
-
----
-
-## Modes
-
-CodeCall offers three **modes** that control which tools are:
-
-- Visible in `list_tools`.
-- Usable via `codecall.search/describe/execute`.
-
-### `mode: 'codecall_only'` (default)
-
-**Best when:**
-
-- You have **many tools**.
-- You want to expose **all of them** via CodeCall.
-- You **don’t** want to list them all.
-
-**Behavior:**
-
-- Hide all tools from `list_tools` by default.
-- Include all tools in CodeCall search/execute by default.
-- Per-tool metadata can:
-
-  - Keep a tool visible in `list_tools`.
-  - Disable a tool from CodeCall if needed.
+All other tools are hidden from `list_tools` but discoverable via `codecall.search`.
 
 ---
 
-### `mode: 'codecall_opt_in'`
+## Configuration Options
 
-**Best when:**
+### Plugin-Level Configuration
 
-- You have a large toolbox, but only a **subset** should be usable via CodeCall.
-- You don’t want every tool to be part of the “code surface”.
+Configure CodeCall behavior when registering the plugin:
 
-**Behavior:**
+<ParamField path="mode" type="'codecall_only' | 'codecall_opt_in' | 'metadata_driven'" default="'codecall_only'">
+  Controls which tools are visible in `list_tools` and usable via CodeCall
 
-- Hide all tools from `list_tools` by default.
-- Only tools with `codecall.enabledInCodeCall: true` are available via CodeCall.
-- `codecall.visibleInListTools` controls whether a tool appears in `list_tools`.
+  - **`codecall_only`** - Hide all tools by default, make all available via CodeCall (best for large toolsets)
+  - **`codecall_opt_in`** - Hide all tools, only enable specific tools for CodeCall (best for selective exposure)
+  - **`metadata_driven`** - No defaults, configure everything per-tool (best for small toolsets with mixed usage)
+</ParamField>
 
----
+<ParamField path="topK" type="number" default="8">
+  Maximum number of tools to return from `codecall.search`
+</ParamField>
 
-### `mode: 'metadata_driven'`
+<ParamField path="maxDefinitions" type="number" default="8">
+  Maximum number of tools that can be described in a single `codecall.describe` call
+</ParamField>
 
-**Best when:**
+<ParamField path="directCalls" type="object">
+  Configure direct tool invocation without VM execution
 
-- You have **up to ~10 tools**.
-- You want to use **both** classic tool calls and CodeCall on the same tools.
-- You’re happy to configure everything per-tool.
+  <Expandable title="properties">
+    <ResponseField name="enabled" type="boolean" default="false">
+      Enable `codecall.invoke` for simple single-tool calls without running the VM
+    </ResponseField>
+    <ResponseField name="allowedTools" type="string[]">
+      Optional allowlist of tool names. If omitted, all CodeCall-enabled tools are allowed
+    </ResponseField>
+  </Expandable>
+</ParamField>
 
-**Behavior:**
+<ParamField path="vm" type="object">
+  VM sandbox configuration
 
-- CodeCall doesn’t assume anything by default.
-- Only tools with:
+  <Expandable title="properties">
+    <ResponseField name="preset" type="'locked_down' | 'secure' | 'balanced' | 'experimental'" default="'secure'">
+      Security preset. Use `secure` for production, `locked_down` for highly sensitive environments
+    </ResponseField>
+    <ResponseField name="timeoutMs" type="number" default="4000">
+      Maximum execution time in milliseconds
+    </ResponseField>
+    <ResponseField name="allowLoops" type="boolean" default="false">
+      Allow for/while loops in execution plans (increases runtime risk)
+    </ResponseField>
+    <ResponseField name="disabledBuiltins" type="string[]">
+      Built-in JavaScript functions to disable (e.g., `['eval', 'Function']`)
+    </ResponseField>
+    <ResponseField name="disabledGlobals" type="string[]">
+      Global objects to disable (e.g., `['process', 'require', 'fetch']`)
+    </ResponseField>
+    <ResponseField name="allowConsole" type="boolean" default="false">
+      Enable console.log/warn/error in execution plans
+    </ResponseField>
+  </Expandable>
+</ParamField>
 
-  - `codecall.enabledInCodeCall: true` are used by CodeCall.
-  - `codecall.visibleInListTools: true` appear in `list_tools`.
+### Tool-Level Configuration
 
----
+Configure CodeCall behavior per tool in the `@Tool` or `tool()` metadata:
 
-## Tool metadata
+<CodeGroup>
 
-CodeCall adds a `codecall` section to `@Tool` options:
-
-```ts
+```ts Hide from list_tools, enable for CodeCall
 @Tool({
   name: 'users:list',
   description: 'List users with pagination',
   codecall: {
-    enabledInCodeCall: true, // usable from codecall.execute
-    visibleInListTools: false, // hidden from classic list_tools
+    visibleInListTools: false, // Hidden from list_tools
+    enabledInCodeCall: true, // Available via CodeCall
   },
 })
-class ListUsersTool {
-  // ...
-}
 ```
 
-Fields:
+```ts Keep visible, also enable for CodeCall
+@Tool({
+  name: 'health:ping',
+  description: 'Health check',
+  codecall: {
+    visibleInListTools: true, // Keep in list_tools
+    enabledInCodeCall: true, // Also available via CodeCall
+  },
+})
+```
 
-- `codecall.visibleInListTools?: boolean`
+```ts Disable from CodeCall
+@Tool({
+  name: 'admin:deleteUser',
+  description: 'Delete user (admin only)',
+  codecall: {
+    visibleInListTools: true, // Keep in list_tools
+    enabledInCodeCall: false, // NOT available via CodeCall
+  },
+})
+```
 
-  - `true` → keep visible in `list_tools`.
-  - `false` / omitted → plugin may hide it depending on `mode`.
+</CodeGroup>
 
-- `codecall.enabledInCodeCall?: boolean`
+<ParamField path="codecall.visibleInListTools" type="boolean">
+  Whether the tool appears in `list_tools`. Defaults depend on `mode`:
+  - `codecall_only`: default `false`
+  - `codecall_opt_in`: default `false`
+  - `metadata_driven`: default `false` (must be explicit)
+</ParamField>
 
-  - Controls whether the tool is indexed and callable from CodeCall.
-  - Defaults depend on `mode`:
-
-  - `codecall_only`: default **true**
-  - `codecall_opt_in`: default **false**
-  - `metadata_driven`: default **false**
+<ParamField path="codecall.enabledInCodeCall" type="boolean">
+  Whether the tool is searchable and callable via CodeCall. Defaults depend on `mode`:
+  - `codecall_only`: default `true`
+  - `codecall_opt_in`: default `false`
+  - `metadata_driven`: default `false` (must be explicit)
+</ParamField>
 
 ---
 
-## Multi-app search
+## Advanced Usage
 
-If your FrontMCP server has **multiple apps** (e.g. `user` app and `billing` app), CodeCall supports app-aware search:
+### Multi-App Search
 
-- `codecall.search` accepts an optional `filter` object with `appIds`.
-- The model can:
-
-  - Search tools in just the `user` app.
-  - Just the `billing` app.
-  - Or across both.
-
-Conceptually:
-
-```jsonc
-// Search only in "user" app
-{
-  "tool": "codecall.search",
-  "input": {
-    "query": "get current user profile",
-    "filter": { "appIds": ["user"] }
-  }
-}
-
-// Search across "user" AND "billing" apps
-{
-  "tool": "codecall.search",
-  "input": {
-    "query": "show unpaid invoices for the current user",
-    "filter": { "appIds": ["user", "billing"] }
-  }
-}
-```
-
-The LLM can decide per task whether it needs data from a single app or to join data across apps.
-
----
-
-## VM security presets
-
-CodeCall runs code in a `vm2` sandbox with **CSP-style presets**.
+When your FrontMCP server has multiple apps (e.g., `user`, `billing`), models can scope searches by app:
 
 ```ts
-vm: {
-  preset?: 'locked_down' | 'secure' | 'balanced' | 'experimental';
-  timeoutMs?: number;
-  allowLoops?: boolean;
-  disabledBuiltins?: string[];
-  disabledGlobals?: string[];
-  allowConsole?: boolean;
-}
+// Search only in "user" app
+await callTool('codecall.search', {
+  query: 'get current user profile',
+  filter: { appIds: ['user'] }
+});
+
+// Search across "user" AND "billing" apps
+await callTool('codecall.search', {
+  query: 'show unpaid invoices for current user',
+  filter: { appIds: ['user', 'billing'] }
+});
 ```
 
-Suggested usage:
+<Tip>
+  Multi-app search lets models decide per-task whether they need data from a single app or to join data across apps.
+</Tip>
 
-- `locked_down` – strictest; highly sensitive environments.
-- `secure` – **default**; safe for untrusted LLM code.
-- `balanced` – more permissive; internal/trusted models.
-- `experimental` – dev-only; very relaxed, not for production.
+### Direct Tool Calls (No VM)
 
-You can override any fields on top of the preset.
+For simple single-tool invocations, enable `codecall.invoke` to bypass VM overhead:
 
----
+```ts
+CodeCallPlugin.init({
+  directCalls: {
+    enabled: true,
+    allowedTools: ['users:getById', 'billing:getInvoice'], // Optional allowlist
+  },
+});
+```
 
-## Meta-tools
-
-CodeCall exposes **three primary** tools + **one optional**:
-
-1. `codecall.search`
-2. `codecall.describe`
-3. `codecall.execute`
-4. `codecall.invoke` (optional, no code/VM)
-
-### `codecall.search`
-
-Find relevant tools by natural language.
-
-**Input (conceptual):**
+The model can then call tools directly without writing JavaScript:
 
 ```json
 {
-  "query": "get all users who logged in today",
-  "topK": 8,
-  "filter": {
-    "appIds": ["user"],
-    "tags": ["users", "sessions"]
+  "tool": "codecall.invoke",
+  "input": {
+    "tool": "users:getById",
+    "input": { "id": "u-123" }
   }
 }
 ```
 
-**Output:**
+This is ideal when the model needs a single tool action without multi-step orchestration.
 
-```jsonc
-{
-  "tools": [
-    {
-      "name": "users:list",
-      "description": "List users with pagination",
-      "appId": "user",
-      "source": "inline",
-      "score": 0.92
-    }
-  ]
-}
-```
+### Logging and Notifications
 
-Usage pattern:
+CodeCall supports visibility into execution plan progress:
 
-1. Call `codecall.search` with your high-level goal.
-2. Optionally scope by `appIds` if you want specific apps.
-3. Pick tool names from the results.
-4. Call `codecall.describe` on those tools.
+#### Automatic Tool Call Events
 
----
+Every `callTool()` inside a plan can emit:
+- **"tool call started"** event (with tool name + input)
+- **"tool call finished"** event (with tool name + result + status)
 
-### `codecall.describe`
+These can be surfaced by your transport as live updates (e.g., SSE).
 
-Get input/output schemas for selected tools.
+#### Script-Driven Logging
 
-**Input:**
-
-```json
-{
-  "tools": ["users:list", "billing:listInvoices"],
-  "max": 8
-}
-```
-
-**Output (simplified):**
-
-```jsonc
-{
-  "tools": [
-    {
-      "name": "users:list",
-      "description": "List users with pagination",
-      "inputSchema": {
-        /* JSON schema-like */
-      },
-      "outputSchema": {
-        /* optional JSON schema-like */
-      },
-      "examples": [
-        {
-          "input": { "limit": 10 },
-          "output": {
-            "items": [
-              /* ... */
-            ]
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-The model uses these schemas to build a valid JS plan for `codecall.execute`.
-
----
-
-### `codecall.execute`
-
-Run a **JavaScript execution plan** that calls tools from inside a sandbox.
-
-**Input (conceptual):**
-
-```json
-{
-  "script": "/* JavaScript code */",
-  "allowedTools": ["users:list", "billing:listInvoices"],
-  "context": {
-    "tenantId": "t-123",
-    "userId": "u-456"
-  }
-}
-```
-
-Inside the VM, the script has access to:
-
-```js
-await callTool('users:list', { limit: 100 });
-const meta = getTool('users:list'); // name, description, schemas
-
-codecallContext.tenantId; // read-only context
-
-console.log('debug info'); // if allowConsole === true
-
-mcpLog('info', 'Loaded users', { count: 100 });
-mcpNotify('step_started', { step: 'load_users' });
-```
-
-> `console`, `mcpLog`, and `mcpNotify` are available only if enabled in config.
-
-**Output (high level):**
-
-CodeCall normalizes results into a shape with `status`:
-
-- `ok` – script returned successfully.
-- `syntax_error` – JS parse error.
-- `illegal_access` – attempted to use a blocked builtin/global.
-- `runtime_error` – bug in the JS plan (script-level error).
-- `tool_error` – error thrown by a specific tool call (tool-level error).
-- `timeout` – script exceeded the configured time.
-
-This allows the LLM and the orchestrator to distinguish:
-
-- “My code is wrong” vs
-- “This specific tool call failed with input X”.
-
----
-
-### `codecall.invoke` (direct call, no code)
-
-For simple cases, you might want the model to call a tool **without** writing a
-JavaScript plan and spinning up the VM.
-
-When `directCalls.enabled === true`, CodeCall exposes an extra meta-tool:
-
-- e.g. `codecall.invoke`
-
-**Input (conceptual):**
-
-```json
-{
-  "tool": "users:getById",
-  "input": { "id": "123" }
-}
-```
-
-**Behavior:**
-
-- No VM is created.
-- No user-written JS is executed.
-- The call behaves just like a normal MCP tool call:
-
-  - PII plugin still runs.
-  - Auth, rate limiting, logging, etc. still run.
-
-- On success: you get back the tool result.
-- On error:
-
-  - If the tool doesn’t exist or isn’t allowed, you get a clear “tool not found / not allowed” error.
-  - If the tool throws, the error includes:
-
-  - the tool name
-  - the input that was used
-  - optional error code/details
-
-This is ideal when:
-
-- The model just needs a **single tool action**.
-- There’s no need for multi-step orchestration or cross-tool joins.
-- You still want all the benefits of CodeCall’s tooling (modes, PII plugins, etc.)
-  without paying the VM cost for simple cases.
-
----
-
-## Logging & notifications from plans
-
-CodeCall supports two types of visibility into what a plan is doing:
-
-1. **Automatic notifications** for tool calls:
-
-- Every `callTool()` can emit:
-
-- A “tool call started” event (with tool name + input).
-- A “tool call finished” event (with tool name + input + status).
-- These can be surfaced by your transport as live updates (e.g. SSE).
-
-2. **Script-driven logging/notifications**:
-
-- CodeCall can expose FrontMCP builtin logging/notification methods into the VM.
-- This lets the LLM decide **what** to notify about and **with which parameters**.
-
-Example inside a plan:
+Enable `allowConsole` to let models add custom logging:
 
 ```js
 async function main() {
-  mcpNotify('step_started', { step: 'sync_billing' });
+  console.log('Starting user sync...');
 
-  const invoices = await callTool('billing:listInvoices', { status: 'unpaid' });
+  const users = await callTool('users:list', { limit: 100 });
+  console.log(`Loaded ${users.length} users`);
 
-  mcpLog('info', 'Loaded unpaid invoices', { count: invoices.items.length });
-
-  mcpNotify('step_completed', {
-    step: 'sync_billing',
-    count: invoices.items.length,
-  });
-
-  return invoices.items;
+  return users;
 }
 
 return main();
 ```
 
-If you don’t want models to emit custom notifications, you can disable these globals in the plugin configuration.
-
----
-
-## PII & privacy
-
-CodeCall runs **on top of** your existing FrontMCP tool pipeline – it does _not_ bypass it.
-
-When a plan calls `callTool('some:tool', input)` inside `codecall.execute`:
-
-- The request still goes through:
-
-  - Any PII plugins (scrubbing/masking input and output).
-  - Auth plugins.
-  - Logging / audit.
-  - Rate limiting.
-
-- The response that CodeCall sees is exactly what a normal tool call would see
-  after those plugins have run.
-
-This means:
-
-- CodeCall cannot leak more data than a normal tool call.
-- PII redaction logic remains in your **PII plugin**, not inside CodeCall.
-- The results you get from a CodeCall plan are equivalent (in terms of privacy)
-  to calling the same tools one-by-one outside of CodeCall.
-
----
-
-## Tool discovery, caching & notifications
-
-CodeCall works with both **stateful** and **stateless** clients.
-
-### With tool list change notifications
-
-If your transport supports:
-
-- A **transport session ID**, and
-- **Tool list change notifications**,
-
-then the recommended pattern is:
-
-1. The client calls `codecall.search` and `codecall.describe` for a given session.
-2. It caches tool definitions (names + schemas) in memory, keyed by session.
-3. When tools relevant to that session change (added/updated/removed), the server sends a **“tool list changed”** notification.
-4. The client refreshes only when notified, instead of re-describing tools on every round-trip.
-
-### Without notifications
-
-If the transport does **not** support notifications:
-
-- The simplest pattern is:
-
-> Before using a tool inside `codecall.execute`, call `codecall.describe` for that tool in the same turn.
-
-- Treat search/describe as ephemeral and re-run them as needed to avoid stale schemas.
-
----
-
-## Permissions & OAuth (future integration)
-
-Some tools may:
-
-- Be **listed and discoverable** to the user.
-- But require **additional permissions or a separate OAuth flow** before they can be executed.
-
-In these cases:
-
-- The tool itself should return a structured “authorization required” result (e.g. including:
-
-  - A URL to start an OAuth flow.
-  - A reason / scope description.
-  - The tool name.
-
-- CodeCall does **not** handle OAuth directly — it simply returns what the tool returned.
-- A dedicated **authorization/permissions plugin** can be added later to:
-
-  - Detect this pattern in tool responses.
-  - Coordinate running the OAuth flow.
-  - Retry execution after permissions are granted.
-
-This keeps a clear separation:
-
-- CodeCall: code orchestration + sandboxing.
-- Auth plugin: identity/permissions orchestration.
-
----
-
-## Example: query-like behavior in code
-
-Even if your REST API doesn’t support this query directly, CodeCall can:
-
-> “Return all user IDs whose first name starts with `me` and logged in today.”
+For structured notifications:
 
 ```js
-// Example script for `codecall.execute`
-
-async function main() {
-  // 1. Get users from a coarse API
-  const page = await callTool('users:list', { limit: 500 });
-
-  // 2. Filter in JS
-  const today = new Date().toISOString().slice(0, 10);
-
-  const matching = page.items.filter((user) => {
-    const firstName = (user.firstName || '').toLowerCase();
-    const lastLogin = (user.lastLogin || '').slice(0, 10);
-    return firstName.startsWith('me') && lastLogin === today;
-  });
-
-  // 3. Return just IDs
-  return matching.map((u) => u.id);
-}
-
-return main();
+mcpNotify('step_started', { step: 'sync_billing' });
+mcpLog('info', 'Loaded invoices', { count: invoices.length });
+mcpNotify('step_completed', { step: 'sync_billing' });
 ```
 
-The LLM can generate this plan after:
+<Warning>
+  Disable `mcpLog` and `mcpNotify` if you don't want models to emit custom notifications in production.
+</Warning>
 
-1. `codecall.search` → finds `users:list` (maybe from the `user` app).
-2. `codecall.describe` → reads its schema.
-3. `codecall.execute` → runs the plan.
+### PII and Privacy
+
+CodeCall runs **on top of** your existing FrontMCP pipeline. When a plan calls `callTool()`:
+
+- The request still flows through:
+  - PII plugins (scrubbing/masking)
+  - Auth plugins
+  - Rate limiting
+  - Audit logging
+
+- CodeCall sees the **same response** a normal tool call would see after plugins run
+
+**This means:**
+- CodeCall cannot leak more data than normal tool calls
+- PII redaction logic stays in your PII plugin, not in CodeCall
+- Privacy guarantees are consistent across all tool invocations
+
+### Tool Discovery and Caching
+
+#### With Tool List Change Notifications
+
+If your transport supports sessions and notifications:
+
+1. Client calls `codecall.search` and `codecall.describe` for a session
+2. Cache tool definitions (names + schemas) in memory, keyed by session
+3. When tools change, server sends **"tool list changed"** notification
+4. Client refreshes only when notified
+
+#### Without Notifications
+
+If your transport doesn't support notifications:
+
+- Call `codecall.describe` before using a tool in `codecall.execute`
+- Treat search/describe as ephemeral and re-run as needed to avoid stale schemas
+
+### OAuth and Permissions (Future)
+
+Some tools may be discoverable but require additional authorization before execution. In these cases:
+
+- The tool returns a structured "authorization required" response with:
+  - OAuth URL to start the flow
+  - Required scope/reason
+  - Tool name
+
+- CodeCall returns this response as-is (no special handling)
+- A future **authorization plugin** can:
+  - Detect this pattern
+  - Coordinate the OAuth flow
+  - Retry execution after permissions are granted
+
+This keeps separation of concerns:
+- **CodeCall:** Code orchestration + sandboxing
+- **Auth plugin:** Identity/permissions orchestration
 
 ---
 
-## Summary
+## Best Practices
 
-- Use **CodeCall** when you want to:
+<AccordionGroup>
+  <Accordion title="1. Choose the Right Mode">
+    - **`codecall_only`** - Best for large toolsets (50+ tools), especially OpenAPI-generated tools
+    - **`codecall_opt_in`** - Best when only a subset of tools should be orchestratable
+    - **`metadata_driven`** - Best for small toolsets (< 10 tools) with mixed usage patterns
+  </Accordion>
 
-  - Hide large toolsets.
-  - Expose a small, code-first meta-API.
-  - Let the LLM orchestrate tools across one or more apps in JavaScript.
+  <Accordion title="2. Use Secure VM Presets">
+    - **Production:** Use `secure` or `locked_down` presets
+    - **Development:** Use `balanced` or `experimental` for faster iteration
+    - **Sensitive data:** Use `locked_down` + disable loops + minimal globals
+    - Always set `timeoutMs` to prevent runaway scripts
+  </Accordion>
 
-- Choose a **mode** based on your tool count and control preferences:
+  <Accordion title="3. Enable Direct Calls for Simple Cases">
+    Enable `codecall.invoke` to bypass VM overhead for single-tool invocations:
+    ```ts
+    directCalls: {
+      enabled: true,
+      allowedTools: ['users:getById', 'health:ping'] // Optional allowlist
+    }
+    ```
+    This reduces latency and resource usage when complex orchestration isn't needed.
+  </Accordion>
 
-  - `codecall_only` – many tools, expose all via CodeCall.
-  - `codecall_opt_in` – many tools, only some via CodeCall.
-  - `metadata_driven` – few tools, mix classic tool calls + CodeCall.
+  <Accordion title="4. Scope Tools by App">
+    When using multi-app servers, encourage models to scope searches:
+    ```ts
+    // Good: scoped to specific app
+    filter: { appIds: ['user'] }
 
-- Use **VM presets** to balance power and safety.
-- Use **direct calls (`codecall.invoke`)** for simple, single-tool actions without running a VM.
-- Rely on your existing **PII and lifecycle plugins** for privacy and policy enforcement — CodeCall reuses the same pipeline.
-- If your transport supports **tool list change notifications**, cache described tools per session and refresh on change; if not, re-describe before execution.
+    // Okay: cross-app when needed
+    filter: { appIds: ['user', 'billing'] }
 
-This gives you a scalable, safe, and flexible way to expose your entire tool universe to LLMs without overwhelming them.
+    // Avoid: no scoping (searches all apps)
+    // Only use when truly needed
+    ```
+  </Accordion>
+
+  <Accordion title="5. Set Appropriate Limits">
+    Configure `topK` and `maxDefinitions` based on your use case:
+    ```ts
+    topK: 8, // Enough for most tasks, not too noisy
+    maxDefinitions: 8, // Balance between context and capability
+    ```
+    Lower values reduce context usage but may limit complex workflows.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Meta-Tools Reference
+
+CodeCall exposes four meta-tools to models:
+
+| Tool | Purpose | VM Required | Best For |
+| ---- | ------- | ----------- | -------- |
+| **`codecall.search`** | Find tools by natural language query | No | Tool discovery, app-scoped searches |
+| **`codecall.describe`** | Get input/output schemas for tools | No | Schema inspection before execution |
+| **`codecall.execute`** | Run JavaScript execution plans | Yes | Multi-tool workflows, filtering, joins |
+| **`codecall.invoke`** | Direct tool call without VM (optional) | No | Simple single-tool invocations |
+
+### Execution Result Status Codes
+
+When `codecall.execute` runs, results include a `status` field:
+
+| Status | Meaning | Retry? |
+| ------ | ------- | ------ |
+| **`ok`** | Script executed successfully | N/A |
+| **`syntax_error`** | JavaScript parse error | No - fix the script |
+| **`illegal_access`** | Attempted to use blocked builtin/global | No - rewrite without forbidden APIs |
+| **`runtime_error`** | Bug in the JavaScript plan | No - fix the script logic |
+| **`tool_error`** | Specific tool call failed | Maybe - check tool input |
+| **`timeout`** | Script exceeded `timeoutMs` | No - optimize or increase timeout |
+
+This lets models distinguish "my code is wrong" from "this specific tool call failed with input X".
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tools not appearing in search">
+    **Possible causes:**
+    - Tool has `codecall.enabledInCodeCall: false`
+    - Using `codecall_opt_in` mode but tool not explicitly enabled
+    - Search query too specific or using wrong terminology
+
+    **Solutions:**
+    - Verify `codecall.enabledInCodeCall: true` in tool metadata
+    - Check that plugin `mode` matches your intent
+    - Improve tool descriptions to match search queries
+    - Use broader search terms
+  </Accordion>
+
+  <Accordion title="Execution plans timing out">
+    **Possible causes:**
+    - Script contains infinite loops
+    - Tools being called are slow
+    - `timeoutMs` set too low
+
+    **Solutions:**
+    - Increase `vm.timeoutMs` (but keep under 10s for production)
+    - Disable loops with `allowLoops: false` if not needed
+    - Optimize slow tools or use caching
+    - Check for accidental blocking operations
+  </Accordion>
+
+  <Accordion title="Illegal access errors">
+    **Possible cause:**
+    - Script trying to use disabled builtins/globals
+
+    **Solutions:**
+    - Check `disabledBuiltins` and `disabledGlobals` configuration
+    - Ensure execution plan doesn't use `eval`, `Function`, `require`, etc.
+    - Use a less restrictive preset for development/testing
+    - Review AST validation errors for specifics
+  </Accordion>
+
+  <Accordion title="Tool not allowed in execution plan">
+    **Possible causes:**
+    - Tool name misspelled in `allowedTools` array
+    - Tool not enabled for CodeCall
+    - Using `directCalls` allowlist that's too restrictive
+
+    **Solutions:**
+    - Verify tool name matches exactly (case-sensitive)
+    - Check `codecall.enabledInCodeCall: true` in tool metadata
+    - Review `directCalls.allowedTools` configuration
+    - Try removing allowlist to allow all CodeCall-enabled tools
+  </Accordion>
+
+  <Accordion title="PII leaking through execution plans">
+    **This should not happen** - CodeCall runs through the normal FrontMCP pipeline.
+
+    **If you see PII leaks:**
+    - Verify your PII plugin is registered and running
+    - Check that PII plugin runs on `afterToolCall` hook
+    - Ensure tool results are being scrubbed properly
+    - CodeCall cannot bypass pipeline hooks
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import CodeCallPlugin from '@frontmcp/plugins/codecall';
+import { z } from 'zod';
+
+// User management tools
+@Tool({
+  name: 'users:list',
+  description: 'List users with pagination and filtering',
+  inputSchema: {
+    limit: z.number().default(100),
+    filter: z.object({
+      role: z.enum(['admin', 'user', 'guest']).optional(),
+      active: z.boolean().optional(),
+    }).optional(),
+  },
+  codecall: {
+    visibleInListTools: false, // Hidden from classic list_tools
+    enabledInCodeCall: true, // Available via CodeCall
+  },
+})
+class ListUsersTool extends ToolContext {
+  async execute(input: { limit: number; filter?: any }) {
+    this.logger.info('Listing users', input);
+    return await this.database.getUsers(input);
+  }
+}
+
+@Tool({
+  name: 'users:getById',
+  description: 'Get user details by ID',
+  inputSchema: { id: z.string() },
+  codecall: {
+    visibleInListTools: false,
+    enabledInCodeCall: true,
+  },
+})
+class GetUserByIdTool extends ToolContext {
+  async execute(input: { id: string }) {
+    return await this.database.getUserById(input.id);
+  }
+}
+
+// Billing tools
+@Tool({
+  name: 'billing:listInvoices',
+  description: 'List invoices for a user',
+  inputSchema: {
+    userId: z.string(),
+    status: z.enum(['paid', 'unpaid', 'overdue']).optional(),
+  },
+  codecall: {
+    visibleInListTools: false,
+    enabledInCodeCall: true,
+  },
+})
+class ListInvoicesTool extends ToolContext {
+  async execute(input: { userId: string; status?: string }) {
+    return await this.billing.getInvoices(input.userId, input.status);
+  }
+}
+
+// Configure CodeCall with secure settings
+const codecallPlugin = CodeCallPlugin.init({
+  mode: 'codecall_only', // Hide all tools, expose via CodeCall
+  topK: 8,
+  maxDefinitions: 8,
+
+  directCalls: {
+    enabled: true, // Enable direct calls for simple cases
+    allowedTools: ['users:getById'], // Only allow safe read operations
+  },
+
+  vm: {
+    preset: 'secure', // Production-safe preset
+    timeoutMs: 5000, // 5 second timeout
+    allowLoops: false, // Disable loops for safety
+    allowConsole: true, // Enable logging for debugging
+    disabledBuiltins: ['eval', 'Function'],
+    disabledGlobals: ['require', 'process', 'fetch', 'setTimeout'],
+  },
+});
+
+@App({
+  id: 'user',
+  name: 'User Management',
+  tools: [ListUsersTool, GetUserByIdTool],
+  plugins: [codecallPlugin],
+})
+class UserApp {}
+
+@App({
+  id: 'billing',
+  name: 'Billing',
+  tools: [ListInvoicesTool],
+  plugins: [codecallPlugin],
+})
+class BillingApp {}
+
+@FrontMcp({
+  info: { name: 'Multi-App Server', version: '1.0.0' },
+  apps: [UserApp, BillingApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+
+/*
+Example model workflow:
+
+1. Search for tools:
+   codecall.search({
+     query: "show unpaid invoices for active admin users",
+     filter: { appIds: ["user", "billing"] }
+   })
+
+2. Describe relevant tools:
+   codecall.describe({
+     tools: ["users:list", "billing:listInvoices"]
+   })
+
+3. Execute orchestration plan:
+   codecall.execute({
+     script: `
+       async function main() {
+         // Get active admin users
+         const users = await callTool('users:list', {
+           limit: 100,
+           filter: { role: 'admin', active: true }
+         });
+
+         // Get unpaid invoices for each admin
+         const results = [];
+         for (const user of users.items) {
+           const invoices = await callTool('billing:listInvoices', {
+             userId: user.id,
+             status: 'unpaid'
+           });
+
+           if (invoices.items.length > 0) {
+             results.push({
+               userId: user.id,
+               userName: user.name,
+               unpaidCount: invoices.items.length,
+               totalAmount: invoices.items.reduce((sum, inv) => sum + inv.amount, 0)
+             });
+           }
+         }
+
+         return results;
+       }
+
+       return main();
+     `,
+     allowedTools: ["users:list", "billing:listInvoices"]
+   })
+*/
+```
+
+---
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/plugins/src/codecall">
+    View the CodeCall plugin source code
+  </Card>
+
+  <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
+    See CodeCall in action with real examples
+  </Card>
+
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+    Learn more about FrontMCP plugins
+  </Card>
+
+  <Card title="vm2 Documentation" icon="shield-halved" href="https://github.com/patriksimek/vm2">
+    Official vm2 sandbox documentation
+  </Card>
+</CardGroup>
