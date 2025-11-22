@@ -1,0 +1,167 @@
+---
+title: CodeCall Search → Describe → Execute
+slug: plugins/codecall-workflow
+description: Understand how the meta-tools hide large toolboxes behind CodeCall.
+icon: code
+---
+
+The [CodeCall Plugin](/docs/plugins/codecall-plugin) hides hundreds of tools behind three meta-tools so models can search, describe, and execute only what they need. This page explains the payloads those meta-tools expect and how to stitch them together in your orchestration layer.
+
+## Meta-tools at a glance
+
+| Tool                | Purpose                                                            | Typical arguments                  | Response                                                        |
+| ------------------- | ------------------------------------------------------------------ | ---------------------------------- | --------------------------------------------------------------- |
+| `codecall.search`   | Find relevant tools across one or more apps.                       | `query`, `apps`, `topK`, `filters` | Ranked list with tool ids, snippet, app id, and confidence.     |
+| `codecall.describe` | Fetch the schema + annotations for specific tool ids.              | `toolIds`, `apps` (optional)       | Array of tool definitions ready for planning.                   |
+| `codecall.execute`  | Run a JavaScript plan that can call the tools that were described. | `plan`, `args`, `timeoutMs`        | Streaming chunks and final result (whatever your plan returns). |
+| `codecall.invoke`   | (Optional) Run a single tool directly without JS.                  | `tool`, `args`                     | The tool’s native response.                                     |
+
+### `codecall.search`
+
+```json title="Request"
+{
+  "name": "codecall.search",
+  "arguments": {
+    "query": "export approved expenses to csv",
+    "apps": ["expenses", "employee-time"],
+    "topK": 8
+  }
+}
+```
+
+```json title="Response"
+{
+  "matches": [
+    {
+      "toolId": "expenses.create_expense",
+      "appId": "expenses",
+      "score": 0.92,
+      "summary": "Create an expense with amount, currency, and justification.",
+      "tags": ["expenses", "finance"]
+    }
+  ],
+  "query": "export approved expenses to csv"
+}
+```
+
+Use the matches to decide which tools to describe next.
+
+### `codecall.describe`
+
+```json title="Request"
+{
+  "name": "codecall.describe",
+  "arguments": {
+    "toolIds": ["expenses.list_expenses", "expenses.create_expense"]
+  }
+}
+```
+
+```json title="Response"
+{
+  "tools": [
+    {
+      "id": "expenses.list_expenses",
+      "name": "List expenses",
+      "appId": "expenses",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["pending", "approved"] }
+        }
+      },
+      "outputSchema": { "type": "array", "items": { "type": "object" } },
+      "codecall": {
+        "enabledInCodeCall": true,
+        "visibleInListTools": false
+      }
+    }
+  ],
+  "version": "2025-11-22T10:15:00.000Z"
+}
+```
+
+Describe once per session and cache the schema until the server notifies you about a tool list change.
+
+### `codecall.execute`
+
+```json title="Request"
+{
+  "name": "codecall.execute",
+  "arguments": {
+    "plan": "async function run(tools, args) {\n  const expenses = await tools['expenses.list_expenses']({ status: 'approved' });\n  return expenses.filter(e => e.total > 1000);\n}",
+    "timeoutMs": 4000,
+    "args": {}
+  }
+}
+```
+
+The plan runs inside a hardened VM (`vm2`) with only the tools you described exposed on the `tools` object. Return whatever shape you need; it is streamed back as MCP content parts.
+
+### `codecall.invoke`
+
+If you enabled direct calls, `codecall.invoke` lets the client bypass JavaScript entirely:
+
+```json
+{
+  "name": "codecall.invoke",
+  "arguments": {
+    "tool": "expenses.get_invoice",
+    "args": { "invoiceId": "inv_123" }
+  }
+}
+```
+
+Use it sparingly—CodeCall works best when the model synthesizes a plan that stitches multiple tools together.
+
+## Putting it all together
+
+<Steps>
+  <Step title="Search" stepNumber={1}>
+    Call <code>codecall.search</code> with the user’s intent (and optional app filters). Keep the top matches.
+  </Step>
+  <Step title="Describe" stepNumber={2}>
+    Pass the selected tool ids to <code>codecall.describe</code>. Cache schemas per transport session so you don’t ask for
+    the same definition twice.
+  </Step>
+  <Step title="Plan" stepNumber={3}>
+    Feed the described tools into your model prompt and ask it to emit a JavaScript function. Encourage it to reuse
+    helper functions and to return structured data.
+  </Step>
+  <Step title="Execute" stepNumber={4}>
+    Send the generated plan to <code>codecall.execute</code>. Stream partial responses back to your user interface and
+    surface final output when the VM finishes.
+  </Step>
+</Steps>
+
+```js title="Plan skeleton emitted by the model"
+async function run(tools, args) {
+  const expenses = await tools['expenses.list_expenses']({
+    status: args.status ?? 'approved',
+    cursor: args.cursor ?? null,
+  });
+
+  const csv = await tools['utilities.convert_to_csv']({
+    rows: expenses.items,
+  });
+
+  return {
+    total: expenses.items.length,
+    csv,
+  };
+}
+```
+
+## Session-aware caching
+
+- Cache described tool definitions per session + app set. When the server emits a `tool_list_changed` notification, invalidate the cache and re-run `codecall.describe`.
+- Keep search results short-lived. They reflect the user’s current intent; do not reuse them for unrelated prompts.
+- Watch the `version` field returned by `codecall.describe`. It bumps whenever the server deploys a new toolset.
+
+## Failure semantics
+
+- The plugin throws `PublicMcpError` when the plan fails validation (syntax errors, missing tool) and `InternalMcpError` when the VM raises something unexpected. Both carry an `errorId` in the `_meta` field so you can correlate logs.
+- If the VM hits `timeoutMs`, CodeCall stops execution and returns a `codecall.timeout` error. Ask the model to generate simpler plans or raise the timeout in controlled environments.
+- Use the `FlowControl` helpers exposed by FrontMCP if you need to stop a plan from within a hook (for example, after a policy violation) without crashing the VM.
+
+Pair these mechanics with the configuration knobs documented in the main [CodeCall Plugin reference](/docs/plugins/codecall-plugin) to decide which tools are discoverable, which are only available via CodeCall, and how the sandbox behaves.

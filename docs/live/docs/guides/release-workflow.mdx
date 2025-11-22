@@ -1,0 +1,76 @@
+---
+title: Release Workflow
+slug: guides/release-workflow
+description: Follow this checklist to cut a FrontMCP release and update the Mintlify docs.
+icon: flag-checkered
+---
+
+Shipping a release touches both the codebase and the public docs. Use this playbook whenever you bump `version.txt` / publish new packages so every surface (CHANGELOG, Updates page, READMEs, navigation, Mintlify docs) stays in sync.
+
+## Pre-flight checklist
+
+- ✅ CI is green (lint, unit tests, integration tests, demo apps).
+- ✅ `nx run-many -t lint,test,build` or the equivalent workspace command succeeds locally.
+- ✅ Draft docs under `docs/draft/**` are merged for the features you plan to announce.
+- ✅ `independent-libs.json` lists every package that will ship independently (CLI, adapters, libraries).
+
+## Release steps
+
+<Steps>
+  <Step title="Bump versions" stepNumber={1}>
+    Update <code>version.txt</code>, <code>version-minor.txt</code>, <code>date.txt</code>, and any package.json files that
+    publish to npm. Commit the version bump separately so it is easy to cherry-pick.
+  </Step>
+  <Step title="Update changelog & highlights" stepNumber={2}>
+    Add a <code>## [vX.Y.Z] - YYYY-MM-DD</code> entry to <code>CHANGELOG.md</code> using Conventional Commit categories.
+    Then summarize the same highlights for users in <code>docs/live/updates.mdx</code> (features only, emoji bullets).
+  </Step>
+  <Step title="Refresh docs & navigation" stepNumber={3}>
+    Copy any approved content from <code>docs/draft/docs</code> into <code>docs/live/docs</code> for the current minor,
+    add new pages, and wire them into <code>docs/live/docs.json</code>. Never edit <code>docs/live/docs/v/&lt;minor&gt;</code>.
+  </Step>
+  <Step title="Update READMEs" stepNumber={4}>
+    Check <code>README.md</code> and every <code>libs/**/README.md</code> touched by the release for new commands,
+    minimum versions, or API changes. Keep changes small and actionable.
+  </Step>
+  <Step title="Publish + tag" stepNumber={5}>
+    Run the publish workflow (GitHub Action or release script), push the tag (<code>vX.Y.Z</code>), and verify npm
+    finishes before announcing. Copy the release notes from the changelog entry into the GitHub release body.
+  </Step>
+</Steps>
+
+## Files to touch
+
+| File / Folder                                  | Purpose                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `version.txt`, `version-minor.txt`, `date.txt` | Source of truth for release automation and docs.                                     |
+| `CHANGELOG.md`                                 | Keep-a-Changelog history for every package in the repo.                              |
+| `docs/live/updates.mdx`                        | Mintlify Updates page (frontmatter must stay intact).                                |
+| `docs/live/docs/**`                            | Latest docs. Add/update only in the non-versioned tree.                              |
+| `docs/live/docs.json`                          | Navigation + version selector. Keep the latest minor first and tagged as `(latest)`. |
+| `README.md`                                    | Repository overview, quickstart, supported Node version.                             |
+| `libs/**/README.md`                            | Each independently published library needs accurate install/usage info.              |
+| `independent-libs.json`                        | Tells the release workflow which extra packages need release notes.                  |
+
+<Note>
+  If you deprecate or rename pages, update <code>docs/live/docs.json</code> in the same PR so Mintlify never points to a
+  404.
+</Note>
+
+## Independent libraries
+
+When `independent-libs.json` lists packages (for example `json-schema-to-zod-v3` or `mcp-from-openapi`):
+
+1. Bump their `package.json` versions.
+2. Update their README with the new features or security notes.
+3. Add their highlight cards to `docs/live/updates.mdx` using the "Independent" tag and the GitHub `libs/<name>` link.
+4. Mention them in `CHANGELOG.md` under the relevant category (usually `feat`).
+
+## After tagging
+
+- Verify the GitHub Release shows the right tag, title, and changelog body.
+- Confirm npm published the synchronized packages (`@frontmcp/sdk`, CLI, adapters) and any independent libraries.
+- Visit `https://docs.agentfront.dev/updates` after the docs deploy to verify the new card renders correctly.
+- Post-release, branch from the tag for any hotfixes and start the next development cycle by updating `version.txt`.
+
+Following the same checklist every time keeps the framework, docs, and libraries perfectly aligned for users and contributors.

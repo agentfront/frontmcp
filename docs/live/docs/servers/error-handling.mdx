@@ -1,0 +1,158 @@
+---
+title: Error Handling
+slug: servers/error-handling
+description: Use the typed MCP error hierarchy and global handler to deliver safe responses with traceable IDs.
+icon: triangle-exclamation
+---
+
+FrontMCP v0.4 ships a typed error system so transports emit user-friendly messages while still giving operators an `errorId`, code, and timestamp. Throw the right error class, let the global handler format the response, and lean on `FlowControl` helpers when you need to stop work mid-flow.
+
+## Error hierarchy
+
+```text
+McpError
+├── PublicMcpError          // safe to show to users
+│   ├── ToolNotFoundError
+│   ├── InvalidInputError
+│   ├── InvalidMethodError
+│   ├── RateLimitError
+│   ├── QuotaExceededError
+│   └── UnauthorizedError
+└── InternalMcpError        // hide details, share errorId only
+    ├── InvalidOutputError
+    ├── ToolExecutionError
+    └── GenericServerError
+```
+
+All classes live in `@frontmcp/sdk/errors` and share the same helpers (`isPublicError`, `toMcpError`, `formatMcpErrorResponse`).
+
+## Throw typed errors inside tools
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { PublicMcpError, UnauthorizedError } from '@frontmcp/sdk/errors';
+import { z } from 'zod';
+
+@Tool({
+  name: 'employees.get',
+  description: 'Fetch an employee record by ID',
+  inputSchema: { id: z.string().min(1) },
+})
+export default class GetEmployeeTool extends ToolContext {
+  async execute({ id }: { id: string }) {
+    const session = this.session(); // your auth provider
+    if (!session?.claims?.canViewEmployees) {
+      throw new UnauthorizedError('You cannot view employee records.');
+    }
+
+    const employee = await this.getEmployeeById(id);
+    if (!employee) {
+      throw new PublicMcpError(`Employee "${id}" not found`, 'EMPLOYEE_NOT_FOUND', 404);
+    }
+
+    return employee;
+  }
+}
+```
+
+- `PublicMcpError` subclasses expose their message to users.
+- `InternalMcpError` subclasses replace the message with a generic sentence (`Internal FrontMCP error...`) and embed the real details only in logs.
+
+## Create custom errors when needed
+
+```ts
+import { PublicMcpError, InternalMcpError } from '@frontmcp/sdk/errors';
+
+export class InvalidWorkflowStateError extends PublicMcpError {
+  constructor(state: string) {
+    super(`Workflow cannot transition from "${state}"`, 'WORKFLOW_STATE', 409);
+  }
+}
+
+export class UpstreamApiError extends InternalMcpError {
+  constructor(service: string, original?: Error) {
+    super(`Failed to call ${service}`, 'UPSTREAM_API_ERROR');
+    if (original) {
+      this.cause = original;
+    }
+  }
+}
+```
+
+Custom errors keep the same `errorId`/`code` structure so your logs and monitoring remain consistent.
+
+## Centralize formatting with `createErrorHandler`
+
+```ts
+import { createErrorHandler, formatMcpErrorResponse } from '@frontmcp/sdk/errors';
+
+const errorHandler = createErrorHandler({
+  isDevelopment: process.env.NODE_ENV !== 'production',
+  logger: {
+    error: (message, meta) => console.error(message, meta),
+    warn: (message, meta) => console.warn(message, meta),
+  },
+});
+
+export const callToolHandler = {
+  handler: async (request, ctx) => {
+    try {
+      return await ctx.scope.runFlowForOutput('tools:call-tool', { request, ctx });
+    } catch (error) {
+      // Wrap unexpected errors and emit a consistent MCP payload
+      return errorHandler.handle(error, { flowName: 'tools:call-tool', toolName: request.params.name });
+    }
+  },
+};
+```
+
+The handler:
+
+- Logs public errors at `warn` and internal ones at `error`.
+- Adds `_meta.errorId`, `_meta.code`, and `_meta.timestamp` to every response.
+- Includes stack traces only when `isDevelopment` is `true`.
+
+If you need to transform third-party errors into `McpError`, supply an `errorTransformer` in `createErrorHandler({ errorTransformer })`.
+
+## FlowControl-aware stop semantics
+
+`FlowControl` (available via `import { FlowControl } from '@frontmcp/sdk'`) already powers hooks and flows. The error handler respects it:
+
+- `FlowControl.respond(...)` short-circuits the flow and returns your data.
+- `FlowControl.fail(error)` or `FlowControl.abort(reason)` stops execution gracefully without double-logging.
+- Use `shouldStopExecution(error)` when you need to decide whether a hook should swallow an error or rethrow it.
+
+```ts
+import { FlowControl } from '@frontmcp/sdk';
+import { shouldStopExecution } from '@frontmcp/sdk/errors';
+
+try {
+  FlowControl.fail(new Error('Policy violation'));
+} catch (error) {
+  if (shouldStopExecution(error)) {
+    throw error;
+  }
+}
+```
+
+## Response envelope
+
+Error responses follow the MCP streaming format:
+
+```json
+{
+  "content": [
+    { "type": "text", "text": "Internal FrontMCP error. Please contact support with error ID: err_0f2e7d67a8f4c3b1" }
+  ],
+  "isError": true,
+  "_meta": {
+    "errorId": "err_0f2e7d67a8f4c3b1",
+    "code": "TOOL_EXECUTION_ERROR",
+    "timestamp": "2025-11-22T12:34:56.789Z"
+  }
+}
+```
+
+Public errors reuse your message; internal errors swap in a neutral sentence yet still include `errorId` so support can correlate logs. Always surface the `errorId` back to users—you can build “copy error ID” affordances in your UI or automatically attach it to bug reports.
+
+Pair this guide with the [Release notes](/updates) to understand which error classes landed in v0.4.0.
