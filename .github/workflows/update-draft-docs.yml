@@ -133,7 +133,20 @@ jobs:
           echo "$BASE" > .github/codex/prompts/base.txt
 
           # Unified diff: from last published release -> current main HEAD
-          git diff "$BASE"...HEAD --unified=3 > .github/codex/prompts/diff.patch || true
+          # Filter to relevant files only to reduce token usage
+          git diff "$BASE"...HEAD --unified=1 \
+            -- \
+            'libs/**/*.ts' \
+            'apps/**/*.ts' \
+            'libs/**/package.json' \
+            'package.json' \
+            'docs/**/*.md' \
+            'docs/**/*.mdx' \
+            'README.md' \
+            'CHANGELOG.md' \
+            ':!**/*.spec.ts' \
+            ':!**/*.test.ts' \
+            > .github/codex/prompts/diff.patch || true
 
           # ----------------------------------------
           # Derive next version from package.json
@@ -144,7 +157,8 @@ jobs:
           echo "$VERSION" > .github/codex/prompts/version.txt
 
           # Commit list (for documentation synthesis)
-          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' > .github/codex/prompts/commits.txt || true
+          # Limit to 100 commits to prevent unbounded growth
+          git log "$BASE"...HEAD --pretty=format:'%H%x09%s%x09%b' -n 100 > .github/codex/prompts/commits.txt || true
 
           # ISO date
           date -u +"%Y-%m-%d" > .github/codex/prompts/date.txt
@@ -339,7 +353,22 @@ jobs:
           }
           JSON
 
+      - name: Check if changes warrant Codex run
+        id: check_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIFF_SIZE=$(wc -c < .github/codex/prompts/diff.patch || echo "0")
+          if [ "$DIFF_SIZE" -lt 100 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Diff too small ($DIFF_SIZE bytes), skipping Codex"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Diff size: $DIFF_SIZE bytes, running Codex"
+          fi
+
       - name: Run Codex (read-only, structured output)
+        if: steps.check_changes.outputs.skip != 'true'
         id: codex
         uses: openai/codex-action@v1
         with:
@@ -352,6 +381,7 @@ jobs:
           output-schema-file: .github/codex/codex-output-schema.json
 
       - name: Apply & validate patches
+        if: steps.check_changes.outputs.skip != 'true'
         id: apply
         run: |
           set -euo pipefail
