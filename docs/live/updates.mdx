@@ -5,27 +5,21 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="FrontMCP 0.4.0" description="2025-11-22" tags={["Releases"]}>
+<Update label="v0.4.0" description="2025-11-22" tags={["Releases"]}>
   <Card
-    title="FrontMCP v0.4.0: generator-first adapters and typed error surfaces."
+    title="FrontMCP v0.4.0: Generator-first adapters and typed error surfaces"
     href="/docs"
     cta="Read the release notes"
   >
-    ### Features
+    🚀 **Generator-native adapters** – The OpenAPI adapter now rides on the standalone `mcp-from-openapi` engine so every tool inherits conflict-free params, request mappers, and per-scheme auth scoring.
 
-    - Run the OpenAPI adapter on the standalone `mcp-from-openapi` generator so every operation comes with request mappers, conflict-free parameter names, JSON Schema + Zod validation, and per-scheme auth scoring.
-    - Let `@Tool` definitions emit literal primitives, tuple arrays, `resource`/`resource_link` payloads, and `rawInputSchema` exports so clients get typed responses without wrapping them in placeholder objects.
-    - Introduce a typed MCP error hierarchy plus a reusable error handler that stamps traceable IDs, consistent public/internal messaging, and FlowControl-aware stop semantics across transports.
-    - Extract `json-schema-to-zod-v3` with regex safeguards so adapters and apps can reuse the hardened converter outside FrontMCP.
+    🧩 **Tool metadata upgrades** – Declare literal primitives, tuple arrays, `resource` / `resource_link` payloads, and a `rawInputSchema` so clients see structured responses without wrapper objects.
 
-    ### Docs
+    🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically.
 
-    - Expanded the OpenAPI adapter guide with security risk scoring, auth-provider mapping, and generator options alongside fresh usage examples.
-    - Added a CodeCall plugin reference plus maintainer runbooks for the release workflow and docs versioning so contributors know when to touch draft vs live files.
+    📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how independent libraries ship alongside synchronized packages.
 
-    ### Build/CI
-
-    - Release automation now splits draft/live Mintlify trees, archives older minors, and enforces husky + lint-staged hooks to keep release branches clean.
+    [View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/v0.4.0)
 
   </Card>
 </Update>
@@ -33,14 +27,16 @@ mode: 'center'
 <Update label="json-schema-to-zod-v3 v1.0.0" description="2025-11-22" tags={["Independent"]}>
   <Card
     title="json-schema-to-zod-v3 v1.0.0"
-    href="https://www.npmjs.com/package/json-schema-to-zod-v3"
-    cta="Install from npm"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
   >
-    ### Changes
+    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted specs from triggering ReDoS in your adapters.
 
-    - Hardened the JSON Schema → Zod converter with default-on regex throttles, quantifier guards, and timeout-based pattern validation helpers.
-    - Added utilities like `jsonSchemaObjectToZodRawShape`, tuple/prefix handling, and deep equality tooling so adapters can reproduce complex schemas without custom code.
-    - Published configurable security APIs (`setSecurityConfig`, `validatePattern`, `createSafeRegExp`) so hosts can tune protections for trusted vs. untrusted specs.
+    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex shapes without custom parsing code.
+
+    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public uploads.
+
+    [View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/json-schema-to-zod-v3@v1.0.0)
 
   </Card>
 </Update>
@@ -48,14 +44,16 @@ mode: 'center'
 <Update label="mcp-from-openapi v1.0.0" description="2025-11-22" tags={["Independent"]}>
   <Card
     title="mcp-from-openapi v1.0.0"
-    href="https://www.npmjs.com/package/mcp-from-openapi"
-    cta="Install from npm"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
   >
-    ### Changes
+    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path, query, header, or body).
 
-    - Converted the OpenAPI → MCP toolchain into a standalone generator with automatic parameter conflict resolution, combined schemas, and explicit HTTP request mappers.
-    - Added flexible loaders (`fromURL`, `fromFile`, `fromYAML`, `fromJSON`) plus validation/dereferencing pipelines so specs are ready before tool generation kicks off.
-    - Bundled typed errors and metadata extraction (auth requirements, preferred responses, server URLs) so the library drops directly into FrontMCP or any MCP-compliant server.
+    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent metadata.
+
+    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can reason about each operation automatically.
+
+    [View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/mcp-from-openapi@v1.0.0)
 
   </Card>
 </Update>

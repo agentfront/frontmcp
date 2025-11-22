@@ -216,6 +216,63 @@ auth: {
 
 ---
 
+## Error handling & tracing
+
+FrontMCP v0.4.0 introduces a typed error stack that keeps client responses safe while still logging everything you need to debug.
+
+- `PublicMcpError` derivatives (like `InvalidInputError`, `ToolNotFoundError`, and `RateLimitError`) surface actionable messages to end users.
+- `InternalMcpError` derivatives (like `ToolExecutionError`, `InvalidOutputError`, and `GenericServerError`) hide implementation details but still carry a traceable `errorId`.
+- `formatMcpErrorResponse` and the `ErrorHandler` helper produce MCP-compliant responses with consistent metadata for every transport.
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { InvalidInputError, ToolExecutionError } from '@frontmcp/sdk/errors';
+import { z } from 'zod';
+
+@Tool({
+  name: 'sync:github',
+  description: 'Sync repositories and collaborators',
+  inputSchema: {
+    repo: z.string(),
+    visibility: z.enum(['public', 'private']),
+  },
+})
+export default class SyncGithubTool extends ToolContext {
+  async execute({ repo, visibility }: { repo: string; visibility: 'public' | 'private' }) {
+    if (!repo?.includes('/')) {
+      throw new InvalidInputError('Use the org/name form (e.g., agentfront/frontmcp).');
+    }
+
+    try {
+      return await this.providers.github.sync(repo, visibility);
+    } catch (error) {
+      throw new ToolExecutionError('sync:github', error instanceof Error ? error : undefined);
+    }
+  }
+}
+```
+
+For transport-level hooks, create a reusable handler and wrap the flow entry points:
+
+```ts
+import { createErrorHandler } from '@frontmcp/sdk/errors';
+
+const errorHandler = createErrorHandler({
+  isDevelopment: process.env.NODE_ENV !== 'production',
+  logger: { error: console.error, warn: console.warn },
+});
+
+export async function handleCall(request, ctx) {
+  try {
+    return await scope.runFlowForOutput('tools:call-tool', { request, ctx });
+  } catch (error) {
+    return errorHandler.handle(error, { flowName: 'tools:call-tool' });
+  }
+}
+```
+
+<Warning>Always rethrow an <code>McpError</code> (or let <code>createErrorHandler</code> do it for you) so transports emit a single, well-formed response with the right <code>errorId</code> and FlowControl hints.</Warning>
+
 ## Common starting points
 
 - **Single app, default everything**: minimal sample above.

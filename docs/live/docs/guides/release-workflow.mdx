@@ -1,0 +1,64 @@
+---
+title: Release & Docs Workflow
+slug: guides/release-workflow
+icon: arrows-rotate
+description: How FrontMCP versions packages, documentation, and release notes.
+---
+
+This runbook explains how releases move from draft docs to production, when to edit each folder, and what the automation expects from maintainers.
+
+## Pipeline at a glance
+
+1. **update-draft-docs** – Watches `main`, summarizes recent changes, and updates `docs/draft/**` plus the draft release notes.
+2. **create-release-branch** – Runs manually (`next/<version>`). Bumps synchronized packages, versions any affected independent libraries, and—if the minor changed—archives the previous docs.
+3. **codex-mintlify-docs** – Runs on every push to `next/**`. Codex refreshes `docs/live/docs/**`, `docs/live/updates.mdx`, `docs/live/docs.json`, the root changelog, and any touched READMEs.
+4. **publish-on-next-close** – Fires when the release branch merges to `main`, tagging npm packages and finalizing the GitHub release.
+
+## Docs directories
+
+```
+docs/
+├─ draft/      # Human-editable source of truth
+│  ├─ docs/
+│  ├─ blog/
+│  ├─ assets/
+│  ├─ snippets/
+│  └─ updates.mdx
+└─ live/       # What Mintlify serves today
+   ├─ docs/
+   │  └─ v/<minor>/  # Archived minors (read-only)
+   ├─ blog/
+   ├─ assets/
+   ├─ snippets/
+   ├─ docs.json
+   └─ updates.mdx
+```
+
+- **Edit drafts on `main`**: add or change content under `docs/draft/**` and let automation promote it during the next minor release.
+- **Patch releases stay in-place**: Codex edits `docs/live/docs/**` directly on the release branch because the minor does not change.
+- **Archived docs are immutable**: anything under `docs/live/docs/v/**` is a snapshot; never modify or delete it manually.
+
+<Warning>Updating `docs/live/docs/v/**` or `docs/draft/**` outside of the workflows breaks the release tooling. Always change the corresponding editable tree.</Warning>
+
+## Patch vs. minor/major releases
+
+| Release type                      | Docs action                                                                                                                           | What to remember                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Patch** (`0.4.0 → 0.4.1`)       | Skip archival. Codex only touches `docs/live/**` on the release branch.                                                               | Draft docs continue to accumulate next-minor content.                                   |
+| **Minor/Major** (`0.4.x → 0.5.0`) | Archive current live docs to `docs/live/docs/v/0.4/`, update `docs/live/docs.json`, then copy `docs/draft/**` over to `docs/live/**`. | Run `scripts/archive-and-publish-docs.mjs` via the workflow; never copy files manually. |
+
+## Package cohorts
+
+- **Synchronized packages** (`versioning:synchronized` in `project.json`) always share the root version bump.
+- **Independent packages** (`versioning:independent`) publish the smallest bump that fits their diff. For v0.4.0, `json-schema-to-zod-v3@1.0.0` and `mcp-from-openapi@1.0.0` shipped separately.
+- Codex writes the root `CHANGELOG.md`, lib-specific CHANGELOGs, and Mintlify release notes based on these decisions.
+
+## Maintainer checklist
+
+1. Decide the bump (`patch`, `minor`, `major`) and run **create-release-branch** with that input.
+2. Review the PR it opens (`next/<version>`). If a minor bump, verify that `docs/live/docs/v/<previous>` exists and navigation paths use `docs/v/...` routes.
+3. Land any final code or doc fixes on the release branch; Codex will restage `docs/live/**` and READMEs for you.
+4. Once satisfied, merge the release PR. **publish-on-next-close** will push npm tags and GitHub releases.
+5. After merge, go back to `main` and continue editing `docs/draft/**` for the next cycle.
+
+<Tip>Leave the frontmatter at the top of `docs/live/updates.mdx` untouched—Codex relies on it when reordering `<Update>` blocks.</Tip>
