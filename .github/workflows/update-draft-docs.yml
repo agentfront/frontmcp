@@ -205,14 +205,44 @@ jobs:
 
           RULES – DRAFT RELEASE NOTES (`docs/draft/updates.mdx`)
 
-          - Update the first <Update> block (labeled "draft") with the latest changes
-          - Summarize notable user-facing changes derived from commits and diff
-          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups)
-          - Keep MDX valid (frontmatter/imports/components)
-          - The release notes should be cumulative (all changes since last release)
+          **CRITICAL: Preserve frontmatter metadata**
+          - The file starts with YAML frontmatter:
+            ```yaml
+            ---
+            title: 'Updates'
+            slug: 'updates'
+            icon: 'sparkles'
+            mode: 'center'
+            ---
+            ```
+          - This frontmatter is **critical** for Mintlify to detect the page
+          - **MUST** be preserved exactly as-is at the top of the file
+
+          **Draft updates structure:**
+
+          The draft updates.mdx contains updates for the NEXT release. Update with cumulative changes:
+
+          1. **FrontMCP (synchronized packages)** - One draft update:
+             - Label: `"draft"`
+             - Title: `"FrontMCP draft"`
+             - Tags: `{["Releases"]}`
+             - Content: Cumulative grouped changes since last release
+
+          2. **Independent libraries** - If working on independent libs:
+             - Label: `"<library-name> draft"`
+             - Title: `"<library-name> draft"`
+             - Tags: `{["Independent"]}`
+             - Content: Changes specific to that library
 
           Format example:
           ```mdx
+          ---
+          title: 'Updates'
+          slug: 'updates'
+          icon: 'sparkles'
+          mode: 'center'
+          ---
+
           <Update label="draft" description="2025-11-22" tags={["Releases"]}>
             <Card
               title="FrontMCP draft"
@@ -231,6 +261,11 @@ jobs:
             </Card>
           </Update>
           ```
+
+          - Keep the release notes cumulative (all changes since last release)
+          - Update the description date to current date
+          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups)
+          - Keep MDX valid (frontmatter/imports/components)
 
           RULES – DRAFT DOCS (`docs/draft/docs/**`)
 

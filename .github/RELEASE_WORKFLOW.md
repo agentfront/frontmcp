@@ -188,7 +188,10 @@ Updates live documentation when changes are pushed to release branches.
 **Modifies:**
 
 - `docs/live/docs/**` - Production markdown files
-- `docs/live/updates.mdx` - Production release notes
+- `docs/live/updates.mdx` - Production release notes with:
+  - One `<Update>` component for FrontMCP (synchronized packages)
+  - Separate `<Update>` components for each independent library published
+  - Preserves critical frontmatter metadata for Mintlify
 - `docs/live/docs.json` - Production navigation
 - `CHANGELOG.md` - Root changelog
 - `README.md` - Root README

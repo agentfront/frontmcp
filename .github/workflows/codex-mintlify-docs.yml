@@ -175,6 +175,50 @@ jobs:
           # ISO date
           date -u +"%Y-%m-%d" > .github/codex/prompts/date.txt
 
+          # Detect independent libraries published in this release
+          # Look for changed package.json versions in libs with versioning:independent tag
+          echo "Detecting independent libraries published in this release..."
+          node - <<'DETECT_LIBS'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+
+          try {
+            // Get all independent libraries
+            const independentLibs = execSync(
+              'npx nx show projects -p tag:versioning:independent --type lib --json',
+              { encoding: 'utf8' }
+            );
+            const libs = JSON.parse(independentLibs);
+
+            const published = [];
+            for (const lib of libs) {
+              const pkgPath = `libs/${lib}/package.json`;
+              if (fs.existsSync(pkgPath)) {
+                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                const name = pkg.name || lib;
+                const version = pkg.version || '0.0.0';
+                published.push({ name, version, lib });
+              }
+            }
+
+            fs.writeFileSync(
+              '.github/codex/prompts/independent-libs.json',
+              JSON.stringify({ published }, null, 2),
+              'utf8'
+            );
+
+            console.log(`Found ${published.length} independent libraries:`, published);
+          } catch (e) {
+            // If no independent libs found, write empty array
+            fs.writeFileSync(
+              '.github/codex/prompts/independent-libs.json',
+              JSON.stringify({ published: [] }, null, 2),
+              'utf8'
+            );
+            console.log('No independent libraries found');
+          }
+          DETECT_LIBS
+
       - name: Add Codex prompt & schema
         run: |
           cat > .github/codex/prompts/update-docs.md <<'MDX'
@@ -186,6 +230,7 @@ jobs:
           - Release version:           `.github/codex/prompts/version.txt`        # e.g., 0.3.1
           - Release minor:             `.github/codex/prompts/version-minor.txt`  # e.g., 0.3
           - Release date (UTC, ISO):   `.github/codex/prompts/date.txt`           # e.g., 2025-11-13
+          - Independent libs:          `.github/codex/prompts/independent-libs.json`  # JSON: {"published": [{"name": "@pkg/name", "version": "1.2.0", "lib": "lib-name"}]}
           - MCP Context Guidelines:    `.github/codex/mcp-context/mintlify-guidelines.md`  # Best practices from Mintlify MCP
 
           DOCS LAYOUT & VERSIONING
@@ -242,10 +287,86 @@ jobs:
 
           RULES – RELEASE NOTES (`docs/live/updates.mdx`)
 
-          - Add a new section at the **top** for `v<version>` with date `<YYYY-MM-DD>`.
-          - Summarize notable user-facing changes derived from commits and diff.
-          - Group items under: Breaking changes, Features, Fixes, Docs, Performance, Refactor, Build/CI (omit empty groups).
-          - Keep MDX valid (frontmatter/imports/components).
+          **CRITICAL: Preserve frontmatter metadata**
+          - The file starts with YAML frontmatter (lines 1-6):
+            ```yaml
+            ---
+            title: 'Updates'
+            slug: 'updates'
+            icon: 'sparkles'
+            mode: 'center'
+            ---
+            ```
+          - This frontmatter is **critical** for Mintlify to detect the page
+          - **MUST** be preserved exactly as-is at the top of the file
+
+          **Structure for updates:**
+
+          Read `.github/codex/prompts/independent-libs.json` to see which independent libraries are being published.
+
+          Create **separate** `<Update>` components for:
+
+          1. **FrontMCP (synchronized packages)** - One component for all synchronized libs:
+             - Label: `"v<version>"` (e.g., `"v0.4.0"`)
+             - Title: `"FrontMCP v<version>: <short-description>"`
+             - Tags: `{["Releases"]}`
+             - Content: Grouped changes (Breaking changes, Features, Fixes, Docs, Performance, Build/CI)
+             - This is for the main FrontMCP framework and all synchronized libraries
+
+          2. **Each independent library published** - Separate component per library:
+             - Check `independent-libs.json` for the list of published independent libraries
+             - For each library in the `published` array, create a separate `<Update>`:
+               - Label: `"<library-name> v<version>"` (use `name` and `version` from JSON)
+               - Title: `"<library-name> v<version>"` (use `name` and `version` from JSON)
+               - Tags: `{["Independent"]}`
+               - Content: Changes specific to that library (search commits/diff for `libs/<lib>/`)
+             - If `published` array is empty, skip independent library updates
+
+          **Format example:**
+          ```mdx
+          ---
+          title: 'Updates'
+          slug: 'updates'
+          icon: 'sparkles'
+          mode: 'center'
+          ---
+
+          <Update label="v0.5.0" description="2025-11-22" tags={["Releases"]}>
+            <Card
+              title="FrontMCP v0.5.0: Brief description"
+              href="/docs"
+              cta="Read the release notes"
+            >
+              ### Features
+              - New feature 1
+              - New feature 2
+
+              ### Fixes
+              - Bug fix 1
+            </Card>
+          </Update>
+
+          <Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={["Independent"]}>
+            <Card
+              title="json-schema-to-zod-v3 v1.2.0"
+              href="/docs"
+              cta="Read the release notes"
+            >
+              ### Changes
+              - Independent lib change 1
+              - Independent lib change 2
+            </Card>
+          </Update>
+
+          <Update label="FrontMCP 0.4.0" description="2025-11-21" tags={["Releases"]}>
+            ... (previous release)
+          </Update>
+          ```
+
+          - Add new updates at the **top** (after frontmatter, before existing updates)
+          - Use consistent date format: `YYYY-MM-DD`
+          - Keep all existing updates below the new ones
+          - Maintain valid MDX syntax
 
           RULES – LATEST DOCS (`docs/live/docs/**`)
 
