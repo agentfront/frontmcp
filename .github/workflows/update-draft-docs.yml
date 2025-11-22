@@ -225,20 +225,27 @@ jobs:
           1. **FrontMCP (synchronized packages)** - One draft update:
              - Label: `"draft"`
              - Title: `"FrontMCP draft"`
+             - href: `"/docs"`
+             - cta: `"Read the release notes"`
              - Tags: `{["Releases"]}`
              - Content: **User-friendly highlights** (NOT technical changelog)
-               - Use emojis/icons to make it engaging (🚀 🛡️ 🔐 📚 ⚡ 🎨 🔧 etc.)
-               - Write compelling, benefit-focused descriptions
-               - Focus on "what users can do" not "what changed"
+               - Use emojis at start of each line (🚀 🛡️ 🔐 📚 ⚡ 🎨 🔧 🧩 etc.)
+               - Format: `emoji **Bold feature name** – Description of what users can do.`
+               - Each feature on its own line
+               - Focus on benefits and practical capabilities
                - Keep cumulative (all changes since last release)
                - NO changelog link (this is draft)
 
           2. **Independent libraries** - If working on independent libs:
              - Label: `"<library-name> draft"`
              - Title: `"<library-name> draft"`
+             - href: `"/docs"`
+             - cta: `"Read the release notes"`
              - Tags: `{["Independent"]}`
              - Content: **User-friendly highlights**
-               - Use emojis/icons
+               - Use emojis at start of each line
+               - Format: `emoji **Bold feature name** – Description.`
+               - Each feature on its own line
                - Benefit-focused descriptions
                - NO changelog link (this is draft)
 
@@ -257,11 +264,11 @@ jobs:
               href="/docs"
               cta="Read the release notes"
             >
-              🚀 **Real-time Streaming** - Build live experiences with the new streaming API and backpressure support.
+              🚀 **Real-time Streaming** – Build live experiences with the new streaming API and backpressure support.
 
-              🛡️ **Better Error Messages** - Debug faster with detailed stack traces and user-friendly error descriptions.
+              🛡️ **Better Error Messages** – Debug faster with detailed stack traces and user-friendly error descriptions.
 
-              📚 **New Guides** - Learn streaming patterns and authentication flows with practical examples.
+              📚 **New Guides** – Learn streaming patterns and authentication flows with practical examples.
             </Card>
           </Update>
           ```
