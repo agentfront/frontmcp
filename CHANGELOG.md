@@ -1,26 +1,20 @@
-## [v0.4.0] - 2025-11-21
+## [v0.4.0] - 2025-11-22
 
 ### feat
 
-- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits request
-  mappers, conflict-free schemas, and per-scheme authentication validation.
-- Allow `@Tool` output schemas to use literal primitives, tuple-style arrays, and resource descriptors so responses stay
-  structured without wrapping objects.
-- Extract `json-schema-to-zod-v3` from the repo with built-in regex safeguards so JSON Schema  Zod conversions can be
-  reused across FrontMCP projects.
+- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits request mappers, conflict-free schemas, and per-scheme authentication analysis.
+- Allow `@Tool` metadata to declare literal primitives, tuple-style arrays, and MCP resources (plus `rawInputSchema`) so clients get typed responses without wrapping outputs in placeholder objects.
+- Add a typed MCP error hierarchy and error handler so transports emit traceable IDs, consistent public/internal messages, and FlowControl-aware stop semantics.
+- Extract `json-schema-to-zod-v3` with built-in regex guards so adapters and apps can reuse the hardened JSON Schema → Zod converter.
 
 ### docs
 
-- Document the CodeCall plugin’s search/describe/execute workflow, sandbox presets, and direct invoke mode so large toolboxes stay approachable.
-- Update the tools reference to cover raw input shapes, literal output schemas, and tuple-style responses introduced in
-  this release.
+- Document OpenAPI adapter security scoring, auth-provider mapping, generator options, and the CodeCall plugin’s search/describe/execute workflow.
+- Publish maintainer runbooks for the release workflow and doc versioning so contributors know when to edit draft vs live docs.
 
 ### build
 
-- Let release automation archive the previous minor docs, copy `docs/draft/docs/**` into `docs/docs/**`, and coordinate
-  independent version bumps/publishes for packages such as `json-schema-to-zod-v3`.
-- Add husky + lint-staged pre-commit hooks and push-time guards that block accidental docs backups to keep release
-  commits clean.
+- Split draft/live Mintlify trees, auto-archive previous minors, and enforce husky + lint-staged guards so release branches stay focused on intentional changes.
 
 ## [v0.3.1] - 2025-11-16
 

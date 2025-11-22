@@ -49,3 +49,8 @@ Plugins compose **depth-first** at the app level. Later plugins can depend on pr
   Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
   behavior without boilerplate.
 </Tip>
+
+## Built-in plugins
+
+- [Cache Plugin](/docs/plugins/cache-plugin) — Transparent per-tool caching with memory or Redis stores, TTL controls, and cache-warming helpers.
+- [CodeCall Plugin](/docs/plugins/codecall-plugin) — Hide large toolsets behind `codecall.search/describe/execute` meta-tools and sandboxed plans so models can orchestrate multiple tools without blowing up `list_tools`.
