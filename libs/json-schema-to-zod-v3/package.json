@@ -27,7 +27,6 @@
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
   "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/json-schema-to-zod-v3/README.md",
-
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "exports": {
@@ -39,7 +38,6 @@
       "default": "./dist/src/index.js"
     }
   },
-
   "peerDependencies": {
     "zod": "^3.0.0"
   },

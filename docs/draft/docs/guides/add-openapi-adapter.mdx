@@ -10,20 +10,22 @@ The OpenAPI Adapter automatically converts REST API endpoints defined in an Open
 ## What You'll Build
 
 By the end of this guide, you'll have:
+
 - ✅ An app that automatically generates tools from an OpenAPI spec
 - ✅ Type-safe input validation for all API endpoints
 - ✅ Authentication configured for API requests
 - ✅ Tools that inherit all your app-level plugins and providers
 
 <Tip>
-  The OpenAPI Adapter is perfect for quickly exposing REST APIs to AI agents without writing custom tool code for each endpoint.
+  The OpenAPI Adapter is perfect for quickly exposing REST APIs to AI agents without writing custom tool code for each
+  endpoint.
 </Tip>
 
 ---
 
 ## Prerequisites
 
-- A FrontMCP project initialized ([see Installation](/getting-started/installation))
+- A FrontMCP project initialized ([see Installation](/docs/getting-started/installation))
 - An OpenAPI 3.x specification (URL or local file)
 - Basic understanding of REST APIs
 
@@ -145,15 +147,13 @@ export default class Server {}
     ```
 
     The server will load the OpenAPI spec and generate tools for each operation.
+
   </Step>
 
-  <Step title="Verify tools are loaded">
-    Check the console output for messages like:
-    ```
-    [INFO] Generated 15 tools from expense-api
-    [INFO] Server listening on http://localhost:3000
-    ```
-  </Step>
+<Step title="Verify tools are loaded">
+  Check the console output for messages like: ``` [INFO] Generated 15 tools from expense-api [INFO] Server listening on
+  http://localhost:3000 ```
+</Step>
 
   <Step title="Test with Inspector">
     ```bash
@@ -161,6 +161,7 @@ export default class Server {}
     ```
 
     Open the MCP Inspector and you'll see all generated tools from your API spec!
+
   </Step>
 </Steps>
 
@@ -175,13 +176,12 @@ Each OpenAPI operation becomes a tool with:
 Tools are named using the pattern: `{adapter-name}:{method}_{path}`
 
 For example:
+
 - `GET /users` → `expense-api:get_users`
 - `POST /expenses` → `expense-api:post_expenses`
 - `GET /expenses/{id}` → `expense-api:get_expenses_id`
 
-<Tip>
-  If your OpenAPI spec includes `operationId`, that will be used instead of the generated name.
-</Tip>
+<Tip>If your OpenAPI spec includes `operationId`, that will be used instead of the generated name.</Tip>
 
 ### Input Schema
 
@@ -233,11 +233,9 @@ OpenapiAdapter.init({
   url: 'https://api.example.com/openapi.json',
   generateOptions: {
     // Only include operations starting with /invoices or /customers
-    filterFn: (op) =>
-      op.path.startsWith('/invoices') ||
-      op.path.startsWith('/customers'),
+    filterFn: (op) => op.path.startsWith('/invoices') || op.path.startsWith('/customers'),
   },
-})
+});
 ```
 
 ### User-Based Authentication
@@ -256,7 +254,7 @@ OpenapiAdapter.init({
     }
     return headers;
   },
-})
+});
 ```
 
 ### Multi-Tenant Setup
@@ -282,7 +280,7 @@ OpenapiAdapter.init({
       tenantId: authInfo.user?.tenantId,
     };
   },
-})
+});
 ```
 
 ---
@@ -295,17 +293,14 @@ OpenapiAdapter.init({
   </Step>
 
   <Step title="Generate Tools">
-    Each operation in the spec becomes an MCP tool with:
-    - Automatic input schema (path params, query params, headers, body)
-    - Type-safe validation using Zod
-    - Description from the operation summary
+    Each operation in the spec becomes an MCP tool with: - Automatic input schema (path params, query params, headers,
+    body) - Type-safe validation using Zod - Description from the operation summary
   </Step>
 
+
   <Step title="Register Tools">
-    Generated tools are registered with your app and inherit:
-    - App-level plugins (caching, logging, etc.)
-    - App-level providers
-    - App-level authentication
+    Generated tools are registered with your app and inherit: - App-level plugins (caching, logging, etc.) - App-level
+    providers - App-level authentication
   </Step>
 
   <Step title="Execute Requests">
@@ -343,6 +338,7 @@ OpenapiAdapter.init({
       ],
     })
     ```
+
   </Accordion>
 
   <Accordion title="Combine with custom tools">
@@ -360,6 +356,7 @@ OpenapiAdapter.init({
       ],
     })
     ```
+
   </Accordion>
 
   <Accordion title="Apply plugins to generated tools">
@@ -384,6 +381,7 @@ OpenapiAdapter.init({
     ```
 
     Now all generated tools can use caching!
+
   </Accordion>
 </AccordionGroup>
 
@@ -402,6 +400,7 @@ OpenapiAdapter.init({
     - Verify the URL is accessible
     - Convert OpenAPI 2.0 to 3.x using [Swagger Editor](https://editor.swagger.io/)
     - Check your filter configuration
+
   </Accordion>
 
   <Accordion title="Authentication errors (401)">
@@ -413,6 +412,7 @@ OpenapiAdapter.init({
     - Verify `additionalHeaders` or `headersMapper` configuration
     - Check that `authInfo.token` contains the expected value
     - Test the API directly with curl/Postman first
+
   </Accordion>
 
   <Accordion title="Tools have unexpected inputs">
@@ -431,6 +431,7 @@ OpenapiAdapter.init({
       },
     }
     ```
+
   </Accordion>
 </AccordionGroup>
 
@@ -443,13 +444,13 @@ OpenapiAdapter.init({
     Explore all configuration options and advanced features
   </Card>
 
-  <Card title="Authentication Setup" icon="lock" href="/docs/servers/authentication/overview">
-    Learn how to configure authentication for your APIs
-  </Card>
+<Card title="Authentication Setup" icon="lock" href="/docs/servers/authentication/overview">
+  Learn how to configure authentication for your APIs
+</Card>
 
-  <Card title="Plugin System" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
-    Add caching, logging, and other features to generated tools
-  </Card>
+<Card title="Plugin System" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+  Add caching, logging, and other features to generated tools
+</Card>
 
   <Card title="Demo App" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo/src/apps/expenses">
     See a complete example using the OpenAPI adapter

@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/adapters",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Adapters for the FrontMCP framework",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -32,7 +32,7 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "^0.3.1",
+    "@frontmcp/sdk": "^0.4.0",
     "@types/json-schema": "^7.0.15",
     "zod": "^3.25.76",
     "openapi-types": "^12.1.3",

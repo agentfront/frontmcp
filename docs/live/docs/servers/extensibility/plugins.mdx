@@ -1,0 +1,56 @@
+---
+title: Plugin Extensions
+sidebarTitle: Plugins
+slug: servers/extensibility/plugins
+icon: puzzle-piece
+---
+
+**Plugins** add cross-cutting behavior and can also contribute components. Typical uses: auth/session helpers, PII filtering, tracing, logging, caching, error policy, rate-limits.
+
+## Define a plugin
+
+```ts
+import { Plugin } from '@frontmcp/sdk';
+
+@Plugin({
+  name: 'Cache Plugin',
+  description: 'Adds transparent response caching for tools/resources',
+  providers: [CacheProvider], // plugin-scoped providers
+  exports: [CacheProvider], // re-export to host app
+  adapters: [SpecNormalizerAdapter], // optionally attach adapters
+  tools: [WarmCacheTool], // and tools/resources/prompts if desired
+  resources: [],
+  prompts: [],
+})
+export default class CachePlugin {}
+```
+
+Attach a plugin at app scope:
+
+```ts
+@App({
+  name: 'Billing',
+  plugins: [CachePlugin, ObservabilityPlugin],
+})
+export default class BillingApp {}
+```
+
+### What plugins can do
+
+- Register **providers** (and **export** them to the host app)
+- Contribute **adapters**, **tools**, **resources**, **prompts**
+- Participate in lifecycle via **hooks** (see _Advanced → Hooks_)
+
+### Composition
+
+Plugins compose **depth-first** at the app level. Later plugins can depend on providers exported by earlier ones.
+
+<Tip>
+  Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
+  behavior without boilerplate.
+</Tip>
+
+## Built-in plugins
+
+- [Cache Plugin](/docs/plugins/cache-plugin) — Transparent per-tool caching with memory or Redis stores, TTL controls, and cache-warming helpers.
+- [CodeCall Plugin](/docs/plugins/codecall-plugin) — Hide large toolsets behind `codecall.search/describe/execute` meta-tools and sandboxed plans so models can orchestrate multiple tools without blowing up `list_tools`.

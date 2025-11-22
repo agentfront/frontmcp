@@ -1,0 +1,68 @@
+---
+title: Welcome to FrontMCP
+sidebarTitle: Welcome to FrontMCP
+slug: getting-started/welcome
+icon: hand-wave
+description: The TypeScript way to build MCP servers with decorators, DI, and Streamable HTTP.
+---
+
+**FrontMCP is the TypeScript-first framework for MCP.** You write clean, typed code; FrontMCP handles the protocol, transport, and execution flow.
+
+```ts
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'add',
+  description: 'Add two numbers',
+  inputSchema: { a: z.number(), b: z.number() },
+  outputSchema: { result: z.number() },
+})
+export default class AddTool extends ToolContext {
+  async execute(input: { a: number; b: number }) {
+    return {
+      result: input.a + input.b,
+    };
+  }
+}
+
+@App({
+  id: 'calc',
+  name: 'Calculator',
+  tools: [AddTool],
+})
+class CalcApp {}
+
+@FrontMcp({
+  info: { name: 'Demo 🚀', version: '0.1.0' },
+  apps: [CalcApp],
+  auth: {
+    type: 'remote',
+    name: 'my-oauth',
+    baseUrl: 'https://oauth.example.com',
+  },
+})
+export default class Server {}
+```
+
+### Why FrontMCP?
+
+- 🧑‍💻 **TypeScript-native DX** — decorators, Zod, and strong typing end-to-end
+- 🧠 **Scoped invoker + DI** — secure, composable execution with hooks
+- 🧩 **Adapters & Plugins** — extend your server without boilerplate
+- 🔌 **Spec-aligned transport** — Streamable HTTP for modern MCP clients
+
+### Core concepts
+
+- **Server** — entry point via `@FrontMcp({...})`
+- **App** — a logical bundle of tools via `@App({...})`
+- **Tool** — typed units of work via `@Tool({...})`
+- **Hooks** — cross-cutting behaviors (auth, logging, rate limits)
+- **Adapters/Plugins** — load tools dynamically; enrich behavior
+
+<Info>
+  FrontMCP follows MCP protocol principles and **secured transport requirements**. You get sessions, streaming, and
+  validation out of the box—no custom wiring needed.
+</Info>
+
+**Build something real**: jump to the [Quickstart](./quickstart) or set up your workspace in [Installation](./installation).

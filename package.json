@@ -1,11 +1,12 @@
 {
   "name": "@frontmcp/source",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
-    "docs:local": "bash scripts/dev-docs.sh",
+    "docs:live": "cd docs/live && mint dev",
+    "docs:draft": "cd docs/draft && mint dev",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -17,7 +18,6 @@
     "axios": "^1.6.0",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",
-    "json-schema-to-zod-v3": "1.0.0",
     "openapi-mcp-generator": "^3.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",

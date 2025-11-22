@@ -2,7 +2,7 @@ name: Publish libs on next/* merge
 
 on:
   pull_request:
-    types: [ closed ]
+    types: [closed]
 
 permissions:
   contents: write
@@ -74,9 +74,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version-file: '.nvmrc'
-          cache: 'yarn'
-          registry-url: 'https://registry.npmjs.org/'
+          node-version-file: ".nvmrc"
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
 
       # Ensure npm CLI has OIDC / trusted publishing support (>= 11.5.1)
       - name: Update npm CLI for trusted publishing
@@ -301,55 +301,12 @@ jobs:
           fi
 
       # -------------------------------
-      # 7) Bump versions before publishing
+      # 7) Build packages (versions already set in release branch)
       # -------------------------------
-      - name: Bump synchronized library versions
-        if: ${{ steps.synchronized.outputs.synchronized_projects != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
-
-          echo "Bumping synchronized libraries to version $VERSION..."
-          node scripts/bump-synchronized-versions.mjs "$VERSION"
-
-      - name: Bump affected independent library versions (patch)
-        if: ${{ steps.independent.outputs.independent_projects != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          INDEPENDENT="${{ steps.independent.outputs.independent_projects }}"
-          if [ -z "$INDEPENDENT" ]; then
-            echo "No independent libraries to bump"
-            exit 0
-          fi
-
-          # Split by comma and bump each library
-          IFS=',' read -ra LIBS <<< "$INDEPENDENT"
-          for lib in "${LIBS[@]}"; do
-            echo "Bumping $lib (patch)..."
-            node scripts/bump-version.mjs "$lib" patch
-          done
-
-      - name: Commit version bumps
-        if: ${{ steps.to_publish.outputs.projects != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Check if there are version changes
-          if [ -n "$(git status --porcelain)" ]; then
-            git add -A
-            git commit -m "chore: bump versions for release ${{ steps.version.outputs.version }}"
-            echo "✅ Version bumps committed"
-          else
-            echo "ℹ️  No version changes to commit"
-          fi
-
-      - name: Rebuild after version bumps
+      - name: Build all packages to publish
         if: ${{ steps.to_publish.outputs.projects != '' }}
         run: |
+          echo "Building packages (versions already set in release branch)..."
           npx nx run-many --targets=build --projects="${{ steps.to_publish.outputs.projects }}" --parallel
 
       # -------------------------------
@@ -370,9 +327,9 @@ jobs:
           done
 
       # -------------------------------
-      # 9) Push release commits (version bumps & draft removals)
+      # 9) Push release commits (draft removals only)
       # -------------------------------
-      - name: Push version bumps and draft removals
+      - name: Push draft blog card removals
         if: ${{ steps.to_publish.outputs.projects != '' }}
         shell: bash
         run: |

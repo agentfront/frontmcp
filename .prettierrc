@@ -14,16 +14,35 @@
   "proseWrap": "preserve",
   "overrides": [
     {
-      "files": "*.md",
+      "files": ["*.md"],
       "options": {
-        "proseWrap": "always"
+        "proseWrap": "preserve"
       }
     },
     {
-      "files": [
-        "*.yml",
-        "*.yaml"
-      ],
+      "files": ["*.mdx"],
+      "options": {
+        "proseWrap": "preserve",
+        "printWidth": 120,
+        "embeddedLanguageFormatting": "off",
+        "jsxSingleQuote": false,
+        "bracketSameLine": false
+      }
+    },
+    {
+      "files": ["docs/**/*.mdx", "docs/**/*.md"],
+      "options": {
+        "proseWrap": "preserve",
+        "printWidth": 120,
+        "embeddedLanguageFormatting": "off",
+        "htmlWhitespaceSensitivity": "ignore",
+        "jsxSingleQuote": false,
+        "bracketSameLine": false,
+        "tabWidth": 2
+      }
+    },
+    {
+      "files": ["*.yml", "*.yaml"],
       "options": {
         "singleQuote": false
       }

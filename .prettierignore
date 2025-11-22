@@ -12,3 +12,8 @@ lib
 .tmp
 .next
 out
+
+# Mintlify navigation files only (preserve exact structure)
+docs/live/docs.json
+docs/docs.draft.json
+docs/docs.backup.json

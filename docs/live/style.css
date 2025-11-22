@@ -1,0 +1,11 @@
+#content-area.max-w-xl {
+  max-width: 46rem;
+}
+
+#content-area.max-w-3xl {
+  max-width: 52rem;
+}
+
+[data-component-part='update-content'] [data-component-part='card-title'] {
+  margin-bottom: 1rem;
+}
