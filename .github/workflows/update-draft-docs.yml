@@ -226,13 +226,21 @@ jobs:
              - Label: `"draft"`
              - Title: `"FrontMCP draft"`
              - Tags: `{["Releases"]}`
-             - Content: Cumulative grouped changes since last release
+             - Content: **User-friendly highlights** (NOT technical changelog)
+               - Use emojis/icons to make it engaging (🚀 🛡️ 🔐 📚 ⚡ 🎨 🔧 etc.)
+               - Write compelling, benefit-focused descriptions
+               - Focus on "what users can do" not "what changed"
+               - Keep cumulative (all changes since last release)
+               - NO changelog link (this is draft)
 
           2. **Independent libraries** - If working on independent libs:
              - Label: `"<library-name> draft"`
              - Title: `"<library-name> draft"`
              - Tags: `{["Independent"]}`
-             - Content: Changes specific to that library
+             - Content: **User-friendly highlights**
+               - Use emojis/icons
+               - Benefit-focused descriptions
+               - NO changelog link (this is draft)
 
           Format example:
           ```mdx
@@ -249,15 +257,11 @@ jobs:
               href="/docs"
               cta="Read the release notes"
             >
-              ### Features
-              - New feature 1
-              - New feature 2
+              🚀 **Real-time Streaming** - Build live experiences with the new streaming API and backpressure support.
 
-              ### Fixes
-              - Bug fix 1
+              🛡️ **Better Error Messages** - Debug faster with detailed stack traces and user-friendly error descriptions.
 
-              ### Docs
-              - Documentation update 1
+              📚 **New Guides** - Learn streaming patterns and authentication flows with practical examples.
             </Card>
           </Update>
           ```

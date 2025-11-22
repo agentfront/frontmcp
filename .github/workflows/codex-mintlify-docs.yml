@@ -310,7 +310,12 @@ jobs:
              - Label: `"v<version>"` (e.g., `"v0.4.0"`)
              - Title: `"FrontMCP v<version>: <short-description>"`
              - Tags: `{["Releases"]}`
-             - Content: Grouped changes (Breaking changes, Features, Fixes, Docs, Performance, Build/CI)
+             - Content: **User-friendly highlights** (NOT technical changelog)
+               - Use emojis/icons to make it engaging (🚀 🛡️ 🔐 📚 ⚡ 🎨 🔧 etc.)
+               - Write compelling, benefit-focused descriptions
+               - Focus on "what users can do" not "what changed"
+               - Group by impact, not by technical category
+               - End with: `[View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/v<version>)`
              - This is for the main FrontMCP framework and all synchronized libraries
 
           2. **Each independent library published** - Separate component per library:
@@ -319,7 +324,11 @@ jobs:
                - Label: `"<library-name> v<version>"` (use `name` and `version` from JSON)
                - Title: `"<library-name> v<version>"` (use `name` and `version` from JSON)
                - Tags: `{["Independent"]}`
-               - Content: Changes specific to that library (search commits/diff for `libs/<lib>/`)
+               - Content: **User-friendly highlights** (NOT technical changelog)
+                 - Use emojis/icons for visual appeal
+                 - Write benefit-focused descriptions
+                 - Focus on practical use cases
+                 - End with: `[View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/<library-name>@v<version>)`
              - If `published` array is empty, skip independent library updates
 
           **Format example:**
@@ -333,16 +342,19 @@ jobs:
 
           <Update label="v0.5.0" description="2025-11-22" tags={["Releases"]}>
             <Card
-              title="FrontMCP v0.5.0: Brief description"
+              title="FrontMCP v0.5.0: Enhanced streaming and error handling"
               href="/docs"
               cta="Read the release notes"
             >
-              ### Features
-              - New feature 1
-              - New feature 2
+              🚀 **Streaming API** - Build real-time experiences with backpressure support and automatic reconnection.
 
-              ### Fixes
-              - Bug fix 1
+              🛡️ **Enhanced Errors** - Get detailed stack traces and user-friendly error messages that help you debug faster.
+
+              🔐 **Authentication Flow** - Simplified auth setup with better provider integration and clearer error messages.
+
+              📚 **Documentation** - New streaming guide and updated authentication examples to get you started quickly.
+
+              [View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/v0.5.0)
             </Card>
           </Update>
 
@@ -352,13 +364,15 @@ jobs:
               href="/docs"
               cta="Read the release notes"
             >
-              ### Changes
-              - Independent lib change 1
-              - Independent lib change 2
+              ✨ **JSON Schema Draft 2020-12** - Full support for the latest JSON Schema specification with all new features.
+
+              🔍 **Enhanced Validation** - More accurate regex pattern validation catches edge cases before runtime.
+
+              [View full changelog →](https://github.com/agentfront/frontmcp/releases/tag/json-schema-to-zod-v3@v1.2.0)
             </Card>
           </Update>
 
-          <Update label="FrontMCP 0.4.0" description="2025-11-21" tags={["Releases"]}>
+          <Update label="v0.4.0" description="2025-11-21" tags={["Releases"]}>
             ... (previous release)
           </Update>
           ```
