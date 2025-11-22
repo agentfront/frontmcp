@@ -1,31 +1,24 @@
----
-title: 'Updates'
-slug: 'updates'
-icon: 'sparkles'
-mode: 'center'
----
-
-<Update label="v0.4.0" description="2025-11-21" tags={["Releases"]}>
+<Update label="v0.4.0" description="2025-11-22" tags={["Releases"]}>
   <Card
-    title="FrontMCP v0.4.0: Generator-first adapters and safer schemas."
+    title="FrontMCP v0.4.0: generator-first adapters and typed error surfaces."
     href="/docs"
     cta="Read the release notes"
   >
     ### Features
 
-    - Power the OpenAPI adapter with the standalone `mcp-from-openapi` generator so every generated tool inherits request mappers, conflict resolution, and per-scheme authentication metadata.
-    - Extract and publish `json-schema-to-zod-v3`, a hardened converter with regex guards, reusable TypeScript helpers, and zero-dependency builds that any MCP project can embed.
-    - Let `@Tool` output schemas declare literal primitives, tuple arrays, and resource/resource_link content so responses stay structured without wrapping everything in objects.
+    - Run the OpenAPI adapter on the standalone `mcp-from-openapi` generator so every operation comes with request mappers, conflict-free parameter names, JSON Schema + Zod validation, and per-scheme auth scoring.
+    - Let `@Tool` definitions emit literal primitives, tuple arrays, `resource`/`resource_link` payloads, and `rawInputSchema` exports so clients get typed responses without wrapping them in placeholder objects.
+    - Introduce a typed MCP error hierarchy plus a reusable error handler that stamps traceable IDs, consistent public/internal messaging, and FlowControl-aware stop semantics across transports.
+    - Extract `json-schema-to-zod-v3` with regex safeguards so adapters and apps can reuse the hardened converter outside FrontMCP.
 
     ### Docs
 
-    - Document the CodeCall plugin’s search/describe/execute workflow, sandbox presets, and direct invoke mode so large toolboxes stay approachable.
-    - Clarify the tools reference with raw input shapes, literal output schemas, and tuple examples to match the new SDK behavior.
+    - Expanded the OpenAPI adapter guide with security risk scoring, auth-provider mapping, and generator options alongside fresh usage examples.
+    - Added a CodeCall plugin reference plus maintainer runbooks for the release workflow and docs versioning so contributors know when to touch draft vs live files.
 
     ### Build/CI
 
-    - Split Mintlify docs into draft/live trees, publish the release workflow runbook, and teach the automation to archive the previous minor before publishing.
-    - Add independent-library version detection plus husky/lint-staged guards so release branches only carry intentional changes.
+    - Release automation now splits draft/live Mintlify trees, archives older minors, and enforces husky + lint-staged hooks to keep release branches clean.
 
   </Card>
 </Update>
