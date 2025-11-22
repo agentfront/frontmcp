@@ -125,7 +125,20 @@ Creates a new release branch with all version bumps and documentation archival.
 
 #### Step 5: Archive and Publish Docs
 
-**Only runs if this is a new minor version** (e.g., 0.3 → 0.4)
+**Behavior depends on version type:**
+
+##### PATCH Version (e.g., 0.4.0 → 0.4.1)
+
+When `LAST_MINOR` = `NEXT_MINOR` (both are `0.4`):
+
+- ❌ **Script is SKIPPED** - No archival, no draft→live movement
+- ✅ Draft docs stay in `/docs/draft/` for future releases
+- ✅ Live docs updated by Codex workflow based on release branch changes
+- ✅ Perfect for bug fixes that only need live docs updates
+
+##### MINOR/MAJOR Version (e.g., 0.4.x → 0.5.0)
+
+When `LAST_MINOR` ≠ `NEXT_MINOR` (e.g., `0.4` → `0.5`):
 
 Uses `scripts/archive-and-publish-docs.mjs` to:
 
