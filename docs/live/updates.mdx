@@ -30,6 +30,36 @@ mode: 'center'
   </Card>
 </Update>
 
+<Update label="json-schema-to-zod-v3 v1.0.0" description="2025-11-22" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.0"
+    href="https://www.npmjs.com/package/json-schema-to-zod-v3"
+    cta="Install from npm"
+  >
+    ### Changes
+
+    - Hardened the JSON Schema → Zod converter with default-on regex throttles, quantifier guards, and timeout-based pattern validation helpers.
+    - Added utilities like `jsonSchemaObjectToZodRawShape`, tuple/prefix handling, and deep equality tooling so adapters can reproduce complex schemas without custom code.
+    - Published configurable security APIs (`setSecurityConfig`, `validatePattern`, `createSafeRegExp`) so hosts can tune protections for trusted vs. untrusted specs.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v1.0.0" description="2025-11-22" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v1.0.0"
+    href="https://www.npmjs.com/package/mcp-from-openapi"
+    cta="Install from npm"
+  >
+    ### Changes
+
+    - Converted the OpenAPI → MCP toolchain into a standalone generator with automatic parameter conflict resolution, combined schemas, and explicit HTTP request mappers.
+    - Added flexible loaders (`fromURL`, `fromFile`, `fromYAML`, `fromJSON`) plus validation/dereferencing pipelines so specs are ready before tool generation kicks off.
+    - Bundled typed errors and metadata extraction (auth requirements, preferred responses, server URLs) so the library drops directly into FrontMCP or any MCP-compliant server.
+
+  </Card>
+</Update>
+
 <Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
     <Card
         title="FrontMCP 0.3.0: Hooks everywhere, cache what matters."
