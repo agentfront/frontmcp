@@ -447,4 +447,342 @@ describe('Storage Adapters', () => {
       }, 60000);
     });
   });
+
+  describe('Storage Adapter Error Handling', () => {
+    describe('MemoryStorageAdapter error scenarios', () => {
+      it('should handle clear() method', async () => {
+        const adapter = new MemoryStorageAdapter();
+        await adapter.initialize();
+
+        const testData = {
+          metadata: {
+            version: '1.0.0',
+            toolsHash: 'test',
+            timestamp: Date.now(),
+            modelName: 'test-model',
+            dimensions: 384,
+            documentCount: 1,
+          },
+          embeddings: [],
+        };
+
+        await adapter.save(testData);
+        await adapter.clear();
+
+        const loaded = await adapter.load();
+        expect(loaded).toBeNull();
+      });
+
+      it('should handle close() method', async () => {
+        const adapter = new MemoryStorageAdapter();
+        await adapter.initialize();
+        await adapter.close();
+
+        // Should still work after close (in-memory has no cleanup)
+        const loaded = await adapter.load();
+        expect(loaded).toBeNull();
+      });
+    });
+
+    describe('FileStorageAdapter error scenarios', () => {
+      const errorTestDir = './tmp/error-test-cache';
+
+      afterEach(async () => {
+        try {
+          await fs.rm(errorTestDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
+
+      it('should handle save errors gracefully', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: '/invalid/path/that/does/not/exist',
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        const testData = {
+          metadata: {
+            version: '1.0.0',
+            toolsHash: 'test',
+            timestamp: Date.now(),
+            modelName: 'test-model',
+            dimensions: 384,
+            documentCount: 1,
+          },
+          embeddings: [],
+        };
+
+        // Should throw error when trying to save to invalid path
+        await expect(adapter.save(testData)).rejects.toThrow();
+      });
+
+      it('should handle load from non-existent file', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: errorTestDir,
+          namespace: 'non-existent',
+        });
+
+        await adapter.initialize();
+        const loaded = await adapter.load();
+
+        expect(loaded).toBeNull();
+      });
+
+      it('should handle corrupted JSON file', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: errorTestDir,
+          namespace: 'corrupted',
+        });
+
+        await adapter.initialize();
+
+        // Create corrupted JSON file
+        const filePath = path.join(errorTestDir, 'corrupted', 'embeddings.json');
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, 'invalid json content{{{');
+
+        const loaded = await adapter.load();
+        expect(loaded).toBeNull();
+      });
+
+      it('should handle clear() when file does not exist', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: errorTestDir,
+          namespace: 'missing',
+        });
+
+        await adapter.initialize();
+
+        // Should not throw when clearing non-existent file
+        await expect(adapter.clear()).resolves.not.toThrow();
+      });
+
+      it('should handle close() method', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: errorTestDir,
+          namespace: 'close-test',
+        });
+
+        await adapter.initialize();
+        await expect(adapter.close()).resolves.not.toThrow();
+      });
+    });
+
+    describe('RedisStorageAdapter error scenarios', () => {
+      it('should handle connection failure during initialization', async () => {
+        const failingClient: RedisClient = {
+          get: async () => null,
+          set: async () => 'OK',
+          setex: async () => 'OK',
+          del: async () => 1,
+          ping: async () => {
+            throw new Error('Connection refused');
+          },
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: failingClient,
+          namespace: 'test',
+        });
+
+        await expect(adapter.initialize()).rejects.toThrow(/Failed to connect to Redis/);
+      });
+
+      it('should handle save errors', async () => {
+        const failingClient: RedisClient = {
+          get: async () => null,
+          set: async () => 'OK',
+          setex: async () => {
+            throw new Error('Save failed');
+          },
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: failingClient,
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        const testData = {
+          metadata: {
+            version: '1.0.0',
+            toolsHash: 'test',
+            timestamp: Date.now(),
+            modelName: 'test-model',
+            dimensions: 384,
+            documentCount: 1,
+          },
+          embeddings: [],
+        };
+
+        await expect(adapter.save(testData)).rejects.toThrow(/Failed to save embeddings to Redis/);
+      });
+
+      it('should handle load errors', async () => {
+        const failingClient: RedisClient = {
+          get: async () => {
+            throw new Error('Get failed');
+          },
+          set: async () => 'OK',
+          setex: async () => 'OK',
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: failingClient,
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        const loaded = await adapter.load();
+        expect(loaded).toBeNull();
+      });
+
+      it('should handle invalid JSON from Redis', async () => {
+        const invalidJsonClient: RedisClient = {
+          get: async () => 'invalid json{{{',
+          set: async () => 'OK',
+          setex: async () => 'OK',
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: invalidJsonClient,
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        const loaded = await adapter.load();
+        expect(loaded).toBeNull();
+      });
+
+      it('should handle clear errors gracefully', async () => {
+        const failingClient: RedisClient = {
+          get: async () => null,
+          set: async () => 'OK',
+          setex: async () => 'OK',
+          del: async () => {
+            throw new Error('Delete failed');
+          },
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: failingClient,
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        // Should not throw even if delete fails
+        await expect(adapter.clear()).resolves.not.toThrow();
+      });
+
+      it('should handle close errors gracefully', async () => {
+        const failingClient: RedisClient = {
+          get: async () => null,
+          set: async () => 'OK',
+          setex: async () => 'OK',
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {
+            throw new Error('Quit failed');
+          },
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: failingClient,
+          namespace: 'test',
+        });
+
+        await adapter.initialize();
+
+        // Should not throw even if quit fails
+        await expect(adapter.close()).resolves.not.toThrow();
+      });
+
+      it('should work with custom TTL', async () => {
+        let savedTTL: number | undefined;
+        const customTTLClient: RedisClient = {
+          get: async () => null,
+          set: async () => 'OK',
+          setex: async (key, ttl, value) => {
+            savedTTL = ttl;
+            return 'OK';
+          },
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: customTTLClient,
+          namespace: 'test',
+          ttl: 3600, // 1 hour
+        });
+
+        await adapter.initialize();
+
+        const testData = {
+          metadata: {
+            version: '1.0.0',
+            toolsHash: 'test',
+            timestamp: Date.now(),
+            modelName: 'test-model',
+            dimensions: 384,
+            documentCount: 1,
+          },
+          embeddings: [],
+        };
+
+        await adapter.save(testData);
+        expect(savedTTL).toBe(3600);
+      });
+
+      it('should work with custom key prefix', async () => {
+        let savedKey: string | undefined;
+        const customPrefixClient: RedisClient = {
+          get: async (key) => {
+            savedKey = key;
+            return null;
+          },
+          set: async () => 'OK',
+          setex: async (key) => {
+            savedKey = key;
+            return 'OK';
+          },
+          del: async () => 1,
+          ping: async () => 'PONG',
+          quit: async () => {},
+        };
+
+        const adapter = new RedisStorageAdapter({
+          client: customPrefixClient,
+          namespace: 'myapp',
+          keyPrefix: 'custom-prefix',
+        });
+
+        await adapter.initialize();
+        await adapter.load();
+
+        expect(savedKey).toContain('custom-prefix');
+        expect(savedKey).toContain('myapp');
+      });
+    });
+  });
 });

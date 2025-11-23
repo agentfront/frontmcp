@@ -126,4 +126,139 @@ describe('EmbeddingService', () => {
       expect(customService.isReady()).toBe(true);
     }, 60000);
   });
+
+  describe('error handling and edge cases', () => {
+    test('should handle empty string embedding', async () => {
+      await embeddingService.initialize();
+
+      const embedding = await embeddingService.generateEmbedding('');
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle whitespace-only string', async () => {
+      await embeddingService.initialize();
+
+      const embedding = await embeddingService.generateEmbedding('   ');
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle very long text', async () => {
+      await embeddingService.initialize();
+
+      const longText = 'word '.repeat(1000); // 5000 characters
+      const embedding = await embeddingService.generateEmbedding(longText);
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    }, 60000);
+
+    test('should handle special characters', async () => {
+      await embeddingService.initialize();
+
+      const specialText = '!@#$%^&*()_+-={}[]|\\:";\'<>?,./`~';
+      const embedding = await embeddingService.generateEmbedding(specialText);
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle unicode characters', async () => {
+      await embeddingService.initialize();
+
+      const unicodeText = '你好世界 🌍 مرحبا العالم';
+      const embedding = await embeddingService.generateEmbedding(unicodeText);
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle emoji text', async () => {
+      await embeddingService.initialize();
+
+      const emojiText = '😀 😃 😄 😁 🎉 🎊 🎈';
+      const embedding = await embeddingService.generateEmbedding(emojiText);
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle empty batch', async () => {
+      await embeddingService.initialize();
+
+      const embeddings = await embeddingService.generateEmbeddings([]);
+
+      expect(embeddings).toEqual([]);
+    });
+
+    test('should handle batch with one item', async () => {
+      await embeddingService.initialize();
+
+      const embeddings = await embeddingService.generateEmbeddings(['single text']);
+
+      expect(embeddings.length).toBe(1);
+      expect(embeddings[0]).toBeInstanceOf(Float32Array);
+      expect(embeddings[0].length).toBe(384);
+    });
+
+    test('should handle batch with mixed empty and non-empty strings', async () => {
+      await embeddingService.initialize();
+
+      const embeddings = await embeddingService.generateEmbeddings(['text', '', 'more text', '   ']);
+
+      expect(embeddings.length).toBe(4);
+      embeddings.forEach((embedding) => {
+        expect(embedding).toBeInstanceOf(Float32Array);
+        expect(embedding.length).toBe(384);
+      });
+    });
+
+    test('should isReady return false before initialization', () => {
+      const service = new EmbeddingService();
+
+      expect(service.isReady()).toBe(false);
+    });
+
+    test('should getDimensions return correct value after initialization', async () => {
+      await embeddingService.initialize();
+
+      expect(embeddingService.getDimensions()).toBe(384);
+    });
+
+    test('should handle numbers as text', async () => {
+      await embeddingService.initialize();
+
+      const embedding = await embeddingService.generateEmbedding('123456789');
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+    });
+
+    test('should handle repeated initialization gracefully', async () => {
+      const service = new EmbeddingService();
+      await service.initialize();
+      await service.initialize(); // Second initialization
+
+      expect(service.isReady()).toBe(true);
+    }, 60000);
+
+    test('should use custom cache directory', async () => {
+      const customCacheDir = './tmp/custom-cache-test';
+      const service = new EmbeddingService('Xenova/all-MiniLM-L6-v2', customCacheDir);
+      await service.initialize();
+
+      expect(service.isReady()).toBe(true);
+
+      // Cleanup
+      const fs = require('fs/promises');
+      try {
+        await fs.rm(customCacheDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }, 60000);
+  });
 });
