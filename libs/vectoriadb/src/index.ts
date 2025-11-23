@@ -12,6 +12,7 @@ export * from './similarity.utils';
 export * from './interfaces';
 
 // Storage adapters
+export { BaseStorageAdapter } from './storage/base.adapter';
 export { MemoryStorageAdapter } from './storage/memory.adapter';
 export { FileStorageAdapter } from './storage/file.adapter';
 export type { FileStorageConfig } from './storage/file.adapter';

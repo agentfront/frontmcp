@@ -1,4 +1,5 @@
 import type { DocumentEmbedding, DocumentMetadata } from '../interfaces';
+import { BaseStorageAdapter } from './base.adapter';
 
 /**
  * Metadata for the stored embeddings
@@ -117,45 +118,35 @@ export interface StorageAdapter<T extends DocumentMetadata = DocumentMetadata> {
 
 /**
  * Utility functions for serialization
+ * Delegates to BaseStorageAdapter for implementation
+ * @deprecated Use BaseStorageAdapter methods directly in adapters
  */
-export class SerializationUtils {
+export class SerializationUtils extends BaseStorageAdapter {
+  private static instance = new SerializationUtils();
+
+  private constructor() {
+    super({});
+  }
+
   /**
    * Serialize a DocumentEmbedding to a SerializedEmbedding
    */
   static serializeEmbedding<T extends DocumentMetadata>(embedding: DocumentEmbedding<T>): SerializedEmbedding<T> {
-    return {
-      id: embedding.id,
-      vector: Array.from(embedding.vector),
-      metadata: embedding.metadata,
-      text: embedding.text,
-      createdAt: embedding.createdAt.toISOString(),
-    };
+    return this.instance.serializeEmbedding(embedding) as SerializedEmbedding<T>;
   }
 
   /**
    * Deserialize a SerializedEmbedding to a DocumentEmbedding
    */
   static deserializeEmbedding<T extends DocumentMetadata>(serialized: SerializedEmbedding<T>): DocumentEmbedding<T> {
-    return {
-      id: serialized.id,
-      vector: new Float32Array(serialized.vector),
-      metadata: serialized.metadata,
-      text: serialized.text,
-      createdAt: new Date(serialized.createdAt),
-    };
+    return this.instance.deserializeEmbedding(serialized) as DocumentEmbedding<T>;
   }
 
   /**
    * Create a hash from a string (simple implementation)
    */
   static hash(input: string): string {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      const char = input.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(36);
+    return this.instance.hash(input);
   }
 
   /**
@@ -163,10 +154,18 @@ export class SerializationUtils {
    * Used to detect when tools/documents change
    */
   static createToolsHash(documents: Array<{ id: string; text: string }>): string {
-    const content = documents
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((d) => `${d.id}:${d.text}`)
-      .join('|');
-    return this.hash(content);
+    return this.instance.createToolsHash(documents);
   }
+
+  // Required abstract methods (not used in singleton pattern)
+  async initialize(): Promise<void> {}
+  async load(): Promise<StoredData | null> {
+    return null;
+  }
+  async save(_data: StoredData): Promise<void> {}
+  async clear(): Promise<void> {}
+  async close(): Promise<void> {}
 }
+
+// Export base class for adapters to extend
+export { BaseStorageAdapter };
