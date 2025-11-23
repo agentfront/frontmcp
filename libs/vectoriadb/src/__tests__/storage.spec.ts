@@ -497,28 +497,15 @@ describe('Storage Adapters', () => {
         }
       });
 
-      it('should handle save errors gracefully', async () => {
+      it('should throw StorageError on initialize with invalid cache directory', async () => {
         const adapter = new FileStorageAdapter({
           cacheDir: '/invalid/path/that/does/not/exist',
           namespace: 'test',
         });
 
-        await adapter.initialize();
-
-        const testData = {
-          metadata: {
-            version: '1.0.0',
-            toolsHash: 'test',
-            timestamp: Date.now(),
-            modelName: 'test-model',
-            dimensions: 384,
-            documentCount: 1,
-          },
-          embeddings: [],
-        };
-
-        // Should throw error when trying to save to invalid path
-        await expect(adapter.save(testData)).rejects.toThrow();
+        // Should throw StorageError when trying to create invalid directory
+        await expect(adapter.initialize()).rejects.toThrow(StorageError);
+        await expect(adapter.initialize()).rejects.toThrow('Failed to create cache directory');
       });
 
       it('should handle load from non-existent file', async () => {

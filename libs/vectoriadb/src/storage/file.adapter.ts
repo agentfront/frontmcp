@@ -90,7 +90,12 @@ export class FileStorageAdapter<T extends DocumentMetadata = DocumentMetadata> e
     try {
       await fs.mkdir(dir, { recursive: true });
     } catch (error) {
-      // Directory might already exist, ignore error
+      // With recursive:true, EEXIST shouldn't occur in modern Node.js
+      // Surface real errors like permission denials or disk full
+      throw new StorageError(
+        `Failed to create cache directory: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 

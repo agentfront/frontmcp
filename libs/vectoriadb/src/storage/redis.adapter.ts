@@ -143,13 +143,7 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
   }
 
   override async close(): Promise<void> {
-    // Optionally quit the Redis connection
-    // Note: This might close the connection for other parts of the app
-    // Users should manage the Redis client lifecycle themselves
-    try {
-      await this.redisConfig.client.quit();
-    } catch {
-      // Ignore errors on close
-    }
+    // No-op: Users manage the Redis client lifecycle themselves
+    // The client is externally owned and may be shared across the application
   }
 }
