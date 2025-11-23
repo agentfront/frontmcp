@@ -1,4 +1,4 @@
-import { EmbeddingService } from '../embedding.service';
+import { EmbeddingService } from '../index';
 
 describe('EmbeddingService', () => {
   let embeddingService: EmbeddingService;
@@ -129,8 +129,6 @@ describe('EmbeddingService', () => {
 
   describe('error handling and edge cases', () => {
     test('should handle empty string embedding', async () => {
-      await embeddingService.initialize();
-
       const embedding = await embeddingService.generateEmbedding('');
 
       expect(embedding).toBeInstanceOf(Float32Array);
@@ -138,8 +136,6 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle whitespace-only string', async () => {
-      await embeddingService.initialize();
-
       const embedding = await embeddingService.generateEmbedding('   ');
 
       expect(embedding).toBeInstanceOf(Float32Array);
@@ -147,8 +143,6 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle very long text', async () => {
-      await embeddingService.initialize();
-
       const longText = 'word '.repeat(1000); // 5000 characters
       const embedding = await embeddingService.generateEmbedding(longText);
 
@@ -157,8 +151,6 @@ describe('EmbeddingService', () => {
     }, 60000);
 
     test('should handle special characters', async () => {
-      await embeddingService.initialize();
-
       const specialText = '!@#$%^&*()_+-={}[]|\\:";\'<>?,./`~';
       const embedding = await embeddingService.generateEmbedding(specialText);
 
@@ -167,8 +159,6 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle unicode characters', async () => {
-      await embeddingService.initialize();
-
       const unicodeText = '你好世界 🌍 مرحبا العالم';
       const embedding = await embeddingService.generateEmbedding(unicodeText);
 
@@ -177,8 +167,6 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle emoji text', async () => {
-      await embeddingService.initialize();
-
       const emojiText = '😀 😃 😄 😁 🎉 🎊 🎈';
       const embedding = await embeddingService.generateEmbedding(emojiText);
 
@@ -187,16 +175,12 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle empty batch', async () => {
-      await embeddingService.initialize();
-
       const embeddings = await embeddingService.generateEmbeddings([]);
 
       expect(embeddings).toEqual([]);
     });
 
     test('should handle batch with one item', async () => {
-      await embeddingService.initialize();
-
       const embeddings = await embeddingService.generateEmbeddings(['single text']);
 
       expect(embeddings.length).toBe(1);
@@ -205,8 +189,6 @@ describe('EmbeddingService', () => {
     });
 
     test('should handle batch with mixed empty and non-empty strings', async () => {
-      await embeddingService.initialize();
-
       const embeddings = await embeddingService.generateEmbeddings(['text', '', 'more text', '   ']);
 
       expect(embeddings.length).toBe(4);
@@ -223,14 +205,10 @@ describe('EmbeddingService', () => {
     });
 
     test('should getDimensions return correct value after initialization', async () => {
-      await embeddingService.initialize();
-
       expect(embeddingService.getDimensions()).toBe(384);
     });
 
     test('should handle numbers as text', async () => {
-      await embeddingService.initialize();
-
       const embedding = await embeddingService.generateEmbedding('123456789');
 
       expect(embedding).toBeInstanceOf(Float32Array);
@@ -259,6 +237,20 @@ describe('EmbeddingService', () => {
       } catch {
         // Ignore cleanup errors
       }
+    }, 60000);
+
+    test('should handle concurrent initialization calls', async () => {
+      const service = new EmbeddingService();
+
+      // Call initialize() multiple times concurrently
+      const init1 = service.initialize();
+      const init2 = service.initialize();
+      const init3 = service.initialize();
+
+      // All should complete without error
+      await Promise.all([init1, init2, init3]);
+
+      expect(service.isReady()).toBe(true);
     }, 60000);
   });
 });

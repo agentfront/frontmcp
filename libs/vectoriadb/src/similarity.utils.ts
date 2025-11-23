@@ -5,6 +5,8 @@
  * to maintain the library's standalone, portable nature as a publishable npm package.
  */
 
+import { EmbeddingError } from './errors';
+
 /**
  * Calculate cosine similarity between two vectors
  * @param a First vector
@@ -13,7 +15,7 @@
  */
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) {
-    throw new Error(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
+    throw new EmbeddingError(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
   }
 
   let dotProduct = 0;
@@ -68,7 +70,7 @@ export function normalizeVector(vector: Float32Array): Float32Array {
  */
 export function euclideanDistance(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) {
-    throw new Error(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
+    throw new EmbeddingError(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
   }
 
   let sum = 0;
@@ -89,7 +91,7 @@ export function euclideanDistance(a: Float32Array, b: Float32Array): number {
  */
 export function dotProduct(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) {
-    throw new Error(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
+    throw new EmbeddingError(`Vector dimensions don't match: ${a.length} vs ${b.length}`);
   }
 
   let result = 0;

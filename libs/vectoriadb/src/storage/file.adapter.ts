@@ -3,7 +3,7 @@ import * as path from 'path';
 import type { DocumentMetadata } from '../interfaces';
 import type { StorageAdapterConfig, StoredData } from './adapter.interface';
 import { BaseStorageAdapter } from './base.adapter';
-import { ConfigurationError } from '../errors';
+import { ConfigurationError, StorageError } from '../errors';
 
 /**
  * Configuration for file storage adapter
@@ -108,11 +108,17 @@ export class FileStorageAdapter<T extends DocumentMetadata = DocumentMetadata> e
     try {
       const content = this.safeJsonStringify(data, true);
       if (!content) {
-        throw new Error('Failed to serialize embeddings data');
+        throw new StorageError('Failed to serialize embeddings data');
       }
       await fs.writeFile(this.filePath, content, 'utf-8');
     } catch (error) {
-      throw new Error(`Failed to save embeddings to file: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof StorageError) {
+        throw error;
+      }
+      throw new StorageError(
+        `Failed to save embeddings to file: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 

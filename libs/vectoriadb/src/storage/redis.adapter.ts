@@ -1,7 +1,7 @@
 import type { DocumentMetadata } from '../interfaces';
 import type { StorageAdapterConfig, StoredData } from './adapter.interface';
 import { BaseStorageAdapter } from './base.adapter';
-import { ConfigurationError } from '../errors';
+import { ConfigurationError, StorageError } from '../errors';
 
 /**
  * Redis client interface (compatible with ioredis, redis, etc.)
@@ -93,7 +93,10 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
     try {
       await this.redisConfig.client.ping();
     } catch (error) {
-      throw new Error(`Failed to connect to Redis: ${error instanceof Error ? error.message : String(error)}`);
+      throw new StorageError(
+        `Failed to connect to Redis: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 
@@ -115,13 +118,19 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
     try {
       const content = this.safeJsonStringify(data);
       if (!content) {
-        throw new Error('Failed to serialize embeddings data');
+        throw new StorageError('Failed to serialize embeddings data');
       }
 
       // Use SETEX to set with TTL
       await this.redisConfig.client.setex(this.redisKey, this.redisConfig.ttl, content);
     } catch (error) {
-      throw new Error(`Failed to save embeddings to Redis: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof StorageError) {
+        throw error;
+      }
+      throw new StorageError(
+        `Failed to save embeddings to Redis: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 

@@ -114,8 +114,8 @@ describe('Regex Utilities', () => {
       expect(result![0]).toHaveLength(10000);
     });
 
-    it('should handle regex execution errors gracefully', () => {
-      const safeRegex = createSafeRegex('(?!)'); // Always fails to match
+    it('should handle never-matching patterns', () => {
+      const safeRegex = createSafeRegex('(?!)'); // Negative lookahead that never matches
       const result = safeRegex('test');
 
       expect(result).toBeNull();
@@ -178,8 +178,8 @@ describe('Regex Utilities', () => {
       expect(safeTest(input, pattern, 100)).toBe(true);
     });
 
-    it('should handle regex errors gracefully', () => {
-      const pattern = /(?!)/; // Pattern that never matches
+    it('should handle never-matching patterns', () => {
+      const pattern = /(?!)/; // Negative lookahead that never matches
       expect(safeTest('test', pattern)).toBe(false);
     });
 

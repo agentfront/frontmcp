@@ -1,4 +1,6 @@
 import { pipeline } from '@huggingface/transformers';
+import { EmbeddingError } from './errors';
+
 /**
  * Service for generating embeddings using transformers.js
  */
@@ -52,8 +54,9 @@ export class EmbeddingService {
       this.isInitialized = true;
     } catch (error) {
       this.initializationPromise = null;
-      throw new Error(
+      throw new EmbeddingError(
         `Failed to initialize embedding model: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -74,7 +77,10 @@ export class EmbeddingService {
 
       return new Float32Array(output.data);
     } catch (error) {
-      throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : String(error)}`);
+      throw new EmbeddingError(
+        `Failed to generate embedding: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 
@@ -107,7 +113,10 @@ export class EmbeddingService {
 
       return results;
     } catch (error) {
-      throw new Error(`Failed to generate embeddings: ${error instanceof Error ? error.message : String(error)}`);
+      throw new EmbeddingError(
+        `Failed to generate embeddings: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error : undefined,
+      );
     }
   }
 

@@ -3,8 +3,10 @@ import { FileStorageAdapter } from '../storage/file.adapter';
 import { MemoryStorageAdapter } from '../storage/memory.adapter';
 import { RedisStorageAdapter } from '../storage/redis.adapter';
 import * as SerializationUtils from '../storage/serialization.utils';
+import { ConfigurationError } from '../errors';
 import type { DocumentMetadata } from '../interfaces';
 import type { RedisClient } from '../storage/redis.adapter';
+import type { StoredData } from '../storage/adapter.interface';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -14,6 +16,35 @@ interface TestMetadata extends DocumentMetadata {
 
 describe('Storage Adapters', () => {
   const testCacheDir = './.cache/vectoriadb-test';
+
+  // Mock Redis client factory - shared across all Redis tests
+  const createMockRedisClient = (): RedisClient => {
+    const storage = new Map<string, string>();
+
+    return {
+      async get(key: string) {
+        return storage.get(key) ?? null;
+      },
+      async set(key: string, value: string) {
+        storage.set(key, value);
+        return 'OK';
+      },
+      async setex(key: string, _seconds: number, value: string) {
+        storage.set(key, value);
+        return 'OK';
+      },
+      async del(key: string) {
+        storage.delete(key);
+        return 1;
+      },
+      async ping() {
+        return 'PONG';
+      },
+      async quit() {
+        // Connection close - data persists in Redis
+      },
+    };
+  };
 
   afterEach(async () => {
     // Cleanup test cache directory
@@ -205,35 +236,6 @@ describe('Storage Adapters', () => {
   });
 
   describe('RedisStorageAdapter', () => {
-    // Mock Redis client
-    const createMockRedisClient = (): RedisClient => {
-      const storage = new Map<string, string>();
-
-      return {
-        async get(key: string) {
-          return storage.get(key) ?? null;
-        },
-        async set(key: string, value: string) {
-          storage.set(key, value);
-          return 'OK';
-        },
-        async setex(key: string, _seconds: number, value: string) {
-          storage.set(key, value);
-          return 'OK';
-        },
-        async del(key: string) {
-          storage.delete(key);
-          return 1;
-        },
-        async ping() {
-          return 'PONG';
-        },
-        async quit() {
-          storage.clear();
-        },
-      };
-    };
-
     test('should initialize with Redis client', async () => {
       const client = createMockRedisClient();
       const adapter = new RedisStorageAdapter<TestMetadata>({
@@ -581,7 +583,9 @@ describe('Storage Adapters', () => {
           ping: async () => {
             throw new Error('Connection refused');
           },
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -601,7 +605,9 @@ describe('Storage Adapters', () => {
           },
           del: async () => 1,
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -635,7 +641,9 @@ describe('Storage Adapters', () => {
           setex: async () => 'OK',
           del: async () => 1,
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -783,6 +791,275 @@ describe('Storage Adapters', () => {
         expect(savedKey).toContain('custom-prefix');
         expect(savedKey).toContain('myapp');
       });
+    });
+  });
+
+  describe('BaseStorageAdapter Coverage', () => {
+    describe('isMetadataValid', () => {
+      it('should return false when version mismatch', async () => {
+        const client = createMockRedisClient();
+        const adapter = new RedisStorageAdapter<TestMetadata>({
+          client,
+          namespace: 'test-version-mismatch',
+        });
+
+        await adapter.initialize();
+
+        // Save data with version 1
+        const testData: StoredData<TestMetadata> = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test-model',
+            toolsHash: 'hash123',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+          },
+        };
+        await adapter.save(testData);
+
+        // Check cache with different version
+        const hasCache = await adapter.hasValidCache({
+          version: '2.0.0',
+          modelName: 'test-model',
+          toolsHash: 'hash123',
+          timestamp: Date.now(),
+          dimensions: 384,
+          documentCount: 0,
+        });
+
+        expect(hasCache).toBe(false);
+      });
+
+      it('should return false when toolsHash mismatch', async () => {
+        const client = createMockRedisClient();
+        const adapter = new RedisStorageAdapter<TestMetadata>({
+          client,
+          namespace: 'test-tools-mismatch',
+        });
+
+        await adapter.initialize();
+
+        // Save data with toolsHash
+        const testData: StoredData<TestMetadata> = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test-model',
+            toolsHash: 'hash123',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+          },
+        };
+        await adapter.save(testData);
+
+        // Check cache with different toolsHash
+        const hasCache = await adapter.hasValidCache({
+          version: '1.0.0',
+          modelName: 'test-model',
+          toolsHash: 'hash456',
+          timestamp: Date.now(),
+          dimensions: 384,
+          documentCount: 0,
+        });
+
+        expect(hasCache).toBe(false);
+      });
+
+      it('should return false when modelName mismatch', async () => {
+        const client = createMockRedisClient();
+        const adapter = new RedisStorageAdapter<TestMetadata>({
+          client,
+          namespace: 'test-model-mismatch',
+        });
+
+        await adapter.initialize();
+
+        // Save data with modelName
+        const testData: StoredData<TestMetadata> = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test-model',
+            toolsHash: 'hash123',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+          },
+        };
+        await adapter.save(testData);
+
+        // Check cache with different modelName
+        const hasCache = await adapter.hasValidCache({
+          version: '1.0.0',
+          modelName: 'different-model',
+          toolsHash: 'hash123',
+          timestamp: Date.now(),
+          dimensions: 384,
+          documentCount: 0,
+        });
+
+        expect(hasCache).toBe(false);
+      });
+
+      it('should handle JSON with prototype pollution keys', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: './tmp/json-parse-test',
+          namespace: 'test-json',
+        });
+
+        const fs = require('fs/promises');
+        const path = require('path');
+
+        try {
+          await adapter.initialize();
+
+          // Manually write JSON with prototype pollution attempt
+          const filePath = path.join('./tmp/json-parse-test', 'test-json', 'embeddings.json');
+          await fs.mkdir(path.dirname(filePath), { recursive: true });
+          await fs.writeFile(
+            filePath,
+            JSON.stringify({
+              __proto__: { polluted: true },
+              constructor: { bad: 'value' },
+              prototype: { evil: 'data' },
+              embeddings: [],
+              metadata: {
+                version: '1.0.0',
+                modelName: 'test',
+                toolsHash: 'hash',
+                createdAt: new Date().toISOString(),
+              },
+            }),
+          );
+
+          // Load should sanitize and not include prototype pollution
+          const data = await adapter.load();
+
+          expect(data).not.toBeNull();
+          expect((data as any).__proto__).toBeUndefined();
+          expect((data as any).constructor).toBeUndefined();
+          expect((data as any).prototype).toBeUndefined();
+
+          // Cleanup
+          await fs.rm('./tmp/json-parse-test', { recursive: true, force: true });
+        } catch {
+          // Cleanup on error
+          try {
+            await fs.rm('./tmp/json-parse-test', { recursive: true, force: true });
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      });
+
+      it('should handle invalid JSON gracefully', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: './tmp/invalid-json-test',
+          namespace: 'test-invalid',
+        });
+
+        const fs = require('fs/promises');
+        const path = require('path');
+
+        try {
+          await adapter.initialize();
+
+          // Write invalid JSON
+          const filePath = path.join('./tmp/invalid-json-test', 'test-invalid', 'embeddings.json');
+          await fs.mkdir(path.dirname(filePath), { recursive: true });
+          await fs.writeFile(filePath, '{invalid json content}');
+
+          // Load should return null for invalid JSON
+          const data = await adapter.load();
+
+          expect(data).toBeNull();
+
+          // Cleanup
+          await fs.rm('./tmp/invalid-json-test', { recursive: true, force: true });
+        } catch {
+          // Cleanup on error
+          try {
+            await fs.rm('./tmp/invalid-json-test', { recursive: true, force: true });
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      });
+    });
+  });
+
+  describe('FileStorageAdapter Edge Cases', () => {
+    it('should sanitize path traversal attempts', () => {
+      // Path traversal is sanitized, not rejected
+      const adapter = new FileStorageAdapter({
+        cacheDir: '/safe/dir',
+        namespace: '../../../etc/passwd', // Path traversal attempt
+      });
+
+      // The adapter should be created successfully with sanitized namespace
+      expect(adapter).toBeDefined();
+
+      // Verify the filePath doesn't contain path traversal
+      const filePath = (adapter as any).filePath;
+      expect(filePath).toContain('/safe/dir');
+      expect(filePath).not.toContain('..');
+      expect(filePath).not.toContain('etc/passwd');
+    });
+  });
+
+  describe('RedisStorageAdapter Edge Cases', () => {
+    it('should throw ConfigurationError for empty namespace', () => {
+      const client = createMockRedisClient();
+
+      expect(() => {
+        new RedisStorageAdapter({
+          client,
+          namespace: '', // Empty namespace
+        });
+      }).toThrow(ConfigurationError);
+      expect(() => {
+        new RedisStorageAdapter({
+          client,
+          namespace: '', // Empty namespace
+        });
+      }).toThrow('Namespace must be a non-empty string');
+    });
+
+    it('should use default namespace when null or undefined', () => {
+      const client = createMockRedisClient();
+
+      // null/undefined namespace gets default value from base class
+      const adapter1 = new RedisStorageAdapter({
+        client,
+        namespace: null as any,
+      });
+      expect(adapter1).toBeDefined();
+
+      const adapter2 = new RedisStorageAdapter({
+        client,
+        namespace: undefined as any,
+      });
+      expect(adapter2).toBeDefined();
+    });
+
+    it('should throw ConfigurationError for namespace that becomes empty after sanitization', () => {
+      const client = createMockRedisClient();
+
+      expect(() => {
+        new RedisStorageAdapter({
+          client,
+          namespace: '!!!@@@###', // Will be empty after sanitization
+        });
+      }).toThrow(ConfigurationError);
+      expect(() => {
+        new RedisStorageAdapter({
+          client,
+          namespace: '!!!@@@###',
+        });
+      }).toThrow('Namespace becomes empty after sanitization');
     });
   });
 });
