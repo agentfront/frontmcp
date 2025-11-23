@@ -54,11 +54,15 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Add a document to the vector database
-   * @throws Error if database is not initialized or document ID already exists
+   * @throws Error if database is not initialized, document ID already exists, or text is empty
    */
   async add(id: string, text: string, metadata: T): Promise<void> {
     if (!this.isInitialized()) {
       throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
+    }
+
+    if (!text || !text.trim()) {
+      throw new Error('Document text cannot be empty or whitespace-only');
     }
 
     if (this.embeddings.has(id)) {
@@ -83,16 +87,19 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Add multiple documents in batch
-   * @throws Error if database is not initialized or any document ID already exists
+   * @throws Error if database is not initialized, any document ID already exists, or any text is empty
    */
   async addMany(documents: Array<{ id: string; text: string; metadata: T }>): Promise<void> {
     if (!this.isInitialized()) {
       throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
     }
 
-    // Check for duplicate IDs within the batch
+    // Check for duplicate IDs within the batch and validate text
     const ids = new Set<string>();
     for (const doc of documents) {
+      if (!doc.text || !doc.text.trim()) {
+        throw new Error(`Document with id "${doc.id}" has empty or whitespace-only text`);
+      }
       if (ids.has(doc.id)) {
         throw new Error(`Duplicate document id "${doc.id}" in batch`);
       }
@@ -107,6 +114,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
     // Generate embeddings in batch
     const vectors = await this.embeddingService.generateEmbeddings(texts);
+
+    // Defensive check: ensure vectors match documents
+    if (vectors.length !== documents.length) {
+      throw new Error(`Embedding generation mismatch: expected ${documents.length} vectors, got ${vectors.length}`);
+    }
 
     // Store embeddings
     for (let i = 0; i < documents.length; i++) {
@@ -127,19 +139,31 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Search for documents using semantic similarity
-   * @throws Error if database is not initialized
+   * @throws Error if database is not initialized, query is empty, or search parameters are invalid
    */
   async search(query: string, options: SearchOptions<T> = {}): Promise<SearchResult<T>[]> {
     if (!this.isInitialized()) {
       throw new Error('VectoriaDB must be initialized before searching. Call initialize() first.');
     }
 
-    // Generate query embedding
-    const queryVector = await this.embeddingService.generateEmbedding(query);
+    if (!query || !query.trim()) {
+      throw new Error('Search query cannot be empty or whitespace-only');
+    }
 
     // Get threshold and topK
     const threshold = options.threshold ?? this.config.defaultSimilarityThreshold;
     const topK = options.topK ?? this.config.defaultTopK;
+
+    if (topK <= 0) {
+      throw new Error('topK must be a positive number');
+    }
+
+    if (threshold < 0 || threshold > 1) {
+      throw new Error('threshold must be between 0 and 1');
+    }
+
+    // Generate query embedding
+    const queryVector = await this.embeddingService.generateEmbedding(query);
 
     // Calculate similarities
     const results: SearchResult<T>[] = [];

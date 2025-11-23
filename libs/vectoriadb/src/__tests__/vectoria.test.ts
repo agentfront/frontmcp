@@ -611,4 +611,78 @@ describe('VectoriaDB', () => {
       expect((customDb as any).config.dimensions).toBe(384);
     });
   });
+
+  describe('input validation', () => {
+    describe('add validation', () => {
+      test('should throw error for empty text', async () => {
+        await expect(db.add('doc-1', '', { id: 'doc-1', category: 'test' })).rejects.toThrow(
+          'Document text cannot be empty or whitespace-only',
+        );
+      });
+
+      test('should throw error for whitespace-only text', async () => {
+        await expect(db.add('doc-1', '   ', { id: 'doc-1', category: 'test' })).rejects.toThrow(
+          'Document text cannot be empty or whitespace-only',
+        );
+      });
+    });
+
+    describe('addMany validation', () => {
+      test('should throw error for document with empty text', async () => {
+        await expect(
+          db.addMany([
+            { id: 'doc-1', text: 'Valid text', metadata: { id: 'doc-1', category: 'test' } },
+            { id: 'doc-2', text: '', metadata: { id: 'doc-2', category: 'test' } },
+          ]),
+        ).rejects.toThrow('Document with id "doc-2" has empty or whitespace-only text');
+
+        // No documents should be added if validation fails
+        expect(db.size()).toBe(0);
+      });
+
+      test('should throw error for document with whitespace-only text', async () => {
+        await expect(
+          db.addMany([{ id: 'doc-1', text: '   \n\t  ', metadata: { id: 'doc-1', category: 'test' } }]),
+        ).rejects.toThrow('Document with id "doc-1" has empty or whitespace-only text');
+      });
+    });
+
+    describe('search validation', () => {
+      test('should throw error for empty query', async () => {
+        await expect(db.search('')).rejects.toThrow('Search query cannot be empty or whitespace-only');
+      });
+
+      test('should throw error for whitespace-only query', async () => {
+        await expect(db.search('   \n\t  ')).rejects.toThrow('Search query cannot be empty or whitespace-only');
+      });
+
+      test('should throw error for negative topK', async () => {
+        await expect(db.search('test', { topK: -1 })).rejects.toThrow('topK must be a positive number');
+      });
+
+      test('should throw error for zero topK', async () => {
+        await expect(db.search('test', { topK: 0 })).rejects.toThrow('topK must be a positive number');
+      });
+
+      test('should throw error for threshold below 0', async () => {
+        await expect(db.search('test', { threshold: -0.5 })).rejects.toThrow('threshold must be between 0 and 1');
+      });
+
+      test('should throw error for threshold above 1', async () => {
+        await expect(db.search('test', { threshold: 1.5 })).rejects.toThrow('threshold must be between 0 and 1');
+      });
+
+      test('should accept threshold of 0', async () => {
+        await db.add('doc-1', 'test document', { id: 'doc-1', category: 'test' });
+        const results = await db.search('test', { threshold: 0 });
+        expect(results).toBeDefined();
+      });
+
+      test('should accept threshold of 1', async () => {
+        await db.add('doc-1', 'test document', { id: 'doc-1', category: 'test' });
+        const results = await db.search('test', { threshold: 1 });
+        expect(results).toBeDefined();
+      });
+    });
+  });
 });
