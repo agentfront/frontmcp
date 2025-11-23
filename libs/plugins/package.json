@@ -36,6 +36,6 @@
     "@frontmcp/sdk": "^0.4.0",
     "acorn": "^8.15.0",
     "acorn-walk": "^8.3.4",
-    "vm2": "^3.10.0"
+    "isolated-vm": "^6.0.2"
   }
 }
