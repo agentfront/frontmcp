@@ -1,0 +1,47 @@
+{
+  "name": "vectoriadb",
+  "version": "1.0.0",
+  "description": "VectoriaDB - A lightweight, production-ready in-memory vector database for semantic search",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://github.com/agentfront/frontmcp/tree/main/libs/vectoriadb",
+  "license": "Apache-2.0",
+  "keywords": [
+    "vector-database",
+    "semantic-search",
+    "embeddings",
+    "in-memory",
+    "cosine-similarity",
+    "transformers",
+    "machine-learning",
+    "vector-search",
+    "similarity-search",
+    "vectordb",
+    "vectoria"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/vectoriadb"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.2.2",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

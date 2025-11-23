@@ -84,7 +84,13 @@ export default class Server {}
 
 ## Installation
 
-**Prereqs:** Node.js ≥ 22, npm ≥ 10. ([Installation - FrontMCP][1])
+**Prerequisites:**
+
+- **Node.js**: Minimum version 22 (LTS) | Recommended version 24 (Active LTS)
+  - _This framework is developed and tested on Node.js 24_
+- **npm**: ≥ 10 (or pnpm/yarn equivalent)
+
+For detailed setup instructions, see the [Installation Guide][1].
 
 ### Option A — New project (recommended)
 
@@ -98,7 +104,7 @@ installs required dev deps. ([Installation - FrontMCP][1])
 ### Option B — Add to an existing project
 
 ```bash
-npm i -D frontmcp @types/node@^24
+npm i -D frontmcp @types/node@^22
 npx frontmcp init
 ```
 

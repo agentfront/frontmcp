@@ -8,7 +8,10 @@ Run your FrontMCP server locally with hot-reload and verify it with the **FrontM
 
 ## Prerequisites
 
-- **Node.js ≥ 22**
+- **Node.js**:
+  - **Minimum**: Version 22 (LTS Maintenance)
+  - **Recommended**: Version 24 (Active LTS)
+  - _FrontMCP is developed and tested on Node.js 24_
 - **npm ≥ 10** (pnpm/yarn also supported)
 
 ---
@@ -30,7 +33,7 @@ Creates a folder and scaffolds everything for you.
 
 Install and initialize in your current repo:
 
-<CodeGroup>```bash universal npm i -D frontmcp @types/node@^24 npx frontmcp init ```</CodeGroup>
+<CodeGroup>```bash universal npm i -D frontmcp @types/node@^22 npx frontmcp init ```</CodeGroup>
 
 `init` adds the required scripts and updates **tsconfig.json** automatically.
 
