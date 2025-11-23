@@ -1,5 +1,6 @@
 import type { DocumentEmbedding, DocumentMetadata } from '../interfaces';
 import type { StorageAdapterConfig, StoredData, StorageMetadata, SerializedEmbedding } from './adapter.interface';
+import * as SerializationUtils from './serialization.utils';
 
 /**
  * Abstract base class for storage adapters
@@ -85,39 +86,23 @@ export abstract class BaseStorageAdapter<T extends DocumentMetadata = DocumentMe
    * Serialize a DocumentEmbedding to a SerializedEmbedding
    */
   protected serializeEmbedding(embedding: DocumentEmbedding<T>): SerializedEmbedding<T> {
-    return {
-      id: embedding.id,
-      vector: Array.from(embedding.vector),
-      metadata: embedding.metadata,
-      text: embedding.text,
-      createdAt: embedding.createdAt.toISOString(),
-    };
+    return SerializationUtils.serializeEmbedding(embedding);
   }
 
   /**
    * Deserialize a SerializedEmbedding to a DocumentEmbedding
+   * Sanitizes metadata to prevent prototype pollution
    */
   protected deserializeEmbedding(serialized: SerializedEmbedding<T>): DocumentEmbedding<T> {
-    return {
-      id: serialized.id,
-      vector: new Float32Array(serialized.vector),
-      metadata: serialized.metadata,
-      text: serialized.text,
-      createdAt: new Date(serialized.createdAt),
-    };
+    return SerializationUtils.deserializeEmbedding(serialized);
   }
 
   /**
-   * Create a hash from a string (simple implementation)
+   * Create a cryptographic hash from a string using SHA-256
+   * More secure than simple hash - prevents collision attacks
    */
   protected hash(input: string): string {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      const char = input.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(36);
+    return SerializationUtils.hash(input);
   }
 
   /**
@@ -125,19 +110,24 @@ export abstract class BaseStorageAdapter<T extends DocumentMetadata = DocumentMe
    * Used to detect when tools/documents change
    */
   protected createToolsHash(documents: Array<{ id: string; text: string }>): string {
-    const content = documents
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((d) => `${d.id}:${d.text}`)
-      .join('|');
-    return this.hash(content);
+    return SerializationUtils.createToolsHash(documents);
   }
 
   /**
-   * Safely parse JSON with error handling
+   * Safely parse JSON with error handling and prototype pollution protection
    */
   protected safeJsonParse<R>(content: string): R | null {
     try {
-      return JSON.parse(content) as R;
+      const parsed = JSON.parse(content, (key, value) => {
+        // Block prototype pollution
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          return undefined;
+        }
+        return value;
+      });
+
+      // Additional sanitization for nested objects
+      return SerializationUtils.sanitizeObject(parsed) as R;
     } catch {
       return null;
     }

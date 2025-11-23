@@ -1,6 +1,7 @@
 import type { DocumentMetadata } from '../interfaces';
 import type { StorageAdapterConfig, StoredData } from './adapter.interface';
 import { BaseStorageAdapter } from './base.adapter';
+import { ConfigurationError } from '../errors';
 
 /**
  * Redis client interface (compatible with ioredis, redis, etc.)
@@ -54,7 +55,37 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
       keyPrefix: config.keyPrefix ?? 'vectoriadb',
     };
 
-    this.redisKey = `${this.redisConfig.keyPrefix}:${this.config.namespace}`;
+    // Sanitize namespace to prevent Redis command injection
+    const sanitizedNamespace = this.sanitizeNamespace(this.config.namespace);
+    const sanitizedKeyPrefix = this.sanitizeNamespace(this.redisConfig.keyPrefix);
+
+    this.redisKey = `${sanitizedKeyPrefix}:${sanitizedNamespace}`;
+  }
+
+  /**
+   * Sanitize namespace/key prefix to prevent Redis command injection
+   * Removes dangerous characters like newlines, carriage returns, and other control characters
+   * @private
+   */
+  private sanitizeNamespace(namespace: string): string {
+    if (!namespace || typeof namespace !== 'string') {
+      throw new ConfigurationError('Namespace must be a non-empty string');
+    }
+
+    // Remove newlines, carriage returns, and other control characters
+    // These could be used for command injection in Redis
+    const sanitized = namespace
+      .replace(/[\r\n\t\0\x0B\x0C]/g, '') // Remove control characters
+      .replace(/[^\w:.-]/g, '-') // Replace unsafe chars with dash (allow word chars, colon, dot, dash)
+      .replace(/^[.-]+/, '') // Remove leading dots and dashes
+      .replace(/[.-]+$/, '') // Remove trailing dots and dashes
+      .substring(0, 200); // Limit length
+
+    if (!sanitized) {
+      throw new ConfigurationError('Namespace becomes empty after sanitization');
+    }
+
+    return sanitized;
   }
 
   override async initialize(): Promise<void> {

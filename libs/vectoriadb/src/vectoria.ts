@@ -9,8 +9,8 @@ import type {
   SearchResult,
   VectoriaStats,
 } from './interfaces';
-import type { StorageAdapter, StorageMetadata, StoredData } from './storage/adapter.interface';
-import { SerializationUtils } from './storage/adapter.interface';
+import { BaseStorageAdapter, StorageMetadata, StoredData } from './storage/adapter.interface';
+import * as SerializationUtils from './storage/serialization.utils';
 import { MemoryStorageAdapter } from './storage/memory.adapter';
 import {
   VectoriaNotInitializedError,
@@ -37,7 +37,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
   private embeddingService: EmbeddingService;
   private config: Required<VectoriaConfig>;
   private hnswIndex: HNSWIndex | null;
-  private storageAdapter: StorageAdapter<T>;
+  private storageAdapter: BaseStorageAdapter<T>;
 
   constructor(config: VectoriaConfig = {}) {
     this.embeddings = new Map();
@@ -54,6 +54,10 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       storageAdapter: config.storageAdapter,
       toolsHash: config.toolsHash ?? '',
       version: config.version ?? '1.0.0',
+      maxDocuments: config.maxDocuments ?? 100000,
+      maxDocumentSize: config.maxDocumentSize ?? 1000000,
+      maxBatchSize: config.maxBatchSize ?? 1000,
+      verboseErrors: config.verboseErrors ?? true,
     };
 
     // Initialize HNSW index if enabled
@@ -106,8 +110,24 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       throw new VectoriaNotInitializedError('adding documents');
     }
 
+    // Check document count limit (DoS protection)
+    if (this.embeddings.size >= this.config.maxDocuments) {
+      throw new DocumentValidationError(
+        `Document limit exceeded. Maximum allowed documents: ${this.config.maxDocuments}`,
+        id,
+      );
+    }
+
     if (!text || !text.trim()) {
       throw new DocumentValidationError('Document text cannot be empty or whitespace-only', id);
+    }
+
+    // Check document size limit (DoS protection)
+    if (text.length > this.config.maxDocumentSize) {
+      throw new DocumentValidationError(
+        `Document text exceeds maximum size. Maximum allowed: ${this.config.maxDocumentSize} characters`,
+        id,
+      );
     }
 
     if (this.embeddings.has(id)) {
@@ -148,11 +168,33 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       throw new VectoriaNotInitializedError('adding documents');
     }
 
+    // Check batch size limit (DoS protection)
+    if (documents.length > this.config.maxBatchSize) {
+      throw new DocumentValidationError(
+        `Batch size exceeds maximum allowed. Maximum: ${this.config.maxBatchSize}, provided: ${documents.length}`,
+      );
+    }
+
+    // Check if adding these documents would exceed the total document limit (DoS protection)
+    const newTotal = this.embeddings.size + documents.length;
+    if (newTotal > this.config.maxDocuments) {
+      throw new DocumentValidationError(
+        `Adding ${documents.length} documents would exceed maximum document limit. Current: ${this.embeddings.size}, Maximum: ${this.config.maxDocuments}`,
+      );
+    }
+
     // Check for duplicate IDs within the batch and validate text
     const ids = new Set<string>();
     for (const doc of documents) {
       if (!doc.text || !doc.text.trim()) {
         throw new DocumentValidationError(`Document with id "${doc.id}" has empty or whitespace-only text`, doc.id);
+      }
+      // Check document size limit (DoS protection)
+      if (doc.text.length > this.config.maxDocumentSize) {
+        throw new DocumentValidationError(
+          `Document with id "${doc.id}" exceeds maximum size. Maximum allowed: ${this.config.maxDocumentSize} characters`,
+          doc.id,
+        );
       }
       if (doc.metadata.id !== doc.id) {
         throw new DocumentValidationError(
@@ -424,6 +466,14 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       throw new DocumentValidationError('Document text cannot be empty or whitespace-only', id);
     }
 
+    // Check document size limit (DoS protection)
+    if (updates.text !== undefined && updates.text.length > this.config.maxDocumentSize) {
+      throw new DocumentValidationError(
+        `Document text exceeds maximum size. Maximum allowed: ${this.config.maxDocumentSize} characters`,
+        id,
+      );
+    }
+
     // Update metadata if provided
     if (updates.metadata !== undefined) {
       existing.metadata = updates.metadata;
@@ -470,6 +520,13 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       throw new VectoriaNotInitializedError('updating');
     }
 
+    // Check batch size limit (DoS protection)
+    if (updates.length > this.config.maxBatchSize) {
+      throw new DocumentValidationError(
+        `Batch size exceeds maximum allowed. Maximum: ${this.config.maxBatchSize}, provided: ${updates.length}`,
+      );
+    }
+
     // Validate all documents exist and new texts are valid
     for (const update of updates) {
       if (!this.embeddings.has(update.id)) {
@@ -478,6 +535,13 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       if (update.text !== undefined && (!update.text || !update.text.trim())) {
         throw new DocumentValidationError(
           `Document with id "${update.id}" has empty or whitespace-only text`,
+          update.id,
+        );
+      }
+      // Check document size limit (DoS protection)
+      if (update.text !== undefined && update.text.length > this.config.maxDocumentSize) {
+        throw new DocumentValidationError(
+          `Document with id "${update.id}" exceeds maximum size. Maximum allowed: ${this.config.maxDocumentSize} characters`,
           update.id,
         );
       }

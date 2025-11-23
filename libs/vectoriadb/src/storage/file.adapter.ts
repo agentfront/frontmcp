@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { DocumentMetadata } from '../interfaces';
 import type { StorageAdapterConfig, StoredData } from './adapter.interface';
 import { BaseStorageAdapter } from './base.adapter';
+import { ConfigurationError } from '../errors';
 
 /**
  * Configuration for file storage adapter
@@ -33,12 +34,54 @@ export class FileStorageAdapter<T extends DocumentMetadata = DocumentMetadata> e
   constructor(config: FileStorageConfig = {}) {
     super(config);
 
+    // Sanitize namespace to prevent path traversal
+    const sanitizedNamespace = this.sanitizeNamespace(this.config.namespace);
+
     this.fileConfig = {
       cacheDir: config.cacheDir ?? './.cache/vectoriadb',
       fileName: config.fileName ?? 'embeddings.json',
     };
 
-    this.filePath = path.join(this.fileConfig.cacheDir, this.config.namespace, this.fileConfig.fileName);
+    this.filePath = path.join(this.fileConfig.cacheDir, sanitizedNamespace, this.fileConfig.fileName);
+
+    // Verify the resolved path is still within cacheDir (path traversal protection)
+    this.validateFilePath();
+  }
+
+  /**
+   * Sanitize namespace to prevent path traversal attacks
+   * Removes dangerous characters and path traversal sequences
+   */
+  private sanitizeNamespace(namespace: string): string {
+    return (
+      namespace
+        // Remove path traversal sequences
+        .replace(/\.\./g, '')
+        // Replace path separators with hyphens
+        .replace(/[\/\\]/g, '-')
+        // Remove leading dots and hyphens
+        .replace(/^[.-]+/, '')
+        // Remove trailing dots and hyphens
+        .replace(/[.-]+$/, '')
+        // Remove any remaining dangerous characters
+        .replace(/[^a-zA-Z0-9-_]/g, '')
+        // Limit length
+        .substring(0, 100) || 'default'
+    );
+  }
+
+  /**
+   * Validate that the file path doesn't escape the cache directory
+   */
+  private validateFilePath(): void {
+    const resolvedPath = path.resolve(this.filePath);
+    const resolvedCacheDir = path.resolve(this.fileConfig.cacheDir);
+
+    if (!resolvedPath.startsWith(resolvedCacheDir + path.sep) && resolvedPath !== resolvedCacheDir) {
+      throw new ConfigurationError(
+        `Invalid namespace: path traversal detected. ` + `Resolved path must be within cache directory.`,
+      );
+    }
   }
 
   override async initialize(): Promise<void> {

@@ -2,7 +2,7 @@ import { VectoriaDB } from '../vectoria';
 import { FileStorageAdapter } from '../storage/file.adapter';
 import { MemoryStorageAdapter } from '../storage/memory.adapter';
 import { RedisStorageAdapter } from '../storage/redis.adapter';
-import { SerializationUtils } from '../storage/adapter.interface';
+import * as SerializationUtils from '../storage/serialization.utils';
 import type { DocumentMetadata } from '../interfaces';
 import type { RedisClient } from '../storage/redis.adapter';
 import * as fs from 'fs/promises';

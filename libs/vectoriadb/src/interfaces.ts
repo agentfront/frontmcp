@@ -89,6 +89,35 @@ export interface VectoriaConfig {
    * @default package version
    */
   version?: string;
+
+  /**
+   * Maximum number of documents allowed in the database
+   * Prevents memory exhaustion attacks
+   * @default 100000
+   */
+  maxDocuments?: number;
+
+  /**
+   * Maximum size of a single document text (in characters)
+   * Prevents memory exhaustion via huge documents
+   * @default 1000000 (1 million characters ~1MB)
+   */
+  maxDocumentSize?: number;
+
+  /**
+   * Maximum number of documents in a single batch operation
+   * Prevents DoS via massive batch operations
+   * @default 1000
+   */
+  maxBatchSize?: number;
+
+  /**
+   * Enable verbose error messages
+   * When false (production mode), error messages are sanitized to prevent information disclosure
+   * When true (development mode), error messages include detailed information for debugging
+   * @default true (development mode with verbose errors)
+   */
+  verboseErrors?: boolean;
 }
 
 /**

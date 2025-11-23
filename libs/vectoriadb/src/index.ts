@@ -9,6 +9,8 @@ export { EmbeddingService } from './embedding.service';
 export { HNSWIndex } from './hnsw.index';
 export type { HNSWConfig } from './hnsw.index';
 export * from './similarity.utils';
+export * from './regex.utils';
+export * from './error.utils';
 export * from './interfaces';
 
 // Storage adapters
@@ -18,14 +20,21 @@ export { FileStorageAdapter } from './storage/file.adapter';
 export type { FileStorageConfig } from './storage/file.adapter';
 export { RedisStorageAdapter } from './storage/redis.adapter';
 export type { RedisStorageConfig, RedisClient } from './storage/redis.adapter';
-export { SerializationUtils } from './storage/adapter.interface';
 export type {
-  StorageAdapter,
   StorageAdapterConfig,
   StorageMetadata,
   StoredData,
   SerializedEmbedding,
 } from './storage/adapter.interface';
+
+// Serialization utilities
+export {
+  serializeEmbedding,
+  deserializeEmbedding,
+  hash,
+  createToolsHash,
+  sanitizeObject,
+} from './storage/serialization.utils';
 
 // Error classes
 export {
