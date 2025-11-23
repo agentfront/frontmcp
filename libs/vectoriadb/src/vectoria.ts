@@ -12,6 +12,16 @@ import type {
 import type { StorageAdapter, StorageMetadata, StoredData } from './storage/adapter.interface';
 import { SerializationUtils } from './storage/adapter.interface';
 import { MemoryStorageAdapter } from './storage/memory.adapter';
+import {
+  VectoriaNotInitializedError,
+  DocumentValidationError,
+  DocumentNotFoundError,
+  DocumentExistsError,
+  DuplicateDocumentError,
+  QueryValidationError,
+  EmbeddingError,
+  StorageError,
+} from './errors';
 
 /**
  * VectoriaDB - A lightweight, production-ready in-memory vector database
@@ -93,15 +103,19 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   async add(id: string, text: string, metadata: T): Promise<void> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
+      throw new VectoriaNotInitializedError('adding documents');
     }
 
     if (!text || !text.trim()) {
-      throw new Error('Document text cannot be empty or whitespace-only');
+      throw new DocumentValidationError('Document text cannot be empty or whitespace-only', id);
     }
 
     if (this.embeddings.has(id)) {
-      throw new Error(`Document with id "${id}" already exists. Use remove() first or choose a different id.`);
+      throw new DocumentExistsError(id);
+    }
+
+    if (metadata.id !== id) {
+      throw new DocumentValidationError(`Metadata id "${metadata.id}" does not match document id "${id}"`, id);
     }
 
     // Generate embedding
@@ -131,20 +145,26 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   async addMany(documents: Array<{ id: string; text: string; metadata: T }>): Promise<void> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
+      throw new VectoriaNotInitializedError('adding documents');
     }
 
     // Check for duplicate IDs within the batch and validate text
     const ids = new Set<string>();
     for (const doc of documents) {
       if (!doc.text || !doc.text.trim()) {
-        throw new Error(`Document with id "${doc.id}" has empty or whitespace-only text`);
+        throw new DocumentValidationError(`Document with id "${doc.id}" has empty or whitespace-only text`, doc.id);
+      }
+      if (doc.metadata.id !== doc.id) {
+        throw new DocumentValidationError(
+          `Document with id "${doc.id}": metadata.id "${doc.metadata.id}" does not match document id`,
+          doc.id,
+        );
       }
       if (ids.has(doc.id)) {
-        throw new Error(`Duplicate document id "${doc.id}" in batch`);
+        throw new DuplicateDocumentError(doc.id, 'batch');
       }
       if (this.embeddings.has(doc.id)) {
-        throw new Error(`Document with id "${doc.id}" already exists`);
+        throw new DuplicateDocumentError(doc.id, 'existing');
       }
       ids.add(doc.id);
     }
@@ -157,7 +177,9 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
     // Defensive check: ensure vectors match documents
     if (vectors.length !== documents.length) {
-      throw new Error(`Embedding generation mismatch: expected ${documents.length} vectors, got ${vectors.length}`);
+      throw new EmbeddingError(
+        `Embedding generation mismatch: expected ${documents.length} vectors, got ${vectors.length}`,
+      );
     }
 
     // Store embeddings
@@ -188,11 +210,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   async search(query: string, options: SearchOptions<T> = {}): Promise<SearchResult<T>[]> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before searching. Call initialize() first.');
+      throw new VectoriaNotInitializedError('searching');
     }
 
     if (!query || !query.trim()) {
-      throw new Error('Search query cannot be empty or whitespace-only');
+      throw new QueryValidationError('Search query cannot be empty or whitespace-only');
     }
 
     // Get threshold and topK
@@ -200,11 +222,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
     const topK = options.topK ?? this.config.defaultTopK;
 
     if (topK <= 0) {
-      throw new Error('topK must be a positive number');
+      throw new QueryValidationError('topK must be a positive number');
     }
 
     if (threshold < 0 || threshold > 1) {
-      throw new Error('threshold must be between 0 and 1');
+      throw new QueryValidationError('threshold must be between 0 and 1');
     }
 
     // Generate query embedding
@@ -362,12 +384,12 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   updateMetadata(id: string, metadata: T): void {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+      throw new VectoriaNotInitializedError('updating');
     }
 
     const existing = this.embeddings.get(id);
     if (!existing) {
-      throw new Error(`Document with id "${id}" not found`);
+      throw new DocumentNotFoundError(id);
     }
 
     // Update metadata only, keep everything else the same
@@ -385,12 +407,12 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
     options: { forceReembed?: boolean } = {},
   ): Promise<boolean> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+      throw new VectoriaNotInitializedError('updating');
     }
 
     const existing = this.embeddings.get(id);
     if (!existing) {
-      throw new Error(`Document with id "${id}" not found`);
+      throw new DocumentNotFoundError(id);
     }
 
     // Check if text is being updated
@@ -399,7 +421,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
     // Validate new text if provided
     if (updates.text !== undefined && (!updates.text || !updates.text.trim())) {
-      throw new Error('Document text cannot be empty or whitespace-only');
+      throw new DocumentValidationError('Document text cannot be empty or whitespace-only', id);
     }
 
     // Update metadata if provided
@@ -445,16 +467,19 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
     options: { forceReembed?: boolean } = {},
   ): Promise<{ updated: number; reembedded: number }> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+      throw new VectoriaNotInitializedError('updating');
     }
 
     // Validate all documents exist and new texts are valid
     for (const update of updates) {
       if (!this.embeddings.has(update.id)) {
-        throw new Error(`Document with id "${update.id}" not found`);
+        throw new DocumentNotFoundError(update.id);
       }
       if (update.text !== undefined && (!update.text || !update.text.trim())) {
-        throw new Error(`Document with id "${update.id}" has empty or whitespace-only text`);
+        throw new DocumentValidationError(
+          `Document with id "${update.id}" has empty or whitespace-only text`,
+          update.id,
+        );
       }
     }
 
@@ -559,7 +584,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   getStats(): VectoriaStats {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before getting stats. Call initialize() first.');
+      throw new VectoriaNotInitializedError('getting stats');
     }
 
     // Estimate memory usage
@@ -594,7 +619,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   async saveToStorage(): Promise<void> {
     if (!this.isInitialized()) {
-      throw new Error('VectoriaDB must be initialized before saving. Call initialize() first.');
+      throw new VectoriaNotInitializedError('saving');
     }
 
     const metadata = this.getStorageMetadata();

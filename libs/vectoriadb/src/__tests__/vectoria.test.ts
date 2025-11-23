@@ -1,5 +1,13 @@
 import { VectoriaDB } from '../vectoria';
 import { DocumentMetadata } from '../interfaces';
+import {
+  VectoriaNotInitializedError,
+  DocumentValidationError,
+  DocumentNotFoundError,
+  DocumentExistsError,
+  DuplicateDocumentError,
+  QueryValidationError,
+} from '../errors';
 
 interface TestMetadata extends DocumentMetadata {
   category: string;
@@ -67,7 +75,7 @@ describe('VectoriaDB', () => {
           id: 'doc-1',
           category: 'updated',
         }),
-      ).rejects.toThrow('Document with id "doc-1" already exists');
+      ).rejects.toThrow(DocumentExistsError);
 
       // Original document should remain unchanged
       expect(db.size()).toBe(1);
@@ -496,24 +504,22 @@ describe('VectoriaDB', () => {
 
     test('should throw error when adding document before initialization', async () => {
       await expect(uninitializedDb.add('doc-1', 'Test', { id: 'doc-1', category: 'test' })).rejects.toThrow(
-        'VectoriaDB must be initialized before adding documents',
+        VectoriaNotInitializedError,
       );
     });
 
     test('should throw error when adding many documents before initialization', async () => {
       await expect(
         uninitializedDb.addMany([{ id: 'doc-1', text: 'Test', metadata: { id: 'doc-1', category: 'test' } }]),
-      ).rejects.toThrow('VectoriaDB must be initialized before adding documents');
+      ).rejects.toThrow(VectoriaNotInitializedError);
     });
 
     test('should throw error when searching before initialization', async () => {
-      await expect(uninitializedDb.search('test query')).rejects.toThrow(
-        'VectoriaDB must be initialized before searching',
-      );
+      await expect(uninitializedDb.search('test query')).rejects.toThrow(VectoriaNotInitializedError);
     });
 
     test('should throw error when getting stats before initialization', () => {
-      expect(() => uninitializedDb.getStats()).toThrow('VectoriaDB must be initialized before getting stats');
+      expect(() => uninitializedDb.getStats()).toThrow(VectoriaNotInitializedError);
     });
 
     test('isInitialized should return false before initialization', () => {
@@ -533,7 +539,7 @@ describe('VectoriaDB', () => {
           { id: 'doc-1', text: 'First', metadata: { id: 'doc-1', category: 'test' } },
           { id: 'doc-1', text: 'Duplicate', metadata: { id: 'doc-1', category: 'test' } },
         ]),
-      ).rejects.toThrow('Duplicate document id "doc-1" in batch');
+      ).rejects.toThrow(DuplicateDocumentError);
 
       // No documents should be added if batch fails
       expect(db.size()).toBe(0);
@@ -547,7 +553,7 @@ describe('VectoriaDB', () => {
           { id: 'doc-2', text: 'New', metadata: { id: 'doc-2', category: 'test' } },
           { id: 'doc-1', text: 'Duplicate', metadata: { id: 'doc-1', category: 'test' } },
         ]),
-      ).rejects.toThrow('Document with id "doc-1" already exists');
+      ).rejects.toThrow(DuplicateDocumentError);
 
       // Original document should remain, new ones should not be added
       expect(db.size()).toBe(1);
@@ -615,14 +621,12 @@ describe('VectoriaDB', () => {
   describe('input validation', () => {
     describe('add validation', () => {
       test('should throw error for empty text', async () => {
-        await expect(db.add('doc-1', '', { id: 'doc-1', category: 'test' })).rejects.toThrow(
-          'Document text cannot be empty or whitespace-only',
-        );
+        await expect(db.add('doc-1', '', { id: 'doc-1', category: 'test' })).rejects.toThrow(DocumentValidationError);
       });
 
       test('should throw error for whitespace-only text', async () => {
         await expect(db.add('doc-1', '   ', { id: 'doc-1', category: 'test' })).rejects.toThrow(
-          'Document text cannot be empty or whitespace-only',
+          DocumentValidationError,
         );
       });
     });
@@ -634,7 +638,7 @@ describe('VectoriaDB', () => {
             { id: 'doc-1', text: 'Valid text', metadata: { id: 'doc-1', category: 'test' } },
             { id: 'doc-2', text: '', metadata: { id: 'doc-2', category: 'test' } },
           ]),
-        ).rejects.toThrow('Document with id "doc-2" has empty or whitespace-only text');
+        ).rejects.toThrow(DocumentValidationError);
 
         // No documents should be added if validation fails
         expect(db.size()).toBe(0);
@@ -643,33 +647,33 @@ describe('VectoriaDB', () => {
       test('should throw error for document with whitespace-only text', async () => {
         await expect(
           db.addMany([{ id: 'doc-1', text: '   \n\t  ', metadata: { id: 'doc-1', category: 'test' } }]),
-        ).rejects.toThrow('Document with id "doc-1" has empty or whitespace-only text');
+        ).rejects.toThrow(DocumentValidationError);
       });
     });
 
     describe('search validation', () => {
       test('should throw error for empty query', async () => {
-        await expect(db.search('')).rejects.toThrow('Search query cannot be empty or whitespace-only');
+        await expect(db.search('')).rejects.toThrow(QueryValidationError);
       });
 
       test('should throw error for whitespace-only query', async () => {
-        await expect(db.search('   \n\t  ')).rejects.toThrow('Search query cannot be empty or whitespace-only');
+        await expect(db.search('   \n\t  ')).rejects.toThrow(QueryValidationError);
       });
 
       test('should throw error for negative topK', async () => {
-        await expect(db.search('test', { topK: -1 })).rejects.toThrow('topK must be a positive number');
+        await expect(db.search('test', { topK: -1 })).rejects.toThrow(QueryValidationError);
       });
 
       test('should throw error for zero topK', async () => {
-        await expect(db.search('test', { topK: 0 })).rejects.toThrow('topK must be a positive number');
+        await expect(db.search('test', { topK: 0 })).rejects.toThrow(QueryValidationError);
       });
 
       test('should throw error for threshold below 0', async () => {
-        await expect(db.search('test', { threshold: -0.5 })).rejects.toThrow('threshold must be between 0 and 1');
+        await expect(db.search('test', { threshold: -0.5 })).rejects.toThrow(QueryValidationError);
       });
 
       test('should throw error for threshold above 1', async () => {
-        await expect(db.search('test', { threshold: 1.5 })).rejects.toThrow('threshold must be between 0 and 1');
+        await expect(db.search('test', { threshold: 1.5 })).rejects.toThrow(QueryValidationError);
       });
 
       test('should accept threshold of 0', async () => {
@@ -894,7 +898,7 @@ describe('VectoriaDB', () => {
         await hnswDb.add('doc-1', 'First version', { id: 'doc-1', category: 'test' });
 
         await expect(hnswDb.add('doc-1', 'Second version', { id: 'doc-1', category: 'test' })).rejects.toThrow(
-          'Document with id "doc-1" already exists',
+          DocumentExistsError,
         );
       });
 
@@ -902,7 +906,7 @@ describe('VectoriaDB', () => {
         const uninitDb = new VectoriaDB<TestMetadata>({ useHNSW: true });
 
         await expect(uninitDb.add('doc-1', 'Test', { id: 'doc-1', category: 'test' })).rejects.toThrow(
-          'VectoriaDB must be initialized',
+          VectoriaNotInitializedError,
         );
       });
     });
@@ -937,7 +941,7 @@ describe('VectoriaDB', () => {
       test('should throw error for non-existent document', () => {
         expect(() => {
           db.updateMetadata('non-existent', { id: 'non-existent', category: 'test' });
-        }).toThrow('Document with id "non-existent" not found');
+        }).toThrow(DocumentNotFoundError);
       });
 
       test('should throw error if not initialized', () => {

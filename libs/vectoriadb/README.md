@@ -17,6 +17,7 @@ VectoriaDB is a fast, minimal-dependency vector database designed for in-memory 
 - [Core Concepts](#core-concepts)
 - [API Reference](#api-reference)
 - [Advanced Usage](#advanced-usage)
+- [Error Handling](#error-handling)
 - [Performance](#performance)
 - [Use Cases](#use-cases)
 - [Testing](#testing)
@@ -37,7 +38,8 @@ VectoriaDB is a fast, minimal-dependency vector database designed for in-memory 
 - **📊 Scalable**: HNSW index for 100k+ documents with sub-millisecond search
 - **💾 Persistent**: File & Redis adapters for caching across restarts
 - **🔄 Smart Updates**: Incremental updates without re-embedding (instant metadata updates)
-- **📦 Production-Ready**: Battle-tested in FrontMCP
+- **🛡️ Production-Ready Error Handling**: Typed error classes with specific error codes
+- **📦 Battle-Tested**: Used in production at FrontMCP
 
 ## Installation
 
@@ -558,6 +560,289 @@ await db.updateMany(docs, { forceReembed: true });
 - **Dynamic content**: Update frequently changing metadata without performance hit
 - **Bulk operations**: Efficiently update thousands of documents
 
+## Error Handling
+
+VectoriaDB provides production-ready error handling with specific error types that can be caught and handled individually.
+
+### Error Classes
+
+All errors extend the base `VectoriaError` class with a `code` property for programmatic error handling:
+
+```typescript
+import {
+  VectoriaError, // Base error class
+  VectoriaNotInitializedError, // DB not initialized
+  DocumentValidationError, // Invalid document data
+  DocumentNotFoundError, // Document doesn't exist
+  DocumentExistsError, // Document already exists
+  DuplicateDocumentError, // Duplicate in batch or existing
+  QueryValidationError, // Invalid search query/params
+  EmbeddingError, // Embedding generation failure
+  StorageError, // Storage operation failure
+  ConfigurationError, // Invalid configuration
+} from 'vectoriadb';
+```
+
+### Error Types
+
+#### VectoriaNotInitializedError
+
+Thrown when operations are attempted before calling `initialize()`:
+
+```typescript
+const db = new VectoriaDB();
+
+try {
+  await db.add('doc-1', 'text', { id: 'doc-1' });
+} catch (error) {
+  if (error instanceof VectoriaNotInitializedError) {
+    console.log(error.code); // 'NOT_INITIALIZED'
+    console.log(error.message); // 'VectoriaDB must be initialized before adding documents...'
+    await db.initialize(); // Fix: initialize first
+  }
+}
+```
+
+#### DocumentValidationError
+
+Thrown when document data is invalid:
+
+```typescript
+try {
+  // Empty text
+  await db.add('doc-1', '', { id: 'doc-1' });
+} catch (error) {
+  if (error instanceof DocumentValidationError) {
+    console.log(error.code); // 'DOCUMENT_VALIDATION_ERROR'
+    console.log(error.documentId); // 'doc-1'
+  }
+}
+
+try {
+  // Metadata.id mismatch
+  await db.add('doc-1', 'text', { id: 'doc-2' });
+} catch (error) {
+  if (error instanceof DocumentValidationError) {
+    console.log(error.message); // 'Metadata id "doc-2" does not match document id "doc-1"'
+  }
+}
+```
+
+#### DocumentNotFoundError
+
+Thrown when attempting to update a non-existent document:
+
+```typescript
+try {
+  await db.update('nonexistent', { text: 'new' });
+} catch (error) {
+  if (error instanceof DocumentNotFoundError) {
+    console.log(error.code); // 'DOCUMENT_NOT_FOUND'
+    console.log(error.documentId); // 'nonexistent'
+  }
+}
+```
+
+#### DocumentExistsError
+
+Thrown when adding a document with an ID that already exists:
+
+```typescript
+await db.add('doc-1', 'text', { id: 'doc-1' });
+
+try {
+  await db.add('doc-1', 'duplicate', { id: 'doc-1' });
+} catch (error) {
+  if (error instanceof DocumentExistsError) {
+    console.log(error.code); // 'DOCUMENT_EXISTS'
+    console.log(error.documentId); // 'doc-1'
+    // Fix: use remove() first or choose different ID
+    db.remove('doc-1');
+    await db.add('doc-1', 'duplicate', { id: 'doc-1' });
+  }
+}
+```
+
+#### DuplicateDocumentError
+
+Thrown when batch operations contain duplicates:
+
+```typescript
+try {
+  await db.addMany([
+    { id: 'doc-1', text: 'first', metadata: { id: 'doc-1' } },
+    { id: 'doc-1', text: 'second', metadata: { id: 'doc-1' } }, // Duplicate in batch
+  ]);
+} catch (error) {
+  if (error instanceof DuplicateDocumentError) {
+    console.log(error.code); // 'DUPLICATE_DOCUMENT'
+    console.log(error.context); // 'batch' or 'existing'
+    console.log(error.documentId); // 'doc-1'
+  }
+}
+```
+
+#### QueryValidationError
+
+Thrown when search parameters are invalid:
+
+```typescript
+try {
+  await db.search(''); // Empty query
+} catch (error) {
+  if (error instanceof QueryValidationError) {
+    console.log(error.code); // 'QUERY_VALIDATION_ERROR'
+  }
+}
+
+try {
+  await db.search('query', { topK: -5 }); // Invalid topK
+} catch (error) {
+  if (error instanceof QueryValidationError) {
+    console.log(error.message); // 'topK must be a positive number'
+  }
+}
+
+try {
+  await db.search('query', { threshold: 1.5 }); // Invalid threshold
+} catch (error) {
+  if (error instanceof QueryValidationError) {
+    console.log(error.message); // 'threshold must be between 0 and 1'
+  }
+}
+```
+
+#### EmbeddingError
+
+Thrown when embedding generation fails:
+
+```typescript
+try {
+  // This would only happen with internal errors
+  await db.addMany(documents);
+} catch (error) {
+  if (error instanceof EmbeddingError) {
+    console.log(error.code); // 'EMBEDDING_ERROR'
+    console.log(error.details); // Additional error details
+  }
+}
+```
+
+### Production Error Handling Patterns
+
+#### Catch Specific Errors
+
+```typescript
+try {
+  await db.add('doc-1', text, metadata);
+} catch (error) {
+  if (error instanceof DocumentExistsError) {
+    // Handle duplicate: maybe update instead
+    await db.update(error.documentId, { text, metadata });
+  } else if (error instanceof DocumentValidationError) {
+    // Handle validation: log and skip
+    console.error(`Invalid document ${error.documentId}:`, error.message);
+  } else if (error instanceof VectoriaNotInitializedError) {
+    // Handle initialization: retry after init
+    await db.initialize();
+    await db.add('doc-1', text, metadata);
+  } else {
+    // Unknown error: rethrow
+    throw error;
+  }
+}
+```
+
+#### Catch by Error Code
+
+```typescript
+try {
+  await db.search(query);
+} catch (error) {
+  if (error instanceof VectoriaError) {
+    switch (error.code) {
+      case 'NOT_INITIALIZED':
+        await db.initialize();
+        break;
+      case 'QUERY_VALIDATION_ERROR':
+        console.error('Invalid query:', error.message);
+        break;
+      default:
+        throw error;
+    }
+  }
+}
+```
+
+#### Batch Operations with Error Recovery
+
+```typescript
+async function addDocumentsSafely(documents: Array<{ id: string; text: string; metadata: T }>) {
+  try {
+    await db.addMany(documents);
+  } catch (error) {
+    if (error instanceof DuplicateDocumentError) {
+      // Remove duplicate and retry
+      const uniqueDocs = documents.filter((doc) => doc.id !== error.documentId);
+      await db.addMany(uniqueDocs);
+      console.warn(`Skipped duplicate: ${error.documentId}`);
+    } else if (error instanceof DocumentValidationError) {
+      // Log validation error and continue with valid documents
+      console.error(`Invalid document ${error.documentId}:`, error.message);
+      // Filter out invalid document and retry
+      const validDocs = documents.filter((doc) => doc.id !== error.documentId);
+      await db.addMany(validDocs);
+    } else {
+      throw error; // Unexpected error
+    }
+  }
+}
+```
+
+#### Graceful Degradation
+
+```typescript
+async function searchWithFallback(query: string) {
+  try {
+    return await db.search(query);
+  } catch (error) {
+    if (error instanceof QueryValidationError) {
+      // Fallback to default search
+      console.warn('Invalid query, using default search');
+      return await db.search('default query', { threshold: 0.1 });
+    } else if (error instanceof VectoriaNotInitializedError) {
+      // Initialize and retry
+      await db.initialize();
+      return await db.search(query);
+    }
+    throw error;
+  }
+}
+```
+
+### Error Codes Reference
+
+| Error Class                   | Code                        | When Thrown                             |
+| ----------------------------- | --------------------------- | --------------------------------------- |
+| `VectoriaNotInitializedError` | `NOT_INITIALIZED`           | Operation before `initialize()`         |
+| `DocumentValidationError`     | `DOCUMENT_VALIDATION_ERROR` | Empty text, metadata mismatch           |
+| `DocumentNotFoundError`       | `DOCUMENT_NOT_FOUND`        | Update/get non-existent document        |
+| `DocumentExistsError`         | `DOCUMENT_EXISTS`           | Add document with existing ID           |
+| `DuplicateDocumentError`      | `DUPLICATE_DOCUMENT`        | Duplicate in batch or existing document |
+| `QueryValidationError`        | `QUERY_VALIDATION_ERROR`    | Empty query, invalid topK/threshold     |
+| `EmbeddingError`              | `EMBEDDING_ERROR`           | Embedding generation failure            |
+| `StorageError`                | `STORAGE_ERROR`             | Storage operation failure               |
+| `ConfigurationError`          | `CONFIGURATION_ERROR`       | Invalid configuration                   |
+
+### Best Practices
+
+1. **Always catch specific errors** instead of generic `Error`
+2. **Use error codes** for programmatic handling
+3. **Access error properties** (`documentId`, `context`, etc.) for debugging
+4. **Implement retry logic** for `VectoriaNotInitializedError`
+5. **Log validation errors** with context for debugging
+6. **Graceful fallbacks** for production resilience
+
 ## Performance
 
 ### Memory Usage
@@ -694,6 +979,7 @@ VectoriaDB is ideal for:
 - [x] HNSW indexing for faster search (>100k documents)
 - [x] Persistence adapters (Redis, File, Memory)
 - [x] Incremental updates without re-embedding
+- [x] Production-ready error handling with typed exceptions
 - [ ] Compression for stored embeddings
 - [ ] Multi-vector embeddings per document
 

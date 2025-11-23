@@ -25,3 +25,17 @@ export type {
   StoredData,
   SerializedEmbedding,
 } from './storage/adapter.interface';
+
+// Error classes
+export {
+  VectoriaError,
+  VectoriaNotInitializedError,
+  DocumentValidationError,
+  DocumentNotFoundError,
+  DocumentExistsError,
+  DuplicateDocumentError,
+  QueryValidationError,
+  EmbeddingError,
+  StorageError,
+  ConfigurationError,
+} from './errors';
