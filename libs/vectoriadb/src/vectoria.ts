@@ -54,8 +54,17 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Add a document to the vector database
+   * @throws Error if database is not initialized or document ID already exists
    */
   async add(id: string, text: string, metadata: T): Promise<void> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
+    }
+
+    if (this.embeddings.has(id)) {
+      throw new Error(`Document with id "${id}" already exists. Use remove() first or choose a different id.`);
+    }
+
     // Generate embedding
     const vector = await this.embeddingService.generateEmbedding(text);
 
@@ -74,8 +83,25 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Add multiple documents in batch
+   * @throws Error if database is not initialized or any document ID already exists
    */
   async addMany(documents: Array<{ id: string; text: string; metadata: T }>): Promise<void> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before adding documents. Call initialize() first.');
+    }
+
+    // Check for duplicate IDs within the batch
+    const ids = new Set<string>();
+    for (const doc of documents) {
+      if (ids.has(doc.id)) {
+        throw new Error(`Duplicate document id "${doc.id}" in batch`);
+      }
+      if (this.embeddings.has(doc.id)) {
+        throw new Error(`Document with id "${doc.id}" already exists`);
+      }
+      ids.add(doc.id);
+    }
+
     // Extract texts
     const texts = documents.map((d) => d.text);
 
@@ -101,8 +127,13 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Search for documents using semantic similarity
+   * @throws Error if database is not initialized
    */
   async search(query: string, options: SearchOptions<T> = {}): Promise<SearchResult<T>[]> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before searching. Call initialize() first.');
+    }
+
     // Generate query embedding
     const queryVector = await this.embeddingService.generateEmbedding(query);
 
@@ -208,8 +239,13 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   /**
    * Get database statistics
+   * @throws Error if database is not initialized
    */
   getStats(): VectoriaStats {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before getting stats. Call initialize() first.');
+    }
+
     // Estimate memory usage
     const vectorBytes = this.embeddings.size * this.config.dimensions * 4; // Float32
     const metadataBytes = this.embeddings.size * 1024; // ~1KB per metadata (rough estimate)

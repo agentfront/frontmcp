@@ -56,21 +56,24 @@ describe('VectoriaDB', () => {
       expect(doc?.text).toBe('Test document');
     });
 
-    test('should overwrite existing document with same id', async () => {
+    test('should throw error when adding duplicate document id', async () => {
       await db.add('doc-1', 'First version', {
         id: 'doc-1',
         category: 'test',
       });
 
-      await db.add('doc-1', 'Second version', {
-        id: 'doc-1',
-        category: 'updated',
-      });
+      await expect(
+        db.add('doc-1', 'Second version', {
+          id: 'doc-1',
+          category: 'updated',
+        }),
+      ).rejects.toThrow('Document with id "doc-1" already exists');
 
+      // Original document should remain unchanged
       expect(db.size()).toBe(1);
       const doc = db.get('doc-1');
-      expect(doc?.text).toBe('Second version');
-      expect(doc?.metadata.category).toBe('updated');
+      expect(doc?.text).toBe('First version');
+      expect(doc?.metadata.category).toBe('test');
     });
   });
 
