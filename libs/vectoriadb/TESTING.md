@@ -56,7 +56,7 @@ Tests main VectoriaDB functionality:
 
 ## Test Results
 
-```
+```text
 PASS  vectoriadb  similarity.test.ts
   Similarity Utils
     cosineSimilarity
