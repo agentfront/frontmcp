@@ -1,3 +1,4 @@
+import * as fs from 'fs/promises';
 import { EmbeddingService, EmbeddingError } from '../index';
 
 describe('EmbeddingService', () => {
@@ -231,7 +232,6 @@ describe('EmbeddingService', () => {
       expect(service.isReady()).toBe(true);
 
       // Cleanup
-      const fs = require('fs/promises');
       try {
         await fs.rm(customCacheDir, { recursive: true, force: true });
       } catch {

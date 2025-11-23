@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import type { DocumentEmbedding, DocumentMetadata } from '../interfaces';
 import type { SerializedEmbedding } from './adapter.interface';
 
@@ -40,7 +41,6 @@ export function deserializeEmbedding<T extends DocumentMetadata>(
  * Create a hash from a string (simple implementation)
  */
 export function hash(input: string): string {
-  const crypto = require('crypto');
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex').substring(0, 16);
 }
 

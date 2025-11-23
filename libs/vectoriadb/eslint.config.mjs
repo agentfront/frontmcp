@@ -17,6 +17,6 @@ export default [
     },
   },
   {
-    ignores: ['**/out-tsc'],
+    ignores: ['**/out-tsc', '**/dist', '**/coverage', '**/__tests__', '**/.nx', '**/.idea', '**/.git'],
   },
 ];

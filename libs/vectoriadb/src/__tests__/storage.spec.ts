@@ -897,9 +897,6 @@ describe('Storage Adapters', () => {
           namespace: 'test-json',
         });
 
-        const fs = require('fs/promises');
-        const path = require('path');
-
         try {
           await adapter.initialize();
 
@@ -947,9 +944,6 @@ describe('Storage Adapters', () => {
           cacheDir: './tmp/invalid-json-test',
           namespace: 'test-invalid',
         });
-
-        const fs = require('fs/promises');
-        const path = require('path');
 
         try {
           await adapter.initialize();
@@ -1077,7 +1071,6 @@ describe('Storage Adapters', () => {
         await expect(adapter.save(invalidData)).rejects.toThrow('Failed to serialize embeddings data');
 
         // Cleanup
-        const fs = require('fs/promises');
         try {
           await fs.rm('./tmp/serialization-error-test', { recursive: true, force: true });
         } catch {
@@ -1117,7 +1110,6 @@ describe('Storage Adapters', () => {
         }
 
         // Cleanup
-        const fs = require('fs/promises');
         try {
           await fs.rm('./tmp/double-wrap-test', { recursive: true, force: true });
         } catch {
