@@ -35,6 +35,8 @@ VectoriaDB is a fast, minimal-dependency vector database designed for in-memory 
 - **⚡ Batch Operations**: Efficient bulk insert and search
 - **🔧 Flexible Filtering**: Custom metadata filtering with type safety
 - **📊 Scalable**: HNSW index for 100k+ documents with sub-millisecond search
+- **💾 Persistent**: File & Redis adapters for caching across restarts
+- **🔄 Smart Updates**: Incremental updates without re-embedding (instant metadata updates)
 - **📦 Production-Ready**: Battle-tested in FrontMCP
 
 ## Installation
@@ -477,6 +479,85 @@ The cache is automatically invalidated when:
 - **Namespace**: Use app name + version to prevent cache conflicts
 - **Manual save**: Call `saveToStorage()` after adding documents
 
+### Incremental Updates (Production-Ready)
+
+Update documents efficiently without re-embedding when only metadata changes:
+
+#### Update Metadata Only (Instant)
+
+```typescript
+// Update metadata without re-embedding (instant operation)
+db.updateMetadata('doc-1', {
+  id: 'doc-1',
+  category: 'updated-category',
+  priority: 'high',
+  lastModified: new Date(),
+});
+```
+
+#### Smart Update (Auto-Detection)
+
+```typescript
+// Only re-embeds if text actually changed
+const reembedded = await db.update('doc-1', {
+  text: 'Updated content', // If different, will re-embed
+  metadata: { id: 'doc-1', category: 'updated' },
+});
+
+console.log(reembedded); // true if re-embedded, false if text was same
+```
+
+#### Batch Updates (Efficient)
+
+```typescript
+// Update many documents - only re-embeds those with text changes
+const result = await db.updateMany([
+  {
+    id: 'doc-1',
+    text: 'New content for doc 1', // Will re-embed
+    metadata: { id: 'doc-1', category: 'tech' },
+  },
+  {
+    id: 'doc-2',
+    metadata: { id: 'doc-2', category: 'food' }, // No text = no re-embedding
+  },
+  {
+    id: 'doc-3',
+    text: 'Same text as before', // Smart detection = no re-embedding
+    metadata: { id: 'doc-3', category: 'science' },
+  },
+]);
+
+console.log(`Updated ${result.updated} documents`);
+console.log(`Re-embedded ${result.reembedded} documents`); // Only what changed
+```
+
+#### Force Re-Embedding
+
+```typescript
+// Force re-embed even if text hasn't changed (e.g., new embedding model)
+await db.update('doc-1', { text: 'same text' }, { forceReembed: true });
+
+// Force re-embed all in batch
+await db.updateMany(docs, { forceReembed: true });
+```
+
+**Performance Benefits:**
+
+| Operation              | Speed      | Re-embedding      |
+| ---------------------- | ---------- | ----------------- |
+| `updateMetadata()`     | Instant    | Never             |
+| `update()` (metadata)  | Instant    | No                |
+| `update()` (text)      | ~100-200ms | Only if changed   |
+| `updateMany()` (mixed) | Batched    | Only what changed |
+
+**Use Cases:**
+
+- **Metadata updates**: Change categories, tags, priorities instantly
+- **Partial text updates**: Only re-embed documents that actually changed
+- **Dynamic content**: Update frequently changing metadata without performance hit
+- **Bulk operations**: Efficiently update thousands of documents
+
 ## Performance
 
 ### Memory Usage
@@ -612,8 +693,9 @@ VectoriaDB is ideal for:
 - [x] Comprehensive test suite with mocked dependencies
 - [x] HNSW indexing for faster search (>100k documents)
 - [x] Persistence adapters (Redis, File, Memory)
-- [ ] Incremental updates without re-embedding
+- [x] Incremental updates without re-embedding
 - [ ] Compression for stored embeddings
+- [ ] Multi-vector embeddings per document
 
 ## Contributing
 

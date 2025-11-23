@@ -794,7 +794,7 @@ describe('VectoriaDB', () => {
 
       test('should handle searches on large datasets', async () => {
         // Add more documents to test HNSW performance characteristics
-        const largeBatch = [];
+        const largeBatch: Array<{ id: string; text: string; metadata: TestMetadata }> = [];
         for (let i = 0; i < 50; i++) {
           largeBatch.push({
             id: `doc-${i + 10}`,
@@ -904,6 +904,242 @@ describe('VectoriaDB', () => {
         await expect(uninitDb.add('doc-1', 'Test', { id: 'doc-1', category: 'test' })).rejects.toThrow(
           'VectoriaDB must be initialized',
         );
+      });
+    });
+  });
+
+  describe('Incremental Updates', () => {
+    beforeEach(async () => {
+      await db.addMany([
+        { id: 'doc-1', text: 'Machine learning basics', metadata: { id: 'doc-1', category: 'tech', author: 'Alice' } },
+        { id: 'doc-2', text: 'Cooking pasta recipes', metadata: { id: 'doc-2', category: 'food', author: 'Bob' } },
+        { id: 'doc-3', text: 'Python programming', metadata: { id: 'doc-3', category: 'tech', author: 'Charlie' } },
+      ]);
+    });
+
+    describe('updateMetadata', () => {
+      test('should update metadata only without re-embedding', () => {
+        const originalDoc = db.get('doc-1')!;
+        const originalVector = originalDoc.vector;
+        const originalText = originalDoc.text;
+        const originalCreatedAt = originalDoc.createdAt;
+
+        db.updateMetadata('doc-1', { id: 'doc-1', category: 'ai', author: 'Alice Updated' });
+
+        const updated = db.get('doc-1')!;
+        expect(updated.metadata.category).toBe('ai');
+        expect(updated.metadata.author).toBe('Alice Updated');
+        expect(updated.text).toBe(originalText);
+        expect(updated.vector).toBe(originalVector); // Same reference = not re-embedded
+        expect(updated.createdAt).toBe(originalCreatedAt);
+      });
+
+      test('should throw error for non-existent document', () => {
+        expect(() => {
+          db.updateMetadata('non-existent', { id: 'non-existent', category: 'test' });
+        }).toThrow('Document with id "non-existent" not found');
+      });
+
+      test('should throw error if not initialized', () => {
+        const uninitDb = new VectoriaDB<TestMetadata>();
+        expect(() => {
+          uninitDb.updateMetadata('doc-1', { id: 'doc-1', category: 'test' });
+        }).toThrow('VectoriaDB must be initialized');
+      });
+    });
+
+    describe('update', () => {
+      test('should update metadata only when text not changed', async () => {
+        const originalVector = db.get('doc-1')!.vector;
+
+        const reembedded = await db.update('doc-1', {
+          metadata: { id: 'doc-1', category: 'ai', author: 'Alice' },
+        });
+
+        expect(reembedded).toBe(false); // Not re-embedded
+        const updated = db.get('doc-1')!;
+        expect(updated.metadata.category).toBe('ai');
+        expect(updated.vector).toBe(originalVector);
+      });
+
+      test('should re-embed when text changes', async () => {
+        const originalVector = db.get('doc-1')!.vector;
+
+        const reembedded = await db.update('doc-1', {
+          text: 'Deep learning advanced concepts',
+          metadata: { id: 'doc-1', category: 'ai', author: 'Alice' },
+        });
+
+        expect(reembedded).toBe(true); // Re-embedded
+        const updated = db.get('doc-1')!;
+        expect(updated.text).toBe('Deep learning advanced concepts');
+        expect(updated.metadata.category).toBe('ai');
+        expect(updated.vector).not.toBe(originalVector); // Different reference
+      });
+
+      test('should not re-embed when text is same', async () => {
+        const originalVector = db.get('doc-1')!.vector;
+
+        const reembedded = await db.update('doc-1', {
+          text: 'Machine learning basics', // Same text
+          metadata: { id: 'doc-1', category: 'ai', author: 'Alice' },
+        });
+
+        expect(reembedded).toBe(false); // Not re-embedded
+        const updated = db.get('doc-1')!;
+        expect(updated.vector).toBe(originalVector);
+        expect(updated.metadata.category).toBe('ai');
+      });
+
+      test('should force re-embed when forceReembed is true', async () => {
+        const originalVector = db.get('doc-1')!.vector;
+
+        const reembedded = await db.update(
+          'doc-1',
+          {
+            text: 'Machine learning basics', // Same text
+          },
+          { forceReembed: true },
+        );
+
+        expect(reembedded).toBe(true); // Forced re-embedding
+        const updated = db.get('doc-1')!;
+        expect(updated.vector).not.toBe(originalVector);
+      });
+
+      test('should throw error for empty text', async () => {
+        await expect(db.update('doc-1', { text: '' })).rejects.toThrow('Document text cannot be empty');
+      });
+
+      test('should throw error for whitespace-only text', async () => {
+        await expect(db.update('doc-1', { text: '   \n\t  ' })).rejects.toThrow('Document text cannot be empty');
+      });
+
+      test('should throw error for non-existent document', async () => {
+        await expect(db.update('non-existent', { text: 'New text' })).rejects.toThrow(
+          'Document with id "non-existent" not found',
+        );
+      });
+
+      test('should update text only without metadata', async () => {
+        const originalCategory = db.get('doc-1')!.metadata.category;
+
+        await db.update('doc-1', { text: 'New text content' });
+
+        const updated = db.get('doc-1')!;
+        expect(updated.text).toBe('New text content');
+        expect(updated.metadata.category).toBe(originalCategory); // Unchanged
+      });
+    });
+
+    describe('updateMany', () => {
+      test('should update multiple documents efficiently', async () => {
+        const result = await db.updateMany([
+          { id: 'doc-1', metadata: { id: 'doc-1', category: 'ai', author: 'Alice' } },
+          { id: 'doc-2', metadata: { id: 'doc-2', category: 'recipes', author: 'Bob' } },
+        ]);
+
+        expect(result.updated).toBe(2);
+        expect(result.reembedded).toBe(0); // Only metadata changed
+
+        expect(db.get('doc-1')!.metadata.category).toBe('ai');
+        expect(db.get('doc-2')!.metadata.category).toBe('recipes');
+      });
+
+      test('should batch re-embed only documents with text changes', async () => {
+        const result = await db.updateMany([
+          { id: 'doc-1', text: 'Updated machine learning', metadata: { id: 'doc-1', category: 'ai' } },
+          { id: 'doc-2', metadata: { id: 'doc-2', category: 'recipes' } }, // No text change
+          { id: 'doc-3', text: 'Updated Python guide', metadata: { id: 'doc-3', category: 'programming' } },
+        ]);
+
+        expect(result.updated).toBe(3);
+        expect(result.reembedded).toBe(2); // Only doc-1 and doc-3
+
+        expect(db.get('doc-1')!.text).toBe('Updated machine learning');
+        expect(db.get('doc-2')!.text).toBe('Cooking pasta recipes'); // Unchanged
+        expect(db.get('doc-3')!.text).toBe('Updated Python guide');
+      });
+
+      test('should not re-embed when text is same', async () => {
+        const result = await db.updateMany([
+          { id: 'doc-1', text: 'Machine learning basics', metadata: { id: 'doc-1', category: 'ai' } }, // Same text
+        ]);
+
+        expect(result.updated).toBe(1);
+        expect(result.reembedded).toBe(0);
+      });
+
+      test('should force re-embed all when forceReembed is true', async () => {
+        const result = await db.updateMany(
+          [
+            { id: 'doc-1', text: 'Machine learning basics', metadata: { id: 'doc-1', category: 'ai' } },
+            { id: 'doc-2', text: 'Cooking pasta recipes', metadata: { id: 'doc-2', category: 'food' } },
+          ],
+          { forceReembed: true },
+        );
+
+        expect(result.updated).toBe(2);
+        expect(result.reembedded).toBe(2); // Both forced to re-embed
+      });
+
+      test('should throw error if any document not found', async () => {
+        await expect(
+          db.updateMany([
+            { id: 'doc-1', metadata: { id: 'doc-1', category: 'test' } },
+            { id: 'non-existent', metadata: { id: 'non-existent', category: 'test' } },
+          ]),
+        ).rejects.toThrow('Document with id "non-existent" not found');
+      });
+
+      test('should throw error for empty text in batch', async () => {
+        await expect(
+          db.updateMany([
+            { id: 'doc-1', text: 'Valid text', metadata: { id: 'doc-1', category: 'test' } },
+            { id: 'doc-2', text: '', metadata: { id: 'doc-2', category: 'test' } },
+          ]),
+        ).rejects.toThrow('Document with id "doc-2" has empty or whitespace-only text');
+      });
+
+      test('should work with HNSW index', async () => {
+        const hnswDb = new VectoriaDB<TestMetadata>({ useHNSW: true });
+        await hnswDb.initialize();
+
+        await hnswDb.addMany([
+          { id: 'doc-1', text: 'Machine learning', metadata: { id: 'doc-1', category: 'tech' } },
+          { id: 'doc-2', text: 'Cooking', metadata: { id: 'doc-2', category: 'food' } },
+        ]);
+
+        await hnswDb.updateMany([{ id: 'doc-1', text: 'Deep learning AI', metadata: { id: 'doc-1', category: 'ai' } }]);
+
+        const results = await hnswDb.search('artificial intelligence', { threshold: 0 });
+        expect(results.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe('update performance', () => {
+      test('updateMetadata should be instant (no embedding generation)', () => {
+        const start = Date.now();
+        db.updateMetadata('doc-1', { id: 'doc-1', category: 'updated' });
+        const duration = Date.now() - start;
+
+        expect(duration).toBeLessThan(10); // Should be < 10ms
+      });
+
+      test('should update metadata on many documents quickly', async () => {
+        // Add many documents first
+        const docs: Array<{ id: string; text: string; metadata: TestMetadata }> = [];
+        for (let i = 0; i < 100; i++) {
+          docs.push({ id: `perf-${i}`, text: `Document ${i}`, metadata: { id: `perf-${i}`, category: 'test' } });
+        }
+        await db.addMany(docs);
+
+        // Metadata-only updates should be fast
+        for (let i = 0; i < 100; i++) {
+          db.updateMetadata(`perf-${i}`, { id: `perf-${i}`, category: 'updated' });
+        }
+
+        expect(db.get('perf-50')!.metadata.category).toBe('updated');
       });
     });
   });

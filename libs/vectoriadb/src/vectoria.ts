@@ -356,6 +356,171 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
   }
 
   /**
+   * Update document metadata without re-embedding
+   * Fast operation - only updates metadata, keeps existing embedding
+   * @throws Error if database is not initialized or document doesn't exist
+   */
+  updateMetadata(id: string, metadata: T): void {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+    }
+
+    const existing = this.embeddings.get(id);
+    if (!existing) {
+      throw new Error(`Document with id "${id}" not found`);
+    }
+
+    // Update metadata only, keep everything else the same
+    existing.metadata = metadata;
+  }
+
+  /**
+   * Update document with smart re-embedding
+   * Only re-embeds if text changes (unless forceReembed is true)
+   * @throws Error if database is not initialized, document doesn't exist, or text is empty
+   */
+  async update(
+    id: string,
+    updates: { text?: string; metadata?: T },
+    options: { forceReembed?: boolean } = {},
+  ): Promise<boolean> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+    }
+
+    const existing = this.embeddings.get(id);
+    if (!existing) {
+      throw new Error(`Document with id "${id}" not found`);
+    }
+
+    // Check if text is being updated
+    const textChanged = updates.text !== undefined && updates.text !== existing.text;
+    const needsReembed = textChanged || options.forceReembed;
+
+    // Validate new text if provided
+    if (updates.text !== undefined && (!updates.text || !updates.text.trim())) {
+      throw new Error('Document text cannot be empty or whitespace-only');
+    }
+
+    // Update metadata if provided
+    if (updates.metadata !== undefined) {
+      existing.metadata = updates.metadata;
+    }
+
+    // Update text and re-embed if needed
+    if (needsReembed && updates.text !== undefined) {
+      const newText = updates.text;
+
+      // Remove from HNSW index (will re-add with new embedding)
+      if (this.hnswIndex) {
+        this.hnswIndex.remove(id);
+      }
+
+      // Generate new embedding
+      const vector = await this.embeddingService.generateEmbedding(newText);
+
+      // Update the embedding
+      existing.vector = vector;
+      existing.text = newText;
+      existing.createdAt = new Date();
+
+      // Re-add to HNSW index
+      if (this.hnswIndex) {
+        this.hnswIndex.insert(id, vector);
+      }
+
+      return true; // Re-embedded
+    }
+
+    return false; // No re-embedding needed
+  }
+
+  /**
+   * Update multiple documents with smart re-embedding
+   * Only re-embeds documents where text changed
+   * @throws Error if database is not initialized, any document doesn't exist, or any text is empty
+   */
+  async updateMany(
+    updates: Array<{ id: string; text?: string; metadata?: T }>,
+    options: { forceReembed?: boolean } = {},
+  ): Promise<{ updated: number; reembedded: number }> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before updating. Call initialize() first.');
+    }
+
+    // Validate all documents exist and new texts are valid
+    for (const update of updates) {
+      if (!this.embeddings.has(update.id)) {
+        throw new Error(`Document with id "${update.id}" not found`);
+      }
+      if (update.text !== undefined && (!update.text || !update.text.trim())) {
+        throw new Error(`Document with id "${update.id}" has empty or whitespace-only text`);
+      }
+    }
+
+    // Separate updates into metadata-only and re-embedding required
+    const metadataOnlyUpdates: typeof updates = [];
+    const reembedUpdates: typeof updates = [];
+
+    for (const update of updates) {
+      const existing = this.embeddings.get(update.id)!;
+      const textChanged = update.text !== undefined && update.text !== existing.text;
+      const needsReembed = textChanged || options.forceReembed;
+
+      if (needsReembed && update.text !== undefined) {
+        reembedUpdates.push(update);
+      } else {
+        metadataOnlyUpdates.push(update);
+      }
+    }
+
+    // Update metadata-only updates (fast)
+    for (const update of metadataOnlyUpdates) {
+      const existing = this.embeddings.get(update.id)!;
+      if (update.metadata !== undefined) {
+        existing.metadata = update.metadata;
+      }
+    }
+
+    // Batch re-embed updates that need it
+    if (reembedUpdates.length > 0) {
+      const texts = reembedUpdates.map((u) => u.text!);
+      const vectors = await this.embeddingService.generateEmbeddings(texts);
+
+      for (let i = 0; i < reembedUpdates.length; i++) {
+        const update = reembedUpdates[i];
+        const existing = this.embeddings.get(update.id)!;
+        const vector = vectors[i];
+
+        // Remove from HNSW if needed
+        if (this.hnswIndex) {
+          this.hnswIndex.remove(update.id);
+        }
+
+        // Update embedding
+        existing.vector = vector;
+        existing.text = update.text!;
+        existing.createdAt = new Date();
+
+        // Update metadata if provided
+        if (update.metadata !== undefined) {
+          existing.metadata = update.metadata;
+        }
+
+        // Re-add to HNSW
+        if (this.hnswIndex) {
+          this.hnswIndex.insert(update.id, vector);
+        }
+      }
+    }
+
+    return {
+      updated: updates.length,
+      reembedded: reembedUpdates.length,
+    };
+  }
+
+  /**
    * Clear all embeddings
    */
   clear(): void {
