@@ -11,22 +11,22 @@ import {
   ProviderInjectedRecord,
   ScopeEntry,
   RegistryKind,
-  RegistryType, ProviderEntry, FrontMcpServer,
-} from '../common';
-import {normalizeProvider, providerDiscoveryDeps, providerInvocationTokens} from './provider.utils';
-import {depsOfClass, isClass, isPromise, tokenName} from '../utils/token.utils';
-import {hasAsyncWith} from '../utils/metadata.utils';
-import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
-import {ProviderViews} from './provider.types';
-import {Scope} from '../scope';
-import HookRegistry from "../hooks/hook.registry";
-
-export default class ProviderRegistry extends RegistryAbstract<
+  RegistryType,
   ProviderEntry,
-  ProviderRecord,
-  ProviderType[],
-  ProviderRegistry | undefined
-> implements ProviderRegistryInterface {
+  FrontMcpServer,
+} from '../common';
+import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
+import { depsOfClass, isClass, isPromise, tokenName } from '../utils/token.utils';
+import { hasAsyncWith } from '../utils/metadata.utils';
+import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import { ProviderViews } from './provider.types';
+import { Scope } from '../scope';
+import HookRegistry from '../hooks/hook.registry';
+
+export default class ProviderRegistry
+  extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
+  implements ProviderRegistryInterface
+{
   /** used to track which registry provided which token */
   private readonly providedBy: Map<Token, ProviderRegistry>;
   /** topo order (deps first) */
@@ -48,7 +48,6 @@ export default class ProviderRegistry extends RegistryAbstract<
     this.ready = this.initialize();
   }
 
-
   getProviders(): ProviderEntry[] {
     return [...this.instances.values()] as const;
   }
@@ -56,10 +55,8 @@ export default class ProviderRegistry extends RegistryAbstract<
   /* -------------------- Hierarchy helpers -------------------- */
 
   /** Walk up the registry chain to find a def for a token. */
-  private lookupDefInHierarchy(token: Token):
-    | { registry: ProviderRegistry; rec: ProviderRecord }
-    | undefined {
-    if (this.defs.has(token as any)) return {registry: this, rec: this.defs.get(token as any)!};
+  private lookupDefInHierarchy(token: Token): { registry: ProviderRegistry; rec: ProviderRecord } | undefined {
+    if (this.defs.has(token as any)) return { registry: this, rec: this.defs.get(token as any)! };
     return this.providers?.lookupDefInHierarchy(token);
   }
 
@@ -67,8 +64,8 @@ export default class ProviderRegistry extends RegistryAbstract<
   private resolveDefaultFromHierarchy(token: Token): any {
     const found = this.lookupDefInHierarchy(token);
     if (!found) throw new Error(`Cannot resolve token ${tokenName(token)}: not registered in hierarchy.`);
-    const {registry, rec} = found;
-    const sc = registry.getScope(rec);
+    const { registry, rec } = found;
+    const sc = registry.getProviderScope(rec);
     if (sc !== ProviderScope.GLOBAL) {
       const scName = ProviderScope[sc];
       throw new Error(
@@ -77,9 +74,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     }
     const inst = registry.instances.get(token);
     if (inst === undefined) {
-      throw new Error(
-        `Dependency ${tokenName(token)} (DEFAULT) is not instantiated in ${registry.constructor.name}`,
-      );
+      throw new Error(`Dependency ${tokenName(token)} (DEFAULT) is not instantiated in ${registry.constructor.name}`);
     }
     return inst;
   }
@@ -99,7 +94,7 @@ export default class ProviderRegistry extends RegistryAbstract<
       graph.set(provide, new Set());
     }
 
-    return {tokens, defs, graph};
+    return { tokens, defs, graph };
   }
 
   protected buildGraph() {
@@ -118,10 +113,9 @@ export default class ProviderRegistry extends RegistryAbstract<
         }
 
         const depRec = isLocal ? this.defs.get(d)! : up!.rec;
-        const depScope =
-          isLocal ? this.getScope(depRec) : up!.registry.getScope(depRec);
+        const depScope = isLocal ? this.getProviderScope(depRec) : up!.registry.getProviderScope(depRec);
 
-        if (this.getScope(rec) === ProviderScope.GLOBAL && depScope !== ProviderScope.GLOBAL) {
+        if (this.getProviderScope(rec) === ProviderScope.GLOBAL && depScope !== ProviderScope.GLOBAL) {
           throw new Error(
             `Invalid dependency: DEFAULT-scoped provider ${tokenName(
               token,
@@ -174,7 +168,7 @@ export default class ProviderRegistry extends RegistryAbstract<
 
     for (const token of this.order) {
       const rec = this.defs.get(token)!;
-      if (this.getScope(rec) !== ProviderScope.GLOBAL) continue;
+      if (this.getProviderScope(rec) !== ProviderScope.GLOBAL) continue;
 
       if (only && !only.has(token)) continue;
       if (!force && this.instances.has(token)) continue;
@@ -199,135 +193,6 @@ export default class ProviderRegistry extends RegistryAbstract<
   getAllSingletons(): ReadonlyMap<Token, unknown> {
     return this.instances; // exposed as ReadonlyMap in the type
   }
-
-  // /** Get (or create) the mutable session store for a sessionId. */
-  // sessionMap(sessionId: string): Map<Token, unknown> {
-  //   let store = this.scoped.get(sessionId);
-  //   if (!store) {
-  //     store = new Map<Token, unknown>();
-  //     this.scoped.set(sessionId, store);
-  //   }
-  //   return store;
-  // }
-
-  // /** Try to build SessionProvider from registered DI definition (CLASS/FACTORY/etc.). */
-  // private async tryBuildRegisteredSessionProvider(
-  //   sessionId: string,
-  //   requestId?: string | number,
-  // ): Promise<SessionProvider | undefined> {
-  //   // Prefer local def; otherwise look up in hierarchy
-  //   const found = this.lookupDefInHierarchy(SessionProvider as unknown as Token);
-  //   const rec = found?.rec;
-  //   const reg = found?.registry;
-  //
-  //   if (!rec) return undefined;
-  //
-  //   const sc = (rec as any).scope ?? ProviderScope.GLOBAL;
-  //   if (sc === ProviderScope.GLOBAL) {
-  //     // If someone registered a DEFAULT-scoped SessionProvider, use the singleton instance (from the owning registry)
-  //     if (!reg!.instances.has(SessionProvider)) {
-  //       throw new Error(
-  //         `Registered ${tokenName(SessionProvider)} (DEFAULT) not instantiated at bootstrap`,
-  //       );
-  //     }
-  //     return reg!.instances.get(SessionProvider) as SessionProvider;
-  //   }
-  //
-  //   // Build into the session store using the owning registry's factory (so its metadata/defs are used)
-  //   const store = this.sessionMap(sessionId);
-  //   await reg!.buildIntoStore(
-  //     SessionProvider as unknown as Token,
-  //     rec,
-  //     store,
-  //     sessionId,
-  //     [sessionId, requestId],
-  //   );
-  //   const sp = store.get(SessionProvider as unknown as Token) as SessionProvider | undefined;
-  //
-  //   // Ensure request id is set/updated, if setter exists
-  //   if (sp && requestId && typeof sp.setRequestId === 'function') sp.setRequestId(requestId);
-  //   return sp;
-  // }
-
-  // /** Ensure a SessionProvider is present in the session map (registered or anonymous).
-  //  * @deprecated
-  //  */
-  // async ensureSessionProvider(sessionId: string, requestId?: string | number): Promise<SessionProvider> {
-  //   const store = this.sessionMap(sessionId);
-  //
-  //   // already present
-  //   if (store.has(SessionProvider)) {
-  //     const sp = store.get(SessionProvider) as SessionProvider;
-  //     if (requestId && typeof sp.setRequestId === 'function') sp.setRequestId(requestId);
-  //     return sp;
-  //   }
-  //
-  //   // try registered provider first (local or parent)
-  //   const registered = await this.tryBuildRegisteredSessionProvider(sessionId, requestId);
-  //   return registered as SessionProvider;
-  //
-  // }
-
-  // /**
-  //  * Create (or get) an authenticated session store, seed SessionProvider if missing.
-  //  * @deprecated
-  //  * */
-  // bootstrapSession(sessionId: string, requestId?: string): Map<Token, unknown> {
-  //   let store = this.scoped.get(sessionId);
-  //   if (!store) {
-  //     store = new Map<Token, unknown>();
-  //     this.scoped.set(sessionId, store);
-  //   }
-  //   if (!store.has(SessionProvider)) {
-  //     store.set(SessionProvider, {}); // new SessionProvider(sessionId, requestId ?? '', false));
-  //   } else if (requestId) {
-  //     (store.get(SessionProvider) as SessionProvider).setRequestId(requestId);
-  //   }
-  //   return store;
-  // }
-
-  // /**
-  //  * Returns all tokens that are registered as session-scoped (including SessionProvider).
-  //  * @deprecated
-  //  */
-  // listSessionScopedTokens(): Token[] {
-  //   const out: Token[] = [];
-  //   // Only local scoped tokens are known here; parent-scoped tokens will be pulled on demand.
-  //   for (const [tok, rec] of this.defs.entries()) {
-  //     if (this.getScope(rec) === ProviderScope.SESSION) out.push(tok);
-  //   }
-  //   return out;
-  // }
-
-  // /** Eager build selected session providers into the given session store. */
-  // private async buildSelectedSessionProviders(sessionId: string, requestId?: string | number): Promise<void> {
-  //   const store = this.sessionMap(sessionId);
-  //   await this.ensureSessionProvider(sessionId, requestId);
-  //
-  //   // Iterate over all session-scoped tokens (local list). Parent-scoped will resolve on demand.
-  //   for (const tok of this.listSessionScopedTokens()) {
-  //     if (tok === (SessionProvider as any)) continue;
-  //
-  //     if (store.has(tok)) continue; // already built
-  //
-  //     const rec = this.defs.get(tok);
-  //     if (!rec) continue; // should not happen
-  //
-  //     // Recursively build into this session store (handles scoped/default deps)
-  //     await this.buildIntoStore(tok, rec, store, sessionId);
-  //   }
-  // }
-
-  // /** Convenience: build all three maps you can pass straight into an invoke ctx. */
-  // async buildViews(sessionId: string, requestId?: string | number): Promise<ProviderViews> {
-  //   await this.buildSelectedSessionProviders(sessionId, requestId);
-  //   return {
-  //     global: this.getAllSingletons(),
-  //     session: this.sessionMap(sessionId),
-  //     request: new Map<Token, unknown>(),
-  //   };
-  // }
-
   discoveryDeps(rec: ProviderRecord): Token[] {
     return providerDiscoveryDeps(rec, this.tokens, (k, phase) => depsOfClass(k, phase));
   }
@@ -336,8 +201,12 @@ export default class ProviderRegistry extends RegistryAbstract<
     return providerInvocationTokens(rec, (k, phase) => depsOfClass(k, phase));
   }
 
-  getScope(rec: ProviderRecord): ProviderScope {
+  getProviderScope(rec: ProviderRecord): ProviderScope {
     return rec.metadata?.scope ?? ProviderScope.GLOBAL;
+  }
+
+  getScope(): ScopeEntry {
+    return this.getActiveScope();
   }
 
   /* -------------------- Instantiation -------------------- */
@@ -362,7 +231,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     // Local def?
     const rec = this.defs.get(t as any);
     if (rec) {
-      const sc = this.getScope(rec);
+      const sc = this.getProviderScope(rec);
       if (sc === ProviderScope.GLOBAL) {
         if (!this.instances.has(t)) {
           throw new Error(`Dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
@@ -377,7 +246,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     // Parent def?
     const up = this.lookupDefInHierarchy(t);
     if (up) {
-      const sc = up.registry.getScope(up.rec);
+      const sc = up.registry.getProviderScope(up.rec);
       if (sc === ProviderScope.GLOBAL) {
         const inst = up.registry.instances.get(t);
         if (inst === undefined) {
@@ -560,7 +429,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     // Local DI?
     const depRec = this.defs.get(d as any);
     if (depRec) {
-      const sc = this.getScope(depRec);
+      const sc = this.getProviderScope(depRec);
       if (sc === ProviderScope.GLOBAL) {
         const v = this.instances.get(d);
         if (v === undefined) throw new Error(`${tokenName(d)} (DEFAULT scope) is not instantiated`);
@@ -574,7 +443,7 @@ export default class ProviderRegistry extends RegistryAbstract<
     // Parent DI?
     const up = this.lookupDefInHierarchy(d);
     if (up) {
-      const sc = up.registry.getScope(up.rec);
+      const sc = up.registry.getProviderScope(up.rec);
       if (sc === ProviderScope.GLOBAL) {
         const v = up.registry.instances.get(d);
         if (v === undefined) throw new Error(`${tokenName(d)} (DEFAULT scope) is not instantiated in parent`);
@@ -592,8 +461,8 @@ export default class ProviderRegistry extends RegistryAbstract<
     if (this.instances.has(token)) return this.instances.get(token) as T;
 
     const rec = this.defs.get(token as any);
-    if (rec && this.getScope(rec) !== ProviderScope.GLOBAL) {
-      const scName = ProviderScope[this.getScope(rec)];
+    if (rec && this.getProviderScope(rec) !== ProviderScope.GLOBAL) {
+      const scName = ProviderScope[this.getProviderScope(rec)];
       throw new Error(`Provider ${tokenName(token)} is scoped (${scName}). Use getScoped(token, key).`);
     }
 
@@ -614,11 +483,11 @@ export default class ProviderRegistry extends RegistryAbstract<
   }
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][] {
-    return [...this.registries.get(type) ?? []] as any;
+    return [...(this.registries.get(type) ?? [])] as any;
   }
 
   getHooksRegistry() {
-    return this.getRegistries('HookRegistry')[0] as HookRegistry
+    return this.getRegistries('HookRegistry')[0] as HookRegistry;
   }
 
   // noinspection JSUnusedGlobalSymbols
@@ -633,13 +502,12 @@ export default class ProviderRegistry extends RegistryAbstract<
 
     const found = this.lookupDefInHierarchy(t);
     if (found) {
-      const {registry, rec} = found;
-      const sc = registry.getScope(rec);
+      const { registry, rec } = found;
+      const sc = registry.getProviderScope(rec);
       if (sc !== ProviderScope.GLOBAL)
         throw new Error(`Plugin dependency ${tokenName(t)} must be DEFAULT-scoped at bootstrap`);
       const v = registry.instances.get(t);
-      if (v === undefined)
-        throw new Error(`Plugin dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
+      if (v === undefined) throw new Error(`Plugin dependency ${tokenName(t)} (DEFAULT scope) is not instantiated`);
       return v;
     }
     throw new Error(`Cannot resolve plugin dependency ${tokenName(t)} (local or parent)`);
@@ -655,8 +523,8 @@ export default class ProviderRegistry extends RegistryAbstract<
     // 1) If it's a registered token (local or parent), handle via DI rules
     const found = this.lookupDefInHierarchy(cls as any);
     if (found) {
-      const {registry, rec} = found;
-      const sc = registry.getScope(rec);
+      const { registry, rec } = found;
+      const sc = registry.getProviderScope(rec);
       if (sc !== ProviderScope.GLOBAL) {
         const scName = ProviderScope[sc];
         throw new Error(
@@ -699,7 +567,7 @@ export default class ProviderRegistry extends RegistryAbstract<
       instance: ProviderEntry;
     }[],
   ) {
-    for (const {token, def, instance} of exported) {
+    for (const { token, def, instance } of exported) {
       if (def.metadata.scope === ProviderScope.GLOBAL) {
         this.instances.set(token, instance);
       }
@@ -739,26 +607,26 @@ export default class ProviderRegistry extends RegistryAbstract<
   }
 
   async addDynamicProviders(dynamicProviders: ProviderRecord[]) {
-    return Promise.all(dynamicProviders.map((rec) => this.initiateOne(rec.provide, rec)))
+    return Promise.all(dynamicProviders.map((rec) => this.initiateOne(rec.provide, rec)));
   }
 
   private getWithParents<T>(token: Token<T>): T {
     if (this.instances.has(token)) {
-      return this.get(token)
+      return this.get(token);
     }
-    const parent = this.parentProviders
+    const parent = this.parentProviders;
     if (!parent) {
-      return this.get(token)
+      return this.get(token);
     }
-    return parent.getWithParents(token)
+    return parent.getWithParents(token);
   }
 
   getActiveScope(): Scope {
-    return this.getWithParents(Scope)
+    return this.getWithParents(Scope);
   }
 
   getActiveServer(): FrontMcpServer {
-    return this.getWithParents(FrontMcpServer)
+    return this.getWithParents(FrontMcpServer);
   }
 
   async buildViews(session: string): Promise<ProviderViews> {

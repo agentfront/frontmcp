@@ -32,7 +32,7 @@ export default class CodeCallVm2Runner {
           log: (...args: unknown[]) => logs.push(['log', ...args].map(String).join(' ')),
           warn: (...args: unknown[]) => logs.push(['warn', ...args].map(String).join(' ')),
           error: (...args: unknown[]) => logs.push(['error', ...args].map(String).join(' ')),
-        } as Console);
+        } as unknown as Console);
     }
 
     if (env.mcpLog) sandbox.mcpLog = env.mcpLog;
