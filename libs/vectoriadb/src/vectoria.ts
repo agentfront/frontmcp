@@ -1,5 +1,6 @@
 import { EmbeddingService } from './embedding.service';
 import { cosineSimilarity } from './similarity.utils';
+import { HNSWIndex } from './hnsw.index';
 import type {
   VectoriaConfig,
   DocumentEmbedding,
@@ -22,6 +23,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
   private embeddings: Map<string, DocumentEmbedding<T>>;
   private embeddingService: EmbeddingService;
   private config: Required<VectoriaConfig>;
+  private hnswIndex: HNSWIndex | null;
 
   constructor(config: VectoriaConfig = {}) {
     this.embeddings = new Map();
@@ -33,7 +35,16 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       dimensions: config.dimensions ?? 384,
       defaultSimilarityThreshold: config.defaultSimilarityThreshold ?? 0.3,
       defaultTopK: config.defaultTopK ?? 10,
+      useHNSW: config.useHNSW ?? false,
+      hnsw: config.hnsw ?? {},
     };
+
+    // Initialize HNSW index if enabled
+    if (this.config.useHNSW) {
+      this.hnswIndex = new HNSWIndex(this.config.hnsw);
+    } else {
+      this.hnswIndex = null;
+    }
   }
 
   /**
@@ -83,6 +94,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
     // Store embedding
     this.embeddings.set(id, embedding);
+
+    // Add to HNSW index if enabled
+    if (this.hnswIndex) {
+      this.hnswIndex.insert(id, vector);
+    }
   }
 
   /**
@@ -134,6 +150,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       };
 
       this.embeddings.set(id, embedding);
+
+      // Add to HNSW index if enabled
+      if (this.hnswIndex) {
+        this.hnswIndex.insert(id, vector);
+      }
     }
   }
 
@@ -165,7 +186,77 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
     // Generate query embedding
     const queryVector = await this.embeddingService.generateEmbedding(query);
 
-    // Calculate similarities
+    // Use HNSW index if enabled
+    if (this.hnswIndex) {
+      return this.searchWithHNSW(queryVector, topK, threshold, options);
+    }
+
+    // Fallback to brute-force search
+    return this.searchBruteForce(queryVector, topK, threshold, options);
+  }
+
+  /**
+   * Search using HNSW index (approximate nearest neighbor)
+   */
+  private searchWithHNSW(
+    queryVector: Float32Array,
+    topK: number,
+    threshold: number,
+    options: SearchOptions<T>,
+  ): SearchResult<T>[] {
+    // Get candidates from HNSW (more than topK to account for filtering)
+    const searchK = options.filter ? Math.min(topK * 3, this.embeddings.size) : topK;
+    const candidates = this.hnswIndex!.search(queryVector, searchK, this.config.hnsw?.efSearch);
+
+    const results: SearchResult<T>[] = [];
+
+    for (const candidate of candidates) {
+      const embedding = this.embeddings.get(candidate.id);
+      if (!embedding) {
+        continue;
+      }
+
+      // Apply filter if provided
+      if (options.filter && !options.filter(embedding.metadata)) {
+        continue;
+      }
+
+      // Convert distance to similarity (HNSW uses distance = 1 - similarity)
+      const score = 1 - candidate.distance;
+
+      if (score >= threshold) {
+        const result: SearchResult<T> = {
+          id: embedding.id,
+          metadata: embedding.metadata,
+          score,
+          text: embedding.text,
+        };
+
+        if (options.includeVector) {
+          result.vector = embedding.vector;
+        }
+
+        results.push(result);
+
+        // Stop early if we have enough results
+        if (results.length >= topK) {
+          break;
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Search using brute-force (exact nearest neighbor)
+   */
+  private searchBruteForce(
+    queryVector: Float32Array,
+    topK: number,
+    threshold: number,
+    options: SearchOptions<T>,
+  ): SearchResult<T>[] {
     const results: SearchResult<T>[] = [];
 
     for (const embedding of this.embeddings.values()) {
@@ -217,7 +308,14 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    * Remove a document from the database
    */
   remove(id: string): boolean {
-    return this.embeddings.delete(id);
+    const deleted = this.embeddings.delete(id);
+
+    // Remove from HNSW index if enabled
+    if (deleted && this.hnswIndex) {
+      this.hnswIndex.remove(id);
+    }
+
+    return deleted;
   }
 
   /**
@@ -238,6 +336,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   clear(): void {
     this.embeddings.clear();
+
+    // Clear HNSW index if enabled
+    if (this.hnswIndex) {
+      this.hnswIndex.clear();
+    }
   }
 
   /**

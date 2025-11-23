@@ -30,6 +30,45 @@ export interface VectoriaConfig {
    * @default 10
    */
   defaultTopK?: number;
+
+  /**
+   * Enable HNSW index for faster search
+   * When enabled, provides O(log n) search instead of O(n) brute-force
+   * @default false
+   */
+  useHNSW?: boolean;
+
+  /**
+   * HNSW index configuration
+   */
+  hnsw?: {
+    /**
+     * Maximum number of connections per node in layer > 0
+     * Higher = better recall, more memory
+     * @default 16
+     */
+    M?: number;
+
+    /**
+     * Maximum connections for layer 0 (typically M * 2)
+     * @default 32
+     */
+    M0?: number;
+
+    /**
+     * Size of dynamic candidate list during construction
+     * Higher = better quality index, slower construction
+     * @default 200
+     */
+    efConstruction?: number;
+
+    /**
+     * Size of dynamic candidate list during search
+     * Higher = better recall, slower search
+     * @default 50
+     */
+    efSearch?: number;
+  };
 }
 
 /**

@@ -685,4 +685,226 @@ describe('VectoriaDB', () => {
       });
     });
   });
+
+  describe('HNSW integration', () => {
+    let hnswDb: VectoriaDB<TestMetadata>;
+
+    beforeAll(async () => {
+      hnswDb = new VectoriaDB<TestMetadata>({
+        useHNSW: true,
+        hnsw: {
+          M: 16,
+          efConstruction: 200,
+          efSearch: 50,
+        },
+      });
+      await hnswDb.initialize();
+    }, 60000);
+
+    afterEach(() => {
+      hnswDb.clear();
+    });
+
+    describe('configuration', () => {
+      test('should create database with HNSW enabled', () => {
+        expect(hnswDb.isInitialized()).toBe(true);
+      });
+
+      test('should accept custom HNSW parameters', () => {
+        const customDb = new VectoriaDB<TestMetadata>({
+          useHNSW: true,
+          hnsw: {
+            M: 32,
+            M0: 64,
+            efConstruction: 400,
+            efSearch: 100,
+          },
+        });
+        expect(customDb).toBeDefined();
+      });
+    });
+
+    describe('add with HNSW', () => {
+      test('should add document to HNSW index', async () => {
+        await hnswDb.add('doc-1', 'Machine learning is fascinating', {
+          id: 'doc-1',
+          category: 'tech',
+        });
+
+        expect(hnswDb.size()).toBe(1);
+        expect(hnswDb.has('doc-1')).toBe(true);
+      });
+
+      test('should add multiple documents to HNSW index', async () => {
+        const docs = [
+          { id: 'doc-1', text: 'Machine learning basics', metadata: { id: 'doc-1', category: 'tech' } },
+          { id: 'doc-2', text: 'Deep learning tutorial', metadata: { id: 'doc-2', category: 'tech' } },
+          { id: 'doc-3', text: 'Cooking recipes', metadata: { id: 'doc-3', category: 'food' } },
+        ];
+
+        await hnswDb.addMany(docs);
+        expect(hnswDb.size()).toBe(3);
+      });
+    });
+
+    describe('search with HNSW', () => {
+      beforeEach(async () => {
+        await hnswDb.addMany([
+          { id: 'doc-1', text: 'Machine learning and AI', metadata: { id: 'doc-1', category: 'tech' } },
+          { id: 'doc-2', text: 'Deep learning neural networks', metadata: { id: 'doc-2', category: 'tech' } },
+          { id: 'doc-3', text: 'Cooking Italian pasta', metadata: { id: 'doc-3', category: 'food' } },
+          { id: 'doc-4', text: 'Python programming language', metadata: { id: 'doc-4', category: 'tech' } },
+          { id: 'doc-5', text: 'Baking chocolate cake', metadata: { id: 'doc-5', category: 'food' } },
+        ]);
+      });
+
+      test('should find relevant documents using HNSW', async () => {
+        const results = await hnswDb.search('artificial intelligence');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].score).toBeGreaterThan(0);
+        // Tech documents should be more relevant
+        expect(['doc-1', 'doc-2', 'doc-4']).toContain(results[0].id);
+      });
+
+      test('should return top-k results with HNSW', async () => {
+        const results = await hnswDb.search('technology', { topK: 2 });
+
+        expect(results.length).toBeLessThanOrEqual(2);
+      });
+
+      test('should filter results with HNSW', async () => {
+        const results = await hnswDb.search('food', {
+          filter: (metadata) => metadata.category === 'food',
+        });
+
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach((result) => {
+          expect(result.metadata.category).toBe('food');
+        });
+      });
+
+      test('should respect similarity threshold with HNSW', async () => {
+        const results = await hnswDb.search('cooking', { threshold: 0.7 });
+
+        results.forEach((result) => {
+          expect(result.score).toBeGreaterThanOrEqual(0.7);
+        });
+      });
+
+      test('should handle searches on large datasets', async () => {
+        // Add more documents to test HNSW performance characteristics
+        const largeBatch = [];
+        for (let i = 0; i < 50; i++) {
+          largeBatch.push({
+            id: `doc-${i + 10}`,
+            text: `Document about topic ${i % 10}`,
+            metadata: { id: `doc-${i + 10}`, category: `category-${i % 5}` },
+          });
+        }
+        await hnswDb.addMany(largeBatch);
+
+        const results = await hnswDb.search('topic');
+        expect(results.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe('remove with HNSW', () => {
+      beforeEach(async () => {
+        await hnswDb.addMany([
+          { id: 'doc-1', text: 'First document', metadata: { id: 'doc-1', category: 'test' } },
+          { id: 'doc-2', text: 'Second document', metadata: { id: 'doc-2', category: 'test' } },
+          { id: 'doc-3', text: 'Third document', metadata: { id: 'doc-3', category: 'test' } },
+        ]);
+      });
+
+      test('should remove document from HNSW index', () => {
+        const removed = hnswDb.remove('doc-2');
+        expect(removed).toBe(true);
+        expect(hnswDb.size()).toBe(2);
+        expect(hnswDb.has('doc-2')).toBe(false);
+      });
+
+      test('should update search results after removal', async () => {
+        hnswDb.remove('doc-1');
+
+        const results = await hnswDb.search('document');
+        const ids = results.map((r) => r.id);
+        expect(ids).not.toContain('doc-1');
+      });
+
+      test('should handle removing multiple documents', () => {
+        const removed = hnswDb.removeMany(['doc-1', 'doc-3']);
+        expect(removed).toBe(2);
+        expect(hnswDb.size()).toBe(1);
+      });
+    });
+
+    describe('clear with HNSW', () => {
+      test('should clear all documents from HNSW index', async () => {
+        await hnswDb.addMany([
+          { id: 'doc-1', text: 'First', metadata: { id: 'doc-1', category: 'test' } },
+          { id: 'doc-2', text: 'Second', metadata: { id: 'doc-2', category: 'test' } },
+        ]);
+
+        hnswDb.clear();
+        expect(hnswDb.size()).toBe(0);
+
+        const results = await hnswDb.search('test');
+        expect(results.length).toBe(0);
+      });
+    });
+
+    describe('HNSW vs brute-force comparison', () => {
+      test('should produce similar results to brute-force search', async () => {
+        // Use same seed data for both
+        const docs = [
+          { id: 'doc-1', text: 'Machine learning algorithms', metadata: { id: 'doc-1', category: 'tech' } },
+          { id: 'doc-2', text: 'Neural network architecture', metadata: { id: 'doc-2', category: 'tech' } },
+          { id: 'doc-3', text: 'Cooking Italian cuisine', metadata: { id: 'doc-3', category: 'food' } },
+          { id: 'doc-4', text: 'Python data science', metadata: { id: 'doc-4', category: 'tech' } },
+        ];
+
+        // HNSW results
+        await hnswDb.addMany(docs);
+        const hnswResults = await hnswDb.search('machine learning', { topK: 2 });
+
+        // Brute-force results
+        const bruteDb = new VectoriaDB<TestMetadata>();
+        await bruteDb.initialize();
+        await bruteDb.addMany(docs);
+        const bruteResults = await bruteDb.search('machine learning', { topK: 2 });
+
+        // Top result should be the same (or very similar)
+        expect(hnswResults[0].id).toBe(bruteResults[0].id);
+        expect(hnswResults.length).toBe(bruteResults.length);
+      });
+    });
+
+    describe('edge cases with HNSW', () => {
+      test('should handle single document', async () => {
+        await hnswDb.add('doc-1', 'Only document', { id: 'doc-1', category: 'test' });
+
+        const results = await hnswDb.search('document');
+        expect(results.length).toBe(1);
+        expect(results[0].id).toBe('doc-1');
+      });
+
+      test('should handle duplicate IDs with HNSW', async () => {
+        await hnswDb.add('doc-1', 'First version', { id: 'doc-1', category: 'test' });
+
+        await expect(hnswDb.add('doc-1', 'Second version', { id: 'doc-1', category: 'test' })).rejects.toThrow(
+          'Document with id "doc-1" already exists',
+        );
+      });
+
+      test('should require initialization before operations', async () => {
+        const uninitDb = new VectoriaDB<TestMetadata>({ useHNSW: true });
+
+        await expect(uninitDb.add('doc-1', 'Test', { id: 'doc-1', category: 'test' })).rejects.toThrow(
+          'VectoriaDB must be initialized',
+        );
+      });
+    });
+  });
 });
