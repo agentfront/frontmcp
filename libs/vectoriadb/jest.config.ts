@@ -17,6 +17,10 @@ export default {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/libs/vectoriadb',
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '/src/index.ts', // Ignore index.ts (re-exports only, no logic to test)
+  ],
   testMatch: ['**/__tests__/**/*.spec.ts'],
   testTimeout: 60000,
 };

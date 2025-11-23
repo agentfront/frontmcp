@@ -1,4 +1,4 @@
-import { EmbeddingService } from '../index';
+import { EmbeddingService, EmbeddingError } from '../index';
 
 describe('EmbeddingService', () => {
   let embeddingService: EmbeddingService;
@@ -251,6 +251,85 @@ describe('EmbeddingService', () => {
       await Promise.all([init1, init2, init3]);
 
       expect(service.isReady()).toBe(true);
+    }, 60000);
+  });
+
+  describe('error handling', () => {
+    test('should throw EmbeddingError on generation failure', async () => {
+      // Create a service and force it to be initialized with a broken pipeline
+      const service = new EmbeddingService();
+      await service.initialize();
+
+      // Mock the internal pipeline to fail on next call
+      const originalPipeline = (service as any).pipeline;
+      (service as any).pipeline = jest.fn().mockRejectedValue(new Error('Pipeline execution failed'));
+
+      await expect(service.generateEmbedding('test')).rejects.toThrow('Failed to generate embedding');
+      await expect(service.generateEmbedding('test')).rejects.toThrow(EmbeddingError);
+
+      // Restore
+      (service as any).pipeline = originalPipeline;
+    }, 60000);
+
+    test('should throw EmbeddingError on batch generation failure', async () => {
+      const service = new EmbeddingService();
+      await service.initialize();
+
+      // Mock the internal pipeline to fail
+      const originalPipeline = (service as any).pipeline;
+      (service as any).pipeline = jest.fn().mockRejectedValue(new Error('Batch processing failed'));
+
+      await expect(service.generateEmbeddings(['test1', 'test2'])).rejects.toThrow('Failed to generate embeddings');
+      await expect(service.generateEmbeddings(['test1', 'test2'])).rejects.toThrow(EmbeddingError);
+
+      // Restore
+      (service as any).pipeline = originalPipeline;
+    }, 60000);
+
+    test('should handle generateEmbedding called before initialization', async () => {
+      const service = new EmbeddingService();
+
+      // Call generateEmbedding without calling initialize first
+      // It should auto-initialize
+      const embedding = await service.generateEmbedding('auto-init test');
+
+      expect(embedding).toBeInstanceOf(Float32Array);
+      expect(embedding.length).toBe(384);
+      expect(service.isReady()).toBe(true);
+    }, 60000);
+
+    test('should handle generateEmbeddings called before initialization', async () => {
+      const service = new EmbeddingService();
+
+      // Call generateEmbeddings without calling initialize first
+      // It should auto-initialize
+      const embeddings = await service.generateEmbeddings(['auto-init test 1', 'auto-init test 2']);
+
+      expect(embeddings.length).toBe(2);
+      embeddings.forEach((embedding) => {
+        expect(embedding).toBeInstanceOf(Float32Array);
+        expect(embedding.length).toBe(384);
+      });
+      expect(service.isReady()).toBe(true);
+    }, 60000);
+
+    test('should include original error details in EmbeddingError', async () => {
+      const service = new EmbeddingService();
+      await service.initialize();
+
+      const testError = new Error('Original pipeline error with details');
+      (service as any).pipeline = jest.fn().mockRejectedValue(testError);
+
+      try {
+        await service.generateEmbedding('test');
+        fail('Should have thrown EmbeddingError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmbeddingError);
+        expect((error as EmbeddingError).message).toContain('Failed to generate embedding');
+        expect((error as EmbeddingError).message).toContain('Original pipeline error with details');
+        // Verify the original error is preserved
+        expect((error as EmbeddingError).details).toBe(testError);
+      }
     }, 60000);
   });
 });

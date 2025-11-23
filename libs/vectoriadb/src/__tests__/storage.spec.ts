@@ -3,7 +3,7 @@ import { FileStorageAdapter } from '../storage/file.adapter';
 import { MemoryStorageAdapter } from '../storage/memory.adapter';
 import { RedisStorageAdapter } from '../storage/redis.adapter';
 import * as SerializationUtils from '../storage/serialization.utils';
-import { ConfigurationError } from '../errors';
+import { ConfigurationError, StorageError } from '../errors';
 import type { DocumentMetadata } from '../interfaces';
 import type { RedisClient } from '../storage/redis.adapter';
 import type { StoredData } from '../storage/adapter.interface';
@@ -1060,6 +1060,165 @@ describe('Storage Adapters', () => {
           namespace: '!!!@@@###',
         });
       }).toThrow('Namespace becomes empty after sanitization');
+    });
+  });
+
+  describe('Error Handling - Serialization Failures', () => {
+    describe('FileStorageAdapter serialization error handling', () => {
+      it('should throw StorageError when safeJsonStringify returns empty', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: './tmp/serialization-error-test',
+          namespace: 'test-serialization',
+        });
+        await adapter.initialize();
+
+        // Create data with BigInt which cannot be serialized by JSON.stringify
+        const invalidData: any = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test',
+            toolsHash: 'hash',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+            invalidValue: BigInt(9007199254740991), // BigInt cannot be JSON.stringify'd
+          },
+        };
+
+        await expect(adapter.save(invalidData)).rejects.toThrow(StorageError);
+        await expect(adapter.save(invalidData)).rejects.toThrow('Failed to serialize embeddings data');
+
+        // Cleanup
+        const fs = require('fs/promises');
+        try {
+          await fs.rm('./tmp/serialization-error-test', { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
+
+      it('should not double-wrap StorageError', async () => {
+        const adapter = new FileStorageAdapter({
+          cacheDir: './tmp/double-wrap-test',
+          namespace: 'test-double-wrap',
+        });
+        await adapter.initialize();
+
+        const invalidData: any = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test',
+            toolsHash: 'hash',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+            invalidValue: BigInt(123),
+          },
+        };
+
+        try {
+          await adapter.save(invalidData);
+          fail('Should have thrown StorageError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(StorageError);
+          // Verify the error message is the original one, not wrapped
+          expect((error as StorageError).message).toBe('Failed to serialize embeddings data');
+          // Verify there's no nested "Failed to save embeddings to file" message
+          expect((error as StorageError).message).not.toContain('Failed to save embeddings to file');
+        }
+
+        // Cleanup
+        const fs = require('fs/promises');
+        try {
+          await fs.rm('./tmp/double-wrap-test', { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
+
+      it('should validate that sanitization prevents path traversal', () => {
+        // The sanitizeNamespace() method removes dangerous path traversal sequences
+        // This test verifies that path traversal attempts are neutralized
+        const adapter = new FileStorageAdapter({
+          cacheDir: '/tmp/safe-dir',
+          namespace: '../../../etc/passwd',
+        });
+
+        // The adapter should be created successfully (sanitization works)
+        expect(adapter).toBeDefined();
+
+        // The actual file path should not contain any path traversal sequences
+        const filePath = (adapter as any).filePath;
+        expect(filePath).toContain('/tmp/safe-dir');
+        expect(filePath).not.toContain('..');
+        expect(filePath).not.toContain('etc/passwd');
+
+        // Note: The validateFilePath() method is a defensive check that's hard to trigger
+        // because sanitizeNamespace() removes all dangerous characters first
+      });
+    });
+
+    describe('RedisStorageAdapter serialization error handling', () => {
+      it('should throw StorageError when safeJsonStringify returns empty', async () => {
+        const client = createMockRedisClient();
+        const adapter = new RedisStorageAdapter({
+          client,
+          namespace: 'test-redis-serialization',
+        });
+        await adapter.initialize();
+
+        // Create data with BigInt which cannot be serialized
+        const invalidData: any = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test',
+            toolsHash: 'hash',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+            invalidValue: BigInt(9007199254740991),
+          },
+        };
+
+        await expect(adapter.save(invalidData)).rejects.toThrow(StorageError);
+        await expect(adapter.save(invalidData)).rejects.toThrow('Failed to serialize embeddings data');
+      });
+
+      it('should not double-wrap StorageError', async () => {
+        const client = createMockRedisClient();
+        const adapter = new RedisStorageAdapter({
+          client,
+          namespace: 'test-redis-double-wrap',
+        });
+        await adapter.initialize();
+
+        const invalidData: any = {
+          embeddings: [],
+          metadata: {
+            version: '1.0.0',
+            modelName: 'test',
+            toolsHash: 'hash',
+            timestamp: Date.now(),
+            dimensions: 384,
+            documentCount: 0,
+            invalidValue: BigInt(456),
+          },
+        };
+
+        try {
+          await adapter.save(invalidData);
+          fail('Should have thrown StorageError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(StorageError);
+          // Verify the error message is the original one, not wrapped
+          expect((error as StorageError).message).toBe('Failed to serialize embeddings data');
+          // Verify there's no nested "Failed to save embeddings to Redis" message
+          expect((error as StorageError).message).not.toContain('Failed to save embeddings to Redis');
+        }
+      });
     });
   });
 });
