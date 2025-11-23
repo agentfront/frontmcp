@@ -69,6 +69,26 @@ export interface VectoriaConfig {
      */
     efSearch?: number;
   };
+
+  /**
+   * Storage adapter for persisting embeddings
+   * @default MemoryStorageAdapter (no persistence)
+   */
+  storageAdapter?: any; // Will be typed as StorageAdapter in implementation
+
+  /**
+   * Tools hash for cache invalidation
+   * Used to detect when tools/documents change
+   * If not provided, cache won't be invalidated based on content
+   */
+  toolsHash?: string;
+
+  /**
+   * Version string for cache compatibility
+   * Used to invalidate cache when version changes
+   * @default package version
+   */
+  version?: string;
 }
 
 /**

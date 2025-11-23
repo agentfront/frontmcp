@@ -375,6 +375,108 @@ const results = await db.search('user authentication', {
 });
 ```
 
+### Persistence with Storage Adapters
+
+Cache embeddings across restarts to avoid recalculation. VectoriaDB supports multiple storage backends:
+
+#### In-Memory (Default)
+
+No persistence - data is lost on restart:
+
+```typescript
+const db = new VectoriaDB(); // Uses MemoryStorageAdapter by default
+```
+
+#### File-Based Persistence
+
+Perfect for local development - caches to disk with automatic invalidation when tools change:
+
+```typescript
+import { VectoriaDB, FileStorageAdapter, SerializationUtils } from 'vectoriadb';
+
+const documents = [
+  { id: 'tool-1', text: 'Create user account', metadata: { id: 'tool-1' } },
+  { id: 'tool-2', text: 'Send email notification', metadata: { id: 'tool-2' } },
+];
+
+// Create tools hash for cache invalidation
+const toolsHash = SerializationUtils.createToolsHash(documents);
+
+const db = new VectoriaDB({
+  storageAdapter: new FileStorageAdapter({
+    cacheDir: './.cache/vectoriadb',
+    namespace: 'my-app', // Separate cache per namespace
+  }),
+  toolsHash, // Cache invalidated when tools change
+  version: '1.0.0', // Cache invalidated when version changes
+});
+
+await db.initialize(); // Automatically loads from cache if valid
+
+// Add documents (only on first run or after invalidation)
+if (db.size() === 0) {
+  await db.addMany(documents);
+  await db.saveToStorage(); // Manually save to cache
+}
+
+// Subsequent runs will load from cache instantly
+```
+
+#### Redis for Distributed Caching
+
+Share embeddings across pods in distributed environments:
+
+```typescript
+import { VectoriaDB, RedisStorageAdapter, SerializationUtils } from 'vectoriadb';
+import Redis from 'ioredis'; // or your Redis client
+
+const documents = [
+  /* your documents */
+];
+const toolsHash = SerializationUtils.createToolsHash(documents);
+
+const redis = new Redis({
+  host: 'localhost',
+  port: 6379,
+});
+
+const db = new VectoriaDB({
+  storageAdapter: new RedisStorageAdapter({
+    client: redis,
+    namespace: 'my-app-v1', // Namespace by app + version
+    ttl: 86400, // 24 hours (default)
+  }),
+  toolsHash,
+  version: process.env.APP_VERSION,
+});
+
+await db.initialize(); // Loads from Redis if cache is valid
+
+if (db.size() === 0) {
+  await db.addMany(documents);
+  await db.saveToStorage();
+}
+
+// Don't forget to close when shutting down
+await db.close();
+```
+
+**Cache Invalidation:**
+
+The cache is automatically invalidated when:
+
+- `toolsHash` changes (documents added/removed/modified)
+- `version` changes (application version updated)
+- `modelName` changes (different embedding model)
+
+**Best Practices:**
+
+- **Local dev**: Use `FileStorageAdapter` to speed up restarts
+- **Production**: Use `RedisStorageAdapter` for multi-pod deployments
+- **Tools hash**: Create from document IDs + texts for automatic invalidation
+- **Namespace**: Use app name + version to prevent cache conflicts
+- **Manual save**: Call `saveToStorage()` after adding documents
+
 ## Performance
 
 ### Memory Usage
@@ -501,17 +603,17 @@ VectoriaDB is ideal for:
 
 ## Limitations
 
-1. **In-memory only**: Data is lost on restart (by design)
-2. **Single process**: Not distributed
-3. **HNSW is approximate**: ~95% recall vs 100% with brute-force (use brute-force for exact results)
-4. **No persistence**: For persistence, integrate with Redis/SQLite
+1. **Single process**: Not distributed (use Redis adapter for multi-pod setups)
+2. **HNSW is approximate**: ~95% recall vs 100% with brute-force (use brute-force for exact results)
+3. **In-memory primary**: Persistence via adapters (cache strategy, not database)
 
 ## Roadmap
 
 - [x] Comprehensive test suite with mocked dependencies
 - [x] HNSW indexing for faster search (>100k documents)
-- [ ] Persistence adapters (Redis, SQLite, File)
+- [x] Persistence adapters (Redis, File, Memory)
 - [ ] Incremental updates without re-embedding
+- [ ] Compression for stored embeddings
 
 ## Contributing
 

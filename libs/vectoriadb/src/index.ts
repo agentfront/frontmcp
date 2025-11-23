@@ -10,3 +10,18 @@ export { HNSWIndex } from './hnsw.index';
 export type { HNSWConfig } from './hnsw.index';
 export * from './similarity.utils';
 export * from './interfaces';
+
+// Storage adapters
+export { MemoryStorageAdapter } from './storage/memory.adapter';
+export { FileStorageAdapter } from './storage/file.adapter';
+export type { FileStorageConfig } from './storage/file.adapter';
+export { RedisStorageAdapter } from './storage/redis.adapter';
+export type { RedisStorageConfig, RedisClient } from './storage/redis.adapter';
+export { SerializationUtils } from './storage/adapter.interface';
+export type {
+  StorageAdapter,
+  StorageAdapterConfig,
+  StorageMetadata,
+  StoredData,
+  SerializedEmbedding,
+} from './storage/adapter.interface';

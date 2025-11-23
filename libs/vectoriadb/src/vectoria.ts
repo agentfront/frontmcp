@@ -9,6 +9,9 @@ import type {
   SearchResult,
   VectoriaStats,
 } from './interfaces';
+import type { StorageAdapter, StorageMetadata, StoredData } from './storage/adapter.interface';
+import { SerializationUtils } from './storage/adapter.interface';
+import { MemoryStorageAdapter } from './storage/memory.adapter';
 
 /**
  * VectoriaDB - A lightweight, production-ready in-memory vector database
@@ -24,6 +27,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
   private embeddingService: EmbeddingService;
   private config: Required<VectoriaConfig>;
   private hnswIndex: HNSWIndex | null;
+  private storageAdapter: StorageAdapter<T>;
 
   constructor(config: VectoriaConfig = {}) {
     this.embeddings = new Map();
@@ -37,6 +41,9 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       defaultTopK: config.defaultTopK ?? 10,
       useHNSW: config.useHNSW ?? false,
       hnsw: config.hnsw ?? {},
+      storageAdapter: config.storageAdapter,
+      toolsHash: config.toolsHash ?? '',
+      version: config.version ?? '1.0.0',
     };
 
     // Initialize HNSW index if enabled
@@ -45,15 +52,32 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
     } else {
       this.hnswIndex = null;
     }
+
+    // Initialize storage adapter (default to in-memory)
+    this.storageAdapter = config.storageAdapter ?? new MemoryStorageAdapter<T>();
   }
 
   /**
    * Initialize the vector database
    * Must be called before using the database
+   * Automatically loads from cache if available and valid
    */
   async initialize(): Promise<void> {
+    // Initialize embedding service
     await this.embeddingService.initialize();
     this.config.dimensions = this.embeddingService.getDimensions();
+
+    // Initialize storage adapter
+    await this.storageAdapter.initialize();
+
+    // Try to load from cache
+    const loaded = await this.loadFromStorage();
+    if (loaded) {
+      // Successfully loaded from cache
+      return;
+    }
+
+    // No valid cache, continue with empty database
   }
 
   /**
@@ -397,5 +421,98 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
    */
   getAll(): DocumentEmbedding<T>[] {
     return Array.from(this.embeddings.values());
+  }
+
+  /**
+   * Save embeddings to storage
+   * Call this method to persist embeddings manually
+   */
+  async saveToStorage(): Promise<void> {
+    if (!this.isInitialized()) {
+      throw new Error('VectoriaDB must be initialized before saving. Call initialize() first.');
+    }
+
+    const metadata = this.getStorageMetadata();
+    const embeddings = Array.from(this.embeddings.values()).map((emb) => SerializationUtils.serializeEmbedding(emb));
+
+    const data: StoredData<T> = {
+      metadata,
+      embeddings,
+    };
+
+    await this.storageAdapter.save(data);
+  }
+
+  /**
+   * Load embeddings from storage
+   * Returns true if successfully loaded from cache
+   * @private
+   */
+  private async loadFromStorage(): Promise<boolean> {
+    try {
+      const metadata = this.getStorageMetadata();
+
+      // Check if valid cache exists
+      const hasValid = await this.storageAdapter.hasValidCache(metadata);
+      if (!hasValid) {
+        return false;
+      }
+
+      // Load from storage
+      const data = await this.storageAdapter.load();
+      if (!data || !data.embeddings || data.embeddings.length === 0) {
+        return false;
+      }
+
+      // Clear existing data
+      this.clear();
+
+      // Restore embeddings
+      for (const serialized of data.embeddings) {
+        const embedding = SerializationUtils.deserializeEmbedding(serialized);
+        this.embeddings.set(embedding.id, embedding);
+
+        // Add to HNSW index if enabled
+        if (this.hnswIndex) {
+          this.hnswIndex.insert(embedding.id, embedding.vector);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      // Failed to load from cache, return false to continue with empty database
+      return false;
+    }
+  }
+
+  /**
+   * Get storage metadata for the current state
+   * @private
+   */
+  private getStorageMetadata(): StorageMetadata {
+    return {
+      version: this.config.version,
+      toolsHash: this.config.toolsHash,
+      timestamp: Date.now(),
+      modelName: this.config.modelName,
+      dimensions: this.config.dimensions,
+      documentCount: this.embeddings.size,
+    };
+  }
+
+  /**
+   * Clear storage cache
+   * This will delete all persisted embeddings
+   */
+  async clearStorage(): Promise<void> {
+    await this.storageAdapter.clear();
+  }
+
+  /**
+   * Close the database and storage adapter
+   * Call this when shutting down to cleanup resources
+   */
+  async close(): Promise<void> {
+    await this.storageAdapter.close();
   }
 }
