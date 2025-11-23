@@ -9,7 +9,10 @@ Build and run your first MCP server with FrontMCP. This quickstart gets you from
 
 ## Prerequisites
 
-- **Node.js ≥ 22**
+- **Node.js**:
+  - **Minimum**: Version 22 (LTS Maintenance)
+  - **Recommended**: Version 24 (Active LTS)
+  - _FrontMCP is developed and tested on Node.js 24_
 - **npm ≥ 10** (or pnpm/yarn)
 
 ---
@@ -58,17 +61,17 @@ If you already have a Node.js project, install FrontMCP:
 <CodeGroup>
 
 ```bash npm
-npm install -D frontmcp @types/node@^20
+npm install -D frontmcp @types/node@^22
 npx frontmcp init
 ```
 
 ```bash pnpm
-pnpm add -D frontmcp @types/node@^20
+pnpm add -D frontmcp @types/node@^22
 pnpm dlx frontmcp init
 ```
 
 ```bash yarn
-yarn add -D frontmcp @types/node@^20
+yarn add -D frontmcp @types/node@^22
 npx frontmcp init
 ```
 
@@ -244,7 +247,6 @@ npm run doctor
 
   </Step>
 
-
 <Step stepNumber={3} title="Connect to your server">
   In the Inspector: 1. Enter server URL: `http://localhost:3000` 2. Click "Connect" 3. You should see your `greet` tool
   listed
@@ -269,21 +271,17 @@ npm run doctor
     Learn how to create more powerful tools with validation, providers, and context
   </Card>
 
-
 <Card title="OpenAPI Adapter" icon="file-code" href="/docs/guides/add-openapi-adapter">
   Auto-generate tools from your REST API's OpenAPI spec
 </Card>
-
 
 <Card title="Add Caching" icon="database" href="/docs/guides/caching-and-cache-miss">
   Improve performance with transparent caching
 </Card>
 
-
 <Card title="Authentication" icon="lock" href="/docs/servers/authentication/overview">
   Secure your server with OAuth (local or remote)
 </Card>
-
 
 <Card title="Plugins" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
   Add cross-cutting features like logging, metrics, and rate limiting
@@ -314,7 +312,7 @@ npm run doctor
 <AccordionGroup>
   <Accordion title="Server won't start">
     **Check:**
-    1. Node.js version ≥ 22: `node --version`
+    1. Node.js version 22+ (Node 24 recommended): `node --version`
     2. Port 3000 is available
     3. No TypeScript errors: Check console output
 
