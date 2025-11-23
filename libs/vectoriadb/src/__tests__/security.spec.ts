@@ -304,7 +304,9 @@ describe('Security Tests', () => {
         setex: async () => 'OK',
         del: async () => 1,
         ping: async () => 'PONG',
-        quit: async () => {},
+        quit: async () => {
+          /* no-op for test mock */
+        },
       };
 
       const maliciousNamespace = 'test\nFLUSHDB\n';
@@ -329,7 +331,9 @@ describe('Security Tests', () => {
         setex: async () => 'OK',
         del: async () => 1,
         ping: async () => 'PONG',
-        quit: async () => {},
+        quit: async () => {
+          /* no-op for test mock */
+        },
       };
 
       const maliciousNamespace = 'test\rDEL *\r';
@@ -353,7 +357,9 @@ describe('Security Tests', () => {
         setex: async () => 'OK',
         del: async () => 1,
         ping: async () => 'PONG',
-        quit: async () => {},
+        quit: async () => {
+          /* no-op for test mock */
+        },
       };
 
       const unsafeNamespace = 'test!@#$%^&*()+=[]{}|;\'",<>?/\\`~';

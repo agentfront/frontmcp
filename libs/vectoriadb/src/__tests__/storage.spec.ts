@@ -651,7 +651,9 @@ describe('Storage Adapters', () => {
           setex: async () => 'OK',
           del: async () => 1,
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -674,7 +676,9 @@ describe('Storage Adapters', () => {
             throw new Error('Delete failed');
           },
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -722,7 +726,9 @@ describe('Storage Adapters', () => {
           },
           del: async () => 1,
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({
@@ -763,7 +769,9 @@ describe('Storage Adapters', () => {
           },
           del: async () => 1,
           ping: async () => 'PONG',
-          quit: async () => {},
+          quit: async () => {
+            /* no-op for test mock */
+          },
         };
 
         const adapter = new RedisStorageAdapter({

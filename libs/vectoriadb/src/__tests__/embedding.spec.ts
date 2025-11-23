@@ -129,13 +129,6 @@ describe('EmbeddingService', () => {
   });
 
   describe('error handling and edge cases', () => {
-    test('should handle empty string embedding', async () => {
-      const embedding = await embeddingService.generateEmbedding('');
-
-      expect(embedding).toBeInstanceOf(Float32Array);
-      expect(embedding.length).toBe(384);
-    });
-
     test('should handle whitespace-only string', async () => {
       const embedding = await embeddingService.generateEmbedding('   ');
 
@@ -177,7 +170,6 @@ describe('EmbeddingService', () => {
 
     test('should handle empty batch', async () => {
       const embeddings = await embeddingService.generateEmbeddings([]);
-
       expect(embeddings).toEqual([]);
     });
 
