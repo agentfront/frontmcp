@@ -49,7 +49,7 @@ describe('Security Tests', () => {
       // Path separators in the actual path are OK, but the namespace part should be sanitized
       expect(filePath).not.toContain('../');
       // Check that path separators from the malicious input were sanitized
-      expect(filePath).toContain('test---admin'); // / replaced with -
+      expect(filePath).toContain('test---admin'); // each / becomes -, .. removed leaves ///
 
       await adapter.close();
     });
@@ -101,7 +101,7 @@ describe('Security Tests', () => {
 
       // Verify __proto__ was blocked (check it's not an own property)
       expect(sanitized).toBeTruthy();
-      expect(sanitized.embeddings[0].metadata.hasOwnProperty('__proto__')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sanitized.embeddings[0].metadata, '__proto__')).toBe(false);
 
       // Verify prototype wasn't polluted
       const testObj: any = {};
@@ -138,7 +138,7 @@ describe('Security Tests', () => {
 
       // Verify constructor was blocked (check it's not an own property)
       expect(sanitized).toBeTruthy();
-      expect(sanitized.embeddings[0].metadata.hasOwnProperty('constructor')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sanitized.embeddings[0].metadata, 'constructor')).toBe(false);
     });
 
     it('should sanitize nested objects recursively', () => {
@@ -174,7 +174,9 @@ describe('Security Tests', () => {
       const sanitized = SerializationUtils.sanitizeObject(parsed) as any;
 
       expect(sanitized).toBeTruthy();
-      expect(sanitized.embeddings[0].metadata.nested.deeper.hasOwnProperty('__proto__')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sanitized.embeddings[0].metadata.nested.deeper, '__proto__')).toBe(
+        false,
+      );
       expect(sanitized.embeddings[0].metadata.nested.deeper.safeField).toBe('value');
     });
   });
@@ -296,19 +298,20 @@ describe('Security Tests', () => {
   });
 
   describe('Redis Key Sanitization', () => {
-    it('should sanitize namespace with newline characters', () => {
-      // Mock Redis client
-      const mockClient = {
-        get: async () => null,
-        set: async () => 'OK',
-        setex: async () => 'OK',
-        del: async () => 1,
-        ping: async () => 'PONG',
-        quit: async () => {
-          /* no-op for test mock */
-        },
-      };
+    // Helper function to create a mock Redis client
+    const createMockRedisClient = () => ({
+      get: async () => null,
+      set: async () => 'OK',
+      setex: async () => 'OK',
+      del: async () => 1,
+      ping: async () => 'PONG',
+      quit: async () => {
+        /* no-op for test mock */
+      },
+    });
 
+    it('should sanitize namespace with newline characters', () => {
+      const mockClient = createMockRedisClient();
       const maliciousNamespace = 'test\nFLUSHDB\n';
       const adapter = new RedisStorageAdapter({
         client: mockClient,
@@ -325,17 +328,7 @@ describe('Security Tests', () => {
     });
 
     it('should sanitize namespace with carriage returns', () => {
-      const mockClient = {
-        get: async () => null,
-        set: async () => 'OK',
-        setex: async () => 'OK',
-        del: async () => 1,
-        ping: async () => 'PONG',
-        quit: async () => {
-          /* no-op for test mock */
-        },
-      };
-
+      const mockClient = createMockRedisClient();
       const maliciousNamespace = 'test\rDEL *\r';
       const adapter = new RedisStorageAdapter({
         client: mockClient,
@@ -351,17 +344,7 @@ describe('Security Tests', () => {
     });
 
     it('should only allow safe characters in namespace', () => {
-      const mockClient = {
-        get: async () => null,
-        set: async () => 'OK',
-        setex: async () => 'OK',
-        del: async () => 1,
-        ping: async () => 'PONG',
-        quit: async () => {
-          /* no-op for test mock */
-        },
-      };
-
+      const mockClient = createMockRedisClient();
       const unsafeNamespace = 'test!@#$%^&*()+=[]{}|;\'",<>?/\\`~';
       const adapter = new RedisStorageAdapter({
         client: mockClient,
