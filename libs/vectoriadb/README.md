@@ -1,8 +1,30 @@
 # VectoriaDB
 
+[![npm version](https://img.shields.io/npm/v/vectoriadb.svg)](https://www.npmjs.com/package/vectoriadb)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+
 > A lightweight, production-ready in-memory vector database for semantic search in JavaScript/TypeScript
 
-VectoriaDB is a fast, zero-dependency (except transformers.js) vector database designed for in-memory semantic search. It's perfect for applications that need to quickly search through documents, tools, or any text-based data using natural language queries.
+VectoriaDB is a fast, minimal-dependency vector database designed for in-memory semantic search. Powered by [transformers.js](https://github.com/xenova/transformers.js), it's perfect for applications that need to quickly search through documents, tools, or any text-based data using natural language queries.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Why VectoriaDB?](#why-vectoriadb)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [API Reference](#api-reference)
+- [Advanced Usage](#advanced-usage)
+- [Performance](#performance)
+- [Use Cases](#use-cases)
+- [Testing](#testing)
+- [Comparison](#comparison-with-other-vector-databases)
+- [Limitations](#limitations)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -17,17 +39,38 @@ VectoriaDB is a fast, zero-dependency (except transformers.js) vector database d
 ## Installation
 
 ```bash
-npm install @frontmcp/vectoria
+npm install vectoriadb
 # or
-yarn add @frontmcp/vectoria
+yarn add vectoriadb
 # or
-pnpm add @frontmcp/vectoria
+pnpm add vectoriadb
 ```
+
+**Requirements:**
+
+- Node.js 18+ (for transformers.js compatibility)
+- TypeScript 5.0+ (if using TypeScript)
+
+## Why VectoriaDB?
+
+**Use VectoriaDB when you need:**
+
+- 🎯 **Semantic search** without complex infrastructure (no external services required)
+- ⚡ **Fast in-memory search** for small to medium datasets (<100k documents)
+- 🔒 **Privacy-first** - all embeddings generated locally, no API calls
+- 🚀 **Quick prototyping** before scaling to production vector databases
+- 📦 **Embedded search** in Node.js applications, CLIs, or desktop apps
+
+**Skip VectoriaDB if you need:**
+
+- 💾 Persistent storage (use Pinecone, Weaviate, or Qdrant)
+- 🌐 Distributed architecture (use Weaviate or Milvus)
+- 📊 Multi-million document scale (use specialized vector DBs with HNSW)
 
 ## Quick Start
 
 ```typescript
-import { VectoriaDB } from '@frontmcp/vectoria';
+import { VectoriaDB } from 'vectoriadb';
 
 // Create and initialize the database
 const db = new VectoriaDB();
@@ -260,6 +303,16 @@ await db.addMany(documents);
 Combine semantic search with complex metadata filters:
 
 ```typescript
+interface SecurityMetadata extends DocumentMetadata {
+  id: string;
+  category: string;
+  tags: string[];
+  author: string;
+  priority: 'low' | 'medium' | 'high';
+}
+
+const db = new VectoriaDB<SecurityMetadata>();
+
 const results = await db.search('user authentication', {
   topK: 10,
   threshold: 0.4,
@@ -268,7 +321,7 @@ const results = await db.search('user authentication', {
       metadata.category === 'security' &&
       metadata.tags.includes('auth') &&
       metadata.author === 'security-team' &&
-      new Date(metadata.createdAt) > new Date('2024-01-01')
+      metadata.priority === 'high'
     );
   },
 });
@@ -350,6 +403,26 @@ const db = new VectoriaDB<ProductMetadata>();
 // Search: "affordable wireless headphones"
 ```
 
+## Testing
+
+VectoriaDB comes with comprehensive tests covering all major functionality:
+
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+```
+
+The test suite includes:
+
+- **Embedding Service Tests**: Verify embedding generation and model initialization
+- **Vector Database Tests**: Test CRUD operations, search, and filtering
+- **Similarity Tests**: Validate cosine similarity calculations
+
+All tests use mocked transformers.js to avoid downloading models during CI/CD, making tests fast and reliable.
+
 ## Comparison with Other Vector Databases
 
 | Feature              | VectoriaDB | Pinecone | Weaviate | ChromaDB |
@@ -378,13 +451,10 @@ VectoriaDB is ideal for:
 
 ## Roadmap
 
+- [x] Comprehensive test suite with mocked dependencies
 - [ ] HNSW indexing for faster search (>100k documents)
 - [ ] Persistence adapters (Redis, SQLite, File)
 - [ ] Incremental updates without re-embedding
-- [ ] Quantization for compressed storage
-- [ ] GPU acceleration
-- [ ] Multi-language support out of the box
-- [ ] Query caching
 
 ## Contributing
 

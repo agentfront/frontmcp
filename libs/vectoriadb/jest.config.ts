@@ -1,8 +1,9 @@
 /* eslint-disable */
 export default {
-  displayName: 'vectoria',
+  displayName: 'vectoriadb',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   transform: {
     '^.+\\.[tj]s$': [
       '@swc/jest',
@@ -15,7 +16,7 @@ export default {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/libs/vectoria',
+  coverageDirectory: '../../coverage/libs/vectoriadb',
   testMatch: ['**/__tests__/**/*.test.ts'],
   testTimeout: 60000,
 };

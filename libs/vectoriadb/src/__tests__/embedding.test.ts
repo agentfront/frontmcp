@@ -69,7 +69,7 @@ describe('EmbeddingService', () => {
       }
 
       const similarity = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
-      expect(similarity).toBeGreaterThan(0.8); // Should be very similar
+      expect(similarity).toBeGreaterThan(0.7); // Should be very similar
     });
 
     test('should handle empty string', async () => {

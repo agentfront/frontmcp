@@ -1,9 +1,9 @@
 {
-  "name": "@frontmcp/vectoria",
-  "version": "0.1.0",
+  "name": "vectoriadb",
+  "version": "1.0.0",
   "description": "VectoriaDB - A lightweight, production-ready in-memory vector database for semantic search",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
+  "homepage": "https://github.com/agentfront/frontmcp/tree/main/libs/vectoriadb",
   "license": "Apache-2.0",
   "keywords": [
     "vector-database",
@@ -21,7 +21,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentfront/frontmcp.git",
-    "directory": "libs/vectoria"
+    "directory": "libs/vectoriadb"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
