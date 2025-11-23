@@ -25,10 +25,11 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
 
   constructor(config: VectoriaConfig = {}) {
     this.embeddings = new Map();
-    this.embeddingService = new EmbeddingService(config.modelName);
+    this.embeddingService = new EmbeddingService(config.modelName, config.cacheDir);
 
     this.config = {
       modelName: config.modelName || 'Xenova/all-MiniLM-L6-v2',
+      cacheDir: config.cacheDir || './.cache/transformers',
       dimensions: config.dimensions || 384,
       defaultSimilarityThreshold: config.defaultSimilarityThreshold ?? 0.3,
       defaultTopK: config.defaultTopK || 10,

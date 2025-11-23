@@ -5,12 +5,14 @@ import { pipeline } from '@huggingface/transformers';
 export class EmbeddingService {
   private pipeline: any = null;
   private modelName: string;
+  private cacheDir: string;
   private dimensions = 384; // default for all-MiniLM-L6-v2
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
 
-  constructor(modelName = 'Xenova/all-MiniLM-L6-v2') {
+  constructor(modelName = 'Xenova/all-MiniLM-L6-v2', cacheDir = './.cache/transformers') {
     this.modelName = modelName;
+    this.cacheDir = cacheDir;
   }
 
   /**
@@ -35,7 +37,7 @@ export class EmbeddingService {
       // Create feature extraction pipeline
       this.pipeline = await pipeline('feature-extraction', this.modelName, {
         // Use local models directory to cache models
-        cache_dir: './.cache/transformers',
+        cache_dir: this.cacheDir,
         // // Don't require progress bars in production
         // progress_callback: null,
       });

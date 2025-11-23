@@ -9,6 +9,12 @@ export interface VectoriaConfig {
   modelName?: string;
 
   /**
+   * Directory to cache downloaded models
+   * @default './.cache/transformers'
+   */
+  cacheDir?: string;
+
+  /**
    * Vector dimensions (auto-detected from model if not provided)
    */
   dimensions?: number;
