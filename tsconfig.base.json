@@ -25,7 +25,8 @@
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
       "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"],
-      "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"]
+      "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"],
+      "vectoriadb": ["libs/vectoriadb/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
