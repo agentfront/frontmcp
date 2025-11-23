@@ -486,4 +486,129 @@ describe('VectoriaDB', () => {
       expect(all.length).toBe(2);
     });
   });
+
+  describe('initialization requirements', () => {
+    let uninitializedDb: VectoriaDB<TestMetadata>;
+
+    beforeEach(() => {
+      uninitializedDb = new VectoriaDB<TestMetadata>();
+    });
+
+    test('should throw error when adding document before initialization', async () => {
+      await expect(uninitializedDb.add('doc-1', 'Test', { id: 'doc-1', category: 'test' })).rejects.toThrow(
+        'VectoriaDB must be initialized before adding documents',
+      );
+    });
+
+    test('should throw error when adding many documents before initialization', async () => {
+      await expect(
+        uninitializedDb.addMany([{ id: 'doc-1', text: 'Test', metadata: { id: 'doc-1', category: 'test' } }]),
+      ).rejects.toThrow('VectoriaDB must be initialized before adding documents');
+    });
+
+    test('should throw error when searching before initialization', async () => {
+      await expect(uninitializedDb.search('test query')).rejects.toThrow(
+        'VectoriaDB must be initialized before searching',
+      );
+    });
+
+    test('should throw error when getting stats before initialization', () => {
+      expect(() => uninitializedDb.getStats()).toThrow('VectoriaDB must be initialized before getting stats');
+    });
+
+    test('isInitialized should return false before initialization', () => {
+      expect(uninitializedDb.isInitialized()).toBe(false);
+    });
+
+    test('isInitialized should return true after initialization', async () => {
+      await uninitializedDb.initialize();
+      expect(uninitializedDb.isInitialized()).toBe(true);
+    });
+  });
+
+  describe('duplicate ID handling', () => {
+    test('should throw error when adding duplicate in addMany batch', async () => {
+      await expect(
+        db.addMany([
+          { id: 'doc-1', text: 'First', metadata: { id: 'doc-1', category: 'test' } },
+          { id: 'doc-1', text: 'Duplicate', metadata: { id: 'doc-1', category: 'test' } },
+        ]),
+      ).rejects.toThrow('Duplicate document id "doc-1" in batch');
+
+      // No documents should be added if batch fails
+      expect(db.size()).toBe(0);
+    });
+
+    test('should throw error when addMany contains ID that already exists', async () => {
+      await db.add('doc-1', 'Existing', { id: 'doc-1', category: 'test' });
+
+      await expect(
+        db.addMany([
+          { id: 'doc-2', text: 'New', metadata: { id: 'doc-2', category: 'test' } },
+          { id: 'doc-1', text: 'Duplicate', metadata: { id: 'doc-1', category: 'test' } },
+        ]),
+      ).rejects.toThrow('Document with id "doc-1" already exists');
+
+      // Original document should remain, new ones should not be added
+      expect(db.size()).toBe(1);
+      expect(db.get('doc-2')).toBeUndefined();
+    });
+
+    test('should successfully add after removing duplicate', async () => {
+      await db.add('doc-1', 'First version', { id: 'doc-1', category: 'test' });
+
+      db.remove('doc-1');
+
+      await db.add('doc-1', 'Second version', { id: 'doc-1', category: 'updated' });
+
+      const doc = db.get('doc-1');
+      expect(doc?.text).toBe('Second version');
+      expect(doc?.metadata.category).toBe('updated');
+    });
+  });
+
+  describe('configuration edge cases', () => {
+    test('should handle 0 as valid dimension value', () => {
+      const customDb = new VectoriaDB({ dimensions: 0 });
+      // Dimensions should be 0, not fall back to default 384
+      expect((customDb as any).config.dimensions).toBe(0);
+    });
+
+    test('should handle custom cache directory', () => {
+      const customDb = new VectoriaDB({ cacheDir: '/custom/path' });
+      expect((customDb as any).config.cacheDir).toBe('/custom/path');
+    });
+
+    test('should handle 0 as valid topK value', () => {
+      const customDb = new VectoriaDB({ defaultTopK: 0 });
+      expect((customDb as any).config.defaultTopK).toBe(0);
+    });
+
+    test('should handle 0 as valid similarity threshold', () => {
+      const customDb = new VectoriaDB({ defaultSimilarityThreshold: 0 });
+      expect((customDb as any).config.defaultSimilarityThreshold).toBe(0);
+    });
+
+    test('should use defaults when config values are null', () => {
+      const customDb = new VectoriaDB({
+        modelName: null as any,
+        cacheDir: null as any,
+        dimensions: null as any,
+      });
+      expect((customDb as any).config.modelName).toBe('Xenova/all-MiniLM-L6-v2');
+      expect((customDb as any).config.cacheDir).toBe('./.cache/transformers');
+      expect((customDb as any).config.dimensions).toBe(384);
+    });
+
+    test('should use defaults when config values are undefined', () => {
+      const customDb = new VectoriaDB({
+        modelName: undefined,
+        cacheDir: undefined,
+        dimensions: undefined,
+      });
+      expect((customDb as any).config.modelName).toBe('Xenova/all-MiniLM-L6-v2');
+      expect((customDb as any).config.cacheDir).toBe('./.cache/transformers');
+      expect((customDb as any).config.dimensions).toBe(384);
+    });
+  });
 });
