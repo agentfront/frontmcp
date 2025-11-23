@@ -1,4 +1,11 @@
 /**
+ * Vector similarity utility functions for semantic search
+ *
+ * Note: These utilities are intentionally self-contained within vectoriadb
+ * to maintain the library's standalone, portable nature as a publishable npm package.
+ */
+
+/**
  * Calculate cosine similarity between two vectors
  * @param a First vector
  * @param b Second vector
@@ -32,7 +39,7 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
 /**
  * Normalize a vector to unit length
  * @param vector Vector to normalize
- * @returns Normalized vector
+ * @returns Normalized vector (or original vector unchanged if it's a zero vector)
  */
 export function normalizeVector(vector: Float32Array): Float32Array {
   let norm = 0;
