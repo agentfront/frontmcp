@@ -2371,11 +2371,6 @@
     unist-util-visit "^4.1.1"
     uuid "^11.1.0"
 
-"@mintlify/prettier-config@^1.0.6":
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/@mintlify/prettier-config/-/prettier-config-1.0.6.tgz#0fa2d43bb3a40edf1f0689edb8cfbaed0f3177b2"
-  integrity sha512-LGjeQ3cYr6kaO1xKosJWweQISfOI58eSqw47h7aN3L/ZJcm4goqR6I9iBcgkdwnZLjErB5G1rQ+OEByJdqqYEA==
-
 "@mintlify/previewing@4.0.789":
   version "4.0.789"
   resolved "https://registry.yarnpkg.com/@mintlify/previewing/-/previewing-4.0.789.tgz#d2de0e44c6a8d3ac12713d55ed6aca730456b66a"
