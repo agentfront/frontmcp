@@ -22,7 +22,7 @@ jest.mock('@huggingface/transformers', () => {
 
   // Create a mock pipeline function that returns consistent embeddings
   const createMockPipeline = () => {
-    return async (text: string | string[], options?: any) => {
+    return async (text: string | string[]) => {
       const textStr = text.toString();
       const words = extractWords(textStr);
       const normalizedWords = words.map(normalizeWord);
@@ -72,7 +72,7 @@ jest.mock('@huggingface/transformers', () => {
   };
 
   return {
-    pipeline: jest.fn(async (task: string, model: string, options?: any) => {
+    pipeline: jest.fn(async () => {
       return createMockPipeline();
     }),
   };

@@ -12,11 +12,7 @@
  * @param verboseErrors - Whether to return verbose error messages
  * @returns Sanitized error message
  */
-export function sanitizeErrorMessage(
-  error: Error | string,
-  genericMessage: string,
-  verboseErrors: boolean = true,
-): string {
+export function sanitizeErrorMessage(error: Error | string, genericMessage: string, verboseErrors = true): string {
   if (verboseErrors) {
     return typeof error === 'string' ? error : error.message;
   }
@@ -33,7 +29,7 @@ export function sanitizeErrorMessage(
  * @param verboseErrors - Whether to include the actual ID
  * @returns Sanitized ID string
  */
-export function sanitizeDocumentId(id: string, verboseErrors: boolean = true): string {
+export function sanitizeDocumentId(id: string, verboseErrors = true): string {
   if (verboseErrors) {
     return id;
   }
@@ -49,7 +45,7 @@ export function sanitizeDocumentId(id: string, verboseErrors: boolean = true): s
  * @param verboseErrors - Whether to include detailed error information
  * @returns Sanitized error message
  */
-export function sanitizeFileError(operation: string, error: Error | string, verboseErrors: boolean = true): string {
+export function sanitizeFileError(operation: string, error: Error | string, verboseErrors = true): string {
   if (verboseErrors) {
     const message = typeof error === 'string' ? error : error.message;
     return `Failed to ${operation} file: ${message}`;
@@ -67,7 +63,7 @@ export function sanitizeFileError(operation: string, error: Error | string, verb
  * @param verboseErrors - Whether to include detailed error information
  * @returns Sanitized error message
  */
-export function sanitizeStorageError(operation: string, error: Error | string, verboseErrors: boolean = true): string {
+export function sanitizeStorageError(operation: string, error: Error | string, verboseErrors = true): string {
   if (verboseErrors) {
     const message = typeof error === 'string' ? error : error.message;
     return `Storage ${operation} failed: ${message}`;

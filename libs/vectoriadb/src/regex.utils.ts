@@ -54,7 +54,7 @@ export function isPotentiallyVulnerableRegex(pattern: string): boolean {
 export function createSafeRegex(
   pattern: string | RegExp,
   flags?: string,
-  timeoutMs: number = 100,
+  _timeoutMs = 100,
 ): (input: string) => RegExpMatchArray | null {
   const regex = typeof pattern === 'string' ? new RegExp(pattern, flags) : pattern;
 
@@ -70,7 +70,7 @@ export function createSafeRegex(
     // a library like 'safe-regex' for more robust protection
     try {
       return input.match(regex);
-    } catch (error) {
+    } catch {
       // Regex execution failed
       return null;
     }
@@ -86,7 +86,7 @@ export function createSafeRegex(
  * @param maxLength - Maximum input length to process (default: 10000)
  * @returns true if the input matches the pattern
  */
-export function safeTest(input: string, pattern: RegExp, maxLength: number = 10000): boolean {
+export function safeTest(input: string, pattern: RegExp, maxLength = 10000): boolean {
   if (input.length > maxLength) {
     return false;
   }
@@ -104,10 +104,11 @@ export function safeTest(input: string, pattern: RegExp, maxLength: number = 100
  */
 export const SAFE_PATTERNS = {
   /** Matches control characters (newlines, tabs, null bytes, etc.) */
-  CONTROL_CHARS: /[\r\n\t\0\x0B\x0C]/g,
+  // eslint-disable-next-line no-control-regex
+  CONTROL_CHARS: /[\r\n\t\0\u000B\u000C]/g,
 
   /** Matches path separators (forward and backslash) */
-  PATH_SEPARATORS: /[\/\\]/g,
+  PATH_SEPARATORS: /[/\\]/g,
 
   /** Matches directory traversal sequences */
   DIR_TRAVERSAL: /\.\./g,

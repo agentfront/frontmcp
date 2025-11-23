@@ -20,7 +20,6 @@ import {
   DuplicateDocumentError,
   QueryValidationError,
   EmbeddingError,
-  StorageError,
 } from './errors';
 
 /**
@@ -733,7 +732,7 @@ export class VectoriaDB<T extends DocumentMetadata = DocumentMetadata> {
       }
 
       return true;
-    } catch (error) {
+    } catch {
       // Failed to load from cache, return false to continue with empty database
       return false;
     }

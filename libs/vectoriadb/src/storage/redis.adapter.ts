@@ -75,7 +75,8 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
     // Remove newlines, carriage returns, and other control characters
     // These could be used for command injection in Redis
     const sanitized = namespace
-      .replace(/[\r\n\t\0\x0B\x0C]/g, '') // Remove control characters
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\r\n\t\0\u000B\u000C]/g, '') // Remove control characters
       .replace(/[^\w:.-]/g, '-') // Replace unsafe chars with dash (allow word chars, colon, dot, dash)
       .replace(/^[.-]+/, '') // Remove leading dots and dashes
       .replace(/[.-]+$/, '') // Remove trailing dots and dashes
@@ -108,7 +109,7 @@ export class RedisStorageAdapter<T extends DocumentMetadata = DocumentMetadata> 
       }
 
       return this.safeJsonParse<StoredData<T>>(content);
-    } catch (error) {
+    } catch {
       // Redis error or invalid JSON
       return null;
     }

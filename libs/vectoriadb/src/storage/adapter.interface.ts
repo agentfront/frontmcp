@@ -1,4 +1,4 @@
-import type { DocumentEmbedding, DocumentMetadata } from '../interfaces';
+import type { DocumentMetadata } from '../interfaces';
 import { BaseStorageAdapter } from './base.adapter';
 
 /**

@@ -58,7 +58,7 @@ export class FileStorageAdapter<T extends DocumentMetadata = DocumentMetadata> e
         // Remove path traversal sequences
         .replace(/\.\./g, '')
         // Replace path separators with hyphens
-        .replace(/[\/\\]/g, '-')
+        .replace(/[/\\]/g, '-')
         // Remove leading dots and hyphens
         .replace(/^[.-]+/, '')
         // Remove trailing dots and hyphens
@@ -103,7 +103,7 @@ export class FileStorageAdapter<T extends DocumentMetadata = DocumentMetadata> e
     try {
       const content = await fs.readFile(this.filePath, 'utf-8');
       return this.safeJsonParse<StoredData<T>>(content);
-    } catch (error) {
+    } catch {
       // File doesn't exist or is invalid
       return null;
     }

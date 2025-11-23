@@ -1,4 +1,3 @@
-/* eslint-disable */
 export default {
   displayName: 'vectoriadb',
   preset: '../../jest.preset.js',

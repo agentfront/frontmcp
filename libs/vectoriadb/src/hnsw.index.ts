@@ -114,14 +114,12 @@ export class HNSWIndex {
 
     // Find nearest neighbors at each level and connect
     let currentNearest = this.entryPointId;
-    let currentDistance = this.distance(vector, this.nodes.get(this.entryPointId)!.vector);
 
     // Search from top level down to level + 1
     for (let lc = this.maxLevel; lc > level; lc--) {
       const nearest = this.searchLayer(vector, currentNearest, 1, lc);
       if (nearest.length > 0) {
         currentNearest = nearest[0].id;
-        currentDistance = nearest[0].distance;
       }
     }
 
@@ -177,14 +175,12 @@ export class HNSWIndex {
 
     const efSearch = ef ?? this.config.efSearch;
     let currentNearest = this.entryPointId;
-    let currentDistance = this.distance(query, this.nodes.get(this.entryPointId)!.vector);
 
     // Search from top level down to level 1
     for (let lc = this.maxLevel; lc > 0; lc--) {
       const nearest = this.searchLayer(query, currentNearest, 1, lc);
       if (nearest.length > 0) {
         currentNearest = nearest[0].id;
-        currentDistance = nearest[0].distance;
       }
     }
 
