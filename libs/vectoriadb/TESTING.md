@@ -8,16 +8,16 @@ VectoriaDB includes comprehensive tests covering all functionality with **100% A
 
 ```bash
 # Run all tests
-nx test vectoria
+nx test vectoriadb
 
 # Run with coverage report
-nx test vectoria --coverage
+nx test vectoriadb --coverage
 
 # Run in watch mode (for development)
-nx test vectoria --watch
+nx test vectoriadb --watch
 
 # Run specific test file
-nx test vectoria --testFile=similarity.test.ts
+nx test vectoriadb --testFile=similarity.test.ts
 ```
 
 ## Test Files
@@ -33,7 +33,7 @@ Tests vector similarity utilities:
 **Run individually:**
 
 ```bash
-nx test vectoria --testFile=similarity.test.ts
+nx test vectoriadb --testFile=similarity.test.ts
 ```
 
 ### 2. `embedding.test.ts` (Slow - Downloads Model First Time)
@@ -57,7 +57,7 @@ Tests main VectoriaDB functionality:
 ## Test Results
 
 ```
-PASS  vectoria  similarity.test.ts
+PASS  vectoriadb  similarity.test.ts
   Similarity Utils
     cosineSimilarity
       ✓ should return 1 for identical vectors
@@ -118,7 +118,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .cache/transformers
-          key: transformers-${{ runner.os }}-${{ hashFiles('libs/vectoria/package.json') }}
+          key: transformers-${{ runner.os }}-${{ hashFiles('libs/vectoriadb/package.json') }}
           restore-keys: |
             transformers-${{ runner.os }}-
 
@@ -126,12 +126,12 @@ jobs:
         run: yarn install
 
       - name: Run tests
-        run: nx test vectoria --coverage
+        run: nx test vectoriadb --coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
-          files: ./coverage/libs/vectoria/lcov.info
+          files: ./coverage/libs/vectoriadb/lcov.info
 ```
 
 ### Pre-download Model (Optional)
@@ -153,7 +153,7 @@ node -e "
 Run with coverage report:
 
 ```bash
-nx test vectoria --coverage
+nx test vectoriadb --coverage
 ```
 
 Expected coverage:
@@ -163,26 +163,26 @@ Expected coverage:
 - **Functions**: > 95%
 - **Lines**: > 95%
 
-Coverage report is generated in `coverage/libs/vectoria/`
+Coverage report is generated in `coverage/libs/vectoriadb/`
 
 ## Debugging Tests
 
 ### Verbose output
 
 ```bash
-nx test vectoria --verbose
+nx test vectoriadb --verbose
 ```
 
 ### Run specific test by name
 
 ```bash
-nx test vectoria -t "should add a document"
+nx test vectoriadb -t "should add a document"
 ```
 
 ### Debug mode
 
 ```bash
-node --inspect-brk node_modules/.bin/nx test vectoria
+node --inspect-brk node_modules/.bin/nx test vectoriadb
 ```
 
 Then open `chrome://inspect` in Chrome and click "inspect".
@@ -243,7 +243,7 @@ describe('MyFeature', () => {
 ```bash
 # Delete cache and retry
 rm -rf .cache/transformers
-nx test vectoria
+nx test vectoriadb
 ```
 
 ### Out of Memory
@@ -254,7 +254,7 @@ nx test vectoria
 
 ```bash
 # Increase Node.js memory
-NODE_OPTIONS=--max-old-space-size=4096 nx test vectoria
+NODE_OPTIONS=--max-old-space-size=4096 nx test vectoriadb
 ```
 
 ### Tests Hang
@@ -274,7 +274,7 @@ NODE_OPTIONS=--max-old-space-size=4096 nx test vectoria
 **Solution**:
 
 ```bash
-cd libs/vectoria
+cd libs/vectoriadb
 yarn install
 ```
 
@@ -292,7 +292,7 @@ yarn install
 For development with live reload:
 
 ```bash
-nx test vectoria --watch
+nx test vectoriadb --watch
 ```
 
 This will:
@@ -317,7 +317,7 @@ Tests are configured in:
 
 After tests pass:
 
-1. Build the library: `nx build vectoria`
+1. Build the library: `nx build vectoriadb`
 2. Run integration tests (if any)
 3. Check coverage report
 4. Update documentation if needed

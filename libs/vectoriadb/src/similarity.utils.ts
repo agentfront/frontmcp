@@ -2,7 +2,7 @@
  * Calculate cosine similarity between two vectors
  * @param a First vector
  * @param b Second vector
- * @returns Cosine similarity score between 0 and 1 (1 = identical)
+ * @returns Cosine similarity score between -1 and 1 (-1 = opposite, 1 = identical)
  */
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) {
