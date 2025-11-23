@@ -2,7 +2,6 @@ import { VectoriaDB } from '../vectoria';
 import { DocumentMetadata } from '../interfaces';
 
 interface TestMetadata extends DocumentMetadata {
-  id: string;
   category: string;
   author?: string;
   tags?: string[];

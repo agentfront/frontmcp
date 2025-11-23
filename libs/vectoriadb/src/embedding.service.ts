@@ -3,14 +3,13 @@ import { pipeline } from '@huggingface/transformers';
  * Service for generating embeddings using transformers.js
  */
 export class EmbeddingService {
-  private model: any = null;
   private pipeline: any = null;
   private modelName: string;
-  private dimensions: number = 384; // default for all-MiniLM-L6-v2
-  private isInitialized: boolean = false;
+  private dimensions = 384; // default for all-MiniLM-L6-v2
+  private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
 
-  constructor(modelName: string = 'Xenova/all-MiniLM-L6-v2') {
+  constructor(modelName = 'Xenova/all-MiniLM-L6-v2') {
     this.modelName = modelName;
   }
 

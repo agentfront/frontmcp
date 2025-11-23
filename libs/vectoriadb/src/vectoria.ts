@@ -7,7 +7,6 @@ import type {
   SearchOptions,
   SearchResult,
   VectoriaStats,
-  DocumentData,
 } from './interfaces';
 
 /**

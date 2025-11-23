@@ -5,7 +5,6 @@
 import { VectoriaDB, DocumentMetadata } from '../src';
 
 interface MyDocument extends DocumentMetadata {
-  id: string;
   category: string;
   author: string;
   tags: string[];
