@@ -548,6 +548,196 @@ Find tools by natural language description.
 }
 ```
 
+### Describe Tool API (`codecall.describe`)
+
+Get detailed schemas and usage examples for specific tools discovered through search.
+
+**Input:**
+
+<ParamField path="toolNames" type="string[]" required>
+  Array of unique tool names (from codecall:search results) to fetch their detailed schemas and usage examples.
+
+  Example: `["users:list", "billing:getInvoice"]`
+
+  **Note:** Duplicate tool names are not allowed and will cause a validation error.
+</ParamField>
+
+**Output:**
+
+<ResponseField name="tools" type="array">
+  Array of tool descriptions with schemas and usage examples
+
+  <Expandable title="properties">
+    <ResponseField name="name" type="string" required>
+      Tool name to be used in `callTool()` within codecall:execute scripts
+    </ResponseField>
+    <ResponseField name="appId" type="string" required>
+      The app ID this tool belongs to
+    </ResponseField>
+    <ResponseField name="description" type="string" required>
+      Detailed description of what this tool does
+    </ResponseField>
+    <ResponseField name="inputSchema" type="object" required>
+      JSON Schema object describing the tool's input parameters
+    </ResponseField>
+    <ResponseField name="outputSchema" type="object">
+      JSON Schema object describing the tool's output structure (optional)
+    </ResponseField>
+    <ResponseField name="annotations" type="object">
+      MCP tool annotations (metadata)
+    </ResponseField>
+    <ResponseField name="usageExample" type="object" required>
+      A practical example of how to use this tool in a codecall:execute script
+
+      <Expandable title="properties">
+        <ResponseField name="description" type="string" required>
+          Description of what this example demonstrates
+        </ResponseField>
+        <ResponseField name="code" type="string" required>
+          JavaScript code example showing how to call this tool using `callTool()`.
+
+          Format: `const result = await callTool("tool:name", { ...params });`
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="notFound" type="string[]">
+  Tool names that were requested but not found in the index. Check these for typos.
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "toolNames": ["users:list", "billing:getInvoice"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "tools": [
+    {
+      "name": "users:list",
+      "appId": "user",
+      "description": "List users with pagination and filtering",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "number", "default": 100 },
+          "offset": { "type": "number", "default": 0 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array" },
+          "total": { "type": "number" }
+        }
+      },
+      "usageExample": {
+        "description": "Fetch first 10 users",
+        "code": "const result = await callTool('users:list', { limit: 10, offset: 0 });"
+      }
+    }
+  ],
+  "notFound": []
+}
+```
+
+### Invoke Tool API (`codecall.invoke`)
+
+Directly invoke a single tool without running JavaScript code. Use this for simple, one-and-done actions.
+
+**Input:**
+
+<ParamField path="tool" type="string" required>
+  The name of the tool to invoke (e.g., `"users:getById"`, `"billing:getInvoice"`).
+
+  Must be a tool you discovered via codecall:search.
+</ParamField>
+
+<ParamField path="input" type="object" required>
+  The input parameters for the tool. Structure must match the tool's input schema (check codecall:describe for schema details).
+</ParamField>
+
+**Output (Success):**
+
+<ResponseField name="status" type="'success'" required>
+  Indicates successful execution
+</ResponseField>
+
+<ResponseField name="result" type="unknown" required>
+  The tool execution result
+</ResponseField>
+
+**Output (Error):**
+
+<ResponseField name="status" type="'error'" required>
+  Indicates an error occurred
+</ResponseField>
+
+<ResponseField name="error" type="object" required>
+  Error details
+
+  <Expandable title="properties">
+    <ResponseField name="type" type="enum" required>
+      Type of error that occurred:
+      - `tool_not_found` - The tool name doesn't exist (typo or wrong app)
+      - `validation_error` - Input doesn't match the tool's schema
+      - `execution_error` - The tool failed during execution
+      - `permission_denied` - You don't have access to this tool
+    </ResponseField>
+    <ResponseField name="message" type="string" required>
+      Human-readable error message
+    </ResponseField>
+    <ResponseField name="details" type="unknown">
+      Additional error details if available
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example (Success):**
+
+```json
+{
+  "tool": "users:getById",
+  "input": { "id": "user_123" }
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "result": {
+    "id": "user_123",
+    "name": "John Doe",
+    "email": "john@example.com"
+  }
+}
+```
+
+**Example (Error):**
+
+```json
+{
+  "status": "error",
+  "error": {
+    "type": "validation_error",
+    "message": "Input validation failed: 'id' is required",
+    "details": {
+      "field": "id",
+      "expected": "string"
+    }
+  }
+}
+```
+
 ### Execution Result Status Codes
 
 When `codecall.execute` runs, results include a `status` field:

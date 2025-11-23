@@ -98,7 +98,7 @@ installs required dev deps. ([Installation - FrontMCP][1])
 ### Option B — Add to an existing project
 
 ```bash
-npm i -D frontmcp @types/node@^20
+npm i -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 

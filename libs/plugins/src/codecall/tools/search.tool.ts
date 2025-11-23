@@ -7,7 +7,10 @@ import {
   searchToolOutputSchema,
   searchToolDescription,
 } from './search.schema';
-import { invokeToolDescription } from './invoke.schema';
+import { ToolSearchService } from '../services/tool-search.service';
+
+// Singleton instance of the search service
+let searchServiceInstance: ToolSearchService | null = null;
 
 @Tool({
   name: 'codecall:search',
@@ -20,33 +23,26 @@ import { invokeToolDescription } from './invoke.schema';
   outputSchema: searchToolOutputSchema,
 })
 export default class SearchTool extends ToolContext {
+  private getSearchService(): ToolSearchService {
+    if (!searchServiceInstance) {
+      searchServiceInstance = new ToolSearchService();
+
+      // Initialize with all tools from the scope
+      const allTools = this.scope.tools.getTools(true);
+      searchServiceInstance.initialize(allTools);
+    }
+
+    return searchServiceInstance;
+  }
+
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
-    const {
-      query,
-      filter,
-      excludeToolNames = [],
-      topK: _topK = 8, // Will be used when implementing actual search
-    } = input;
+    const { query, filter, excludeToolNames = [], topK = 8 } = input;
 
-    // TODO: Implement actual tool search logic
-    // This is a placeholder implementation that should be replaced with:
-    // 1. Access to the CodeCall plugin's tool index
-    // 2. Semantic search or keyword matching against tool names/descriptions
-    // 3. Filtering by appIds if provided
-    // 4. Excluding already-fetched tools
-    // 5. Ranking by relevance score
-    // 6. Detecting excluded tools that don't exist in the index
-
+    const searchService = this.getSearchService();
     const warnings: SearchToolOutput['warnings'] = [];
-    const results: SearchToolOutput['results'] = [];
 
-    // Placeholder: Check for excluded tools that don't exist
-    // In real implementation, this would check against the actual tool index
-    const nonExistentExcludedTools = excludeToolNames.filter((_toolName: string) => {
-      // TODO: Check if toolName exists in the actual index
-      // For now, this is a placeholder
-      return false;
-    });
+    // Check for excluded tools that don't exist in the index
+    const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !searchService.hasTool(toolName));
 
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
@@ -58,17 +54,23 @@ export default class SearchTool extends ToolContext {
       });
     }
 
-    // TODO: Implement actual search
-    // Example placeholder structure:
-    // const allTools = await this.getToolIndex();
-    // const filteredByApp = filter?.appIds
-    //   ? allTools.filter(t => filter.appIds.includes(t.appId))
-    //   : allTools;
-    // const excludedSet = new Set(excludeToolNames);
-    // const candidateTools = filteredByApp.filter(t => !excludedSet.has(t.name));
-    // const rankedTools = await this.rankByRelevance(candidateTools, query);
-    // const topResults = rankedTools.slice(0, topK);
+    // Perform the search
+    const searchResults = searchService.search(query, {
+      topK,
+      appIds: filter?.appIds,
+      excludeToolNames,
+      minScore: 0.0, // Include all results with any relevance
+    });
 
+    // Convert search results to output format
+    const results: SearchToolOutput['results'] = searchResults.map((result) => ({
+      name: result.toolName,
+      appId: result.appId || 'unknown',
+      description: result.tool.metadata.description || '',
+      relevanceScore: result.score,
+    }));
+
+    // Add warning if no results found
     if (results.length === 0) {
       warnings.push({
         type: 'no_results',
@@ -81,7 +83,7 @@ export default class SearchTool extends ToolContext {
     return {
       results,
       warnings,
-      totalAvailableTools: 0, // TODO: Replace with actual count from index
+      totalAvailableTools: searchService.getTotalCount(),
     };
   }
 }

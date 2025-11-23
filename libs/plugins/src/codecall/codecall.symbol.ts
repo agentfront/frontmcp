@@ -63,3 +63,52 @@ export interface CodeCallVmEnvironment {
 
   mcpNotify?: (event: string, payload: Record<string, unknown>) => void;
 }
+
+/**
+ * Token for the ToolSearch provider
+ */
+export const ToolSearchProvider: Token<ToolSearch> = Symbol.for('ToolSearchProvider');
+
+/**
+ * Result from a tool search query
+ */
+export interface ToolSearchResult {
+  toolName: string;
+  appId?: string;
+  description: string;
+  relevanceScore: number;
+}
+
+/**
+ * Options for searching tools
+ */
+export interface ToolSearchOptions {
+  topK?: number;
+  appIds?: string[];
+  excludeToolNames?: string[];
+}
+
+/**
+ * Interface for the tool search service
+ */
+export interface ToolSearch {
+  /**
+   * Search for tools matching the query
+   */
+  search(query: string, options?: ToolSearchOptions): Promise<ToolSearchResult[]>;
+
+  /**
+   * Check if a tool exists in the index
+   */
+  hasTool(toolName: string): boolean;
+
+  /**
+   * Get the total number of indexed tools
+   */
+  getTotalCount(): number;
+
+  /**
+   * Initialize the search index with tools
+   */
+  initialize(): Promise<void>;
+}
