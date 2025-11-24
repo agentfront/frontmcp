@@ -1,4 +1,5 @@
 import * as walk from 'acorn-walk';
+import type * as acorn from 'acorn';
 import { ValidationRule, ValidationContext, ValidationSeverity } from '../interfaces';
 
 /**
@@ -6,8 +7,6 @@ import { ValidationRule, ValidationContext, ValidationSeverity } from '../interf
  *
  * Detects code that can never be executed:
  * - Statements after return/throw/break/continue
- * - Code after infinite loops
- * - Dead branches in conditionals
  */
 export class UnreachableCodeRule implements ValidationRule {
   readonly name = 'unreachable-code';
@@ -16,9 +15,9 @@ export class UnreachableCodeRule implements ValidationRule {
   readonly enabledByDefault = true;
 
   validate(context: ValidationContext): void {
-    walk.ancestor(context.ast as any, {
+    walk.ancestor(context.ast, {
       // Check for statements after return/throw/break/continue
-      BlockStatement: (node: any, ancestors: any[]) => {
+      BlockStatement: (node: any) => {
         const statements = node.body;
 
         for (let i = 0; i < statements.length - 1; i++) {
@@ -51,8 +50,9 @@ export class UnreachableCodeRule implements ValidationRule {
   /**
    * Check if a statement always terminates control flow
    */
-  private isTerminalStatement(node: any): boolean {
-    switch (node.type) {
+  private isTerminalStatement(node: acorn.Node): boolean {
+    const n = node as any; // acorn.Node lacks specific type definitions for node properties
+    switch (n.type) {
       case 'ReturnStatement':
       case 'ThrowStatement':
         return true;
@@ -64,15 +64,12 @@ export class UnreachableCodeRule implements ValidationRule {
       case 'IfStatement':
         // Both branches must be terminal
         return (
-          node.consequent &&
-          node.alternate &&
-          this.isTerminalStatement(node.consequent) &&
-          this.isTerminalStatement(node.alternate)
+          n.consequent && n.alternate && this.isTerminalStatement(n.consequent) && this.isTerminalStatement(n.alternate)
         );
 
       case 'BlockStatement':
         // Check if any statement in the block is terminal
-        return node.body.some((stmt: any) => this.isTerminalStatement(stmt));
+        return n.body.some((stmt: any) => this.isTerminalStatement(stmt));
 
       default:
         return false;
