@@ -49,28 +49,51 @@ export class IsolatedVmService {
       // Set up the jail with allowed globals
       await jail.set('global', jail.derefInto());
 
-      // Create callTool as an async function accessible from the isolate
-      await jail.set(
-        'callTool',
-        new ivm.Reference(async function (name: string, input: any) {
-          try {
+      // Set up callTool and getTool using evalClosure
+      // Use JSON serialization to transfer complex objects
+      await context.evalClosure(
+        `
+        globalThis.callTool = function(name, input) {
+          // Serialize input to JSON string for safe transfer
+          const inputJson = JSON.stringify(input);
+          return $0.applySyncPromise(undefined, [name, inputJson]);
+        };
+        globalThis.getTool = function(name) {
+          return $1.applySync(undefined, [name]);
+        };
+        `,
+        [
+          async (name: string, inputJson: string) => {
+            const input = JSON.parse(inputJson);
             const result = await environment.callTool(name, input);
-            return new ivm.ExternalCopy(result).copyInto();
-          } catch (error: any) {
-            throw new Error(`Tool error: ${error.message}`);
-          }
-        }),
+            // Return result as JSON string
+            return JSON.stringify(result);
+          },
+          (name: string) => {
+            const tool = environment.getTool(name);
+            if (!tool) return undefined;
+            // Return tool as JSON string
+            return JSON.stringify(tool);
+          },
+        ],
+        { arguments: { reference: true } },
       );
 
-      // Create getTool function
-      await jail.set(
-        'getTool',
-        new ivm.Reference(function (name: string) {
-          const tool = environment.getTool(name);
-          if (!tool) return undefined;
-          return new ivm.ExternalCopy(tool).copyInto();
-        }),
-      );
+      // Wrap the JSON-based callTool/getTool with JSON parsing
+      await context.eval(`
+        const _callToolJson = globalThis.callTool;
+        const _getToolJson = globalThis.getTool;
+
+        globalThis.callTool = async function(name, input) {
+          const resultJson = await _callToolJson(name, input);
+          return JSON.parse(resultJson);
+        };
+
+        globalThis.getTool = function(name) {
+          const toolJson = _getToolJson(name);
+          return toolJson ? JSON.parse(toolJson) : undefined;
+        };
+      `);
 
       // Set codecallContext as a read-only object
       const contextCopy = new ivm.ExternalCopy(environment.codecallContext);

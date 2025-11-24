@@ -15,7 +15,7 @@ export default {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },
   moduleFileExtensions: ['ts', 'js', 'html', 'node'],
-  transformIgnorePatterns: ['node_modules/(?!(isolated-vm)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(isolated-vm|jose)/)'],
   moduleNameMapper: {
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
   },
