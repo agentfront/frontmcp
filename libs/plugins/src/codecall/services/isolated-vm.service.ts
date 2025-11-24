@@ -4,16 +4,26 @@ import ivm from 'isolated-vm';
 import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 
 /**
+ * Error from VM execution with preserved metadata
+ */
+export interface VmExecutionError {
+  message: string;
+  name: string;
+  stack?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  code?: unknown;
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+/**
  * Result of VM execution
  */
 export interface VmExecutionResult {
   success: boolean;
   result?: unknown;
-  error?: {
-    message: string;
-    name: string;
-    stack?: string;
-  };
+  error?: VmExecutionError;
   logs: string[];
   timedOut: boolean;
 }
@@ -103,11 +113,8 @@ export class IsolatedVmService {
       }
 
       // Wrap the script to make it async-compatible
-      const wrappedScript = `
-        (async function() {
-          ${script}
-        })()
-      `;
+      // Use string concatenation to avoid template literal interpolation issues
+      const wrappedScript = '(async function() {\n' + script + '\n})()';
 
       // Compile and run the script
       const compiledScript = await isolate.compileScript(wrappedScript);
@@ -137,13 +144,49 @@ export class IsolatedVmService {
       // Check if it's a timeout error
       const timedOut = error.message?.includes('timeout') || error.message?.includes('Script execution timed out');
 
+      // Serialize error preserving all metadata (toolName, toolInput, code, details, etc.)
+      const serializedError: VmExecutionError = {
+        message: error?.message || 'Unknown error during script execution',
+        name: error?.name || 'Error',
+        stack: error?.stack,
+      };
+
+      // Preserve tool-specific metadata if present
+      if (error && typeof error === 'object') {
+        const errorObj = error as Record<string, unknown>;
+
+        // Copy well-known tool error fields using bracket notation
+        if ('toolName' in errorObj && errorObj['toolName'] !== undefined && errorObj['toolName'] !== null) {
+          serializedError.toolName = errorObj['toolName'] as string;
+        }
+        if ('toolInput' in errorObj && errorObj['toolInput'] !== undefined && errorObj['toolInput'] !== null) {
+          serializedError.toolInput = errorObj['toolInput'];
+        }
+        if ('code' in errorObj && errorObj['code'] !== undefined && errorObj['code'] !== null) {
+          serializedError.code = errorObj['code'];
+        }
+        if ('details' in errorObj && errorObj['details'] !== undefined && errorObj['details'] !== null) {
+          serializedError.details = errorObj['details'];
+        }
+
+        // Copy any other custom properties
+        for (const [key, value] of Object.entries(errorObj)) {
+          if (
+            !(key in serializedError) &&
+            key !== 'message' &&
+            key !== 'name' &&
+            key !== 'stack' &&
+            value !== undefined &&
+            value !== null
+          ) {
+            serializedError[key] = value;
+          }
+        }
+      }
+
       return {
         success: false,
-        error: {
-          message: error.message || 'Unknown error during script execution',
-          name: error.name || 'Error',
-          stack: error.stack,
-        },
+        error: serializedError,
         logs,
         timedOut,
       };

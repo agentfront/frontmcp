@@ -33,10 +33,17 @@ export default class AstValidateService implements CodeCallAstValidator {
     const vmOptions = config.get('resolvedVm');
     const presetLevel = PRESET_MAPPING[vmOptions.preset] || PresetLevel.SECURE;
 
+    // Combine all disallowed identifiers (including console if needed)
+    const additionalDisallowed = [
+      ...vmOptions.disabledBuiltins,
+      ...vmOptions.disabledGlobals,
+      ...(vmOptions.allowConsole ? [] : ['console']),
+    ];
+
     // Create rules based on VM options
     const rules = createPreset(presetLevel, {
       // Add additional disallowed identifiers from VM options
-      additionalDisallowedIdentifiers: [...vmOptions.disabledBuiltins, ...vmOptions.disabledGlobals],
+      additionalDisallowedIdentifiers: additionalDisallowed,
 
       // Configure loops based on allowLoops flag
       allowedLoops: vmOptions.allowLoops
@@ -58,9 +65,6 @@ export default class AstValidateService implements CodeCallAstValidator {
       // Don't require callTool - scripts may be used for data transformation only
       // requiredFunctions: ['callTool'],
       // minFunctionCalls: 0,
-
-      // Allow console if enabled in VM options
-      ...(vmOptions.allowConsole ? {} : { additionalDisallowedIdentifiers: ['console'] }),
     });
 
     this.validator = new JSAstValidator(rules);
