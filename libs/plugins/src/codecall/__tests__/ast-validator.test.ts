@@ -1,14 +1,15 @@
 // file: libs/plugins/src/codecall/__tests__/ast-validator.test.ts
 
 import CodeCallAstValidatorProvider from '../providers/codecall-ast-validator.provider';
-import { ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import CodeCallConfig from '../providers/code-call.config';
+import { CodeCallVmOptions } from '../codecall.symbol';
 
 describe('CodeCallAstValidatorProvider', () => {
   describe('secure preset', () => {
     let validator: CodeCallAstValidatorProvider;
 
     beforeEach(() => {
-      const vmOptions: ResolvedCodeCallVmOptions = {
+      const vmOptions: CodeCallVmOptions = {
         preset: 'secure',
         timeoutMs: 3500,
         allowLoops: false,
@@ -16,7 +17,8 @@ describe('CodeCallAstValidatorProvider', () => {
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process', 'fetch', 'setTimeout', 'setInterval', 'global', 'globalThis'],
       };
-      validator = new CodeCallAstValidatorProvider(vmOptions);
+      const config = new CodeCallConfig({ vm: vmOptions });
+      validator = new CodeCallAstValidatorProvider(config);
     });
 
     it('should validate a simple valid script', async () => {
@@ -168,7 +170,7 @@ describe('CodeCallAstValidatorProvider', () => {
     let validator: CodeCallAstValidatorProvider;
 
     beforeEach(() => {
-      const vmOptions: ResolvedCodeCallVmOptions = {
+      const vmOptions: CodeCallVmOptions = {
         preset: 'balanced',
         timeoutMs: 5000,
         allowLoops: true,
@@ -176,7 +178,8 @@ describe('CodeCallAstValidatorProvider', () => {
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process', 'fetch'],
       };
-      validator = new CodeCallAstValidatorProvider(vmOptions);
+      const config = new CodeCallConfig({ vm: vmOptions });
+      validator = new CodeCallAstValidatorProvider(config);
     });
 
     it('should allow for loops when allowLoops is true', async () => {
@@ -224,7 +227,7 @@ describe('CodeCallAstValidatorProvider', () => {
     let validator: CodeCallAstValidatorProvider;
 
     beforeEach(() => {
-      const vmOptions: ResolvedCodeCallVmOptions = {
+      const vmOptions: CodeCallVmOptions = {
         preset: 'locked_down',
         timeoutMs: 2000,
         allowLoops: false,
@@ -232,7 +235,8 @@ describe('CodeCallAstValidatorProvider', () => {
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process', 'fetch', 'setTimeout', 'setInterval', 'global', 'globalThis'],
       };
-      validator = new CodeCallAstValidatorProvider(vmOptions);
+      const config = new CodeCallConfig({ vm: vmOptions });
+      validator = new CodeCallAstValidatorProvider(config);
     });
 
     it('should reject console when allowConsole is false', async () => {
@@ -270,7 +274,7 @@ describe('CodeCallAstValidatorProvider', () => {
     let validator: CodeCallAstValidatorProvider;
 
     beforeEach(() => {
-      const vmOptions: ResolvedCodeCallVmOptions = {
+      const vmOptions: CodeCallVmOptions = {
         preset: 'experimental',
         timeoutMs: 10000,
         allowLoops: true,
@@ -278,7 +282,8 @@ describe('CodeCallAstValidatorProvider', () => {
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process'],
       };
-      validator = new CodeCallAstValidatorProvider(vmOptions);
+      const config = new CodeCallConfig({ vm: vmOptions });
+      validator = new CodeCallAstValidatorProvider(config);
     });
 
     it('should be more permissive with loops and console', async () => {

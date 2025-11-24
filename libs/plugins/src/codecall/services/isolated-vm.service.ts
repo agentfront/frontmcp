@@ -49,40 +49,35 @@ export class IsolatedVmService {
       // Set up the jail with allowed globals
       await jail.set('global', jail.derefInto());
 
-      // WORKAROUND: Since async callbacks are problematic, use a synchronous callback
-      // that triggers the async operation and stores result for later retrieval
-      const results = new Map<number, { status: 'pending' | 'resolved' | 'rejected'; value?: any; error?: any }>();
-      let callId = 0;
-
-      await jail.set(
-        '_submitCall',
-        new ivm.Callback((name: string, inputJson: string) => {
-          const id = callId++;
-          results.set(id, { status: 'pending' });
-
+      // Set up async tool caller
+      // Create a plain async function in the context that can be called with applySyncPromise
+      const asyncToolCaller = async (name: string, inputJson: string) => {
+        try {
           const input = JSON.parse(inputJson);
-          environment
-            .callTool(name, input)
-            .then((result) => {
-              results.set(id, { status: 'resolved', value: JSON.stringify(result) });
-            })
-            .catch((error) => {
-              results.set(id, { status: 'rejected', error: error.message });
-            });
-
-          return id;
-        }),
-      );
-
-      await jail.set(
-        '_checkCall',
-        new ivm.Callback((id: number) => {
-          const result = results.get(id);
-          if (!result) return JSON.stringify({ status: 'unknown' });
+          const result = await environment.callTool(name, input);
+          // Return as a plain string - primitives are transferable
           return JSON.stringify(result);
-        }),
-      );
+        } catch (error: any) {
+          // Return error in a structured format that can be reconstructed in the isolate
+          const errorData = {
+            __isError: true,
+            message: error?.message || 'Unknown error',
+            name: error?.name || 'Error',
+            stack: error?.stack,
+            // Preserve tool-specific metadata if present
+            toolName: error?.toolName,
+            toolInput: error?.toolInput,
+            code: error?.code,
+            details: error?.details,
+          };
+          return JSON.stringify(errorData);
+        }
+      };
 
+      // Use Reference with the async function
+      await jail.set('_callToolAsync', new ivm.Reference(asyncToolCaller));
+
+      // Set up getTool (synchronous, no changes needed)
       await jail.set(
         'getTool',
         new ivm.Callback((name: string) => {
@@ -92,31 +87,34 @@ export class IsolatedVmService {
         }),
       );
 
-      // Implement callTool in isolate
-      // Use Promise constructor instead of async function to avoid "non-transferable value" error
+      // Implement callTool using applySyncPromise
+      // This waits for the Promise to resolve while allowing the default isolate event loop to continue
       await context.eval(`
         globalThis.callTool = function(name, input) {
           const inputJson = JSON.stringify(input);
-          const id = _submitCall(name, inputJson);
+          // applySyncPromise waits for the async function to complete
+          // Note: result options are not available for applySyncPromise
+          const resultJson = _callToolAsync.applySyncPromise(
+            undefined,
+            [name, inputJson],
+            { arguments: { copy: true } }
+          );
+          const result = JSON.parse(resultJson);
 
-          // Return a Promise that polls for the result
-          return new Promise(function(resolve, reject) {
-            function checkResult() {
-              const statusJson = _checkCall(id);
-              const status = JSON.parse(statusJson);
+          // Check if the result is an error and reconstruct it
+          if (result.__isError) {
+            const error = new Error(result.message);
+            error.name = result.name;
+            if (result.stack) error.stack = result.stack;
+            // Preserve tool-specific metadata
+            if (result.toolName) error.toolName = result.toolName;
+            if (result.toolInput) error.toolInput = result.toolInput;
+            if (result.code) error.code = result.code;
+            if (result.details) error.details = result.details;
+            throw error;
+          }
 
-              if (status.status === 'resolved') {
-                resolve(JSON.parse(status.value));
-              } else if (status.status === 'rejected') {
-                reject(new Error(status.error));
-              } else {
-                // Still pending, check again immediately (busy polling)
-                checkResult();
-              }
-            }
-
-            checkResult();
-          });
+          return result;
         };
 
         globalThis.getTool = function(name) {
@@ -128,6 +126,48 @@ export class IsolatedVmService {
       // Set codecallContext as a read-only object
       const contextCopy = new ivm.ExternalCopy(environment.codecallContext);
       await jail.set('codecallContext', contextCopy.copyInto());
+
+      // Make codecallContext readonly by freezing it
+      await context.eval(`
+        Object.freeze(codecallContext);
+      `);
+
+      // Set up MCP logging functions if provided
+      if (environment.mcpLog) {
+        await jail.set(
+          '_mcpLog',
+          new ivm.Callback((level: string, message: string, dataJson?: string) => {
+            const data = dataJson ? JSON.parse(dataJson) : undefined;
+            environment.mcpLog!(level, message, data);
+            logs.push(`[mcp:${level}] ${message}`);
+          }),
+        );
+
+        await context.eval(`
+          globalThis.mcpLog = function(level, message, data) {
+            const dataJson = data ? JSON.stringify(data) : undefined;
+            _mcpLog(level, message, dataJson);
+          };
+        `);
+      }
+
+      if (environment.mcpNotify) {
+        await jail.set(
+          '_mcpNotify',
+          new ivm.Callback((event: string, dataJson: string) => {
+            const data = JSON.parse(dataJson);
+            environment.mcpNotify!(event, data);
+            logs.push(`[notify] ${event}`);
+          }),
+        );
+
+        await context.eval(`
+          globalThis.mcpNotify = function(event, data) {
+            const dataJson = JSON.stringify(data);
+            _mcpNotify(event, dataJson);
+          };
+        `);
+      }
 
       // Set up console if allowed
       if (this.vmOptions.allowConsole) {
@@ -164,11 +204,16 @@ export class IsolatedVmService {
             error: function(...args) { _error.applySync(undefined, args); }
           };
         `);
+      } else {
+        // Remove console when not allowed
+        await context.eval(`
+          delete globalThis.console;
+        `);
       }
 
-      // Wrap the script to make it async-compatible
+      // Wrap the script to make it async-compatible and enable strict mode
       // Use string concatenation to avoid template literal interpolation issues
-      const wrappedScript = '(async function() {\n' + script + '\n})()';
+      const wrappedScript = '(async function() {\n"use strict";\n' + script + '\n})()';
 
       // Compile and run the script
       const compiledScript = await isolate.compileScript(wrappedScript);

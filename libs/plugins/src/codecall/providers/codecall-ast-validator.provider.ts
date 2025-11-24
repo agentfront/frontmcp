@@ -44,31 +44,35 @@ export default class AstValidateService implements CodeCallAstValidator {
     ];
 
     // Create rules based on VM options
-    const rules = createPreset(presetLevel, {
+    const loopConfig = vmOptions.allowLoops
+      ? {
+          allowFor: true,
+          allowWhile: true,
+          allowDoWhile: true,
+          allowForIn: true,
+          allowForOf: true,
+        }
+      : {
+          allowFor: false,
+          allowWhile: false,
+          allowDoWhile: false,
+          allowForIn: false,
+          allowForOf: false,
+        };
+
+    const presetOptions: any = {
       // Add additional disallowed identifiers from VM options
       additionalDisallowedIdentifiers: additionalDisallowed,
 
       // Configure loops based on allowLoops flag
-      allowedLoops: vmOptions.allowLoops
-        ? {
-            allowFor: true,
-            allowWhile: true,
-            allowDoWhile: true,
-            allowForIn: true,
-            allowForOf: true,
-          }
-        : {
-            allowFor: false,
-            allowWhile: false,
-            allowDoWhile: false,
-            allowForIn: false,
-            allowForOf: false,
-          },
+      allowedLoops: loopConfig,
 
       // Don't require callTool - scripts may be used for data transformation only
       // requiredFunctions: ['callTool'],
       // minFunctionCalls: 0,
-    });
+    };
+
+    const rules = createPreset(presetLevel, presetOptions);
 
     this.validator = new JSAstValidator(rules);
   }
@@ -78,22 +82,46 @@ export default class AstValidateService implements CodeCallAstValidator {
    * Should catch syntax errors + illegal identifiers/loops.
    */
   async validate(script: string): Promise<CodeCallAstValidationResult> {
-    const result = await this.validator.validate(script);
+    // Validate using script mode with allowReturnOutsideFunction
+    // This matches the isolated-vm execution environment which wraps scripts in async IIFEs
+    // We use 'script' mode to support top-level return and await (via allowAwaitOutsideFunction if needed)
+    const result = await this.validator.validate(script, {
+      parseOptions: {
+        sourceType: 'script',
+        allowReturnOutsideFunction: true,
+        allowAwaitOutsideFunction: true,
+      },
+      // Explicitly enable rules - ast-guard requires rules to be explicitly enabled
+      // unless they have enabledByDefault: true (most security rules have enabledByDefault: false)
+      rules: {
+        'disallowed-identifier': true,
+        'no-eval': true,
+        'no-async': true,
+        'forbidden-loop': true,
+        'required-function-call': true,
+        'call-argument-validation': true,
+      },
+    });
 
     // Map ast-guard validation issues to CodeCall format (only ERROR-level)
     const issues: CodeCallAstValidationIssue[] = result.issues
       .filter((issue) => issue.severity === ValidationSeverity.ERROR)
-      .map((issue) => ({
-        kind: this.mapCodeToKind(issue.code),
-        message: issue.message,
-        location: issue.location
-          ? {
-              line: issue.location.line,
-              column: issue.location.column,
-            }
-          : undefined,
-        identifier: (issue.data?.['identifier'] as string) || undefined,
-      }));
+      .map((issue) => {
+        // Extract identifier from message or data for better kind mapping
+        const identifier = (issue.data?.['identifier'] as string) || this.extractIdentifierFromMessage(issue.message);
+
+        return {
+          kind: this.mapCodeToKind(issue.code, identifier),
+          message: issue.message,
+          location: issue.location
+            ? {
+                line: issue.location.line,
+                column: issue.location.column,
+              }
+            : undefined,
+          identifier,
+        };
+      });
 
     // Derive 'ok' from the filtered issues to ensure consistency
     // (script is valid only if there are no ERROR-level issues)
@@ -106,19 +134,61 @@ export default class AstValidateService implements CodeCallAstValidator {
   }
 
   /**
+   * Extract identifier from error message
+   */
+  private extractIdentifierFromMessage(message: string): string | undefined {
+    // Try to extract identifier from messages like "Identifier 'Function' is not allowed"
+    let match = message.match(/Identifier\s+'([^']+)'/);
+    if (match) return match[1];
+
+    // Try to extract from messages like 'Access to "Function" is not allowed'
+    match = message.match(/Access to "([^"]+)"/);
+    if (match) return match[1];
+
+    // Try to extract from messages like 'Use of Function constructor'
+    match = message.match(/Use of (\w+) constructor/);
+    if (match) return match[1];
+
+    // Try to extract from messages like 'Use of eval() is not allowed'
+    match = message.match(/Use of (\w+)\(\)/);
+    if (match) return match[1];
+
+    return undefined;
+  }
+
+  /**
    * Maps ast-guard issue codes to CodeCall issue kinds
    */
-  private mapCodeToKind(code: string): CodeCallAstValidationIssue['kind'] {
+  private mapCodeToKind(code: string, identifier?: string): CodeCallAstValidationIssue['kind'] {
     switch (code) {
       case 'parse-error':
+      case 'PARSE_ERROR':
         return 'ParseError';
       case 'disallowed-identifier':
+      case 'DISALLOWED_IDENTIFIER':
+        // Check if this is eval - it should be IllegalBuiltinAccess
+        if (identifier === 'eval') {
+          return 'IllegalBuiltinAccess';
+        }
         return 'DisallowedGlobal';
       case 'forbidden-loop':
+      case 'FORBIDDEN_LOOP':
         return 'DisallowedLoop';
       case 'no-eval':
+      case 'NO_EVAL':
+        // Only eval itself is IllegalBuiltinAccess
+        // Function constructor and others are DisallowedGlobal
+        if (identifier === 'eval') {
+          return 'IllegalBuiltinAccess';
+        }
+        return 'DisallowedGlobal';
       case 'no-async':
-        return 'IllegalBuiltinAccess';
+      case 'NO_ASYNC':
+        // Async-related violations are DisallowedGlobal unless it's eval
+        if (identifier === 'eval') {
+          return 'IllegalBuiltinAccess';
+        }
+        return 'DisallowedGlobal';
       default:
         return 'IllegalBuiltinAccess';
     }
