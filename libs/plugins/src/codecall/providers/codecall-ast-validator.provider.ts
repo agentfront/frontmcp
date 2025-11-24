@@ -1,8 +1,6 @@
 // file: libs/plugins/src/codecall/providers/codecall-ast-validator.provider.ts
 
-import { Provider, ProviderScope } from '@frontmcp/sdk';
-import * as acorn from 'acorn';
-import * as walk from 'acorn-walk';
+import { JSAstValidator, ValidationRule, createPreset, PresetLevel, ValidationSeverity } from 'ast-guard';
 
 import {
   CodeCallAstValidator,
@@ -11,74 +9,99 @@ import {
   ResolvedCodeCallVmOptions,
 } from '../codecall.symbol';
 
-@Provider({
-  name: 'codecall:ast-validator',
-  description: 'AST validator for CodeCall JavaScript plans',
-  scope: ProviderScope.GLOBAL,
-})
+/**
+ * Maps CodeCall VM presets to ast-guard preset levels
+ */
+const PRESET_MAPPING: Record<string, PresetLevel> = {
+  locked_down: PresetLevel.STRICT,
+  secure: PresetLevel.SECURE,
+  balanced: PresetLevel.STANDARD,
+  experimental: PresetLevel.PERMISSIVE,
+};
+
+/**
+ * AST validator for CodeCall JavaScript plans using ast-guard
+ * Provided dynamically by the plugin to inject VM options
+ */
 export default class CodeCallAstValidatorProvider implements CodeCallAstValidator {
-  constructor(private readonly vmOptions: ResolvedCodeCallVmOptions) {}
+  private readonly validator: JSAstValidator;
 
-  validate(script: string): CodeCallAstValidationResult {
-    const issues: CodeCallAstValidationIssue[] = [];
+  constructor(private readonly vmOptions: ResolvedCodeCallVmOptions) {
+    const presetLevel = PRESET_MAPPING[vmOptions.preset] || PresetLevel.SECURE;
 
-    let ast: acorn.Node;
-    try {
-      ast = acorn.parse(script, {
-        ecmaVersion: 'latest',
-        sourceType: 'script',
-        locations: true,
-      }) as unknown as acorn.Node;
-    } catch (err: any) {
-      issues.push({
-        kind: 'ParseError',
-        message: err?.message ?? 'Failed to parse script',
-        location:
-          typeof err?.loc?.line === 'number' && typeof err?.loc?.column === 'number'
-            ? { line: err.loc.line, column: err.loc.column }
-            : undefined,
-      });
+    // Create rules based on VM options
+    const rules = createPreset(presetLevel, {
+      // Add additional disallowed identifiers from VM options
+      additionalDisallowedIdentifiers: [...vmOptions.disabledBuiltins, ...vmOptions.disabledGlobals],
 
-      return { ok: false, issues };
-    }
+      // Configure loops based on allowLoops flag
+      allowedLoops: vmOptions.allowLoops
+        ? {
+            allowFor: true,
+            allowWhile: true,
+            allowDoWhile: true,
+            allowForIn: true,
+            allowForOf: true,
+          }
+        : {
+            allowFor: false,
+            allowWhile: false,
+            allowDoWhile: false,
+            allowForIn: false,
+            allowForOf: false,
+          },
 
-    const { disabledBuiltins, disabledGlobals, allowLoops } = this.vmOptions;
-    const forbidden = new Set([...disabledBuiltins, ...disabledGlobals]);
+      // Don't require callTool - scripts may be used for data transformation only
+      // requiredFunctions: ['callTool'],
+      // minFunctionCalls: 0,
 
-    walk.simple(ast as any, {
-      Identifier: (node: any) => {
-        if (forbidden.has(node.name)) {
-          issues.push({
-            kind: disabledGlobals.includes(node.name) ? 'DisallowedGlobal' : 'IllegalBuiltinAccess',
-            message: `Access to "${node.name}" is not allowed in CodeCall scripts.`,
-            location: node.loc ? { line: node.loc.start.line, column: node.loc.start.column } : undefined,
-            identifier: node.name,
-          });
-        }
-      },
-
-      // loop constructs when allowLoops === false
-      ForStatement: this.checkLoop(issues, allowLoops),
-      WhileStatement: this.checkLoop(issues, allowLoops),
-      DoWhileStatement: this.checkLoop(issues, allowLoops),
-      ForOfStatement: this.checkLoop(issues, allowLoops),
-      ForInStatement: this.checkLoop(issues, allowLoops),
+      // Allow console if enabled in VM options
+      ...(vmOptions.allowConsole ? {} : { additionalDisallowedIdentifiers: ['console'] }),
     });
 
+    this.validator = new JSAstValidator(rules);
+  }
+
+  async validate(script: string): Promise<CodeCallAstValidationResult> {
+    const result = await this.validator.validate(script);
+
+    // Map ast-guard validation issues to CodeCall format
+    const issues: CodeCallAstValidationIssue[] = result.issues
+      .filter((issue) => issue.severity === ValidationSeverity.ERROR)
+      .map((issue) => ({
+        kind: this.mapCodeToKind(issue.code),
+        message: issue.message,
+        location: issue.location
+          ? {
+              line: issue.location.line,
+              column: issue.location.column,
+            }
+          : undefined,
+        identifier: (issue.data?.['identifier'] as string) || undefined,
+      }));
+
     return {
-      ok: issues.length === 0,
+      ok: result.valid,
       issues,
     };
   }
 
-  private checkLoop(issues: CodeCallAstValidationIssue[], allowLoops: boolean): (node: any) => void {
-    return (node: any) => {
-      if (allowLoops) return;
-      issues.push({
-        kind: 'DisallowedLoop',
-        message: 'Loops are not allowed in this CodeCall VM preset.',
-        location: node.loc ? { line: node.loc.start.line, column: node.loc.start.column } : undefined,
-      });
-    };
+  /**
+   * Maps ast-guard issue codes to CodeCall issue kinds
+   */
+  private mapCodeToKind(code: string): CodeCallAstValidationIssue['kind'] {
+    switch (code) {
+      case 'parse-error':
+        return 'ParseError';
+      case 'disallowed-identifier':
+        return 'DisallowedGlobal';
+      case 'forbidden-loop':
+        return 'DisallowedLoop';
+      case 'no-eval':
+      case 'no-async':
+        return 'IllegalBuiltinAccess';
+      default:
+        return 'IllegalBuiltinAccess';
+    }
   }
 }

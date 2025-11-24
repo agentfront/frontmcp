@@ -16,7 +16,7 @@ import CodeCallAstValidator from './providers/codecall-ast-validator.provider';
 @Plugin({
   name: 'codecall',
   description: 'CodeCall plugin: VM-based meta-tools for orchestrating MCP tools',
-  providers: [CodeCallAstValidator],
+  providers: [], // AST validator is provided dynamically to inject VM options
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions> {
@@ -48,11 +48,26 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
    * (e.g. different presets, or a non-vm2 engine) without touching the plugin decorator.
    */
   static override dynamicProviders(options: CodeCallPluginOptions): ProviderType[] {
+    const resolvedVmOptions = resolveVmOptions(options.vm);
+
     return [
       {
         name: 'codecall:config',
         provide: CodeCallConfig,
         useValue: options,
+      },
+      {
+        name: 'codecall:vm-options',
+        provide: 'codecall:vm-options' as any,
+        useValue: resolvedVmOptions,
+      },
+      {
+        name: 'codecall:ast-validator',
+        provide: 'codecall:ast-validator' as any,
+        inject: () => [],
+        useFactory: async () => {
+          return new CodeCallAstValidator(resolvedVmOptions);
+        },
       },
       {
         name: 'codecall:tool-search',

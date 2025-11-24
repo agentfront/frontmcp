@@ -36,7 +36,7 @@ export interface CodeCallAstValidator {
    * Validate a JS script before it hits the VM.
    * Should catch syntax errors + illegal identifiers/loops.
    */
-  validate(script: string): CodeCallAstValidationResult;
+  validate(script: string): Promise<CodeCallAstValidationResult>;
 }
 
 /**
