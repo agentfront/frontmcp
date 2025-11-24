@@ -217,7 +217,10 @@ export class JSAstValidator {
       }
 
       // If rule config is object
-      if (ruleConfig.enabled) {
+      // noinspection SuspiciousTypeOfGuard
+      const explicitlyEnabled = typeof ruleConfig.enabled === 'boolean' ? ruleConfig.enabled : undefined;
+      const shouldEnable = explicitlyEnabled ?? rule.enabledByDefault;
+      if (shouldEnable) {
         enabled.push(rule);
       }
     }

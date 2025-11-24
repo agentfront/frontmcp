@@ -32,7 +32,6 @@ export class UnreachableCodeRule implements ValidationRule {
 
               context.report({
                 code: 'UNREACHABLE_CODE',
-                severity: ValidationSeverity.WARNING,
                 message: 'Unreachable code detected',
                 location: unreachableStmt.loc
                   ? {
