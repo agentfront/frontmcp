@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2025-01-23
+## [1.0.0] - 2025-01-23
 
 ### Added
 
@@ -65,24 +65,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - toString/valueOf manipulation
   - Getter/setter traps
   - Comprehensive bank-level lockdown validation
-
-## [1.0.0] - 2024-11-23
-
-### Added
-
-- Initial release of AST Guard
-- Core validator architecture with rule-based validation
-- Built-in validation rules:
-  - `DisallowedIdentifierRule` - Prevent usage of specific identifiers
-  - `ForbiddenLoopRule` - Block loop constructs
-  - `RequiredFunctionCallRule` - Ensure specific functions are called
-  - `UnreachableCodeRule` - Detect unreachable code
-  - `CallArgumentValidationRule` - Validate function call arguments
-  - `NoEvalRule` - Prevent eval and dynamic code execution
-  - `NoAsyncRule` - Prevent async/await usage
-- Comprehensive error handling with typed errors
-- Full TypeScript support with strict typing
-- Extensible plugin architecture
-- Production-ready validation with configurable limits
-- Detailed error reporting with source locations
-- Comprehensive test suite

@@ -202,7 +202,7 @@ describe('Security Tests - Malicious Code Detection', () => {
         rules: { 'disallowed-identifier': true },
       });
       // Note: property access like {}.constructor is not caught as an identifier
-      // This is expected behavior - identifier check only catches direct references
+      // TODO: Consider whether DisallowedIdentifierRule should block property access patterns
       expect(result.valid).toBe(true);
     });
 

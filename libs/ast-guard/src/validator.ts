@@ -102,39 +102,46 @@ export class JSAstValidator {
       };
     }
 
-    // Create validation context
-    const context: ValidationContext = {
-      ast,
-      source,
-      config,
-      visited: new Set(),
-      metadata: new Map(),
-      report: (issue) => {
-        const fullIssue: ValidationIssue = {
-          severity: ValidationSeverity.ERROR,
-          ...issue,
-        };
-
-        issues.push(fullIssue);
-
-        // Stop on first error if configured
-        if (config.stopOnFirstError && fullIssue.severity === ValidationSeverity.ERROR) {
-          throw new StopValidationError();
-        }
-
-        // Stop if max issues reached
-        if (config.maxIssues && config.maxIssues > 0 && issues.length >= config.maxIssues) {
-          throw new StopValidationError();
-        }
-      },
-    };
-
     // Get enabled rules
     const enabledRules = this.getEnabledRules(config);
 
     // Execute rules
     try {
       for (const rule of enabledRules) {
+        // Get rule configuration for severity override
+        const ruleConfig = config.rules?.[rule.name];
+        const configSeverity = typeof ruleConfig === 'object' ? ruleConfig.severity : undefined;
+
+        // Create per-rule validation context with proper severity resolution
+        const context: ValidationContext = {
+          ast,
+          source,
+          config,
+          visited: new Set(),
+          metadata: new Map(),
+          report: (issue) => {
+            // Precedence: issue.severity → ruleConfig.severity → rule.defaultSeverity → ERROR fallback
+            const severity = issue.severity ?? configSeverity ?? rule.defaultSeverity ?? ValidationSeverity.ERROR;
+
+            const fullIssue: ValidationIssue = {
+              ...issue,
+              severity,
+            };
+
+            issues.push(fullIssue);
+
+            // Stop on first error if configured
+            if (config.stopOnFirstError && fullIssue.severity === ValidationSeverity.ERROR) {
+              throw new StopValidationError();
+            }
+
+            // Stop if max issues reached
+            if (config.maxIssues && config.maxIssues > 0 && issues.length >= config.maxIssues) {
+              throw new StopValidationError();
+            }
+          },
+        };
+
         await rule.validate(context);
       }
     } catch (err) {
@@ -150,17 +157,6 @@ export class JSAstValidator {
       issues,
       ast,
     };
-  }
-
-  /**
-   * Synchronous version of validate
-   */
-  validateSync(source: string, config: ValidationConfig = {}): ValidationResult {
-    const result = this.validate(source, config);
-    if (result instanceof Promise) {
-      throw new ConfigurationError('Cannot use validateSync with async rules');
-    }
-    return result as ValidationResult;
   }
 
   /**
