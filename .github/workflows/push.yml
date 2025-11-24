@@ -28,7 +28,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Run linter
-        run: npx nx run-many -t lint
+        run: npx nx affected -t lint
         continue-on-error: true
 
       - name: Run prettier
@@ -36,7 +36,7 @@ jobs:
         continue-on-error: true
 
       - name: Build libraries
-        run: npx nx run-many -t build
+        run: npx nx affected -t build
 
       - name: Test libraries
-        run: npx nx run-many -t test --passWithNoTests
+        run: npx nx affected -t test --passWithNoTests
