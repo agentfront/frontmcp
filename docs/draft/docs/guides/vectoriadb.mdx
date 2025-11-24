@@ -1,0 +1,236 @@
+---
+title: Semantic Search with VectoriaDB
+slug: guides/vectoriadb
+description: Index your FrontMCP tools with VectoriaDB for offline semantic discovery and personalized tool recommendations.
+icon: magnifying-glass
+---
+
+VectoriaDB is FrontMCP's in-memory vector database built on transformers.js. Use it to surface the right tool, prompt, or document snippet from natural-language queries without shipping data to an external service. This guide shows how to fold VectoriaDB into a FrontMCP server for always-on semantic discovery.
+
+<CardGroup cols={3}>
+  <Card title="Offline embeddings" icon="bolt">
+    Embeddings run locally via transformers.js, so your users' data never leaves the server and you avoid API quotas.
+  </Card>
+  <Card title="Type-safe metadata" icon="brackets-curly">
+    Strong generics ensure every document you index keeps the same shape as your tool metadata.
+  </Card>
+  <Card title="Operational guardrails" icon="shield">
+    Built-in rate limits, batch validation, HNSW indexing, and storage adapters keep the index production ready.
+  </Card>
+</CardGroup>
+
+## What you'll build
+
+- A typed document shape for every tool, app, or resource you want to search
+- An indexing routine that stays in sync with `toolRegistry.getTools(true)`
+- Semantic queries with metadata filters, score thresholds, and pagination controls
+- Persistent caches (file or Redis) so restarts do not require re-embedding everything
+- Tunable HNSW search for large inventories
+
+<Note>
+  The default Xenova `all-MiniLM-L6-v2` model is ~22 MB. The first initialization downloads and caches it under
+  `cacheDir`; subsequent boots reuse the local copy.
+</Note>
+
+## Prerequisites
+
+- Node.js 22 or later (Node 24 is recommended and is what FrontMCP tests against)
+- An existing FrontMCP server with at least one app and tool registry
+- Ability to install npm packages in the server workspace
+- Optional: writable disk or Redis if you plan to persist embeddings between restarts
+
+## Step 1: Install & initialize VectoriaDB
+
+Install the package alongside your server:
+
+<CodeGroup>
+```bash npm
+npm install vectoriadb
+```
+```bash pnpm
+pnpm add vectoriadb
+```
+```bash yarn
+yarn add vectoriadb
+```
+</CodeGroup>
+
+Initialize a singleton database during server startup (for example inside your custom bootstrap or provider):
+
+```ts
+import { VectoriaDB, DocumentMetadata } from 'vectoriadb';
+
+interface ToolDocument extends DocumentMetadata {
+  toolName: string;
+  owner: string;
+  tags: string[];
+  risk: 'safe' | 'destructive';
+}
+
+export const toolIndex = new VectoriaDB<ToolDocument>({
+  cacheDir: './.cache/transformers',
+  defaultSimilarityThreshold: 0.4,
+});
+
+await toolIndex.initialize(); // downloads and warms the embedding model once
+```
+
+`initialize()` must run before `add`, `search`, or `update`. Calling it twice is safe because VectoriaDB short-circuits if it is already ready.
+
+## Step 2: Index your tools
+
+Collect metadata from the tool registry (apps, plugins, adapters, or scopes) and write it into the database. Each document needs a unique `id`, the natural-language `text` you want to vectorize, and `metadata` that extends `DocumentMetadata`.
+
+```ts
+import type { ToolEntry, ToolRegistryInterface } from '@frontmcp/sdk';
+
+function collectToolDocuments(tools: ToolEntry[]): Array<{ id: string; text: string; metadata: ToolDocument }> {
+  return tools.map((tool) => {
+    const docId = `${tool.owner.id}:${tool.name}`;
+    return {
+      id: docId,
+      text: [
+        tool.metadata.description ?? tool.name,
+        `Inputs: ${Object.keys(tool.metadata.inputSchema ?? {}).join(', ') || 'none'}`,
+        `Tags: ${(tool.metadata.tags ?? []).join(', ') || 'none'}`,
+      ].join('\n'),
+      metadata: {
+        id: docId,
+        toolName: tool.name,
+        owner: tool.owner.id,
+        tags: tool.metadata.tags ?? [],
+        risk: tool.metadata.annotations?.destructiveHint ? 'destructive' : 'safe',
+      },
+    };
+  });
+}
+
+export async function indexTools(toolRegistry: ToolRegistryInterface) {
+  const tools = toolRegistry.getTools(true); // include hidden tools so you can filter later
+  await toolIndex.addMany(collectToolDocuments(tools));
+}
+```
+
+`addMany` validates every document, enforces `maxBatchSize`, and prevents duplicates. Use it after deployments or whenever your tool inventory changes.
+
+## Step 3: Run semantic search
+
+Query the index anywhere you can run async code (for example inside a custom MCP tool that recommends next actions):
+
+```ts
+const matches = await toolIndex.search('reset a billing password', {
+  topK: 5,
+  threshold: 0.45,
+  filter: (metadata) => metadata.owner === 'billing' && !metadata.tags.includes('deprecated'),
+});
+
+for (const match of matches) {
+  console.log(`${match.metadata.toolName} (${match.score.toFixed(2)})`);
+}
+```
+
+`search` returns the best matches sorted by cosine similarity. Use `filter` to enforce authorization, `includeVector` to inspect raw vectors, and `threshold` to drop low-confidence hits.
+
+<Tip>
+  Keep the index current with `updateMetadata`, `update`, or `updateMany`. Metadata-only updates never trigger re-embedding,
+  while text changes re-embed only the affected documents.
+</Tip>
+
+## Persist embeddings between restarts
+
+Avoid re-indexing on every boot by swapping the default in-memory adapter with the provided file or Redis adapters plus a deterministic tools hash.
+
+```ts
+import { FileStorageAdapter, createToolsHash } from 'vectoriadb';
+
+export async function warmToolIndex(toolRegistry: ToolRegistryInterface) {
+  const documents = collectToolDocuments(toolRegistry.getTools(true));
+
+  const toolIndex = new VectoriaDB<ToolDocument>({
+    storageAdapter: new FileStorageAdapter({
+      cacheDir: './.cache/vectoriadb',
+      namespace: 'tool-index',
+    }),
+    toolsHash: createToolsHash(documents),
+    version: process.env.npm_package_version,
+  });
+
+  await toolIndex.initialize();
+
+  if (toolIndex.size() === 0) {
+    await toolIndex.addMany(documents);
+    await toolIndex.saveToStorage(); // persist embeddings to disk
+  }
+
+  return toolIndex;
+}
+```
+
+`toolsHash` automatically invalidates the cache when your tool list or descriptions change. Call `saveToStorage()` after indexing; `initialize()` transparently loads the cache on the next boot.
+
+<Note>
+  Need a shared cache across pods? Swap in `RedisStorageAdapter` with your preferred Redis client and namespace. TTLs and
+  key prefixes are configurable per adapter.
+</Note>
+
+## Scale & tune search
+
+- Enable `useHNSW` for datasets above roughly ten thousand documents. HNSW provides sub-millisecond queries with more than 95% recall.
+- Adjust `threshold` and `topK` per query to trade recall for precision.
+- Guard resource usage with `maxDocuments`, `maxDocumentSize`, and `maxBatchSize` (VectoriaDB enforces these automatically).
+- Set a custom `cacheDir` if your runtime has strict filesystem policies.
+
+```ts
+const toolIndex = new VectoriaDB<ToolDocument>({
+  useHNSW: true,
+  hnsw: { M: 16, efConstruction: 200, efSearch: 64 },
+  maxDocuments: 150_000,
+  maxBatchSize: 2_000,
+});
+```
+
+## Handle errors and monitor health
+
+All errors extend `VectoriaError` and ship with machine-readable `code` values so you can branch on them.
+
+```ts
+import {
+  VectoriaError,
+  VectoriaNotInitializedError,
+  DocumentValidationError,
+} from 'vectoriadb';
+
+try {
+  await toolIndex.add(doc.id, doc.text, doc.metadata);
+} catch (error) {
+  if (error instanceof VectoriaNotInitializedError) {
+    await toolIndex.initialize();
+  } else if (error instanceof DocumentValidationError) {
+    console.warn({ tool: error.documentId }, 'invalid document skipped');
+  } else if (error instanceof VectoriaError) {
+    console.error({ code: error.code }, error.message);
+    throw error;
+  } else {
+    throw error;
+  }
+}
+```
+
+Use `toolIndex.getStats()` to feed dashboards or health endpoints:
+
+```ts
+const stats = toolIndex.getStats();
+/*
+{
+  totalEmbeddings: number;
+  dimensions: number;
+  estimatedMemoryBytes: number;
+  modelName: string;
+}
+*/
+```
+
+<Info>
+  Pair stats with `toolIndex.size()`, `toolIndex.clear()`, and `toolIndex.clearStorage()` to expose maintenance commands or
+  admin tooling.
+</Info>
