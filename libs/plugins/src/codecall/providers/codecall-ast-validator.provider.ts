@@ -34,10 +34,13 @@ export default class AstValidateService implements CodeCallAstValidator {
     const presetLevel = PRESET_MAPPING[vmOptions.preset] || PresetLevel.SECURE;
 
     // Combine all disallowed identifiers (including console if needed)
+    // Deduplicate to keep the rule set minimal in case of overlaps
     const additionalDisallowed = [
-      ...vmOptions.disabledBuiltins,
-      ...vmOptions.disabledGlobals,
-      ...(vmOptions.allowConsole ? [] : ['console']),
+      ...new Set([
+        ...vmOptions.disabledBuiltins,
+        ...vmOptions.disabledGlobals,
+        ...(vmOptions.allowConsole ? [] : ['console']),
+      ]),
     ];
 
     // Create rules based on VM options
@@ -77,7 +80,7 @@ export default class AstValidateService implements CodeCallAstValidator {
   async validate(script: string): Promise<CodeCallAstValidationResult> {
     const result = await this.validator.validate(script);
 
-    // Map ast-guard validation issues to CodeCall format
+    // Map ast-guard validation issues to CodeCall format (only ERROR-level)
     const issues: CodeCallAstValidationIssue[] = result.issues
       .filter((issue) => issue.severity === ValidationSeverity.ERROR)
       .map((issue) => ({
@@ -92,8 +95,12 @@ export default class AstValidateService implements CodeCallAstValidator {
         identifier: (issue.data?.['identifier'] as string) || undefined,
       }));
 
+    // Derive 'ok' from the filtered issues to ensure consistency
+    // (script is valid only if there are no ERROR-level issues)
+    const ok = issues.length === 0;
+
     return {
-      ok: result.valid,
+      ok,
       issues,
     };
   }

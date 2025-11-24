@@ -103,11 +103,12 @@ export class IsolatedVmService {
         );
 
         // Bootstrap console object
+        // Note: Variables registered via jail.set() are accessed without $ prefix in eval()
         await context.eval(`
           globalThis.console = {
-            log: function(...args) { $_log.applySync(undefined, args); },
-            warn: function(...args) { $_warn.applySync(undefined, args); },
-            error: function(...args) { $_error.applySync(undefined, args); }
+            log: function(...args) { _log.applySync(undefined, args); },
+            warn: function(...args) { _warn.applySync(undefined, args); },
+            error: function(...args) { _error.applySync(undefined, args); }
           };
         `);
       }
