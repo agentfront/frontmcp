@@ -34,6 +34,7 @@
   "dependencies": {
     "ioredis": "^5.8.0",
     "@frontmcp/sdk": "^0.4.0",
+    "vectoriadb": "^1.0.0",
     "acorn": "^8.15.0",
     "acorn-walk": "^8.3.4",
     "isolated-vm": "^6.0.2"

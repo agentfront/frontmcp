@@ -37,6 +37,43 @@ export interface CodeCallDirectCallsOptions {
 }
 
 /**
+ * Embedding strategy for tool search
+ */
+export type EmbeddingStrategy = 'tfidf' | 'ml';
+
+/**
+ * Configuration for tool search embeddings
+ */
+export interface CodeCallEmbeddingOptions {
+  /**
+   * Embedding strategy to use for tool search
+   * - 'tfidf': Lightweight, synchronous TF-IDF based search (no ML models required)
+   * - 'ml': ML-based semantic search using transformers.js (better quality, requires model download)
+   * @default 'tfidf'
+   */
+  strategy?: EmbeddingStrategy;
+
+  /**
+   * Model name for ML-based embeddings (only used when strategy='ml')
+   * @default 'Xenova/all-MiniLM-L6-v2'
+   */
+  modelName?: string;
+
+  /**
+   * Cache directory for ML models (only used when strategy='ml')
+   * @default './.cache/transformers'
+   */
+  cacheDir?: string;
+
+  /**
+   * Enable HNSW index for faster search (only used when strategy='ml')
+   * When enabled, provides O(log n) search instead of O(n) brute-force
+   * @default false
+   */
+  useHNSW?: boolean;
+}
+
+/**
  * Plugin-level options (from README).
  */
 export interface CodeCallPluginOptions {
@@ -54,6 +91,11 @@ export interface CodeCallPluginOptions {
 
   directCalls?: CodeCallDirectCallsOptions;
   vm?: CodeCallVmOptions;
+
+  /**
+   * Embedding configuration for tool search
+   */
+  embedding?: CodeCallEmbeddingOptions;
 }
 
 /**

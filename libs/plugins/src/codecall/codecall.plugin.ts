@@ -1,9 +1,10 @@
 // file: libs/plugins/src/codecall/codecall.plugin.ts
 
-import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType, ScopeEntry } from '@frontmcp/sdk';
 
 import { CodeCallPluginOptions, CodeCallVmOptions, CodeCallVmPreset } from './codecall.types';
 import { CodeCallConfig, ResolvedCodeCallVmOptions } from './codecall.symbol';
+import { ToolSearchService } from './services/tool-search.service';
 
 import SearchTool from './tools/search.tool';
 import DescribeTool from './tools/describe.tool';
@@ -48,13 +49,24 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
    * (e.g. different presets, or a non-vm2 engine) without touching the plugin decorator.
    */
   static override dynamicProviders(options: CodeCallPluginOptions): ProviderType[] {
-    // move to helpers
-    // const resolvedVm = resolveVmOptions(options.vm);
     return [
       {
         name: 'codecall:config',
         provide: CodeCallConfig,
         useValue: options,
+      },
+      {
+        name: 'codecall:tool-search',
+        provide: ToolSearchService,
+        inject: () => [ScopeEntry],
+        useFactory: async (scope: ScopeEntry) => {
+          return new ToolSearchService(
+            {
+              embeddingOptions: options.embedding,
+            },
+            scope,
+          );
+        },
       },
     ];
   }

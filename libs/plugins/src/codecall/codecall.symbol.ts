@@ -65,11 +65,6 @@ export interface CodeCallVmEnvironment {
 }
 
 /**
- * Token for the ToolSearch provider
- */
-export const ToolSearchProvider: Token<ToolSearch> = Symbol.for('ToolSearchProvider');
-
-/**
  * Result from a tool search query
  */
 export interface ToolSearchResult {

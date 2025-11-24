@@ -1,10 +1,17 @@
-// file: libs/plugins/src/codecall/services/embedding.service.ts
-
 /**
- * Simple TF-IDF based embedding service for semantic search
- * This provides a lightweight in-memory solution without external dependencies
+ * Lightweight TF-IDF based embedding service for semantic search
+ *
+ * This provides a simple, synchronous alternative to the ML-based EmbeddingService
+ * Ideal for use cases where:
+ * - You don't want to download ML models
+ * - You need synchronous operation
+ * - You have a small to medium corpus (< 10K documents)
+ * - You want zero external dependencies beyond Node.js
+ *
+ * Note: For production semantic search with larger corpora, use the ML-based
+ * EmbeddingService which provides better quality embeddings via transformers.js
  */
-export class EmbeddingService {
+export class TFIDFEmbeddingService {
   private vocabulary: Map<string, number> = new Map();
   private idf: Map<string, number> = new Map();
   private documentCount = 0;
@@ -12,7 +19,7 @@ export class EmbeddingService {
   /**
    * Tokenizes and normalizes text into terms
    */
-  private tokenize(text: string): string[] {
+  tokenize(text: string): string[] {
     return text
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
@@ -71,6 +78,7 @@ export class EmbeddingService {
 
   /**
    * Generates a TF-IDF vector for a given text
+   * Returns a sparse vector representation as a Map<term, weight>
    */
   embed(text: string): Map<string, number> {
     const terms = this.tokenize(text);
@@ -88,7 +96,27 @@ export class EmbeddingService {
   }
 
   /**
-   * Computes cosine similarity between two vectors
+   * Converts a sparse vector to a dense Float32Array
+   * Uses the internal vocabulary for dimension mapping
+   * Missing terms are filled with zeros
+   */
+  toDenseVector(sparseVector: Map<string, number>): Float32Array {
+    const dimensions = this.vocabulary.size;
+    const dense = new Float32Array(dimensions);
+
+    for (const [term, weight] of sparseVector.entries()) {
+      const index = this.vocabulary.get(term);
+      if (index !== undefined) {
+        dense[index] = weight;
+      }
+    }
+
+    return dense;
+  }
+
+  /**
+   * Computes cosine similarity between two sparse vectors
+   * More efficient than converting to dense vectors for TF-IDF
    */
   cosineSimilarity(vector1: Map<string, number>, vector2: Map<string, number>): number {
     let dotProduct = 0;
@@ -118,9 +146,25 @@ export class EmbeddingService {
   }
 
   /**
-   * Tokenizes text (used for building the corpus)
+   * Get the size of the vocabulary
    */
-  tokenizeText(text: string): string[] {
-    return this.tokenize(text);
+  getVocabularySize(): number {
+    return this.vocabulary.size;
+  }
+
+  /**
+   * Get the number of documents in the corpus
+   */
+  getDocumentCount(): number {
+    return this.documentCount;
+  }
+
+  /**
+   * Clear the IDF and vocabulary (useful for rebuilding the index)
+   */
+  clear(): void {
+    this.vocabulary.clear();
+    this.idf.clear();
+    this.documentCount = 0;
   }
 }

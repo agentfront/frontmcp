@@ -9,9 +9,6 @@ import {
 } from './search.schema';
 import { ToolSearchService } from '../services/tool-search.service';
 
-// Singleton instance of the search service
-let searchServiceInstance: ToolSearchService | null = null;
-
 @Tool({
   name: 'codecall:search',
   cache: {
@@ -23,22 +20,11 @@ let searchServiceInstance: ToolSearchService | null = null;
   outputSchema: searchToolOutputSchema,
 })
 export default class SearchTool extends ToolContext {
-  private getSearchService(): ToolSearchService {
-    if (!searchServiceInstance) {
-      searchServiceInstance = new ToolSearchService();
-
-      // Initialize with all tools from the scope
-      const allTools = this.scope.tools.getTools(true);
-      searchServiceInstance.initialize(allTools);
-    }
-
-    return searchServiceInstance;
-  }
-
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
     const { query, filter, excludeToolNames = [], topK = 8 } = input;
 
-    const searchService = this.getSearchService();
+    // Inject the ToolSearchService via DI
+    const searchService = this.get(ToolSearchService);
     const warnings: SearchToolOutput['warnings'] = [];
 
     // Check for excluded tools that don't exist in the index
@@ -55,19 +41,18 @@ export default class SearchTool extends ToolContext {
     }
 
     // Perform the search
-    const searchResults = searchService.search(query, {
+    const searchResults = await searchService.search(query, {
       topK,
       appIds: filter?.appIds,
       excludeToolNames,
-      minScore: 0.0, // Include all results with any relevance
     });
 
-    // Convert search results to output format
+    // Convert search results to output format (already in correct format from ToolSearch interface)
     const results: SearchToolOutput['results'] = searchResults.map((result) => ({
       name: result.toolName,
       appId: result.appId || 'unknown',
-      description: result.tool.metadata.description || '',
-      relevanceScore: result.score,
+      description: result.description,
+      relevanceScore: result.relevanceScore,
     }));
 
     // Add warning if no results found

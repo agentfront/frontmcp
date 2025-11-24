@@ -13,6 +13,11 @@ export * from './regex.utils';
 export * from './error.utils';
 export * from './interfaces';
 
+// TF-IDF based lightweight vector database (zero external dependencies)
+export { TFIDFVectoria } from './vectoria-tfidf';
+export type { TFIDFDocument, TFIDFVectoriaConfig } from './vectoria-tfidf';
+export { TFIDFEmbeddingService } from './tfidf.embedding.service';
+
 // Storage adapters
 export { BaseStorageAdapter } from './storage/base.adapter';
 export { MemoryStorageAdapter } from './storage/memory.adapter';

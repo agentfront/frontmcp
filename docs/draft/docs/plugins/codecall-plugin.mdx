@@ -738,6 +738,150 @@ Directly invoke a single tool without running JavaScript code. Use this for simp
 }
 ```
 
+### Execute Tool API (`codecall.execute`)
+
+Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter results, join data, or implement complex workflows.
+
+**Input:**
+
+<ParamField path="script" type="string" required>
+  JavaScript code to execute in the sandboxed VM. The script can call tools using the `call(toolName, input)` function and access results.
+
+  Example:
+  ```js
+  const user = await call('users:getById', { id: 'user_123' });
+  const orders = await call('orders:listByUser', { userId: user.id });
+  return { user, orderCount: orders.length };
+  ```
+</ParamField>
+
+<ParamField path="allowedTools" type="string[]">
+  Optional allowlist of tools that can be called from the script. If not provided, all discovered tools are allowed.
+
+  Use this to restrict script capabilities:
+  ```json
+  {
+    "script": "const user = await call('users:getById', { id: '123' });",
+    "allowedTools": ["users:getById", "users:list"]
+  }
+  ```
+</ParamField>
+
+<ParamField path="timeoutMs" type="number">
+  Optional execution timeout in milliseconds. Defaults to the plugin's configured timeout.
+
+  If the script exceeds this time, execution is terminated with a `timeout` status.
+</ParamField>
+
+**Output (Success):**
+
+<ResponseField name="status" type="'ok'" required>
+  Indicates successful execution
+</ResponseField>
+
+<ResponseField name="result" type="unknown" required>
+  The return value from the script (whatever the script's final expression or `return` statement produces)
+</ResponseField>
+
+<ResponseField name="executionTime" type="number">
+  Time taken to execute the script in milliseconds
+</ResponseField>
+
+**Output (Error):**
+
+<ResponseField name="status" type="enum" required>
+  Type of error that occurred:
+  - `syntax_error` - JavaScript parse error (invalid syntax)
+  - `illegal_access` - Script attempted to use blocked builtin or global
+  - `runtime_error` - Bug in the JavaScript code (e.g., null reference, type error)
+  - `tool_error` - A specific tool call failed
+  - `timeout` - Script exceeded the configured timeout
+</ResponseField>
+
+<ResponseField name="error" type="object" required>
+  Error details
+
+  <Expandable title="properties">
+    <ResponseField name="message" type="string" required>
+      Human-readable error message
+    </ResponseField>
+    <ResponseField name="details" type="unknown">
+      Additional error context (e.g., which tool failed, validation details, stack trace)
+    </ResponseField>
+    <ResponseField name="toolName" type="string">
+      For `tool_error` status: the name of the tool that failed
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example (Success):**
+
+```json
+{
+  "script": "const user = await call('users:getById', { id: 'user_123' }); const orders = await call('orders:listByUser', { userId: user.id }); return { userName: user.name, totalOrders: orders.length };"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "result": {
+    "userName": "John Doe",
+    "totalOrders": 5
+  },
+  "executionTime": 234
+}
+```
+
+**Example (Syntax Error):**
+
+```json
+{
+  "script": "const user = await call('users:getById', { id: 'user_123' }"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "syntax_error",
+  "error": {
+    "message": "Unexpected end of input",
+    "details": {
+      "line": 1,
+      "column": 65
+    }
+  }
+}
+```
+
+**Example (Tool Error):**
+
+```json
+{
+  "script": "const user = await call('users:getById', { id: 'nonexistent' }); return user;"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "tool_error",
+  "error": {
+    "message": "Tool execution failed: User not found",
+    "toolName": "users:getById",
+    "details": {
+      "statusCode": 404,
+      "error": "User with id 'nonexistent' does not exist"
+    }
+  }
+}
+```
+
 ### Execution Result Status Codes
 
 When `codecall.execute` runs, results include a `status` field:

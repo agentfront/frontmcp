@@ -629,6 +629,12 @@ export default class ProviderRegistry
     return this.getWithParents(FrontMcpServer);
   }
 
+  /**
+   * Build provider instance views for different scopes
+   * NOTE: This is currently a stub implementation returning empty maps.
+   * Actual view building logic is planned as part of the session management refactoring.
+   * See the ProviderRegistryInterface TODO for fixing the session type.
+   */
   async buildViews(session: string): Promise<ProviderViews> {
     return {
       global: new Map<Token, any>(),
