@@ -83,7 +83,12 @@ export class ToolSearchService implements ToolSearch {
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
-    const embeddingOptions = config.embeddingOptions || {};
+    const embeddingOptions: CodeCallEmbeddingOptions = config.embeddingOptions || {
+      strategy: 'tfidf',
+      modelName: 'Xenova/all-MiniLM-L6-v2',
+      cacheDir: './.cache/transformers',
+      useHNSW: false,
+    };
     this.strategy = config.strategy || embeddingOptions.strategy || 'tfidf';
 
     this.config = {

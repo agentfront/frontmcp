@@ -1,102 +1,187 @@
 // file: libs/plugins/src/codecall/codecall.types.ts
 
-export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_driven';
+import { z } from 'zod';
 
-export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experimental';
+// ===== Zod Schemas with Defaults =====
 
-export interface CodeCallVmOptions {
-  /**
-   * CSP-like preset; see README.
-   * @default 'secure'
-   */
-  preset?: CodeCallVmPreset;
+export const codeCallModeSchema = z
+  .enum(['codecall_only', 'codecall_opt_in', 'metadata_driven'])
+  .default('codecall_only');
 
-  timeoutMs?: number;
-  allowLoops?: boolean;
-  maxSteps?: number;
-  disabledBuiltins?: string[];
-  disabledGlobals?: string[];
-  allowConsole?: boolean;
-}
+export const codeCallVmPresetSchema = z.enum(['locked_down', 'secure', 'balanced', 'experimental']).default('secure');
 
-export interface CodeCallDirectCallsOptions {
+export const codeCallVmOptionsSchema = z
+  .object({
+    /**
+     * CSP-like preset; see README.
+     * @default 'secure'
+     */
+    preset: codeCallVmPresetSchema,
+
+    /**
+     * Timeout for script execution in milliseconds
+     * Defaults vary by preset
+     */
+    timeoutMs: z.number().positive().optional(),
+
+    /**
+     * Allow loop constructs (for, while, do-while)
+     * Defaults vary by preset
+     */
+    allowLoops: z.boolean().optional(),
+
+    /**
+     * Maximum number of steps (if applicable)
+     * Defaults vary by preset
+     */
+    maxSteps: z.number().positive().optional(),
+
+    /**
+     * List of disabled builtin functions
+     * Defaults vary by preset
+     */
+    disabledBuiltins: z.array(z.string()).optional(),
+
+    /**
+     * List of disabled global variables
+     * Defaults vary by preset
+     */
+    disabledGlobals: z.array(z.string()).optional(),
+
+    /**
+     * Allow console.log/warn/error
+     * Defaults vary by preset
+     */
+    allowConsole: z.boolean().optional(),
+  })
+  .default({});
+
+export const codeCallDirectCallsOptionsSchema = z.object({
   /**
    * Enable/disable the `codecall.invoke` meta-tool.
    */
-  enabled: boolean;
+  enabled: z.boolean(),
 
   /**
    * Optional allowlist of tool names.
    */
-  allowedTools?: string[];
+  allowedTools: z.array(z.string()).optional(),
 
   /**
    * Optional advanced filter.
+   * Note: Functions can't be validated by Zod at runtime, so this is any
    */
-  filter?: (tool: { name: string; appId?: string; source?: string; tags?: string[] }) => boolean;
-}
+  filter: z
+    .function()
+    .args(
+      z.object({
+        name: z.string(),
+        appId: z.string().optional(),
+        source: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      }),
+    )
+    .returns(z.boolean())
+    .optional(),
+});
 
-/**
- * Embedding strategy for tool search
- */
-export type EmbeddingStrategy = 'tfidf' | 'ml';
+export const embeddingStrategySchema = z.enum(['tfidf', 'ml']).default('tfidf');
 
-/**
- * Configuration for tool search embeddings
- */
-export interface CodeCallEmbeddingOptions {
-  /**
-   * Embedding strategy to use for tool search
-   * - 'tfidf': Lightweight, synchronous TF-IDF based search (no ML models required)
-   * - 'ml': ML-based semantic search using transformers.js (better quality, requires model download)
-   * @default 'tfidf'
-   */
-  strategy?: EmbeddingStrategy;
+export const codeCallEmbeddingOptionsSchema = z
+  .object({
+    /**
+     * Embedding strategy to use for tool search
+     * - 'tfidf': Lightweight, synchronous TF-IDF based search (no ML models required)
+     * - 'ml': ML-based semantic search using transformers.js (better quality, requires model download)
+     * @default 'tfidf'
+     */
+    strategy: embeddingStrategySchema,
 
-  /**
-   * Model name for ML-based embeddings (only used when strategy='ml')
-   * @default 'Xenova/all-MiniLM-L6-v2'
-   */
-  modelName?: string;
+    /**
+     * Model name for ML-based embeddings (only used when strategy='ml')
+     * @default 'Xenova/all-MiniLM-L6-v2'
+     */
+    modelName: z.string().default('Xenova/all-MiniLM-L6-v2'),
 
-  /**
-   * Cache directory for ML models (only used when strategy='ml')
-   * @default './.cache/transformers'
-   */
-  cacheDir?: string;
+    /**
+     * Cache directory for ML models (only used when strategy='ml')
+     * @default './.cache/transformers'
+     */
+    cacheDir: z.string().default('./.cache/transformers'),
 
-  /**
-   * Enable HNSW index for faster search (only used when strategy='ml')
-   * When enabled, provides O(log n) search instead of O(n) brute-force
-   * @default false
-   */
-  useHNSW?: boolean;
-}
+    /**
+     * Enable HNSW index for faster search (only used when strategy='ml')
+     * When enabled, provides O(log n) search instead of O(n) brute-force
+     * @default false
+     */
+    useHNSW: z.boolean().default(false),
+  })
+  .default({});
 
-/**
- * Plugin-level options (from README).
- */
-export interface CodeCallPluginOptions {
-  mode?: CodeCallMode;
-  topK?: number;
-  maxDefinitions?: number;
+export const codeCallPluginOptionsSchema = z
+  .object({
+    /**
+     * CodeCall mode
+     * @default 'codecall_only'
+     */
+    mode: codeCallModeSchema,
 
-  includeTools?: (tool: {
-    name: string;
-    appId?: string;
-    source?: string;
-    description?: string;
-    tags?: string[];
-  }) => boolean;
+    /**
+     * Default number of tools to return in search results
+     * @default 8
+     */
+    topK: z.number().positive().default(8),
 
-  directCalls?: CodeCallDirectCallsOptions;
-  vm?: CodeCallVmOptions;
+    /**
+     * Maximum number of tool definitions to include
+     * @default 8
+     */
+    maxDefinitions: z.number().positive().default(8),
 
-  /**
-   * Embedding configuration for tool search
-   */
-  embedding?: CodeCallEmbeddingOptions;
-}
+    /**
+     * Optional filter function for including tools
+     * Note: Functions can't be validated by Zod at runtime
+     */
+    includeTools: z
+      .function()
+      .args(
+        z.object({
+          name: z.string(),
+          appId: z.string().optional(),
+          source: z.string().optional(),
+          description: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+      )
+      .returns(z.boolean())
+      .optional(),
+
+    /**
+     * Direct calls configuration
+     */
+    directCalls: codeCallDirectCallsOptionsSchema.optional(),
+
+    /**
+     * VM execution options
+     */
+    vm: codeCallVmOptionsSchema,
+
+    /**
+     * Embedding configuration for tool search
+     */
+    embedding: codeCallEmbeddingOptionsSchema,
+  })
+  .default({});
+
+// ===== TypeScript Types =====
+
+export type CodeCallMode = z.infer<typeof codeCallModeSchema>;
+export type CodeCallVmPreset = z.infer<typeof codeCallVmPresetSchema>;
+export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
+export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
+export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
+export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
+export type CodeCallPluginOptions = z.infer<typeof codeCallPluginOptionsSchema>;
 
 /**
  * Per-tool metadata used by CodeCall.

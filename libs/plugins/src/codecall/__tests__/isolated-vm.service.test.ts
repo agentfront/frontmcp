@@ -1,10 +1,9 @@
 // file: libs/plugins/src/codecall/__tests__/isolated-vm.service.test.ts
 
+import { IsolatedVmService } from '../services/isolated-vm.service';
 import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 
-// Skip these tests for now - isolated-vm has native module dependencies that don't work well with Jest
-// These tests should be run in an integration test environment or with proper mocking
-describe.skip('IsolatedVmService', () => {
+describe('IsolatedVmService', () => {
   let vmOptions: ResolvedCodeCallVmOptions;
   let mockEnvironment: CodeCallVmEnvironment;
 
@@ -40,6 +39,9 @@ describe.skip('IsolatedVmService', () => {
 
       const result = await service.execute(script, mockEnvironment);
 
+      if (!result.success) {
+        console.log('Error:', result.error);
+      }
       expect(result.success).toBe(true);
       expect(result.result).toBe(42);
       expect(result.timedOut).toBe(false);

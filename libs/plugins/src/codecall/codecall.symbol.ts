@@ -2,8 +2,7 @@
 
 import { CodeCallPluginOptions, CodeCallVmPreset } from './codecall.types';
 import { Token } from '@frontmcp/sdk';
-
-export const CodeCallConfig: Token<CodeCallPluginOptions> = Symbol.for('CodeCallConfig');
+import type CodeCallConfigProvider from './providers/code-call.config';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';
@@ -18,6 +17,16 @@ export interface CodeCallAstValidationResult {
 }
 
 /**
+ * Interface for the AST validator service
+ */
+export interface CodeCallAstValidator {
+  /**
+   * Validate a JavaScript script before execution
+   */
+  validate(script: string): Promise<CodeCallAstValidationResult>;
+}
+
+/**
  * Resolved VM options with all defaults applied.
  * Plugins compute this once and pass into providers.
  */
@@ -29,14 +38,6 @@ export interface ResolvedCodeCallVmOptions {
   disabledBuiltins: string[];
   disabledGlobals: string[];
   allowConsole: boolean;
-}
-
-export interface CodeCallAstValidator {
-  /**
-   * Validate a JS script before it hits the VM.
-   * Should catch syntax errors + illegal identifiers/loops.
-   */
-  validate(script: string): Promise<CodeCallAstValidationResult>;
 }
 
 /**

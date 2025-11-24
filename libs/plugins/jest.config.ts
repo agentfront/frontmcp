@@ -2,9 +2,7 @@
 import { readFileSync } from 'fs';
 
 // Reading the SWC compilation config for the spec files
-const swcJestConfig = JSON.parse(
-  readFileSync(`${__dirname}/.spec.swcrc`, 'utf-8')
-);
+const swcJestConfig = JSON.parse(readFileSync(`${__dirname}/.spec.swcrc`, 'utf-8'));
 
 // Disable .swcrc look-up by SWC core because we're passing in swcJestConfig ourselves
 swcJestConfig.swcrc = false;
@@ -16,6 +14,10 @@ export default {
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },
-  moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleFileExtensions: ['ts', 'js', 'html', 'node'],
+  transformIgnorePatterns: ['node_modules/(?!(isolated-vm)/)'],
+  moduleNameMapper: {
+    '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
+  },
   coverageDirectory: 'test-output/jest/coverage',
 };

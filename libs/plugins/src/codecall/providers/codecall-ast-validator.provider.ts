@@ -1,13 +1,10 @@
 // file: libs/plugins/src/codecall/providers/codecall-ast-validator.provider.ts
 
-import { JSAstValidator, ValidationRule, createPreset, PresetLevel, ValidationSeverity } from 'ast-guard';
+import { createPreset, JSAstValidator, PresetLevel, ValidationSeverity } from 'ast-guard';
 
-import {
-  CodeCallAstValidator,
-  CodeCallAstValidationIssue,
-  CodeCallAstValidationResult,
-  ResolvedCodeCallVmOptions,
-} from '../codecall.symbol';
+import { CodeCallAstValidationIssue, CodeCallAstValidationResult, CodeCallAstValidator } from '../codecall.symbol';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
+import type CodeCallConfig from './code-call.config';
 
 /**
  * Maps CodeCall VM presets to ast-guard preset levels
@@ -21,12 +18,19 @@ const PRESET_MAPPING: Record<string, PresetLevel> = {
 
 /**
  * AST validator for CodeCall JavaScript plans using ast-guard
- * Provided dynamically by the plugin to inject VM options
+ * Uses dependency injection to get CodeCallConfig
  */
-export default class CodeCallAstValidatorProvider implements CodeCallAstValidator {
+@Provider({
+  name: 'codecall:ast-validator',
+  description: 'Validates JS scripts before they hit the VM',
+  scope: ProviderScope.GLOBAL,
+})
+export default class AstValidateService implements CodeCallAstValidator {
   private readonly validator: JSAstValidator;
 
-  constructor(private readonly vmOptions: ResolvedCodeCallVmOptions) {
+  constructor(config: CodeCallConfig) {
+    // Get resolved VM options from config
+    const vmOptions = config.get('resolvedVm');
     const presetLevel = PRESET_MAPPING[vmOptions.preset] || PresetLevel.SECURE;
 
     // Create rules based on VM options
@@ -62,6 +66,10 @@ export default class CodeCallAstValidatorProvider implements CodeCallAstValidato
     this.validator = new JSAstValidator(rules);
   }
 
+  /**
+   * Validate a JS script before it hits the VM.
+   * Should catch syntax errors + illegal identifiers/loops.
+   */
   async validate(script: string): Promise<CodeCallAstValidationResult> {
     const result = await this.validator.validate(script);
 

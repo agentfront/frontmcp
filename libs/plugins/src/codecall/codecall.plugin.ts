@@ -2,8 +2,7 @@
 
 import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType, ScopeEntry } from '@frontmcp/sdk';
 
-import { CodeCallPluginOptions, CodeCallVmOptions, CodeCallVmPreset } from './codecall.types';
-import { CodeCallConfig, ResolvedCodeCallVmOptions } from './codecall.symbol';
+import { CodeCallPluginOptions, codeCallPluginOptionsSchema } from './codecall.types';
 import { ToolSearchService } from './services/tool-search.service';
 
 import SearchTool from './tools/search.tool';
@@ -12,61 +11,46 @@ import ExecuteTool from './tools/execute.tool';
 import InvokeTool from './tools/invoke.tool';
 
 import CodeCallAstValidator from './providers/codecall-ast-validator.provider';
+import CodeCallConfig from './providers/code-call.config';
 
 @Plugin({
   name: 'codecall',
   description: 'CodeCall plugin: VM-based meta-tools for orchestrating MCP tools',
-  providers: [], // AST validator is provided dynamically to inject VM options
+  providers: [],
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions> {
-  static defaultOptions: CodeCallPluginOptions = {
-    mode: 'codecall_only',
-    topK: 8,
-    maxDefinitions: 8,
-    vm: {
-      preset: 'secure',
-    },
-  };
-
   options: CodeCallPluginOptions;
 
-  constructor(options: CodeCallPluginOptions = CodeCallPlugin.defaultOptions) {
+  constructor(options: Partial<CodeCallPluginOptions> = {}) {
     super();
-    this.options = {
-      ...CodeCallPlugin.defaultOptions,
-      ...options,
-      vm: {
-        ...CodeCallPlugin.defaultOptions.vm,
-        ...(options.vm ?? {}),
-      },
-    };
+    // Parse options with Zod schema to apply all defaults
+    this.options = codeCallPluginOptionsSchema.parse(options);
   }
 
   /**
-   * Dynamic providers allow you to override the VM implementation in the future
-   * (e.g. different presets, or a non-vm2 engine) without touching the plugin decorator.
+   * Dynamic providers allow you to configure the plugin with custom options
+   * without touching the plugin decorator.
    */
-  static override dynamicProviders(options: CodeCallPluginOptions): ProviderType[] {
-    const resolvedVmOptions = resolveVmOptions(options.vm);
+  static override dynamicProviders(options: Partial<CodeCallPluginOptions>): ProviderType[] {
+    // Parse options with Zod schema to apply all defaults
+    const parsedOptions = codeCallPluginOptionsSchema.parse(options);
+
+    // Create config instance
+    const config = new CodeCallConfig(parsedOptions);
 
     return [
       {
         name: 'codecall:config',
         provide: CodeCallConfig,
-        useValue: options,
-      },
-      {
-        name: 'codecall:vm-options',
-        provide: 'codecall:vm-options' as any,
-        useValue: resolvedVmOptions,
+        useValue: config,
       },
       {
         name: 'codecall:ast-validator',
-        provide: 'codecall:ast-validator' as any,
-        inject: () => [],
-        useFactory: async () => {
-          return new CodeCallAstValidator(resolvedVmOptions);
+        provide: CodeCallAstValidator,
+        inject: () => [CodeCallConfig],
+        useFactory: async (cfg: CodeCallConfig) => {
+          return new CodeCallAstValidator(cfg);
         },
       },
       {
@@ -76,7 +60,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
         useFactory: async (scope: ScopeEntry) => {
           return new ToolSearchService(
             {
-              embeddingOptions: options.embedding,
+              embeddingOptions: parsedOptions.embedding,
             },
             scope,
           );
@@ -98,87 +82,5 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
     // - read final tool list from flowCtx.state / flowCtx.result
     // - apply this.options.mode + per-tool metadata (metadata.codecall)
     // - hide/show tools + ensure CodeCall meta-tools stay visible
-  }
-}
-
-// ---- helpers ----
-
-function resolveVmOptions(vmOptions?: CodeCallVmOptions): ResolvedCodeCallVmOptions {
-  const preset: CodeCallVmPreset = vmOptions?.preset ?? 'secure';
-
-  const base = presetDefaults(preset);
-
-  return {
-    ...base,
-    ...vmOptions,
-    disabledBuiltins: vmOptions?.disabledBuiltins ?? base.disabledBuiltins,
-    disabledGlobals: vmOptions?.disabledGlobals ?? base.disabledGlobals,
-  };
-}
-
-function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
-  switch (preset) {
-    case 'locked_down':
-      return {
-        preset,
-        timeoutMs: 2000,
-        allowLoops: false,
-        allowConsole: false,
-        maxSteps: 2000,
-        disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
-        disabledGlobals: [
-          'require',
-          'process',
-          'fetch',
-          'setTimeout',
-          'setInterval',
-          'setImmediate',
-          'global',
-          'globalThis',
-        ],
-      };
-
-    case 'balanced':
-      return {
-        preset,
-        timeoutMs: 5000,
-        allowLoops: true,
-        allowConsole: true,
-        maxSteps: 10000,
-        disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
-        disabledGlobals: ['require', 'process', 'fetch'],
-      };
-
-    case 'experimental':
-      return {
-        preset,
-        timeoutMs: 10000,
-        allowLoops: true,
-        allowConsole: true,
-        maxSteps: 20000,
-        disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
-        disabledGlobals: ['require', 'process'],
-      };
-
-    case 'secure':
-    default:
-      return {
-        preset: 'secure',
-        timeoutMs: 3500,
-        allowLoops: false,
-        allowConsole: true,
-        maxSteps: 5000,
-        disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
-        disabledGlobals: [
-          'require',
-          'process',
-          'fetch',
-          'setTimeout',
-          'setInterval',
-          'setImmediate',
-          'global',
-          'globalThis',
-        ],
-      };
   }
 }
