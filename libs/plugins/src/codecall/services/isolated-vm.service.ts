@@ -49,48 +49,78 @@ export class IsolatedVmService {
       // Set up the jail with allowed globals
       await jail.set('global', jail.derefInto());
 
-      // Set up callTool and getTool using evalClosure
-      // Use JSON serialization to transfer complex objects
-      await context.evalClosure(
-        `
-        globalThis.callTool = function(name, input) {
-          // Serialize input to JSON string for safe transfer
-          const inputJson = JSON.stringify(input);
-          return $0.applySyncPromise(undefined, [name, inputJson]);
-        };
-        globalThis.getTool = function(name) {
-          return $1.applySync(undefined, [name]);
-        };
-        `,
-        [
-          async (name: string, inputJson: string) => {
-            const input = JSON.parse(inputJson);
-            const result = await environment.callTool(name, input);
-            // Return result as JSON string
-            return JSON.stringify(result);
-          },
-          (name: string) => {
-            const tool = environment.getTool(name);
-            if (!tool) return undefined;
-            // Return tool as JSON string
-            return JSON.stringify(tool);
-          },
-        ],
-        { arguments: { reference: true } },
+      // WORKAROUND: Since async callbacks are problematic, use a synchronous callback
+      // that triggers the async operation and stores result for later retrieval
+      const results = new Map<number, { status: 'pending' | 'resolved' | 'rejected'; value?: any; error?: any }>();
+      let callId = 0;
+
+      await jail.set(
+        '_submitCall',
+        new ivm.Callback((name: string, inputJson: string) => {
+          const id = callId++;
+          results.set(id, { status: 'pending' });
+
+          const input = JSON.parse(inputJson);
+          environment
+            .callTool(name, input)
+            .then((result) => {
+              results.set(id, { status: 'resolved', value: JSON.stringify(result) });
+            })
+            .catch((error) => {
+              results.set(id, { status: 'rejected', error: error.message });
+            });
+
+          return id;
+        }),
       );
 
-      // Wrap the JSON-based callTool/getTool with JSON parsing
-      await context.eval(`
-        const _callToolJson = globalThis.callTool;
-        const _getToolJson = globalThis.getTool;
+      await jail.set(
+        '_checkCall',
+        new ivm.Callback((id: number) => {
+          const result = results.get(id);
+          if (!result) return JSON.stringify({ status: 'unknown' });
+          return JSON.stringify(result);
+        }),
+      );
 
-        globalThis.callTool = async function(name, input) {
-          const resultJson = await _callToolJson(name, input);
-          return JSON.parse(resultJson);
+      await jail.set(
+        'getTool',
+        new ivm.Callback((name: string) => {
+          const tool = environment.getTool(name);
+          if (!tool) return undefined;
+          return JSON.stringify(tool);
+        }),
+      );
+
+      // Implement callTool in isolate
+      // Use Promise constructor instead of async function to avoid "non-transferable value" error
+      await context.eval(`
+        globalThis.callTool = function(name, input) {
+          const inputJson = JSON.stringify(input);
+          const id = _submitCall(name, inputJson);
+
+          // Return a Promise that polls for the result
+          return new Promise(function(resolve, reject) {
+            function checkResult() {
+              const statusJson = _checkCall(id);
+              const status = JSON.parse(statusJson);
+
+              if (status.status === 'resolved') {
+                resolve(JSON.parse(status.value));
+              } else if (status.status === 'rejected') {
+                reject(new Error(status.error));
+              } else {
+                // Still pending, check again immediately (busy polling)
+                checkResult();
+              }
+            }
+
+            checkResult();
+          });
         };
 
         globalThis.getTool = function(name) {
-          const toolJson = _getToolJson(name);
+          const toolJson = getTool(name);
           return toolJson ? JSON.parse(toolJson) : undefined;
         };
       `);
