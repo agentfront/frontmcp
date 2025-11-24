@@ -1,0 +1,33 @@
+{
+  "name": "ast-guard",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/ast-guard/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:independent"],
+  "targets": {
+    "build-tsc": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/ast-guard/dist",
+        "main": "libs/ast-guard/src/index.ts",
+        "tsConfig": "libs/ast-guard/tsconfig.lib.json",
+        "assets": ["libs/ast-guard/README.md", "libs/ast-guard/CHANGELOG.md", "LICENSE"]
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-tsc"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/ast-guard/dist/package.json"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/ast-guard/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    }
+  }
+}
