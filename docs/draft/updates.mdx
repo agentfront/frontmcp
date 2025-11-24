@@ -5,19 +5,35 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-23" tags={["Releases"]}>
+<Update label="draft" description="2025-11-24" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Node 24 optimized runtime** – Build against the Active LTS release with FrontMCP validated on Node 24 while keeping Node 22 as the supported floor.
+    **Breaking changes**
 
-    🧠 **VectoriaDB semantic search** – Index every tool with the new first-party vector database, apply metadata filters, and serve natural-language discovery entirely offline.
+    🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
-    🛡️ **Stronger editor typings** – `frontmcp init` now installs `@types/node@^22`, so your IDE matches the runtime APIs without manual tweaks.
+    **Features**
 
-    📚 **Updated onboarding guides** – Installation, quickstart, local dev, and the new VectoriaDB guide now spell out the runtime expectations and how to wire up semantic search so teams can upgrade confidently.
+    🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database, filter by metadata, and answer natural-language queries entirely on your own infrastructure.
+
+    🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with the new AST validator, mix in presets or custom rules, and block risky scripts before they reach a tool.
+
+    **Build/CI**
+
+    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^22` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
+
+    **Docs**
+
+    📚 **Vector intelligence guide** – New VectoriaDB walkthrough plus refreshed installation, quickstart, and local-dev pages clarify runtime expectations and persistence strategies.
+
+    🧩 **Script hardening playbook** – The AST Guard guide shows how to wire policy enforcement into hooks so teams can let copilots write scripts without sacrificing safety.
+
+    **Performance**
+
+    ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
   </Card>
 </Update>
