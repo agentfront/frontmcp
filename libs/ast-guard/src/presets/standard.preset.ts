@@ -15,7 +15,7 @@ import { PresetOptions } from './types';
  *
  * Blocks:
  * - eval() and Function constructor
- * - Most dangerous identifiers (process, require, global)
+ * - Critical dangerous identifiers (process, require)
  * - Infinite while/do-while loops
  *
  * Allows:
@@ -95,7 +95,7 @@ export function createStandardPreset(options: PresetOptions = {}): ValidationRul
   }
 
   // Enforce argument validation if specified
-  if (options.functionArgumentRules) {
+  if (options.functionArgumentRules && Object.keys(options.functionArgumentRules).length > 0) {
     rules.push(
       new CallArgumentValidationRule({
         functions: options.functionArgumentRules,

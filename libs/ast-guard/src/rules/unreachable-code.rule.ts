@@ -46,15 +46,6 @@ export class UnreachableCodeRule implements ValidationRule {
           }
         }
       },
-
-      // Check for code after return in function body
-      ReturnStatement: (node: any, ancestors: any[]) => {
-        this.checkAfterTerminal(node, ancestors, context);
-      },
-
-      ThrowStatement: (node: any, ancestors: any[]) => {
-        this.checkAfterTerminal(node, ancestors, context);
-      },
     });
   }
 
@@ -86,39 +77,6 @@ export class UnreachableCodeRule implements ValidationRule {
 
       default:
         return false;
-    }
-  }
-
-  /**
-   * Check for statements after a terminal statement
-   */
-  private checkAfterTerminal(node: any, ancestors: any[], context: ValidationContext): void {
-    // Find the parent block statement
-    for (let i = ancestors.length - 1; i >= 0; i--) {
-      const ancestor = ancestors[i];
-
-      if (ancestor.type === 'BlockStatement') {
-        const statements = ancestor.body;
-        const currentIndex = statements.indexOf(node);
-
-        if (currentIndex !== -1 && currentIndex < statements.length - 1) {
-          // There are statements after this terminal statement
-          const nextStmt = statements[currentIndex + 1];
-
-          context.report({
-            code: 'UNREACHABLE_CODE',
-            severity: ValidationSeverity.WARNING,
-            message: `Code after ${node.type.replace('Statement', '').toLowerCase()} is unreachable`,
-            location: nextStmt.loc
-              ? {
-                  line: nextStmt.loc.start.line,
-                  column: nextStmt.loc.start.column,
-                }
-              : undefined,
-          });
-        }
-        break;
-      }
     }
   }
 }

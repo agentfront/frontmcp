@@ -114,6 +114,8 @@ export interface ValidationResult {
   ast?: acorn.Node;
   /** Parse error if parsing failed */
   parseError?: Error;
+  /** Number of rules that were executed during validation */
+  rulesExecuted?: number;
 }
 
 /**

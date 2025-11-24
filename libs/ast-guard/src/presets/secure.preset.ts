@@ -95,6 +95,9 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     'indexedDB',
 
     // Import/dynamic loading
+    // Note: The 'import' keyword causes parse errors in script mode (default),
+    // so it's redundant here but kept for completeness. Only 'import()' (dynamic import)
+    // would parse in script mode, and it appears as a CallExpression, not an identifier.
     'import',
     'importScripts',
 
@@ -136,7 +139,7 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
   }
 
   // Enforce argument validation if specified
-  if (options.functionArgumentRules) {
+  if (options.functionArgumentRules && Object.keys(options.functionArgumentRules).length > 0) {
     rules.push(
       new CallArgumentValidationRule({
         functions: options.functionArgumentRules,

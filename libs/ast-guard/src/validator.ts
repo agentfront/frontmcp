@@ -99,6 +99,7 @@ export class JSAstValidator {
         valid: false,
         issues,
         parseError,
+        rulesExecuted: 0,
       };
     }
 
@@ -156,6 +157,7 @@ export class JSAstValidator {
       valid: !issues.some((issue) => issue.severity === ValidationSeverity.ERROR),
       issues,
       ast,
+      rulesExecuted: enabledRules.length,
     };
   }
 
@@ -168,7 +170,7 @@ export class JSAstValidator {
       errors: 0,
       warnings: 0,
       infos: 0,
-      rulesExecuted: 0,
+      rulesExecuted: result.rulesExecuted ?? 0,
       durationMs,
     };
 

@@ -76,7 +76,7 @@ export function createPermissivePreset(options: PresetOptions = {}): ValidationR
   }
 
   // Enforce argument validation if specified
-  if (options.functionArgumentRules) {
+  if (options.functionArgumentRules && Object.keys(options.functionArgumentRules).length > 0) {
     rules.push(
       new CallArgumentValidationRule({
         functions: options.functionArgumentRules,

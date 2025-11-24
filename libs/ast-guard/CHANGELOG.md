@@ -10,14 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Security Presets**: Pre-configured security levels for quick setup
-  - `LOCKDOWN`: Maximum security - blocks all dangerous patterns, loops, and async
-  - `SECURED`: High security - blocks most dangerous patterns with some flexibility
-  - `BALANCED`: Medium security - sensible defaults for most use cases
-  - `NAIVE`: Low security - minimal restrictions, only blocks eval
-  - `NO_BUILTIN`: Minimal security - no built-in rules, custom rules only
+  - `STRICT`: Maximum security (bank-grade) - blocks all dangerous patterns, loops, and async
+  - `SECURE`: High security - blocks most dangerous patterns with some flexibility
+  - `STANDARD`: Medium security - sensible defaults for most use cases
+  - `PERMISSIVE`: Low security - minimal restrictions, only blocks eval
 - New `Presets` object with factory functions for each security level
 - `createPreset()` function to create presets by level
-- Individual preset functions: `createLockdownPreset()`, `createSecuredPreset()`, etc.
+- Individual preset functions: `createStrictPreset()`, `createSecurePreset()`, `createStandardPreset()`, `createPermissivePreset()`
 - Comprehensive preset customization via `PresetOptions` interface
 - Support for overriding loop restrictions, async settings, and blocked identifiers
 - Built-in API enforcement for required functions and argument validation
@@ -31,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Bank-Level Security Enhancements**: LOCKDOWN preset now blocks 90+ dangerous identifiers for maximum protection
+- **Bank-Level Security Enhancements**: STRICT preset now blocks 90+ dangerous identifiers for maximum protection
 
   - **Prototype Manipulation**: Blocks `Object`, `Array`, `String`, `Number`, `Boolean`, `Symbol`, `BigInt`, `constructor`, `__proto__`, `prototype`
   - **Error Stack Manipulation**: Blocks all Error types (`Error`, `TypeError`, `ReferenceError`, `SyntaxError`, etc.) to prevent stack trace exploitation

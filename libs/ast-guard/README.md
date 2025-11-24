@@ -32,10 +32,13 @@ pnpm add ast-guard
 ## Quick Start
 
 ```typescript
-import { AstGuard, DisallowedIdentifierRule, NoEvalRule } from 'ast-guard';
+import { JSAstValidator, DisallowedIdentifierRule, NoEvalRule } from 'ast-guard';
 
 // Create validator with built-in rules
-const validator = new AstGuard([new DisallowedIdentifierRule({ disallowed: ['eval', 'Function'] }), new NoEvalRule()]);
+const validator = new JSAstValidator([
+  new DisallowedIdentifierRule({ disallowed: ['eval', 'Function'] }),
+  new NoEvalRule(),
+]);
 
 // Validate code
 const result = await validator.validate(`
@@ -62,35 +65,34 @@ AST Guard provides pre-configured security presets for quick and easy setup. Cho
 
 | Preset         | Security Level | Description                                          | Use Case                            |
 | -------------- | -------------- | ---------------------------------------------------- | ----------------------------------- |
-| **LOCKDOWN**   | Maximum        | Blocks all dangerous patterns, loops, and async      | Untrusted code execution            |
-| **SECURED**    | High           | Blocks most dangerous patterns, allows bounded loops | Semi-trusted code with restrictions |
-| **BALANCED**   | Medium         | Sensible defaults, blocks critical risks only        | Trusted code with safety checks     |
-| **NAIVE**      | Low            | Minimal restrictions, only blocks eval               | Internal scripts                    |
-| **NO_BUILTIN** | Minimal        | No built-in rules, custom rules only                 | Complete custom control             |
+| **STRICT**     | Maximum        | Blocks all dangerous patterns, loops, and async      | Untrusted code execution            |
+| **SECURE**     | High           | Blocks most dangerous patterns, allows bounded loops | Semi-trusted code with restrictions |
+| **STANDARD**   | Medium         | Sensible defaults, blocks critical risks only        | Trusted code with safety checks     |
+| **PERMISSIVE** | Low            | Minimal restrictions, only blocks eval               | Internal scripts                    |
 
 ### Quick Start with Presets
 
 ```typescript
-import { AstGuard, Presets, PresetLevel } from 'ast-guard';
+import { JSAstValidator, Presets, PresetLevel } from 'ast-guard';
 
 // Option 1: Use the Presets object
-const lockdownRules = Presets.lockdown();
-const validator = new AstGuard(lockdownRules);
+const lockdownRules = Presets.strict();
+const validator = new JSAstValidator(lockdownRules);
 
 // Option 2: Use createPreset with level
 import { createPreset } from 'ast-guard';
-const securedRules = createPreset(PresetLevel.SECURED);
-const validator = new AstGuard(securedRules);
+const securedRules = createPreset(PresetLevel.SECURE);
+const validator = new JSAstValidator(securedRules);
 
 // Option 3: Use individual preset function
-import { createBalancedPreset } from 'ast-guard';
-const balancedRules = createBalancedPreset();
-const validator = new AstGuard(balancedRules);
+import { createStandardPreset } from 'ast-guard';
+const balancedRules = createStandardPreset();
+const validator = new JSAstValidator(balancedRules);
 ```
 
 ### Preset Details
 
-#### LOCKDOWN Preset
+#### STRICT Preset
 
 Maximum security for untrusted code. Blocks everything dangerous.
 
@@ -98,10 +100,10 @@ Maximum security for untrusted code. Blocks everything dangerous.
 import { Presets } from 'ast-guard';
 
 // Maximum lockdown
-const rules = Presets.lockdown();
+const rules = Presets.strict();
 
 // With customization
-const rules = Presets.lockdown({
+const rules = Presets.strict({
   // Allow specific loops
   allowedLoops: { allowFor: true, allowForOf: true },
 
@@ -130,7 +132,7 @@ const rules = Presets.lockdown({
 - All async/await
 - Dangerous identifiers: `process`, `require`, `global`, `__dirname`, `constructor`, `__proto__`, etc.
 
-#### SECURED Preset
+#### SECURE Preset
 
 High security with some flexibility for semi-trusted code.
 
@@ -155,7 +157,7 @@ const rules = Presets.secured({
 - Bounded for/for-of loops
 - Await expressions (but not async functions)
 
-#### BALANCED Preset
+#### STANDARD Preset
 
 Medium security with sensible defaults for most use cases.
 
@@ -180,7 +182,7 @@ const rules = Presets.balanced({
 - Async/await
 - Constructor and prototype access
 
-#### NAIVE Preset
+#### PERMISSIVE Preset
 
 Low security for internal or trusted scripts.
 
@@ -202,29 +204,6 @@ const rules = Presets.naive({
 - Async/await
 - All identifiers
 - Constructor and prototype access
-
-#### NO_BUILTIN Preset
-
-No built-in rules, complete custom control.
-
-```typescript
-import { Presets } from 'ast-guard';
-
-// Start with no rules
-const rules = Presets.noBuiltin();
-
-// Add only the rules you want
-rules.push(new MyCustomRule());
-rules.push(new AnotherCustomRule());
-
-// Or use with API enforcement only
-const rules = Presets.noBuiltin({
-  requiredFunctions: ['callTool'],
-  functionArgumentRules: {
-    callTool: { minArgs: 2 },
-  },
-});
-```
 
 ### Customizing Presets
 
@@ -280,11 +259,11 @@ const rules = Presets.secured({
 #### Example 1: Untrusted Code Sandbox
 
 ```typescript
-import { AstGuard, Presets } from 'ast-guard';
+import { JSAstValidator, Presets } from 'ast-guard';
 
 // Maximum security for untrusted user code
-const validator = new AstGuard(
-  Presets.lockdown({
+const validator = new JSAstValidator(
+  Presets.strict({
     requiredFunctions: ['callTool'],
     functionArgumentRules: {
       callTool: {
@@ -319,10 +298,10 @@ if (result.valid) {
 #### Example 2: Plugin System
 
 ```typescript
-import { AstGuard, Presets } from 'ast-guard';
+import { JSAstValidator, Presets } from 'ast-guard';
 
 // Balanced security for plugin code
-const validator = new AstGuard(
+const validator = new JSAstValidator(
   Presets.balanced({
     requiredFunctions: ['registerPlugin'],
     additionalDisallowedIdentifiers: ['process', 'require', 'fs'],
@@ -342,10 +321,10 @@ const result = await validator.validate(pluginCode, {
 #### Example 3: Internal Automation Scripts
 
 ```typescript
-import { AstGuard, Presets } from 'ast-guard';
+import { JSAstValidator, Presets } from 'ast-guard';
 
 // Minimal security for trusted internal scripts
-const validator = new AstGuard(
+const validator = new JSAstValidator(
   Presets.naive({
     requiredFunctions: ['execute'],
   }),
@@ -354,18 +333,18 @@ const validator = new AstGuard(
 
 ### Preset Comparison Matrix
 
-| Feature              | LOCKDOWN | SECURED | BALANCED | NAIVE | NO_BUILTIN |
-| -------------------- | -------- | ------- | -------- | ----- | ---------- |
-| **eval()**           | ❌       | ❌      | ❌       | ❌    | ✅         |
-| **Function()**       | ❌       | ❌      | ❌       | ✅    | ✅         |
-| **for loops**        | ❌       | ✅      | ✅       | ✅    | ✅         |
-| **while loops**      | ❌       | ❌      | ❌       | ✅    | ✅         |
-| **async/await**      | ❌       | ⚠️      | ✅       | ✅    | ✅         |
-| **process**          | ❌       | ❌      | ❌       | ✅    | ✅         |
-| **require**          | ❌       | ❌      | ❌       | ✅    | ✅         |
-| **global**           | ❌       | ❌      | ✅       | ✅    | ✅         |
-| **constructor**      | ❌       | ✅      | ✅       | ✅    | ✅         |
-| **Unreachable code** | ⚠️       | ⚠️      | ⚠️       | ⚠️    | ✅         |
+| Feature              | STRICT | SECURE | STANDARD | PERMISSIVE |
+| -------------------- | ------ | ------ | -------- | ---------- |
+| **eval()**           | ❌     | ❌     | ❌       | ❌         |
+| **Function()**       | ❌     | ❌     | ❌       | ✅         |
+| **for loops**        | ❌     | ✅     | ✅       | ✅         |
+| **while loops**      | ❌     | ❌     | ❌       | ✅         |
+| **async/await**      | ❌     | ⚠️     | ✅       | ✅         |
+| **process**          | ❌     | ❌     | ❌       | ✅         |
+| **require**          | ❌     | ❌     | ❌       | ✅         |
+| **global**           | ❌     | ❌     | ✅       | ✅         |
+| **constructor**      | ❌     | ✅     | ✅       | ✅         |
+| **Unreachable code** | ⚠️     | ⚠️     | ⚠️       | ⚠️         |
 
 Legend: ❌ Blocked (error) | ⚠️ Detected (warning) | ✅ Allowed
 
@@ -518,7 +497,7 @@ class NoConsoleRule implements ValidationRule {
 }
 
 // Use your custom rule
-const validator = new AstGuard([new NoConsoleRule()]);
+const validator = new JSAstValidator([new NoConsoleRule()]);
 ```
 
 ## Configuration
@@ -556,7 +535,7 @@ const result = await validator.validate(code, {
 ### Rule Management
 
 ```typescript
-const validator = new AstGuard();
+const validator = new JSAstValidator();
 
 // Register rules
 validator.registerRule(new DisallowedIdentifierRule({ disallowed: ['eval'] }));
@@ -593,11 +572,11 @@ interface ValidationIssue {
 
 ## Error Handling
 
-All errors extend `AstGuardError` with specific error types:
+All errors extend `JSAstValidatorError` with specific error types:
 
 ```typescript
 import {
-  AstGuardError,
+  JSAstValidatorError,
   ParseError,
   RuleConfigurationError,
   ConfigurationError,
@@ -637,7 +616,7 @@ console.log(`Duration: ${stats.durationMs}ms`);
 Validate code before executing in a sandboxed environment:
 
 ```typescript
-const validator = new AstGuard([
+const validator = new JSAstValidator([
   new DisallowedIdentifierRule({ disallowed: ['eval', 'Function', 'process'] }),
   new NoEvalRule(),
   new ForbiddenLoopRule(), // Prevent infinite loops
@@ -656,7 +635,7 @@ if (result.valid) {
 Ensure code follows API contracts:
 
 ```typescript
-const validator = new AstGuard([
+const validator = new JSAstValidator([
   new RequiredFunctionCallRule({ required: ['callTool'] }),
   new CallArgumentValidationRule({
     functions: {
@@ -674,7 +653,7 @@ const validator = new AstGuard([
 Detect potentially dangerous code patterns:
 
 ```typescript
-const validator = new AstGuard([
+const validator = new JSAstValidator([
   new NoEvalRule(),
   new DisallowedIdentifierRule({
     disallowed: ['eval', 'Function', 'require', 'process', 'child_process'],
@@ -687,7 +666,7 @@ const validator = new AstGuard([
 Detect code quality issues:
 
 ```typescript
-const validator = new AstGuard([
+const validator = new JSAstValidator([
   new UnreachableCodeRule(),
   // Add custom rules for your quality standards
 ]);
