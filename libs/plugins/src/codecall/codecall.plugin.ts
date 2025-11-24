@@ -12,12 +12,11 @@ import ExecuteTool from './tools/execute.tool';
 import InvokeTool from './tools/invoke.tool';
 
 import CodeCallAstValidator from './providers/codecall-ast-validator.provider';
-import CodeCallVm2Runner from './providers/codecall-vm2.provider';
 
 @Plugin({
   name: 'codecall',
   description: 'CodeCall plugin: VM-based meta-tools for orchestrating MCP tools',
-  providers: [CodeCallAstValidator, CodeCallVm2Runner],
+  providers: [CodeCallAstValidator],
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions> {
