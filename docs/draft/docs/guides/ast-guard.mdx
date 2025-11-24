@@ -1,0 +1,234 @@
+---
+title: Secure User Scripts with AST Guard
+slug: guides/ast-guard
+description: Validate and enforce policy on user-provided JavaScript before tools execute it.
+icon: shield-halved
+---
+
+AST Guard is FrontMCP's bank-grade AST validator for JavaScript. It inspects user-provided or LLM-generated code before it reaches your sandbox so you can block risky constructs, enforce API usage, and explain violations back to the caller.
+
+<CardGroup cols={3}>
+  <Card title="Defense in depth" icon="shield">
+    Block eval-like identifiers, async/await, loops, and other dangerous nodes with 7 built-in rules plus structured errors.
+  </Card>
+  <Card title="Presets & plugins" icon="layer-group">
+    Choose from STRICT, SECURE, STANDARD, and PERMISSIVE presets or register custom rule plugins for bespoke policies.
+  </Card>
+  <Card title="Operational telemetry" icon="chart-line">
+    Validation results include machine-readable codes, locations, and stats so you can monitor rejection rates and respond gracefully.
+  </Card>
+</CardGroup>
+
+## When to reach for AST Guard
+
+- Tools accept arbitrary JavaScript (e.g., scripting assistants, workflow builders, plugin authors).
+- You need deterministic guardrails before handing code to a sandbox, VM, or remote executor.
+- Compliance teams require audit trails that show exactly which rule blocked a script.
+
+<Note>
+  AST Guard is a pure TypeScript package that matches FrontMCP's Node 22 minimum (Node 24 recommended). No native builds or external services are required.
+</Note>
+
+## Install and bootstrap
+
+<CodeGroup>
+```bash npm
+npm install ast-guard
+```
+```bash pnpm
+pnpm add ast-guard
+```
+```bash yarn
+yarn add ast-guard
+```
+</CodeGroup>
+
+<Tip>
+  Instantiate `JSAstValidator` once and share it via DI or a module-level export. Reusing a singleton keeps presets, custom rules, and caches consistent across every request.
+</Tip>
+
+### Create a validator once
+
+```ts title="src/security/script-validator.ts"
+import { JSAstValidator, Presets } from 'ast-guard';
+
+export const scriptValidator = new JSAstValidator(
+  Presets.secure({
+    requiredFunctions: ['callTool'],
+    functionArgumentRules: {
+      callTool: {
+        minArgs: 2,
+        expectedTypes: ['string', 'object'],
+      },
+    },
+    allowedLoops: { allowForOf: true }, // permit bounded for...of but keep while loops blocked
+  }),
+);
+```
+
+## Validate scripts inside a tool
+
+```ts title="src/tools/run-script.tool.ts"
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+import type { ValidationIssue } from 'ast-guard';
+import { scriptValidator } from '../security/script-validator';
+
+@Tool({
+  name: 'run-script',
+  description: 'Executes a user-supplied JavaScript snippet in a sandbox',
+  inputSchema: { source: z.string().min(1, 'Provide a script body') },
+})
+export default class RunScriptTool extends ToolContext {
+  async execute(input: { source: string }) {
+    const validation = await scriptValidator.validate(input.source, {
+      maxIssues: 25,
+      stopOnFirstError: true,
+    });
+
+    if (!validation.valid) {
+      throw new Error(formatIssues(validation.issues));
+    }
+
+    // Continue with your sandbox/runtime only after validation passes
+    return { status: 'accepted' };
+  }
+}
+
+function formatIssues(issues: ValidationIssue[]) {
+  return issues
+    .map((issue) => {
+      const location = issue.location ? ` (line ${issue.location.line}, col ${issue.location.column})` : '';
+      return `[${issue.severity}] ${issue.message}${location}`;
+    })
+    .join('\n');
+}
+```
+
+## Pick the right security preset
+
+| Preset         | Use it for                      | What it blocks by default                                                           |
+| -------------- | ------------------------------- | ----------------------------------------------------------------------------------- |
+| **STRICT**     | Running untrusted / guest code  | All loops, async/await, eval/Function, dangerous identifiers, missing required APIs |
+| **SECURE**     | LLM-authored automations        | Eval/Function, async declarations, unbounded loops, privileged globals              |
+| **STANDARD**   | Trusted scripts with guardrails | Eval/Function, critical identifiers, infinite while/do-while                        |
+| **PERMISSIVE** | Internal scripts or tests       | Only eval/Function while still emitting structured issues                           |
+
+```ts
+import { Presets, PresetLevel, createPreset } from 'ast-guard';
+
+const lockdown = Presets.strict({
+  requiredFunctions: ['callTool'],
+  minFunctionCalls: 1,
+  allowedLoops: { allowFor: false },
+});
+
+const balanced = createPreset(PresetLevel.STANDARD, {
+  additionalDisallowedIdentifiers: ['window', 'document'],
+});
+```
+
+## Enforce policy at the platform level
+
+Use hooks to reject bad scripts before the tool executes, even if multiple tools submit code.
+
+```ts title="src/plugins/script-guard.plugin.ts"
+import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { ValidationSeverity } from 'ast-guard';
+import { scriptValidator } from '../security/script-validator';
+
+const GUARDED_TOOLS = new Set(['run-script', 'workflow-eval']);
+
+@Plugin({
+  name: 'script-guard',
+  description: 'Blocks unsafe JavaScript before it reaches the sandbox',
+})
+export default class ScriptGuardPlugin {
+  @ToolHook.Will('execute', { priority: 200 })
+  async blockUnsafe(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = ctx.state;
+    if (!tool || !toolContext || !GUARDED_TOOLS.has(tool.name)) return;
+
+    const source = toolContext.input?.source;
+    if (typeof source !== 'string') {
+      throw new Error('Provide a script string before executing this tool.');
+    }
+
+    const result = await scriptValidator.validate(source, {
+      rules: {
+        'forbidden-loop': { enabled: true }, // turn on loop blocking even if the tool forgot
+        'no-async': { severity: ValidationSeverity.ERROR },
+      },
+    });
+
+    if (!result.valid) {
+      throw new Error(result.issues[0]?.message ?? 'Script rejected by AST policy');
+    }
+  }
+}
+```
+
+## Mix in fine-grained rules
+
+Combine built-in rules to match your own threat model.
+
+```ts title="src/security/custom-rules.ts"
+import {
+  JSAstValidator,
+  DisallowedIdentifierRule,
+  ForbiddenLoopRule,
+  RequiredFunctionCallRule,
+  CallArgumentValidationRule,
+} from 'ast-guard';
+
+export const customValidator = new JSAstValidator([
+  new DisallowedIdentifierRule({
+    disallowed: ['eval', 'Function', 'process', 'require', 'window', 'document'],
+  }),
+  new ForbiddenLoopRule({ allowFor: true, allowWhile: false, allowDoWhile: false }),
+  new RequiredFunctionCallRule({ required: ['callTool'], minCalls: 1, maxCalls: 5 }),
+  new CallArgumentValidationRule({
+    functions: {
+      callTool: {
+        minArgs: 2,
+        expectedTypes: ['string', 'object'],
+      },
+    },
+  }),
+]);
+```
+
+## Return actionable errors to requesters
+
+Surface structured issues so users (or copilots) know how to fix their scripts.
+
+```ts
+const result = await scriptValidator.validate(source, { maxIssues: 10 });
+
+return {
+  status: result.valid ? 'ok' : 'rejected',
+  issues: result.issues.map((issue) => ({
+    code: issue.code,
+    severity: issue.severity,
+    message: issue.message,
+    location: issue.location,
+  })),
+};
+```
+
+## Monitor and tune validation
+
+- `stopOnFirstError` halts validation as soon as a rule reports an errorgreat for latency-sensitive flows.
+- `maxIssues` caps the number of findings returned for a single run to avoid overwhelming users.
+- `parseOptions` lets you enforce `sourceType`, strict mode, or JSX support per tool.
+- `validator.getStats(result, durationMs)` produces telemetry-friendly counters.
+
+```ts
+const result = await scriptValidator.validate(source, { stopOnFirstError: true });
+const stats = scriptValidator.getStats(result, durationMs);
+this.logger.info({ stats }, 'AST validation completed');
+```
+
+<Warning>
+  AST Guard prevents unsafe syntax from entering your sandbox, but it does not execute or sandbox code itself. Pair it with your existing isolation layer (VM2, workers, remote runners, etc.) for complete defense-in-depth.
+</Warning>
