@@ -745,12 +745,12 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 **Input:**
 
 <ParamField path="script" type="string" required>
-  JavaScript code to execute in the sandboxed VM. The script can call tools using the `call(toolName, input)` function and access results.
+  JavaScript code to execute in the sandboxed VM. The script can call tools using the `callTool(toolName, input)` function and access results.
 
   Example:
   ```js
-  const user = await call('users:getById', { id: 'user_123' });
-  const orders = await call('orders:listByUser', { userId: user.id });
+  const user = await callTool('users:getById', { id: 'user_123' });
+  const orders = await callTool('orders:listByUser', { userId: user.id });
   return { user, orderCount: orders.length };
   ```
 </ParamField>
@@ -818,7 +818,7 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 
 ```json
 {
-  "script": "const user = await call('users:getById', { id: 'user_123' }); const orders = await call('orders:listByUser', { userId: user.id }); return { userName: user.name, totalOrders: orders.length };"
+  "script": "const user = await callTool('users:getById', { id: 'user_123' }); const orders = await callTool('orders:listByUser', { userId: user.id }); return { userName: user.name, totalOrders: orders.length };"
 }
 ```
 

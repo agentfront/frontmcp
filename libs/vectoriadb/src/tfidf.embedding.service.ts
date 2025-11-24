@@ -34,6 +34,11 @@ export class TFIDFEmbeddingService {
     const tf = new Map<string, number>();
     const totalTerms = terms.length;
 
+    // Handle empty document edge case
+    if (totalTerms === 0) {
+      return tf;
+    }
+
     for (const term of terms) {
       tf.set(term, (tf.get(term) || 0) + 1);
     }
