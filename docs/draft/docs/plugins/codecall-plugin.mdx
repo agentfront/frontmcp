@@ -21,7 +21,7 @@ The CodeCall Plugin transforms how you expose large toolsets to models. Instead 
   </Card>
 
   <Card title="Safe Code Execution" icon="shield-check">
-    Run model-generated JavaScript in a vm2 sandbox with CSP-style security presets
+    Run model-generated JavaScript in Enclave with AST validation, transformation, and runtime sandboxing
   </Card>
 </CardGroup>
 
@@ -46,12 +46,12 @@ npm install @frontmcp/plugins
   </Step>
 
   <Step title="Execute in Sandbox">
-    CodeCall runs the plan in a secure vm2 sandbox, calling your real tools through the normal FrontMCP pipeline
+    CodeCall runs the plan in Enclave - a secure sandbox using ast-guard validation and Node.js vm module - calling your real tools through the normal FrontMCP pipeline
   </Step>
 </Steps>
 
 <Info>
-  CodeCall uses [vm2](https://github.com/patriksimek/vm2) to run model-generated JavaScript in a secure sandbox with configurable security presets.
+  CodeCall uses [Enclave](/docs/guides/enclave) - FrontMCP's defense-in-depth execution environment - which combines AST validation (ast-guard), code transformation, and runtime sandboxing for bank-grade security.
 </Info>
 
 ---
@@ -89,9 +89,10 @@ class ListUsersTool extends ToolContext {
       mode: 'codecall_only', // Recommended: many tools, all via CodeCall
       topK: 8, // Return top 8 search results
       maxDefinitions: 8, // Max tools to describe at once
-      vm: {
-        preset: 'secure', // CSP-style security preset
-        timeoutMs: 4000,
+      enclave: {
+        timeoutMs: 5000,
+        maxToolCalls: 100,
+        maxIterations: 10000,
         allowConsole: true,
       },
     }),
@@ -146,30 +147,32 @@ Configure CodeCall behavior when registering the plugin:
   </Expandable>
 </ParamField>
 
-<ParamField path="vm" type="object">
-  VM sandbox configuration
+<ParamField path="enclave" type="object">
+  Enclave sandbox configuration (defense-in-depth security with ast-guard + Node.js vm)
 
   <Expandable title="properties">
-    <ResponseField name="preset" type="'locked_down' | 'secure' | 'balanced' | 'experimental'" default="'secure'">
-      Security preset. Use `secure` for production, `locked_down` for highly sensitive environments
+    <ResponseField name="timeoutMs" type="number" default="30000">
+      Maximum execution time in milliseconds (30 seconds default)
     </ResponseField>
-    <ResponseField name="timeoutMs" type="number" default="4000">
-      Maximum execution time in milliseconds
+    <ResponseField name="maxToolCalls" type="number" default="100">
+      Maximum number of tool calls allowed per execution
     </ResponseField>
-    <ResponseField name="allowLoops" type="boolean" default="false">
-      Allow for/while loops in execution plans (increases runtime risk)
-    </ResponseField>
-    <ResponseField name="disabledBuiltins" type="string[]">
-      Built-in JavaScript functions to disable (e.g., `['eval', 'Function']`)
-    </ResponseField>
-    <ResponseField name="disabledGlobals" type="string[]">
-      Global objects to disable (e.g., `['process', 'require', 'fetch']`)
+    <ResponseField name="maxIterations" type="number" default="10000">
+      Maximum loop iterations allowed (prevents infinite loops)
     </ResponseField>
     <ResponseField name="allowConsole" type="boolean" default="false">
       Enable console.log/warn/error in execution plans
     </ResponseField>
   </Expandable>
 </ParamField>
+
+<Note>
+  Enclave automatically blocks dangerous constructs via AST validation:
+  - `eval`, `Function`, `setTimeout`, `setInterval` are blocked
+  - Global objects like `process`, `require`, `window`, `globalThis` are blocked
+  - Loops are transformed to safe versions with iteration limits
+  - All identifiers are validated against a whitelist
+</Note>
 
 ### Tool-Level Configuration
 
@@ -385,11 +388,12 @@ This keeps separation of concerns:
     - **`metadata_driven`** - Best for small toolsets (< 10 tools) with mixed usage patterns
   </Accordion>
 
-  <Accordion title="2. Use Secure VM Presets">
-    - **Production:** Use `secure` or `locked_down` presets
-    - **Development:** Use `balanced` or `experimental` for faster iteration
-    - **Sensitive data:** Use `locked_down` + disable loops + minimal globals
-    - Always set `timeoutMs` to prevent runaway scripts
+  <Accordion title="2. Configure Enclave Appropriately">
+    - **Production:** Use default settings - Enclave's defense-in-depth security is enabled by default
+    - **Timeout:** Set `timeoutMs` based on expected execution time (default 30s)
+    - **Iterations:** Set `maxIterations` for loop-heavy workloads (default 10K)
+    - **Tool calls:** Set `maxToolCalls` to limit API calls per execution (default 100)
+    - Enclave automatically blocks eval, Function, dangerous globals via ast-guard
   </Accordion>
 
   <Accordion title="3. Enable Direct Calls for Simple Cases">
@@ -426,6 +430,307 @@ This keeps separation of concerns:
     Lower values reduce context usage but may limit complex workflows.
   </Accordion>
 </AccordionGroup>
+
+---
+
+## AgentScript Language Reference
+
+AgentScript is the restricted JavaScript subset that runs inside CodeCall's `codecall.execute`. It's designed for safe AI-generated orchestration code with predictable behavior and no escape vectors.
+
+### Language Overview
+
+<CardGroup cols={2}>
+  <Card title="What You CAN Do" icon="check">
+    - Call tools with `await callTool(name, args)`
+    - Declare variables with `const` and `let`
+    - Use conditionals (`if`/`else`, ternary `? :`)
+    - Iterate with `for` and `for...of` loops
+    - Use array methods (`.map()`, `.filter()`, `.reduce()`)
+    - Work with `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`
+    - Return results from your script
+  </Card>
+  <Card title="What You CANNOT Do" icon="xmark">
+    - Define named functions or use recursion
+    - Use `eval()`, `Function()`, or dynamic code execution
+    - Access `process`, `require`, `window`, `globalThis`
+    - Use `setTimeout`, `setInterval`, or timers
+    - Access prototype chains (`__proto__`, `constructor`)
+    - Use `while` or `do...while` loops (unbounded)
+    - Create `Proxy`, use `Reflect`, or metaprogramming
+  </Card>
+</CardGroup>
+
+### Syntax Quick Reference
+
+```js
+// ✅ Variable declarations
+const users = await callTool('users:list', { limit: 10 });
+let total = 0;
+
+// ✅ Tool calls (the primary API)
+const result = await callTool('toolName', { arg1: 'value', arg2: 123 });
+
+// ✅ Conditionals
+if (users.length > 0) {
+  total = users.length;
+} else {
+  total = 0;
+}
+
+// ✅ For loops (with iteration limits enforced by Enclave)
+for (let i = 0; i < users.length; i++) {
+  total += users[i].score;
+}
+
+// ✅ For-of loops (preferred for iteration)
+for (const user of users) {
+  console.log(user.name);
+}
+
+// ✅ Array methods with arrow functions
+const activeUsers = users.filter(u => u.active);
+const names = users.map(u => u.name);
+const sum = numbers.reduce((acc, n) => acc + n, 0);
+
+// ✅ Object/array literals
+const data = { userId: user.id, items: [1, 2, 3] };
+
+// ✅ Template literals
+const message = `Found ${users.length} users`;
+
+// ✅ Return values
+return { users: activeUsers, total };
+```
+
+### Allowed Globals
+
+AgentScript provides a limited set of safe globals:
+
+| Global | Description | Example |
+| ------ | ----------- | ------- |
+| `callTool` | Call MCP tools | `await callTool('users:list', {})` |
+| `Math` | Mathematical operations | `Math.max(1, 2, 3)` |
+| `JSON` | JSON parsing/stringification | `JSON.parse('{"a":1}')` |
+| `Array` | Array constructor and methods | `Array.isArray(x)` |
+| `Object` | Object methods | `Object.keys(obj)` |
+| `String` | String methods | `String(123)` |
+| `Number` | Number methods | `Number.isNaN(x)` |
+| `Date` | Date operations | `new Date()` |
+| `console`* | Logging (if enabled) | `console.log('debug')` |
+
+<Note>
+  `console` is only available when `enclave.allowConsole: true` is configured. Standard safe globals like `undefined`, `null`, `true`, `false`, `NaN`, `Infinity`, `isNaN`, `isFinite`, `parseInt`, `parseFloat` are also available.
+</Note>
+
+### Blocked Constructs
+
+These constructs are blocked by ast-guard's AST validation:
+
+<AccordionGroup>
+  <Accordion title="Code Execution">
+    ```js
+    // ❌ All blocked
+    eval('code');
+    new Function('return 1')();
+    setTimeout(() => {}, 100);
+    setInterval(() => {}, 100);
+    ```
+    **Why:** Prevents arbitrary code execution and timing attacks.
+  </Accordion>
+
+  <Accordion title="System Access">
+    ```js
+    // ❌ All blocked
+    process.env.SECRET;
+    require('fs');
+    import('module');
+    global.foo;
+    globalThis.bar;
+    window.location;
+    ```
+    **Why:** Prevents sandbox escape and access to host environment.
+  </Accordion>
+
+  <Accordion title="Prototype Manipulation">
+    ```js
+    // ❌ All blocked
+    obj.__proto__;
+    obj.constructor;
+    Object.prototype.foo = 'bar';
+    this.constructor.constructor;
+    ```
+    **Why:** Prevents prototype pollution and sandbox escape via constructor chains.
+  </Accordion>
+
+  <Accordion title="User-Defined Functions">
+    ```js
+    // ❌ Blocked (prevents recursion)
+    function myFunc() { /* ... */ }
+    const myFunc = function() { /* ... */ };
+
+    // ✅ Arrow functions ARE allowed (for array methods)
+    const doubled = nums.map(n => n * 2);
+    ```
+    **Why:** Prevents recursion and complex control flow. Arrow functions are allowed for functional array operations.
+  </Accordion>
+
+  <Accordion title="Unbounded Loops">
+    ```js
+    // ❌ Blocked (unbounded)
+    while (condition) { /* ... */ }
+    do { /* ... */ } while (condition);
+    for (key in obj) { /* ... */ }  // prototype walking
+
+    // ✅ Allowed (bounded, with iteration limits)
+    for (let i = 0; i < 10; i++) { /* ... */ }
+    for (const item of array) { /* ... */ }
+    ```
+    **Why:** Prevents infinite loops. Allowed loops are transformed to enforce iteration limits.
+  </Accordion>
+
+  <Accordion title="Dangerous APIs">
+    ```js
+    // ❌ All blocked
+    fetch('https://evil.com');
+    new WebSocket('ws://evil.com');
+    new Proxy(target, handler);
+    Reflect.get(obj, 'prop');
+    new Worker('worker.js');
+    WebAssembly.compile(bytes);
+    crypto.getRandomValues(arr);
+    ```
+    **Why:** Prevents network access, metaprogramming, native code execution, and sandbox escape.
+  </Accordion>
+</AccordionGroup>
+
+### Reserved Identifiers
+
+User code cannot declare or use identifiers starting with these prefixes:
+
+- `__ag_` - Reserved for AgentScript compiler (e.g., `__ag_main`)
+- `__safe_` - Reserved for runtime-injected safe functions (e.g., `__safe_callTool`)
+
+```js
+// ❌ Blocked
+const __ag_hack = 'value';
+let __safe_override = function() {};
+
+// ✅ Allowed
+const agentData = 'value';
+let safeValue = 123;
+```
+
+### Common Patterns
+
+<CodeGroup>
+
+```js Sequential tool calls
+// Call tools one after another
+const user = await callTool('users:getById', { id: 'u-123' });
+const orders = await callTool('orders:listByUser', { userId: user.id });
+const invoice = await callTool('billing:getInvoice', { orderId: orders[0].id });
+
+return { user, orderCount: orders.length, latestInvoice: invoice };
+```
+
+```js Parallel-like execution (sequential in practice)
+// Collect multiple results
+const results = [];
+const userIds = ['u-1', 'u-2', 'u-3'];
+
+for (const id of userIds) {
+  const user = await callTool('users:getById', { id });
+  results.push(user);
+}
+
+return results;
+```
+
+```js Filtering and aggregation
+// Get data, filter, and aggregate
+const users = await callTool('users:list', { limit: 100 });
+
+const activeAdmins = users.items
+  .filter(u => u.active && u.role === 'admin');
+
+const totalScore = activeAdmins
+  .reduce((sum, u) => sum + u.score, 0);
+
+return {
+  count: activeAdmins.length,
+  totalScore,
+  averageScore: totalScore / activeAdmins.length
+};
+```
+
+```js Conditional logic
+// Branch based on conditions
+const user = await callTool('users:getById', { id: userId });
+
+if (user.role === 'admin') {
+  const allUsers = await callTool('users:list', { limit: 1000 });
+  return { type: 'admin_view', users: allUsers.items };
+} else {
+  const myOrders = await callTool('orders:listByUser', { userId: user.id });
+  return { type: 'user_view', orders: myOrders.items };
+}
+```
+
+```js Data transformation
+// Transform and reshape data
+const orders = await callTool('orders:list', { status: 'pending' });
+
+const summary = orders.items.map(order => ({
+  id: order.id,
+  customer: order.customerName,
+  total: order.items.reduce((sum, item) => sum + item.price, 0),
+  itemCount: order.items.length
+}));
+
+return {
+  pendingOrders: summary,
+  totalValue: summary.reduce((sum, o) => sum + o.total, 0)
+};
+```
+
+</CodeGroup>
+
+### Runtime Limits
+
+Even valid AgentScript code is subject to runtime limits enforced by Enclave:
+
+| Limit | Default | Purpose |
+| ----- | ------- | ------- |
+| `timeoutMs` | 30000 (30s) | Maximum execution time |
+| `maxToolCalls` | 100 | Maximum `callTool()` invocations |
+| `maxIterations` | 10000 | Maximum loop iterations (all loops combined) |
+
+When limits are exceeded, execution stops immediately with an appropriate error status.
+
+### Error Handling in Scripts
+
+AgentScript doesn't support `try/catch` for user code - errors propagate to the `codecall.execute` response:
+
+```js
+// If this tool fails, the entire script fails with status: "tool_error"
+const user = await callTool('users:getById', { id: 'nonexistent' });
+
+// This code never runs if the above fails
+return user;
+```
+
+For conditional handling, check tool results:
+
+```js
+const result = await callTool('users:getById', { id: userId });
+
+// Check for error indicators in the result itself
+if (result.error || !result.data) {
+  return { success: false, message: 'User not found' };
+}
+
+return { success: true, user: result.data };
+```
 
 ---
 
@@ -917,26 +1222,27 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
 
   <Accordion title="Execution plans timing out">
     **Possible causes:**
-    - Script contains infinite loops
+    - Script contains loops with many iterations
     - Tools being called are slow
     - `timeoutMs` set too low
 
     **Solutions:**
-    - Increase `vm.timeoutMs` (but keep under 10s for production)
-    - Disable loops with `allowLoops: false` if not needed
+    - Increase `enclave.timeoutMs` (default is 30s)
+    - Lower `maxIterations` if loops aren't needed (default 10K)
     - Optimize slow tools or use caching
     - Check for accidental blocking operations
+    - Enclave automatically enforces iteration limits to prevent infinite loops
   </Accordion>
 
   <Accordion title="Illegal access errors">
     **Possible cause:**
-    - Script trying to use disabled builtins/globals
+    - Script trying to use blocked globals or dangerous constructs
 
     **Solutions:**
-    - Check `disabledBuiltins` and `disabledGlobals` configuration
-    - Ensure execution plan doesn't use `eval`, `Function`, `require`, etc.
-    - Use a less restrictive preset for development/testing
-    - Review AST validation errors for specifics
+    - Review the error message - ast-guard provides specific details
+    - Ensure execution plan doesn't use `eval`, `Function`, `require`, `process`, etc.
+    - Check the [ast-guard documentation](/docs/guides/ast-guard) for allowed globals
+    - Use whitelisted globals: `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`, `callTool`
   </Accordion>
 
   <Accordion title="Tool not allowed in execution plan">
@@ -1029,7 +1335,7 @@ class ListInvoicesTool extends ToolContext {
   }
 }
 
-// Configure CodeCall with secure settings
+// Configure CodeCall with Enclave settings
 const codecallPlugin = CodeCallPlugin.init({
   mode: 'codecall_only', // Hide all tools, expose via CodeCall
   topK: 8,
@@ -1040,14 +1346,14 @@ const codecallPlugin = CodeCallPlugin.init({
     allowedTools: ['users:getById'], // Only allow safe read operations
   },
 
-  vm: {
-    preset: 'secure', // Production-safe preset
+  enclave: {
     timeoutMs: 5000, // 5 second timeout
-    allowLoops: false, // Disable loops for safety
+    maxToolCalls: 100, // Max 100 tool calls per execution
+    maxIterations: 10000, // Max 10K loop iterations
     allowConsole: true, // Enable logging for debugging
-    disabledBuiltins: ['eval', 'Function'],
-    disabledGlobals: ['require', 'process', 'fetch', 'setTimeout'],
   },
+  // Note: Enclave automatically blocks eval, Function, process, require
+  // via ast-guard AST validation - no manual configuration needed
 });
 
 @App({
@@ -1142,7 +1448,11 @@ Example model workflow:
     Learn more about FrontMCP plugins
   </Card>
 
-  <Card title="isolated-vm Documentation" icon="shield-halved" href="https://github.com/laverdet/isolated-vm">
-    Official isolated-vm sandbox documentation
+  <Card title="Enclave Guide" icon="shield-halved" href="/docs/guides/enclave">
+    Learn about Enclave's defense-in-depth security model
+  </Card>
+
+  <Card title="AST Guard Guide" icon="shield-check" href="/docs/guides/ast-guard">
+    Understand ast-guard's AST validation and transformation
   </Card>
 </CardGroup>

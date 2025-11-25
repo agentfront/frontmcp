@@ -37,7 +37,7 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
     **Features:**
     - Search and discover tools dynamically
     - Generate JavaScript execution plans
-    - Sandboxed VM execution with vm2
+    - Defense-in-depth security with [Enclave](/docs/guides/enclave) (AST validation + runtime sandboxing)
     - Multi-app tool orchestration
     - Direct invocation mode for simple cases
 
@@ -247,5 +247,16 @@ Choose the right plugin for your use case:
   </Card>
   <Card title="Contributing Guide" icon="code-pull-request" href="https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md">
     Contribute to FrontMCP plugins
+  </Card>
+</CardGroup>
+
+## Related Guides
+
+<CardGroup cols={2}>
+  <Card title="Enclave Guide" icon="shield-halved" href="/docs/guides/enclave">
+    Learn about secure code execution with Enclave
+  </Card>
+  <Card title="AST Guard Guide" icon="shield-check" href="/docs/guides/ast-guard">
+    Understand AST validation and security rules
   </Card>
 </CardGroup>

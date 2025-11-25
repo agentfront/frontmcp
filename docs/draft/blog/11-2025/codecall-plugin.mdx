@@ -134,8 +134,8 @@ CodeCall does **three simple things**:
 - `code-call:execute` — run a JS plan that calls tools inside a sandbox.
 - `code-call:invoke` — optional direct-call helper for single-tool actions.
 
-3. **Runs the model’s plan in a sandboxed VM**
-   Using [`vm2`](https://github.com/patriksimek/vm2) with CSP-style presets and AST validation.
+3. **Runs the model's plan in Enclave**
+   Using [ast-guard](/docs/guides/ast-guard) for AST validation and transformation, plus Node.js `vm` module for runtime isolation.
 
 From the model’s perspective, a typical flow looks like:
 
@@ -272,14 +272,14 @@ class HealthPingTool {
         enabled: true,
         allowedTools: ['users:getById', 'billing:getInvoice'],
       },
-      vm: {
-        preset: 'secure',
-        timeoutMs: 4000,
-        allowLoops: false,
-        disabledBuiltins: ['eval', 'Function'],
-        disabledGlobals: ['require', 'process', 'fetch', 'setTimeout', 'setInterval'],
-        allowConsole: true,
+      enclave: {
+        timeoutMs: 5000, // 5 second timeout
+        maxToolCalls: 100, // Max 100 tool calls
+        maxIterations: 10000, // Max 10K loop iterations
+        allowConsole: true, // Enable console logging
       },
+      // Note: Enclave automatically blocks eval, Function, require, process
+      // via ast-guard AST validation - no manual configuration needed
     }),
   ],
 })
@@ -417,32 +417,35 @@ And your server logic doesn’t change.
 
 ---
 
-## Inside the VM: safety, logging, and observability
+## Inside Enclave: safety, logging, and observability
 
-CodeCall runs plans inside a `vm2` sandbox with a **CSP-like policy**.
+CodeCall runs plans inside **Enclave** - FrontMCP's defense-in-depth execution environment.
 
 ### Security pipeline
 
-1. **AST validation**
+1. **AST validation (ast-guard)**
 
-- Parse the `script`.
-- Reject:
+- Parse the `script` into an AST.
+- Apply the AgentScript preset which blocks:
+  - `eval`, `Function`, `setTimeout`, `setInterval`
+  - Global access via `process`, `require`, `window`, `globalThis`, `this`
+  - Prototype chain manipulation
+  - All identifiers not in the whitelist
 
-- Disallowed builtins/globals (e.g. `process`, `require`, `eval`).
-- Loops if `allowLoops: false`.
+2. **Code transformation**
 
-2. **Preset + overrides**
+- Wrap code in `async function __ag_main()` for top-level await support
+- Transform `callTool` → `__safe_callTool` (proxied through Enclave)
+- Transform loops (`for`, `while`, `do-while`) → safe versions with iteration limits
 
-Presets give you an intent:
+3. **Runtime sandboxing (Node.js vm)**
 
-- `locked_down` – strictest; short timeouts, no loops, no console.
-- `secure` – **default**; safe for untrusted LLMs.
-- `balanced` – more permissive for trusted/internal code.
-- `experimental` – dev-only, relaxed.
+- Execute in isolated context with controlled globals
+- Enforce timeout limits (default 30s)
+- Track iteration count and tool calls
+- Sanitize stack traces to prevent information leakage
 
-You can override any field: `timeoutMs`, `allowLoops`, `disabledGlobals`, etc.
-
-3. **Execution + result model**
+4. **Execution + result model**
 
 CodeCall normalizes the outcome into a small set of statuses:
 
