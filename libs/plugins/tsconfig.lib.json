@@ -5,10 +5,10 @@
     "declaration": true,
     "types": ["node"],
     "paths": {
-      "@frontmcp/enclave": ["../enclave/dist/src/index.d.ts"],
-      "@frontmcp/sdk": ["../sdk/src/index.ts"],
-      "ast-guard": ["../ast-guard/src/index.ts"],
-      "vectoriadb": ["../vectoriadb/src/index.ts"]
+      "@frontmcp/enclave": ["../../libs/enclave/dist/src/index.d.ts"],
+      "@frontmcp/sdk": ["../../libs/sdk/src/index.ts"],
+      "ast-guard": ["../../libs/ast-guard/dist/src/index.d.ts"],
+      "vectoriadb": ["../../libs/vectoriadb/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],
