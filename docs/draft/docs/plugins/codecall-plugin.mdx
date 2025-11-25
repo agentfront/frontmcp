@@ -1094,7 +1094,7 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
   Use this to restrict script capabilities:
   ```json
   {
-    "script": "const user = await call('users:getById', { id: '123' });",
+    "script": "const user = await callTool('users:getById', { id: '123' });",
     "allowedTools": ["users:getById", "users:list"]
   }
   ```
@@ -1172,7 +1172,7 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 
 ```json
 {
-  "script": "const user = await call('users:getById', { id: 'user_123' }"
+  "script": "const user = await callTool('users:getById', { id: 'user_123' }"
 }
 ```
 
@@ -1195,7 +1195,7 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 
 ```json
 {
-  "script": "const user = await call('users:getById', { id: 'nonexistent' }); return user;"
+  "script": "const user = await callTool('users:getById', { id: 'nonexistent' }); return user;"
 }
 ```
 

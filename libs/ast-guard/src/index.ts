@@ -54,6 +54,8 @@ export {
   ReservedPrefixRule,
   UnknownGlobalRule,
   NoUserDefinedFunctionsRule,
+  NoCallTargetAssignmentRule,
+  UnicodeSecurityRule,
   StaticCallTargetRule,
 } from './rules';
 
@@ -100,11 +102,14 @@ export {
   // String extraction
   extractLargeStrings,
   shouldExtract,
-  StringExtractionConfig,
-  StringExtractionResult,
   // Concatenation transformation
   transformConcatenation,
   transformTemplateLiterals,
+} from './transforms';
+
+export type {
+  StringExtractionConfig,
+  StringExtractionResult,
   ConcatTransformConfig,
   ConcatTransformResult,
 } from './transforms';

@@ -310,11 +310,11 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
   // 7. Configure loop restrictions
   rules.push(
     new ForbiddenLoopRule({
-      allowFor: options.allowedLoops?.allowFor !== false, // default true (bounded)
-      allowWhile: options.allowedLoops?.allowWhile || false, // default false (unbounded)
-      allowDoWhile: options.allowedLoops?.allowDoWhile || false, // default false (unbounded)
-      allowForIn: options.allowedLoops?.allowForIn || false, // default false (prototype walking)
-      allowForOf: options.allowedLoops?.allowForOf !== false, // default true (safe iteration)
+      allowFor: options.allowedLoops?.allowFor ?? true, // default true (bounded)
+      allowWhile: options.allowedLoops?.allowWhile ?? false, // default false (unbounded)
+      allowDoWhile: options.allowedLoops?.allowDoWhile ?? false, // default false (unbounded)
+      allowForIn: options.allowedLoops?.allowForIn ?? false, // default false (prototype walking)
+      allowForOf: options.allowedLoops?.allowForOf ?? true, // default true (safe iteration)
     }),
   );
 

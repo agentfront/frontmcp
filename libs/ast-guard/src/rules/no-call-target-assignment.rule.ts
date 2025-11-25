@@ -6,6 +6,21 @@ import { ValidationSeverity } from '../interfaces';
 /**
  * Configuration options for NoCallTargetAssignmentRule
  */
+/**
+ * Error types for NoCallTargetAssignmentRule
+ */
+export type NoCallTargetAssignmentErrorType =
+  | 'assignment'
+  | 'declaration'
+  | 'function-declaration'
+  | 'function-expression'
+  | 'class-declaration'
+  | 'destructuring'
+  | 'destructuring-rest'
+  | 'parameter'
+  | 'catch-parameter'
+  | 'import';
+
 export interface NoCallTargetAssignmentOptions {
   /**
    * List of protected call targets that cannot be assigned or shadowed
@@ -234,7 +249,11 @@ export class NoCallTargetAssignmentRule implements ValidationRule {
   /**
    * Report a validation error
    */
-  private reportError(node: acorn.Node & { name: string }, type: string, context: ValidationContext): void {
+  private reportError(
+    node: acorn.Node & { name: string },
+    type: NoCallTargetAssignmentErrorType,
+    context: ValidationContext,
+  ): void {
     const targetName = node.name;
 
     const typeMessages: Record<string, string> = {

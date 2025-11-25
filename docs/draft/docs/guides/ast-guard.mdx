@@ -314,6 +314,76 @@ export default class ScriptGuardPlugin {
 }
 ```
 
+## Built-in Security Rules
+
+ast-guard ships with a comprehensive set of security rules:
+
+### NoGlobalAccessRule
+
+Blocks access to dangerous global objects via member expressions (e.g., `window.location`, `process.env`).
+
+```ts
+import { NoGlobalAccessRule } from 'ast-guard';
+
+const rule = new NoGlobalAccessRule({
+  blockedGlobals: ['window', 'process', 'global', 'globalThis'],
+  allowedMembers: { console: ['log', 'warn', 'error'] }, // Whitelist specific members
+});
+```
+
+### ReservedPrefixRule
+
+Prevents user code from declaring or assigning identifiers with reserved prefixes (e.g., `__ag_`, `__safe_`).
+
+```ts
+import { ReservedPrefixRule } from 'ast-guard';
+
+const rule = new ReservedPrefixRule({
+  prefixes: ['__ag_', '__safe_'],
+  allowedIdentifiers: ['__ag_main'], // Exceptions
+});
+```
+
+### NoCallTargetAssignmentRule
+
+Protects critical call targets from being reassigned or shadowed.
+
+```ts
+import { NoCallTargetAssignmentRule } from 'ast-guard';
+
+const rule = new NoCallTargetAssignmentRule({
+  protectedTargets: ['callTool', '__safe_callTool'],
+});
+```
+
+This blocks:
+- `callTool = malicious;` - Direct assignment
+- `const callTool = () => {};` - Variable shadowing
+- `const { callTool } = obj;` - Destructuring shadowing
+- `function callTool() {}` - Function declaration shadowing
+
+### UnicodeSecurityRule
+
+Detects and blocks Unicode-based attacks including Trojan Source, homoglyphs, and invisible characters.
+
+```ts
+import { UnicodeSecurityRule } from 'ast-guard';
+
+const rule = new UnicodeSecurityRule({
+  blockBidi: true,          // Block bidirectional text attacks (Trojan Source)
+  blockHomoglyphs: true,    // Block lookalike characters (Cyrillic 'а' vs Latin 'a')
+  blockZeroWidth: true,     // Block zero-width characters
+  blockInvisible: true,     // Block invisible formatting characters
+  checkComments: true,      // Also check inside comments
+  checkStrings: false,      // Skip string literals (default)
+  allowedCharacters: [],    // Whitelist specific characters
+});
+```
+
+<Warning>
+  Trojan Source attacks (CVE-2021-42574) use Unicode bidirectional control characters to make code appear different than it actually executes. Always enable `blockBidi: true` for untrusted code.
+</Warning>
+
 ## Mix in fine-grained rules
 
 Combine built-in rules to match your own threat model.
