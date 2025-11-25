@@ -189,9 +189,9 @@ const transformed = transformAgentScript(code, {
 // Result:
 // async function __ag_main() {
 //   const users = await __safe_callTool('users:list', {});
-//   __safe_forOf(users, (user) => {
+//   for (const user of __safe_forOf(users)) {
 //     console.log(user.name);
-//   });
+//   }
 //   return users.length;
 // }
 ```
@@ -466,7 +466,7 @@ return {
 
 ## Monitor and tune validation
 
-- `stopOnFirstError` halts validation as soon as a rule reports an errorgreat for latency-sensitive flows.
+- `stopOnFirstError` halts validation as soon as a rule reports an error—great for latency-sensitive flows.
 - `maxIssues` caps the number of findings returned for a single run to avoid overwhelming users.
 - `parseOptions` lets you enforce `sourceType`, strict mode, or JSX support per tool.
 - `validator.getStats(result, durationMs)` produces telemetry-friendly counters.
