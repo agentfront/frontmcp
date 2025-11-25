@@ -4,69 +4,130 @@ slug: servers/resources
 icon: book-open
 ---
 
-Resources provide **readable data** to load into the model’s context. Define fixed `Resource`s (a concrete `uri`) or `ResourceTemplate`s (an RFC 6570 `uriTemplate`).
+Resources expose **readable data** to the model's context.
 
-## Minimal resource
+## Static Resource
 
 ```ts
 import { Resource } from '@frontmcp/sdk';
 
 @Resource({
-  name: 'docs-home',
-  title: 'Docs Home',
-  uri: 'https://example.com/docs',
-  mimeType: 'text/html',
+  name: 'config',
+  uri: 'app://config',
+  mimeType: 'application/json',
 })
-export default class DocsHome {
-  async execute(uri: string) {
-    return { contents: [{ uri, text: 'Welcome to the docs!' }] };
+class Config {
+  execute() {
+    return { version: '1.0', env: 'production' };
   }
 }
 ```
 
-## Minimal resource template
+**Function style:**
+
+```ts
+import { resource } from '@frontmcp/sdk';
+
+const Config = resource({
+  name: 'config',
+  uri: 'app://config',
+})(() => ({ version: '1.0' }));
+```
+
+---
+
+## Resource Template
+
+Dynamic URIs with parameters (RFC 6570):
 
 ```ts
 import { ResourceTemplate } from '@frontmcp/sdk';
 
 @ResourceTemplate({
-  name: 'repo-readme',
-  title: 'GitHub README',
-  uriTemplate: 'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md',
-  mimeType: 'text/markdown',
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
 })
-export default class RepoReadme {}
+class UserProfile {
+  execute(uri: string, params: Record<string, string>) {
+    return { id: params.userId, name: 'John' };
+  }
+}
+```
+
+**Function style:**
+
+```ts
+import { resourceTemplate } from '@frontmcp/sdk';
+
+const UserProfile = resourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+})((uri, params) => ({ id: params.userId }));
 ```
 
 ---
 
-## Resource metadata
+## Register
 
 ```ts
-@Resource({
-  name: string,
-  title?: string,
-  uri: string,
-  description?: string,
-  mimeType?: string,
-  icons?: Icon[],
+@App({
+  resources: [Config, UserProfile],
 })
+class MyApp {}
 ```
 
-## Resource template metadata
+---
+
+## Return Values
 
 ```ts
-@ResourceTemplate({
-  name: string,
-  title?: string,
-  uriTemplate: string,    // RFC 6570
-  description?: string,
-  mimeType?: string,
-  icons?: Icon[],
-})
+// Object → auto-serialized to JSON
+return { data: 'value' };
+
+// String → text content
+return 'plain text';
+
+// Buffer → binary blob
+return Buffer.from(data);
+
+// Full control
+return {
+  contents: [
+    { uri, mimeType: 'text/plain', text: 'content' },
+    { uri, mimeType: 'image/png', blob: 'base64...' },
+  ]
+};
 ```
 
-**Tips**
+---
 
-- Use resources to preload long-form text, schemas, or docs the model should see before calling tools.
-- Prefer templates when the shape is stable but the identifiers vary.
+## Metadata
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Identifier |
+| `uri` | Yes* | Static URI (*Resource only) |
+| `uriTemplate` | Yes* | RFC 6570 template (*ResourceTemplate only) |
+| `title` | No | Display name |
+| `description` | No | LLM hint |
+| `mimeType` | No | Content type |
+| `icons` | No | UI icons |
+
+---
+
+## Context
+
+Class resources can access context via `this`:
+
+```ts
+@Resource({ name: 'data', uri: 'app://data' })
+class Data {
+  execute() {
+    this.uri;        // requested URI
+    this.params;     // template params
+    this.authInfo;   // auth context
+    this.get(Token); // resolve provider
+    this.fetch(url); // built-in fetch
+  }
+}
+```
