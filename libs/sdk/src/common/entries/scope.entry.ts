@@ -1,15 +1,23 @@
-import {BaseEntry} from './base.entry';
-import {ScopeRecord} from '../records';
+import { BaseEntry } from './base.entry';
+import { ScopeRecord } from '../records';
 import {
   ScopeInterface,
   ProviderRegistryInterface,
   AppRegistryInterface,
   AuthRegistryInterface,
   FrontMcpAuth,
-  Token, FlowInputOf, FlowOutputOf, Type, FlowType, FrontMcpLogger, ToolRegistryInterface, HookRegistryInterface,
+  Token,
+  FlowInputOf,
+  FlowOutputOf,
+  Type,
+  FlowType,
+  FrontMcpLogger,
+  ToolRegistryInterface,
+  HookRegistryInterface,
+  ResourceRegistryInterface,
 } from '../interfaces';
-import {FlowName, ScopeMetadata} from '../metadata';
-import {normalizeEntryPrefix, normalizeScopeBase} from "../../auth/path.utils";
+import { FlowName, ScopeMetadata } from '../metadata';
+import { normalizeEntryPrefix, normalizeScopeBase } from '../../auth/path.utils';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;
@@ -35,7 +43,13 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
 
   abstract get tools(): ToolRegistryInterface;
 
+  abstract get resources(): ResourceRegistryInterface;
+
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 
-  abstract runFlow<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, additionalDeps?: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined>;
+  abstract runFlow<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    additionalDeps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined>;
 }

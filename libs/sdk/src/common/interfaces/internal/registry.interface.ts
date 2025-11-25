@@ -121,11 +121,20 @@ export interface ToolRegistryInterface {
 }
 
 export interface ResourceRegistryInterface {
-  // inline resources plus discovered by nested tool registries
-  getResources(): ResourceEntry<any, any>[];
+  // owner of this registry
+  owner: EntryOwnerRef;
+
+  // inline resources plus discovered by nested resource registries
+  getResources(includeHidden?: boolean): ResourceEntry<any, any>[];
+
+  // resource templates
+  getResourceTemplates(): ResourceEntry<any, any>[];
 
   // inline resources only
   getInlineResources(): ResourceEntry<any, any>[];
+
+  // find a resource by URI (exact match first, then template matching)
+  findResourceForUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined;
 }
 
 export interface PromptRegistryInterface {

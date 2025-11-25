@@ -125,11 +125,48 @@ export class InternalMcpError extends McpError {
 // ============================================================================
 
 /**
- * Tool didn't find an error
+ * Tool not found error
  */
 export class ToolNotFoundError extends PublicMcpError {
   constructor(toolName: string) {
     super(`Tool "${toolName}" not found`, 'TOOL_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Resource not found error
+ */
+export class ResourceNotFoundError extends PublicMcpError {
+  constructor(uri: string) {
+    super(`Resource not found: ${uri}`, 'RESOURCE_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Resource read error (internal)
+ */
+export class ResourceReadError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(uri: string, originalError?: Error) {
+    super(`Resource "${uri}" read failed: ${originalError?.message || 'Unknown error'}`, 'RESOURCE_READ_ERROR');
+    this.originalError = originalError;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}
+
+/**
+ * Invalid resource URI error
+ */
+export class InvalidResourceUriError extends PublicMcpError {
+  constructor(uri: string, reason?: string) {
+    super(`Invalid resource URI: ${uri}${reason ? ` (${reason})` : ''}`, 'INVALID_RESOURCE_URI', 400);
   }
 }
 

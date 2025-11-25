@@ -1,39 +1,125 @@
-import { ResourceMetadata } from '../metadata';
-import { FuncType, Token, Type } from './base.interface';
+// file: libs/sdk/src/common/interfaces/resource.interface.ts
 
+import { randomUUID } from 'crypto';
+import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
+import { FuncType, Token, Type } from './base.interface';
+import { ProviderRegistryInterface } from './internal';
+import { FrontMcpLogger } from './logger.interface';
+import { FlowControl } from './flow.interface';
+import { URL } from 'url';
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ScopeEntry } from '../entries';
 
 export interface ResourceInterface<In = any, Out = any> {
-  execute(input: In, context: ResourceContext<In, Out>): Promise<Out>;
+  execute(uri: string, params: Record<string, string>): Promise<Out>;
 }
 
-export type ResourceType<In = any, Out = any> =
-  | Type<ResourceInterface<In, Out>>
-  | FuncType<ResourceInterface<In, Out>>
+export type ResourceType<In = any, Out = any> = Type<ResourceInterface<In, Out>> | FuncType<ResourceInterface<In, Out>>;
 
+type HistoryEntry<T> = {
+  at: number;
+  stage?: string;
+  value: T | undefined;
+  note?: string;
+};
 
-export interface ResourceContext<In, Out> {
-  readonly resourceId: string;
-  readonly resourceName: string;
-  readonly metadata: ResourceMetadata;
+export type ResourceCtorArgs<In> = {
+  metadata: ResourceMetadata | ResourceTemplateMetadata;
+  uri: string;
+  params: Record<string, string>;
+  providers: ProviderRegistryInterface;
+  logger: FrontMcpLogger;
+  authInfo: AuthInfo;
+};
 
+export abstract class ResourceContext<In = any, Out = any> {
+  private providers: ProviderRegistryInterface;
+  readonly authInfo: AuthInfo;
 
-  get<T>(token: Token<T>): T;
+  protected readonly runId: string;
+  protected readonly resourceId: string;
+  protected readonly resourceName: string;
+  readonly metadata: ResourceMetadata | ResourceTemplateMetadata;
+  protected readonly logger: FrontMcpLogger;
 
-  tryGet<T>(token: Token<T>): T | undefined;
+  /** The actual URI being read */
+  readonly uri: string;
+  /** Extracted URI template parameters (empty for static resources) */
+  readonly params: Record<string, string>;
 
-  get inputHistory(): In[];
+  protected activeStage: string;
 
-  get outputHistory(): Out[];
+  // ---- OUTPUT storages (backing fields)
+  private _outputDraft?: Partial<Out> | any;
+  private _output?: Out;
 
-  set input(value: In);
+  private _error?: Error;
 
-  get input(): In;
+  // ---- histories
+  private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
-  set output(value: Out);
+  constructor(args: ResourceCtorArgs<In>) {
+    const { metadata, uri, params, providers, logger, authInfo } = args;
+    this.runId = randomUUID();
+    this.resourceName = metadata.name;
+    this.resourceId = metadata.name;
+    this.metadata = metadata;
+    this.uri = uri;
+    this.params = params;
+    this.providers = providers;
+    this.logger = logger.child(`resource:${this.resourceId}`);
+    this.authInfo = authInfo;
+  }
 
-  get output(): Out | undefined;
+  abstract execute(uri: string, params: Record<string, string>): Promise<Out>;
 
-  respond(value: Out): never;
+  get<T>(token: Token<T>): T {
+    return this.providers.get(token);
+  }
 
-  fail(reason: string, error: any): never;
+  get scope(): ScopeEntry {
+    return this.providers.getScope();
+  }
+
+  tryGet<T>(token: Token<T>): T | undefined {
+    try {
+      return this.providers.get(token);
+    } catch (e) {
+      this.logger.warn("Requesting provider that doesn't exist: ", token);
+      return undefined;
+    }
+  }
+
+  public get output(): Out | undefined {
+    return this._output;
+  }
+
+  public set output(v: Out | undefined) {
+    this._output = v;
+    this._outputHistory.push({ at: Date.now(), stage: this.activeStage, value: v });
+  }
+
+  public get outputHistory(): ReadonlyArray<HistoryEntry<Out>> {
+    return this._outputHistory;
+  }
+
+  respond(value: Out): never {
+    // record validated output and surface the value via control flow
+    this.output = value;
+    FlowControl.respond<Out>(value);
+  }
+
+  /** Fail the run (invoker will run error/finalize). */
+  protected fail(err: Error): never {
+    this._error = err;
+    FlowControl.fail(err);
+  }
+
+  mark(stage: string): void {
+    this.activeStage = stage;
+  }
+
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    return fetch(input, init);
+  }
 }

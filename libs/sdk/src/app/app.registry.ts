@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { AppType, Token, AppEntry, AppKind, AppRecord } from '../common';
+import { AppType, Token, AppEntry, AppKind, AppRecord, EntryOwnerRef } from '../common';
 import { appDiscoveryDeps, normalizeApp } from './app.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
@@ -7,14 +7,12 @@ import { tokenName } from '../utils/token.utils';
 import { AppLocalInstance, AppRemoteInstance } from './instances';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {
+  private readonly owner: EntryOwnerRef;
 
-  constructor(
-    globalProviders: ProviderRegistry,
-    list: AppType[],
-  ) {
+  constructor(globalProviders: ProviderRegistry, list: AppType[], owner: EntryOwnerRef) {
     super('AppRegistry', globalProviders, list);
+    this.owner = owner;
   }
-
 
   protected buildMap(list: AppType[]): RegistryBuildMapResult<AppRecord> {
     const tokens = new Set<Token>();
@@ -64,7 +62,6 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
     }
     await Promise.all(readyArr);
   }
-
 
   getApps(): AppEntry[] {
     return [...this.instances.values()];

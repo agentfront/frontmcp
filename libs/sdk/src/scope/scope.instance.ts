@@ -1,11 +1,14 @@
 import 'reflect-metadata';
 import {
+  EntryOwnerRef,
   FlowInputOf,
-  FlowName, FlowOutputOf,
+  FlowName,
+  FlowOutputOf,
   FlowType,
   FrontMcpAuth,
   FrontMcpLogger,
-  FrontMcpServer, HookRegistryInterface,
+  FrontMcpServer,
+  HookRegistryInterface,
   ProviderScope,
   ScopeEntry,
   ScopeRecord,
@@ -15,13 +18,13 @@ import {
 } from '../common';
 import AppRegistry from '../app/app.registry';
 import ProviderRegistry from '../provider/provider.registry';
-import {AuthRegistry} from '../auth/auth.registry';
+import { AuthRegistry } from '../auth/auth.registry';
 import FlowRegistry from '../flows/flow.registry';
 import HttpRequestFlow from './flows/http.request.flow';
-import {TransportService} from '../transport/transport.registry';
+import { TransportService } from '../transport/transport.registry';
 import ToolRegistry from '../tool/tool.registry';
-import HookRegistry from "../hooks/hook.registry";
-
+import ResourceRegistry from '../resource/resource.registry';
+import HookRegistry from '../hooks/hook.registry';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -34,6 +37,7 @@ export class Scope extends ScopeEntry {
   private scopeApps: AppRegistry;
   private scopeHooks: HookRegistry;
   private scopeTools: ToolRegistry;
+  private scopeResources: ResourceRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   readonly entryPath: string;
@@ -50,9 +54,9 @@ export class Scope extends ScopeEntry {
     this.server = this.globalProviders.get(FrontMcpServer);
     this.entryPath = rec.metadata.http?.entryPath ?? '';
 
-    if(rec.kind === 'SPLIT_BY_APP'){
-      this.routeBase = `/${rec.metadata.id}`
-    }else {
+    if (rec.kind === 'SPLIT_BY_APP') {
+      this.routeBase = `/${rec.metadata.id}`;
+    } else {
       this.routeBase = '';
     }
 
@@ -63,58 +67,66 @@ export class Scope extends ScopeEntry {
   protected async initialize(): Promise<void> {
     await this.scopeProviders.ready;
 
-    this.scopeHooks = new HookRegistry(this.scopeProviders, []);
+    const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
+    const scopeProviders = this.scopeProviders;
+
+    this.scopeHooks = new HookRegistry(scopeProviders, []);
     await this.scopeHooks.ready;
 
-    this.scopeFlows = new FlowRegistry(this.scopeProviders, [HttpRequestFlow]);
+    this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow]);
     await this.scopeFlows.ready;
 
     this.transportService = new TransportService(this);
 
-    this.scopeAuth = new AuthRegistry(this, this.scopeProviders, [], {
-      kind: 'scope',
-      id: this.id,
-      ref: ScopeEntry,
-    }, this.metadata.auth);
-    await this.scopeAuth.ready
+    this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
+    await this.scopeAuth.ready;
 
-    this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps);
+    this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     await this.scopeApps.ready;
 
-    this.scopeTools = new ToolRegistry(this.scopeProviders, [], {kind: 'scope', id: this.id, ref: Scope});
+    this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
 
+    this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
+    await this.scopeResources.ready;
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
     if (!this.metadata.auth) {
-      // log large warning about using FrontMcp without authentication
-      this.logger.warn(`\n\n*******************************\n  WARNING: FrontMcp is running without authentication. \n  This is a security risk and should only be used in development environments. \n*******************************\n\n`);
+      // log a large warning about using FrontMcp without authentication
+      this.logger.warn(
+        `\n\n*******************************\n  WARNING: FrontMcp is running without authentication. \n  This is a security risk and should only be used in development environments. \n*******************************\n\n`,
+      );
     }
   }
 
   private get defaultScopeProviders() {
-    return [{
-      scope: ProviderScope.GLOBAL,
-      name: 'ScopeEntry',
-      provide: ScopeEntry,
-      useValue: this,
-    }, {
-      scope: ProviderScope.GLOBAL,
-      name: 'Scope',
-      provide: Scope,
-      useValue: this,
-    }, {
-      scope: ProviderScope.GLOBAL,
-      name: 'FrontMcpLogger',
-      provide: FrontMcpLogger,
-      useValue: this.logger,
-    }, {
-      scope: ProviderScope.SESSION,
-      name: 'SessionProvider',
-      provide: SessionProvider,
-      useClass: SessionProvider,
-    }];
+    return [
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'ScopeEntry',
+        provide: ScopeEntry,
+        useValue: this,
+      },
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'Scope',
+        provide: Scope,
+        useValue: this,
+      },
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'FrontMcpLogger',
+        provide: FrontMcpLogger,
+        useValue: this.logger,
+      },
+      {
+        scope: ProviderScope.SESSION,
+        name: 'SessionProvider',
+        provide: SessionProvider,
+        useClass: SessionProvider,
+      },
+    ];
   }
 
   get auth(): FrontMcpAuth {
@@ -141,16 +153,27 @@ export class Scope extends ScopeEntry {
     return this.scopeTools;
   }
 
+  get resources(): ResourceRegistry {
+    return this.scopeResources;
+  }
 
   registryFlows(...flows: FlowType[]) {
     return this.scopeFlows.registryFlows(flows);
   }
 
-  runFlow<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
+  runFlow<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    deps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
     return this.scopeFlows.runFlow(name, input, deps);
   }
 
-  async runFlowForOutput<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name>> {
+  async runFlowForOutput<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    deps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name>> {
     const result = await this.scopeFlows.runFlow(name, input, deps);
     if (result) {
       return result;
