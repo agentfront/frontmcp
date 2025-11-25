@@ -118,6 +118,62 @@ export const codeCallEmbeddingOptionsSchema = z
   })
   .default({});
 
+export const codeCallSidecarOptionsSchema = z
+  .object({
+    /**
+     * Enable pass-by-reference support via sidecar
+     * When enabled, large strings are automatically lifted to a sidecar
+     * and resolved at the callTool boundary
+     * @default false
+     */
+    enabled: z.boolean().default(false),
+
+    /**
+     * Maximum total size of all stored references in bytes
+     * @default 16MB (from security level)
+     */
+    maxTotalSize: z.number().positive().optional(),
+
+    /**
+     * Maximum size of a single reference in bytes
+     * @default 4MB (from security level)
+     */
+    maxReferenceSize: z.number().positive().optional(),
+
+    /**
+     * Threshold in bytes to trigger extraction from source code
+     * Strings larger than this are lifted to the sidecar
+     * @default 64KB (from security level)
+     */
+    extractionThreshold: z.number().positive().optional(),
+
+    /**
+     * Maximum expanded size when resolving references for tool calls
+     * @default 8MB (from security level)
+     */
+    maxResolvedSize: z.number().positive().optional(),
+
+    /**
+     * Whether to allow composite handles from string concatenation
+     * If false, concatenating references throws an error
+     * @default false (strict mode)
+     */
+    allowComposites: z.boolean().optional(),
+
+    /**
+     * Maximum script length (in characters) when sidecar is disabled
+     * Prevents large inline data from being embedded in script
+     * If null, no limit is enforced
+     * @default 64KB
+     */
+    maxScriptLengthWhenDisabled: z
+      .number()
+      .positive()
+      .nullable()
+      .default(64 * 1024),
+  })
+  .default({});
+
 export const codeCallPluginOptionsSchema = z
   .object({
     /**
@@ -170,6 +226,12 @@ export const codeCallPluginOptionsSchema = z
      * Embedding configuration for tool search
      */
     embedding: codeCallEmbeddingOptionsSchema,
+
+    /**
+     * Sidecar (pass-by-reference) configuration
+     * When enabled, large data is stored outside the sandbox and resolved at callTool boundary
+     */
+    sidecar: codeCallSidecarOptionsSchema,
   })
   .default({});
 
@@ -181,6 +243,7 @@ export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
 export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
+export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
 export type CodeCallPluginOptions = z.infer<typeof codeCallPluginOptionsSchema>;
 
 /**

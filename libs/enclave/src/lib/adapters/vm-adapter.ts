@@ -229,8 +229,11 @@ export class VmAdapter implements SandboxAdapter {
     const startTime = Date.now();
 
     try {
-      // Create safe runtime context
-      const safeRuntime = createSafeRuntime(executionContext);
+      // Create safe runtime context with optional sidecar support
+      const safeRuntime = createSafeRuntime(executionContext, {
+        sidecar: executionContext.sidecar,
+        referenceConfig: executionContext.referenceConfig,
+      });
 
       // Create sandbox context with safe globals only
       // IMPORTANT: Use empty object to get NEW isolated prototypes

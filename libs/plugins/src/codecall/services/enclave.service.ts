@@ -1,9 +1,10 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { Enclave, type ExecutionResult, type ToolHandler } from '@frontmcp/enclave';
+import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from '@frontmcp/enclave';
 import type CodeCallConfig from '../providers/code-call.config';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import type { CodeCallSidecarOptions } from '../codecall.types';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -39,6 +40,25 @@ export interface EnclaveExecutionResult {
  * - Runtime limits (timeout, iterations, tool calls)
  * - Tool call integration with FrontMCP pipeline
  */
+/**
+ * Error thrown when script exceeds maximum length and sidecar is disabled
+ */
+export class ScriptTooLargeError extends Error {
+  readonly code = 'SCRIPT_TOO_LARGE';
+  readonly scriptLength: number;
+  readonly maxLength: number;
+
+  constructor(scriptLength: number, maxLength: number) {
+    super(
+      `Script length (${scriptLength} characters) exceeds maximum allowed length (${maxLength} characters). ` +
+        `Enable sidecar to handle large data, or reduce script size.`,
+    );
+    this.name = 'ScriptTooLargeError';
+    this.scriptLength = scriptLength;
+    this.maxLength = maxLength;
+  }
+}
+
 @Provider({
   name: 'codecall:enclave',
   description: 'Executes AgentScript code in a secure enclave',
@@ -46,9 +66,11 @@ export interface EnclaveExecutionResult {
 })
 export default class EnclaveService {
   private readonly vmOptions: ResolvedCodeCallVmOptions;
+  private readonly sidecarOptions: CodeCallSidecarOptions;
 
   constructor(config: CodeCallConfig) {
     this.vmOptions = config.get('resolvedVm');
+    this.sidecarOptions = config.get('sidecar');
   }
 
   /**
@@ -57,14 +79,35 @@ export default class EnclaveService {
    * @param code - The AgentScript code to execute (raw, not transformed)
    * @param environment - The VM environment with callTool, getTool, etc.
    * @returns Execution result with success/error and logs
+   * @throws ScriptTooLargeError if script exceeds max length and sidecar is disabled
    */
   async execute(code: string, environment: CodeCallVmEnvironment): Promise<EnclaveExecutionResult> {
     const logs: string[] = [];
+
+    // Validate script length when sidecar is disabled
+    if (!this.sidecarOptions.enabled && this.sidecarOptions.maxScriptLengthWhenDisabled !== null) {
+      const maxLength = this.sidecarOptions.maxScriptLengthWhenDisabled;
+      if (code.length > maxLength) {
+        throw new ScriptTooLargeError(code.length, maxLength);
+      }
+    }
 
     // Create tool handler that bridges to CodeCallVmEnvironment
     const toolHandler: ToolHandler = async (toolName: string, args: Record<string, unknown>) => {
       return environment.callTool(toolName, args);
     };
+
+    // Build sidecar configuration if enabled
+    const sidecar: ReferenceSidecarOptions | undefined = this.sidecarOptions.enabled
+      ? {
+          enabled: true,
+          maxTotalSize: this.sidecarOptions.maxTotalSize,
+          maxReferenceSize: this.sidecarOptions.maxReferenceSize,
+          extractionThreshold: this.sidecarOptions.extractionThreshold,
+          maxResolvedSize: this.sidecarOptions.maxResolvedSize,
+          allowComposites: this.sidecarOptions.allowComposites,
+        }
+      : undefined;
 
     // Create enclave with configuration from CodeCallConfig
     const enclave = new Enclave({
@@ -74,6 +117,9 @@ export default class EnclaveService {
       toolHandler,
       validate: true,
       transform: true,
+      sidecar,
+      // Allow functions in globals since we intentionally provide getTool, mcpLog, mcpNotify, and console
+      allowFunctionsInGlobals: true,
       globals: {
         // Provide getTool as a custom global
         getTool: environment.getTool,

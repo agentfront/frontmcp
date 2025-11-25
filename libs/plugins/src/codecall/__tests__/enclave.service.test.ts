@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/enclave.service.test.ts
 
-import EnclaveService from '../services/enclave.service';
+import EnclaveService, { ScriptTooLargeError } from '../services/enclave.service';
 import CodeCallConfig from '../providers/code-call.config';
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
 
@@ -594,5 +594,219 @@ describe('EnclaveService', () => {
       expect(result.success).toBe(false);
       expect(result.error?.message).toMatch(/iteration|limit/i);
     }, 10000);
+  });
+
+  describe('script length validation (sidecar disabled)', () => {
+    it('should throw ScriptTooLargeError when script exceeds max length', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: false,
+          maxScriptLengthWhenDisabled: 100, // Very small limit for testing
+        },
+      });
+
+      const serviceWithLimit = new EnclaveService(config);
+      const largeScript = 'return "' + 'x'.repeat(200) + '";';
+
+      await expect(serviceWithLimit.execute(largeScript, mockEnvironment)).rejects.toThrow(ScriptTooLargeError);
+    });
+
+    it('should include script length and max length in error', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: false,
+          maxScriptLengthWhenDisabled: 50,
+        },
+      });
+
+      const serviceWithLimit = new EnclaveService(config);
+      const script = 'return "' + 'x'.repeat(100) + '";';
+
+      try {
+        await serviceWithLimit.execute(script, mockEnvironment);
+        fail('Should have thrown ScriptTooLargeError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ScriptTooLargeError);
+        const e = error as ScriptTooLargeError;
+        expect(e.code).toBe('SCRIPT_TOO_LARGE');
+        expect(e.scriptLength).toBe(script.length);
+        expect(e.maxLength).toBe(50);
+      }
+    });
+
+    it('should allow scripts under max length', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: false,
+          maxScriptLengthWhenDisabled: 1000,
+        },
+      });
+
+      const serviceWithLimit = new EnclaveService(config);
+      const result = await serviceWithLimit.execute('return 42;', mockEnvironment);
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe(42);
+    });
+
+    it('should skip length check when maxScriptLengthWhenDisabled is null', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: false,
+          maxScriptLengthWhenDisabled: null,
+        },
+      });
+
+      const serviceWithNoLimit = new EnclaveService(config);
+      const largeScript = 'return "' + 'x'.repeat(100000) + '";';
+
+      // Should not throw - length check is disabled
+      const result = await serviceWithNoLimit.execute(largeScript, mockEnvironment);
+      expect(result.success).toBe(true);
+    });
+
+    it('should skip length check when sidecar is enabled', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: true, // Sidecar enabled
+          maxScriptLengthWhenDisabled: 50, // This should be ignored
+          extractionThreshold: 10, // Low threshold for testing
+        },
+      });
+
+      const serviceWithSidecar = new EnclaveService(config);
+      const largeScript = 'return "' + 'x'.repeat(200) + '";';
+
+      // Should not throw - sidecar handles large data
+      const result = await serviceWithSidecar.execute(largeScript, mockEnvironment);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('sidecar integration', () => {
+    it('should extract large strings and resolve at callTool boundary', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: true,
+          extractionThreshold: 50, // Low threshold for testing
+        },
+      });
+
+      const serviceWithSidecar = new EnclaveService(config);
+      const largeData = 'x'.repeat(100);
+
+      (mockEnvironment.callTool as jest.Mock).mockImplementation(async (name, args) => {
+        // Verify the tool receives the actual resolved data
+        expect(args.data).toBe(largeData);
+        return 'ok';
+      });
+
+      const result = await serviceWithSidecar.execute(
+        `
+        const data = "${largeData}";
+        await callTool('myTool', { data });
+        return 'done';
+        `,
+        mockEnvironment,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('done');
+      expect(mockEnvironment.callTool).toHaveBeenCalled();
+    });
+
+    it('should block concatenation when allowComposites is false', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: true,
+          extractionThreshold: 50,
+          allowComposites: false,
+        },
+      });
+
+      const serviceWithSidecar = new EnclaveService(config);
+      const largeData = 'x'.repeat(100);
+
+      const result = await serviceWithSidecar.execute(
+        `
+        const data = "${largeData}";
+        const combined = data + " suffix";
+        return combined;
+        `,
+        mockEnvironment,
+      );
+
+      // Should fail because concatenation creates a composite
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('concat');
+    });
+
+    it('should allow concatenation when allowComposites is true', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: true,
+          extractionThreshold: 50,
+          allowComposites: true,
+        },
+      });
+
+      const serviceWithSidecar = new EnclaveService(config);
+      const largeData = 'x'.repeat(100);
+
+      (mockEnvironment.callTool as jest.Mock).mockImplementation(async (name, args) => {
+        // The composite should be resolved to actual concatenated string
+        expect(args.data).toBe(largeData + ' suffix');
+        return 'ok';
+      });
+
+      const result = await serviceWithSidecar.execute(
+        `
+        const data = "${largeData}";
+        const combined = data + " suffix";
+        await callTool('myTool', { data: combined });
+        return 'done';
+        `,
+        mockEnvironment,
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should lift large tool results to sidecar', async () => {
+      const config = new CodeCallConfig({
+        vm: { preset: 'secure' },
+        sidecar: {
+          enabled: true,
+          extractionThreshold: 50,
+        },
+      });
+
+      const serviceWithSidecar = new EnclaveService(config);
+      const largeResult = 'y'.repeat(100);
+
+      (mockEnvironment.callTool as jest.Mock).mockResolvedValue(largeResult);
+
+      const result = await serviceWithSidecar.execute(
+        `
+        const data = await callTool('getData', {});
+        // The result is a reference ID, pass it directly to another tool
+        return data;
+        `,
+        mockEnvironment,
+      );
+
+      // Result should be a reference ID (starts with __REF_)
+      expect(result.success).toBe(true);
+      expect(typeof result.result).toBe('string');
+      expect((result.result as string).startsWith('__REF_')).toBe(true);
+    });
   });
 });

@@ -9,6 +9,8 @@ import {
   UnknownGlobalRule,
   NoUserDefinedFunctionsRule,
   UnreachableCodeRule,
+  StaticCallTargetRule,
+  RequiredFunctionCallRule,
 } from '../rules';
 
 /**
@@ -61,6 +63,30 @@ export interface AgentScriptOptions {
    * Default: ['__ag_', '__safe_']
    */
   reservedPrefixes?: string[];
+
+  /**
+   * Configuration for static call target validation
+   * Ensures callTool first argument is always a static string literal
+   */
+  staticCallTarget?: {
+    /**
+     * Whether to enable static call target validation
+     * Default: true
+     */
+    enabled?: boolean;
+    /**
+     * Whitelist of allowed tool names (exact strings or RegExp patterns)
+     * If provided, only these tools can be called
+     */
+    allowedToolNames?: (string | RegExp)[];
+  };
+
+  /**
+   * Whether to require at least one callTool invocation
+   * When enabled, scripts that don't call callTool will fail validation
+   * Default: false
+   */
+  requireCallTool?: boolean;
 }
 
 /**
@@ -309,6 +335,27 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
 
   // 9. Detect unreachable code
   rules.push(new UnreachableCodeRule());
+
+  // 10. Enforce static string literals for callTool targets (default: enabled)
+  if (options.staticCallTarget?.enabled !== false) {
+    rules.push(
+      new StaticCallTargetRule({
+        targetFunctions: ['callTool', '__safe_callTool'],
+        allowedToolNames: options.staticCallTarget?.allowedToolNames,
+      }),
+    );
+  }
+
+  // 11. Require at least one callTool invocation (optional, default: disabled)
+  if (options.requireCallTool) {
+    rules.push(
+      new RequiredFunctionCallRule({
+        required: ['callTool'],
+        minCalls: 1,
+        messageTemplate: 'AgentScript code must contain at least one callTool invocation',
+      }),
+    );
+  }
 
   return rules;
 }

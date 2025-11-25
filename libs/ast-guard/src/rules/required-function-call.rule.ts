@@ -14,6 +14,12 @@ export interface RequiredFunctionCallOptions {
   maxCalls?: number;
   /** Custom message template (use {function} placeholder) */
   messageTemplate?: string;
+  /**
+   * Mode for checking multiple required functions
+   * - 'all': ALL functions in the list must be called (default)
+   * - 'any': At least ONE function in the list must be called
+   */
+  mode?: 'all' | 'any';
 }
 
 /**
@@ -38,7 +44,7 @@ export class RequiredFunctionCallRule implements ValidationRule {
   }
 
   validate(context: ValidationContext): void {
-    const { required, minCalls = 1, maxCalls = 0, messageTemplate } = this.options;
+    const { required, minCalls = 1, maxCalls = 0, messageTemplate, mode = 'all' } = this.options;
     const callCounts = new Map<string, number>();
 
     // Initialize counts
@@ -69,7 +75,28 @@ export class RequiredFunctionCallRule implements ValidationRule {
       },
     });
 
-    // Check minimum calls
+    // Handle 'any' mode: at least one function must be called
+    if (mode === 'any') {
+      const totalCalls = Array.from(callCounts.values()).reduce((sum, count) => sum + count, 0);
+      if (totalCalls < minCalls) {
+        const functionNames = required.join(' or ');
+        const message =
+          messageTemplate || `At least one of [${functionNames}] must be called at least ${minCalls} time(s)`;
+
+        context.report({
+          code: 'REQUIRED_FUNCTION_NOT_CALLED',
+          message,
+          data: {
+            functions: required,
+            expectedMin: minCalls,
+            actual: totalCalls,
+          },
+        });
+      }
+      return;
+    }
+
+    // Handle 'all' mode (default): each function must be called
     for (const [funcName, count] of callCounts.entries()) {
       if (count < minCalls) {
         const message =

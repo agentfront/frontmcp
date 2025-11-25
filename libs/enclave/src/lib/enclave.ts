@@ -6,12 +6,16 @@
  * - Code transformation
  * - Runtime safety wrappers
  * - Resource limits (timeout, memory, iterations)
+ * - Pass-by-reference support for large data
  *
  * @packageDocumentation
  */
 
 import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
 import { transformAgentScript, isWrappedInMain } from 'ast-guard';
+import { extractLargeStrings, transformConcatenation, transformTemplateLiterals } from 'ast-guard';
+import * as acorn from 'acorn';
+import { generate } from 'astring';
 import type {
   EnclaveConfig,
   CreateEnclaveOptions,
@@ -22,10 +26,13 @@ import type {
   ToolHandler,
   SecurityLevel,
   SecurityLevelConfig,
+  ReferenceSidecarOptions,
 } from './types';
 import { SECURITY_LEVEL_CONFIGS } from './types';
 import { createSafeRuntime } from './safe-runtime';
 import { validateGlobals } from './globals-validator';
+import { ReferenceSidecar } from './sidecar/reference-sidecar';
+import { REFERENCE_CONFIGS, ReferenceConfig } from './sidecar/reference-config';
 
 /**
  * Default security level
@@ -73,6 +80,30 @@ const BASE_CONFIG = {
 };
 
 /**
+ * Build reference config from security level and sidecar options
+ */
+function buildReferenceConfig(
+  securityLevel: SecurityLevel,
+  sidecarOptions?: ReferenceSidecarOptions,
+): ReferenceConfig | undefined {
+  if (!sidecarOptions?.enabled) {
+    return undefined;
+  }
+
+  const baseConfig = REFERENCE_CONFIGS[securityLevel];
+
+  return {
+    maxTotalSize: sidecarOptions.maxTotalSize ?? baseConfig.maxTotalSize,
+    maxReferenceSize: sidecarOptions.maxReferenceSize ?? baseConfig.maxReferenceSize,
+    extractionThreshold: sidecarOptions.extractionThreshold ?? baseConfig.extractionThreshold,
+    maxResolvedSize: sidecarOptions.maxResolvedSize ?? baseConfig.maxResolvedSize,
+    allowComposites: sidecarOptions.allowComposites ?? baseConfig.allowComposites,
+    maxReferenceCount: sidecarOptions.maxReferenceCount ?? baseConfig.maxReferenceCount,
+    maxResolutionDepth: baseConfig.maxResolutionDepth,
+  };
+}
+
+/**
  * Enclave - Safe AgentScript Execution Environment
  *
  * @example
@@ -110,6 +141,7 @@ export class Enclave {
   private readonly validator: JSAstValidator;
   private readonly validateCode: boolean;
   private readonly transformCode: boolean;
+  private readonly referenceConfig?: ReferenceConfig;
   private adapter?: SandboxAdapter;
 
   constructor(options: CreateEnclaveOptions = {}) {
@@ -172,6 +204,8 @@ export class Enclave {
         '__safe_for',
         '__safe_while',
         '__safe_doWhile',
+        '__safe_concat',
+        '__safe_template',
         ...customAllowedGlobals,
       ],
     }));
@@ -179,6 +213,9 @@ export class Enclave {
     // Configuration flags
     this.validateCode = options.validate !== false; // Default: true
     this.transformCode = options.transform !== false; // Default: true
+
+    // Build reference config if sidecar is enabled
+    this.referenceConfig = buildReferenceConfig(this.securityLevel, options.sidecar);
 
     // Adapter will be lazy-loaded based on config.adapter
   }
@@ -205,6 +242,11 @@ export class Enclave {
       endTime: 0,
     };
 
+    // Create sidecar for this execution if enabled
+    const sidecar = this.referenceConfig
+      ? new ReferenceSidecar(this.referenceConfig)
+      : undefined;
+
     try {
       // Step 1: Transform (if enabled) - MUST happen before validation
       // because AgentScript allows top-level return, await, etc. which are only
@@ -221,12 +263,18 @@ export class Enclave {
         });
       }
 
+      // Step 1.5: Apply sidecar transforms if enabled
+      // These transforms extract large strings and convert concatenation to safe calls
+      if (sidecar && this.referenceConfig) {
+        transformedCode = this.applySidecarTransforms(transformedCode, sidecar);
+      }
+
       // Step 2: Validate (if enabled) - validate TRANSFORMED code
       if (this.validateCode) {
         const validationResult = await this.validator.validate(transformedCode);
         if (!validationResult.valid) {
           const errorMessages = validationResult.issues
-            .map(issue => `${issue.code}: ${issue.message}`)
+            .map((issue) => `${issue.code}: ${issue.message}`)
             .join('\n');
 
           return {
@@ -253,6 +301,8 @@ export class Enclave {
         abortController: new AbortController(),
         aborted: false,
         toolHandler: toolHandler || this.config.toolHandler,
+        sidecar,
+        referenceConfig: this.referenceConfig,
       };
 
       // Set up timeout
@@ -306,7 +356,48 @@ export class Enclave {
           endTime: Date.now(),
         },
       };
+    } finally {
+      // Always dispose the sidecar to prevent memory leaks
+      if (sidecar) {
+        sidecar.dispose();
+      }
     }
+  }
+
+  /**
+   * Apply sidecar transforms to code
+   *
+   * Extracts large strings and transforms concatenation to use safe functions.
+   *
+   * @param code The code to transform
+   * @param sidecar The sidecar to store extracted strings
+   * @returns The transformed code
+   */
+  private applySidecarTransforms(code: string, sidecar: ReferenceSidecar): string {
+    // Parse the code into an AST
+    const ast = acorn.parse(code, {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+    });
+
+    // Extract large strings (if extraction threshold is set)
+    if (this.referenceConfig?.extractionThreshold) {
+      extractLargeStrings(ast, {
+        threshold: this.referenceConfig.extractionThreshold,
+        onExtract: (value) => {
+          return sidecar.store(value, 'extraction');
+        },
+      });
+    }
+
+    // Transform concatenation operations (a + b -> __safe_concat(a, b))
+    transformConcatenation(ast);
+
+    // Transform template literals (`Hello ${name}` -> __safe_template(['Hello ', ''], name))
+    transformTemplateLiterals(ast);
+
+    // Generate code from the transformed AST
+    return generate(ast);
   }
 
   /**

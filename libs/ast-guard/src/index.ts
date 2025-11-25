@@ -54,6 +54,7 @@ export {
   ReservedPrefixRule,
   UnknownGlobalRule,
   NoUserDefinedFunctionsRule,
+  StaticCallTargetRule,
 } from './rules';
 
 // Rule options types
@@ -70,6 +71,7 @@ export type { NoGlobalAccessOptions } from './rules/no-global-access.rule';
 export type { ReservedPrefixOptions } from './rules/reserved-prefix.rule';
 export type { UnknownGlobalOptions } from './rules/unknown-global.rule';
 export type { NoUserDefinedFunctionsOptions } from './rules/no-user-functions.rule';
+export type { StaticCallTargetOptions } from './rules/static-call-target.rule';
 
 // Presets
 export {
@@ -92,3 +94,17 @@ export {
   AGENTSCRIPT_DESCRIPTION_MEDIUM,
   AGENTSCRIPT_DESCRIPTION_FULL,
 } from './agentscript-description';
+
+// AST Transforms (for pass-by-reference support)
+export {
+  // String extraction
+  extractLargeStrings,
+  shouldExtract,
+  StringExtractionConfig,
+  StringExtractionResult,
+  // Concatenation transformation
+  transformConcatenation,
+  transformTemplateLiterals,
+  ConcatTransformConfig,
+  ConcatTransformResult,
+} from './transforms';

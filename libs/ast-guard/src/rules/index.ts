@@ -15,3 +15,4 @@ export * from './unknown-global.rule';
 export * from './no-user-functions.rule';
 export * from './no-call-target-assignment.rule';
 export * from './unicode-security.rule';
+export * from './static-call-target.rule';

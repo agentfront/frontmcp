@@ -27,10 +27,34 @@ export type {
   SandboxAdapter,
   SecurityLevel,
   SecurityLevelConfig,
+  ReferenceSidecarOptions,
 } from './lib/types';
 
 // Security level configurations
 export { SECURITY_LEVEL_CONFIGS } from './lib/types';
 
 // Safe runtime utilities
-export { createSafeRuntime, serializeSafeRuntime } from './lib/safe-runtime';
+export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './lib/safe-runtime';
+
+// Reference Sidecar (pass-by-reference support)
+export {
+  // Configuration
+  ReferenceConfig,
+  REFERENCE_CONFIGS,
+  REF_ID_PREFIX,
+  REF_ID_SUFFIX,
+  REF_ID_PATTERN,
+  isReferenceId,
+  getReferenceConfig,
+  // Sidecar
+  ReferenceSidecar,
+  ReferenceSource,
+  ReferenceMetadata,
+  SidecarLimitError,
+  ReferenceNotFoundError,
+  // Resolver
+  ReferenceResolver,
+  ResolutionLimitError,
+  CompositeHandle,
+  isCompositeHandle,
+} from './lib/sidecar';

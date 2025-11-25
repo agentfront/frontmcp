@@ -386,7 +386,7 @@ export interface SafeRuntimeContext {
     init: () => void,
     test: () => boolean,
     update: () => void,
-    body: () => void
+    body: () => void,
   ) => void;
 
   /**
@@ -394,6 +394,24 @@ export interface SafeRuntimeContext {
    * Enforces iteration limits
    */
   __safe_while: (test: () => boolean, body: () => void) => void;
+
+  /**
+   * Safe do-while loop wrapper
+   * Enforces iteration limits
+   */
+  __safe_doWhile: (body: () => void, test: () => boolean) => void;
+
+  /**
+   * Safe string concatenation
+   * Detects reference IDs and handles them appropriately
+   */
+  __safe_concat: (left: unknown, right: unknown) => unknown;
+
+  /**
+   * Safe template literal interpolation
+   * Detects reference IDs in interpolated values
+   */
+  __safe_template: (quasis: string[], ...values: unknown[]) => unknown;
 
   /**
    * Whitelisted safe globals
@@ -413,6 +431,10 @@ export interface SafeRuntimeContext {
   parseInt: typeof parseInt;
   parseFloat: typeof parseFloat;
 }
+
+// Forward reference - imported at runtime to avoid circular dependency
+import type { ReferenceSidecar } from './sidecar/reference-sidecar';
+import type { ReferenceConfig } from './sidecar/reference-config';
 
 /**
  * Internal execution context (tracks state during execution)
@@ -447,6 +469,17 @@ export interface ExecutionContext {
    * Tool handler
    */
   toolHandler?: ToolHandler;
+
+  /**
+   * Reference sidecar for pass-by-reference support (per-execution)
+   * Created and disposed by the Enclave for each run
+   */
+  sidecar?: ReferenceSidecar;
+
+  /**
+   * Reference configuration for sidecar
+   */
+  referenceConfig?: ReferenceConfig;
 }
 
 /**
@@ -470,6 +503,58 @@ export interface SandboxAdapter {
    * Cleanup the sandbox
    */
   dispose(): void;
+}
+
+/**
+ * Options for reference sidecar (pass-by-reference) support
+ */
+export interface ReferenceSidecarOptions {
+  /**
+   * Enable pass-by-reference support
+   * When enabled, large strings are automatically lifted to a sidecar
+   * and replaced with reference IDs.
+   * @default false
+   */
+  enabled: boolean;
+
+  /**
+   * Maximum total size of all stored references in bytes
+   * Prevents memory exhaustion from excessive data storage
+   * @default Determined by securityLevel
+   */
+  maxTotalSize?: number;
+
+  /**
+   * Maximum size of a single reference in bytes
+   * @default Determined by securityLevel
+   */
+  maxReferenceSize?: number;
+
+  /**
+   * Threshold in bytes to trigger extraction from source code
+   * Strings larger than this are lifted to the sidecar
+   * @default Determined by securityLevel
+   */
+  extractionThreshold?: number;
+
+  /**
+   * Maximum expanded size when resolving references for tool calls
+   * @default Determined by securityLevel
+   */
+  maxResolvedSize?: number;
+
+  /**
+   * Whether to allow composite handles from string concatenation
+   * If false, concatenating references throws an error
+   * @default Determined by securityLevel (false for STRICT/SECURE)
+   */
+  allowComposites?: boolean;
+
+  /**
+   * Maximum number of references in a single execution
+   * @default Determined by securityLevel
+   */
+  maxReferenceCount?: number;
 }
 
 /**
@@ -545,4 +630,29 @@ export interface CreateEnclaveOptions extends EnclaveConfig {
    * Default: Determined by securityLevel
    */
   maxSanitizeProperties?: number;
+
+  /**
+   * Reference sidecar (pass-by-reference) configuration
+   *
+   * When enabled, the enclave:
+   * - Extracts large strings from code and stores them in a sidecar
+   * - Transforms concatenation to detect reference IDs
+   * - Resolves references at the callTool boundary
+   * - Lifts large tool results back to the sidecar
+   *
+   * This enables scripts to manipulate large data (videos, PDFs, images)
+   * without loading them into the JavaScript sandbox.
+   *
+   * @example
+   * ```typescript
+   * const enclave = new Enclave({
+   *   securityLevel: 'STRICT',
+   *   sidecar: {
+   *     enabled: true,
+   *     extractionThreshold: 64 * 1024, // 64KB
+   *   },
+   * });
+   * ```
+   */
+  sidecar?: ReferenceSidecarOptions;
 }
