@@ -63,9 +63,10 @@ export class NoGlobalAccessRule implements ValidationRule {
         if (objectName && this.blockedGlobals.has(objectName)) {
           // Member access: window.eval, globalThis.Function
           if (!node.computed && this.blockMemberAccess) {
+            const propertyName = node.property?.type === 'Identifier' ? node.property.name : '(unknown)';
             report({
               code: 'NO_GLOBAL_ACCESS',
-              message: `Access to ${objectName}.${node.property.name} is not allowed`,
+              message: `Access to ${objectName}.${propertyName} is not allowed`,
               location: node.object.loc
                 ? {
                     line: node.object.loc.start.line,
@@ -74,7 +75,7 @@ export class NoGlobalAccessRule implements ValidationRule {
                 : undefined,
               data: {
                 global: objectName,
-                property: node.property.name,
+                property: propertyName,
                 accessType: 'member',
               },
             });
@@ -204,6 +205,8 @@ export class NoGlobalAccessRule implements ValidationRule {
             'getOwnPropertyDescriptors',
             'getPrototypeOf',
             'setPrototypeOf',
+            'defineProperty',
+            'defineProperties',
           ];
 
           const methodName = node.callee.property.name;

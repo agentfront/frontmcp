@@ -266,7 +266,7 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'SharedWorker',
     'ServiceWorker',
 
-    // Collections (memory leaks, prototype pollution)
+    // Weak references (can hold references to sensitive objects, harder to audit)
     'WeakMap',
     'WeakSet',
     'WeakRef',

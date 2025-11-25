@@ -780,78 +780,20 @@ describe('Modern JavaScript Features', () => {
     });
   });
 
-  describe('Summary Report', () => {
-    it('should generate modern features coverage report', () => {
-      console.log(`
-
+  // Output summary report after all tests complete
+  afterAll(() => {
+    console.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║        MODERN JAVASCRIPT FEATURES COVERAGE REPORT              ║
 ╚════════════════════════════════════════════════════════════════╝
 
 FEATURE SUPPORT:
 ──────────────────────────────────────────────────────────────
-✅ Dynamic Import (import())
-   - Parsing: Supported
-   - Transformation: Working
-   - Security: Blocked when dangerous
-
-✅ Private Class Fields (#field)
-   - Parsing: Supported
-   - Transformation: Working in methods
-   - Security: Constructor access blocked
-
-✅ Decorators (@decorator)
-   - Parsing: Supported
-   - Transformation: Working
-   - Security: Constructor access blocked
-
-✅ Top-Level Await
-   - Parsing: Supported (module mode)
-   - Transformation: Working
-   - Security: Controlled by no-async rule
-
-✅ Nullish Coalescing (??)
-   - Parsing: Supported
-   - Transformation: Working
-   - Security: No bypass vectors
-
-✅ Optional Chaining (?.)
-   - Parsing: Supported
-   - Transformation: Working
-   - Security: Constructor access still blocked
-
+✅ Dynamic Import, Private Class Fields, Decorators
+✅ Top-Level Await, Nullish Coalescing, Optional Chaining
 ✅ Module Namespace Objects
-   - Parsing: Supported
-   - Transformation: Working
-   - Security: Constructor access blocked
-
-SECURITY ANALYSIS:
-──────────────────────────────────────────────────────────────
-✅ Dynamic Import: Cannot bypass sandbox isolation
-✅ Private Fields: Cannot hide constructor access
-✅ Decorators: Cannot escape via decorator functions
-✅ Top-Level Await: Cannot escape via Promise chains
-✅ Nullish Coalescing: Cannot bypass identifier checks
-✅ Optional Chaining: Constructor access still blocked
-✅ Namespace Objects: Constructor access blocked
-
-COMBINED FEATURES:
-──────────────────────────────────────────────────────────────
-✅ All modern features work together correctly
-✅ No bypass vectors when combining features
-✅ Transformation applies to all modern constructs
-✅ Security rules enforce across all syntax
-
-CONCLUSION:
-──────────────────────────────────────────────────────────────
-ast-guard fully supports modern JavaScript (ES2020+) while
-maintaining security. All features are properly parsed,
-transformed, and secured against known attack patterns.
 
 STATUS: ✅ MODERN JAVASCRIPT FULLY SUPPORTED & SECURED
-      `);
-
-      expect(true).toBe(true);
-    });
+    `);
   });
 });

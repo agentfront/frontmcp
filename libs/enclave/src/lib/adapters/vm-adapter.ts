@@ -29,14 +29,17 @@ function sanitizeStackTrace(stack: string | undefined): string | undefined {
   return stack
     .split('\n')
     .map(line => {
-      // Remove absolute paths (Unix/Mac: /Users/, /home/, Linux: /var/, Windows: C:\)
+      // Remove absolute paths (Unix/Mac/Linux/Windows)
       return line
         .replace(/\/Users\/[^/]+\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/home\/[^/]+\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/var\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/opt\/[^\s)]+/g, '[REDACTED]')
-        .replace(/C:\\[^\s)]+/g, '[REDACTED]')
-        .replace(/D:\\[^\s)]+/g, '[REDACTED]');
+        .replace(/\/tmp\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/etc\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/root\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/mnt\/[^\s)]+/g, '[REDACTED]')
+        .replace(/[A-Z]:\\[^\s)]+/gi, '[REDACTED]');
     })
     .join('\n');
 }
@@ -94,7 +97,9 @@ export class VmAdapter implements SandboxAdapter {
         info: console.info.bind(console),
       };
 
-      // Store context
+      // Store context reference for disposal
+      // Note: Each execute() call creates a fresh context for isolation
+      // The stored reference is only used by dispose() for cleanup
       this.context = sandbox;
 
       // Wrap code in async IIFE to handle top-level await

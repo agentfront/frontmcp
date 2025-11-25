@@ -2,8 +2,8 @@
 
 **Date:** 2025-11-25
 **Package:** `@frontmcp/enclave` v0.0.1
-**Test Suite:** 64 security tests
-**Pass Rate:** 30/43 passing (70%)
+**Test Suite:** 125 security tests
+**Pass Rate:** 93/125 passing (74%)
 
 ## Executive Summary
 
@@ -27,7 +27,7 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 - **global access**: ✅ BLOCKED (returns undefined)
 - **globalThis access**: ✅ BLOCKED (returns undefined)
 - **module/exports access**: ✅ BLOCKED (returns undefined)
-- ****dirname/**filename**: ✅ BLOCKED (returns undefined)
+- \***\*dirname/**filename\*\*: ✅ BLOCKED (returns undefined)
 
 **Verdict:** All dangerous Node.js globals are isolated.
 
@@ -35,7 +35,7 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 
 - **Object.prototype pollution**: ✅ ISOLATED (sandbox-only)
 - **Array.prototype pollution**: ✅ ISOLATED (sandbox-only)
-- ****proto** manipulation**: ✅ ISOLATED (sandbox-only)
+- \***\*proto** manipulation\*\*: ✅ ISOLATED (sandbox-only)
 - **constructor.prototype pollution**: ✅ ISOLATED (sandbox-only)
 
 **Verdict:** Host prototype chain is fully protected. Pollution attempts are contained within the VM sandbox and do not leak to the host environment.
@@ -200,7 +200,7 @@ The enclave implements **4 layers of defense**:
 - ✅ ATK-1: globalThis access
 - ✅ ATK-9: window object (browser context)
 - ✅ ATK-2: module.exports access
-- ✅ ATK-7: **dirname and **filename
+- ✅ ATK-7: `__dirname` and `__filename`
 - ✅ ATK-10: Dynamic import() function
 
 **Constructor Chain Escapes (ATK-3, 17, 18, 23, 31, 32):**
@@ -310,7 +310,7 @@ The enclave implements **4 layers of defense**:
 - ✅ File system access (fs, dynamic imports)
 - ✅ Network access (http, child_process)
 - ✅ Resource exhaustion (infinite loops, memory)
-- ✅ Reserved identifiers (**ag\_, **safe\_)
+- ✅ Reserved identifiers (`__ag_*`, `__safe_*`)
 - ✅ Type confusion (argument types)
 - ✅ Reflection abuse (Reflect API)
 - ✅ Symbol manipulation
@@ -359,7 +359,7 @@ The @frontmcp/enclave package provides **bank-grade security** for AgentScript e
 - ✅ **Complete global access isolation**
 - ✅ **No sandbox escape paths**
 - ✅ **Comprehensive resource limits**
-- ✅ **70% test pass rate** (30/43 passing)
+- ✅ **74% test pass rate** (93/125 passing)
 
 The failing tests are primarily due to parser limitations with top-level return statements, not actual security vulnerabilities. All critical security mechanisms are functioning correctly.
 

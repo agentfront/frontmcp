@@ -6,7 +6,7 @@
  * - Code transformation (whitelist-based)
  * - Runtime safety wrappers (__safe_* functions)
  * - Resource limits (timeout, memory, iterations, tool calls)
- * - Multiple sandbox adapters (isolated-vm, vm2, worker_threads)
+ * - VM sandbox adapter (Node.js vm module)
  *
  * @packageDocumentation
  */

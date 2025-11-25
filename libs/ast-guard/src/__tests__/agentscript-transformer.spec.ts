@@ -43,7 +43,7 @@ describe('AgentScript Transformer', () => {
       expect(output).toContain('return result');
     });
 
-    it('should not double-wrap already wrapped code', () => {
+    it('should double-wrap if caller does not check isWrappedInMain first', () => {
       const input = `
         async function __ag_main() {
           const data = await callTool('getData', {});
@@ -54,14 +54,14 @@ describe('AgentScript Transformer', () => {
       // Check if already wrapped
       expect(isWrappedInMain(input)).toBe(true);
 
-      // Transform anyway (user's responsibility to check)
+      // Transform anyway (user's responsibility to check isWrappedInMain first)
       const output = transformAgentScript(input, {
         wrapInMain: true,
         transformCallTool: false,
         transformLoops: false,
       });
 
-      // Should now have nested __ag_main
+      // Double-wrapping occurs - caller must check isWrappedInMain first to prevent this
       const mainCount = (output.match(/__ag_main/g) || []).length;
       expect(mainCount).toBeGreaterThanOrEqual(2); // Nested
     });

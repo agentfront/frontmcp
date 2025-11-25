@@ -162,8 +162,7 @@ export function transformAgentScript(code: string, config: AgentScriptTransformC
       'parseInt',
       'parseFloat',
 
-      // callTool is explicitly transformed
-      // Additional identifiers from config can extend the blacklist
+      // Additional identifiers to whitelist (these will NOT be transformed)
       ...additionalIdentifiers,
     ];
 
@@ -252,23 +251,15 @@ function wrapInMainFunction(ast: any): any {
  * @param ast The AST to transform
  * @param prefix Prefix for safe functions (default: '__safe_')
  */
-function transformLoopsInAst(ast: any, prefix: string = '__safe_'): void {
-  // We need to track replacements because we can't modify during walk
-  const replacements: Array<{ parent: any; key: string; index: number; newNode: any }> = [];
-
+function transformLoopsInAst(ast: any, prefix = '__safe_'): void {
   walk.ancestor(ast, {
-    ForStatement: (node: any, ancestors: any[]) => {
-      // Transform: for (let i = 0; i < 10; i++) { ... }
-      // → __safe_for(() => { let i = 0; return i < 10; }, () => i++, () => { ... })
-      // For simplicity in v1, we'll wrap the for-of pattern
-      // Full transformation would require more complex AST manipulation
-      // For now, we'll focus on the for-of case which is more common in AgentScript
-    },
+    // ForStatement: Not transformed in v1 - blocked by validation layer
+    // WhileStatement: Not transformed in v1 - blocked by validation layer
+    // DoWhileStatement: Not transformed in v1 - blocked by validation layer
 
-    ForOfStatement: (node: any, ancestors: any[]) => {
+    ForOfStatement: (node: any) => {
       // Transform: for (const x of iterable) { ... }
       // → for (const x of __safe_forOf(iterable)) { ... }
-
       if (node.right) {
         node.right = {
           type: 'CallExpression',
@@ -280,21 +271,7 @@ function transformLoopsInAst(ast: any, prefix: string = '__safe_'): void {
         };
       }
     },
-
-    WhileStatement: (node: any, ancestors: any[]) => {
-      // For while loops, we'll need to replace the statement entirely
-      // This is complex, so for v1 we'll skip this transformation
-      // The validation layer already blocks while loops by default
-    },
-
-    DoWhileStatement: (node: any, ancestors: any[]) => {
-      // Same as while - complex transformation
-      // Blocked by validation layer in v1
-    },
   });
-
-  // Apply replacements (if we had any)
-  // In our current implementation, we're doing in-place modifications for ForOfStatement
 }
 
 /**

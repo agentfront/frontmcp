@@ -279,12 +279,10 @@ describe('AST Transformer', () => {
   });
 
   describe('Error handling', () => {
-    it('should add TRANSFORM_ERROR issue if transformation fails', async () => {
+    it('should succeed with valid transformation', async () => {
       const validator = new JSAstValidator([]);
       const code = `console.log('hello');`;
 
-      // Mock a transformation failure by passing invalid AST
-      // This is hard to test naturally, but we can verify the error path exists
       const result = await validator.validate(code, {
         parseOptions: {
           ecmaVersion: 'latest',

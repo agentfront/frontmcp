@@ -91,7 +91,7 @@ export class NoUserDefinedFunctionsRule implements ValidationRule {
 
   constructor(options: NoUserDefinedFunctionsOptions = {}) {
     this.allowArrowFunctions = options.allowArrowFunctions !== false; // default true
-    this.allowFunctionExpressions = options.allowFunctionExpressions || false;
+    this.allowFunctionExpressions = options.allowFunctionExpressions === true; // default false
     this.allowedFunctionNames = new Set(options.allowedFunctionNames || ['__ag_main']);
     this.customMessage = options.message;
   }

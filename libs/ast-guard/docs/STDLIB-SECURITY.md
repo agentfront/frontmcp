@@ -128,7 +128,7 @@ Math: [
    - **Impact**: Out of memory error
    - **Guard**: Implement maximum string length (default: 1MB)
 
-3. **Prototype Pollution via **proto****
+3. **Prototype Pollution via `__proto__`**
    - **Attack**: Object with `__proto__` key pollutes prototype
    ```javascript
    JSON.parse('{"__proto__": {"isAdmin": true}}');
@@ -628,7 +628,7 @@ Object.defineProperty(Object.prototype, 'polluted', {
 
 **Status:** ❌ Blocked by not whitelisting defineProperty
 
-**4. JSON.parse() with **proto****
+**4. JSON.parse() with **proto\*\*\*\*
 
 ```javascript
 JSON.parse('{"__proto__": {"polluted": true}}');
@@ -725,10 +725,10 @@ const AGENTSCRIPT_LIMITS = {
   maxObjectDepth: 10, // 10 levels deep max
 
   // Iteration
-  maxIterations: 100_000, // 100K iterations max (for loops)
+  maxIterations: 10_000, // 10K iterations max (for loops)
 
   // Execution
-  maxExecutionTime: 5_000, // 5 seconds max
+  maxExecutionTime: 30_000, // 30 seconds max
   maxMemory: 128_000_000, // 128MB max memory
 };
 ```
