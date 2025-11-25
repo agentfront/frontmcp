@@ -2,7 +2,7 @@
 
 import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType, ScopeEntry } from '@frontmcp/sdk';
 
-import { CodeCallPluginOptions, codeCallPluginOptionsSchema } from './codecall.types';
+import { CodeCallPluginOptions, CodeCallPluginOptionsInput, codeCallPluginOptionsSchema } from './codecall.types';
 import { ToolSearchService } from './services/tool-search.service';
 
 import SearchTool from './tools/search.tool';
@@ -19,10 +19,10 @@ import EnclaveService from './services/enclave.service';
   providers: [],
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
-export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions> {
+export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions, CodeCallPluginOptionsInput> {
   options: CodeCallPluginOptions;
 
-  constructor(options: Partial<CodeCallPluginOptions> = {}) {
+  constructor(options: CodeCallPluginOptionsInput = {}) {
     super();
     // Parse options with Zod schema to apply all defaults
     this.options = codeCallPluginOptionsSchema.parse(options);
@@ -32,7 +32,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
    * Dynamic providers allow you to configure the plugin with custom options
    * without touching the plugin decorator.
    */
-  static override dynamicProviders(options: Partial<CodeCallPluginOptions>): ProviderType[] {
+  static override dynamicProviders(options: CodeCallPluginOptionsInput): ProviderType[] {
     // Parse options with Zod schema to apply all defaults
     const parsedOptions = codeCallPluginOptionsSchema.parse(options);
 

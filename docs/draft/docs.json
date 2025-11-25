@@ -127,6 +127,7 @@
               {
                 "group": "Guides",
                 "pages": [
+                  "docs/guides/create-plugin",
                   "docs/guides/add-openapi-adapter",
                   "docs/guides/caching-and-cache-miss",
                   "docs/guides/customize-flow-stages"

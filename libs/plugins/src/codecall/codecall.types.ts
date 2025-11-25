@@ -174,69 +174,72 @@ export const codeCallSidecarOptionsSchema = z
   })
   .default({});
 
-export const codeCallPluginOptionsSchema = z
-  .object({
-    /**
-     * CodeCall mode
-     * @default 'codecall_only'
-     */
-    mode: codeCallModeSchema,
+// Inner schema without the outer .default() - used for extracting input type
+const codeCallPluginOptionsObjectSchema = z.object({
+  /**
+   * CodeCall mode
+   * @default 'codecall_only'
+   */
+  mode: codeCallModeSchema,
 
-    /**
-     * Default number of tools to return in search results
-     * @default 8
-     */
-    topK: z.number().positive().default(8),
+  /**
+   * Default number of tools to return in search results
+   * @default 8
+   */
+  topK: z.number().positive().default(8),
 
-    /**
-     * Maximum number of tool definitions to include
-     * @default 8
-     */
-    maxDefinitions: z.number().positive().default(8),
+  /**
+   * Maximum number of tool definitions to include
+   * @default 8
+   */
+  maxDefinitions: z.number().positive().default(8),
 
-    /**
-     * Optional filter function for including tools
-     * Note: Functions can't be validated by Zod at runtime
-     */
-    includeTools: z
-      .function()
-      .args(
-        z.object({
-          name: z.string(),
-          appId: z.string().optional(),
-          source: z.string().optional(),
-          description: z.string().optional(),
-          tags: z.array(z.string()).optional(),
-        }),
-      )
-      .returns(z.boolean())
-      .optional(),
+  /**
+   * Optional filter function for including tools
+   * Note: Functions can't be validated by Zod at runtime
+   */
+  includeTools: z
+    .function()
+    .args(
+      z.object({
+        name: z.string(),
+        appId: z.string().optional(),
+        source: z.string().optional(),
+        description: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      }),
+    )
+    .returns(z.boolean())
+    .optional(),
 
-    /**
-     * Direct calls configuration
-     */
-    directCalls: codeCallDirectCallsOptionsSchema.optional(),
+  /**
+   * Direct calls configuration
+   */
+  directCalls: codeCallDirectCallsOptionsSchema.optional(),
 
-    /**
-     * VM execution options
-     */
-    vm: codeCallVmOptionsSchema,
+  /**
+   * VM execution options
+   */
+  vm: codeCallVmOptionsSchema,
 
-    /**
-     * Embedding configuration for tool search
-     */
-    embedding: codeCallEmbeddingOptionsSchema,
+  /**
+   * Embedding configuration for tool search
+   */
+  embedding: codeCallEmbeddingOptionsSchema,
 
-    /**
-     * Sidecar (pass-by-reference) configuration
-     * When enabled, large data is stored outside the sandbox and resolved at callTool boundary
-     */
-    sidecar: codeCallSidecarOptionsSchema,
-  })
-  .default({});
+  /**
+   * Sidecar (pass-by-reference) configuration
+   * When enabled, large data is stored outside the sandbox and resolved at callTool boundary
+   */
+  sidecar: codeCallSidecarOptionsSchema,
+});
+
+// Full schema with default - used for parsing
+export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.default({});
 
 // ===== TypeScript Types =====
 
+// Output types (after parsing, with defaults applied) - use for internal plugin logic
 export type CodeCallMode = z.infer<typeof codeCallModeSchema>;
 export type CodeCallVmPreset = z.infer<typeof codeCallVmPresetSchema>;
 export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
@@ -244,7 +247,18 @@ export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptio
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
+
+/**
+ * Resolved options type (after parsing with defaults applied).
+ * Use this for internal plugin logic where all defaults are guaranteed.
+ */
 export type CodeCallPluginOptions = z.infer<typeof codeCallPluginOptionsSchema>;
+
+/**
+ * Input options type (what users provide to init()).
+ * All fields with defaults are optional.
+ */
+export type CodeCallPluginOptionsInput = z.input<typeof codeCallPluginOptionsObjectSchema>;
 
 /**
  * Per-tool metadata used by CodeCall.
