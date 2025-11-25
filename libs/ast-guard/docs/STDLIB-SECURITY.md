@@ -118,7 +118,7 @@ Math: [
 
 2. **Denial of Service (DoS) via Large Arrays**
 
-   - **Attack**: Very large arrays cause memory exhaustion
+   - **Attack**: Extremely large arrays cause memory exhaustion
 
    ```javascript
    // DoS attack
@@ -182,7 +182,7 @@ function safeJSONParse(str, maxDepth = 10, maxLength = 1_000_000) {
    - **Guard**: Already handled by JSON.stringify (throws error)
 
 2. **Denial of Service (DoS) via Large Objects**
-   - **Attack**: Very large objects cause memory exhaustion
+   - **Attack**: Massive object payloads cause memory exhaustion
    ```javascript
    JSON.stringify({ data: new Array(10_000_000).fill('x') });
    ```
@@ -641,9 +641,9 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 
 1. **Block dangerous Object methods** (already done)
 2. **Block `__proto__` access** (already done in STRICT preset)
-3. **Filter `__proto__` in JSON.parse** (need to implement)
-4. **Filter `__proto__` in Object.assign** (need to implement)
-5. **Freeze all prototypes in sandbox** (additional hardening)
+3. **Filter `__proto__` in JSON.parse** (to be implemented)
+4. **Implement `__proto__` filtering in Object.assign** (future enhancement)
+5. **Optionally freeze prototypes in sandbox** (additional hardening)
 
 ---
 
@@ -706,30 +706,33 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 
 ### Recommended Limits for AgentScript
 
+> **Note:** Currently enforced limits are marked with ✅. Other limits are recommended
+> values for future implementation or application-level enforcement.
+
 ```javascript
 const AGENTSCRIPT_LIMITS = {
-  // JSON
+  // JSON (application-level enforcement recommended)
   maxJSONStringLength: 1_000_000, // 1MB max JSON string
   maxJSONDepth: 10, // 10 levels deep max
   maxJSONOutputSize: 100_000, // 100KB max output
 
-  // Arrays
+  // Arrays (application-level enforcement recommended)
   maxArraySize: 100_000, // 100K elements max
   maxArrayMemory: 10_000_000, // 10MB max array memory
 
-  // Strings
+  // Strings (application-level enforcement recommended)
   maxStringLength: 1_000_000, // 1MB max string
 
-  // Objects
+  // Objects (application-level enforcement recommended)
   maxObjectKeys: 10_000, // 10K keys max
   maxObjectDepth: 10, // 10 levels deep max
 
-  // Iteration
+  // ✅ Iteration (enforced by Enclave safe runtime)
   maxIterations: 10_000, // 10K iterations max (for loops)
 
-  // Execution
+  // ✅ Execution (enforced by Enclave)
   maxExecutionTime: 30_000, // 30 seconds max
-  maxMemory: 128_000_000, // 128MB max memory
+  maxMemory: 128_000_000, // 128MB max (VM timeout on large allocations)
 };
 ```
 
