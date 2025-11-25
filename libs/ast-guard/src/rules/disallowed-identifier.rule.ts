@@ -57,6 +57,35 @@ export class DisallowedIdentifierRule implements ValidationRule {
           });
         }
       },
+      MemberExpression: (node: any) => {
+        // Check property name in member expressions
+        // e.g., obj.constructor or obj['constructor']
+        let propertyName: string | undefined;
+
+        if (node.property) {
+          if (node.property.type === 'Identifier' && !node.computed) {
+            // obj.constructor
+            propertyName = node.property.name;
+          } else if (node.property.type === 'Literal' && typeof node.property.value === 'string') {
+            // obj['constructor']
+            propertyName = node.property.value;
+          }
+        }
+
+        if (propertyName && disallowedSet.has(propertyName)) {
+          context.report({
+            code: 'DISALLOWED_IDENTIFIER',
+            message: messageTemplate.replace('{identifier}', propertyName),
+            location: node.property.loc
+              ? {
+                  line: node.property.loc.start.line,
+                  column: node.property.loc.start.column,
+                }
+              : undefined,
+            data: { identifier: propertyName },
+          });
+        }
+      },
     });
   }
 }

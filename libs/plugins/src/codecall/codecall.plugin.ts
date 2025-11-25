@@ -10,12 +10,12 @@ import DescribeTool from './tools/describe.tool';
 import ExecuteTool from './tools/execute.tool';
 import InvokeTool from './tools/invoke.tool';
 
-import CodeCallAstValidator from './providers/codecall-ast-validator.provider';
 import CodeCallConfig from './providers/code-call.config';
+import EnclaveService from './services/enclave.service';
 
 @Plugin({
   name: 'codecall',
-  description: 'CodeCall plugin: VM-based meta-tools for orchestrating MCP tools',
+  description: 'CodeCall plugin: AgentScript-based meta-tools for orchestrating MCP tools',
   providers: [],
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
@@ -46,11 +46,11 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions>
         useValue: config,
       },
       {
-        name: 'codecall:ast-validator',
-        provide: CodeCallAstValidator,
+        name: 'codecall:enclave',
+        provide: EnclaveService,
         inject: () => [CodeCallConfig],
         useFactory: async (cfg: CodeCallConfig) => {
-          return new CodeCallAstValidator(cfg);
+          return new EnclaveService(cfg);
         },
       },
       {

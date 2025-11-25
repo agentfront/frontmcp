@@ -190,20 +190,19 @@ describe('Security Tests - Malicious Code Detection', () => {
   });
 
   describe('Sandbox Escape Attempts', () => {
-    it('should block constructor chain traversal', async () => {
-      const guard = new JSAstValidator([new DisallowedIdentifierRule({ disallowed: ['constructor'] })]);
+    it('should block constructor chain traversal with NoGlobalAccessRule', async () => {
+      const { NoGlobalAccessRule } = require('../rules/no-global-access.rule');
+      const guard = new JSAstValidator([new NoGlobalAccessRule()]);
 
       const maliciousCode = `
         const FunctionConstructor = {}.constructor.constructor;
         const dangerousFunc = FunctionConstructor('return process')();
       `;
 
-      const result = await guard.validate(maliciousCode, {
-        rules: { 'disallowed-identifier': true },
-      });
-      // Note: property access like {}.constructor is not caught as an identifier
-      // TODO: Consider whether DisallowedIdentifierRule should block property access patterns
-      expect(result.valid).toBe(true);
+      const result = await guard.validate(maliciousCode);
+      // NoGlobalAccessRule catches .constructor property access
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
 
     it('should block prototype pollution attempts', async () => {

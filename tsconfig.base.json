@@ -21,13 +21,14 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
-      "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
+      "@frontmcp/enclave": ["libs/enclave/src/index.ts"],
+      "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
+      "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
+      "ast-guard": ["libs/ast-guard/dist/src/index.d.ts"],
       "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"],
       "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"],
-      "vectorised": ["libs/vectoriadb/src/index.ts"],
-      "ast-guard": ["libs/ast-guard/src/index.ts"]
+      "vectoriadb": ["libs/vectoriadb/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -1,94 +1,73 @@
 // file: libs/plugins/src/codecall/tools/execute.schema.ts
 import { z } from 'zod';
 
-export const executeToolDescription = `Execute JavaScript code in a secure VM sandbox that can orchestrate multiple tools. Use this for complex workflows, data transformations, and multi-tool operations.
+export const executeToolDescription = `Execute AgentScript code to orchestrate multiple tool calls safely.
 
-WHEN TO USE:
-- You need to call MULTIPLE tools in sequence
-- You need to filter, transform, join, or aggregate data from tool results
-- You need conditional logic, loops, or complex orchestration
-- You want to keep intermediate results in the VM instead of sending them through the model context
+AgentScript is a restricted JavaScript subset designed for AI agent orchestration. It allows chaining tool calls, transforming data, and implementing logic without sandbox escape risks.
 
-WHEN NOT TO USE:
-- You just need to call a single tool once → Use codecall:invoke instead (lower latency)
+## callTool API
+\`await callTool(toolName: string, args: object): Promise<any>\`
 
-HOW IT WORKS:
-1. You write JavaScript code that orchestrates tools
-2. The code runs in a secure VM2 sandbox with CSP-like policies
-3. Inside your code, use callTool(name, input) to invoke tools
-4. Tools are called through the normal FrontMCP pipeline (PII, auth, logging all apply)
-5. The script's return value becomes the result
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| toolName | string | Tool identifier (e.g., 'users:list') |
+| args | object | Tool arguments as key-value pairs |
 
-AVAILABLE IN THE SANDBOX:
-- callTool(toolName, input) → Promise<result>
-  Call a tool and get its result. Example: await callTool('users:list', { limit: 10 })
+## Allowed Features
+| Feature | Example |
+|---------|---------|
+| for, for...of loops | for (const x of items) { } |
+| Arrow functions | items.map(x => x.id) |
+| Array methods | map, filter, reduce, find, sort |
+| Math methods | Math.max(), Math.round() |
+| JSON methods | JSON.parse(), JSON.stringify() |
+| Control flow | if/else, ternary ? : |
+| Destructuring | const { id, name } = user |
+| Spread | [...items, newItem] |
+| Template literals | \`Hello \${name}\` |
 
-- getTool(toolName) → { name, description, inputSchema, outputSchema }
-  Get metadata about a tool without calling it
+## Blocked Features
+| Feature | Reason |
+|---------|--------|
+| while, do...while | Unbounded loops |
+| function declarations | No recursion |
+| eval, Function | Code execution |
+| process, require | System access |
+| fetch, XMLHttpRequest | Network access |
+| setTimeout | Timing attacks |
+| window, globalThis | Global access |
 
-- codecallContext (read-only object)
-  Runtime context you provided in the context parameter
+## Example: Data Aggregation
+\`\`\`javascript
+const users = await callTool('users:list', { role: 'admin', active: true });
 
-- mcpLog(level, message, metadata?)
-  Log messages (if logging is enabled in VM config)
-
-- mcpNotify(eventType, data?)
-  Send notifications (if notifications are enabled in VM config)
-
-- console.log/warn/error (if console is enabled in VM config)
-
-NOT AVAILABLE (security):
-- require, import, eval, Function constructor
-- process, global, setTimeout, setInterval
-- fetch, XMLHttpRequest (unless explicitly enabled)
-- File system access
-
-WORKFLOW:
-1. codecall:search → Find tools you need
-2. codecall:describe → Check their schemas and see usage examples
-3. codecall:execute → Write JavaScript that orchestrates them
-
-EXAMPLE:
-{
-  "script": "async function main() {
-    const users = await callTool('users:list', { limit: 100 });
-    const invoices = await callTool('billing:listInvoices', { status: 'unpaid' });
-
-    // Join in JavaScript
-    const byUserId = new Map(invoices.items.map(i => [i.userId, i]));
-    return users.items
-      .filter(u => byUserId.has(u.id))
-      .map(u => ({
-        userId: u.id,
-        userName: u.name,
-        invoice: byUserId.get(u.id)
-      }));
-  }
-  return main();",
-  "allowedTools": ["users:list", "billing:listInvoices"],
-  "context": { "tenantId": "acme-corp" }
+const results = [];
+for (const user of users.items) {
+  const orders = await callTool('orders:list', { userId: user.id });
+  const total = orders.items.reduce((sum, o) => sum + o.amount, 0);
+  results.push({
+    userId: user.id,
+    name: user.name,
+    orderCount: orders.items.length,
+    totalAmount: Math.round(total * 100) / 100
+  });
 }
 
-RESULT STATUSES:
-- ok: Script executed successfully, result is in the result field
-- syntax_error: JavaScript syntax error (check error.location for line/column)
-- illegal_access: Tried to use forbidden API (eval, process, etc.)
-- runtime_error: Script threw an error during execution
-- tool_error: A specific tool call failed (check error.toolName)
-- timeout: Script exceeded the time limit
+return results.sort((a, b) => b.totalAmount - a.totalAmount);
+\`\`\`
 
-ERROR RECOVERY:
-- For syntax_error: Fix your JavaScript syntax
-- For illegal_access: Remove forbidden APIs (check error.kind)
-- For runtime_error: Debug your script logic
-- For tool_error: Check the tool input or handle the tool failure
-- For timeout: Simplify your script or remove loops
+## Limits
+- Max 10,000 iterations per loop
+- 30 second execution timeout (configurable)
+- Max 100 tool calls per execution
 
-SECURITY:
-- Runs in isolated VM2 sandbox with AST validation
-- Same PII/auth/logging guarantees as normal tool calls
-- Configurable timeouts, loop detection, and API restrictions
-- Read the blog post for CSP preset details (locked_down, secure, balanced, experimental)`;
+## Result Statuses
+- ok: Script executed successfully
+- syntax_error: JavaScript syntax error
+- illegal_access: Used forbidden API (eval, process, etc.)
+- runtime_error: Script threw an error
+- tool_error: A tool call failed
+- timeout: Script exceeded time limit`;
 
 export const executeToolInputSchema = z.object({
   script: z

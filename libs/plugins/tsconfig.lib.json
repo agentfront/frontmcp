@@ -3,7 +3,13 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "declaration": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@frontmcp/enclave": ["../enclave/dist/src/index.d.ts"],
+      "@frontmcp/sdk": ["../sdk/src/index.ts"],
+      "ast-guard": ["../ast-guard/src/index.ts"],
+      "vectoriadb": ["../vectoriadb/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts"]

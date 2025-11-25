@@ -9,3 +9,7 @@ export * from './unreachable-code.rule';
 export * from './call-argument-validation.rule';
 export * from './no-eval.rule';
 export * from './no-async.rule';
+export * from './no-global-access.rule';
+export * from './reserved-prefix.rule';
+export * from './unknown-global.rule';
+export * from './no-user-functions.rule';

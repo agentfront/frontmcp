@@ -21,9 +21,9 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode);
-      // Note: Computed property access like obj['constructor'] is not caught by identifier checks
-      // This is a known limitation - we detect direct identifier usage only
-      expect(result.valid).toBe(true); // Current behavior - will enhance with new rules
+      // NoGlobalAccessRule now catches .constructor property access
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
 
     it('should block string concatenation to build forbidden identifiers', async () => {
@@ -35,8 +35,8 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode);
-      // Computed access with concatenation bypasses static analysis
-      expect(result.valid).toBe(true); // Current limitation
+      // NoGlobalAccessRule catches window access in strict mode
+      expect(result.valid).toBe(false);
     });
 
     it('should block template literal obfuscation', async () => {
@@ -48,7 +48,8 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode);
-      expect(result.valid).toBe(true); // Current limitation
+      // NoGlobalAccessRule catches this[...] access in strict mode
+      expect(result.valid).toBe(false);
     });
 
     it('should block hex/unicode escape sequences', async () => {
@@ -174,7 +175,9 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode);
-      expect(result.valid).toBe(true); // Need to detect generator functions
+      // Strict preset now catches .constructor access via NoGlobalAccessRule
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
   });
 
@@ -558,7 +561,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
   });
 
   describe('Getter/Setter Traps', () => {
-    it('should detect getter with side effects', async () => {
+    it('should block getter with dangerous this access', async () => {
       const guard = new JSAstValidator(Presets.strict());
 
       const maliciousCode = `
@@ -571,8 +574,8 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode);
-      // Getters are legitimate JavaScript, hard to block
-      expect(result.valid).toBe(true);
+      // Strict preset now catches this access via NoGlobalAccessRule
+      expect(result.valid).toBe(false);
     });
 
     it('should detect Object.defineProperty for traps', async () => {

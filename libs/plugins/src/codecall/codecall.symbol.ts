@@ -14,6 +14,7 @@ export interface CodeCallAstValidationIssue {
 export interface CodeCallAstValidationResult {
   ok: boolean;
   issues: CodeCallAstValidationIssue[];
+  transformedCode?: string;
 }
 
 /**

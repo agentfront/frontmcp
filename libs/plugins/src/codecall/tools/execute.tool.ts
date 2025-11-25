@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
-import { Tool, ToolContext, ToolEntry } from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import {
   CodeCallExecuteResult,
   executeToolOutputSchema,
@@ -8,8 +8,8 @@ import {
   executeToolInputSchema,
   ExecuteToolInput,
 } from './execute.schema';
-import { CodeCallAstValidator, CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
-import { IsolatedVmService } from '../services/isolated-vm.service';
+import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import EnclaveService from '../services/enclave.service';
 
 @Tool({
   name: 'codecall:execute',
@@ -25,37 +25,7 @@ export default class ExecuteTool extends ToolContext {
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
     const { script, allowedTools, context } = input;
 
-    // Get the AST validator from DI
-    const astValidator = this.get<CodeCallAstValidator>('codecall:ast-validator' as any);
-
-    // Step 1: AST validation
-    const validationResult = await astValidator.validate(script);
-
-    if (!validationResult.ok) {
-      const firstIssue = validationResult.issues[0];
-
-      // Map to appropriate error type
-      if (firstIssue.kind === 'ParseError') {
-        return {
-          status: 'syntax_error',
-          error: {
-            message: firstIssue.message,
-            location: firstIssue.location,
-          },
-        };
-      }
-
-      // All other validation issues are illegal access
-      return {
-        status: 'illegal_access',
-        error: {
-          kind: firstIssue.kind,
-          message: firstIssue.message,
-        },
-      };
-    }
-
-    // Step 2: Set up the VM environment
+    // Set up the VM environment with tool integration
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
 
     const environment: CodeCallVmEnvironment = {
@@ -74,8 +44,7 @@ export default class ExecuteTool extends ToolContext {
             throw new Error(`Tool "${name}" not found`);
           }
 
-          // TODO: Properly invoke tool through the FrontMCP pipeline
-          // For now, create a tool context and execute
+          // Create a tool context and execute
           const toolContext = tool.create(
             toolInput as any,
             {
@@ -116,7 +85,7 @@ export default class ExecuteTool extends ToolContext {
 
       codecallContext: Object.freeze(context || {}),
 
-      console: this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any).allowConsole ? console : undefined,
+      console: this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any)?.allowConsole ? console : undefined,
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
@@ -125,24 +94,23 @@ export default class ExecuteTool extends ToolContext {
 
       mcpNotify: (event: string, payload: Record<string, unknown>) => {
         // Send notifications through FrontMCP notification system if available
-        // This is a placeholder - actual implementation depends on FrontMCP notification system
         this.logger?.debug('Notification sent', { event, payload });
       },
     };
 
-    // Step 3: Execute in isolated-vm
+    // Get the enclave service and execute
+    const enclaveService = this.get<EnclaveService>('codecall:enclave' as any);
     const vmOptions = this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any);
-    const vmService = new IsolatedVmService(vmOptions);
 
     try {
-      const executionResult = await vmService.execute(script, environment);
+      const executionResult = await enclaveService.execute(script, environment);
 
-      // Step 4: Map execution result to CodeCall result
+      // Map execution result to CodeCall result
       if (executionResult.timedOut) {
         return {
           status: 'timeout',
           error: {
-            message: `Script execution timed out after ${vmOptions.timeoutMs}ms`,
+            message: `Script execution timed out after ${vmOptions?.timeoutMs || 30000}ms`,
           },
         };
       }
@@ -150,17 +118,28 @@ export default class ExecuteTool extends ToolContext {
       if (!executionResult.success) {
         const error = executionResult.error!;
 
+        // Check if it's a validation error (from AST validation)
+        if (error.code === 'VALIDATION_ERROR' || error.name === 'ValidationError') {
+          return {
+            status: 'illegal_access',
+            error: {
+              kind: 'IllegalBuiltinAccess',
+              message: error.message,
+            },
+          };
+        }
+
         // Check if it's a tool error
-        if ((error as any).toolName) {
+        if (error.toolName) {
           return {
             status: 'tool_error',
             error: {
               source: 'tool',
-              toolName: (error as any).toolName,
-              toolInput: (error as any).toolInput,
+              toolName: error.toolName,
+              toolInput: error.toolInput,
               message: error.message,
-              code: (error as any).code,
-              details: (error as any).details,
+              code: error.code,
+              details: error.details,
             },
           };
         }
@@ -184,7 +163,18 @@ export default class ExecuteTool extends ToolContext {
         logs: executionResult.logs.length > 0 ? executionResult.logs : undefined,
       };
     } catch (error: any) {
-      // Unexpected error during VM execution
+      // Check for syntax errors
+      if (error.name === 'SyntaxError' || error.message?.includes('syntax')) {
+        return {
+          status: 'syntax_error',
+          error: {
+            message: error.message || 'Syntax error in script',
+            location: error.loc ? { line: error.loc.line, column: error.loc.column } : undefined,
+          },
+        };
+      }
+
+      // Unexpected error during execution
       return {
         status: 'runtime_error',
         error: {
