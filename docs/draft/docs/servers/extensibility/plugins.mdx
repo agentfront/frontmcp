@@ -244,30 +244,30 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
 Intercept tool execution flow:
 
-| Stage | Phase | Description |
-|-------|-------|-------------|
-| `parseInput` | pre | Parse and validate request |
-| `findTool` | pre | Locate the requested tool |
-| `createToolCallContext` | pre | Create execution context |
-| `acquireQuota` | pre | Rate limiting |
-| `acquireSemaphore` | pre | Concurrency control |
-| `validateInput` | execute | Validate tool input against schema |
-| `execute` | execute | Run the tool |
-| `validateOutput` | execute | Validate tool output |
-| `releaseSemaphore` | finalize | Release concurrency |
-| `releaseQuota` | finalize | Release rate limit |
-| `finalize` | finalize | Format and return response |
+| Stage                   | Phase    | Description                        |
+| ----------------------- | -------- | ---------------------------------- |
+| `parseInput`            | pre      | Parse and validate request         |
+| `findTool`              | pre      | Locate the requested tool          |
+| `createToolCallContext` | pre      | Create execution context           |
+| `acquireQuota`          | pre      | Rate limiting                      |
+| `acquireSemaphore`      | pre      | Concurrency control                |
+| `validateInput`         | execute  | Validate tool input against schema |
+| `execute`               | execute  | Run the tool                       |
+| `validateOutput`        | execute  | Validate tool output               |
+| `releaseSemaphore`      | finalize | Release concurrency                |
+| `releaseQuota`          | finalize | Release rate limit                 |
+| `finalize`              | finalize | Format and return response         |
 
 ### ListToolsHook (tools:list-tools)
 
 Intercept tool listing flow:
 
-| Stage | Phase | Description |
-|-------|-------|-------------|
-| `parseInput` | pre | Parse request |
-| `findTools` | execute | Collect available tools |
-| `resolveConflicts` | execute | Handle name conflicts |
-| `parseTools` | post | Format tool descriptors |
+| Stage              | Phase   | Description             |
+| ------------------ | ------- | ----------------------- |
+| `parseInput`       | pre     | Parse request           |
+| `findTools`        | execute | Collect available tools |
+| `resolveConflicts` | execute | Handle name conflicts   |
+| `parseTools`       | post    | Format tool descriptors |
 
 ### Hook Timing
 
@@ -298,10 +298,10 @@ class DynamicPlugin<TOptions, TInput = TOptions> {
 }
 ```
 
-| Type Parameter | Description |
-|----------------|-------------|
-| `TOptions` | Resolved options type (after defaults). Use internally. |
-| `TInput` | Input options type (for `init()`). Defaults to `TOptions`. |
+| Type Parameter | Description                                                |
+| -------------- | ---------------------------------------------------------- |
+| `TOptions`     | Resolved options type (after defaults). Use internally.    |
+| `TInput`       | Input options type (for `init()`). Defaults to `TOptions`. |
 
 <Info>
   The `init()` method accepts your plugin's input options type and returns a provider

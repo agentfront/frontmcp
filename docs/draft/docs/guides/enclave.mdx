@@ -105,12 +105,12 @@ this.constructor;                 // ❌ this access blocked
 
 The AgentScript preset blocks:
 
-| Category | Blocked Constructs |
-| -------- | ------------------ |
-| **Eval-like** | `eval`, `Function`, `setTimeout`, `setInterval` |
-| **Globals** | `process`, `require`, `window`, `document`, `global`, `globalThis` |
-| **Context access** | `this`, `self`, `parent`, `top`, `frames` |
-| **Prototype manipulation** | `__proto__`, `constructor`, `prototype` access |
+| Category                   | Blocked Constructs                                                 |
+| -------------------------- | ------------------------------------------------------------------ |
+| **Eval-like**              | `eval`, `Function`, `setTimeout`, `setInterval`                    |
+| **Globals**                | `process`, `require`, `window`, `document`, `global`, `globalThis` |
+| **Context access**         | `this`, `self`, `parent`, `top`, `frames`                          |
+| **Prototype manipulation** | `__proto__`, `constructor`, `prototype` access                     |
 
 ### Layer 2: Code Transformation
 
@@ -287,12 +287,12 @@ interface ExecutionResult<T> {
 
 ### Error Codes
 
-| Code | Meaning | Action |
-| ---- | ------- | ------ |
-| `VALIDATION_ERROR` | AST validation failed | Fix the code - blocked construct used |
-| `EXECUTION_ERROR` | Runtime error in script | Fix script logic |
-| `TIMEOUT` | Execution exceeded timeout | Optimize or increase timeout |
-| `TOOL_ERROR` | Tool call failed | Check tool input/availability |
+| Code               | Meaning                    | Action                                |
+| ------------------ | -------------------------- | ------------------------------------- |
+| `VALIDATION_ERROR` | AST validation failed      | Fix the code - blocked construct used |
+| `EXECUTION_ERROR`  | Runtime error in script    | Fix script logic                      |
+| `TIMEOUT`          | Execution exceeded timeout | Optimize or increase timeout          |
+| `TOOL_ERROR`       | Tool call failed           | Check tool input/availability         |
 
 ## Advanced Usage
 
@@ -367,11 +367,11 @@ const enclave = new Enclave({
 <Warning>
   While Enclave provides strong security guarantees, it should be used as part of a defense-in-depth strategy. Always:
 
-  - Validate tool inputs before execution
-  - Limit what tools are available to scripts
-  - Monitor execution for anomalies
-  - Keep Enclave and ast-guard updated
-</Warning>
+- Validate tool inputs before execution
+- Limit what tools are available to scripts
+- Monitor execution for anomalies
+- Keep Enclave and ast-guard updated
+  </Warning>
 
 ### What Enclave Protects Against
 
