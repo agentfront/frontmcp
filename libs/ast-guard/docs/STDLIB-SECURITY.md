@@ -88,7 +88,7 @@ Math: [
 
 ### Special Considerations
 
-**Math.random()**
+#### Math.random()
 
 - ⚠️ **Potential timing leak**: Could theoretically be used to measure execution time
 - ⚠️ **Not cryptographically secure**: Don't use for security-sensitive operations
@@ -272,7 +272,7 @@ JSON: {
 
 ### ❌ NEVER WHITELIST
 
-**constructor**
+#### constructor
 
 - Leads to Function constructor
 - Enables arbitrary code execution
@@ -322,35 +322,35 @@ Array.prototype: [
 
 ### Dangerous Methods - ❌ NEVER WHITELIST
 
-**Object.getPrototypeOf(obj)**
+#### Object.getPrototypeOf(obj)
 
 - **Risk**: Access prototype chain
 - **Attack**: `Object.getPrototypeOf({}).constructor.constructor('return process')()`
 - **Blocked by**: NoGlobalAccessRule (already blocks this)
 
-**Object.setPrototypeOf(obj, proto)**
+#### Object.setPrototypeOf(obj, proto)
 
 - **Risk**: Prototype pollution
 - **Attack**: `Object.setPrototypeOf(obj, Function.prototype); obj('return process')()`
 - **Blocked by**: NoGlobalAccessRule (already blocks this)
 
-**Object.getOwnPropertyDescriptor(obj, prop)**
+#### Object.getOwnPropertyDescriptor(obj, prop)
 
 - **Risk**: Extract function references from property descriptors
 - **Attack**: `Object.getOwnPropertyDescriptor(window, 'eval').value('code')`
 - **Blocked by**: NoGlobalAccessRule (already blocks this)
 
-**Object.getOwnPropertyDescriptors(obj)**
+#### Object.getOwnPropertyDescriptors(obj)
 
 - **Risk**: Same as getOwnPropertyDescriptor
 - **Blocked by**: NoGlobalAccessRule
 
-**Object.defineProperty(obj, prop, descriptor)**
+#### Object.defineProperty(obj, prop, descriptor)
 
 - **Risk**: Can modify property descriptors, potentially bypassing protections
 - **Attack**: Make read-only properties writable
 
-**Object.create(proto)**
+#### Object.create(proto)
 
 - **Risk**: Create objects with arbitrary prototypes
 - **Attack**: `Object.create(Function.prototype)`
@@ -442,19 +442,19 @@ String.prototype: [
 
 ### ❌ NEVER WHITELIST
 
-**constructor**
+#### constructor
 
 - Leads to String → Function constructor chain
 - **Attack**: `"".constructor.constructor('return process')()`
 
 ### Special Considerations
 
-**String.prototype.replace() with function callback**
+#### String.prototype.replace() with function callback
 
 - ✅ Safe: Callback is already sandboxed
 - User code can't escape via replace callback
 
-**RegExp usage in string methods**
+#### RegExp usage in string methods
 
 - ⚠️ **Potential ReDoS (Regular Expression DoS)**
 - **Attack**: `"a".repeat(100_000).match(/a(a+)+b/)`
@@ -515,7 +515,7 @@ String.prototype: [
 
 ### ❌ NEVER WHITELIST
 
-**constructor property**
+#### constructor property
 
 - Same as all objects: leads to Function constructor
 
@@ -599,7 +599,7 @@ Modifying the prototype of built-in objects (Object, Array, etc.) to add or chan
 
 ### Attack Vectors
 
-**1. Object.setPrototypeOf()**
+#### 1. Object.setPrototypeOf()
 
 ```javascript
 Object.setPrototypeOf({}, Function.prototype);
@@ -608,7 +608,7 @@ Object.setPrototypeOf({}, Function.prototype);
 
 **Status:** ❌ Blocked by NoGlobalAccessRule
 
-**2. **proto** property**
+#### 2. `__proto__` property
 
 ```javascript
 const obj = {};
@@ -618,7 +618,7 @@ obj.__proto__.polluted = true;
 
 **Status:** ❌ Blocked by DisallowedIdentifierRule
 
-**3. Object.defineProperty()**
+#### 3. Object.defineProperty()
 
 ```javascript
 Object.defineProperty(Object.prototype, 'polluted', {
@@ -628,7 +628,7 @@ Object.defineProperty(Object.prototype, 'polluted', {
 
 **Status:** ❌ Blocked by not whitelisting defineProperty
 
-**4. JSON.parse() with `__proto__`**
+#### 4. JSON.parse() with `__proto__`
 
 ```javascript
 JSON.parse('{"__proto__": {"polluted": true}}');
@@ -651,33 +651,33 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 
 ### ✅ SAFE - Whitelist All Methods
 
-**Math**
+#### Math
 
 - All methods safe (pure functions)
 
-**String**
+#### String
 
 - All methods safe (immutable operations)
 
 ### ⚠️ SAFE WITH GUARDS - Whitelist with Protections
 
-**JSON**
+#### JSON
 
 - parse: Add depth/length limits, filter `__proto__`
 - stringify: Add size limits
 
-**Array**
+#### Array
 
 - Iteration methods: Add array size limits
 - Access methods: All safe
 
-**Object**
+#### Object
 
 - keys, values, entries: Safe
 - assign: Filter `__proto__`, constructor, prototype keys
 - freeze, seal, is: Safe
 
-**Date**
+#### Date
 
 - now: Safe (acceptable timing leak)
 - Constructor: Safe
@@ -685,18 +685,18 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 
 ### ❌ NEVER WHITELIST - Always Dangerous
 
-**ANY object:**
+#### ANY object
 
 - .constructor property (leads to Function constructor)
 
-**Object:**
+#### Object
 
 - getPrototypeOf, setPrototypeOf (prototype manipulation)
 - getOwnPropertyDescriptor, getOwnPropertyDescriptors (property inspection)
 - defineProperty, defineProperties (property manipulation)
 - create (arbitrary prototype creation)
 
-**Reflect:**
+#### Reflect
 
 - ALL methods (Reflect.get, Reflect.apply, etc.)
 
