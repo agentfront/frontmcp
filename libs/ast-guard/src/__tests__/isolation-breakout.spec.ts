@@ -96,7 +96,7 @@ describe('Isolation Breakout Tests', () => {
   });
 
   describe('A15: Debugger Statement Injection', () => {
-    it('should block debugger statements in STRICT mode', async () => {
+    it('should allow debugger statements at AST level (blocked at runtime)', async () => {
       const code = `
         const secret = 'sensitive data';
         debugger;
@@ -105,11 +105,10 @@ describe('Isolation Breakout Tests', () => {
       // Note: STRICT mode doesn't specifically block debugger statements,
       // but the VM sandbox blocks debugger at runtime. This test documents
       // that the AST validation itself doesn't reject debugger statements.
-      // If this fails, it means another rule is blocking the code.
       expect(result.valid).toBe(true);
     });
 
-    it('should block debugger in conditional expressions', async () => {
+    it('should allow debugger in conditional expressions (runtime handled)', async () => {
       const code = `
         const debug = true;
         if (debug) debugger;

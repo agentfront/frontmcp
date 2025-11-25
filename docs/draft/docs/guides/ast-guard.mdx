@@ -182,6 +182,8 @@ const transformed = transformAgentScript(code, {
   wrapInMain: true,       // Wrap in async function __ag_main()
   transformCallTool: true, // callTool → __safe_callTool
   transformLoops: true,    // for/for-of → __safe_for/__safe_forOf
+  prefix: '__safe_',      // Prefix for safe runtime functions (default)
+  additionalIdentifiers: [], // Additional identifiers to transform
 });
 
 // Result:
@@ -476,5 +478,5 @@ this.logger.info({ stats }, 'AST validation completed');
 ```
 
 <Warning>
-  AST Guard prevents unsafe syntax from entering your sandbox, but it does not execute or sandbox code itself. Pair it with your existing isolation layer (VM2, workers, remote runners, etc.) for complete defense-in-depth.
+  AST Guard prevents unsafe syntax from entering your sandbox, but it does not execute or sandbox code itself. Pair it with your existing isolation layer (isolated-vm, workers, remote runners, etc.) for complete defense-in-depth.
 </Warning>

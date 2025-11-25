@@ -397,12 +397,16 @@ const rules = createAgentScriptPreset({
 
 **Options:**
 
-| Option                            | Type       | Default | Description                                              |
-| --------------------------------- | ---------- | ------- | -------------------------------------------------------- |
-| `requireCallTool`                 | `boolean`  | `false` | Require at least one `callTool()` invocation in the code |
-| `additionalDisallowedIdentifiers` | `string[]` | `[]`    | Additional identifiers to block beyond the default set   |
-| `allowedLoops`                    | `object`   | -       | Override default loop restrictions                       |
-| `allowAsync`                      | `object`   | -       | Override default async restrictions                      |
+| Option                            | Type       | Default                     | Description                                              |
+| --------------------------------- | ---------- | --------------------------- | -------------------------------------------------------- |
+| `requireCallTool`                 | `boolean`  | `false`                     | Require at least one `callTool()` invocation in the code |
+| `allowedGlobals`                  | `string[]` | `['callTool', 'Math', ...]` | List of allowed global identifiers                       |
+| `additionalDisallowedIdentifiers` | `string[]` | `[]`                        | Additional identifiers to block beyond the default set   |
+| `allowArrowFunctions`             | `boolean`  | `true`                      | Whether to allow arrow functions (for array methods)     |
+| `allowedLoops`                    | `object`   | `{ allowFor, allowForOf }`  | Override default loop restrictions                       |
+| `reservedPrefixes`                | `string[]` | `['__ag_', '__safe_']`      | Reserved prefixes that user code cannot use              |
+| `staticCallTarget`                | `object`   | `{ enabled: true }`         | Configuration for static call target validation          |
+| `callToolValidation`              | `object`   | -                           | Validation rules for callTool arguments                  |
 
 **Example with all options:**
 
@@ -411,8 +415,14 @@ const rules = createAgentScriptPreset({
   // Require the code to actually call tools
   requireCallTool: true,
 
+  // Customize allowed globals
+  allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON', 'Array', 'Object'],
+
   // Block additional identifiers
   additionalDisallowedIdentifiers: ['fetch', 'XMLHttpRequest'],
+
+  // Allow arrow functions for array methods (default: true)
+  allowArrowFunctions: true,
 
   // Allow specific loops (default: for and for-of allowed)
   allowedLoops: {
@@ -423,10 +433,10 @@ const rules = createAgentScriptPreset({
     allowForIn: false, // Block for-in loops
   },
 
-  // Control async behavior
-  allowAsync: {
-    allowAsyncFunctions: false, // Block async function declarations
-    allowAwait: true, // Allow await expressions
+  // Static call target validation
+  staticCallTarget: {
+    enabled: true,
+    allowedToolNames: ['users:list', 'users:get'], // Optional whitelist
   },
 });
 ```
