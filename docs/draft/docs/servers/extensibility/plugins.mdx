@@ -290,8 +290,8 @@ class DynamicPlugin<TOptions, TInput = TOptions> {
   get<T>(token: Reference<T>): T;
 
   // Static method to create configured plugin instance
-  // Accepts TInput options, returns a plugin provider
-  static init(options: TInput): PluginProvider;
+  // Pass to the plugins array in @App()
+  static init(options: TInput);
 
   // Override to provide dynamic providers based on options
   static dynamicProviders?(options: TInput): ProviderType[];
@@ -304,9 +304,9 @@ class DynamicPlugin<TOptions, TInput = TOptions> {
 | `TInput` | Input options type (for `init()`). Defaults to `TOptions`. |
 
 <Info>
-  The `init()` method accepts your plugin's input options type and handles the internal
-  wiring automatically. You don't need to import or reference internal types like
-  `InitOptions` or `PluginReturn`—just pass your options object directly.
+  The `init()` method accepts your plugin's input options type and returns a provider
+  configuration that the framework uses internally. You don't need to import or reference
+  the return type—just pass the result directly to the `plugins` array.
 </Info>
 
 ## Extending Tool Metadata
