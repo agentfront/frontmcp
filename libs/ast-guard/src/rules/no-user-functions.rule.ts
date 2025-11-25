@@ -234,10 +234,6 @@ export class NoUserDefinedFunctionsRule implements ValidationRule {
           });
         }
       },
-
-      // Generator functions: function* gen() {}
-      // (These are also caught by FunctionDeclaration, but provide more specific error)
-      // Async generators: async function* gen() {}
     });
   }
 }

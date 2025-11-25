@@ -29,7 +29,7 @@ function sanitizeStackTrace(stack: string | undefined): string | undefined {
   return stack
     .split('\n')
     .map(line => {
-      // Remove absolute paths (Unix/Mac/Linux/Windows)
+      // Remove absolute paths (Unix/Mac/Linux/Windows/Container)
       return line
         .replace(/\/Users\/[^/]+\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/home\/[^/]+\/[^\s)]+/g, '[REDACTED]')
@@ -39,6 +39,10 @@ function sanitizeStackTrace(stack: string | undefined): string | undefined {
         .replace(/\/etc\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/root\/[^\s)]+/g, '[REDACTED]')
         .replace(/\/mnt\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/srv\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/data\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\/app\/[^\s)]+/g, '[REDACTED]')
+        .replace(/\\\\[^\s)]+/g, '[REDACTED]') // UNC paths
         .replace(/[A-Z]:\\[^\s)]+/gi, '[REDACTED]');
     })
     .join('\n');

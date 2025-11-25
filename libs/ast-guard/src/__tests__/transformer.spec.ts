@@ -161,8 +161,9 @@ describe('AST Transformer', () => {
       expect(result.valid).toBe(true);
       expect(result.transformedCode).toBeDefined();
       // Original code should have 'eval' not '__safe_eval' in computed access
-      expect(result.transformedCode).toContain("'eval'");
-      expect(result.transformedCode).not.toContain("'__safe_eval'");
+      // Use regex to handle either single or double quotes from code generator
+      expect(result.transformedCode).toMatch(/["']eval["']/);
+      expect(result.transformedCode).not.toMatch(/["']__safe_eval["']/);
     });
 
     it('should not transform non-matching computed member expressions', async () => {
@@ -183,7 +184,8 @@ describe('AST Transformer', () => {
       });
 
       expect(result.valid).toBe(true);
-      expect(result.transformedCode).toContain("'foo'");
+      // Use regex to handle either single or double quotes from code generator
+      expect(result.transformedCode).toMatch(/["']foo["']/);
       expect(result.transformedCode).not.toContain('__safe_');
     });
   });

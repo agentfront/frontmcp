@@ -207,6 +207,7 @@ export class NoGlobalAccessRule implements ValidationRule {
             'setPrototypeOf',
             'defineProperty',
             'defineProperties',
+            'create', // Can create objects with arbitrary prototypes
           ];
 
           const methodName = node.callee.property.name;

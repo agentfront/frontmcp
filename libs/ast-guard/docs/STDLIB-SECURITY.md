@@ -628,7 +628,7 @@ Object.defineProperty(Object.prototype, 'polluted', {
 
 **Status:** ❌ Blocked by not whitelisting defineProperty
 
-**4. JSON.parse() with **proto\*\*\*\*
+**4. JSON.parse() with `__proto__`**
 
 ```javascript
 JSON.parse('{"__proto__": {"polluted": true}}');
@@ -640,9 +640,9 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 ### Protection Strategy
 
 1. **Block dangerous Object methods** (already done)
-2. **Block **proto** access** (already done in STRICT preset)
-3. **Filter **proto** in JSON.parse** (need to implement)
-4. **Filter **proto** in Object.assign** (need to implement)
+2. **Block `__proto__` access** (already done in STRICT preset)
+3. **Filter `__proto__` in JSON.parse** (need to implement)
+4. **Filter `__proto__` in Object.assign** (need to implement)
 5. **Freeze all prototypes in sandbox** (additional hardening)
 
 ---

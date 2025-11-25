@@ -27,7 +27,7 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 - **global access**: ✅ BLOCKED (returns undefined)
 - **globalThis access**: ✅ BLOCKED (returns undefined)
 - **module/exports access**: ✅ BLOCKED (returns undefined)
-- \***\*dirname/**filename\*\*: ✅ BLOCKED (returns undefined)
+- `__dirname`/`__filename`: ✅ BLOCKED (returns undefined)
 
 **Verdict:** All dangerous Node.js globals are isolated.
 
@@ -35,7 +35,7 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 
 - **Object.prototype pollution**: ✅ ISOLATED (sandbox-only)
 - **Array.prototype pollution**: ✅ ISOLATED (sandbox-only)
-- \***\*proto** manipulation\*\*: ✅ ISOLATED (sandbox-only)
+- `__proto__` manipulation: ✅ ISOLATED (sandbox-only)
 - **constructor.prototype pollution**: ✅ ISOLATED (sandbox-only)
 
 **Verdict:** Host prototype chain is fully protected. Pollution attempts are contained within the VM sandbox and do not leak to the host environment.
@@ -73,8 +73,8 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 
 ### ✅ Reserved Identifier Protection (100% passing)
 
-- **\__ag_ prefix usage**: ✅ BLOCKED (validation error)
-- **\__safe_ prefix usage**: ✅ BLOCKED (validation error)
+- `__ag_` prefix usage: ✅ BLOCKED (validation error)
+- `__safe_` prefix usage: ✅ BLOCKED (validation error)
 - **Safe function override attempts**: ✅ BLOCKED
 
 **Verdict:** Internal runtime identifiers are protected.
@@ -225,7 +225,7 @@ The enclave implements **4 layers of defense**:
 
 **Prototype Pollution (ATK-24, 25, 26):**
 
-- ✅ ATK-24: **proto** assignment
+- ✅ ATK-24: `__proto__` assignment
 - ✅ ATK-25: Object.setPrototypeOf
 - ✅ ATK-26: Reflect.setPrototypeOf
 
@@ -291,9 +291,9 @@ The enclave implements **4 layers of defense**:
 
 **Reserved Identifiers (ATK-Reserved):**
 
-- ✅ \__ag_ prefix blocking
-- ✅ \__safe_ prefix blocking
-- ✅ \_\_safe_callTool override prevention
+- ✅ `__ag_` prefix blocking
+- ✅ `__safe_` prefix blocking
+- ✅ `__safe_callTool` override prevention
 
 **Type Validation:**
 
@@ -305,7 +305,7 @@ The enclave implements **4 layers of defense**:
 
 - ✅ Code injection (eval, Function, setTimeout)
 - ✅ Global access (process, require, module)
-- ✅ Prototype pollution (**proto**, constructor)
+- ✅ Prototype pollution (`__proto__`, constructor)
 - ✅ Sandbox escapes (constructor chain, this binding)
 - ✅ File system access (fs, dynamic imports)
 - ✅ Network access (http, child_process)
