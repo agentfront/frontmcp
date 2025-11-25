@@ -125,9 +125,10 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
   }
 
   private getAllowedSites(authInfo: unknown): string[] | 'ALL' {
-    const user = (authInfo as any)?.user;
-    const sites = user?.sites || user?.tenants;
+    const user = this.extractUser(authInfo);
+    if (!user) return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
 
+    const sites = user.sites || user.tenants;
     if (!sites || (Array.isArray(sites) && sites.length === 0)) {
       return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
     }
@@ -138,12 +139,20 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
   }
 
   private isAdmin(authInfo: unknown): boolean {
-    const user = (authInfo as any)?.user;
+    const user = this.extractUser(authInfo);
     if (!user) return !!this.opts.demoAllowAllIfNoClaims;
     if (user.isAdmin === true) return true;
 
-    const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
+    const roles: string[] = Array.isArray(user.roles) ? user.roles : [];
     return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
+  }
+
+  /** Safely extract user object from authInfo */
+  private extractUser(authInfo: unknown): Record<string, unknown> | null {
+    if (!authInfo || typeof authInfo !== 'object') return null;
+    const obj = authInfo as Record<string, unknown>;
+    if (!obj.user || typeof obj.user !== 'object') return null;
+    return obj.user as Record<string, unknown>;
   }
 }
 ```
@@ -275,13 +284,19 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     await cacheStore.setValue(hash, toolContext.output, ttl);
   }
 
-  private hashObject(obj: Record<string, unknown>): string {
+  /**
+   * Simple hash for cache keys. For production, consider:
+   * - Using a proper hash function (crypto.createHash)
+   * - Adding depth limit to prevent stack overflow on circular structures
+   */
+  private hashObject(obj: Record<string, unknown>, depth = 0): string {
+    if (depth > 10) return '[max-depth]'; // Prevent infinite recursion
     const keys = Object.keys(obj).sort();
     return keys.reduce((acc, key) => {
       const val = obj[key];
       acc += key + ':';
       if (typeof val === 'object' && val !== null) {
-        acc += this.hashObject(val as Record<string, unknown>);
+        acc += this.hashObject(val as Record<string, unknown>, depth + 1);
       } else {
         acc += val;
       }
@@ -452,6 +467,36 @@ async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
 }
 ```
 
+## Error Handling in Hooks
+
+Hooks should handle errors gracefully, especially in non-critical paths:
+
+```ts
+@ToolHook.Will('execute', { priority: 1000 })
+async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+  const { tool, toolContext } = flowCtx.state;
+  if (!tool || !toolContext) return;
+
+  try {
+    const cacheStore = this.get(CacheStoreToken);
+    const cached = await cacheStore.getValue(key);
+    if (cached !== undefined) {
+      flowCtx.state.rawOutput = cached;
+      toolContext.respond(cached);
+    }
+  } catch (error) {
+    // Log but don't fail - cache miss is acceptable
+    this.logger?.warn('Cache read failed, continuing without cache', { error });
+    // Let execution continue normally
+  }
+}
+```
+
+**Guidelines:**
+- **Authorization hooks** - Throw errors to block execution
+- **Caching/logging hooks** - Catch errors and continue gracefully
+- **Cleanup hooks (Did)** - Always wrap in try/catch to avoid breaking the response
+
 ## Best Practices
 
 1. **Use descriptive names** - Plugin name should be lowercase with hyphens
@@ -461,6 +506,7 @@ async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
 5. **Don't throw in cleanup** - Wrap finalize hooks in try/catch
 6. **Document metadata extensions** - If extending `ExtendFrontMcpToolMetadata`
 7. **Export types** - Export options types for consumers
+8. **Type-safe authInfo access** - Use helper methods to safely extract user data
 
 ## Complete Example
 

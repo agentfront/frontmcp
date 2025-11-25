@@ -19,6 +19,7 @@ import { CrmStore } from '../data/store';
       role: z.enum(['admin', 'user', 'viewer']),
       status: z.enum(['active', 'inactive', 'pending']),
       createdAt: z.string(),
+      lastLoginAt: z.string().optional(),
     }),
     success: z.boolean(),
   },

@@ -12,11 +12,13 @@ import InvokeTool from './tools/invoke.tool';
 
 import CodeCallConfig from './providers/code-call.config';
 import EnclaveService from './services/enclave.service';
+import CachePlugin from '../cache';
 
 @Plugin({
   name: 'codecall',
   description: 'CodeCall plugin: AgentScript-based meta-tools for orchestrating MCP tools',
   providers: [],
+  plugins: [CachePlugin],
   tools: [SearchTool, DescribeTool, ExecuteTool, InvokeTool],
 })
 export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions, CodeCallPluginOptionsInput> {

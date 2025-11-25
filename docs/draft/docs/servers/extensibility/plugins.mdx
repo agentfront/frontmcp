@@ -167,6 +167,15 @@ Plugins can intercept flow stages using hooks. Use `this.get(Token)` to access p
 ```ts
 import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
+// Define options interface
+interface CachePluginOptions {
+  type: 'memory' | 'redis';
+  defaultTTL?: number; // TTL in seconds
+}
+
+// Injection token for the cache store
+const CacheStoreToken = Symbol('CacheStore');
+
 @Plugin({
   name: 'cache',
   description: 'Cache plugin for tool results',
@@ -181,7 +190,7 @@ import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   options: CachePluginOptions;
 
-  constructor(options: CachePluginOptions = { type: 'memory' }) {
+  constructor(options: CachePluginOptions = { type: 'memory', defaultTTL: 3600 }) {
     super();
     this.options = options;
   }
@@ -281,7 +290,8 @@ class DynamicPlugin<TOptions, TInput = TOptions> {
   get<T>(token: Reference<T>): T;
 
   // Static method to create configured plugin instance
-  static init<TThis>(options: InitOptions<TInput>): PluginReturn<TOptions>;
+  // Accepts TInput options, returns a plugin provider
+  static init(options: TInput): PluginProvider;
 
   // Override to provide dynamic providers based on options
   static dynamicProviders?(options: TInput): ProviderType[];
@@ -292,6 +302,12 @@ class DynamicPlugin<TOptions, TInput = TOptions> {
 |----------------|-------------|
 | `TOptions` | Resolved options type (after defaults). Use internally. |
 | `TInput` | Input options type (for `init()`). Defaults to `TOptions`. |
+
+<Info>
+  The `init()` method accepts your plugin's input options type and handles the internal
+  wiring automatically. You don't need to import or reference internal types like
+  `InitOptions` or `PluginReturn`—just pass your options object directly.
+</Info>
 
 ## Extending Tool Metadata
 
