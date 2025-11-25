@@ -118,7 +118,7 @@ Math: [
 
 2. **Denial of Service (DoS) via Large Arrays**
 
-   - **Attack**: Extremely large arrays cause memory exhaustion
+   - **Attack**: Million-element arrays cause memory exhaustion
 
    ```javascript
    // DoS attack
@@ -504,7 +504,7 @@ String.prototype: [
 
 **Is this a real risk?**
 
-- For AgentScript (data manipulation): **LOW RISK**
+- For AgentScript (data manipulation): **low-risk**
 - Date/time operations are commonly needed for filtering data
 - Sandbox is already isolated from sensitive operations
 
@@ -711,19 +711,19 @@ JSON.parse('{"__proto__": {"polluted": true}}');
 
 ```javascript
 const AGENTSCRIPT_LIMITS = {
-  // JSON (application-level enforcement recommended)
+  // ⚠️ JSON (NOT enforced - application-level enforcement required)
   maxJSONStringLength: 1_000_000, // 1MB max JSON string
   maxJSONDepth: 10, // 10 levels deep max
   maxJSONOutputSize: 100_000, // 100KB max output
 
-  // Arrays (application-level enforcement recommended)
+  // ⚠️ Arrays (NOT enforced - application-level enforcement required)
   maxArraySize: 100_000, // 100K elements max
   maxArrayMemory: 10_000_000, // 10MB max array memory
 
-  // Strings (application-level enforcement recommended)
+  // ⚠️ Strings (NOT enforced - application-level enforcement required)
   maxStringLength: 1_000_000, // 1MB max string
 
-  // Objects (application-level enforcement recommended)
+  // ⚠️ Objects (NOT enforced - application-level enforcement required)
   maxObjectKeys: 10_000, // 10K keys max
   maxObjectDepth: 10, // 10 levels deep max
 
