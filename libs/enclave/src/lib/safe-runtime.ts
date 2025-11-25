@@ -8,6 +8,7 @@
  */
 
 import type { ExecutionContext, ToolHandler } from './types';
+import { sanitizeValue } from './value-sanitizer';
 
 /**
  * Create safe runtime context with all __safe_* functions
@@ -60,7 +61,20 @@ export function createSafeRuntime(context: ExecutionContext) {
 
     // Execute the tool call
     try {
-      return await context.toolHandler(toolName, args);
+      const result = await context.toolHandler(toolName, args);
+
+      // Sanitize the return value to prevent:
+      // - Function injection
+      // - Symbol injection
+      // - Prototype pollution (__proto__, constructor)
+      // - Deeply nested objects (DoS)
+      // - Large object graphs (DoS)
+      return sanitizeValue(result, {
+        maxDepth: 20,
+        maxProperties: 10000,
+        allowDates: true,
+        allowErrors: true,
+      });
     } catch (error: unknown) {
       // Re-throw with context
       const err = error as Error;

@@ -20,17 +20,52 @@ import type {
   ExecutionStats,
   SandboxAdapter,
   ToolHandler,
+  SecurityLevel,
+  SecurityLevelConfig,
 } from './types';
+import { SECURITY_LEVEL_CONFIGS } from './types';
 import { createSafeRuntime } from './safe-runtime';
+import { validateGlobals } from './globals-validator';
 
 /**
- * Default configuration values
+ * Default security level
  */
-const DEFAULT_CONFIG = {
-  timeout: 30000, // 30 seconds
+const DEFAULT_SECURITY_LEVEL: SecurityLevel = 'STANDARD';
+
+/**
+ * Get merged configuration from security level and explicit options
+ * Explicit options override security level defaults
+ */
+function getConfigFromSecurityLevel(
+  securityLevel: SecurityLevel,
+  options: CreateEnclaveOptions
+): {
+  timeout: number;
+  maxIterations: number;
+  maxToolCalls: number;
+  sanitizeStackTraces: boolean;
+  maxSanitizeDepth: number;
+  maxSanitizeProperties: number;
+  allowFunctionsInGlobals: boolean;
+} {
+  const levelConfig = SECURITY_LEVEL_CONFIGS[securityLevel];
+
+  return {
+    timeout: options.timeout ?? levelConfig.timeout,
+    maxIterations: options.maxIterations ?? levelConfig.maxIterations,
+    maxToolCalls: options.maxToolCalls ?? levelConfig.maxToolCalls,
+    sanitizeStackTraces: options.sanitizeStackTraces ?? levelConfig.sanitizeStackTraces,
+    maxSanitizeDepth: options.maxSanitizeDepth ?? levelConfig.maxSanitizeDepth,
+    maxSanitizeProperties: options.maxSanitizeProperties ?? levelConfig.maxSanitizeProperties,
+    allowFunctionsInGlobals: options.allowFunctionsInGlobals ?? levelConfig.allowFunctionsInGlobals,
+  };
+}
+
+/**
+ * Base configuration values (non-security-level dependent)
+ */
+const BASE_CONFIG = {
   memoryLimit: 128 * 1024 * 1024, // 128MB
-  maxToolCalls: 100,
-  maxIterations: 10000,
   adapter: 'vm' as const,
   allowBuiltins: false,
   globals: {},
@@ -65,19 +100,47 @@ const DEFAULT_CONFIG = {
  * ```
  */
 export class Enclave {
-  private readonly config: Omit<Required<EnclaveConfig>, 'toolHandler'> & { toolHandler?: ToolHandler };
+  private readonly config: Omit<Required<EnclaveConfig>, 'toolHandler'> & {
+    toolHandler?: ToolHandler;
+    sanitizeStackTraces: boolean;
+    maxSanitizeDepth: number;
+    maxSanitizeProperties: number;
+  };
+  private readonly securityLevel: SecurityLevel;
   private readonly validator: JSAstValidator;
   private readonly validateCode: boolean;
   private readonly transformCode: boolean;
   private adapter?: SandboxAdapter;
 
   constructor(options: CreateEnclaveOptions = {}) {
-    // Merge with defaults
+    // Determine security level (default: STANDARD)
+    this.securityLevel = options.securityLevel ?? DEFAULT_SECURITY_LEVEL;
+
+    // Get configuration from security level, with explicit options overriding
+    const securityConfig = getConfigFromSecurityLevel(this.securityLevel, options);
+
+    // Validate custom globals before use
+    // Security: Prevents function injection, getters/setters, and dangerous patterns
+    if (options.globals) {
+      validateGlobals(options.globals, {
+        maxDepth: 10,
+        allowFunctions: securityConfig.allowFunctionsInGlobals,
+        allowGettersSetters: false,
+      });
+    }
+
+    // Merge with defaults, applying security level configuration
     this.config = {
-      ...DEFAULT_CONFIG,
+      ...BASE_CONFIG,
+      timeout: securityConfig.timeout,
+      maxIterations: securityConfig.maxIterations,
+      maxToolCalls: securityConfig.maxToolCalls,
+      sanitizeStackTraces: securityConfig.sanitizeStackTraces,
+      maxSanitizeDepth: securityConfig.maxSanitizeDepth,
+      maxSanitizeProperties: securityConfig.maxSanitizeProperties,
       ...options,
       globals: {
-        ...DEFAULT_CONFIG.globals,
+        ...BASE_CONFIG.globals,
         ...options.globals,
       },
     };
@@ -271,6 +334,44 @@ export class Enclave {
       default:
         throw new Error(`Unknown adapter: ${this.config.adapter}`);
     }
+  }
+
+  /**
+   * Get the current security level
+   *
+   * @returns The security level this enclave was configured with
+   */
+  getSecurityLevel(): SecurityLevel {
+    return this.securityLevel;
+  }
+
+  /**
+   * Get the effective configuration
+   *
+   * Useful for debugging and understanding what settings are active
+   *
+   * @returns A copy of the current configuration
+   */
+  getEffectiveConfig(): {
+    securityLevel: SecurityLevel;
+    timeout: number;
+    maxIterations: number;
+    maxToolCalls: number;
+    sanitizeStackTraces: boolean;
+    maxSanitizeDepth: number;
+    maxSanitizeProperties: number;
+    memoryLimit: number;
+  } {
+    return {
+      securityLevel: this.securityLevel,
+      timeout: this.config.timeout,
+      maxIterations: this.config.maxIterations,
+      maxToolCalls: this.config.maxToolCalls,
+      sanitizeStackTraces: this.config.sanitizeStackTraces,
+      maxSanitizeDepth: this.config.maxSanitizeDepth,
+      maxSanitizeProperties: this.config.maxSanitizeProperties,
+      memoryLimit: this.config.memoryLimit,
+    };
   }
 
   /**

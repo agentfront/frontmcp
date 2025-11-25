@@ -459,7 +459,7 @@ describe('Enclave Security Tests', () => {
       enclave.dispose();
     });
 
-    it('should allow assignment to reserved runtime functions (runtime protection)', async () => {
+    it('should block assignment to reserved runtime functions via static validation', async () => {
       const enclave = new Enclave();
       const code = `
         __safe_callTool = () => 'pwned';
@@ -468,11 +468,95 @@ describe('Enclave Security Tests', () => {
 
       const result = await enclave.run(code);
 
-      // Note: ReservedPrefixRule only checks declarations, not assignments.
-      // Runtime protection (frozen globals, etc.) should handle this case.
-      // Currently, simple assignments are allowed by the validator.
-      // The sandbox runtime should freeze/protect these variables instead.
+      // ReservedPrefixRule now blocks assignments to reserved identifiers.
+      // This provides defense in depth: static analysis + runtime protection.
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('VALIDATION_ERROR');
+      expect(result.error?.message).toContain('__safe_');
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Custom Global Hardening', () => {
+    it('should block injecting functions via globals by default', () => {
+      // The globals validator now blocks functions by default to prevent
+      // scope leakage through closures
+      expect(() => {
+        new Enclave({
+          globals: {
+            require: () => {
+              throw new Error('host require should never be reachable');
+            },
+          },
+        });
+      }).toThrow(/function/i);
+    });
+
+    it('should block dangerous function patterns in globals', () => {
+      // The globals validator blocks functions containing 'require' pattern
+      expect(() => {
+        new Enclave({
+          allowFunctionsInGlobals: true,
+          globals: {
+            // Function name contains 'require' - blocked
+            customRequire: () => {
+              throw new Error('host require should never be reachable');
+            },
+          },
+        });
+      }).toThrow(/require/i);
+    });
+
+    it('should allow safe function globals with allowFunctionsInGlobals', async () => {
+      // Safe functions (no dangerous patterns) can be passed
+      const enclave = new Enclave({
+        allowFunctionsInGlobals: true,
+        globals: {
+          safeMultiplier: (x: number) => x * 2,
+        },
+      });
+
+      const code = `
+        return safeMultiplier(21);
+      `;
+
+      const result = await enclave.run(code);
       expect(result.success).toBe(true);
+      expect(result.value).toBe(42);
+
+      enclave.dispose();
+    });
+
+    it('should block injecting Buffer via globals by default', () => {
+      // Buffer is a function, so it gets blocked by the globals validator
+      expect(() => {
+        new Enclave({
+          globals: {
+            nodeSecrets: { Buffer },
+          },
+        });
+      }).toThrow(/function/i);
+    });
+
+    it('should block destructuring Buffer from custom objects when functions allowed', async () => {
+      const enclave = new Enclave({
+        allowFunctionsInGlobals: true,
+        globals: {
+          nodeSecrets: { Buffer },
+        },
+      });
+
+      const code = `
+        const { Buffer } = nodeSecrets;
+        return Buffer.alloc(8);
+      `;
+
+      const result = await enclave.run(code);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('VALIDATION_ERROR');
+      expect(result.error?.message).toMatch(/Buffer/i);
 
       enclave.dispose();
     });
@@ -590,7 +674,8 @@ describe('Enclave Security Tests', () => {
     });
 
     it('should not expose stack traces with host information', async () => {
-      const enclave = new Enclave();
+      // Use STRICT security level which enables stack trace sanitization
+      const enclave = new Enclave({ securityLevel: 'STRICT' });
       const code = `
         const obj = null;
         return obj.property;
@@ -599,7 +684,7 @@ describe('Enclave Security Tests', () => {
       const result = await enclave.run(code);
 
       expect(result.success).toBe(false);
-      // Stack trace should not reveal host file system paths
+      // Stack trace should not reveal host file system paths when sanitization is enabled
       if (result.error?.stack) {
         expect(result.error.stack).not.toContain('/Users/');
         expect(result.error.stack).not.toContain('/home/');

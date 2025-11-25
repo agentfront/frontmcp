@@ -16,36 +16,193 @@ import type {
 import { createSafeRuntime } from '../safe-runtime';
 
 /**
+ * Sensitive patterns to redact from stack traces
+ * Security: Prevents information leakage about host environment
+ *
+ * Categories covered:
+ * - File system paths (Unix, Windows, UNC)
+ * - Cloud environment variables and metadata
+ * - Container/orchestration paths
+ * - CI/CD system paths
+ * - User home directories
+ * - Secret/credential patterns
+ * - Internal hostnames and IPs
+ * - Package manager cache paths
+ */
+const SENSITIVE_STACK_PATTERNS = [
+  // Unix file system paths
+  /\/Users\/[^/]+\/[^\s):]*/gi,           // macOS home directories
+  /\/home\/[^/]+\/[^\s):]*/gi,            // Linux home directories
+  /\/var\/[^\s):]*/gi,                    // System var directories
+  /\/opt\/[^\s):]*/gi,                    // Optional software
+  /\/tmp\/[^\s):]*/gi,                    // Temporary files
+  /\/etc\/[^\s):]*/gi,                    // System configuration
+  /\/root\/[^\s):]*/gi,                   // Root home directory
+  /\/mnt\/[^\s):]*/gi,                    // Mount points
+  /\/srv\/[^\s):]*/gi,                    // Service data
+  /\/data\/[^\s):]*/gi,                   // Data directories
+  /\/app\/[^\s):]*/gi,                    // Application directories
+  /\/proc\/[^\s):]*/gi,                   // Process information
+  /\/sys\/[^\s):]*/gi,                    // System files
+
+  // Windows paths
+  /\\\\[^\s):]*/g,                        // UNC paths
+  /[A-Z]:\\[^\s):]+/gi,                   // Windows drive paths
+
+  // URL-based paths
+  /file:\/\/[^\s):]+/gi,                  // File URLs
+  /webpack:\/\/[^\s):]+/gi,               // Webpack paths
+  /%2F[^\s):]+/gi,                        // URL-encoded paths
+
+  // Package managers and node
+  /node_modules\/[^\s):]+/gi,             // Node modules paths
+  /\/nix\/store\/[^\s):]*/gi,             // Nix store paths
+  /\.npm\/[^\s):]*/gi,                    // NPM cache
+  /\.yarn\/[^\s):]*/gi,                   // Yarn cache
+  /\.pnpm\/[^\s):]*/gi,                   // PNPM cache
+
+  // Container and orchestration
+  /\/run\/secrets\/[^\s):]*/gi,           // Docker/K8s secrets
+  /\/var\/run\/[^\s):]*/gi,               // Runtime directories
+  /\/docker\/[^\s):]*/gi,                 // Docker paths
+  /\/containers\/[^\s):]*/gi,             // Container paths
+  /\/kubelet\/[^\s):]*/gi,                // Kubernetes kubelet
+
+  // CI/CD systems
+  /\/github\/workspace\/[^\s):]*/gi,      // GitHub Actions
+  /\/runner\/[^\s):]*/gi,                 // GitHub/GitLab runner
+  /\/builds\/[^\s):]*/gi,                 // CI builds
+  /\/workspace\/[^\s):]*/gi,              // Generic workspace
+  /\/pipeline\/[^\s):]*/gi,               // CI pipelines
+  /\/jenkins\/[^\s):]*/gi,                // Jenkins
+  /\/bamboo\/[^\s):]*/gi,                 // Bamboo
+  /\/teamcity\/[^\s):]*/gi,               // TeamCity
+  /\/circleci\/[^\s):]*/gi,               // CircleCI
+
+  // Cloud providers
+  /\/aws\/[^\s):]*/gi,                    // AWS paths
+  /\/gcloud\/[^\s):]*/gi,                 // Google Cloud
+  /\/azure\/[^\s):]*/gi,                  // Azure paths
+  /s3:\/\/[^\s):]+/gi,                    // S3 URIs
+  /gs:\/\/[^\s):]+/gi,                    // GCS URIs
+
+  // Secrets and credentials (patterns that might appear in paths or errors)
+  /[A-Z0-9]{20,}/g,                       // AWS-style access keys (20+ uppercase chars)
+  /sk-[a-zA-Z0-9]{32,}/g,                 // OpenAI/Stripe-style secret keys
+  /ghp_[a-zA-Z0-9]{36,}/g,                // GitHub personal access tokens
+  /gho_[a-zA-Z0-9]{36,}/g,                // GitHub OAuth tokens
+  /github_pat_[a-zA-Z0-9_]{22,}/g,        // GitHub fine-grained tokens
+  /xox[baprs]-[a-zA-Z0-9-]+/g,            // Slack tokens
+  /Bearer\s+[a-zA-Z0-9._-]+/gi,           // Bearer tokens
+  /Basic\s+[a-zA-Z0-9+/=]+/gi,            // Basic auth
+
+  // Internal network info
+  /(?:10|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+/g,  // Private IPs
+  /[a-z0-9-]+\.internal(?:\.[a-z]+)?/gi,  // Internal hostnames
+  /localhost:\d+/gi,                       // Localhost with port
+  /127\.0\.0\.1:\d+/gi,                   // Loopback with port
+
+  // User information
+  /\/u\/[^/]+\//gi,                       // User subdirectories
+  /~[a-z_][a-z0-9_-]*/gi,                 // Unix user home shorthand
+];
+
+/**
  * Sanitize stack trace by removing host file system paths
  * Security: Prevents information leakage about host environment
  *
+ * When enabled (sanitize=true):
+ * - Removes file paths from all supported platforms
+ * - Redacts potential secrets and credentials
+ * - Strips internal hostnames and IPs
+ * - Removes line/column numbers for full anonymization
+ *
  * @param stack Original stack trace
- * @returns Sanitized stack trace
+ * @param sanitize Whether to sanitize (defaults to true)
+ * @returns Sanitized stack trace (or original if sanitize=false)
  */
-function sanitizeStackTrace(stack: string | undefined): string | undefined {
+function sanitizeStackTrace(stack: string | undefined, sanitize = true): string | undefined {
   if (!stack) return stack;
 
-  // Remove absolute file paths while preserving the stack structure
-  return stack
-    .split('\n')
-    .map(line => {
-      // Remove absolute paths (Unix/Mac/Linux/Windows/Container)
-      return line
-        .replace(/\/Users\/[^/]+\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/home\/[^/]+\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/var\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/opt\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/tmp\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/etc\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/root\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/mnt\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/srv\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/data\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\/app\/[^\s)]+/g, '[REDACTED]')
-        .replace(/\\\\[^\s)]+/g, '[REDACTED]') // UNC paths
-        .replace(/[A-Z]:\\[^\s)]+/gi, '[REDACTED]');
-    })
-    .join('\n');
+  // Return unsanitized stack if disabled
+  if (!sanitize) return stack;
+
+  let sanitized = stack;
+
+  // Apply all sensitive patterns
+  for (const pattern of SENSITIVE_STACK_PATTERNS) {
+    // Reset lastIndex for global patterns to ensure consistent behavior
+    pattern.lastIndex = 0;
+    sanitized = sanitized.replace(pattern, '[REDACTED]');
+  }
+
+  // Additional: Remove line and column numbers from stack frames
+  // Format: "at functionName (file:line:column)" -> "at functionName ([REDACTED])"
+  sanitized = sanitized.replace(
+    /at\s+([^\s]+)\s+\([^)]*:\d+:\d+\)/g,
+    'at $1 ([REDACTED])'
+  );
+
+  // Format: "at file:line:column" -> "at [REDACTED]"
+  sanitized = sanitized.replace(
+    /at\s+[^\s]+:\d+:\d+/g,
+    'at [REDACTED]'
+  );
+
+  return sanitized;
+}
+
+/**
+ * Protected identifier prefixes that cannot be modified from sandbox code
+ * Security: Prevents runtime override attacks on safe functions
+ */
+const PROTECTED_PREFIXES = ['__safe_', '__ag_'];
+
+/**
+ * Check if an identifier is protected
+ */
+function isProtectedIdentifier(prop: string | symbol): boolean {
+  if (typeof prop !== 'string') return false;
+  return PROTECTED_PREFIXES.some(prefix => prop.startsWith(prefix));
+}
+
+/**
+ * Create a protected sandbox context using Proxy
+ * Security: Prevents runtime reassignment of __safe_* and __ag_* functions
+ *
+ * @param sandbox The original VM context sandbox
+ * @returns A proxy that protects reserved identifiers from modification
+ */
+function createProtectedSandbox(sandbox: vm.Context): vm.Context {
+  return new Proxy(sandbox, {
+    set(target, prop, value) {
+      if (isProtectedIdentifier(prop)) {
+        throw new Error(
+          `Cannot modify protected identifier "${String(prop)}". ` +
+            `Identifiers starting with ${PROTECTED_PREFIXES.map(p => `"${p}"`).join(', ')} are protected runtime functions.`
+        );
+      }
+      return Reflect.set(target, prop, value);
+    },
+    defineProperty(target, prop, descriptor) {
+      if (isProtectedIdentifier(prop)) {
+        throw new Error(
+          `Cannot define protected identifier "${String(prop)}". ` +
+            `Identifiers starting with ${PROTECTED_PREFIXES.map(p => `"${p}"`).join(', ')} are protected runtime functions.`
+        );
+      }
+      return Reflect.defineProperty(target, prop, descriptor);
+    },
+    deleteProperty(target, prop) {
+      if (isProtectedIdentifier(prop)) {
+        throw new Error(
+          `Cannot delete protected identifier "${String(prop)}". ` +
+            `Identifiers starting with ${PROTECTED_PREFIXES.map(p => `"${p}"`).join(', ')} are protected runtime functions.`
+        );
+      }
+      return Reflect.deleteProperty(target, prop);
+    },
+  });
 }
 
 /**
@@ -77,34 +234,44 @@ export class VmAdapter implements SandboxAdapter {
 
       // Create sandbox context with safe globals only
       // IMPORTANT: Use empty object to get NEW isolated prototypes
-      const sandbox = vm.createContext({});
+      const baseSandbox = vm.createContext({});
 
-      // Add safe runtime functions to the isolated context
-      // We must do this WITHOUT using Object.assign to avoid prototype chain issues
+      // Add safe runtime functions to the isolated context as non-writable, non-configurable
+      // Security: Prevents runtime override attacks on __safe_* functions
       for (const [key, value] of Object.entries(safeRuntime)) {
-        (sandbox as any)[key] = value;
+        Object.defineProperty(baseSandbox, key, {
+          value: value,
+          writable: false,
+          configurable: false,
+          enumerable: true,
+        });
       }
 
       // Add user-provided globals (if any)
+      // These are NOT protected - users can modify their own globals
       if (config.globals) {
         for (const [key, value] of Object.entries(config.globals)) {
-          (sandbox as any)[key] = value;
+          (baseSandbox as any)[key] = value;
         }
       }
 
       // Add console (bind to host console)
       // These are just function references, safe to assign
-      (sandbox as any).console = {
+      (baseSandbox as any).console = {
         log: console.log.bind(console),
         error: console.error.bind(console),
         warn: console.warn.bind(console),
         info: console.info.bind(console),
       };
 
+      // Wrap sandbox in protective Proxy to catch dynamic assignment attempts
+      // Security: Prevents dynamic assignment like `this['__safe_callTool'] = malicious`
+      const sandbox = createProtectedSandbox(baseSandbox);
+
       // Store context reference for disposal
       // Note: Each execute() call creates a fresh context for isolation
       // The stored reference is only used by dispose() for cleanup
-      this.context = sandbox;
+      this.context = baseSandbox;
 
       // Wrap code in async IIFE to handle top-level await
       const wrappedCode = `
@@ -144,12 +311,16 @@ export class VmAdapter implements SandboxAdapter {
       stats.duration = Date.now() - startTime;
       stats.endTime = Date.now();
 
+      // Determine whether to sanitize stack traces based on config
+      // Default to true for backwards compatibility if not explicitly set
+      const shouldSanitize = config.sanitizeStackTraces ?? true;
+
       return {
         success: false,
         error: {
           name: err.name || 'VMExecutionError',
           message: err.message || 'Unknown VM execution error',
-          stack: sanitizeStackTrace(err.stack),
+          stack: sanitizeStackTrace(err.stack, shouldSanitize),
           code: 'VM_EXECUTION_ERROR',
         },
         stats,

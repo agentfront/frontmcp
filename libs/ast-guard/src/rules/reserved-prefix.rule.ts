@@ -79,7 +79,7 @@ export class ReservedPrefixRule implements ValidationRule {
   validate(context: ValidationContext): void {
     const { ast } = context;
 
-    // Walk the AST and check all identifier declarations
+    // Walk the AST and check all identifier declarations AND assignments
     walk.simple(ast, {
       // Variable declarations (const, let, var)
       VariableDeclarator: (node: any) => {
@@ -88,6 +88,27 @@ export class ReservedPrefixRule implements ValidationRule {
         } else if (node.id.type === 'ObjectPattern' || node.id.type === 'ArrayPattern') {
           // Handle destructuring: const { __ag_foo } = obj
           this.checkPattern(node.id, context);
+        }
+      },
+
+      // Assignment expressions (x = y, x += y, etc.)
+      // Security: Block runtime reassignment of protected identifiers
+      AssignmentExpression: (node: any) => {
+        // Check direct identifier assignment: __safe_callTool = malicious
+        if (node.left.type === 'Identifier') {
+          this.checkAssignmentTarget(node.left, context);
+        }
+        // Check member expression assignment: obj.__safe_foo = malicious or obj['__safe_foo'] = malicious
+        if (node.left.type === 'MemberExpression') {
+          this.checkMemberAssignment(node.left, context);
+        }
+      },
+
+      // Update expressions (++x, x++, --x, x--)
+      // Security: Block increment/decrement of protected identifiers
+      UpdateExpression: (node: any) => {
+        if (node.argument.type === 'Identifier') {
+          this.checkAssignmentTarget(node.argument, context);
         }
       },
 
@@ -229,6 +250,103 @@ export class ReservedPrefixRule implements ValidationRule {
       this.checkPattern(pattern.left, context);
     } else if (pattern.type === 'RestElement') {
       this.checkPattern(pattern.argument, context);
+    }
+  }
+
+  /**
+   * Check assignment targets for reserved prefixes
+   * Security: Blocks runtime reassignment of protected identifiers
+   *
+   * @example
+   * __safe_callTool = () => 'pwned';  // ❌ BLOCKED
+   * __ag_counter = 0;                  // ❌ BLOCKED
+   */
+  private checkAssignmentTarget(node: acorn.Node & { name: string }, context: ValidationContext): void {
+    const identifierName = node.name;
+
+    // Check if this identifier is explicitly allowed
+    if (this.allowedIdentifiers.has(identifierName)) {
+      return;
+    }
+
+    for (const prefix of this.reservedPrefixes) {
+      if (identifierName.startsWith(prefix)) {
+        context.report({
+          code: 'RESERVED_PREFIX_ASSIGNMENT',
+          message:
+            this.customMessage ||
+            `Cannot assign to reserved identifier "${identifierName}". ` +
+              `Identifiers starting with ${this.reservedPrefixes.map((p) => `"${p}"`).join(', ')} ` +
+              `are protected runtime functions and cannot be reassigned.`,
+          location: node.loc
+            ? {
+                line: node.loc.start.line,
+                column: node.loc.start.column,
+                endLine: node.loc.end.line,
+                endColumn: node.loc.end.column,
+              }
+            : undefined,
+          data: {
+            identifier: identifierName,
+            prefix,
+            type: 'assignment',
+            reservedPrefixes: this.reservedPrefixes,
+          },
+        });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Check member expression assignments for reserved prefixes
+   * Security: Blocks assignment to properties with reserved prefixes
+   *
+   * @example
+   * obj.__safe_callTool = malicious;       // ❌ BLOCKED
+   * obj['__safe_callTool'] = malicious;    // ❌ BLOCKED
+   * this.__ag_internal = 42;               // ❌ BLOCKED
+   */
+  private checkMemberAssignment(node: any, context: ValidationContext): void {
+    // Get property name from member expression
+    let propName: string | null = null;
+
+    if (node.computed && node.property.type === 'Literal') {
+      // obj['__safe_foo'] = ...
+      propName = String(node.property.value);
+    } else if (!node.computed && node.property.type === 'Identifier') {
+      // obj.__safe_foo = ...
+      propName = node.property.name;
+    }
+
+    if (!propName) return;
+
+    for (const prefix of this.reservedPrefixes) {
+      if (propName.startsWith(prefix)) {
+        context.report({
+          code: 'RESERVED_PREFIX_MEMBER_ASSIGNMENT',
+          message:
+            this.customMessage ||
+            `Cannot assign to property "${propName}". ` +
+              `Properties starting with ${this.reservedPrefixes.map((p) => `"${p}"`).join(', ')} ` +
+              `are protected and cannot be modified.`,
+          location: node.property.loc
+            ? {
+                line: node.property.loc.start.line,
+                column: node.property.loc.start.column,
+                endLine: node.property.loc.end.line,
+                endColumn: node.property.loc.end.column,
+              }
+            : undefined,
+          data: {
+            property: propName,
+            prefix,
+            type: 'member-assignment',
+            reservedPrefixes: this.reservedPrefixes,
+          },
+        });
+        return;
+      }
     }
   }
 }

@@ -13,3 +13,5 @@ export * from './no-global-access.rule';
 export * from './reserved-prefix.rule';
 export * from './unknown-global.rule';
 export * from './no-user-functions.rule';
+export * from './no-call-target-assignment.rule';
+export * from './unicode-security.rule';

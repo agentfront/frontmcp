@@ -326,6 +326,7 @@ describe('Enclave', () => {
   describe('Custom Globals', () => {
     it('should support custom globals', async () => {
       const enclave = new Enclave({
+        allowFunctionsInGlobals: true, // Required to pass functions in globals
         globals: {
           customValue: 42,
           customFunction: (x: number) => x * 2,
@@ -341,6 +342,34 @@ describe('Enclave', () => {
 
       expect(result.success).toBe(true);
       expect(result.value).toBe(84);
+
+      enclave.dispose();
+    });
+
+    it('should support non-function globals without allowFunctionsInGlobals', async () => {
+      const enclave = new Enclave({
+        globals: {
+          customValue: 42,
+          customString: 'hello',
+          customObject: { nested: { value: 123 } },
+        },
+      });
+
+      const code = `
+        return {
+          value: customValue,
+          str: customString,
+          nested: customObject.nested.value
+        };
+      `;
+
+      const result = await enclave.run(code);
+
+      expect(result.success).toBe(true);
+      const value = result.value as Record<string, unknown>;
+      expect(value['value']).toBe(42);
+      expect(value['str']).toBe('hello');
+      expect(value['nested']).toBe(123);
 
       enclave.dispose();
     });

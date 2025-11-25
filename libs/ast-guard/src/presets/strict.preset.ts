@@ -91,6 +91,10 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
     '__filename',
     'module',
     'exports',
+    'Buffer',
+    'arguments',
+    'callee',
+    'caller',
 
     // Prototype manipulation
     'constructor',
@@ -160,6 +164,12 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
     'Set',
     'WeakRef',
     'FinalizationRegistry',
+
+    // ES2024+ APIs (sandbox escape vectors)
+    'ShadowRealm',
+    'Iterator',
+    'AsyncIterator',
+    'Temporal', // When available
 
     // Dates (timing attacks)
     'Date',

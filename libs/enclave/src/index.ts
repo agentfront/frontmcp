@@ -25,7 +25,12 @@ export type {
   SafeRuntimeContext,
   ExecutionContext,
   SandboxAdapter,
+  SecurityLevel,
+  SecurityLevelConfig,
 } from './lib/types';
+
+// Security level configurations
+export { SECURITY_LEVEL_CONFIGS } from './lib/types';
 
 // Safe runtime utilities
 export { createSafeRuntime, serializeSafeRuntime } from './lib/safe-runtime';

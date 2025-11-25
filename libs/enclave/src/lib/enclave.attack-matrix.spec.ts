@@ -785,7 +785,8 @@ describe('Enclave Attack Matrix', () => {
 
   describe('Error and Info Leakage (ATK-70)', () => {
     it('ATK-70: should not leak host paths in error messages', async () => {
-      const enclave = new Enclave();
+      // Use STRICT security level which enables stack trace sanitization
+      const enclave = new Enclave({ securityLevel: 'STRICT' });
       const code = `
         const obj = null;
         obj.property;
@@ -795,7 +796,7 @@ describe('Enclave Attack Matrix', () => {
 
       expect(result.success).toBe(false);
 
-      // Stack trace should not contain absolute host paths
+      // Stack trace should not contain absolute host paths when sanitization is enabled
       if (result.error?.stack) {
         expect(result.error.stack).not.toMatch(/\/Users\//);
         expect(result.error.stack).not.toMatch(/\/home\//);
