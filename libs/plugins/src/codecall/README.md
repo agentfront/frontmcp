@@ -37,6 +37,7 @@ Goals:
 ## High-level architecture
 
 1. **Tool indexing**
+
    - On app/bootstrap, the plugin receives the resolved list of tools (inline + adapters) across all apps.
    - It builds an index containing:
      - `name`
@@ -48,12 +49,14 @@ Goals:
    - An optional `includeTools` predicate can drop tools from the index entirely.
 
 2. **Modes + metadata**
+
    - CodeCall has a `mode` that controls:
      - Which tools appear in `list_tools`.
      - Which tools are indexed and callable by CodeCall.
    - Tools are annotated with `codecall` metadata via the `@Tool` decorator.
 
 3. **Multi-app / filter-aware search**
+
    - `codecall.search` accepts a `filter` object that can include:
      - `appIds` – limit search to one or more apps (e.g. `['user', 'billing']`).
      - Other tags or flags.
@@ -63,6 +66,7 @@ Goals:
      - Or omit `appIds` to search across all apps.
 
 4. **`list_tools` interception**
+
    - CodeCall intercepts tool listing and replaces it with:
      - `codecall.search`
      - `codecall.describe`
@@ -71,6 +75,7 @@ Goals:
      - plus any tools whose metadata requires them to stay visible.
 
 5. **Search / describe**
+
    - `codecall.search`:
      - Scores tools against a natural-language query (optionally scoped by `filter`).
      - Returns the top `topK`.
@@ -78,6 +83,7 @@ Goals:
      - Returns JSON-schema-like shapes for selected tools so the LLM can generate valid JS code.
 
 6. **Plan execution**
+
    - `codecall.execute`:
      - Parses the script into an AST.
      - Validates the AST against security rules (no banned builtins/globals, optional loop ban).
@@ -93,6 +99,7 @@ Goals:
      - Returns a normalized result with a `status` discriminant.
 
 7. **Direct calls (no VM)**
+
    - If enabled, CodeCall exposes `codecall.invoke`:
      - Calls tools directly via the underlying tool pipeline (no VM, no JS plan).
      - Still uses the same plugin chain, PII behavior, and error model.
@@ -117,7 +124,7 @@ Internally, `callTool(name, input)` inside the VM must delegate to the same
   masking, audit logging, rate limiting, auth) will still run as usual.
 - CodeCall does not introduce extra data paths:
   - The data seen by the VM is exactly what a normal tool call would see
-    *after* all relevant plugins have run.
+    _after_ all relevant plugins have run.
   - The result that CodeCall returns is equivalent to calling the same tools
     one-by-one outside of CodeCall.
 
@@ -163,7 +170,7 @@ declare global {
     };
   }
 }
-````
+```
 
 Example tool:
 
@@ -190,10 +197,7 @@ Implementation detail: ship a `.d.ts` or `types` entry that adds this `codecall`
 ### Type
 
 ```ts
-export type CodeCallMode =
-  | 'codecall_only'
-  | 'codecall_opt_in'
-  | 'metadata_driven';
+export type CodeCallMode = 'codecall_only' | 'codecall_opt_in' | 'metadata_driven';
 ```
 
 ### Semantics & best practices
@@ -202,57 +206,61 @@ export type CodeCallMode =
 
 **Use when:**
 
-* There are **many tools** (dozens/hundreds).
-* You want them **all available via CodeCall**, but **not all listed** in `list_tools`.
+- There are **many tools** (dozens/hundreds).
+- You want them **all available via CodeCall**, but **not all listed** in `list_tools`.
 
 **Behavior:**
 
-* `list_tools`:
+- `list_tools`:
 
-    * Hide all tools by default.
-    * Show tools with `codecall.visibleInListTools === true`.
-* CodeCall index:
+  - Hide all tools by default.
+  - Show tools with `codecall.visibleInListTools === true`.
 
-    * Include all tools by default.
-    * Exclude tools if:
+- CodeCall index:
 
-        * `includeTools(tool) === false`, or
-        * `codecall.enabledInCodeCall === false`.
+  - Include all tools by default.
+  - Exclude tools if:
+
+    - `includeTools(tool) === false`, or
+    - `codecall.enabledInCodeCall === false`.
 
 #### `codecall_opt_in`
 
 **Use when:**
 
-* There is a large toolset but only a **specific subset** should be used via CodeCall.
-* You don’t want all tools in the “code surface”.
+- There is a large toolset but only a **specific subset** should be used via CodeCall.
+- You don’t want all tools in the “code surface”.
 
 **Behavior:**
 
-* `list_tools`:
+- `list_tools`:
 
-    * Hide all tools by default.
-    * Show tools with `codecall.visibleInListTools === true`.
-* CodeCall index:
+  - Hide all tools by default.
+  - Show tools with `codecall.visibleInListTools === true`.
 
-    * Include **only** tools with `codecall.enabledInCodeCall === true`.
+- CodeCall index:
+
+  - Include **only** tools with `codecall.enabledInCodeCall === true`.
 
 #### `metadata_driven`
 
 **Use when:**
 
-* There are **few tools** (≈ up to 10).
-* You want to combine **classic tool calls + CodeCall** on the same tools.
-* The user is comfortable configuring everything via metadata.
+- There are **few tools** (≈ up to 10).
+- You want to combine **classic tool calls + CodeCall** on the same tools.
+- The user is comfortable configuring everything via metadata.
 
 **Behavior:**
 
-* `list_tools`:
+- `list_tools`:
 
-    * Show tools with `codecall.visibleInListTools === true`.
-* CodeCall index:
+  - Show tools with `codecall.visibleInListTools === true`.
 
-    * Include tools with `codecall.enabledInCodeCall === true`.
-* No other implicit defaults.
+- CodeCall index:
+
+  - Include tools with `codecall.enabledInCodeCall === true`.
+
+- No other implicit defaults.
 
 ---
 
@@ -321,16 +329,11 @@ export interface CodeCallOptions {
     /**
      * Optional filter for more advanced policies (e.g. based on appId/tags).
      */
-    filter?: (tool: {
-      name: string;
-      appId?: string;
-      source?: string;
-      tags?: string[];
-    }) => boolean;
+    filter?: (tool: { name: string; appId?: string; source?: string; tags?: string[] }) => boolean;
   };
 
   /**
-   * vm2 sandbox configuration and CSP-style policy.
+   * VM/Enclave configuration and CSP-style policy.
    */
   vm?: {
     /**
@@ -346,12 +349,155 @@ export interface CodeCallOptions {
     disabledGlobals?: string[];
     allowConsole?: boolean;
   };
+
+  /**
+   * Sidecar configuration for handling large data in AgentScript.
+   *
+   * The sidecar allows tool results with large string data to be stored
+   * separately and accessed via reference tokens, keeping the script
+   * size manageable for security validation.
+   */
+  sidecar?: {
+    /**
+     * Enable or disable the sidecar feature.
+     * @default false
+     */
+    enabled: boolean;
+
+    /**
+     * Maximum total size of all stored references (bytes).
+     * @default 10MB
+     */
+    maxTotalSize?: number;
+
+    /**
+     * Maximum size of a single reference (bytes).
+     * @default 1MB
+     */
+    maxReferenceSize?: number;
+
+    /**
+     * Minimum string size to extract to sidecar (bytes).
+     * Strings smaller than this stay inline.
+     * @default 1024
+     */
+    extractionThreshold?: number;
+
+    /**
+     * Maximum size when resolving references (bytes).
+     * @default 5MB
+     */
+    maxResolvedSize?: number;
+
+    /**
+     * Allow string concatenation with reference tokens.
+     * Set to false (default) for maximum security - prevents
+     * attacks like: ref + "__proto__"
+     * @default false
+     */
+    allowComposites?: boolean;
+
+    /**
+     * Maximum script length when sidecar is disabled (bytes).
+     * If the script exceeds this length and sidecar is disabled,
+     * execution fails with ScriptTooLargeError.
+     * Set to null to disable the length check.
+     * @default 65536 (64KB)
+     */
+    maxScriptLengthWhenDisabled?: number | null;
+  };
 }
 ```
 
 Default `mode` should be `'codecall_only'`.
 
-`includeTools` is applied *before* mode/metadata rules to drop tools entirely from CodeCall.
+`includeTools` is applied _before_ mode/metadata rules to drop tools entirely from CodeCall.
+
+---
+
+## Sidecar: Handling Large Data
+
+The **sidecar** feature enables CodeCall to handle large tool responses without embedding them directly in the script. This is critical for:
+
+1. **Security**: Keeping script size small for reliable AST validation
+2. **Performance**: Avoiding memory pressure from large inline strings
+3. **Flexibility**: Allowing tools to return large datasets (API responses, documents, etc.)
+
+### How It Works
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  Tool returns large data                                       │
+│  { data: "...1MB of text..." }                                 │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Sidecar extracts large strings                                │
+│  "__ref_abc123" ← stored separately                            │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  Script receives reference token                               │
+│  const response = { data: "__ref_abc123" }                     │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  On property access, reference is resolved                     │
+│  response.data.length → resolves to actual data                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Enabling Sidecar
+
+```ts
+const codecall = new CodeCallPlugin({
+  sidecar: {
+    enabled: true,
+    extractionThreshold: 1024, // Extract strings > 1KB
+    maxTotalSize: 10 * 1024 * 1024, // 10MB total storage
+    allowComposites: false, // Block ref + "string" (security)
+  },
+});
+```
+
+### Script Length Validation
+
+When sidecar is **disabled**, CodeCall validates script length to prevent DoS attacks via excessively large scripts:
+
+```ts
+const codecall = new CodeCallPlugin({
+  sidecar: {
+    enabled: false,
+    maxScriptLengthWhenDisabled: 64 * 1024, // 64KB max (default)
+  },
+});
+```
+
+If a script exceeds this limit, execution fails with `ScriptTooLargeError`:
+
+```ts
+// Error: Script length (100000 characters) exceeds maximum allowed length (65536 characters).
+// Enable sidecar to handle large data, or reduce script size.
+```
+
+Set `maxScriptLengthWhenDisabled: null` to disable the length check entirely (not recommended for untrusted code).
+
+### Security: allowComposites
+
+The `allowComposites` option controls whether reference tokens can be concatenated with strings:
+
+```ts
+// When allowComposites: false (default, secure)
+const result = ref + '_suffix'; // BLOCKED - prevents prototype pollution attacks
+
+// When allowComposites: true (less secure)
+const result = ref + '_suffix'; // ALLOWED - use with caution
+```
+
+Keep `allowComposites: false` unless you specifically need string concatenation with large data.
 
 ---
 
@@ -360,79 +506,76 @@ Default `mode` should be `'codecall_only'`.
 ### Preset type
 
 ```ts
-export type CodeCallVmPreset =
-  | 'locked_down'
-  | 'secure'
-  | 'balanced'
-  | 'experimental';
+export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experimental';
 ```
 
 ### Expected behavior (intent)
 
 #### `locked_down`
 
-* Very strict, for sensitive deployments.
-* Short `timeoutMs` (~2000).
-* `allowLoops: false`.
-* `allowConsole: false`.
-* Large `disabledBuiltins` and `disabledGlobals` sets.
-* Analogy: CSP `default-src 'none'`.
+- Very strict, for sensitive deployments.
+- Short `timeoutMs` (~2000).
+- `allowLoops: false`.
+- `allowConsole: false`.
+- Large `disabledBuiltins` and `disabledGlobals` sets.
+- Analogy: CSP `default-src 'none'`.
 
 #### `secure` (default)
 
-* Default for untrusted LLM code.
-* `timeoutMs` ~3000–4000.
-* `allowLoops: false` (forces linear code).
-* `allowConsole: true` (logs captured).
-* `disabledBuiltins`: at least `['eval', 'Function']`.
-* `disabledGlobals`: block Node & network, timers (`['require', 'process', 'fetch', 'setTimeout', 'setInterval']`).
+- Default for untrusted LLM code.
+- `timeoutMs` ~3000–4000.
+- `allowLoops: false` (forces linear code).
+- `allowConsole: true` (logs captured).
+- `disabledBuiltins`: at least `['eval', 'Function']`.
+- `disabledGlobals`: block Node & network, timers (`['require', 'process', 'fetch', 'setTimeout', 'setInterval']`).
 
 #### `balanced`
 
-* More permissive for trusted/internal usage.
-* `allowLoops: true`.
-* `allowConsole: true`.
-* `disabledBuiltins`: `['eval', 'Function']`.
-* `disabledGlobals`: still block Node/network.
+- More permissive for trusted/internal usage.
+- `allowLoops: true`.
+- `allowConsole: true`.
+- `disabledBuiltins`: `['eval', 'Function']`.
+- `disabledGlobals`: still block Node/network.
 
 #### `experimental`
 
-* For local dev only.
-* Higher `timeoutMs`.
-* `allowLoops: true`, `allowConsole: true`.
-* Minimal blocking (still block `eval`, `Function` at minimum).
+- For local dev only.
+- Higher `timeoutMs`.
+- `allowLoops: true`, `allowConsole: true`.
+- Minimal blocking (still block `eval`, `Function` at minimum).
 
 ### Security pipeline
 
 1. **AST validation**
 
-    * Parse `script` to an AST.
-    * Reject:
+   - Parse `script` to an AST.
+   - Reject:
 
-        * Disallowed identifiers (from `disabledBuiltins` / `disabledGlobals`).
-        * Loop nodes (`ForStatement`, `WhileStatement`, `DoWhileStatement`, `ForOfStatement`, `ForInStatement`) if `allowLoops === false`.
-    * Happens *before* any VM execution.
+     - Disallowed identifiers (from `disabledBuiltins` / `disabledGlobals`).
+     - Loop nodes (`ForStatement`, `WhileStatement`, `DoWhileStatement`, `ForOfStatement`, `ForInStatement`) if `allowLoops === false`.
+
+   - Happens _before_ any VM execution.
 
 2. **VM configuration**
 
-    * Start from preset defaults.
-    * Apply `vm` overrides.
-    * Construct `vm2` options with:
+   - Start from preset defaults.
+   - Apply `vm` overrides.
+   - Construct `vm2` options with:
 
-        * `sandbox` object (`callTool`, `getTool`, `codecallContext`, optional `console`, optional `mcpLog` / `mcpNotify`).
-        * No `require` or other Node internals.
+     - `sandbox` object (`callTool`, `getTool`, `codecallContext`, optional `console`, optional `mcpLog` / `mcpNotify`).
+     - No `require` or other Node internals.
 
 3. **Execution**
 
-    * Run script with `vm2` and `timeoutMs`.
-    * Map outcomes to `CodeCallExecuteResult`:
+   - Run script with `vm2` and `timeoutMs`.
+   - Map outcomes to `CodeCallExecuteResult`:
 
-        * `ok`
-        * `syntax_error`
-        * `illegal_access`
-        * `tool_error`
-        * `runtime_error`
-        * `timeout`
+     - `ok`
+     - `syntax_error`
+     - `illegal_access`
+     - `tool_error`
+     - `runtime_error`
+     - `timeout`
 
 ---
 
@@ -440,8 +583,8 @@ export type CodeCallVmPreset =
 
 ### `codecall.search`
 
-* Input: `CodeCallSearchInput`
-* Output: `CodeCallSearchResult`
+- Input: `CodeCallSearchInput`
+- Output: `CodeCallSearchResult`
 
 ```ts
 export type CodeCallSearchInput = {
@@ -468,16 +611,16 @@ export type CodeCallSearchResult = {
 
 Requirements:
 
-* Respect global `topK` default + per-call override.
-* Use the tool index after `includeTools` and mode/metadata filtering.
-* Respect `filter.appIds` to limit by appId when provided.
+- Respect global `topK` default + per-call override.
+- Use the tool index after `includeTools` and mode/metadata filtering.
+- Respect `filter.appIds` to limit by appId when provided.
 
 ---
 
 ### `codecall.describe`
 
-* Input: `CodeCallDescribeInput`
-* Output: `CodeCallDescribeResult`
+- Input: `CodeCallDescribeInput`
+- Output: `CodeCallDescribeResult`
 
 ```ts
 export type CodeCallDescribeInput = {
@@ -501,16 +644,16 @@ export type CodeCallDescribeResult = {
 
 Requirements:
 
-* Only describe tools that are currently in the CodeCall index.
-* Respect `maxDefinitions` + per-call override `max`.
-* Map internal schemas to JSON-schema-like objects in a stable format.
+- Only describe tools that are currently in the CodeCall index.
+- Respect `maxDefinitions` + per-call override `max`.
+- Map internal schemas to JSON-schema-like objects in a stable format.
 
 ---
 
 ### `codecall.execute`
 
-* Input: `CodeCallExecuteInput`
-* Output: `CodeCallExecuteResult`
+- Input: `CodeCallExecuteInput`
+- Output: `CodeCallExecuteResult`
 
 ```ts
 export type CodeCallExecuteInput = {
@@ -523,10 +666,7 @@ export type CodeCallExecuteInput = {
 Inside the VM, injected globals (conceptual):
 
 ```ts
-declare function callTool<TInput, TResult>(
-  name: string,
-  input: TInput
-): Promise<TResult>;
+declare function callTool<TInput, TResult>(name: string, input: TInput): Promise<TResult>;
 
 declare function getTool(name: string): {
   name: string;
@@ -546,13 +686,10 @@ declare const console: {
 declare function mcpLog(
   level: 'debug' | 'info' | 'warn' | 'error',
   message: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ): void;
 
-declare function mcpNotify(
-  event: string,
-  payload: Record<string, unknown>
-): void;
+declare function mcpNotify(event: string, payload: Record<string, unknown>): void;
 ```
 
 > `console`, `mcpLog`, and `mcpNotify` may be disabled depending on configuration.
@@ -620,24 +757,24 @@ export type CodeCallExecuteResult =
 
 Every `callTool()` invocation should produce MCP notifications so the client/agent can observe:
 
-* **Before** the tool runs:
+- **Before** the tool runs:
 
-    * “tool call start” notification:
+  - “tool call start” notification:
 
-        * `toolName`
-        * `input`
-        * `callId` (correlates with end event)
+    - `toolName`
+    - `input`
+    - `callId` (correlates with end event)
 
-* **After** the tool finishes:
+- **After** the tool finishes:
 
-    * “tool call end” notification:
+  - “tool call end” notification:
 
-        * `toolName`
-        * `input`
-        * `callId`
-        * `status` (e.g. `"ok"` / `"error"`)
-        * optional `durationMs`
-        * optional `error` information if it failed
+    - `toolName`
+    - `input`
+    - `callId`
+    - `status` (e.g. `"ok"` / `"error"`)
+    - optional `durationMs`
+    - optional `error` information if it failed
 
 Exact notification shape is defined by the FrontMCP transport, but CodeCall must emit them around each `callTool` execution.
 
@@ -668,27 +805,28 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
 
 #### Error separation: script vs tool
 
-* **Script-level errors**:
+- **Script-level errors**:
 
-    * `status: 'runtime_error'`, `error.source: 'script'`
-    * Thrown by user code itself (invalid property access, thrown `Error`, etc.).
-    * Not tied to a single tool call.
-* **Tool-level errors**:
+  - `status: 'runtime_error'`, `error.source: 'script'`
+  - Thrown by user code itself (invalid property access, thrown `Error`, etc.).
+  - Not tied to a single tool call.
 
-    * `status: 'tool_error'`, `error.source: 'tool'`
-    * Thrown while executing a specific `callTool(toolName, input)`.
-    * Include:
+- **Tool-level errors**:
 
-        * `toolName`
-        * `toolInput`
-        * `message` (+ optional `code` / `details`).
+  - `status: 'tool_error'`, `error.source: 'tool'`
+  - Thrown while executing a specific `callTool(toolName, input)`.
+  - Include:
+
+    - `toolName`
+    - `toolInput`
+    - `message` (+ optional `code` / `details`).
 
 The LLM can also wrap `callTool` in `try/catch` inside the plan. If it doesn’t, CodeCall surfaces failures as `tool_error` with enough context for retries.
 
 Unknown tool / permission issues should typically surface as:
 
-* `tool_error` with `code: 'UnknownTool'`, or
-* A tool-defined “authorization required” payload in `details` (for a future auth plugin to handle).
+- `tool_error` with `code: 'UnknownTool'`, or
+- A tool-defined “authorization required” payload in `details` (for a future auth plugin to handle).
 
 ---
 
@@ -707,33 +845,36 @@ export type CodeCallInvokeInput = {
 
 Behavior:
 
-* Validate that `tool` is allowed by `directCalls` policy.
-* Forward the call to the **same tool call pipeline** as normal MCP calls:
+- Validate that `tool` is allowed by `directCalls` policy.
+- Forward the call to the **same tool call pipeline** as normal MCP calls:
 
-    * PII plugin(s)
-    * auth / rate limits
-    * logging / audit
-    * other lifecycle plugins
-* No VM is created and no user JS is run.
+  - PII plugin(s)
+  - auth / rate limits
+  - logging / audit
+  - other lifecycle plugins
+
+- No VM is created and no user JS is run.
 
 Output:
 
-* On success:
+- On success:
 
-    * Return tool result (or a wrapped `{ status: 'ok', result }`).
-* On error:
+  - Return tool result (or a wrapped `{ status: 'ok', result }`).
 
-    * If tool is unknown/not allowed:
+- On error:
 
-        * Return a clear error referring to `tool`.
-    * If the tool throws:
+  - If tool is unknown/not allowed:
 
-        * Return a `tool_error`-like shape including:
+    - Return a clear error referring to `tool`.
 
-            * `toolName`
-            * `toolInput`
-            * `message`
-            * optional `code` / `details`.
+  - If the tool throws:
+
+    - Return a `tool_error`-like shape including:
+
+      - `toolName`
+      - `toolInput`
+      - `message`
+      - optional `code` / `details`.
 
 ---
 
@@ -741,15 +882,15 @@ Output:
 
 CodeCall should integrate with the surrounding transport protocol:
 
-* With **session IDs + tool list change notifications**:
+- With **session IDs + tool list change notifications**:
 
-    * Clients cache search/describe results per session.
-    * CodeCall emits notifications when tools relevant to a prior search/describe change.
-    * Clients can re-describe only when notified.
+  - Clients cache search/describe results per session.
+  - CodeCall emits notifications when tools relevant to a prior search/describe change.
+  - Clients can re-describe only when notified.
 
-* Without notifications:
+- Without notifications:
 
-    * Orchestrators should re-run `codecall.describe` before relying on a tool in `codecall.execute`.
+  - Orchestrators should re-run `codecall.describe` before relying on a tool in `codecall.execute`.
 
 Implementation-specific details (event names, payloads) live in the transport layer, but CodeCall needs hooks to trigger these events.
 
@@ -787,27 +928,31 @@ npx nx lint codecall
 
 Testing guidelines:
 
-* **Happy path**:
+- **Happy path**:
 
-    * search → describe → execute with valid tools and simple scripts.
-* **Error cases**:
+  - search → describe → execute with valid tools and simple scripts.
 
-    * Script syntax errors.
-    * Illegal access (banned globals/builtins).
-    * Unknown tool names.
-    * Tool-level errors vs script-level errors.
-    * Timeout behavior.
-* **Mode behavior**:
+- **Error cases**:
 
-    * Which tools appear in `list_tools` and search results under each mode.
-* **Direct calls**:
+  - Script syntax errors.
+  - Illegal access (banned globals/builtins).
+  - Unknown tool names.
+  - Tool-level errors vs script-level errors.
+  - Timeout behavior.
 
-    * `codecall.invoke` success + error paths.
-* **Security tests**:
+- **Mode behavior**:
 
-    * Attempt access to `process`, `require`, `fetch`, etc.
-    * Attempt loops when `allowLoops === false`.
-    * Ensure PII plugins still see all inputs/outputs.
+  - Which tools appear in `list_tools` and search results under each mode.
+
+- **Direct calls**:
+
+  - `codecall.invoke` success + error paths.
+
+- **Security tests**:
+
+  - Attempt access to `process`, `require`, `fetch`, etc.
+  - Attempt loops when `allowLoops === false`.
+  - Ensure PII plugins still see all inputs/outputs.
 
 ---
 
@@ -815,20 +960,18 @@ Testing guidelines:
 
 Safe extension points:
 
-* Pluggable search strategies (BM25, embeddings).
-* More granular tagging/filtering of tools.
-* Helper utilities injected as globals (e.g. pagination helpers), guarded by AST + config.
-* Per-tenant / per-session VM policies (based on `codecallContext`).
-* Future **auth/permissions plugin** that:
+- Pluggable search strategies (BM25, embeddings).
+- More granular tagging/filtering of tools.
+- Helper utilities injected as globals (e.g. pagination helpers), guarded by AST + config.
+- Per-tenant / per-session VM policies (based on `codecallContext`).
+- Future **auth/permissions plugin** that:
 
-    * Detects “authorization required” tool responses.
-    * Drives OAuth/permission flows.
-    * Retries execution when possible.
+  - Detects “authorization required” tool responses.
+  - Drives OAuth/permission flows.
+  - Retries execution when possible.
 
 Any change that alters the LLM contract (field names, tool names, result shapes) should:
 
 1. Be treated as a breaking change.
 2. Update Mintlify docs and this README.
 3. Provide migration notes when possible.
-
-

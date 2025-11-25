@@ -79,6 +79,9 @@ The AgentScript preset is purpose-built for validating LLM-generated orchestrati
 import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
 
 const validator = new JSAstValidator(createAgentScriptPreset({
+  // Require at least one callTool() invocation (default: false)
+  requireCallTool: true,
+
   // Customize allowed globals
   allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON', 'Array', 'Object'],
 
@@ -95,6 +98,20 @@ const validator = new JSAstValidator(createAgentScriptPreset({
   },
 }));
 ```
+
+### AgentScript Preset Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `requireCallTool` | `boolean` | `false` | Require at least one `callTool()` invocation in the code |
+| `allowedGlobals` | `string[]` | Standard safe globals | Identifiers that can be referenced without declaration |
+| `allowArrowFunctions` | `boolean` | `true` | Allow arrow functions for array methods |
+| `allowedLoops` | `object` | `for` and `for-of` | Configure which loop types are allowed |
+| `additionalDisallowedIdentifiers` | `string[]` | `[]` | Additional identifiers to block |
+
+<Tip>
+  Use `requireCallTool: true` to ensure AgentScript code actually interacts with tools rather than just performing local computations. This is useful for preventing scripts that do nothing useful.
+</Tip>
 
 ### What AgentScript Blocks
 

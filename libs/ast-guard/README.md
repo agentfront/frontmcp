@@ -378,6 +378,61 @@ const validator = new JSAstValidator(
 
 Legend: ❌ Blocked (error) | ⚠️ Detected (warning) | ✅ Allowed
 
+### AgentScript Preset
+
+The AgentScript preset is specifically designed for safe AI agent orchestration. It provides security rules tailored for executing LLM-generated code that calls tools via `callTool()`.
+
+```typescript
+import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
+
+// Basic usage - secure defaults for AgentScript
+const rules = createAgentScriptPreset();
+const validator = new JSAstValidator(rules);
+
+// With requireCallTool - enforce that code must call tools
+const rules = createAgentScriptPreset({
+  requireCallTool: true, // Require at least one callTool() invocation
+});
+```
+
+**Options:**
+
+| Option                            | Type       | Default | Description                                              |
+| --------------------------------- | ---------- | ------- | -------------------------------------------------------- |
+| `requireCallTool`                 | `boolean`  | `false` | Require at least one `callTool()` invocation in the code |
+| `additionalDisallowedIdentifiers` | `string[]` | `[]`    | Additional identifiers to block beyond the default set   |
+| `allowedLoops`                    | `object`   | -       | Override default loop restrictions                       |
+| `allowAsync`                      | `object`   | -       | Override default async restrictions                      |
+
+**Example with all options:**
+
+```typescript
+const rules = createAgentScriptPreset({
+  // Require the code to actually call tools
+  requireCallTool: true,
+
+  // Block additional identifiers
+  additionalDisallowedIdentifiers: ['fetch', 'XMLHttpRequest'],
+
+  // Allow specific loops (default: for and for-of allowed)
+  allowedLoops: {
+    allowFor: true,
+    allowForOf: true,
+    allowWhile: false, // Block while loops
+    allowDoWhile: false, // Block do-while loops
+    allowForIn: false, // Block for-in loops
+  },
+
+  // Control async behavior
+  allowAsync: {
+    allowAsyncFunctions: false, // Block async function declarations
+    allowAwait: true, // Allow await expressions
+  },
+});
+```
+
+The AgentScript preset is used internally by the `@frontmcp/enclave` package for secure code execution.
+
 ## Built-in Rules
 
 ### DisallowedIdentifierRule
@@ -422,6 +477,20 @@ const rule = new RequiredFunctionCallRule({
   minCalls: 1,
   maxCalls: 10,
   messageTemplate: 'Must call {function} at least once',
+});
+```
+
+**Mode Options:**
+
+- `mode: 'all'` (default) - All functions in `required` must be called
+- `mode: 'any'` - At least one function from `required` must be called
+
+```typescript
+// Require either callTool or invokeAPI to be called
+const rule = new RequiredFunctionCallRule({
+  required: ['callTool', 'invokeAPI'],
+  mode: 'any',
+  minCalls: 1,
 });
 ```
 

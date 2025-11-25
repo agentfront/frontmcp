@@ -166,6 +166,34 @@ Configure CodeCall behavior when registering the plugin:
   </Expandable>
 </ParamField>
 
+<ParamField path="sidecar" type="object">
+  Configuration for handling large data in AgentScript. The sidecar stores large tool responses separately and provides them via reference tokens.
+
+  <Expandable title="properties">
+    <ResponseField name="enabled" type="boolean" default="false">
+      Enable the sidecar feature for large data handling
+    </ResponseField>
+    <ResponseField name="maxTotalSize" type="number" default="10485760">
+      Maximum total size of all stored references in bytes (default 10MB)
+    </ResponseField>
+    <ResponseField name="maxReferenceSize" type="number" default="1048576">
+      Maximum size of a single reference in bytes (default 1MB)
+    </ResponseField>
+    <ResponseField name="extractionThreshold" type="number" default="1024">
+      Minimum string size in bytes to extract to sidecar. Smaller strings stay inline.
+    </ResponseField>
+    <ResponseField name="maxResolvedSize" type="number" default="5242880">
+      Maximum size when resolving references in bytes (default 5MB)
+    </ResponseField>
+    <ResponseField name="allowComposites" type="boolean" default="false">
+      Allow string concatenation with reference tokens. Set to `false` (default) for security - prevents attacks like `ref + "__proto__"`
+    </ResponseField>
+    <ResponseField name="maxScriptLengthWhenDisabled" type="number | null" default="65536">
+      Maximum script length in bytes when sidecar is disabled. If exceeded, execution fails with `ScriptTooLargeError`. Set to `null` to disable this check.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
 <Note>
   Enclave automatically blocks dangerous constructs via AST validation:
   - `eval`, `Function`, `setTimeout`, `setInterval` are blocked

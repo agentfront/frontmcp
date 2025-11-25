@@ -87,7 +87,7 @@ enclave.dispose();
 
 ## Defense-in-Depth Security Model
 
-Enclave uses a three-layer security approach:
+Enclave uses a four-layer security approach:
 
 ### Layer 1: AST Validation
 
@@ -148,6 +148,15 @@ Code executes in an isolated Node.js vm context:
 - **Resource limits**: Timeout, iteration count, and tool call limits enforced
 - **Stack sanitization**: Error stack traces sanitized to prevent information leakage
 
+### Layer 4: Reference Sidecar (Optional)
+
+When enabled, large data is handled separately:
+
+- **Large data extraction**: Strings exceeding the threshold are stored in sidecar storage
+- **Reference tokens**: Large strings are replaced with safe reference tokens (`__ref_abc123`)
+- **Lazy resolution**: Data is only resolved when explicitly accessed
+- **Composite blocking**: String concatenation with references can be blocked (`allowComposites: false`)
+
 ## Configuration Options
 
 <ParamField path="timeout" type="number" default="30000">
@@ -178,6 +187,81 @@ Code executes in an isolated Node.js vm context:
 <ParamField path="transform" type="boolean" default="true">
   Whether to transform code before execution
 </ParamField>
+
+<ParamField path="allowFunctionsInGlobals" type="boolean" default="false">
+  Allow functions in the `globals` object. Required when providing callback functions or utilities.
+</ParamField>
+
+<ParamField path="sidecar" type="object">
+  Configuration for handling large data via reference tokens
+
+  <Expandable title="properties">
+    <ResponseField name="enabled" type="boolean" default="false">
+      Enable the sidecar feature for large data handling
+    </ResponseField>
+    <ResponseField name="maxTotalSize" type="number" default="10485760">
+      Maximum total size of all stored references in bytes (default 10MB)
+    </ResponseField>
+    <ResponseField name="maxReferenceSize" type="number" default="1048576">
+      Maximum size of a single reference in bytes (default 1MB)
+    </ResponseField>
+    <ResponseField name="extractionThreshold" type="number" default="1024">
+      Minimum string size to extract to sidecar. Smaller strings stay inline.
+    </ResponseField>
+    <ResponseField name="maxResolvedSize" type="number" default="5242880">
+      Maximum size when resolving references (default 5MB)
+    </ResponseField>
+    <ResponseField name="allowComposites" type="boolean" default="false">
+      Allow string concatenation with reference tokens. Keep `false` for security.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Reference Sidecar
+
+The sidecar is a powerful feature for handling large data in AgentScript without embedding it in the script. This keeps script size small for reliable AST validation while allowing tools to return large datasets.
+
+### How It Works
+
+1. **Extraction**: When a tool returns data with large strings (> `extractionThreshold`), those strings are stored in the sidecar and replaced with reference tokens (`__ref_abc123`)
+2. **Lazy Resolution**: When script code accesses a reference token, it's resolved just-in-time to the actual data
+3. **Safe Property Access**: Only explicit property accesses trigger resolution, preventing data exfiltration
+
+```ts
+const enclave = new Enclave({
+  toolHandler: async (name, args) => {
+    if (name === 'documents:get') {
+      // Returns a 2MB document - automatically stored in sidecar
+      return { content: '...2MB of text...' };
+    }
+  },
+  sidecar: {
+    enabled: true,
+    extractionThreshold: 1024,    // Extract strings > 1KB
+    allowComposites: false,        // Block: ref + "_suffix" (security)
+  },
+});
+
+const result = await enclave.run(`
+  const doc = await callTool('documents:get', { id: 'doc-123' });
+  // doc.content is a reference token, resolved on access
+  return { wordCount: doc.content.split(' ').length };
+`);
+```
+
+### Security: allowComposites
+
+The `allowComposites: false` setting (default) blocks string concatenation with reference tokens:
+
+```js
+// When allowComposites: false (default, secure)
+const result = ref + "_suffix";  // ❌ BLOCKED - prevents prototype pollution
+
+// When allowComposites: true (less secure)
+const result = ref + "_suffix";  // ✅ ALLOWED - use with caution
+```
+
+Keep `allowComposites: false` unless you specifically need string concatenation with large data.
 
 ## Execution Results
 
