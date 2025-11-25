@@ -21,7 +21,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/json-schema-to-zod-v3"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"

@@ -6,7 +6,8 @@ import CrmMcpApp from './apps/crm';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp, CrmMcpApp],
+  // apps: [ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp, CrmMcpApp],
+  apps: [CrmMcpApp],
   logging: { level: LogLevel.VERBOSE },
   http: {
     port: 3002,

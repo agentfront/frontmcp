@@ -15,7 +15,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/cli"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
@@ -27,6 +28,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
+    "dev-inspect": "tsx src/cli.ts inspector",
     "prepare": "npm run build"
   },
   "dependencies": {
