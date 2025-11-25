@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Set Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
       - name: Run linter
         run: npx nx affected -t lint
         continue-on-error: true
