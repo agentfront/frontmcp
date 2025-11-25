@@ -9,35 +9,43 @@ import {
   ValidationStats,
 } from './interfaces';
 import { ParseError, InvalidSourceError, ConfigurationError } from './errors';
+import { transformAst, generateCode } from './transformer';
 
 /**
  * Main AST validator class
  */
 export class JSAstValidator {
   private rules: Map<string, ValidationRule> = new Map();
+  private explicitlyRegistered = new Set<string>();
 
   constructor(rules?: ValidationRule[]) {
     if (rules) {
       for (const rule of rules) {
-        this.registerRule(rule);
+        this.registerRule(rule, true);
       }
     }
   }
 
   /**
    * Register a validation rule
+   * @param rule The rule to register
+   * @param explicit Whether this rule was explicitly registered (via constructor)
    */
-  registerRule(rule: ValidationRule): void {
+  registerRule(rule: ValidationRule, explicit = false): void {
     if (this.rules.has(rule.name)) {
       throw new ConfigurationError(`Rule ${rule.name} is already registered`);
     }
     this.rules.set(rule.name, rule);
+    if (explicit) {
+      this.explicitlyRegistered.add(rule.name);
+    }
   }
 
   /**
    * Unregister a validation rule
    */
   unregisterRule(ruleName: string): boolean {
+    this.explicitlyRegistered.delete(ruleName);
     return this.rules.delete(ruleName);
   }
 
@@ -153,11 +161,30 @@ export class JSAstValidator {
 
     const durationMs = Date.now() - startTime;
 
+    // Perform transformation if enabled and validation passed
+    let transformedCode: string | undefined;
+    if (config.transform?.enabled && ast) {
+      try {
+        // Clone the AST before transforming to avoid mutating the original
+        const astClone = JSON.parse(JSON.stringify(ast));
+        transformAst(astClone, config.transform);
+        transformedCode = generateCode(astClone);
+      } catch (err) {
+        const error = err as Error;
+        issues.push({
+          code: 'TRANSFORM_ERROR',
+          severity: ValidationSeverity.ERROR,
+          message: `Code transformation failed: ${error.message}`,
+        });
+      }
+    }
+
     return {
       valid: !issues.some((issue) => issue.severity === ValidationSeverity.ERROR),
       issues,
       ast,
       rulesExecuted: enabledRules.length,
+      transformedCode,
     };
   }
 
@@ -201,8 +228,9 @@ export class JSAstValidator {
       const ruleConfig = config.rules?.[rule.name];
 
       // If rule is not configured, use its default enabled state
+      // Rules explicitly registered via constructor are always considered enabled
       if (ruleConfig === undefined) {
-        if (rule.enabledByDefault) {
+        if (this.explicitlyRegistered.has(rule.name) || rule.enabledByDefault) {
           enabled.push(rule);
         }
         continue;

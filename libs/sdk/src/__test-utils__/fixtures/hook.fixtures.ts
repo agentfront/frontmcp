@@ -14,9 +14,7 @@ export const TEST_HOOK_TARGET: Token = Symbol('TEST_HOOK_TARGET');
 /**
  * Creates a simple hook metadata object
  */
-export function createHookMetadata(
-  overrides: Partial<HookMetadata> = {}
-): HookMetadata {
+export function createHookMetadata(overrides: Partial<HookMetadata> = {}): HookMetadata {
   return {
     type: 'stage' as HookStageType,
     flow: 'CallToolFlow' as any,
@@ -31,10 +29,7 @@ export function createHookMetadata(
 /**
  * Creates a "will" stage hook metadata
  */
-export function createWillHookMetadata(
-  flow: string = 'CallToolFlow',
-  stage: string = 'execute'
-): HookMetadata {
+export function createWillHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
   return {
     type: 'will',
     flow: flow as any,
@@ -48,10 +43,7 @@ export function createWillHookMetadata(
 /**
  * Creates a "did" stage hook metadata
  */
-export function createDidHookMetadata(
-  flow: string = 'CallToolFlow',
-  stage: string = 'execute'
-): HookMetadata {
+export function createDidHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
   return {
     type: 'did',
     flow: flow as any,
@@ -65,10 +57,7 @@ export function createDidHookMetadata(
 /**
  * Creates an "around" stage hook metadata
  */
-export function createAroundHookMetadata(
-  flow: string = 'CallToolFlow',
-  stage: string = 'execute'
-): HookMetadata {
+export function createAroundHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
   return {
     type: 'around',
     flow: flow as any,

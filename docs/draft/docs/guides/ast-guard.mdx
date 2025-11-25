@@ -1,35 +1,36 @@
 ---
-title: Secure User Scripts with AST Guard
+title: AST Validation with ast-guard
 slug: guides/ast-guard
-description: Validate and enforce policy on user-provided JavaScript before tools execute it.
-icon: shield-halved
+description: Bank-grade JavaScript AST validation with extensible rules, presets, and the AgentScript language for safe LLM code execution.
+icon: shield-check
 ---
 
-AST Guard is FrontMCP's bank-grade AST validator for JavaScript. It inspects user-provided or LLM-generated code before it reaches your sandbox so you can block risky constructs, enforce API usage, and explain violations back to the caller.
+ast-guard is FrontMCP's AST validation library for JavaScript. It inspects user-provided or LLM-generated code before execution, blocking dangerous constructs and enforcing API usage policies. ast-guard powers Enclave's first security layer and can be used standalone for any JavaScript validation needs.
 
 <CardGroup cols={3}>
-  <Card title="Defense in depth" icon="shield">
-    Block eval-like identifiers, async/await, loops, and other dangerous nodes with 7 built-in rules plus structured errors.
+  <Card title="12 Built-in Rules" icon="shield">
+    Block eval, dangerous globals, prototype manipulation, unbounded loops, and more with battle-tested validation rules.
   </Card>
-  <Card title="Presets & plugins" icon="layer-group">
-    Choose from STRICT, SECURE, STANDARD, and PERMISSIVE presets or register custom rule plugins for bespoke policies.
+  <Card title="AgentScript Preset" icon="robot">
+    Purpose-built preset for LLM-generated orchestration code with whitelist-only globals and strict control flow.
   </Card>
-  <Card title="Operational telemetry" icon="chart-line">
-    Validation results include machine-readable codes, locations, and stats so you can monitor rejection rates and respond gracefully.
+  <Card title="Code Transformation" icon="arrows-rotate">
+    Transform validated code for safe execution with loop limits, proxied functions, and main wrapper.
   </Card>
 </CardGroup>
 
-## When to reach for AST Guard
+## When to Use ast-guard
 
-- Tools accept arbitrary JavaScript (e.g., scripting assistants, workflow builders, plugin authors).
-- You need deterministic guardrails before handing code to a sandbox, VM, or remote executor.
-- Compliance teams require audit trails that show exactly which rule blocked a script.
+- **LLM-generated code** - Validate AI-written JavaScript before execution
+- **User scripts** - Accept arbitrary JavaScript with deterministic guardrails
+- **Workflow builders** - Enforce API usage and block dangerous constructs
+- **Compliance requirements** - Audit trails showing exactly which rule blocked a script
 
 <Note>
-  AST Guard is a pure TypeScript package that matches FrontMCP's Node 22 minimum (Node 24 recommended). No native builds or external services are required.
+  ast-guard is a pure TypeScript package with zero native dependencies. It works in Node.js 22+ and can be used standalone or as part of the Enclave execution environment.
 </Note>
 
-## Install and bootstrap
+## Installation
 
 <CodeGroup>
 ```bash npm
@@ -43,89 +44,236 @@ yarn add ast-guard
 ```
 </CodeGroup>
 
-<Tip>
-  Instantiate `JSAstValidator` once and share it via DI or a module-level export. Reusing a singleton keeps presets, custom rules, and caches consistent across every request.
-</Tip>
+## Quick Start
 
-### Create a validator once
+```ts
+import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
 
-```ts title="src/security/script-validator.ts"
-import { JSAstValidator, Presets } from 'ast-guard';
+// Create validator with AgentScript preset (recommended for LLM code)
+const validator = new JSAstValidator(createAgentScriptPreset());
 
-export const scriptValidator = new JSAstValidator(
-  Presets.secure({
-    requiredFunctions: ['callTool'],
-    functionArgumentRules: {
-      callTool: {
-        minArgs: 2,
-        expectedTypes: ['string', 'object'],
-      },
-    },
-    allowedLoops: { allowForOf: true }, // permit bounded for...of but keep while loops blocked
-  }),
-);
+// Validate code
+const result = await validator.validate(`
+  const users = await callTool('users:list', { limit: 10 });
+  return users.filter(u => u.active);
+`);
+
+if (result.valid) {
+  console.log('Code is safe to execute');
+} else {
+  console.log('Blocked:', result.issues);
+}
 ```
 
-## Validate scripts inside a tool
+<Tip>
+  Instantiate `JSAstValidator` once and reuse it. This keeps presets, custom rules, and caches consistent across requests.
+</Tip>
 
-```ts title="src/tools/run-script.tool.ts"
+---
+
+## AgentScript Preset
+
+The AgentScript preset is purpose-built for validating LLM-generated orchestration code. It's the default preset used by [Enclave](/docs/guides/enclave) and the [CodeCall Plugin](/docs/plugins/codecall-plugin).
+
+```ts
+import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
+
+const validator = new JSAstValidator(createAgentScriptPreset({
+  // Require at least one callTool() invocation (default: false)
+  requireCallTool: true,
+
+  // Customize allowed globals
+  allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON', 'Array', 'Object'],
+
+  // Allow arrow functions for array methods (default: true)
+  allowArrowFunctions: true,
+
+  // Configure allowed loop types
+  allowedLoops: {
+    allowFor: true,      // for (let i = 0; ...) - default: true
+    allowForOf: true,    // for (const x of arr) - default: true
+    allowWhile: false,   // while (cond) - default: false
+    allowDoWhile: false, // do {} while (cond) - default: false
+    allowForIn: false,   // for (key in obj) - default: false
+  },
+}));
+```
+
+### AgentScript Preset Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `requireCallTool` | `boolean` | `false` | Require at least one `callTool()` invocation in the code |
+| `allowedGlobals` | `string[]` | Standard safe globals | Identifiers that can be referenced without declaration |
+| `allowArrowFunctions` | `boolean` | `true` | Allow arrow functions for array methods |
+| `allowedLoops` | `object` | `for` and `for-of` | Configure which loop types are allowed |
+| `additionalDisallowedIdentifiers` | `string[]` | `[]` | Additional identifiers to block |
+
+<Tip>
+  Use `requireCallTool: true` to ensure AgentScript code actually interacts with tools rather than just performing local computations. This is useful for preventing scripts that do nothing useful.
+</Tip>
+
+### What AgentScript Blocks
+
+| Category | Blocked Constructs | Why |
+| -------- | ------------------ | --- |
+| **Code execution** | `eval`, `Function`, `AsyncFunction`, `GeneratorFunction` | Prevents dynamic code injection |
+| **System access** | `process`, `require`, `module`, `__dirname`, `__filename`, `Buffer` | Prevents Node.js API access |
+| **Global objects** | `window`, `globalThis`, `global`, `self`, `this` | Prevents sandbox escape |
+| **Timers** | `setTimeout`, `setInterval`, `setImmediate` | Prevents timing attacks and async escape |
+| **Prototype** | `__proto__`, `constructor`, `prototype` | Prevents prototype pollution |
+| **Metaprogramming** | `Proxy`, `Reflect` | Prevents interception and reflection |
+| **Network** | `fetch`, `XMLHttpRequest`, `WebSocket` | Prevents network access |
+| **Storage** | `localStorage`, `sessionStorage`, `indexedDB` | Prevents data persistence |
+| **Native code** | `WebAssembly`, `Worker`, `SharedWorker` | Prevents native execution |
+| **Weak references** | `WeakMap`, `WeakSet`, `WeakRef` | Prevents reference manipulation |
+| **User functions** | `function foo() {}`, `const f = function() {}` | Prevents recursion (arrow functions allowed) |
+| **Unbounded loops** | `while`, `do-while`, `for-in` | Prevents infinite loops and prototype walking |
+
+### What AgentScript Allows
+
+```js
+// ✅ Tool calls
+const result = await callTool('users:list', { limit: 10 });
+
+// ✅ Variables
+const users = result.items;
+let count = 0;
+
+// ✅ Conditionals
+if (users.length > 0) { count = users.length; }
+
+// ✅ Bounded loops
+for (let i = 0; i < users.length; i++) { /* ... */ }
+for (const user of users) { /* ... */ }
+
+// ✅ Array methods with arrow functions
+const active = users.filter(u => u.active);
+const names = users.map(u => u.name);
+const total = users.reduce((sum, u) => sum + u.score, 0);
+
+// ✅ Safe globals
+const max = Math.max(1, 2, 3);
+const parsed = JSON.parse('{"a":1}');
+const keys = Object.keys(obj);
+
+// ✅ Return values
+return { count, active, names };
+```
+
+---
+
+## Code Transformation
+
+ast-guard can transform validated code for safe execution:
+
+```ts
+import { transformAgentScript } from 'ast-guard';
+
+const code = `
+  const users = await callTool('users:list', {});
+  for (const user of users) {
+    console.log(user.name);
+  }
+  return users.length;
+`;
+
+const transformed = transformAgentScript(code, {
+  wrapInMain: true,       // Wrap in async function __ag_main()
+  transformCallTool: true, // callTool → __safe_callTool
+  transformLoops: true,    // for/for-of → __safe_for/__safe_forOf
+  prefix: '__safe_',      // Prefix for safe runtime functions (default)
+  additionalIdentifiers: [], // Additional identifiers to transform
+});
+
+// Result:
+// async function __ag_main() {
+//   const users = await __safe_callTool('users:list', {});
+//   for (const user of __safe_forOf(users)) {
+//     console.log(user.name);
+//   }
+//   return users.length;
+// }
+```
+
+Transformations provide:
+
+- **Main wrapper**: `async function __ag_main()` enables top-level await
+- **Safe callTool**: Proxied through runtime with call counting
+- **Safe loops**: Iteration limits enforced at runtime
+- **Reserved prefixes**: `__ag_` and `__safe_` cannot be used by user code
+
+---
+
+## Security Presets
+
+ast-guard includes four security presets for different use cases:
+
+| Preset | Use Case | Security Level |
+| ------ | -------- | -------------- |
+| **AgentScript** | LLM-generated code, CodeCall | Highest - whitelist-only |
+| **STRICT** | Untrusted guest code | High - no loops, no async |
+| **SECURE** | Automation scripts | Medium - bounded loops only |
+| **STANDARD** | Trusted scripts | Low - basic guardrails |
+| **PERMISSIVE** | Internal/test code | Minimal - eval blocked |
+
+```ts
+import { JSAstValidator, createAgentScriptPreset, Presets } from 'ast-guard';
+
+// AgentScript (recommended for LLM code)
+const agentScript = new JSAstValidator(createAgentScriptPreset());
+
+// STRICT preset
+const strict = new JSAstValidator(Presets.strict({
+  requiredFunctions: ['callTool'],
+  minFunctionCalls: 1,
+}));
+
+// SECURE preset
+const secure = new JSAstValidator(Presets.secure({
+  allowedLoops: { allowForOf: true },
+}));
+
+// STANDARD preset
+const standard = new JSAstValidator(Presets.standard());
+```
+
+---
+
+## Validation in Tools
+
+Use ast-guard to validate scripts inside FrontMCP tools:
+
+```ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import type { ValidationIssue } from 'ast-guard';
-import { scriptValidator } from '../security/script-validator';
+import { JSAstValidator, createAgentScriptPreset } from 'ast-guard';
+
+const validator = new JSAstValidator(createAgentScriptPreset());
 
 @Tool({
   name: 'run-script',
-  description: 'Executes a user-supplied JavaScript snippet in a sandbox',
-  inputSchema: { source: z.string().min(1, 'Provide a script body') },
+  description: 'Execute a JavaScript script in sandbox',
+  inputSchema: { source: z.string().min(1) },
 })
 export default class RunScriptTool extends ToolContext {
   async execute(input: { source: string }) {
-    const validation = await scriptValidator.validate(input.source, {
-      maxIssues: 25,
+    const result = await validator.validate(input.source, {
+      maxIssues: 10,
       stopOnFirstError: true,
     });
 
-    if (!validation.valid) {
-      throw new Error(formatIssues(validation.issues));
+    if (!result.valid) {
+      const errors = result.issues
+        .map(i => `[${i.code}] ${i.message}`)
+        .join('\n');
+      throw new Error(`Validation failed:\n${errors}`);
     }
 
-    // Continue with your sandbox/runtime only after validation passes
+    // Safe to execute in sandbox
     return { status: 'accepted' };
   }
 }
-
-function formatIssues(issues: ValidationIssue[]) {
-  return issues
-    .map((issue) => {
-      const location = issue.location ? ` (line ${issue.location.line}, col ${issue.location.column})` : '';
-      return `[${issue.severity}] ${issue.message}${location}`;
-    })
-    .join('\n');
-}
-```
-
-## Pick the right security preset
-
-| Preset         | Use it for                      | What it blocks by default                                                           |
-| -------------- | ------------------------------- | ----------------------------------------------------------------------------------- |
-| **STRICT**     | Running untrusted / guest code  | All loops, async/await, eval/Function, dangerous identifiers, missing required APIs |
-| **SECURE**     | LLM-authored automations        | Eval/Function, async declarations, unbounded loops, privileged globals              |
-| **STANDARD**   | Trusted scripts with guardrails | Eval/Function, critical identifiers, infinite while/do-while                        |
-| **PERMISSIVE** | Internal scripts or tests       | Only eval/Function while still emitting structured issues                           |
-
-```ts
-import { Presets, PresetLevel, createPreset } from 'ast-guard';
-
-const lockdown = Presets.strict({
-  requiredFunctions: ['callTool'],
-  minFunctionCalls: 1,
-  allowedLoops: { allowFor: false },
-});
-
-const balanced = createPreset(PresetLevel.STANDARD, {
-  additionalDisallowedIdentifiers: ['window', 'document'],
-});
 ```
 
 ## Enforce policy at the platform level
@@ -168,6 +316,76 @@ export default class ScriptGuardPlugin {
 }
 ```
 
+## Built-in Security Rules
+
+ast-guard ships with a comprehensive set of security rules:
+
+### NoGlobalAccessRule
+
+Blocks access to dangerous global objects via member expressions (e.g., `window.location`, `process.env`).
+
+```ts
+import { NoGlobalAccessRule } from 'ast-guard';
+
+const rule = new NoGlobalAccessRule({
+  blockedGlobals: ['window', 'process', 'global', 'globalThis'],
+  allowedMembers: { console: ['log', 'warn', 'error'] }, // Whitelist specific members
+});
+```
+
+### ReservedPrefixRule
+
+Prevents user code from declaring or assigning identifiers with reserved prefixes (e.g., `__ag_`, `__safe_`).
+
+```ts
+import { ReservedPrefixRule } from 'ast-guard';
+
+const rule = new ReservedPrefixRule({
+  prefixes: ['__ag_', '__safe_'],
+  allowedIdentifiers: ['__ag_main'], // Exceptions
+});
+```
+
+### NoCallTargetAssignmentRule
+
+Protects critical call targets from being reassigned or shadowed.
+
+```ts
+import { NoCallTargetAssignmentRule } from 'ast-guard';
+
+const rule = new NoCallTargetAssignmentRule({
+  protectedTargets: ['callTool', '__safe_callTool'],
+});
+```
+
+This blocks:
+- `callTool = malicious;` - Direct assignment
+- `const callTool = () => {};` - Variable shadowing
+- `const { callTool } = obj;` - Destructuring shadowing
+- `function callTool() {}` - Function declaration shadowing
+
+### UnicodeSecurityRule
+
+Detects and blocks Unicode-based attacks including Trojan Source, homoglyphs, and invisible characters.
+
+```ts
+import { UnicodeSecurityRule } from 'ast-guard';
+
+const rule = new UnicodeSecurityRule({
+  blockBidi: true,          // Block bidirectional text attacks (Trojan Source)
+  blockHomoglyphs: true,    // Block lookalike characters (Cyrillic 'а' vs Latin 'a')
+  blockZeroWidth: true,     // Block zero-width characters
+  blockInvisible: true,     // Block invisible formatting characters
+  checkComments: true,      // Also check inside comments
+  checkStrings: false,      // Skip string literals (default)
+  allowedCharacters: [],    // Whitelist specific characters
+});
+```
+
+<Warning>
+  Trojan Source attacks (CVE-2021-42574) use Unicode bidirectional control characters to make code appear different than it actually executes. Always enable `blockBidi: true` for untrusted code.
+</Warning>
+
 ## Mix in fine-grained rules
 
 Combine built-in rules to match your own threat model.
@@ -179,6 +397,7 @@ import {
   ForbiddenLoopRule,
   RequiredFunctionCallRule,
   CallArgumentValidationRule,
+  UnknownGlobalRule,
 } from 'ast-guard';
 
 export const customValidator = new JSAstValidator([
@@ -195,8 +414,37 @@ export const customValidator = new JSAstValidator([
       },
     },
   }),
+  new UnknownGlobalRule({
+    allowedGlobals: ['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date'],
+    allowStandardGlobals: true,
+  }),
 ]);
 ```
+
+## Whitelist-based identifier control with UnknownGlobalRule
+
+`UnknownGlobalRule` implements a **whitelist-based approach** where all identifier references must be either declared locally or explicitly allowed. This is the most secure option for sandboxed environments.
+
+```ts
+import { UnknownGlobalRule } from 'ast-guard';
+
+const rule = new UnknownGlobalRule({
+  // Only these globals are allowed (plus locally declared variables)
+  allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON', 'Array', 'Object'],
+  // Include safe JS globals like undefined, NaN, isNaN, parseInt, etc.
+  allowStandardGlobals: true,
+});
+```
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `allowedGlobals` | `['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date']` | Identifiers that can be referenced without declaration |
+| `allowStandardGlobals` | `true` | Include safe built-ins like `undefined`, `NaN`, `isNaN`, `parseInt`, etc. |
+| `message` | Auto-generated | Custom error message for violations |
+
+<Note>
+  `UnknownGlobalRule` uses a flat symbol table for performance. It collects all declarations across the AST without tracking lexical scope. This is an intentional simplification for AgentScript v1 where user-defined functions are blocked by default (`NoUserDefinedFunctionsRule`). If you enable user functions, be aware that inner-scope declarations will "whitelist" that identifier name globally.
+</Note>
 
 ## Return actionable errors to requesters
 
@@ -218,7 +466,7 @@ return {
 
 ## Monitor and tune validation
 
-- `stopOnFirstError` halts validation as soon as a rule reports an errorgreat for latency-sensitive flows.
+- `stopOnFirstError` halts validation as soon as a rule reports an error—great for latency-sensitive flows.
 - `maxIssues` caps the number of findings returned for a single run to avoid overwhelming users.
 - `parseOptions` lets you enforce `sourceType`, strict mode, or JSX support per tool.
 - `validator.getStats(result, durationMs)` produces telemetry-friendly counters.
@@ -230,5 +478,5 @@ this.logger.info({ stats }, 'AST validation completed');
 ```
 
 <Warning>
-  AST Guard prevents unsafe syntax from entering your sandbox, but it does not execute or sandbox code itself. Pair it with your existing isolation layer (VM2, workers, remote runners, etc.) for complete defense-in-depth.
+  AST Guard prevents unsafe syntax from entering your sandbox, but it does not execute or sandbox code itself. Pair it with your existing isolation layer (isolated-vm, workers, remote runners, etc.) for complete defense-in-depth.
 </Warning>

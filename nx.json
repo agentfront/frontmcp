@@ -14,15 +14,10 @@
     "autoExit": true
   },
   "sync": {
-    "disabledTaskSyncGenerators": [
-      "@nx/js:typescript-sync"
-    ]
+    "disabledTaskSyncGenerators": ["@nx/js:typescript-sync"]
   },
   "namedInputs": {
-    "default": [
-      "{projectRoot}/**/*",
-      "sharedGlobals"
-    ],
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
     "production": [
       "default",
       "!{projectRoot}/.eslintrc.json",
@@ -33,9 +28,7 @@
       "!{projectRoot}/src/test-setup.[jt]s",
       "!{projectRoot}/test-setup.[jt]s"
     ],
-    "sharedGlobals": [
-      "{workspaceRoot}/.github/workflows/ci.yml"
-    ]
+    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
   "plugins": [
     {
@@ -74,29 +67,23 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": [
-        "apps/expenses-e2e/**/*"
-      ]
+      "exclude": ["apps/expenses-e2e/**/*"]
     }
   ],
   "targetDefaults": {
     "test": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "@nx/js:tsc": {
       "cache": true,
-      "dependsOn": [
-        "^build"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     }
   },
   "release": {
-    "projects": ["libs/*"]
+    "projects": ["libs/*"],
+    "version": {
+      "preVersionCommand": "npx nx run-many -t build"
+    }
   }
 }

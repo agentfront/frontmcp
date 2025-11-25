@@ -89,6 +89,75 @@ export interface RuleConfig {
 }
 
 /**
+ * Transformation mode
+ */
+export type TransformMode = 'blacklist' | 'whitelist';
+
+/**
+ * Configuration for whitelisted standard library globals
+ * Specifies which methods of standard objects are allowed
+ */
+export interface WhitelistedGlobals {
+  /** Allowed Math methods (e.g., ['max', 'min', 'floor', 'ceil']) */
+  Math?: string[];
+  /** Allowed JSON methods (e.g., ['parse', 'stringify']) */
+  JSON?: string[];
+  /** Allowed Array prototype methods (e.g., ['map', 'filter', 'reduce']) */
+  Array?: string[];
+  /** Allowed Object methods (e.g., ['keys', 'values', 'entries']) */
+  Object?: string[];
+  /** Allowed String prototype methods (e.g., ['startsWith', 'includes']) */
+  String?: string[];
+  /** Allowed Date methods (e.g., ['now']) */
+  Date?: string[];
+  /** Allowed Number methods (e.g., ['parseInt', 'parseFloat']) */
+  Number?: string[];
+}
+
+/**
+ * Configuration for code transformation
+ */
+export interface TransformConfig {
+  /** Whether transformation is enabled */
+  enabled: boolean;
+
+  /** Prefix to add to identifiers (default: '__safe_') */
+  prefix?: string;
+
+  /**
+   * Transformation mode:
+   * - 'blacklist': Only transform identifiers in the `identifiers` list (default)
+   * - 'whitelist': Transform ALL identifiers EXCEPT those in `whitelistedIdentifiers` list
+   */
+  mode?: TransformMode;
+
+  /**
+   * BLACKLIST MODE: List of identifier names to transform
+   * Used when mode is 'blacklist' (default)
+   */
+  identifiers?: string[];
+
+  /**
+   * WHITELIST MODE: List of identifier names NOT to transform
+   * Used when mode is 'whitelist'
+   * Example: ['undefined', 'null', 'true', 'false', 'Math', 'JSON']
+   */
+  whitelistedIdentifiers?: string[];
+
+  /**
+   * WHITELIST MODE: Whitelisted standard library globals and their methods
+   * Used when mode is 'whitelist'
+   */
+  whitelistedGlobals?: WhitelistedGlobals;
+
+  /** Whether to transform computed member expressions (e.g., obj['eval']) */
+  transformComputed?: boolean;
+
+  /** Whether to transform loops into safe function calls */
+  transformLoops?: boolean;
+}
+
+/**
  * Configuration for the validator
  */
 export interface ValidationConfig {
@@ -100,6 +169,8 @@ export interface ValidationConfig {
   maxIssues?: number;
   /** Stop on first error */
   stopOnFirstError?: boolean;
+  /** Transformation configuration */
+  transform?: TransformConfig;
 }
 
 /**
@@ -116,6 +187,8 @@ export interface ValidationResult {
   parseError?: Error;
   /** Number of rules that were executed during validation */
   rulesExecuted?: number;
+  /** Transformed code (if transformation is enabled) */
+  transformedCode?: string;
 }
 
 /**

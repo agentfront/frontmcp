@@ -17,7 +17,5 @@ export * from './interfaces/tool-hook.interface';
 export * from './interfaces/session-hook.interface';
 export * from './interfaces/auth-hook.interface';
 
-
 export * from './providers/session.provider';
-
-
+export * from './providers/base-config.provider';

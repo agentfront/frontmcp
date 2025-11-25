@@ -18,6 +18,7 @@ export { createStrictPreset } from './strict.preset';
 export { createSecurePreset } from './secure.preset';
 export { createStandardPreset } from './standard.preset';
 export { createPermissivePreset } from './permissive.preset';
+export { createAgentScriptPreset, type AgentScriptOptions } from './agentscript.preset';
 
 // Re-export for convenience
 import { ValidationRule } from '../interfaces';

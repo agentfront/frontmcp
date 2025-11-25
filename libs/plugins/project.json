@@ -4,10 +4,12 @@
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "implicitDependencies": ["enclave"],
   "targets": {
     "build-tsc": {
       "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
+      "dependsOn": ["^build"],
       "options": {
         "outputPath": "libs/plugins/dist",
         "main": "libs/plugins/src/index.ts",

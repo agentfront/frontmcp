@@ -20,7 +20,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentfront/frontmcp.git"
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/mcp-from-openapi"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
@@ -47,7 +48,7 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "zod": "^3.23.8"
   }

@@ -7,6 +7,7 @@ import {
   CallArgumentValidationRule,
   NoEvalRule,
   NoAsyncRule,
+  NoGlobalAccessRule,
 } from '../rules';
 import { PresetOptions } from './types';
 
@@ -14,18 +15,27 @@ import { PresetOptions } from './types';
  * Creates a STRICT preset with maximum security restrictions (bank-grade)
  *
  * Blocks:
- * - All eval-like constructs
+ * - All eval-like constructs (eval, Function constructor)
  * - All loops (configurable via options)
  * - All async/await (configurable via options)
  * - Dangerous identifiers (eval, Function, process, require, etc.)
- * - Constructor chain access
- * - Prototype manipulation
- * - Global object access
+ * - Constructor chain access (.constructor property)
+ * - Prototype manipulation (__proto__, Object.setPrototypeOf)
+ * - Global object access (window, globalThis, this, global)
+ * - Reflection APIs (Reflect.*)
+ * - Meta-programming APIs (Object.getOwnPropertyDescriptor, etc.)
  *
  * Enforces:
  * - Required function calls (if specified)
  * - Strict argument validation (if specified)
  * - Unreachable code detection
+ *
+ * Protection against:
+ * - ✅ All vm2 CVEs (2023-29017, 2023-30547, 2023-32313, 2023-37466)
+ * - ✅ isolated-vm escape vectors
+ * - ✅ node-vm sandbox escapes
+ * - ✅ Constructor chain exploits
+ * - ✅ Prototype pollution attacks
  *
  * @param options - Optional customization for the preset
  * @returns Array of configured validation rules
@@ -55,6 +65,15 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
   // Block all eval-like constructs
   rules.push(new NoEvalRule());
 
+  // Block global object access patterns (constructor chains, reflection APIs, etc.)
+  rules.push(
+    new NoGlobalAccessRule({
+      blockedGlobals: ['window', 'globalThis', 'self', 'global', 'this'],
+      blockMemberAccess: true,
+      blockComputedAccess: true,
+    }),
+  );
+
   // Block all dangerous identifiers for bank-level security
   const disallowedIdentifiers = [
     // Code execution
@@ -72,6 +91,10 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
     '__filename',
     'module',
     'exports',
+    'Buffer',
+    'arguments',
+    'callee',
+    'caller',
 
     // Prototype manipulation
     'constructor',
@@ -141,6 +164,12 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
     'Set',
     'WeakRef',
     'FinalizationRegistry',
+
+    // ES2024+ APIs (sandbox escape vectors)
+    'ShadowRealm',
+    'Iterator',
+    'AsyncIterator',
+    'Temporal', // When available
 
     // Dates (timing attacks)
     'Date',

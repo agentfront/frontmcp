@@ -68,7 +68,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     devDependencies: {
       frontmcp: selfVersion,
       tsx: '^4.20.6',
-      '@types/node': '^22.0.0',
+      '@types/node': '^24.0.0',
       typescript: '^5.5.3',
     },
   };

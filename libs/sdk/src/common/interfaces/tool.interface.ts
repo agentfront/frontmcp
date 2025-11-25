@@ -7,6 +7,8 @@ import { FlowControl } from './flow.interface';
 import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
+import { Scope } from '../../scope';
+import { ScopeEntry } from '../entries';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -72,6 +74,10 @@ export abstract class ToolContext<
 
   get<T>(token: Token<T>): T {
     return this.providers.get(token);
+  }
+
+  get scope(): ScopeEntry {
+    return this.providers.getScope();
   }
 
   tryGet<T>(token: Token<T>): T | undefined {

@@ -21,9 +21,7 @@ import {
 describe('ProviderRegistry', () => {
   describe('Basic Registration', () => {
     it('should register a value provider', async () => {
-      const registry = new ProviderRegistry([
-        createValueProvider(TEST_TOKEN, { name: 'test value' }),
-      ]);
+      const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test value' })]);
 
       await registry.ready;
 
@@ -33,9 +31,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('should register a factory provider', async () => {
-      const registry = new ProviderRegistry([
-        createFactoryProvider(FACTORY_TOKEN, () => ({ name: 'from factory' })),
-      ]);
+      const registry = new ProviderRegistry([createFactoryProvider(FACTORY_TOKEN, () => ({ name: 'from factory' }))]);
 
       await registry.ready;
 
@@ -83,10 +79,7 @@ describe('ProviderRegistry', () => {
         name: 'DependentService',
       });
 
-      const registry = new ProviderRegistry([
-        TestServiceAnnotated,
-        DependentServiceAnnotated,
-      ]);
+      const registry = new ProviderRegistry([TestServiceAnnotated, DependentServiceAnnotated]);
 
       await registry.ready;
 
@@ -119,10 +112,7 @@ describe('ProviderRegistry', () => {
 
       @Injectable()
       class ServiceC {
-        constructor(
-          public a: ServiceA,
-          public b: ServiceB
-        ) {
+        constructor(public a: ServiceA, public b: ServiceB) {
           initOrder.push('C');
         }
       }
@@ -213,15 +203,13 @@ describe('ProviderRegistry', () => {
 
   describe('Hierarchical Provider Lookups', () => {
     it('should resolve providers from parent registry', async () => {
-      const parentRegistry = new ProviderRegistry([
-        createValueProvider(TEST_TOKEN, { name: 'from parent' }),
-      ]);
+      const parentRegistry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'from parent' })]);
 
       await parentRegistry.ready;
 
       const childRegistry = new ProviderRegistry(
         [createValueProvider(FACTORY_TOKEN, { name: 'from child' })],
-        parentRegistry
+        parentRegistry,
       );
 
       await childRegistry.ready;
@@ -250,10 +238,7 @@ describe('ProviderRegistry', () => {
         name: 'DependentService',
       });
 
-      const childRegistry = new ProviderRegistry(
-        [DependentServiceAnnotated],
-        parentRegistry
-      );
+      const childRegistry = new ProviderRegistry([DependentServiceAnnotated], parentRegistry);
 
       await childRegistry.ready;
 
@@ -422,9 +407,7 @@ describe('ProviderRegistry', () => {
         }
       }
 
-      const registry = new ProviderRegistry([
-        createClassProvider(FailingService, { name: 'FailingService' }),
-      ]);
+      const registry = new ProviderRegistry([createClassProvider(FailingService, { name: 'FailingService' })]);
 
       await expect(registry.ready).rejects.toThrow(/Construction failed/);
     });
@@ -445,9 +428,7 @@ describe('ProviderRegistry', () => {
       }
 
       expect(() => {
-        new ProviderRegistry([
-          createClassProvider(ServiceNeedingUnregistered, { name: 'ServiceNeedingUnregistered' }),
-        ]);
+        new ProviderRegistry([createClassProvider(ServiceNeedingUnregistered, { name: 'ServiceNeedingUnregistered' })]);
       }).toThrow(/not registered/);
     });
   });
@@ -466,9 +447,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('should return singleton map via getAllSingletons()', async () => {
-      const registry = new ProviderRegistry([
-        createValueProvider(TEST_TOKEN, { name: 'value1' }),
-      ]);
+      const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'value1' })]);
 
       await registry.ready;
 

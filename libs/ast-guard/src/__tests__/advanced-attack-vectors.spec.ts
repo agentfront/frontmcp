@@ -55,7 +55,7 @@ describe('Advanced Security - Attack Vectors', () => {
     it('should not block computed property access (known limitation of static analysis)', async () => {
       const guard = new JSAstValidator(Presets.strict());
 
-      // VULNERABILITY: Computed property access bypasses identifier checks
+      // Constructor property access is now caught by NoGlobalAccessRule
       const attack = `
         const obj = {};
         const dangerous = obj['constructor']['constructor'];
@@ -66,13 +66,12 @@ describe('Advanced Security - Attack Vectors', () => {
         rules: { 'disallowed-identifier': true },
       });
 
-      // This is a KNOWN LIMITATION - we cannot block computed property access
-      // The validator only checks direct identifier references
-      expect(result.valid).toBe(true);
-      // NOTE: This would need runtime protection (Object.freeze, Proxy, etc.)
+      // BLOCKED: NoGlobalAccessRule catches .constructor property access
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
 
-    it('should not block optional chaining property access (known limitation of static analysis)', async () => {
+    it('should block optional chaining property access to constructor', async () => {
       const guard = new JSAstValidator(Presets.strict());
 
       const attack = `
@@ -84,8 +83,9 @@ describe('Advanced Security - Attack Vectors', () => {
         rules: { 'disallowed-identifier': true },
       });
 
-      // KNOWN LIMITATION: Optional chaining with property access
-      expect(result.valid).toBe(true);
+      // BLOCKED: NoGlobalAccessRule catches .constructor property access
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
   });
 
@@ -532,10 +532,10 @@ describe('Advanced Security - Attack Vectors', () => {
       // - Isolated execution context (VM, Worker)
     });
 
-    it('should document that property access chains with computed strings cannot be blocked (requires Object.freeze)', async () => {
+    it('should block property access chains with constructor string', async () => {
       const guard = new JSAstValidator(Presets.strict());
 
-      // Property access chains cannot be fully blocked
+      // NoGlobalAccessRule now catches .constructor property access
       const bypass = `
         const obj = {};
         const step1 = obj['constructor'];
@@ -545,10 +545,9 @@ describe('Advanced Security - Attack Vectors', () => {
 
       const result = await guard.validate(bypass);
 
-      // KNOWN LIMITATION: Computed property access
-      expect(result.valid).toBe(true);
-
-      // MITIGATION: Use Object.freeze, sealed contexts, Proxy wrappers
+      // BLOCKED: NoGlobalAccessRule catches .constructor property access
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
     });
   });
 });

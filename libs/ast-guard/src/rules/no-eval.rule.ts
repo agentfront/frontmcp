@@ -8,6 +8,7 @@ import { ValidationRule, ValidationContext, ValidationSeverity } from '../interf
  * - eval() calls
  * - new Function() calls
  * - setTimeout/setInterval with string arguments
+ * - with statements (scope manipulation)
  */
 export class NoEvalRule implements ValidationRule {
   readonly name = 'no-eval';
@@ -68,6 +69,20 @@ export class NoEvalRule implements ValidationRule {
               : undefined,
           });
         }
+      },
+
+      WithStatement: (node: any) => {
+        // Check for with statement (scope manipulation)
+        context.report({
+          code: 'NO_EVAL',
+          message: 'Use of with statement is not allowed (manipulates scope)',
+          location: node.loc
+            ? {
+                line: node.loc.start.line,
+                column: node.loc.start.column,
+              }
+            : undefined,
+        });
       },
     });
   }

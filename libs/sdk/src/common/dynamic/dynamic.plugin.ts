@@ -1,21 +1,21 @@
 // dynamic-plugin.ts
-import {Reference, PluginType, ProviderType, ProviderRegistryInterface} from '../interfaces';
-import {collectDynamicProviders, dedupePluginProviders} from './dynamic.utils';
+import { Reference, PluginType, ProviderType, ProviderRegistryInterface } from '../interfaces';
+import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
 
-// keep your original options union; just add optional `providers`
-type InitOptions<T> =
-  | ((T & { useFactory?: never; inject?: never }) & { providers?: readonly ProviderType[] })
+// InitOptions accepts input type (what users provide to init())
+type InitOptions<TInput> =
+  | ((TInput & { useFactory?: never; inject?: never }) & { providers?: readonly ProviderType[] })
   | {
-  inject: () => readonly Reference<any>[];
-  useFactory: (...args: any[]) => T;
-  providers?: readonly ProviderType[];
-};
+      inject: () => readonly Reference<any>[];
+      useFactory: (...args: any[]) => TInput;
+      providers?: readonly ProviderType[];
+    };
 
-type PluginClassWithOptions<T> = {
-  new(...args: any[]): any;
-  prototype: { __options_brand?: T };
+type PluginClassWithOptions<TInput, TOptions> = {
+  new (...args: any[]): any;
+  prototype: { __options_brand?: TOptions; __options_input_brand?: TInput };
   // optional hook contributed by plugin authors
-  dynamicProviders?: (options: T) => readonly ProviderType[];
+  dynamicProviders?: (options: TInput) => readonly ProviderType[];
 };
 
 type ValueMcpPlugin<T> = { provide: any; useValue: T; providers?: ProviderType[] };
@@ -23,14 +23,25 @@ type FactoryMcpPlugin<T> = { provide: any; inject: () => readonly Reference<any>
 
 type PluginReturn<T> = (ValueMcpPlugin<T> | FactoryMcpPlugin<T>) &
   PluginType & {
-  providers?: readonly ProviderType[];
-};
+    providers?: readonly ProviderType[];
+  };
 
-export abstract class DynamicPlugin<TOptions extends object> {
+/**
+ * Base class for plugins that support dynamic configuration.
+ *
+ * @template TOptions - The resolved options type (after parsing with defaults applied)
+ * @template TInput - The input options type (what users provide to init()). Defaults to TOptions for backwards compatibility.
+ */
+export abstract class DynamicPlugin<TOptions extends object, TInput extends object = TOptions> {
   /**
-   * Private property to ensure options are typed correctly.
+   * Brand for resolved options type (used internally).
    */
   declare __options_brand: TOptions;
+
+  /**
+   * Brand for input options type (used by init()).
+   */
+  declare __options_input_brand: TInput;
 
   /**
    * Optional hook to contribute providers to the plugin.
@@ -44,11 +55,11 @@ export abstract class DynamicPlugin<TOptions extends object> {
 
   /**
    * Static init() method to create a plugin provider.
-   * @param options
+   * @param options - Input options (with optional fields for defaults)
    */
-  static init<TThis extends PluginClassWithOptions<any>>(
+  static init<TThis extends PluginClassWithOptions<any, any>>(
     this: TThis,
-    options: InitOptions<TThis['prototype'] extends { __options_brand?: infer O } ? O : never>,
+    options: InitOptions<TThis['prototype'] extends { __options_input_brand?: infer I } ? I : never>,
   ): PluginReturn<TThis['prototype'] extends { __options_brand?: infer O } ? O : never> {
     const extraProviders = (options as any).providers as readonly ProviderType[] | undefined;
     const typedOptions = options as any;

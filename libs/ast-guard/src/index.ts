@@ -7,6 +7,13 @@
 // Core validator
 export { JSAstValidator } from './validator';
 
+// Transformer
+export { transformAst, generateCode, transformCode } from './transformer';
+
+// AgentScript Transformer
+export { transformAgentScript, isWrappedInMain, unwrapFromMain } from './agentscript-transformer';
+export type { AgentScriptTransformConfig } from './agentscript-transformer';
+
 // Interfaces and types
 export type {
   ValidationRule,
@@ -17,6 +24,9 @@ export type {
   ValidationStats,
   SourceLocation,
   RuleConfig,
+  TransformConfig,
+  TransformMode,
+  WhitelistedGlobals,
 } from './interfaces';
 
 export { ValidationSeverity } from './interfaces';
@@ -40,6 +50,13 @@ export {
   CallArgumentValidationRule,
   NoEvalRule,
   NoAsyncRule,
+  NoGlobalAccessRule,
+  ReservedPrefixRule,
+  UnknownGlobalRule,
+  NoUserDefinedFunctionsRule,
+  NoCallTargetAssignmentRule,
+  UnicodeSecurityRule,
+  StaticCallTargetRule,
 } from './rules';
 
 // Rule options types
@@ -52,6 +69,11 @@ export type {
   ArgumentValidator,
 } from './rules/call-argument-validation.rule';
 export type { NoAsyncOptions } from './rules/no-async.rule';
+export type { NoGlobalAccessOptions } from './rules/no-global-access.rule';
+export type { ReservedPrefixOptions } from './rules/reserved-prefix.rule';
+export type { UnknownGlobalOptions } from './rules/unknown-global.rule';
+export type { NoUserDefinedFunctionsOptions } from './rules/no-user-functions.rule';
+export type { StaticCallTargetOptions } from './rules/static-call-target.rule';
 
 // Presets
 export {
@@ -62,6 +84,32 @@ export {
   createSecurePreset,
   createStandardPreset,
   createPermissivePreset,
+  createAgentScriptPreset,
 } from './presets';
 
-export type { PresetOptions } from './presets';
+export type { PresetOptions, AgentScriptOptions } from './presets';
+
+// AgentScript tool descriptions for AI agents
+export {
+  AGENTSCRIPT_DESCRIPTION,
+  AGENTSCRIPT_DESCRIPTION_SHORT,
+  AGENTSCRIPT_DESCRIPTION_MEDIUM,
+  AGENTSCRIPT_DESCRIPTION_FULL,
+} from './agentscript-description';
+
+// AST Transforms (for pass-by-reference support)
+export {
+  // String extraction
+  extractLargeStrings,
+  shouldExtract,
+  // Concatenation transformation
+  transformConcatenation,
+  transformTemplateLiterals,
+} from './transforms';
+
+export type {
+  StringExtractionConfig,
+  StringExtractionResult,
+  ConcatTransformConfig,
+  ConcatTransformResult,
+} from './transforms';

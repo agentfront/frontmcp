@@ -35,7 +35,7 @@ export function createTestEnvironment() {
  * Wraps a test function with automatic environment setup and cleanup
  */
 export function withTestEnvironment<T extends any[]>(
-  testFn: (env: ReturnType<typeof createTestEnvironment>, ...args: T) => Promise<void> | void
+  testFn: (env: ReturnType<typeof createTestEnvironment>, ...args: T) => Promise<void> | void,
 ) {
   return async (...args: T) => {
     const env = createTestEnvironment();

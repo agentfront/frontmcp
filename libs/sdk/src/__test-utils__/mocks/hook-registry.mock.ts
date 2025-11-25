@@ -54,11 +54,7 @@ export function createMockHookRegistry(overrides: Partial<any> = {}) {
 /**
  * Creates a mock hook entry
  */
-export function createMockHookEntry(
-  flowName: string,
-  stage: string,
-  priority: number = 0
-): HookMetadata {
+export function createMockHookEntry(flowName: string, stage: string, priority: number = 0): HookMetadata {
   return {
     type: 'stage',
     flow: flowName as any,
@@ -72,9 +68,6 @@ export function createMockHookEntry(
 /**
  * Adds a hook to a mock registry
  */
-export function addHookToMock(
-  registry: ReturnType<typeof createMockHookRegistry>,
-  hookMetadata: HookMetadata
-) {
+export function addHookToMock(registry: ReturnType<typeof createMockHookRegistry>, hookMetadata: HookMetadata) {
   registry.hooks.push(hookMetadata);
 }

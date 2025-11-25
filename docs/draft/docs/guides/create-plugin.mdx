@@ -1,0 +1,516 @@
+---
+title: Create Your Own Plugin
+sidebarTitle: Create a Plugin
+slug: guides/create-plugin
+icon: plug
+---
+
+This guide walks you through creating a FrontMCP plugin from scratch. We'll build a real-world example: a **site authorization plugin** that validates user access to site-scoped tools.
+
+## Plugin Architecture
+
+A FrontMCP plugin can:
+
+1. **Register providers** - Services available to the plugin and optionally exported to the host app
+2. **Contribute tools** - Add tools that become available when the plugin is attached
+3. **Intercept flows via hooks** - Run code before/after specific stages (caching, validation, logging)
+4. **Accept configuration** - Via `init()` for runtime customization
+5. **Extend metadata** - Add custom fields to tool metadata for plugin-specific behavior
+
+## Step 1: Create the Plugin Structure
+
+```
+my-plugin/
+├── index.ts              # Exports
+├── my-plugin.plugin.ts   # Plugin class
+├── my-plugin.types.ts    # Types and interfaces
+├── my-plugin.symbol.ts   # Injection tokens (optional)
+└── providers/            # Provider implementations
+    └── my-service.provider.ts
+```
+
+## Step 2: Define Types
+
+Start by defining your plugin's options and any metadata extensions.
+
+```ts title="site-authorization.types.ts"
+// Extend global tool metadata to add site-specific fields
+declare global {
+  interface ExtendFrontMcpToolMetadata {
+    site?: {
+      siteScoped?: boolean;
+      adminRequired?: boolean;
+      siteIdFieldName?: string;
+    };
+  }
+}
+
+export interface SiteAuthorizationPluginOptions {
+  /**
+   * In demo mode, allow all requests if user has no site claims.
+   * @default true
+   */
+  demoAllowAllIfNoClaims?: boolean;
+
+  /**
+   * Default field name for site ID in tool input.
+   * @default 'siteId'
+   */
+  siteIdFieldName?: string;
+}
+```
+
+## Step 3: Create the Plugin Class
+
+### Simple Plugin (No Required Options)
+
+For plugins that work without configuration:
+
+```ts title="site-authorization.plugin.ts"
+import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { SiteAuthorizationPluginOptions } from './site-authorization.types';
+
+@Plugin({
+  name: 'site-authorization',
+  description: 'Validates site access for site-scoped tools',
+})
+export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthorizationPluginOptions> {
+  opts: SiteAuthorizationPluginOptions;
+
+  constructor(opts: SiteAuthorizationPluginOptions = {}) {
+    super();
+    // Apply defaults
+    this.opts = {
+      demoAllowAllIfNoClaims: opts.demoAllowAllIfNoClaims ?? true,
+      siteIdFieldName: opts.siteIdFieldName ?? 'siteId',
+    };
+  }
+
+  /**
+   * Hook runs BEFORE the 'execute' stage.
+   * Priority 900 ensures it runs before most other hooks.
+   */
+  @ToolHook.Will('execute', { priority: 900 })
+  async validateSiteAccess(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+
+    const input: Record<string, unknown> = toolContext.input ?? {};
+    const meta = toolContext.metadata;
+
+    // Determine site field name (per-tool override or plugin default)
+    const siteField = meta.site?.siteIdFieldName || this.opts.siteIdFieldName || 'siteId';
+    const siteId = input[siteField] as string | undefined;
+
+    // Check if this is a site-scoped tool
+    const siteScoped = meta.site?.siteScoped ?? (siteId !== undefined);
+    if (!siteScoped) return;
+
+    // Validate site ID is provided
+    if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
+      throw new Error(`Missing required ${siteField} for site-scoped operation`);
+    }
+
+    // Check user has access to this site
+    const allowed = this.getAllowedSites(toolContext.authInfo);
+    if (allowed !== 'ALL' && !allowed.includes(siteId)) {
+      throw new Error(`Not authorized for site ${siteId}`);
+    }
+
+    // Check admin requirement
+    const adminRequired = meta.site?.adminRequired === true;
+    if (adminRequired && !this.isAdmin(toolContext.authInfo)) {
+      throw new Error('Admin privileges required');
+    }
+  }
+
+  private getAllowedSites(authInfo: unknown): string[] | 'ALL' {
+    const user = this.extractUser(authInfo);
+    if (!user) return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
+
+    const sites = user.sites || user.tenants;
+    if (!sites || (Array.isArray(sites) && sites.length === 0)) {
+      return this.opts.demoAllowAllIfNoClaims ? 'ALL' : [];
+    }
+
+    if (Array.isArray(sites)) return sites.map(String);
+    if (typeof sites === 'string') return [sites];
+    return [];
+  }
+
+  private isAdmin(authInfo: unknown): boolean {
+    const user = this.extractUser(authInfo);
+    if (!user) return !!this.opts.demoAllowAllIfNoClaims;
+    if (user.isAdmin === true) return true;
+
+    const roles: string[] = Array.isArray(user.roles) ? user.roles : [];
+    return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
+  }
+
+  /** Safely extract user object from authInfo */
+  private extractUser(authInfo: unknown): Record<string, unknown> | null {
+    if (!authInfo || typeof authInfo !== 'object') return null;
+    const obj = authInfo as Record<string, unknown>;
+    if (!obj.user || typeof obj.user !== 'object') return null;
+    return obj.user as Record<string, unknown>;
+  }
+}
+```
+
+### Usage
+
+```ts
+import { App } from '@frontmcp/sdk';
+import SiteAuthorizationPlugin from './plugins/site-authorization.plugin';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    // Option 1: Use directly with defaults
+    SiteAuthorizationPlugin,
+
+    // Option 2: Use init() with custom options
+    SiteAuthorizationPlugin.init({
+      demoAllowAllIfNoClaims: false,
+      siteIdFieldName: 'tenantId',
+    }),
+  ],
+})
+export default class MyApp {}
+```
+
+## Step 4: Add Dynamic Providers
+
+For plugins that need to create providers based on configuration:
+
+```ts title="cache.plugin.ts"
+import { DynamicPlugin, Plugin, ProviderType, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { CachePluginOptions, CacheStoreInterface } from './cache.types';
+import { CacheStoreToken } from './cache.symbol';
+import CacheRedisProvider from './providers/cache-redis.provider';
+import CacheMemoryProvider from './providers/cache-memory.provider';
+
+@Plugin({
+  name: 'cache',
+  description: 'Cache plugin for caching tool results',
+  providers: [
+    // Default provider (overridden by dynamicProviders if configured)
+    {
+      name: 'cache:memory',
+      provide: CacheStoreToken,
+      useValue: new CacheMemoryProvider(60 * 60 * 24),
+    },
+  ],
+})
+export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
+  /**
+   * Create providers based on options.
+   * Called when using MyPlugin.init({ ... })
+   */
+  static override dynamicProviders(options: CachePluginOptions): ProviderType[] {
+    const providers: ProviderType[] = [];
+
+    switch (options.type) {
+      case 'redis':
+      case 'redis-client':
+        providers.push({
+          name: 'cache:redis',
+          provide: CacheStoreToken,
+          useValue: new CacheRedisProvider(options),
+        });
+        break;
+      case 'memory':
+        providers.push({
+          name: 'cache:memory',
+          provide: CacheStoreToken,
+          useValue: new CacheMemoryProvider(options.defaultTTL),
+        });
+        break;
+    }
+
+    return providers;
+  }
+
+  static defaultOptions: CachePluginOptions = { type: 'memory' };
+  options: CachePluginOptions;
+
+  constructor(options: CachePluginOptions = CachePlugin.defaultOptions) {
+    super();
+    this.options = {
+      defaultTTL: 60 * 60 * 24,
+      ...options,
+    };
+  }
+
+  @ToolHook.Will('execute', { priority: 1000 })
+  async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+
+    const { cache } = toolContext.metadata;
+    if (!cache || typeof toolContext.input === 'undefined') return;
+
+    // Access provider via this.get()
+    const cacheStore = this.get(CacheStoreToken);
+    const hash = this.hashObject({ tool: tool.fullName, input: toolContext.input });
+    const cached = await cacheStore.getValue(hash);
+
+    if (cached !== undefined && cached !== null) {
+      // Validate cached value still matches tool output schema
+      if (!tool.safeParseOutput(cached).success) {
+        await cacheStore.delete(hash);
+        return;
+      }
+
+      // Cache hit - set output and bypass execution
+      flowCtx.state.rawOutput = cached;
+      toolContext.respond(cached);
+    }
+  }
+
+  @ToolHook.Did('execute', { priority: 1000 })
+  async willWriteCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+    const { tool, toolContext } = flowCtx.state;
+    if (!tool || !toolContext) return;
+
+    const { cache } = toolContext.metadata;
+    if (!cache || typeof toolContext.input === 'undefined') return;
+
+    const cacheStore = this.get(CacheStoreToken);
+    const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
+    const hash = this.hashObject({ tool: tool.fullName, input: toolContext.input });
+
+    await cacheStore.setValue(hash, toolContext.output, ttl);
+  }
+
+  /**
+   * Simple hash for cache keys. For production, consider:
+   * - Using a proper hash function (crypto.createHash)
+   * - Adding depth limit to prevent stack overflow on circular structures
+   */
+  private hashObject(obj: Record<string, unknown>, depth = 0): string {
+    if (depth > 10) return '[max-depth]'; // Prevent infinite recursion
+    const keys = Object.keys(obj).sort();
+    return keys.reduce((acc, key) => {
+      const val = obj[key];
+      acc += key + ':';
+      if (typeof val === 'object' && val !== null) {
+        acc += this.hashObject(val as Record<string, unknown>, depth + 1);
+      } else {
+        acc += val;
+      }
+      return acc + ';';
+    }, '');
+  }
+}
+```
+
+## Step 5: Type-Safe Options with Zod
+
+For plugins with complex options and defaults, use Zod:
+
+```ts title="my-plugin.types.ts"
+import { z } from 'zod';
+
+// Define inner schema (without outer .default())
+const myPluginOptionsObjectSchema = z.object({
+  mode: z.enum(['strict', 'permissive']).default('strict'),
+  maxRetries: z.number().positive().default(3),
+  timeout: z.number().positive().optional(),
+  features: z.object({
+    logging: z.boolean().default(true),
+    metrics: z.boolean().default(false),
+  }).default({}),
+});
+
+// Full schema with outer default for parsing empty object
+export const myPluginOptionsSchema = myPluginOptionsObjectSchema.default({});
+
+/**
+ * Resolved options type - all defaults applied.
+ * Use for internal plugin logic.
+ */
+export type MyPluginOptions = z.infer<typeof myPluginOptionsSchema>;
+
+/**
+ * Input options type - fields with defaults are optional.
+ * Use for init() parameter.
+ */
+export type MyPluginOptionsInput = z.input<typeof myPluginOptionsObjectSchema>;
+```
+
+```ts title="my-plugin.plugin.ts"
+import { DynamicPlugin, Plugin, ProviderType } from '@frontmcp/sdk';
+import {
+  MyPluginOptions,
+  MyPluginOptionsInput,
+  myPluginOptionsSchema
+} from './my-plugin.types';
+
+@Plugin({
+  name: 'my-plugin',
+  description: 'Plugin with Zod-validated options',
+  providers: [],
+})
+export default class MyPlugin extends DynamicPlugin<MyPluginOptions, MyPluginOptionsInput> {
+  options: MyPluginOptions;
+
+  constructor(options: MyPluginOptionsInput = {}) {
+    super();
+    // Parse applies all defaults
+    this.options = myPluginOptionsSchema.parse(options);
+  }
+
+  static override dynamicProviders(options: MyPluginOptionsInput): ProviderType[] {
+    // Parse to get resolved options
+    const parsed = myPluginOptionsSchema.parse(options);
+
+    return [
+      {
+        name: 'my-plugin:config',
+        provide: MyPluginConfig,
+        useValue: new MyPluginConfig(parsed),
+      },
+    ];
+  }
+}
+```
+
+## Step 6: Using Factory Pattern
+
+For async initialization or injecting other providers:
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    CachePlugin.init({
+      inject: () => [ConfigService, DatabaseService],
+      useFactory: async (config: ConfigService, db: DatabaseService) => {
+        const redisUrl = await config.getAsync('REDIS_URL');
+        return {
+          type: 'redis',
+          config: {
+            host: redisUrl.hostname,
+            port: parseInt(redisUrl.port),
+            password: redisUrl.password,
+          },
+        };
+      },
+    }),
+  ],
+})
+export default class MyApp {}
+```
+
+## Step 7: Export the Plugin
+
+```ts title="index.ts"
+export { default } from './my-plugin.plugin';
+export * from './my-plugin.types';
+```
+
+## Hook Reference
+
+### Available Hooks
+
+| Hook | Flow | Stages |
+|------|------|--------|
+| `ToolHook` | `tools:call-tool` | parseInput, findTool, createToolCallContext, acquireQuota, acquireSemaphore, validateInput, execute, validateOutput, releaseSemaphore, releaseQuota, finalize |
+| `ListToolsHook` | `tools:list-tools` | parseInput, findTools, resolveConflicts, parseTools |
+
+### Hook Timing
+
+```ts
+// Runs BEFORE the stage
+@ToolHook.Will('execute', { priority: 1000 })
+
+// Runs AFTER the stage
+@ToolHook.Did('execute', { priority: 1000 })
+```
+
+### Priority
+
+Lower numbers run first. Common conventions:
+
+| Priority | Use Case |
+|----------|----------|
+| 100-500 | Critical security checks |
+| 500-900 | Authorization, validation |
+| 900-1000 | Standard plugin behavior |
+| 1000+ | Logging, metrics |
+
+### FlowCtxOf State
+
+Access flow state in hooks:
+
+```ts
+async myHook(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+  const { tool, toolContext } = flowCtx.state;
+
+  // tool: ToolEntry - metadata, schemas, owner
+  // toolContext: ToolContext - input, output, authInfo, metadata
+
+  // Access required values (throws if missing)
+  const { tool: requiredTool } = flowCtx.state.required;
+
+  // Set state values
+  flowCtx.state.rawOutput = myValue;
+
+  // Bypass execution by responding early
+  toolContext.respond(cachedResult);
+}
+```
+
+## Error Handling in Hooks
+
+Hooks should handle errors gracefully, especially in non-critical paths:
+
+```ts
+@ToolHook.Will('execute', { priority: 1000 })
+async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
+  const { tool, toolContext } = flowCtx.state;
+  if (!tool || !toolContext) return;
+
+  try {
+    const cacheStore = this.get(CacheStoreToken);
+    const cached = await cacheStore.getValue(key);
+    if (cached !== undefined) {
+      flowCtx.state.rawOutput = cached;
+      toolContext.respond(cached);
+    }
+  } catch (error) {
+    // Log but don't fail - cache miss is acceptable
+    this.logger?.warn('Cache read failed, continuing without cache', { error });
+    // Let execution continue normally
+  }
+}
+```
+
+**Guidelines:**
+- **Authorization hooks** - Throw errors to block execution
+- **Caching/logging hooks** - Catch errors and continue gracefully
+- **Cleanup hooks (Did)** - Always wrap in try/catch to avoid breaking the response
+
+## Best Practices
+
+1. **Use descriptive names** - Plugin name should be lowercase with hyphens
+2. **Provider naming** - Use `plugin-name:provider-name` format
+3. **Default options** - Always provide sensible defaults
+4. **Guard hooks early** - Check for required state before processing
+5. **Don't throw in cleanup** - Wrap finalize hooks in try/catch
+6. **Document metadata extensions** - If extending `ExtendFrontMcpToolMetadata`
+7. **Export types** - Export options types for consumers
+8. **Type-safe authInfo access** - Use helper methods to safely extract user data
+
+## Complete Example
+
+See the built-in plugins for complete examples:
+- **CachePlugin** - Caching with Redis/memory, hooks, dynamic providers
+- **CodeCallPlugin** - Complex plugin with tools, multiple providers, Zod validation
+- **SiteAuthorizationPlugin** - Simple authorization plugin with hooks

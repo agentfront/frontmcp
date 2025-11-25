@@ -11,9 +11,7 @@ import { createToolMetadata } from './tool.fixtures';
 /**
  * Creates a simple plugin metadata object
  */
-export function createPluginMetadata(
-  overrides: Partial<PluginMetadata> = {}
-): PluginMetadata {
+export function createPluginMetadata(overrides: Partial<PluginMetadata> = {}): PluginMetadata {
   return {
     name: 'TestPlugin',
     description: 'A test plugin',

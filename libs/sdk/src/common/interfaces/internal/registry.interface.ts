@@ -82,6 +82,8 @@ export interface ProviderViews {
 export interface ProviderRegistryInterface {
   get<T>(token: Token<T>): T;
 
+  getScope(): ScopeEntry;
+
   getProviders(): ProviderEntry[];
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][];
