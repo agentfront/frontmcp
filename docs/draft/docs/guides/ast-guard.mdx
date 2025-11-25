@@ -179,6 +179,7 @@ import {
   ForbiddenLoopRule,
   RequiredFunctionCallRule,
   CallArgumentValidationRule,
+  UnknownGlobalRule,
 } from 'ast-guard';
 
 export const customValidator = new JSAstValidator([
@@ -195,8 +196,37 @@ export const customValidator = new JSAstValidator([
       },
     },
   }),
+  new UnknownGlobalRule({
+    allowedGlobals: ['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date'],
+    allowStandardGlobals: true,
+  }),
 ]);
 ```
+
+## Whitelist-based identifier control with UnknownGlobalRule
+
+`UnknownGlobalRule` implements a **whitelist-based approach** where all identifier references must be either declared locally or explicitly allowed. This is the most secure option for sandboxed environments.
+
+```ts
+import { UnknownGlobalRule } from 'ast-guard';
+
+const rule = new UnknownGlobalRule({
+  // Only these globals are allowed (plus locally declared variables)
+  allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON', 'Array', 'Object'],
+  // Include safe JS globals like undefined, NaN, isNaN, parseInt, etc.
+  allowStandardGlobals: true,
+});
+```
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `allowedGlobals` | `['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date']` | Identifiers that can be referenced without declaration |
+| `allowStandardGlobals` | `true` | Include safe built-ins like `undefined`, `NaN`, `isNaN`, `parseInt`, etc. |
+| `message` | Auto-generated | Custom error message for violations |
+
+<Note>
+  `UnknownGlobalRule` uses a flat symbol table for performance. It collects all declarations across the AST without tracking lexical scope. This is an intentional simplification for AgentScript v1 where user-defined functions are blocked by default (`NoUserDefinedFunctionsRule`). If you enable user functions, be aware that inner-scope declarations will "whitelist" that identifier name globally.
+</Note>
 
 ## Return actionable errors to requesters
 

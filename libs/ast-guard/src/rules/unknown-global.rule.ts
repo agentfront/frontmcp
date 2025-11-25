@@ -168,6 +168,19 @@ export class UnknownGlobalRule implements ValidationRule {
 
   /**
    * Collect all declared identifiers in the AST
+   *
+   * **Note on scope handling:** This method builds a flat symbol table without
+   * tracking lexical scope. All declarations are collected into a single set
+   * regardless of where they're declared. This is an intentional simplification
+   * for performance reasons, and works correctly when used with AgentScript v1
+   * where user-defined functions are blocked by default (NoUserDefinedFunctionsRule).
+   *
+   * If user functions are enabled, inner-scope declarations will "whitelist"
+   * that identifier name globally, which may cause false negatives. Example:
+   * ```javascript
+   * function inner() { const x = 1; }  // declares 'x'
+   * Math.max(x, 5);  // 'x' passes because it's in the flat declared set
+   * ```
    */
   private collectDeclarations(ast: acorn.Node, declared: Set<string>): void {
     walk.simple(ast, {
