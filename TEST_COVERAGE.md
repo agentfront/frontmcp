@@ -15,7 +15,7 @@
 | mcp-from-openapi      | 21    | 67.5% | 54.3%    | 78.6% | 68.2% | ⚠️ Medium |
 | sdk                   | 125   | 37.0% | 7.0%     | 17.5% | 38.1% | ❌ Low    |
 
-**Total Tests: 1,257 passed (1 skipped)**
+## Total Tests: 1,257 passed (1 skipped)
 
 ---
 
@@ -23,7 +23,7 @@
 
 ### ast-guard
 
-```
+```text
 Tests:       356 passed, 356 total
 Statements : 89.49% ( 724/809 )
 Branches   : 76.53% ( 636/831 )
@@ -33,7 +33,7 @@ Lines      : 90.39% ( 706/781 )
 
 ### enclave
 
-```
+```text
 Tests:       168 passed, 1 skipped, 169 total
 Statements : 71.62% ( 106/148 )
 Branches   : 56.33% ( 40/71 )
@@ -43,7 +43,7 @@ Lines      : 71.91% ( 105/146 )
 
 ### vectoriadb
 
-```
+```text
 Tests:       357 passed, 357 total
 Statements : 82.91% ( 665/802 )
 Branches   : 80.95% ( 374/462 )
@@ -53,7 +53,7 @@ Lines      : 82.46% ( 635/770 )
 
 ### json-schema-to-zod-v3
 
-```
+```text
 Tests:       59 passed, 59 total
 Statements : 70.49% ( 473/671 )
 Branches   : 54.21% ( 270/498 )
@@ -63,7 +63,7 @@ Lines      : 71.92% ( 415/577 )
 
 ### mcp-from-openapi
 
-```
+```text
 Tests:       21 passed, 21 total
 Statements : 67.54% ( 335/496 )
 Branches   : 54.26% ( 242/446 )
@@ -73,7 +73,7 @@ Lines      : 68.16% ( 319/468 )
 
 ### sdk
 
-```
+```text
 Tests:       125 passed, 125 total
 Statements : 36.98% ( 3932/10630 )
 Branches   : 6.97% ( 315/4516 )
@@ -83,7 +83,7 @@ Lines      : 38.08% ( 3838/10077 )
 
 ### adapters
 
-```
+```text
 Tests:       70 passed, 70 total
 Statements : 72.19% ( 174/241 )
 Branches   : 61.53% ( 120/195 )
@@ -93,7 +93,7 @@ Lines      : 72.17% ( 166/230 )
 
 ### plugins
 
-```
+```text
 Tests:       101 passed, 101 total
 Statements : 78.20% ( 122/156 )
 Branches   : 60.68% ( 71/117 )
