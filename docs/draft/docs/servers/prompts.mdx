@@ -4,49 +4,503 @@ slug: servers/prompts
 icon: message-lines
 ---
 
-Prompts are **reusable prompt templates** with typed arguments. They return an MCP `GetPromptResult` for clients to render or send as messages to a model.
+Prompts are **reusable prompt templates** with typed arguments. They encapsulate system instructions, conversation starters, or any repeatable interaction pattern that clients can discover and invoke with parameters.
 
-## Minimal prompt
+<Info>
+This feature implements the [MCP Prompts specification](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts). FrontMCP handles all protocol details automatically.
+</Info>
+
+## Why Prompts?
+
+In the Model Context Protocol, prompts serve a distinct purpose from tools and resources:
+
+| Aspect | Prompt | Tool | Resource |
+|--------|--------|------|----------|
+| **Purpose** | Provide templated instructions | Execute actions | Provide data |
+| **Output** | Messages for the model | Execution results | Content to read |
+| **Arguments** | Named string parameters | Typed schema inputs | URI parameters |
+| **Use case** | Conversation templates, workflows | Side effects, mutations | Context loading |
+
+Prompts are ideal for:
+- **System instructions** — reusable persona definitions, behavior guidelines
+- **Conversation starters** — standardized ways to begin specific tasks
+- **Workflow templates** — multi-turn interaction patterns
+- **Task scaffolding** — structured prompts for code review, summarization, translation
+- **Consistent messaging** — ensure uniform tone and format across interactions
+
+---
+
+## Creating Prompts
+
+### Class Style
+
+Use class decorators for prompts that need dependency injection, lifecycle hooks, or complex logic:
 
 ```ts
 import { Prompt } from '@frontmcp/sdk';
 
 @Prompt({
-  name: 'Summarize',
+  name: 'summarize',
   title: 'Summarize Text',
-  description: 'Create a concise summary',
-  arguments: [{ name: 'text', description: 'Input text', required: true }],
+  description: 'Create a concise summary of the provided text',
+  arguments: [
+    { name: 'text', description: 'The text to summarize', required: true },
+    { name: 'style', description: 'Summary style (brief, detailed, bullets)', required: false },
+  ],
 })
-export default class SummarizePrompt {
-  async execute(args: { text: string }) {
+class SummarizePrompt {
+  async execute(args: Record<string, string>) {
+    const style = args['style'] || 'brief';
+
     return {
-      description: 'Summarize the provided text',
       messages: [
-        { role: 'system', content: 'You are a concise assistant.' },
-        { role: 'user', content: args.text },
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please summarize the following text in a ${style} style:\n\n${args['text']}`,
+          },
+        },
       ],
     };
   }
 }
 ```
 
-## Prompt metadata
+### Function Style
+
+For simpler prompts, use the functional builder:
+
+```ts
+import { prompt } from '@frontmcp/sdk';
+
+const SummarizePrompt = prompt({
+  name: 'summarize',
+  title: 'Summarize Text',
+  description: 'Create a concise summary of the provided text',
+  arguments: [
+    { name: 'text', description: 'The text to summarize', required: true },
+  ],
+})((args) => ({
+  messages: [
+    {
+      role: 'user',
+      content: {
+        type: 'text',
+        text: `Please summarize the following text:\n\n${args?.['text']}`,
+      },
+    },
+  ],
+}));
+```
+
+---
+
+## Registering Prompts
+
+Add prompts to your app via the `prompts` array:
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  prompts: [SummarizePrompt, CodeReviewPrompt, TranslatePrompt],
+})
+class MyApp {}
+```
+
+Prompts can also be generated dynamically by **adapters** or **plugins**.
+
+---
+
+## Return Values
+
+Prompts return messages that clients can render or send to a model. The SDK supports multiple return formats.
+
+### Simple String Return
+
+```ts
+execute(args: Record<string, string>) {
+  return `Summarize this: ${args['text']}`;
+}
+// Converted to: { messages: [{ role: 'user', content: { type: 'text', text: '...' } }] }
+```
+
+### Message Array
+
+```ts
+execute(args: Record<string, string>) {
+  return [
+    { role: 'user', content: { type: 'text', text: 'First message' } },
+    { role: 'assistant', content: { type: 'text', text: 'Response template' } },
+  ];
+}
+```
+
+### Full MCP Format
+
+For complete control, return the full `GetPromptResult` structure:
+
+```ts
+execute(args: Record<string, string>) {
+  return {
+    description: 'A customized prompt for code review',
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `Review this code:\n\n${args['code']}`,
+        },
+      },
+    ],
+  };
+}
+```
+
+### Object Return
+
+Objects are automatically JSON-serialized:
+
+```ts
+execute(args: Record<string, string>) {
+  return { task: 'summarize', input: args['text'], options: { length: 'short' } };
+}
+// Converted to JSON string in a user message
+```
+
+---
+
+## Prompt Metadata
 
 ```ts
 @Prompt({
-  name: string,
-  title?: string,
-  description?: string,
-  arguments?: Array<{
-    name: string;
-    description?: string;
-    required?: boolean;
+  name: string,           // Required: unique identifier
+  title?: string,         // Optional: human-readable display name
+  description?: string,   // Optional: hint for the LLM and clients
+  arguments?: Array<{     // Optional: parameter definitions
+    name: string;         //   - argument name
+    description?: string; //   - description for UI/LLM
+    required?: boolean;   //   - whether argument is mandatory
   }>,
-  icons?: Icon[],
+  icons?: Icon[],         // Optional: UI icons
 })
 ```
 
-**Notes**
+**Field descriptions:**
 
-- Prompts are discoverable and can be parameterized by clients.
-- Use prompts to standardize instructions for common tasks across tools/apps.
+| Field | Description |
+|-------|-------------|
+| `name` | Programmatic identifier used internally and in MCP responses |
+| `title` | Human-friendly name for UI display |
+| `description` | Helps clients and models understand when to use this prompt |
+| `arguments` | Named parameters that can be filled in by clients |
+| `icons` | Array of icons for visual representation in clients |
+
+---
+
+## Prompt Context
+
+Class-based prompts have access to a rich execution context via `this`:
+
+```ts
+@Prompt({
+  name: 'context-example',
+  arguments: [{ name: 'topic', required: true }],
+})
+class ContextExamplePrompt {
+  async execute(args: Record<string, string>) {
+    // Arguments passed to the prompt
+    this.args;              // { topic: 'value', ... }
+    this.metadata;          // Prompt metadata (name, description, etc.)
+
+    // Authentication
+    this.authInfo;          // Auth context from MCP session
+
+    // Dependency injection
+    this.get(ConfigService); // Resolve a provider
+    this.tryGet(Cache);      // Resolve or return undefined
+
+    // Scope access
+    this.scope;              // Access the current scope
+
+    // Flow control
+    this.respond(value);     // End execution with a response
+
+    return {
+      messages: [{ role: 'user', content: { type: 'text', text: args['topic'] } }],
+    };
+  }
+}
+```
+
+### Using Providers
+
+Inject services via the `get()` method:
+
+```ts
+@Prompt({
+  name: 'personalized-greeting',
+  arguments: [{ name: 'userId', required: true }],
+})
+class PersonalizedGreeting {
+  async execute(args: Record<string, string>) {
+    const db = this.get(DatabaseProvider);
+    const user = await db.users.findById(args['userId']);
+
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Hello ${user.name}! How can I help you today?`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+---
+
+## Real-World Examples
+
+### Code Review Prompt
+
+```ts
+@Prompt({
+  name: 'code-review',
+  title: 'Code Review',
+  description: 'Review code for quality, bugs, and improvements',
+  arguments: [
+    { name: 'code', description: 'The code to review', required: true },
+    { name: 'language', description: 'Programming language', required: false },
+    { name: 'focus', description: 'Review focus (security, performance, style)', required: false },
+  ],
+})
+class CodeReviewPrompt {
+  execute(args: Record<string, string>) {
+    const language = args['language'] || 'the detected language';
+    const focus = args['focus'] || 'overall quality';
+
+    return {
+      description: `Code review focused on ${focus}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please review the following ${language} code with a focus on ${focus}:
+
+\`\`\`
+${args['code']}
+\`\`\`
+
+Provide:
+1. A summary of what the code does
+2. Potential bugs or issues
+3. Suggestions for improvement
+4. Security considerations (if applicable)`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+### Translation Prompt
+
+```ts
+@Prompt({
+  name: 'translate',
+  title: 'Translate Text',
+  description: 'Translate text between languages',
+  arguments: [
+    { name: 'text', description: 'Text to translate', required: true },
+    { name: 'from', description: 'Source language', required: false },
+    { name: 'to', description: 'Target language', required: true },
+  ],
+})
+class TranslatePrompt {
+  execute(args: Record<string, string>) {
+    const fromLang = args['from'] ? `from ${args['from']} ` : '';
+
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Translate the following text ${fromLang}to ${args['to']}:\n\n${args['text']}`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+### Multi-Turn Conversation Starter
+
+```ts
+@Prompt({
+  name: 'interview-prep',
+  title: 'Interview Preparation',
+  description: 'Start an interview practice session',
+  arguments: [
+    { name: 'role', description: 'Job role to practice for', required: true },
+    { name: 'company', description: 'Target company (optional)', required: false },
+  ],
+})
+class InterviewPrepPrompt {
+  execute(args: Record<string, string>) {
+    const company = args['company'] ? ` at ${args['company']}` : '';
+
+    return {
+      description: `Interview practice for ${args['role']}${company}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `I want to practice for a ${args['role']} interview${company}. Please act as the interviewer and ask me relevant technical and behavioral questions. Start with an introduction and your first question.`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `Welcome! I'll be conducting your ${args['role']} interview today${company}. Let's begin with a brief introduction - could you tell me about yourself and your experience relevant to this role?`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+### Dynamic Prompt with Provider
+
+```ts
+@Prompt({
+  name: 'project-summary',
+  title: 'Project Summary',
+  description: 'Generate a summary prompt for a specific project',
+  arguments: [
+    { name: 'projectId', description: 'Project identifier', required: true },
+  ],
+})
+class ProjectSummaryPrompt {
+  async execute(args: Record<string, string>) {
+    const db = this.get(DatabaseProvider);
+    const project = await db.projects.findById(args['projectId']);
+
+    if (!project) {
+      return {
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `Project ${args['projectId']} not found. Please verify the project ID.`,
+            },
+          },
+        ],
+      };
+    }
+
+    return {
+      description: `Summary request for project: ${project.name}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please provide a status summary for the "${project.name}" project:
+
+**Description:** ${project.description}
+**Status:** ${project.status}
+**Team Size:** ${project.teamSize}
+**Start Date:** ${project.startDate}
+**Milestones:** ${project.milestones.map((m) => m.name).join(', ')}
+
+Focus on:
+1. Current progress
+2. Upcoming deadlines
+3. Potential blockers
+4. Resource needs`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+---
+
+## MCP Protocol Integration
+
+Prompts integrate with the MCP protocol via two flows:
+
+| Flow | Description |
+|------|-------------|
+| `prompts/list` | Returns all available prompts with their metadata |
+| `prompts/get` | Returns the messages for a specific prompt with arguments filled in |
+
+When a client requests `prompts/get` with a name and arguments:
+1. The SDK locates the prompt by name
+2. Arguments are validated against the prompt's definition
+3. The `execute()` method is called with the arguments
+4. The return value is converted to MCP `GetPromptResult` format
+
+### Capabilities
+
+FrontMCP automatically advertises prompt capabilities during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "prompts": {
+      "listChanged": true
+    }
+  }
+}
+```
+
+| Capability | Description |
+|------------|-------------|
+| `listChanged` | When `true`, the server will send `notifications/prompts/list_changed` when the prompt list changes (prompts added/removed dynamically) |
+
+The SDK sets `listChanged: true` when you have any prompts registered, enabling clients to receive real-time notifications when prompts are dynamically added or removed.
+
+### Change Notifications
+
+When prompts change dynamically (e.g., via adapters or plugins), FrontMCP automatically sends `notifications/prompts/list_changed` to connected clients. Clients that support this notification will refresh their prompt list.
+
+<Tip>
+For the full protocol specification, see [MCP Prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts).
+</Tip>
+
+---
+
+## Best Practices
+
+**Do:**
+- Use descriptive `name` and `description` fields to help clients understand prompt purpose
+- Define clear `arguments` with descriptions to guide users
+- Keep prompts focused on a single task or interaction pattern
+- Use the `title` field for user-friendly display names
+- Return structured messages with appropriate roles
+
+**Don't:**
+- Create prompts that perform side effects (use tools instead)
+- Hardcode values that should be arguments
+- Create overly complex prompts—split into multiple prompts if needed
+- Ignore argument validation—mark required fields appropriately
+- Mix concerns—keep prompts focused on message generation

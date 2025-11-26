@@ -125,9 +125,40 @@ export * from './errors';
 
 ## SDK Code Guidelines
 
+### Type Safety Philosophy
+
+FrontMCP is a TypeScript-first schema validation framework. All types should align with MCP protocol definitions.
+
+#### MCP Response Types (DO NOT use `unknown` for protocol types)
+
+- **Tools**: `execute()` returns `Promise<Out>` where `Out` is the typed output schema
+- **Prompts**: `execute()` returns `Promise<GetPromptResult>` (MCP-defined type)
+- **Resources**: `read()` returns `Promise<ReadResourceResult>` (MCP-defined type)
+
+```typescript
+// ✅ Good - strict MCP protocol types
+abstract execute(args: Record<string, string>): Promise<GetPromptResult>;
+
+// ❌ Bad - using unknown defeats TypeScript-first development
+abstract execute(args: Record<string, string>): Promise<unknown>;
+```
+
+#### Validation Flow Pattern
+
+1. `execute/read` methods return strictly typed MCP responses
+2. `parseOutput/safeParseOutput` normalize various input shapes to the strict type
+3. Flows finalize output using the entry's parse methods
+
+```typescript
+// In flow finalize stage:
+const parseResult = prompt.safeParseOutput(rawOutput);
+if (!parseResult.success) throw new InvalidOutputError();
+this.respond(parseResult.data); // data is GetPromptResult
+```
+
 ### Type System Patterns
 
-**Use `unknown` instead of `any` for generic types:**
+**Use `unknown` instead of `any` for generic type defaults (NOT for MCP protocol types):**
 
 ```typescript
 // ✅ Good - explicit constraint with unknown default

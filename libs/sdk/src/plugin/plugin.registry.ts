@@ -101,7 +101,7 @@ export default class PluginRegistry
 
       const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], pluginOwner);
       const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
-      const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? []);
+      const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? [], pluginOwner);
 
       await Promise.all([tools.ready, resources.ready, prompts.ready]);
 

@@ -391,6 +391,17 @@ export default class ToolRegistry
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
   }
+
+  /**
+   * Get the MCP capabilities for tools.
+   * These are reported to clients during initialization.
+   */
+  getCapabilities(): { listChanged: boolean } {
+    return {
+      // List change notifications are supported if we have any tools registered
+      listChanged: this.hasAny(),
+    };
+  }
 }
 
 /* -------------------- lineage utility -------------------- */
