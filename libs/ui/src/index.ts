@@ -6,6 +6,9 @@
  * for building authentication and authorization UIs across multiple LLM platforms.
  */
 
+// Validation system
+export * from './validation';
+
 // Theme system
 export * from './theme';
 

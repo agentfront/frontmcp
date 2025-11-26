@@ -1,19 +1,18 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
 import { Icon, IconSchema } from '@modelcontextprotocol/sdk/types.js';
+import { isValidMcpUri, isValidMcpUriTemplate } from '../../utils/uri-validation.utils';
 
 declare global {
   /**
    * Declarative metadata extends to McpResource decorator.
    */
-  export interface ExtendFrontMcpResourceMetadata {
-  }
+  export interface ExtendFrontMcpResourceMetadata {}
 
   /**
    * Declarative metadata extends to McpResourceTemplate decorator.
    */
-  export interface ExtendFrontMcpResourceTemplateMetadata {
-  }
+  export interface ExtendFrontMcpResourceTemplateMetadata {}
 }
 
 /**
@@ -55,16 +54,18 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
   icons?: Icon[];
 }
 
-
-export const frontMcpResourceMetadataSchema = z.object({
-  name: z.string().min(1),
-  title: z.string().optional(),
-  uri: z.string().min(1),
-  description: z.string().optional(),
-  mimeType: z.string().optional(),
-  icons: z.array(IconSchema).optional(),
-} satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>).passthrough();
-
+export const frontMcpResourceMetadataSchema = z
+  .object({
+    name: z.string().min(1),
+    title: z.string().optional(),
+    uri: z.string().min(1).refine(isValidMcpUri, {
+      message: 'URI must have a valid scheme (e.g., file://, https://, custom://)',
+    }),
+    description: z.string().optional(),
+    mimeType: z.string().optional(),
+    icons: z.array(IconSchema).optional(),
+  } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
+  .passthrough();
 
 /**
  * A template description for resources available on the server.
@@ -105,16 +106,18 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
   icons?: Icon[];
 }
 
-
-export const frontMcpResourceTemplateMetadataSchema = z.object({
-  name: z.string().min(1),
-  title: z.string().optional(),
-  uriTemplate: z.string().min(1),
-  description: z.string().optional(),
-  mimeType: z.string().optional(),
-  icons: z.array(IconSchema).optional(),
-} satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>).passthrough();
-
+export const frontMcpResourceTemplateMetadataSchema = z
+  .object({
+    name: z.string().min(1),
+    title: z.string().optional(),
+    uriTemplate: z.string().min(1).refine(isValidMcpUriTemplate, {
+      message: 'URI template must have a valid scheme (e.g., file://, https://, custom://)',
+    }),
+    description: z.string().optional(),
+    mimeType: z.string().optional(),
+    icons: z.array(IconSchema).optional(),
+  } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
+  .passthrough();
 
 export {
   ResourceMetadata,

@@ -15,5 +15,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
 
   // global scoped providers
   providers: tokenFactory.meta('providers'),
-  // TODO: FEATURE/FRONT_MCP_METADATA - add support for global plugins across apps
+  // global scoped tools (shared across apps)
+  tools: tokenFactory.meta('tools'),
+  // global scoped resources (shared across apps)
+  resources: tokenFactory.meta('resources'),
 };

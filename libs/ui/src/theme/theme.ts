@@ -1,14 +1,42 @@
 /**
- * Theme Configuration System
+ * @file theme.ts
+ * @description Theme Configuration System for FrontMCP UI.
  *
- * Provides a comprehensive theming system for FrontMCP UI with:
+ * Provides a comprehensive theming system with:
  * - Color palettes with semantic naming
  * - Typography configuration
  * - Spacing and sizing
  * - Component-specific tokens
+ * - Customizable CDN URLs for fonts, icons, and scripts
  * - Dark mode support
  * - Tailwind CSS v4 @theme integration
+ *
+ * @example
+ * ```typescript
+ * import { createTheme, DEFAULT_THEME } from '@frontmcp/ui';
+ *
+ * // Use the default GitHub/OpenAI theme
+ * const theme = DEFAULT_THEME;
+ *
+ * // Or create a custom theme
+ * const customTheme = createTheme({
+ *   colors: {
+ *     semantic: { primary: '#0969da' },
+ *   },
+ *   cdn: {
+ *     fonts: {
+ *       preconnect: ['https://fonts.googleapis.com'],
+ *       stylesheets: ['https://fonts.googleapis.com/css2?family=Roboto&display=swap'],
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @module @frontmcp/ui/theme
  */
+
+// Import default theme from presets (must be at top, used in createTheme)
+import { DEFAULT_THEME as _DEFAULT_THEME, GITHUB_OPENAI_THEME as _GITHUB_OPENAI_THEME } from './presets';
 
 // ============================================
 // Color Types
@@ -263,6 +291,69 @@ export interface ComponentTokens {
 }
 
 // ============================================
+// CDN Configuration Types
+// ============================================
+
+/**
+ * Script resource with optional integrity hash
+ */
+export interface CdnScriptResource {
+  /** URL to the script */
+  url: string;
+  /** Subresource integrity hash */
+  integrity?: string;
+}
+
+/**
+ * Font CDN configuration
+ */
+export interface ThemeCdnFonts {
+  /** Preconnect URLs for font providers */
+  preconnect?: string[];
+  /** Font stylesheet URLs */
+  stylesheets?: string[];
+}
+
+/**
+ * Icon CDN configuration
+ */
+export interface ThemeCdnIcons {
+  /** Icon library script */
+  script?: CdnScriptResource;
+}
+
+/**
+ * Scripts CDN configuration
+ */
+export interface ThemeCdnScripts {
+  /** Tailwind CSS Browser CDN URL */
+  tailwind?: string;
+  /** HTMX script resource */
+  htmx?: CdnScriptResource;
+  /** Alpine.js script resource */
+  alpine?: CdnScriptResource;
+}
+
+/**
+ * Complete CDN configuration for theme
+ *
+ * Allows customizing all external resource URLs used by the theme.
+ * Useful for:
+ * - Using private CDN mirrors
+ * - Self-hosting resources
+ * - Compliance with CSP policies
+ * - Using different font families
+ */
+export interface ThemeCdnConfig {
+  /** Font configuration */
+  fonts?: ThemeCdnFonts;
+  /** Icon library configuration */
+  icons?: ThemeCdnIcons;
+  /** Script CDN configuration */
+  scripts?: ThemeCdnScripts;
+}
+
+// ============================================
 // Complete Theme Configuration
 // ============================================
 
@@ -291,6 +382,9 @@ export interface ThemeConfig {
   /** Component-specific tokens */
   components?: ComponentTokens;
 
+  /** CDN resource configuration */
+  cdn?: ThemeCdnConfig;
+
   /** Dark mode variant */
   dark?: Partial<ThemeConfig>;
 
@@ -302,129 +396,46 @@ export interface ThemeConfig {
 }
 
 // ============================================
-// Default Theme
+// Default Theme (GitHub/OpenAI Style)
 // ============================================
 
 /**
- * Default FrontMCP theme
+ * Default FrontMCP theme - GitHub/OpenAI inspired gray-black aesthetic
+ *
+ * Re-exported from presets for convenience. The default theme features:
+ * - Monochromatic gray-black color palette
+ * - System UI font stack
+ * - Smaller border radii (GitHub style)
+ * - Subtle shadows with gray tones
+ *
+ * @see ./presets/github-openai.ts for full theme definition
  */
-export const DEFAULT_THEME: ThemeConfig = {
-  name: 'frontmcp-default',
-
-  colors: {
-    semantic: {
-      primary: '#3b82f6', // blue-500
-      secondary: '#8b5cf6', // violet-500
-      accent: '#06b6d4', // cyan-500
-      success: '#22c55e', // green-500
-      warning: '#f59e0b', // amber-500
-      danger: '#ef4444', // red-500
-      info: '#0ea5e9', // sky-500
-    },
-    surface: {
-      background: '#f9fafb', // gray-50
-      surface: '#ffffff',
-      elevated: '#ffffff',
-      overlay: 'rgba(0, 0, 0, 0.5)',
-    },
-    text: {
-      primary: '#111827', // gray-900
-      secondary: '#6b7280', // gray-500
-      disabled: '#9ca3af', // gray-400
-      inverse: '#ffffff',
-      link: '#3b82f6', // blue-500
-    },
-    border: {
-      default: '#e5e7eb', // gray-200
-      hover: '#d1d5db', // gray-300
-      focus: '#3b82f6', // blue-500
-      divider: '#f3f4f6', // gray-100
-    },
-  },
-
-  typography: {
-    families: {
-      sans: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
-    },
-    sizes: {
-      xs: '0.75rem',
-      sm: '0.875rem',
-      base: '1rem',
-      lg: '1.125rem',
-      xl: '1.25rem',
-      '2xl': '1.5rem',
-      '3xl': '1.875rem',
-      '4xl': '2.25rem',
-    },
-    weights: {
-      normal: '400',
-      medium: '500',
-      semibold: '600',
-      bold: '700',
-    },
-  },
-
-  radius: {
-    none: '0',
-    sm: '0.25rem',
-    md: '0.375rem',
-    lg: '0.5rem',
-    xl: '0.75rem',
-    '2xl': '1rem',
-    full: '9999px',
-  },
-
-  shadows: {
-    sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-    md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-    xl: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
-  },
-
-  components: {
-    button: {
-      radius: '0.5rem',
-      paddingX: '1rem',
-      paddingY: '0.625rem',
-      fontSize: '0.875rem',
-      fontWeight: '500',
-    },
-    card: {
-      radius: '0.75rem',
-      padding: '1.5rem',
-      shadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
-      borderWidth: '1px',
-    },
-    input: {
-      radius: '0.5rem',
-      paddingX: '0.75rem',
-      paddingY: '0.625rem',
-      borderWidth: '1px',
-      focusRingWidth: '2px',
-    },
-  },
-};
+export const GITHUB_OPENAI_THEME = _GITHUB_OPENAI_THEME;
+export const DEFAULT_THEME = _DEFAULT_THEME;
 
 // ============================================
 // Theme Builder Utilities
 // ============================================
 
 /**
- * Deep merge two theme configurations
+ * Deep merge two theme configurations (internal helper without dark handling)
+ * Accepts Partial<ThemeConfig> for base to safely handle dark variants which may not have all required properties
  */
-export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): ThemeConfig {
+function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConfig>): Omit<ThemeConfig, 'dark'> {
+  // Provide safe defaults for required nested properties
+  const baseColors = base.colors ?? { semantic: { primary: '#24292f' } };
+
   return {
     ...base,
     ...override,
     colors: {
-      ...base.colors,
+      ...baseColors,
       ...override.colors,
-      semantic: { ...base.colors.semantic, ...override.colors?.semantic },
-      surface: { ...base.colors.surface, ...override.colors?.surface },
-      text: { ...base.colors.text, ...override.colors?.text },
-      border: { ...base.colors.border, ...override.colors?.border },
-      custom: { ...base.colors.custom, ...override.colors?.custom },
+      semantic: { ...baseColors.semantic, ...override.colors?.semantic },
+      surface: { ...baseColors.surface, ...override.colors?.surface },
+      text: { ...baseColors.text, ...override.colors?.text },
+      border: { ...baseColors.border, ...override.colors?.border },
+      custom: { ...baseColors.custom, ...override.colors?.custom },
     },
     typography: {
       ...base.typography,
@@ -432,7 +443,9 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
       families: { ...base.typography?.families, ...override.typography?.families },
       sizes: { ...base.typography?.sizes, ...override.typography?.sizes },
       weights: { ...base.typography?.weights, ...override.typography?.weights },
+      lineHeight: { ...base.typography?.lineHeight, ...override.typography?.lineHeight },
     },
+    spacing: { ...base.spacing, ...override.spacing },
     radius: { ...base.radius, ...override.radius },
     shadows: { ...base.shadows, ...override.shadows },
     components: {
@@ -442,8 +455,75 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
       card: { ...base.components?.card, ...override.components?.card },
       input: { ...base.components?.input, ...override.components?.input },
     },
+    cdn: {
+      ...base.cdn,
+      ...override.cdn,
+      fonts: {
+        // Concatenate then dedupe so base entries are preserved without duplicates
+        preconnect: Array.from(
+          new Set([...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])]),
+        ),
+        stylesheets: Array.from(
+          new Set([...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])]),
+        ),
+      },
+      icons: {
+        ...base.cdn?.icons,
+        ...override.cdn?.icons,
+        // Deep merge script to preserve integrity when only url is overridden
+        script: override.cdn?.icons?.script
+          ? { ...base.cdn?.icons?.script, ...override.cdn?.icons?.script }
+          : base.cdn?.icons?.script,
+      },
+      scripts: {
+        // tailwind is a simple string, just use override or base
+        tailwind: override.cdn?.scripts?.tailwind ?? base.cdn?.scripts?.tailwind,
+        // Deep merge htmx/alpine to preserve integrity when only url is overridden
+        htmx: override.cdn?.scripts?.htmx
+          ? { ...base.cdn?.scripts?.htmx, ...override.cdn?.scripts?.htmx }
+          : base.cdn?.scripts?.htmx,
+        alpine: override.cdn?.scripts?.alpine
+          ? { ...base.cdn?.scripts?.alpine, ...override.cdn?.scripts?.alpine }
+          : base.cdn?.scripts?.alpine,
+      },
+    },
     customVars: { ...base.customVars, ...override.customVars },
     customCss: [base.customCss, override.customCss].filter(Boolean).join('\n'),
+  };
+}
+
+/**
+ * Deep merge two theme configurations
+ *
+ * @remarks
+ * Dark variant handling:
+ * - When override.dark is provided, it's merged on top of base.dark (if present) or base
+ * - The resulting dark variant never contains a nested .dark property
+ * - This prevents infinite recursion and ensures clean dark theme composition
+ */
+export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): ThemeConfig {
+  // Merge the main (light) theme properties
+  const merged = mergeThemesCore(base, override);
+
+  // Handle dark variant separately to avoid nested .dark properties
+  let darkVariant: Partial<ThemeConfig> | undefined;
+
+  if (override.dark !== undefined) {
+    // Merge override.dark on top of base.dark (or base if no base.dark)
+    // darkBase may be partial (from base.dark) - mergeThemesCore handles this safely
+    const darkBase = base.dark ?? base;
+    // Strip any .dark from override.dark to prevent nesting
+    const { dark: _nestedDark, ...overrideDarkWithoutNested } = override.dark;
+    darkVariant = mergeThemesCore(darkBase, overrideDarkWithoutNested);
+  } else if (base.dark !== undefined) {
+    // Preserve base.dark, but strip any nested .dark property
+    const { dark: _nestedDark, ...baseDarkWithoutNested } = base.dark;
+    darkVariant = baseDarkWithoutNested;
+  }
+
+  return {
+    ...merged,
+    dark: darkVariant,
   };
 }
 
@@ -452,6 +532,15 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
  */
 export function createTheme(overrides: Partial<ThemeConfig>): ThemeConfig {
   return mergeThemes(DEFAULT_THEME, overrides);
+}
+
+/**
+ * Emit color scale CSS variables
+ */
+function emitColorScale(lines: string[], name: string, scale: ColorScale): void {
+  for (const [shade, value] of Object.entries(scale)) {
+    if (value) lines.push(`--color-${name}-${shade}: ${value};`);
+  }
 }
 
 /**
@@ -464,12 +553,29 @@ export function buildThemeCss(theme: ThemeConfig): string {
   const semantic = theme.colors.semantic;
   if (typeof semantic.primary === 'string') {
     lines.push(`--color-primary: ${semantic.primary};`);
+  } else if (semantic.primary) {
+    emitColorScale(lines, 'primary', semantic.primary);
   }
-  if (semantic.secondary && typeof semantic.secondary === 'string') {
-    lines.push(`--color-secondary: ${semantic.secondary};`);
+  if (semantic.secondary) {
+    if (typeof semantic.secondary === 'string') {
+      lines.push(`--color-secondary: ${semantic.secondary};`);
+    } else {
+      emitColorScale(lines, 'secondary', semantic.secondary);
+    }
   }
-  if (semantic.accent && typeof semantic.accent === 'string') {
-    lines.push(`--color-accent: ${semantic.accent};`);
+  if (semantic.accent) {
+    if (typeof semantic.accent === 'string') {
+      lines.push(`--color-accent: ${semantic.accent};`);
+    } else {
+      emitColorScale(lines, 'accent', semantic.accent);
+    }
+  }
+  if (semantic.neutral) {
+    if (typeof semantic.neutral === 'string') {
+      lines.push(`--color-neutral: ${semantic.neutral};`);
+    } else {
+      emitColorScale(lines, 'neutral', semantic.neutral);
+    }
   }
   if (semantic.success) lines.push(`--color-success: ${semantic.success};`);
   if (semantic.warning) lines.push(`--color-warning: ${semantic.warning};`);
@@ -514,11 +620,13 @@ export function buildThemeCss(theme: ThemeConfig): string {
 
   // Radius
   const radius = theme.radius;
+  if (radius?.none) lines.push(`--radius-none: ${radius.none};`);
   if (radius?.sm) lines.push(`--radius-sm: ${radius.sm};`);
   if (radius?.md) lines.push(`--radius-md: ${radius.md};`);
   if (radius?.lg) lines.push(`--radius-lg: ${radius.lg};`);
   if (radius?.xl) lines.push(`--radius-xl: ${radius.xl};`);
   if (radius?.['2xl']) lines.push(`--radius-2xl: ${radius['2xl']};`);
+  if (radius?.full) lines.push(`--radius-full: ${radius.full};`);
 
   // Custom vars
   if (theme.customVars) {
@@ -532,6 +640,24 @@ export function buildThemeCss(theme: ThemeConfig): string {
 
 /**
  * Build complete style block with @theme and custom CSS
+ *
+ * @remarks
+ * **Security/Trust Model:**
+ * The `theme.customCss` property is injected directly into a `<style>` tag without
+ * sanitization. This is intentional - CSS customization requires full CSS syntax support.
+ *
+ * **Trust assumptions:**
+ * - Theme configurations should only come from trusted sources (developer-defined themes)
+ * - Never pass user-provided input directly to `customCss`
+ * - If you need user-customizable styles, validate/sanitize them before including in a theme
+ *
+ * **Why no sanitization:**
+ * - CSS sanitization is complex and often breaks legitimate styles
+ * - The theme system is designed for developer use, not end-user customization
+ * - Developers creating themes are trusted to provide safe CSS
+ *
+ * @param theme - Theme configuration with optional customCss
+ * @returns HTML style block with Tailwind @theme directive
  */
 export function buildStyleBlock(theme: ThemeConfig): string {
   const themeCss = buildThemeCss(theme);

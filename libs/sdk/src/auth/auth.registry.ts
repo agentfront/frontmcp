@@ -29,6 +29,7 @@ import { tokenName } from '../utils/token.utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';
+import { DependencyNotFoundError } from '../errors/mcp.error';
 
 /**
  * Default auth options when none provided - public mode with all tools open
@@ -46,6 +47,7 @@ export class AuthRegistry
   private readonly primary?: FrontMcpAuth;
   private readonly parsedOptions: AuthOptions;
   private readonly logger: FrontMcpLogger;
+  private readonly owner: EntryOwnerRef;
 
   /**
    * Detection result for auth providers across the scope hierarchy
@@ -66,6 +68,7 @@ export class AuthRegistry
   ) {
     super('AuthRegistry', providers, metadata, false);
 
+    this.owner = owner;
     this.logger = providers.get(FrontMcpLogger).child('AuthRegistry');
 
     // Parse input with defaults applied
@@ -245,14 +248,21 @@ export class AuthRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new DependencyNotFoundError('AuthRegistry', tokenName(token));
+      }
       const deps = authDiscoveryDeps(rec);
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
           throw new Error(`AuthProvider ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
         }
-        this.graph.get(token)!.add(d);
+        const graphEntry = this.graph.get(token);
+        if (!graphEntry) {
+          throw new DependencyNotFoundError('AuthRegistry', `graph entry for ${tokenName(token)}`);
+        }
+        graphEntry.add(d);
       }
     }
   }
@@ -265,7 +275,10 @@ export class AuthRegistry
   }
 
   getPrimary(): FrontMcpAuth {
-    return this.primary!;
+    if (!this.primary) {
+      throw new DependencyNotFoundError('AuthRegistry', 'primary auth provider');
+    }
+    return this.primary;
   }
 
   getAuthProviders(): AuthProviderEntry[] {

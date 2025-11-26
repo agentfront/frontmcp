@@ -1,76 +1,77 @@
 /**
- * Button Component
+ * @file button.ts
+ * @description Button Component for FrontMCP UI.
  *
- * Versatile button component with multiple variants and states.
+ * Versatile button component with multiple variants, sizes, and states.
+ * Includes HTMX support for dynamic interactions without JavaScript.
+ *
+ * @example Basic button
+ * ```typescript
+ * import { button } from '@frontmcp/ui';
+ *
+ * // Primary button (default)
+ * const html = button('Click Me');
+ * // <button type="button" class="...bg-primary...">Click Me</button>
+ * ```
+ *
+ * @example Button variants
+ * ```typescript
+ * import { button, primaryButton, dangerButton, outlineButton } from '@frontmcp/ui';
+ *
+ * // Using variant option
+ * const secondary = button('Save', { variant: 'secondary' });
+ * const danger = button('Delete', { variant: 'danger' });
+ *
+ * // Using shorthand functions
+ * const primary = primaryButton('Submit');
+ * const outline = outlineButton('Cancel');
+ * ```
+ *
+ * @example Button with loading state
+ * ```typescript
+ * const loadingBtn = button('Saving...', {
+ *   loading: true,
+ *   disabled: true,
+ * });
+ * ```
+ *
+ * @example Button with HTMX
+ * ```typescript
+ * const htmxBtn = button('Load More', {
+ *   htmx: {
+ *     get: '/api/items?page=2',
+ *     target: '#items-list',
+ *     swap: 'beforeend',
+ *   },
+ * });
+ * ```
+ *
+ * @example Button group
+ * ```typescript
+ * import { button, buttonGroup } from '@frontmcp/ui';
+ *
+ * const group = buttonGroup([
+ *   button('Edit', { variant: 'outline' }),
+ *   button('Delete', { variant: 'danger' }),
+ * ], { attached: true });
+ * ```
+ *
+ * @module @frontmcp/ui/components/button
  */
 
 import { escapeHtml } from '../layouts/base';
+import { validateOptions } from '../validation';
+import {
+  ButtonOptionsSchema,
+  ButtonGroupOptionsSchema,
+  type ButtonOptions,
+  type ButtonVariant,
+  type ButtonSize,
+  type ButtonGroupOptions,
+} from './button.schema';
 
-// ============================================
-// Button Types
-// ============================================
-
-/**
- * Button variant styles
- */
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success' | 'link';
-
-/**
- * Button size options
- */
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-
-/**
- * Button component options
- */
-export interface ButtonOptions {
-  /** Button variant */
-  variant?: ButtonVariant;
-  /** Button size */
-  size?: ButtonSize;
-  /** Button type attribute */
-  type?: 'button' | 'submit' | 'reset';
-  /** Disabled state */
-  disabled?: boolean;
-  /** Loading state */
-  loading?: boolean;
-  /** Full width */
-  fullWidth?: boolean;
-  /** Icon before text */
-  iconBefore?: string;
-  /** Icon after text */
-  iconAfter?: string;
-  /** Icon only (no text) */
-  iconOnly?: boolean;
-  /** Additional CSS classes */
-  className?: string;
-  /** Button ID */
-  id?: string;
-  /** Name attribute */
-  name?: string;
-  /** Value attribute */
-  value?: string;
-  /** Click handler (URL for links) */
-  href?: string;
-  /** Open in new tab */
-  target?: '_blank' | '_self';
-  /** HTMX attributes */
-  htmx?: {
-    get?: string;
-    post?: string;
-    put?: string;
-    delete?: string;
-    target?: string;
-    swap?: string;
-    trigger?: string;
-    confirm?: string;
-    indicator?: string;
-  };
-  /** Data attributes */
-  data?: Record<string, string>;
-  /** ARIA label */
-  ariaLabel?: string;
-}
+// Re-export types from schema
+export type { ButtonOptions, ButtonVariant, ButtonSize, ButtonGroupOptions };
 
 // ============================================
 // Button Builder
@@ -118,6 +119,24 @@ function getSizeClasses(size: ButtonSize, iconOnly: boolean): string {
 }
 
 /**
+ * Sanitize a data-* attribute key to prevent malformed attributes / injection
+ * Returns null if the key is invalid after sanitization
+ */
+function sanitizeDataKey(key: string): string | null {
+  // Only allow lowercase letters, numbers, underscores, and hyphens
+  const sanitized = key
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!sanitized) {
+    console.warn(`[frontmcp/ui] Dropping invalid data-* key: "${key}"`);
+    return null;
+  }
+  return sanitized;
+}
+
+/**
  * Build HTMX attributes string
  */
 function buildHtmxAttrs(htmx?: ButtonOptions['htmx']): string {
@@ -144,9 +163,61 @@ const loadingSpinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none"
 </svg>`;
 
 /**
+ * Validate href protocol to prevent javascript: and other dangerous protocols
+ */
+function isValidHrefProtocol(href: string): boolean {
+  const trimmed = href.trim().toLowerCase();
+  // Allow only safe protocols (allowlist approach is more secure than blocklist)
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('mailto:') ||
+    trimmed.startsWith('tel:')
+  );
+}
+
+/**
  * Build a button component
+ *
+ * @param text - Button label text (used as aria-label for icon-only buttons)
+ * @param options - Button configuration options
+ * @returns HTML string for the button, or validation error box on invalid input
+ *
+ * @remarks
+ * **Security considerations:**
+ * - The `iconBefore` and `iconAfter` options accept raw HTML strings for SVG icons.
+ *   These are NOT escaped and should only contain trusted content (e.g., icon library output).
+ *   Never pass user-provided content to these options.
+ * - The `href` option uses an allowlist for safe protocols. Only the following are allowed:
+ *   - `http://`, `https://` - absolute URLs
+ *   - `/` - absolute paths (e.g., "/login", "/api/users")
+ *   - `#` - anchor links (e.g., "#section")
+ *   - `mailto:` - email links
+ *   - `tel:` - phone links
+ *   Note: Bare relative URLs like "login" or "./foo" are NOT allowed and will fall back to
+ *   button behavior. Use absolute paths ("/login") instead.
+ * - The `data` option keys are sanitized to prevent malformed attributes.
+ *
+ * **Accessibility:**
+ * - When `iconOnly: true`, the `text` parameter is automatically used as `aria-label`
+ *   unless an explicit `ariaLabel` option is provided.
+ * - Empty button text with `iconOnly: false` will log a warning for accessibility.
+ * - Icon-only buttons without text or ariaLabel will log a warning.
  */
 export function button(text: string, options: ButtonOptions = {}): string {
+  // Validate options using Zod schema
+  const validation = validateOptions<ButtonOptions>(options, {
+    schema: ButtonOptionsSchema,
+    componentName: 'button',
+  });
+
+  if (!validation.success) {
+    return validation.error;
+  }
+
+  const validatedOptions = validation.data;
   const {
     variant = 'primary',
     size = 'md',
@@ -166,10 +237,31 @@ export function button(text: string, options: ButtonOptions = {}): string {
     htmx,
     data,
     ariaLabel,
-  } = options;
+  } = validatedOptions;
+
+  // Warn about empty button text (accessibility concern)
+  if (!iconOnly && !text.trim()) {
+    console.warn('[frontmcp/ui] Button has empty text. Consider providing text or using iconOnly with ariaLabel.');
+  }
+
+  // Warn about icon-only buttons without accessible label
+  if (iconOnly && !ariaLabel && !text.trim()) {
+    console.warn(
+      '[frontmcp/ui] iconOnly button requires non-empty text or ariaLabel for accessibility; control will have no label.',
+    );
+  }
+
+  // Validate href protocol
+  if (href && !isValidHrefProtocol(href)) {
+    console.warn(`[frontmcp/ui] Button href contains potentially dangerous protocol: "${href.slice(0, 20)}..."`);
+    // Don't render the href - fall back to button behavior
+  }
 
   const variantClasses = getVariantClasses(variant);
   const sizeClasses = getSizeClasses(size, iconOnly);
+
+  // Escape className to prevent XSS via attribute injection (e.g., `btn" onclick="...`)
+  const safeClassName = className ? escapeHtml(className) : '';
 
   const baseClasses = [
     'inline-flex items-center justify-center',
@@ -181,7 +273,7 @@ export function button(text: string, options: ButtonOptions = {}): string {
     fullWidth ? 'w-full' : '',
     variantClasses,
     sizeClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -189,7 +281,11 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const htmxAttrs = buildHtmxAttrs(htmx);
   const dataAttrs = data
     ? Object.entries(data)
-        .map(([key, val]) => `data-${key}="${escapeHtml(val)}"`)
+        .map(([key, val]) => {
+          const safeKey = sanitizeDataKey(key);
+          return safeKey ? `data-${safeKey}="${escapeHtml(val)}"` : '';
+        })
+        .filter(Boolean)
         .join(' ')
     : '';
 
@@ -197,22 +293,28 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const nameAttr = name ? `name="${escapeHtml(name)}"` : '';
   const valueAttr = value ? `value="${escapeHtml(value)}"` : '';
   const disabledAttr = disabled || loading ? 'disabled' : '';
-  const ariaLabelAttr = ariaLabel ? `aria-label="${escapeHtml(ariaLabel)}"` : '';
-  const targetAttr = target ? `target="${target}"` : '';
+  const targetAttr = target ? `target="${escapeHtml(target)}"` : '';
+  // Add rel="noopener noreferrer" for target="_blank" to prevent window.opener access
+  const relAttr = target === '_blank' ? 'rel="noopener noreferrer"' : '';
 
-  // Build content
+  // For icon-only buttons, use text as aria-label if no explicit ariaLabel provided (WCAG)
+  const trimmedText = text.trim();
+  const effectiveAriaLabel = ariaLabel ?? (iconOnly && trimmedText ? trimmedText : undefined);
+  const ariaLabelAttr = effectiveAriaLabel ? `aria-label="${escapeHtml(effectiveAriaLabel)}"` : '';
+
+  // Build content (both icons hide during loading for consistent visual behavior)
   const iconBeforeHtml = iconBefore && !loading ? `<span class="${iconOnly ? '' : 'mr-2'}">${iconBefore}</span>` : '';
-  const iconAfterHtml = iconAfter ? `<span class="${iconOnly ? '' : 'ml-2'}">${iconAfter}</span>` : '';
+  const iconAfterHtml = iconAfter && !loading ? `<span class="${iconOnly ? '' : 'ml-2'}">${iconAfter}</span>` : '';
   const loadingHtml = loading ? loadingSpinner : '';
   const textHtml = iconOnly ? '' : escapeHtml(text);
 
   const contentHtml = `${loadingHtml}${iconBeforeHtml}${textHtml}${iconAfterHtml}`;
 
-  // Use anchor tag if href provided
-  if (href && !disabled && !loading) {
+  // Use anchor tag if href provided and protocol is safe
+  if (href && !disabled && !loading && isValidHrefProtocol(href)) {
     return `<a href="${escapeHtml(
       href,
-    )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr}>
+    )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr} ${relAttr}>
       ${contentHtml}
     </a>`;
   }
@@ -224,30 +326,45 @@ export function button(text: string, options: ButtonOptions = {}): string {
 
 /**
  * Build a button group
+ *
+ * @param buttons - Array of button HTML strings
+ * @param options - Button group configuration options
+ * @returns HTML string for the button group, or validation error box on invalid input
  */
-export function buttonGroup(
-  buttons: string[],
-  options: {
-    attached?: boolean;
-    direction?: 'horizontal' | 'vertical';
-    gap?: 'sm' | 'md' | 'lg';
-    className?: string;
-  } = {},
-): string {
-  const { attached = false, direction = 'horizontal', gap = 'md', className = '' } = options;
+export function buttonGroup(buttons: string[], options: ButtonGroupOptions = {}): string {
+  if (buttons.length === 0) {
+    console.warn('[frontmcp/ui] buttonGroup called with empty buttons array');
+    return '';
+  }
+
+  // Validate options using Zod schema
+  const validation = validateOptions<ButtonGroupOptions>(options, {
+    schema: ButtonGroupOptionsSchema,
+    componentName: 'buttonGroup',
+  });
+
+  if (!validation.success) {
+    return validation.error;
+  }
+
+  const validatedOptions = validation.data;
+  const { attached = false, direction = 'horizontal', gap = 'md', className = '' } = validatedOptions;
+
+  // Escape className to prevent XSS via attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
 
   if (attached) {
     const classes =
       direction === 'horizontal'
         ? 'inline-flex rounded-lg shadow-sm [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none [&>*:not(:first-child):not(:last-child)]:rounded-none [&>*:not(:first-child)]:-ml-px'
         : 'inline-flex flex-col rounded-lg shadow-sm [&>*:first-child]:rounded-b-none [&>*:last-child]:rounded-t-none [&>*:not(:first-child):not(:last-child)]:rounded-none [&>*:not(:first-child)]:-mt-px';
-    return `<div class="${classes} ${className}">${buttons.join('')}</div>`;
+    return `<div class="${classes} ${safeClassName}">${buttons.join('')}</div>`;
   }
 
   const gapClasses = { sm: 'gap-2', md: 'gap-3', lg: 'gap-4' };
   const directionClasses = direction === 'horizontal' ? 'flex flex-row' : 'flex flex-col';
 
-  return `<div class="${directionClasses} ${gapClasses[gap]} ${className}">${buttons.join('')}</div>`;
+  return `<div class="${directionClasses} ${gapClasses[gap]} ${safeClassName}">${buttons.join('')}</div>`;
 }
 
 // ============================================

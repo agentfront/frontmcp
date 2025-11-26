@@ -44,7 +44,7 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     await this.appAdapters.ready;
 
     this.appTools = new ToolRegistry(this.appProviders, this.metadata.tools ?? [], appOwner);
-    this.appResources = new ResourceRegistry(this.appProviders, this.metadata.resources ?? []);
+    this.appResources = new ResourceRegistry(this.appProviders, this.metadata.resources ?? [], appOwner);
     this.appPrompts = new PromptRegistry(this.appProviders, this.metadata.prompts ?? []);
 
     await Promise.all([this.appTools.ready, this.appResources.ready, this.appPrompts.ready]);

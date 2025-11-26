@@ -1,15 +1,15 @@
-import {AuthenticatedServerRequest} from '../../server/server.types';
-import {TransportKey, TypedElicitResult} from '../transport.types';
-import {Server as McpServer} from '@modelcontextprotocol/sdk/server/index.js';
-import {EmptyResultSchema, ElicitResult, RequestId, ElicitResultSchema} from '@modelcontextprotocol/sdk/types.js';
-import {InMemoryEventStore} from '../transport.event-store';
-import {AuthInfo} from '@modelcontextprotocol/sdk/server/auth/types.js';
-import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {SSEServerTransport} from '../legacy/legacy.sse.tranporter';
-import {ZodObject} from 'zod';
-import {FrontMcpLogger, ServerRequestTokens, ServerResponse} from '../../common';
-import {Scope} from '../../scope';
-import {createMcpHandlers} from '../mcp-handlers';
+import { AuthenticatedServerRequest } from '../../server/server.types';
+import { TransportKey, TypedElicitResult } from '../transport.types';
+import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
+import { EmptyResultSchema, ElicitResult, RequestId, ElicitResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { InMemoryEventStore } from '../transport.event-store';
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
+import { ZodObject } from 'zod';
+import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
+import { Scope } from '../../scope';
+import { createMcpHandlers } from '../mcp-handlers';
 
 export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransport | SSEServerTransport> {
   protected logger: FrontMcpLogger;
@@ -45,9 +45,8 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   abstract handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
 
   connectServer() {
-    const {info} = this.scope.metadata;
+    const { info } = this.scope.metadata;
 
-    // TODO: collect server options from scope
     const serverOptions = {
       instructions: '',
       capabilities: {
@@ -55,6 +54,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
           subscribe: true,
           listChanged: true,
         },
+        resources: this.scope.resources.getCapabilities(),
       },
       serverInfo: info,
     };
@@ -106,7 +106,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
       // await this.server.ping({ timeout: timeoutMs });
 
       // Works on all versions (low-level request):
-      await this.server.request({method: 'ping'}, EmptyResultSchema, {timeout: timeoutMs});
+      await this.server.request({ method: 'ping' }, EmptyResultSchema, { timeout: timeoutMs });
       return true;
     } catch {
       return false;
@@ -114,7 +114,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   }
 
   protected ensureAuthInfo(req: AuthenticatedServerRequest, transport: LocalTransportAdapter<T>) {
-    const {token, user, session} = req[ServerRequestTokens.auth];
+    const { token, user, session } = req[ServerRequestTokens.auth];
     req.auth = {
       token,
       user,
@@ -128,12 +128,11 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   }
 
   handleIfElicitResult(req: AuthenticatedServerRequest): boolean {
-
     if (!this.elicitHandler) {
       return false;
     }
     if (req.body.error) {
-      const {code, message} = req.body.error;
+      const { code, message } = req.body.error;
       if (code === -32600 && message === 'Elicitation not supported') {
         this.elicitHandler.reject(req.body.error);
         return true;

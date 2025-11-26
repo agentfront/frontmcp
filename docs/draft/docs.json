@@ -84,36 +84,31 @@
                 "group": "Servers",
                 "pages": [
                   "docs/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/apps",
-                      "docs/servers/tools",
-                      "docs/servers/resources",
-                      "docs/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "docs/servers/authentication/overview",
-                      "docs/servers/authentication/token",
-                      "docs/servers/authentication/remote",
-                      "docs/servers/authentication/remote-proxy",
-                      "docs/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/extensibility/providers",
-                      "docs/servers/extensibility/plugins",
-                      "docs/servers/extensibility/logging"
-                    ]
-                  }
+                  "docs/servers/apps",
+                  "docs/servers/tools",
+                  "docs/servers/resources",
+                  "docs/servers/prompts"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "icon": "shield-check",
+                "pages": [
+                  "docs/authentication/overview",
+                  "docs/authentication/token",
+                  "docs/authentication/remote",
+                  "docs/authentication/remote-proxy",
+                  "docs/authentication/local"
+                ]
+              },
+              {
+                "group": "Extensibility",
+                "icon": "puzzle-piece",
+                "pages": [
+                  "docs/extensibility/providers",
+                  "docs/extensibility/plugins",
+                  "docs/extensibility/adapters",
+                  "docs/extensibility/logging"
                 ]
               },
               {

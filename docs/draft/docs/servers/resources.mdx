@@ -4,69 +4,439 @@ slug: servers/resources
 icon: book-open
 ---
 
-Resources provide **readable data** to load into the model’s context. Define fixed `Resource`s (a concrete `uri`) or `ResourceTemplate`s (an RFC 6570 `uriTemplate`).
+Resources expose **readable data** to an AI model's context. Unlike tools that execute actions with side effects, resources are designed for read-only data retrieval—configuration files, user profiles, documents, API responses, or any content the model needs to reference.
 
-## Minimal resource
+## Why Resources?
+
+In the Model Context Protocol, resources serve a fundamentally different purpose than tools:
+
+| Aspect | Resource | Tool |
+|--------|----------|------|
+| **Purpose** | Provide data to read | Execute actions |
+| **Direction** | Model pulls data on demand | Model triggers execution |
+| **Idempotent** | Always (read-only) | Not necessarily |
+| **Use case** | Context loading, data retrieval | Side effects, mutations |
+
+Resources are ideal for:
+- **Configuration** — expose app settings, feature flags, environment info
+- **User data** — profiles, preferences, permissions
+- **Documents** — files, templates, knowledge base articles
+- **API responses** — cached or live data from external services
+- **System state** — logs, metrics, status information
+
+---
+
+## Static Resources
+
+Static resources have a **fixed URI** and return content at that specific address. Use them for singleton data like configuration or global state.
+
+### Class Style
 
 ```ts
 import { Resource } from '@frontmcp/sdk';
 
 @Resource({
-  name: 'docs-home',
-  title: 'Docs Home',
-  uri: 'https://example.com/docs',
-  mimeType: 'text/html',
+  name: 'app-config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+  description: 'Application configuration and settings',
 })
-export default class DocsHome {
-  async execute(uri: string) {
-    return { contents: [{ uri, text: 'Welcome to the docs!' }] };
+class AppConfig {
+  execute(uri: string, params: Record<string, string>) {
+    return {
+      version: '2.1.0',
+      environment: process.env.NODE_ENV,
+      features: {
+        darkMode: true,
+        analytics: false,
+      },
+    };
   }
 }
 ```
 
-## Minimal resource template
+### Function Style
+
+For simpler resources, use the functional builder:
+
+```ts
+import { resource } from '@frontmcp/sdk';
+
+const AppConfig = resource({
+  name: 'app-config',
+  uri: 'config://app',
+  mimeType: 'application/json',
+})(() => ({
+  version: '2.1.0',
+  environment: process.env.NODE_ENV,
+}));
+```
+
+---
+
+## Resource Templates
+
+Resource templates use **dynamic URIs** with parameters following [RFC 6570](https://tools.ietf.org/html/rfc6570) Level 1 syntax. Parameters are extracted automatically and passed to `execute()`.
+
+### Class Style
 
 ```ts
 import { ResourceTemplate } from '@frontmcp/sdk';
 
 @ResourceTemplate({
-  name: 'repo-readme',
-  title: 'GitHub README',
-  uriTemplate: 'https://raw.githubusercontent.com/{owner}/{repo}/main/README.md',
-  mimeType: 'text/markdown',
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+  description: 'Fetch user profile by ID',
 })
-export default class RepoReadme {}
+class UserProfile {
+  execute(uri: string, params: Record<string, string>) {
+    const { userId } = params;
+    // Fetch user from database, API, etc.
+    return {
+      id: userId,
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      role: 'admin',
+    };
+  }
+}
+```
+
+### URI Template Patterns
+
+```ts
+// Single parameter
+'users://{userId}'              // matches users://123
+
+// Multiple parameters
+'repos://{owner}/{repo}'        // matches repos://acme/widget
+
+// With path segments
+'files://{path}/content'        // matches files://docs/content
+
+// Complex paths
+'api://{version}/users/{id}'    // matches api://v2/users/456
+```
+
+Parameters are extracted into a `Record<string, string>` and passed as the second argument to `execute()`.
+
+---
+
+## Registering Resources
+
+Add resources to your app via the `resources` array:
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  resources: [AppConfig, UserProfile],
+})
+class MyApp {}
+```
+
+Resources can also be generated dynamically by **adapters** (e.g., OpenAPI adapter) or **plugins**.
+
+---
+
+## Return Values
+
+Resources support multiple return formats. The SDK automatically converts your return value to the MCP `ReadResourceResult` format.
+
+### Simple Returns
+
+```ts
+// Object -> auto-serialized to JSON
+execute() {
+  return { key: 'value', count: 42 };
+}
+
+// String -> text content
+execute() {
+  return 'Plain text content';
+}
+
+// Buffer -> binary blob (base64 encoded)
+execute() {
+  return Buffer.from(imageData);
+}
+```
+
+### Full MCP Format
+
+For complete control over the response, return the full `ReadResourceResult` structure:
+
+```ts
+execute(uri: string) {
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: 'text/plain',
+        text: 'First content block',
+      },
+      {
+        uri: `${uri}#image`,
+        mimeType: 'image/png',
+        blob: 'base64EncodedImageData...',
+      },
+    ],
+  };
+}
+```
+
+### Multiple Content Items
+
+Return an array to include multiple content blocks:
+
+```ts
+execute(uri: string) {
+  return [
+    { uri, mimeType: 'text/markdown', text: '# Document Title' },
+    { uri: `${uri}#metadata`, mimeType: 'application/json', text: '{"author":"Jane"}' },
+  ];
+}
 ```
 
 ---
 
-## Resource metadata
+## Resource Metadata
+
+### Static Resource (`@Resource`)
 
 ```ts
 @Resource({
-  name: string,
-  title?: string,
-  uri: string,
-  description?: string,
-  mimeType?: string,
-  icons?: Icon[],
+  name: string,           // Required: unique identifier
+  uri: string,            // Required: static URI (e.g., 'config://app')
+  title?: string,         // Optional: human-readable display name
+  description?: string,   // Optional: hint for the LLM
+  mimeType?: string,      // Optional: content type (e.g., 'application/json')
+  icons?: Icon[],         // Optional: UI icons
 })
 ```
 
-## Resource template metadata
+### Resource Template (`@ResourceTemplate`)
 
 ```ts
 @ResourceTemplate({
-  name: string,
-  title?: string,
-  uriTemplate: string,    // RFC 6570
-  description?: string,
-  mimeType?: string,
-  icons?: Icon[],
+  name: string,           // Required: unique identifier
+  uriTemplate: string,    // Required: RFC 6570 URI template (e.g., 'users://{id}')
+  title?: string,         // Optional: human-readable display name
+  description?: string,   // Optional: hint for the LLM
+  mimeType?: string,      // Optional: content type for all matching URIs
+  icons?: Icon[],         // Optional: UI icons
 })
 ```
 
-**Tips**
+**Field descriptions:**
 
-- Use resources to preload long-form text, schemas, or docs the model should see before calling tools.
-- Prefer templates when the shape is stable but the identifiers vary.
+| Field | Description |
+|-------|-------------|
+| `name` | Programmatic identifier used internally and in MCP responses |
+| `uri` / `uriTemplate` | The address clients use to request this resource |
+| `title` | Human-friendly name for UI display |
+| `description` | Helps the model understand when to use this resource |
+| `mimeType` | Content type hint; auto-detected for JSON/text if omitted |
+| `icons` | Array of icons for visual representation in clients |
+
+---
+
+## Resource Context
+
+Class-based resources have access to a rich execution context via `this`:
+
+```ts
+@Resource({ name: 'data', uri: 'app://data' })
+class DataResource {
+  execute(uri: string, params: Record<string, string>) {
+    // Request information
+    this.uri;              // The actual URI being read
+    this.params;           // Extracted template parameters (empty for static)
+    this.metadata;         // Resource metadata (name, uri, description, etc.)
+
+    // Authentication
+    this.authInfo;         // Auth context from MCP session
+
+    // Dependency injection
+    this.get(DbService);   // Resolve a provider
+    this.tryGet(Cache);    // Resolve or return undefined
+
+    // Scope access
+    this.scope;            // Access the current scope
+
+    // Utilities
+    this.fetch(url);       // Built-in fetch for HTTP requests
+
+    // Flow control
+    this.respond(value);   // End execution with a response
+  }
+}
+```
+
+### Using Providers
+
+Inject services via the `get()` method:
+
+```ts
+@Resource({
+  name: 'users-list',
+  uri: 'data://users',
+})
+class UsersList {
+  async execute() {
+    const db = this.get(DatabaseProvider);
+    const users = await db.query('SELECT * FROM users LIMIT 100');
+    return users;
+  }
+}
+```
+
+---
+
+## Real-World Examples
+
+### Configuration Resource
+
+```ts
+@Resource({
+  name: 'feature-flags',
+  uri: 'config://features',
+  mimeType: 'application/json',
+  description: 'Current feature flag configuration',
+})
+class FeatureFlags {
+  execute() {
+    return {
+      newDashboard: process.env.FEATURE_NEW_DASHBOARD === 'true',
+      betaFeatures: process.env.FEATURE_BETA === 'true',
+      maxUploadSize: parseInt(process.env.MAX_UPLOAD_SIZE || '10485760'),
+    };
+  }
+}
+```
+
+### Database-Backed Template
+
+```ts
+@ResourceTemplate({
+  name: 'order-details',
+  uriTemplate: 'orders://{orderId}',
+  mimeType: 'application/json',
+  description: 'Retrieve order details by order ID',
+})
+class OrderDetails {
+  async execute(uri: string, params: Record<string, string>) {
+    const db = this.get(DatabaseProvider);
+    const order = await db.orders.findById(params.orderId);
+
+    if (!order) {
+      throw new Error(`Order ${params.orderId} not found`);
+    }
+
+    return {
+      id: order.id,
+      status: order.status,
+      items: order.items,
+      total: order.total,
+      createdAt: order.createdAt,
+    };
+  }
+}
+```
+
+### File System Resource
+
+```ts
+@ResourceTemplate({
+  name: 'document',
+  uriTemplate: 'docs://{path}',
+  description: 'Read documentation files',
+})
+class DocumentResource {
+  async execute(uri: string, params: Record<string, string>) {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    const docPath = path.join(process.cwd(), 'docs', params.path);
+    const content = await fs.readFile(docPath, 'utf-8');
+    const ext = path.extname(params.path);
+
+    return {
+      contents: [{
+        uri,
+        mimeType: ext === '.md' ? 'text/markdown' : 'text/plain',
+        text: content,
+      }],
+    };
+  }
+}
+```
+
+### API Proxy Resource
+
+```ts
+@ResourceTemplate({
+  name: 'github-repo',
+  uriTemplate: 'github://{owner}/{repo}',
+  mimeType: 'application/json',
+  description: 'Fetch GitHub repository information',
+})
+class GitHubRepo {
+  async execute(uri: string, params: Record<string, string>) {
+    const { owner, repo } = params;
+    const response = await this.fetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'FrontMCP-Resource',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
+}
+```
+
+---
+
+## MCP Protocol Integration
+
+Resources integrate with the MCP protocol via three flows:
+
+| Flow | Description |
+|------|-------------|
+| `resources/list` | Returns all static resources |
+| `resources/templates/list` | Returns all resource templates |
+| `resources/read` | Reads content from a specific URI |
+
+When a client requests `resources/read` with a URI:
+1. The SDK matches the URI against registered resources and templates
+2. For templates, parameters are extracted from the URI
+3. The `execute()` method is called with the URI and parameters
+4. The return value is converted to MCP `ReadResourceResult` format
+
+---
+
+## Best Practices
+
+**Do:**
+- Use descriptive `name` and `description` fields to help models understand resource purpose
+- Return structured data (objects) when possible for better model comprehension
+- Use templates for parameterized data instead of creating many static resources
+- Keep resources focused—one resource per data concern
+- Handle errors gracefully and return meaningful error messages
+
+**Don't:**
+- Use resources for operations with side effects (use tools instead)
+- Return extremely large datasets—paginate or summarize when needed
+- Expose sensitive data without proper authentication checks
+- Hardcode values that should come from configuration

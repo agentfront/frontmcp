@@ -1,12 +1,33 @@
 /**
- * CDN Configuration
+ * @file cdn.ts
+ * @description CDN Configuration for FrontMCP UI.
  *
  * Centralized configuration for all CDN resources used by FrontMCP UI.
  * All resources are loaded at runtime - no build step required.
  *
  * For platforms with blocked network (e.g., Claude Artifacts),
  * scripts can be fetched once and cached for inline injection.
+ *
+ * CDN URLs can be customized via theme configuration for:
+ * - Using private CDN mirrors
+ * - Self-hosting resources
+ * - Compliance with CSP policies
+ *
+ * @example
+ * ```typescript
+ * import { buildCdnScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+ *
+ * // Use default CDN URLs
+ * const scripts = buildCdnScripts();
+ *
+ * // Use theme-configured CDN URLs
+ * const themedScripts = buildCdnScriptsFromTheme(DEFAULT_THEME);
+ * ```
+ *
+ * @module @frontmcp/ui/theme/cdn
  */
+
+import type { ThemeConfig } from './theme';
 
 // ============================================
 // CDN URLs
@@ -58,6 +79,7 @@ export const CDN = {
    */
   icons: {
     url: 'https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js',
+    integrity: 'sha384-wpLmHb7v7V1LsEuTmPQ9tXqWZvTtRWWVqJuE+Yz6X0I6O2T6bHJVeXH1lVWqF4qE',
   },
 } as const;
 
@@ -209,6 +231,10 @@ function buildInlineScriptTag(content: string): string {
 
 /**
  * Build all CDN script tags based on options
+ *
+ * @remarks
+ * When `inline: true` is specified, scripts must be pre-cached via `fetchAndCacheScripts()`.
+ * Uncached scripts will be silently skipped with a console warning.
  */
 export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   const { tailwind = true, htmx = true, alpine = false, icons = false, inline = false } = options;
@@ -216,18 +242,42 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   const scripts: string[] = [];
 
   if (inline) {
-    // Use cached inline scripts
-    if (tailwind && isScriptCached(CDN.tailwind)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.tailwind)!));
+    // Use cached inline scripts - warn if not cached
+    if (tailwind) {
+      if (isScriptCached(CDN.tailwind)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.tailwind)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (htmx && isScriptCached(CDN.htmx.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.htmx.url)!));
+    if (htmx) {
+      if (isScriptCached(CDN.htmx.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.htmx.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (alpine && isScriptCached(CDN.alpine.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.alpine.url)!));
+    if (alpine) {
+      if (isScriptCached(CDN.alpine.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.alpine.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (icons && isScriptCached(CDN.icons.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.icons.url)!));
+    if (icons) {
+      if (isScriptCached(CDN.icons.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.icons.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Lucide icons script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
   } else {
     // Use CDN URLs
@@ -241,9 +291,166 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
       scripts.push(buildScriptTag(CDN.alpine.url, CDN.alpine.integrity, { defer: true }));
     }
     if (icons) {
-      scripts.push(buildScriptTag(CDN.icons.url));
+      scripts.push(buildScriptTag(CDN.icons.url, CDN.icons.integrity));
     }
   }
 
   return scripts.join('\n  ');
+}
+
+// ============================================
+// Theme-Aware CDN Builders
+// ============================================
+
+/**
+ * Options for theme-aware CDN script building
+ */
+export interface ThemeCdnScriptOptions {
+  /** Include Tailwind CSS (default: true) */
+  tailwind?: boolean;
+  /** Include HTMX (default: true) */
+  htmx?: boolean;
+  /** Include Alpine.js (default: false) */
+  alpine?: boolean;
+  /** Include icon library (default: false) */
+  icons?: boolean;
+  /** Use inline scripts from cache (for blocked network) */
+  inline?: boolean;
+}
+
+/**
+ * Build font preconnect links from theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @returns HTML preconnect link tags
+ */
+export function buildFontPreconnectFromTheme(theme: ThemeConfig): string {
+  const preconnect = theme.cdn?.fonts?.preconnect ?? CDN.fonts.preconnect;
+  return preconnect.map((url, i) => `<link rel="preconnect" href="${url}"${i > 0 ? ' crossorigin' : ''}>`).join('\n  ');
+}
+
+/**
+ * Build font stylesheet links from theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @returns HTML stylesheet link tags
+ */
+export function buildFontStylesheetsFromTheme(theme: ThemeConfig): string {
+  const stylesheets = theme.cdn?.fonts?.stylesheets ?? [CDN.fonts.inter];
+  return stylesheets.map((url) => `<link href="${url}" rel="stylesheet">`).join('\n  ');
+}
+
+/**
+ * Build all CDN script tags from theme configuration
+ *
+ * Uses theme.cdn configuration if available, falls back to global CDN defaults.
+ *
+ * @remarks
+ * When `inline: true` is specified, scripts must be pre-cached via `fetchAndCacheScriptsFromTheme()`.
+ * Uncached scripts will be silently skipped with a console warning.
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @param options - Script inclusion options
+ * @returns HTML script tags
+ */
+export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnScriptOptions = {}): string {
+  const { tailwind = true, htmx = true, alpine = false, icons = false, inline = false } = options;
+
+  const scripts: string[] = [];
+
+  // Get URLs from theme or fallback to defaults
+  const tailwindUrl = theme.cdn?.scripts?.tailwind ?? CDN.tailwind;
+  const htmxConfig = theme.cdn?.scripts?.htmx ?? CDN.htmx;
+  const alpineConfig = theme.cdn?.scripts?.alpine ?? CDN.alpine;
+  const iconsConfig = theme.cdn?.icons?.script ?? CDN.icons;
+
+  if (inline) {
+    // Use cached inline scripts - warn if not cached
+    if (tailwind) {
+      if (isScriptCached(tailwindUrl)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(tailwindUrl)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
+    }
+    if (htmx) {
+      if (isScriptCached(htmxConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(htmxConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
+    }
+    if (alpine) {
+      if (isScriptCached(alpineConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(alpineConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
+    }
+    if (icons) {
+      if (isScriptCached(iconsConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(iconsConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but icons script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
+    }
+  } else {
+    // Use CDN URLs from theme
+    if (tailwind) {
+      scripts.push(buildScriptTag(tailwindUrl));
+    }
+    if (htmx) {
+      scripts.push(buildScriptTag(htmxConfig.url, htmxConfig.integrity));
+    }
+    if (alpine) {
+      scripts.push(buildScriptTag(alpineConfig.url, alpineConfig.integrity, { defer: true }));
+    }
+    if (icons) {
+      scripts.push(buildScriptTag(iconsConfig.url, iconsConfig.integrity));
+    }
+  }
+
+  return scripts.join('\n  ');
+}
+
+/**
+ * Fetch and cache scripts based on theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @param options - Which scripts to cache
+ * @returns Map of cached script URLs to content
+ */
+export async function fetchAndCacheScriptsFromTheme(
+  theme: ThemeConfig,
+  options: {
+    tailwind?: boolean;
+    htmx?: boolean;
+    alpine?: boolean;
+    icons?: boolean;
+  } = {},
+): Promise<Map<string, string>> {
+  const { tailwind = true, htmx = true, alpine = false, icons = false } = options;
+  const urls: string[] = [];
+
+  // Get URLs from theme or fallback to defaults
+  const tailwindUrl = theme.cdn?.scripts?.tailwind ?? CDN.tailwind;
+  const htmxConfig = theme.cdn?.scripts?.htmx ?? CDN.htmx;
+  const alpineConfig = theme.cdn?.scripts?.alpine ?? CDN.alpine;
+  const iconsConfig = theme.cdn?.icons?.script ?? CDN.icons;
+
+  if (tailwind) urls.push(tailwindUrl);
+  if (htmx) urls.push(htmxConfig.url);
+  if (alpine) urls.push(alpineConfig.url);
+  if (icons) urls.push(iconsConfig.url);
+
+  await Promise.all(urls.map(fetchScript));
+  return scriptCache;
 }

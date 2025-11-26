@@ -7,3 +7,8 @@ export * from './common';
 export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');
+
+// Resource hooks
+export const ResourceHook = FlowHooksOf('resources:read-resource');
+export const ListResourcesHook = FlowHooksOf('resources:list-resources');
+export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-templates');

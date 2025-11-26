@@ -1,7 +1,7 @@
 ---
 title: Authentication
 sidebarTitle: Overview
-slug: servers/authentication/overview
+slug: authentication/overview
 icon: users-between-lines
 ---
 
@@ -19,7 +19,7 @@ FrontMCP supports **Remote OAuth** (connect to an external IdP) and a built‑in
 Auth drives **session creation**, **token propagation**, and optional **consent** for tools/resources/prompts.
 
 <Info>
-  If an external provider **doesn’t support Dynamic Client Registration (DCR)**, FrontMCP can front it with a **local
+  If an external provider **doesn't support Dynamic Client Registration (DCR)**, FrontMCP can front it with a **local
   OAuth proxy** that registers/holds the client on your behalf. See *Remote OAuth → Proxy*.
 </Info>
 
@@ -75,7 +75,7 @@ Auth integrates with server sessions (see _Server Overview → Sessions_):
 - `session.transportIdMode`: `uuid` (per‑node) or `jwt` (signed transport IDs for distributed setups).
 
 <Tip>
-  Use **stateful** sessions when working with short‑lived upstream tokens—you’ll get refresh without round‑trips.
+  Use **stateful** sessions when working with short‑lived upstream tokens—you'll get refresh without round‑trips.
 </Tip>
 
 ---
