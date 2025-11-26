@@ -34,6 +34,9 @@ import {
   IndexedResource,
   ResourceTemplateRecord,
 } from './resource.types';
+import ReadResourceFlow from './flows/read-resource.flow';
+import ResourcesListFlow from './flows/resources-list.flow';
+import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
 
 export default class ResourceRegistry
   extends RegistryAbstract<
@@ -152,8 +155,9 @@ export default class ResourceRegistry
     this.reindex();
     this.bump('reset');
 
-    // Register flows will be done by scope when it initializes
-    // The flows will be registered separately
+    // Register resource flows with the scope
+    const scope = this.providers.getActiveScope();
+    await scope.registryFlows(ReadResourceFlow, ResourcesListFlow, ResourceTemplatesListFlow);
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */

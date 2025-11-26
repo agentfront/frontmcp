@@ -12,6 +12,7 @@ const createMockScope = () => ({
   providers: {
     getHooksRegistry: jest.fn().mockReturnValue(createMockHookRegistry()),
   },
+  registryFlows: jest.fn().mockResolvedValue(undefined),
 });
 
 const createMockProviderRegistry = () => {
