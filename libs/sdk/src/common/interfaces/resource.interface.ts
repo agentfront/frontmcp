@@ -86,7 +86,8 @@ export abstract class ResourceContext<In = any, Out = any> {
     try {
       return this.providers.get(token);
     } catch (e) {
-      this.logger.warn("Requesting provider that doesn't exist: ", token);
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
       return undefined;
     }
   }

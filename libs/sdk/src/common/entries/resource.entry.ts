@@ -1,6 +1,5 @@
 // file: libs/sdk/src/common/entries/resource.entry.ts
 
-import { z } from 'zod';
 import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { ResourceRecord, ResourceFunctionRecord } from '../records';
 import { ResourceContext, ResourceInterface } from '../interfaces';

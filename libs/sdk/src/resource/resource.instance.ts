@@ -167,8 +167,8 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
   override safeParseOutput(raw: Out): ResourceSafeTransformResult<ParsedResourceResult> {
     try {
       return { success: true, data: this.parseOutput(raw) };
-    } catch (error: any) {
-      return { success: false, error };
+    } catch (error: unknown) {
+      return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
     }
   }
 }
