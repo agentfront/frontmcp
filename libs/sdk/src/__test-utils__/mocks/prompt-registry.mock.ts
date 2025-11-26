@@ -62,6 +62,11 @@ export function createMockPromptRegistry(overrides: Partial<Record<string, unkno
 
     hasAny: jest.fn(() => prompts.size > 0),
 
+    getCapabilities: jest.fn(() => ({
+      // Mirror the pattern used in real registries
+      listChanged: prompts.size > 0,
+    })),
+
     listByOwner: jest.fn((ownerId: string) => {
       const results: ReturnType<typeof createMockPromptEntry>[] = [];
       for (const prompt of prompts.values()) {

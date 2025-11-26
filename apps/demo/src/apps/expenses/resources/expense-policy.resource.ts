@@ -37,7 +37,7 @@ export default class ExpensePolicyResource extends ResourceContext {
         { threshold: 100, approver: 'manager' },
         { threshold: 500, approver: 'director' },
         { threshold: 5000, approver: 'vp' },
-        { threshold: Infinity, approver: 'cfo' },
+        { threshold: Number.MAX_SAFE_INTEGER, approver: 'cfo' },
       ],
       submissionDeadline: 'End of month + 5 business days',
       receiptRequirements: {

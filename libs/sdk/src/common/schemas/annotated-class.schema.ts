@@ -32,7 +32,7 @@ export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
       (v['useFactory'] && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success)
     );
   },
-  { message: 'plugins items must be annotated with @Provider() | @FrontMcpProvider().' },
+  { message: 'providers items must be annotated with @Provider() | @FrontMcpProvider().' },
 );
 
 export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
@@ -43,7 +43,7 @@ export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
       (v['useFactory'] && frontMcpAuthProviderMetadataSchema.passthrough().safeParse(v).success)
     );
   },
-  { message: 'plugins items must be annotated with @AuthProvider() | @FrontMcpAuthProvider().' },
+  { message: 'auth providers items must be annotated with @AuthProvider() | @FrontMcpAuthProvider().' },
 );
 
 export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
