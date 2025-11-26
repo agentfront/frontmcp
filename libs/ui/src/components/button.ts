@@ -260,6 +260,9 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const variantClasses = getVariantClasses(variant);
   const sizeClasses = getSizeClasses(size, iconOnly);
 
+  // Escape className to prevent XSS via attribute injection (e.g., `btn" onclick="...`)
+  const safeClassName = className ? escapeHtml(className) : '';
+
   const baseClasses = [
     'inline-flex items-center justify-center',
     'font-medium',
@@ -270,7 +273,7 @@ export function button(text: string, options: ButtonOptions = {}): string {
     fullWidth ? 'w-full' : '',
     variantClasses,
     sizeClasses,
-    className,
+    safeClassName,
   ]
     .filter(Boolean)
     .join(' ');
@@ -291,6 +294,8 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const valueAttr = value ? `value="${escapeHtml(value)}"` : '';
   const disabledAttr = disabled || loading ? 'disabled' : '';
   const targetAttr = target ? `target="${escapeHtml(target)}"` : '';
+  // Add rel="noopener noreferrer" for target="_blank" to prevent window.opener access
+  const relAttr = target === '_blank' ? 'rel="noopener noreferrer"' : '';
 
   // For icon-only buttons, use text as aria-label if no explicit ariaLabel provided (WCAG)
   const trimmedText = text.trim();
@@ -309,7 +314,7 @@ export function button(text: string, options: ButtonOptions = {}): string {
   if (href && !disabled && !loading && isValidHrefProtocol(href)) {
     return `<a href="${escapeHtml(
       href,
-    )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr}>
+    )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr} ${relAttr}>
       ${contentHtml}
     </a>`;
   }
@@ -345,18 +350,21 @@ export function buttonGroup(buttons: string[], options: ButtonGroupOptions = {})
   const validatedOptions = validation.data;
   const { attached = false, direction = 'horizontal', gap = 'md', className = '' } = validatedOptions;
 
+  // Escape className to prevent XSS via attribute injection
+  const safeClassName = className ? escapeHtml(className) : '';
+
   if (attached) {
     const classes =
       direction === 'horizontal'
         ? 'inline-flex rounded-lg shadow-sm [&>*:first-child]:rounded-r-none [&>*:last-child]:rounded-l-none [&>*:not(:first-child):not(:last-child)]:rounded-none [&>*:not(:first-child)]:-ml-px'
         : 'inline-flex flex-col rounded-lg shadow-sm [&>*:first-child]:rounded-b-none [&>*:last-child]:rounded-t-none [&>*:not(:first-child):not(:last-child)]:rounded-none [&>*:not(:first-child)]:-mt-px';
-    return `<div class="${classes} ${className}">${buttons.join('')}</div>`;
+    return `<div class="${classes} ${safeClassName}">${buttons.join('')}</div>`;
   }
 
   const gapClasses = { sm: 'gap-2', md: 'gap-3', lg: 'gap-4' };
   const directionClasses = direction === 'horizontal' ? 'flex flex-row' : 'flex flex-col';
 
-  return `<div class="${directionClasses} ${gapClasses[gap]} ${className}">${buttons.join('')}</div>`;
+  return `<div class="${directionClasses} ${gapClasses[gap]} ${safeClassName}">${buttons.join('')}</div>`;
 }
 
 // ============================================

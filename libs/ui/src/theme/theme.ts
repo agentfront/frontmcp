@@ -459,9 +459,13 @@ function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConf
       ...base.cdn,
       ...override.cdn,
       fonts: {
-        // Concatenate arrays rather than replace (allows adding to preconnect/stylesheets)
-        preconnect: [...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])],
-        stylesheets: [...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])],
+        // Concatenate then dedupe so base entries are preserved without duplicates
+        preconnect: Array.from(
+          new Set([...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])]),
+        ),
+        stylesheets: Array.from(
+          new Set([...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])]),
+        ),
       },
       icons: {
         ...base.cdn?.icons,
