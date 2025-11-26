@@ -1,0 +1,111 @@
+---
+title: CodeCall Tuning
+slug: plugins/codecall-tuning
+description: Choose VM presets, embedding strategies, and sidecar settings for the CodeCall plugin.
+icon: sliders
+---
+
+CodeCall ships with powerful defaults, but large deployments often need tighter control over its sandbox and discovery stack. Use this guide to choose the right VM preset, semantic-search backend, and sidecar options for your workload.
+
+## VM Presets
+
+CodeCall executes AgentScript inside Enclave. The `vm` configuration lets you pick a preset that balances latency and strictness.
+
+| Preset               | Timeout | Loops         | Console | Highlights                                            |
+| -------------------- | ------- | ------------- | ------- | ----------------------------------------------------- |
+| `locked_down`        | 2s      | Disabled      | Off     | Maximum paranoia. Blocks loops and console output.    |
+| `secure` _(default)_ | 3.5s    | Patched loops | On      | Production-safe defaults with console logging.        |
+| `balanced`           | 5s      | Enabled       | On      | Extra time for orchestration-heavy plans.             |
+| `experimental`       | 10s     | Enabled       | On      | Long-running research workflows with relaxed globals. |
+
+Override any field when you need more control:
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    preset: 'balanced',
+    timeoutMs: 8000,
+    maxSteps: 250,
+    allowConsole: false,
+    disabledGlobals: ['fetch'],
+  },
+});
+```
+
+<Note>
+  `maxSteps` caps the total tool calls + major VM operations per execution. Use a lower value to keep models from fanning out into hundreds of API calls.
+</Note>
+
+## Embedding Strategies
+
+`codecall.search` indexes every CodeCall-enabled tool. Pick the strategy that fits your infra:
+
+### `tfidf`
+
+- Zero dependencies, fully synchronous.
+- Great for small inventories or air-gapped environments.
+- Scoring is lexical (bag-of-words).
+
+### `ml`
+
+- Uses `VectoriaDB` + transformers.js for semantic embeddings.
+- Supports `modelName`, `cacheDir`, and `useHNSW` (approximate nearest neighbor) for faster large-scale lookup.
+- Requires a one-time model download (~22MB for `Xenova/all-MiniLM-L6-v2`).
+
+```ts
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'ml',
+    modelName: 'Xenova/all-MiniLM-L6-v2',
+    cacheDir: './.cache/transformers',
+    useHNSW: true,
+  },
+});
+```
+
+## Sidecar Options
+
+Large tool responses can blow past script limits. Enable the sidecar to pass big payloads by reference:
+
+```ts
+CodeCallPlugin.init({
+  sidecar: {
+    enabled: true,
+    maxTotalSize: 16 * 1024 * 1024, // 16MB across all references
+    maxReferenceSize: 2 * 1024 * 1024, // 2MB per chunk
+    extractionThreshold: 2048, // lift strings over 2KB into the sidecar
+    maxResolvedSize: 8 * 1024 * 1024, // guard rail when resolving refs
+    allowComposites: false,
+  },
+});
+```
+
+<Info>
+  When the sidecar is disabled, CodeCall enforces `maxScriptLengthWhenDisabled` (default 64KB) to stop models from inlining huge blobs. Lower this value if you want extra protection.
+</Info>
+
+## Putting It Together
+
+```ts
+import { CodeCallPlugin } from '@frontmcp/plugins';
+
+const codecall = CodeCallPlugin.init({
+  mode: 'codecall_only',
+  vm: {
+    preset: 'locked_down',
+    timeoutMs: 2500,
+    maxSteps: 80,
+  },
+  embedding: {
+    strategy: 'ml',
+    modelName: 'Xenova/all-MiniLM-L6-v2',
+    useHNSW: true,
+  },
+  sidecar: {
+    enabled: true,
+    extractionThreshold: 1024,
+  },
+});
+```
+
+Now `codecall.search` enjoys semantic recall, `codecall.execute` runs under a tight sandbox, and large payloads travel through the sidecar instead of bloating scripts.

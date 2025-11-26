@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-25" tags={["Releases"]}>
+<Update label="draft" description="2025-11-26" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -25,6 +25,7 @@ mode: 'center'
 
     🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall, showing how to orchestrate CRUD flows plus activity logging from a single meta-entry point.
 
+    📦 **MCP resource registry** – Define static resources and RFC 6570 templates with decorators or the new `resource()` / `resourceTemplate()` helpers; the registry now auto-adopts resources across scopes so `resources/read` works everywhere.
     **Fixes**
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
@@ -39,6 +40,8 @@ mode: 'center'
 
     🗂️ **CRM & CodeCall example** – The apps reference now includes the CRM CodeCall sample so you can replicate multi-tool orchestration in your own servers.
 
+    🧭 **Resource registry guide** – Learn how the registry lifecycle propagates resources across scopes, plus new function-style templates for quick data exposes.
+    ⚙️ **CodeCall tuning** – The plugin docs now cover the `vm` presets and embedding strategies (`tfidf` vs `ml`) so you can pick the right discovery stack.
     **Performance**
 
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.

@@ -10,14 +10,15 @@ Resources expose **readable data** to an AI model's context. Unlike tools that e
 
 In the Model Context Protocol, resources serve a fundamentally different purpose than tools:
 
-| Aspect | Resource | Tool |
-|--------|----------|------|
-| **Purpose** | Provide data to read | Execute actions |
-| **Direction** | Model pulls data on demand | Model triggers execution |
-| **Idempotent** | Always (read-only) | Not necessarily |
-| **Use case** | Context loading, data retrieval | Side effects, mutations |
+| Aspect         | Resource                        | Tool                     |
+| -------------- | ------------------------------- | ------------------------ |
+| **Purpose**    | Provide data to read            | Execute actions          |
+| **Direction**  | Model pulls data on demand      | Model triggers execution |
+| **Idempotent** | Always (read-only)              | Not necessarily          |
+| **Use case**   | Context loading, data retrieval | Side effects, mutations  |
 
 Resources are ideal for:
+
 - **Configuration** — expose app settings, feature flags, environment info
 - **User data** — profiles, preferences, permissions
 - **Documents** — files, templates, knowledge base articles
@@ -102,6 +103,34 @@ class UserProfile {
   }
 }
 ```
+
+### Function Style Templates
+
+Prefer the builder helpers when you only need a handler function:
+
+```ts
+import { resourceTemplate } from '@frontmcp/sdk';
+
+export const UserProfile = resourceTemplate({
+  name: 'user-profile',
+  uriTemplate: 'users://{userId}/profile',
+  mimeType: 'application/json',
+  description: 'Fetch user profile by ID',
+})(async (uri, params) => {
+  const profile = await fetchProfile(params.userId); // Look up data in your datastore
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify(profile),
+      },
+    ],
+  };
+});
+```
+
+Function-style templates share the same metadata schema as classes, but ship zero decorator state and are ideal for simple wrappers around existing fetch helpers.
 
 ### URI Template Patterns
 
@@ -233,14 +262,14 @@ execute(uri: string) {
 
 **Field descriptions:**
 
-| Field | Description |
-|-------|-------------|
-| `name` | Programmatic identifier used internally and in MCP responses |
-| `uri` / `uriTemplate` | The address clients use to request this resource |
-| `title` | Human-friendly name for UI display |
-| `description` | Helps the model understand when to use this resource |
-| `mimeType` | Content type hint; auto-detected for JSON/text if omitted |
-| `icons` | Array of icons for visual representation in clients |
+| Field                 | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `name`                | Programmatic identifier used internally and in MCP responses |
+| `uri` / `uriTemplate` | The address clients use to request this resource             |
+| `title`               | Human-friendly name for UI display                           |
+| `description`         | Helps the model understand when to use this resource         |
+| `mimeType`            | Content type hint; auto-detected for JSON/text if omitted    |
+| `icons`               | Array of icons for visual representation in clients          |
 
 ---
 
@@ -330,7 +359,7 @@ class FeatureFlags {
 class OrderDetails {
   async execute(uri: string, params: Record<string, string>) {
     const db = this.get(DatabaseProvider);
-    const order = await db.orders.findById(params.orderId);
+    const order = await db.orders findById(params.orderId);
 
     if (!order) {
       throw new Error(`Order ${params.orderId} not found`);
@@ -412,13 +441,14 @@ class GitHubRepo {
 
 Resources integrate with the MCP protocol via three flows:
 
-| Flow | Description |
-|------|-------------|
-| `resources/list` | Returns all static resources |
-| `resources/templates/list` | Returns all resource templates |
-| `resources/read` | Reads content from a specific URI |
+| Flow                       | Description                       |
+| -------------------------- | --------------------------------- |
+| `resources/list`           | Returns all static resources      |
+| `resources/templates/list` | Returns all resource templates    |
+| `resources/read`           | Reads content from a specific URI |
 
 When a client requests `resources/read` with a URI:
+
 1. The SDK matches the URI against registered resources and templates
 2. For templates, parameters are extracted from the URI
 3. The `execute()` method is called with the URI and parameters
@@ -426,9 +456,47 @@ When a client requests `resources/read` with a URI:
 
 ---
 
+## Registry Lifecycle & Adoption
+
+Every scope, app, and plugin gets its own `ResourceRegistry`. Parent scopes automatically **adopt** the resources declared by their children, so registering a resource inside an app (or plugin) instantly makes it available to the server-level `resources:*` flows.
+
+### Inspecting resources inside a tool
+
+```ts
+import { ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
+
+@Tool({ name: 'resources:debug', description: 'Show available resources' })
+class ResourceDebugger extends ToolContext {
+  async execute() {
+    const scope = this.get(ScopeEntry);
+    const registry = scope.resources;
+
+    const total = registry.getResources(true).length;
+    const match = registry findResourceForUri('docs://welcome');
+
+    return {
+      totalResources: total,
+      matchedResource: match?.instance?.name ?? null,
+      params: match?.params ?? {},
+    };
+  }
+}
+```
+
+### Live updates & MCP flows
+
+- `registry.subscribe()` lets you watch for new resources (handy for custom logging or cache invalidation).
+- `resources/list`, `resources/templates/list`, and `resources/read` flows pull directly from the active registry, so adopted resources travel with their lineage and metadata intact.
+- Because adoption keeps references to the original instances, any provider dependencies or caches stay shared between parent and child scopes.
+
+---
+
+---
+
 ## Best Practices
 
 **Do:**
+
 - Use descriptive `name` and `description` fields to help models understand resource purpose
 - Return structured data (objects) when possible for better model comprehension
 - Use templates for parameterized data instead of creating many static resources
@@ -436,6 +504,7 @@ When a client requests `resources/read` with a URI:
 - Handle errors gracefully and return meaningful error messages
 
 **Don't:**
+
 - Use resources for operations with side effects (use tools instead)
 - Return extremely large datasets—paginate or summarize when needed
 - Expose sensitive data without proper authentication checks
