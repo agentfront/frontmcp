@@ -79,6 +79,7 @@ export const CDN = {
    */
   icons: {
     url: 'https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js',
+    integrity: 'sha384-wpLmHb7v7V1LsEuTmPQ9tXqWZvTtRWWVqJuE+Yz6X0I6O2T6bHJVeXH1lVWqF4qE',
   },
 } as const;
 
@@ -230,6 +231,10 @@ function buildInlineScriptTag(content: string): string {
 
 /**
  * Build all CDN script tags based on options
+ *
+ * @remarks
+ * When `inline: true` is specified, scripts must be pre-cached via `fetchAndCacheScripts()`.
+ * Uncached scripts will be silently skipped with a console warning.
  */
 export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   const { tailwind = true, htmx = true, alpine = false, icons = false, inline = false } = options;
@@ -237,18 +242,42 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   const scripts: string[] = [];
 
   if (inline) {
-    // Use cached inline scripts
-    if (tailwind && isScriptCached(CDN.tailwind)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.tailwind)!));
+    // Use cached inline scripts - warn if not cached
+    if (tailwind) {
+      if (isScriptCached(CDN.tailwind)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.tailwind)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (htmx && isScriptCached(CDN.htmx.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.htmx.url)!));
+    if (htmx) {
+      if (isScriptCached(CDN.htmx.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.htmx.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (alpine && isScriptCached(CDN.alpine.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.alpine.url)!));
+    if (alpine) {
+      if (isScriptCached(CDN.alpine.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.alpine.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
-    if (icons && isScriptCached(CDN.icons.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(CDN.icons.url)!));
+    if (icons) {
+      if (isScriptCached(CDN.icons.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(CDN.icons.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Lucide icons script not cached. Call fetchAndCacheScripts() first.',
+        );
+      }
     }
   } else {
     // Use CDN URLs
@@ -262,7 +291,7 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
       scripts.push(buildScriptTag(CDN.alpine.url, CDN.alpine.integrity, { defer: true }));
     }
     if (icons) {
-      scripts.push(buildScriptTag(CDN.icons.url));
+      scripts.push(buildScriptTag(CDN.icons.url, CDN.icons.integrity));
     }
   }
 
@@ -316,6 +345,10 @@ export function buildFontStylesheetsFromTheme(theme: ThemeConfig): string {
  *
  * Uses theme.cdn configuration if available, falls back to global CDN defaults.
  *
+ * @remarks
+ * When `inline: true` is specified, scripts must be pre-cached via `fetchAndCacheScriptsFromTheme()`.
+ * Uncached scripts will be silently skipped with a console warning.
+ *
  * @param theme - Theme configuration with CDN settings
  * @param options - Script inclusion options
  * @returns HTML script tags
@@ -332,18 +365,42 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
   const iconsConfig = theme.cdn?.icons?.script ?? CDN.icons;
 
   if (inline) {
-    // Use cached inline scripts
-    if (tailwind && isScriptCached(tailwindUrl)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(tailwindUrl)!));
+    // Use cached inline scripts - warn if not cached
+    if (tailwind) {
+      if (isScriptCached(tailwindUrl)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(tailwindUrl)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
     }
-    if (htmx && isScriptCached(htmxConfig.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(htmxConfig.url)!));
+    if (htmx) {
+      if (isScriptCached(htmxConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(htmxConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
     }
-    if (alpine && isScriptCached(alpineConfig.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(alpineConfig.url)!));
+    if (alpine) {
+      if (isScriptCached(alpineConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(alpineConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
     }
-    if (icons && isScriptCached(iconsConfig.url)) {
-      scripts.push(buildInlineScriptTag(getCachedScript(iconsConfig.url)!));
+    if (icons) {
+      if (isScriptCached(iconsConfig.url)) {
+        scripts.push(buildInlineScriptTag(getCachedScript(iconsConfig.url)!));
+      } else {
+        console.warn(
+          '[frontmcp/ui] Inline mode requested but icons script not cached. Call fetchAndCacheScriptsFromTheme() first.',
+        );
+      }
     }
   } else {
     // Use CDN URLs from theme
@@ -357,7 +414,7 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
       scripts.push(buildScriptTag(alpineConfig.url, alpineConfig.integrity, { defer: true }));
     }
     if (icons) {
-      scripts.push(buildScriptTag(iconsConfig.url));
+      scripts.push(buildScriptTag(iconsConfig.url, iconsConfig.integrity));
     }
   }
 

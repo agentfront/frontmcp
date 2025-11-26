@@ -214,7 +214,7 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const valueAttr = value ? `value="${escapeHtml(value)}"` : '';
   const disabledAttr = disabled || loading ? 'disabled' : '';
   const ariaLabelAttr = ariaLabel ? `aria-label="${escapeHtml(ariaLabel)}"` : '';
-  const targetAttr = target ? `target="${target}"` : '';
+  const targetAttr = target ? `target="${escapeHtml(target)}"` : '';
 
   // Build content
   const iconBeforeHtml = iconBefore && !loading ? `<span class="${iconOnly ? '' : 'mr-2'}">${iconBefore}</span>` : '';

@@ -14,7 +14,7 @@
 
 ## Architecture
 
-```
+```text
 libs/ui/src/
 ├── components/        # UI components (button, card, form, etc.)
 │   ├── *.ts          # Component implementations
@@ -243,7 +243,7 @@ The error box:
 
 ## File Naming Conventions
 
-```
+```text
 component.ts         # Component implementation
 component.schema.ts  # Zod schema definitions
 component.test.ts    # Jest tests (include validation tests)

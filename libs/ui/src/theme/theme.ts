@@ -439,7 +439,9 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
       families: { ...base.typography?.families, ...override.typography?.families },
       sizes: { ...base.typography?.sizes, ...override.typography?.sizes },
       weights: { ...base.typography?.weights, ...override.typography?.weights },
+      lineHeight: { ...base.typography?.lineHeight, ...override.typography?.lineHeight },
     },
+    spacing: { ...base.spacing, ...override.spacing },
     radius: { ...base.radius, ...override.radius },
     shadows: { ...base.shadows, ...override.shadows },
     components: {
@@ -456,6 +458,7 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
       icons: { ...base.cdn?.icons, ...override.cdn?.icons },
       scripts: { ...base.cdn?.scripts, ...override.cdn?.scripts },
     },
+    dark: override.dark !== undefined ? mergeThemes(base, override.dark as Partial<ThemeConfig>) : base.dark,
     customVars: { ...base.customVars, ...override.customVars },
     customCss: [base.customCss, override.customCss].filter(Boolean).join('\n'),
   };
@@ -469,6 +472,15 @@ export function createTheme(overrides: Partial<ThemeConfig>): ThemeConfig {
 }
 
 /**
+ * Emit color scale CSS variables
+ */
+function emitColorScale(lines: string[], name: string, scale: ColorScale): void {
+  for (const [shade, value] of Object.entries(scale)) {
+    if (value) lines.push(`--color-${name}-${shade}: ${value};`);
+  }
+}
+
+/**
  * Build Tailwind @theme CSS from theme configuration
  */
 export function buildThemeCss(theme: ThemeConfig): string {
@@ -478,12 +490,29 @@ export function buildThemeCss(theme: ThemeConfig): string {
   const semantic = theme.colors.semantic;
   if (typeof semantic.primary === 'string') {
     lines.push(`--color-primary: ${semantic.primary};`);
+  } else if (semantic.primary) {
+    emitColorScale(lines, 'primary', semantic.primary);
   }
-  if (semantic.secondary && typeof semantic.secondary === 'string') {
-    lines.push(`--color-secondary: ${semantic.secondary};`);
+  if (semantic.secondary) {
+    if (typeof semantic.secondary === 'string') {
+      lines.push(`--color-secondary: ${semantic.secondary};`);
+    } else {
+      emitColorScale(lines, 'secondary', semantic.secondary);
+    }
   }
-  if (semantic.accent && typeof semantic.accent === 'string') {
-    lines.push(`--color-accent: ${semantic.accent};`);
+  if (semantic.accent) {
+    if (typeof semantic.accent === 'string') {
+      lines.push(`--color-accent: ${semantic.accent};`);
+    } else {
+      emitColorScale(lines, 'accent', semantic.accent);
+    }
+  }
+  if (semantic.neutral) {
+    if (typeof semantic.neutral === 'string') {
+      lines.push(`--color-neutral: ${semantic.neutral};`);
+    } else {
+      emitColorScale(lines, 'neutral', semantic.neutral);
+    }
   }
   if (semantic.success) lines.push(`--color-success: ${semantic.success};`);
   if (semantic.warning) lines.push(`--color-warning: ${semantic.warning};`);
@@ -528,11 +557,13 @@ export function buildThemeCss(theme: ThemeConfig): string {
 
   // Radius
   const radius = theme.radius;
+  if (radius?.none) lines.push(`--radius-none: ${radius.none};`);
   if (radius?.sm) lines.push(`--radius-sm: ${radius.sm};`);
   if (radius?.md) lines.push(`--radius-md: ${radius.md};`);
   if (radius?.lg) lines.push(`--radius-lg: ${radius.lg};`);
   if (radius?.xl) lines.push(`--radius-xl: ${radius.xl};`);
   if (radius?.['2xl']) lines.push(`--radius-2xl: ${radius['2xl']};`);
+  if (radius?.full) lines.push(`--radius-full: ${radius.full};`);
 
   // Custom vars
   if (theme.customVars) {
