@@ -18,6 +18,7 @@ import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { buildParsedPromptResult } from './prompt.utils';
+import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
 export class PromptInstance extends PromptEntry {
   private readonly providers: ProviderRegistry;
@@ -141,7 +142,9 @@ class FunctionPromptContext extends PromptContext {
     super(args);
   }
 
-  execute(args: Record<string, string>): Promise<unknown> {
-    return this.record.provide(args, this);
+  // Return type matches base class PromptContext.execute signature
+  // The actual return can be any serializable value - parseOutput handles conversion
+  execute(args: Record<string, string>): Promise<GetPromptResult> {
+    return this.record.provide(args, this) as Promise<GetPromptResult>;
   }
 }
