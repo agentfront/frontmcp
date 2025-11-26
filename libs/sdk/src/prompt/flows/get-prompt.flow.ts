@@ -25,6 +25,8 @@ const stateSchema = z.object({
     name: z.string().min(1),
     arguments: z.record(z.string()).optional(),
   }),
+  // Prompt owner ID for hook filtering during execution
+  promptOwnerId: z.string().optional(),
   // z.any() used because AuthInfo is a complex external type from @modelcontextprotocol/sdk
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   // z.any() used because PromptEntry is a complex abstract class type
@@ -115,11 +117,8 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       throw new PromptNotFoundError(name);
     }
 
-    // Store prompt owner ID in the flow input for hook filtering.
-    // This mutation allows hooks to filter by prompt owner during execution.
-    if (prompt.owner) {
-      (this.rawInput as any)._promptOwnerId = prompt.owner.id;
-    }
+    // Store prompt owner ID in state for hook filtering during execution
+    this.state.set('promptOwnerId', prompt.owner?.id);
 
     this.logger = this.logger.child(`GetPromptFlow(${name})`);
     this.state.set('prompt', prompt);

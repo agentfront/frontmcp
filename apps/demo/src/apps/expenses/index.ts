@@ -8,6 +8,12 @@ import AddTool from './tools/add.tool';
 import AuthorizationPlugin from './plugins/authorization.plugin';
 import { CachePlugin } from '@frontmcp/plugins';
 
+// Prompts
+import { ExpenseReportPrompt, CategorizeExpensePrompt } from './prompts';
+
+// Resources
+import { ExpensePolicyResource, ExpenseByIdResource, ExpenseCategoriesResource } from './resources';
+
 @App({
   id: 'expense',
   name: 'Expense MCP app',
@@ -29,6 +35,8 @@ import { CachePlugin } from '@frontmcp/plugins';
       },
     }),
   ],
-  tools: [AddTool, CreateExpenseTool, GetExpenseTool]
+  tools: [AddTool, CreateExpenseTool, GetExpenseTool],
+  prompts: [ExpenseReportPrompt, CategorizeExpensePrompt],
+  resources: [ExpensePolicyResource, ExpenseByIdResource, ExpenseCategoriesResource],
 })
 export default class ExpenseMcpApp {}

@@ -142,8 +142,6 @@ class FunctionPromptContext extends PromptContext {
     super(args);
   }
 
-  // Return type matches base class PromptContext.execute signature
-  // The actual return can be any serializable value - parseOutput handles conversion
   execute(args: Record<string, string>): Promise<GetPromptResult> {
     return this.record.provide(args, this) as Promise<GetPromptResult>;
   }

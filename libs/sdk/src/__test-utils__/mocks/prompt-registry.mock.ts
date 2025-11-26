@@ -3,7 +3,7 @@
  * Mock factory for PromptRegistry
  */
 
-import { PromptMetadata } from '../../common/metadata';
+import { PromptMetadata, PromptKind, PromptRecord, PromptEntry } from '../../common';
 
 /**
  * Creates a mock PromptRegistry for testing
@@ -39,7 +39,7 @@ export function createMockPromptRegistry(overrides: Partial<Record<string, unkno
     }),
 
     findAllByName: jest.fn((name: string) => {
-      const results: any[] = [];
+      const results: ReturnType<typeof createMockPromptEntry>[] = [];
       for (const prompt of prompts.values()) {
         if (prompt.metadata?.name === name || prompt.name === name) {
           results.push(prompt);
@@ -63,7 +63,7 @@ export function createMockPromptRegistry(overrides: Partial<Record<string, unkno
     hasAny: jest.fn(() => prompts.size > 0),
 
     listByOwner: jest.fn((ownerId: string) => {
-      const results: any[] = [];
+      const results: ReturnType<typeof createMockPromptEntry>[] = [];
       for (const prompt of prompts.values()) {
         if (prompt.owner?.id === ownerId) {
           results.push(prompt);
@@ -82,7 +82,7 @@ export function createMockPromptRegistry(overrides: Partial<Record<string, unkno
 export function createMockPromptEntry(
   name: string,
   metadata?: Partial<PromptMetadata>,
-  execute?: (args: Record<string, string>) => any,
+  execute?: (args: Record<string, string>) => unknown,
 ) {
   const fullMetadata: PromptMetadata = {
     name,
@@ -98,7 +98,7 @@ export function createMockPromptEntry(
     owner: { kind: 'app', id: 'test-app', ref: {} },
     execute: jest.fn(
       execute ||
-        ((args: Record<string, string>) => ({
+        ((_args: Record<string, string>) => ({
           messages: [{ role: 'user', content: { type: 'text', text: `Response from ${name}` } }],
         })),
     ),
@@ -112,42 +112,46 @@ export function createMockPromptEntry(
       }
       return args || {};
     }),
-    parseOutput: jest.fn((output: any) => {
+    parseOutput: jest.fn((output: unknown) => {
       if (typeof output === 'string') {
         return {
           messages: [{ role: 'user', content: { type: 'text', text: output } }],
           description: fullMetadata.description,
         };
       }
-      if (output?.messages) {
-        return { ...output, description: output.description || fullMetadata.description };
+      if (output && typeof output === 'object' && 'messages' in output) {
+        const outputObj = output as { messages: unknown[]; description?: string };
+        return { ...outputObj, description: outputObj.description || fullMetadata.description };
       }
       return {
         messages: [{ role: 'user', content: { type: 'text', text: JSON.stringify(output) } }],
         description: fullMetadata.description,
       };
     }),
-    safeParseOutput: jest.fn((output: any) => {
+    safeParseOutput: jest.fn((output: unknown) => {
       try {
-        const parsed =
-          typeof output === 'string'
-            ? {
-                messages: [{ role: 'user', content: { type: 'text', text: output } }],
-                description: fullMetadata.description,
-              }
-            : output?.messages
-            ? { ...output, description: output.description || fullMetadata.description }
-            : {
-                messages: [{ role: 'user', content: { type: 'text', text: JSON.stringify(output) } }],
-                description: fullMetadata.description,
-              };
+        let parsed: { messages: unknown[]; description?: string };
+        if (typeof output === 'string') {
+          parsed = {
+            messages: [{ role: 'user', content: { type: 'text', text: output } }],
+            description: fullMetadata.description,
+          };
+        } else if (output && typeof output === 'object' && 'messages' in output) {
+          const outputObj = output as { messages: unknown[]; description?: string };
+          parsed = { ...outputObj, description: outputObj.description || fullMetadata.description };
+        } else {
+          parsed = {
+            messages: [{ role: 'user', content: { type: 'text', text: JSON.stringify(output) } }],
+            description: fullMetadata.description,
+          };
+        }
         return { success: true, data: parsed };
       } catch (error) {
         return { success: false, error };
       }
     }),
     getMetadata: jest.fn(() => fullMetadata),
-    create: jest.fn((args: Record<string, string>, ctx?: any) => ({
+    create: jest.fn((args: Record<string, string>, ctx?: unknown) => ({
       args,
       ctx,
       output: undefined,
@@ -155,16 +159,21 @@ export function createMockPromptEntry(
       mark: jest.fn(),
     })),
     record: {
-      provide: class {},
+      kind: PromptKind.CLASS_TOKEN,
+      provide: class MockPromptEntry {} as unknown as new () => PromptEntry,
       metadata: fullMetadata,
-    },
+    } as PromptRecord,
   };
 }
 
 /**
  * Adds a prompt to a mock registry
  */
-export function addPromptToMock(registry: ReturnType<typeof createMockPromptRegistry>, name: string, promptEntry: any) {
+export function addPromptToMock(
+  registry: ReturnType<typeof createMockPromptRegistry>,
+  name: string,
+  promptEntry: ReturnType<typeof createMockPromptEntry>,
+) {
   registry.prompts.set(name, promptEntry);
 
   registry.findByName.mockImplementation((n: string) => {
