@@ -147,8 +147,8 @@ describe('prompt.decorator', () => {
       const myPrompt = prompt({
         name: 'function-prompt',
         arguments: [],
-      })((args) => ({
-        messages: [{ role: 'user', content: { type: 'text', text: 'hello' } }],
+      })(() => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'hello' } }],
       }));
 
       expect(typeof myPrompt).toBe('function');
@@ -161,7 +161,7 @@ describe('prompt.decorator', () => {
         title: 'Function Title',
         description: 'Function Description',
         arguments: [{ name: 'arg1', required: true }],
-      })((args) => ({
+      })(() => ({
         messages: [],
       }));
 
@@ -173,8 +173,8 @@ describe('prompt.decorator', () => {
     });
 
     it('should return handler when called', () => {
-      const handler = (args: any) => ({
-        messages: [{ role: 'user', content: { type: 'text', text: 'test' } }],
+      const handler = () => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'test' } }],
       });
 
       const myPrompt = prompt({
@@ -187,8 +187,8 @@ describe('prompt.decorator', () => {
     });
 
     it('should preserve async handlers', () => {
-      const asyncHandler = async (args: any) => ({
-        messages: [{ role: 'user', content: { type: 'text', text: 'async' } }],
+      const asyncHandler = async () => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'async' } }],
       });
 
       const myPrompt = prompt({
@@ -208,7 +208,7 @@ describe('prompt.decorator', () => {
           { name: 'format', description: 'Output format', required: false },
         ],
       })((args) => ({
-        messages: [{ role: 'user', content: { type: 'text', text: args?.topic || 'default' } }],
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args?.['topic'] || 'default' } }],
       }));
 
       const metadata = myPrompt[FrontMcpPromptTokens.metadata];

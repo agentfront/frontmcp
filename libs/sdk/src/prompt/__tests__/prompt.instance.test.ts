@@ -147,7 +147,7 @@ describe('PromptInstance', () => {
       })
       class ArgsPrompt {
         execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: args.topic } }] };
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args['topic'] } }] };
         }
       }
 
@@ -156,7 +156,7 @@ describe('PromptInstance', () => {
       await instance.ready;
 
       const result = instance.parseArguments({ topic: 'test topic' });
-      expect(result.topic).toBe('test topic');
+      expect(result['topic']).toBe('test topic');
     });
 
     it('should throw for missing required argument', async () => {
@@ -166,7 +166,9 @@ describe('PromptInstance', () => {
       })
       class RequiredArgs {
         execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: args.required_field } }] };
+          return {
+            messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args['required_field'] } }],
+          };
         }
       }
 
@@ -221,7 +223,7 @@ describe('PromptInstance', () => {
       })
       class ExtraArgs {
         execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'extra' } }] };
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'extra' } }] };
         }
       }
 
@@ -230,8 +232,8 @@ describe('PromptInstance', () => {
       await instance.ready;
 
       const result = instance.parseArguments({ defined: 'yes', extra: 'also yes' });
-      expect(result.defined).toBe('yes');
-      expect(result.extra).toBe('also yes');
+      expect(result['defined']).toBe('yes');
+      expect(result['extra']).toBe('also yes');
     });
   });
 

@@ -222,7 +222,10 @@ describe('PromptsListFlow', () => {
         name: 'with-icons',
         description: 'Prompt with icons',
         arguments: [],
-        icons: { light: 'icon-light.png', dark: 'icon-dark.png' },
+        icons: [
+          { src: 'icon-light.png', mimeType: 'image/png' },
+          { src: 'icon-dark.png', mimeType: 'image/png' },
+        ],
       });
       addPromptToMock(promptRegistry, 'with-icons', promptEntry);
 
@@ -234,10 +237,10 @@ describe('PromptsListFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(true);
-      expect(result.response.prompts[0].icons).toEqual({
-        light: 'icon-light.png',
-        dark: 'icon-dark.png',
-      });
+      expect(result.response.prompts[0].icons).toEqual([
+        { src: 'icon-light.png', mimeType: 'image/png' },
+        { src: 'icon-dark.png', mimeType: 'image/png' },
+      ]);
     });
   });
 

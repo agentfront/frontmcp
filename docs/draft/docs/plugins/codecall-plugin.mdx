@@ -119,12 +119,11 @@ All other tools are hidden from `list_tools` but discoverable via `codecall.sear
 Configure CodeCall behavior when registering the plugin:
 
 <ParamField path="mode" type="'codecall_only' | 'codecall_opt_in' | 'metadata_driven'" default="'codecall_only'">
-  Controls which tools are visible in `list_tools` and usable via CodeCall
-
-- **`codecall_only`** - Hide all tools by default, make all available via CodeCall (best for large toolsets)
-- **`codecall_opt_in`** - Hide all tools, only enable specific tools for CodeCall (best for selective exposure)
-- **`metadata_driven`** - No defaults, configure everything per-tool (best for small toolsets with mixed usage)
-  </ParamField>
+  Controls which tools are visible in `list_tools` and usable via CodeCall:
+  - **`codecall_only`** - Hide all tools by default, make all available via CodeCall (best for large toolsets)
+  - **`codecall_opt_in`** - Hide all tools, only enable specific tools for CodeCall (best for selective exposure)
+  - **`metadata_driven`** - No defaults, configure everything per-tool (best for small toolsets with mixed usage)
+</ParamField>
 
 <ParamField path="topK" type="number" default="8">
   Maximum number of tools to return from `codecall.search`

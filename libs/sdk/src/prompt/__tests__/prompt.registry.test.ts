@@ -1,6 +1,10 @@
 import 'reflect-metadata';
 import PromptRegistry from '../prompt.registry';
 import { Prompt } from '../../common/decorators/prompt.decorator';
+import { PromptType } from '../../common/interfaces/prompt.interface';
+
+// Helper to cast test classes to PromptType
+const asPromptTypes = (...classes: any[]): PromptType[] => classes as unknown as PromptType[];
 
 // Mock the complex dependencies
 const createMockHookRegistry = () => ({
@@ -40,12 +44,16 @@ describe('PromptRegistry', () => {
         arguments: [],
       })
       class GreetingPrompt {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'Hello!' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Hello!' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [GreetingPrompt], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(GreetingPrompt),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const prompts = registry.getPrompts();
@@ -63,26 +71,30 @@ describe('PromptRegistry', () => {
     it('should register multiple prompts', async () => {
       @Prompt({ name: 'prompt1', arguments: [] })
       class Prompt1 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '1' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
       @Prompt({ name: 'prompt2', arguments: [] })
       class Prompt2 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '2' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
         }
       }
 
       @Prompt({ name: 'prompt3', arguments: [{ name: 'topic', required: true }] })
       class Prompt3 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: args.topic } }] };
+        async execute(args: Record<string, string>) {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args['topic'] } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Prompt1, Prompt2, Prompt3], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(Prompt1, Prompt2, Prompt3),
+        createMockOwner(),
+      );
       await registry.ready;
 
       expect(registry.getPrompts()).toHaveLength(3);
@@ -97,12 +109,18 @@ describe('PromptRegistry', () => {
         ],
       })
       class ParameterizedPrompt {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: `Topic: ${args.topic}` } }] };
+        async execute(args: Record<string, string>) {
+          return {
+            messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `Topic: ${args['topic']}` } }],
+          };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [ParameterizedPrompt], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(ParameterizedPrompt),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const prompts = registry.getPrompts();
@@ -117,19 +135,23 @@ describe('PromptRegistry', () => {
     it('should return all prompts', async () => {
       @Prompt({ name: 'first', arguments: [] })
       class First {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '1' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
       @Prompt({ name: 'second', arguments: [] })
       class Second {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '2' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [First, Second], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(First, Second),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const prompts = registry.getPrompts();
@@ -142,12 +164,12 @@ describe('PromptRegistry', () => {
     it('should find prompt by exact name', async () => {
       @Prompt({ name: 'findable', arguments: [] })
       class Findable {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'found' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'found' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Findable], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Findable), createMockOwner());
       await registry.ready;
 
       const found = registry.findByName('findable');
@@ -158,12 +180,12 @@ describe('PromptRegistry', () => {
     it('should return undefined for unknown name', async () => {
       @Prompt({ name: 'existing', arguments: [] })
       class Existing {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'e' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Existing], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Existing), createMockOwner());
       await registry.ready;
 
       const notFound = registry.findByName('unknown');
@@ -173,12 +195,12 @@ describe('PromptRegistry', () => {
     it('should find first prompt when multiple have same name', async () => {
       @Prompt({ name: 'duplicate', arguments: [] })
       class Duplicate1 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '1' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Duplicate1], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Duplicate1), createMockOwner());
       await registry.ready;
 
       const found = registry.findByName('duplicate');
@@ -191,12 +213,12 @@ describe('PromptRegistry', () => {
     it('should find all prompts with given name', async () => {
       @Prompt({ name: 'shared-name', arguments: [] })
       class SharedName {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'shared' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'shared' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [SharedName], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(SharedName), createMockOwner());
       await registry.ready;
 
       const found = registry.findAllByName('shared-name');
@@ -206,12 +228,12 @@ describe('PromptRegistry', () => {
     it('should return empty array for unknown name', async () => {
       @Prompt({ name: 'known', arguments: [] })
       class Known {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'k' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'k' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Known], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Known), createMockOwner());
       await registry.ready;
 
       const found = registry.findAllByName('unknown');
@@ -223,19 +245,23 @@ describe('PromptRegistry', () => {
     it('should return all indexed prompts', async () => {
       @Prompt({ name: 'prompt1', arguments: [] })
       class Prompt1 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '1' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
       @Prompt({ name: 'prompt2', arguments: [] })
       class Prompt2 {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '2' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Prompt1, Prompt2], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(Prompt1, Prompt2),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const indexed = registry.listAllIndexed();
@@ -245,12 +271,12 @@ describe('PromptRegistry', () => {
     it('should include lineage info in indexed prompts', async () => {
       @Prompt({ name: 'lineaged', arguments: [] })
       class Lineaged {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'l' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'l' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Lineaged], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Lineaged), createMockOwner());
       await registry.ready;
 
       const indexed = registry.listAllIndexed();
@@ -265,12 +291,12 @@ describe('PromptRegistry', () => {
     it('should export with default snake_case', async () => {
       @Prompt({ name: 'myPrompt', arguments: [] })
       class MyPrompt {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'content' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'content' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [MyPrompt], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(MyPrompt), createMockOwner());
       await registry.ready;
 
       const exported = registry.exportResolvedNames();
@@ -281,12 +307,12 @@ describe('PromptRegistry', () => {
     it('should export with kebab-case', async () => {
       @Prompt({ name: 'myPrompt', arguments: [] })
       class MyPrompt {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'content' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'content' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [MyPrompt], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(MyPrompt), createMockOwner());
       await registry.ready;
 
       const exported = registry.exportResolvedNames({ case: 'kebab' });
@@ -297,19 +323,23 @@ describe('PromptRegistry', () => {
     it('should handle multiple prompts with unique names', async () => {
       @Prompt({ name: 'first', arguments: [] })
       class First {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '1' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '1' } }] };
         }
       }
 
       @Prompt({ name: 'second', arguments: [] })
       class Second {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: '2' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: '2' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [First, Second], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(First, Second),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const exported = registry.exportResolvedNames();
@@ -323,12 +353,12 @@ describe('PromptRegistry', () => {
     it('should return true when registry has prompts', async () => {
       @Prompt({ name: 'test', arguments: [] })
       class Test {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'test' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'test' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Test], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Test), createMockOwner());
       await registry.ready;
 
       expect(registry.hasAny()).toBe(true);
@@ -346,12 +376,12 @@ describe('PromptRegistry', () => {
     it('should return locally registered prompts', async () => {
       @Prompt({ name: 'inline', arguments: [] })
       class Inline {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'inline' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'inline' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Inline], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Inline), createMockOwner());
       await registry.ready;
 
       const inline = registry.getInlinePrompts();
@@ -364,12 +394,12 @@ describe('PromptRegistry', () => {
     it('should emit immediate event when requested', async () => {
       @Prompt({ name: 'subscribed', arguments: [] })
       class Subscribed {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 's' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 's' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Subscribed], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Subscribed), createMockOwner());
       await registry.ready;
 
       const events: any[] = [];
@@ -383,12 +413,12 @@ describe('PromptRegistry', () => {
     it('should return unsubscribe function', async () => {
       @Prompt({ name: 'unsub', arguments: [] })
       class Unsub {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'u' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'u' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Unsub], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Unsub), createMockOwner());
       await registry.ready;
 
       const events: any[] = [];
@@ -404,13 +434,13 @@ describe('PromptRegistry', () => {
     it('should return prompts for specific owner', async () => {
       @Prompt({ name: 'owned', arguments: [] })
       class Owned {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'o' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'o' } }] };
         }
       }
 
       const owner = createMockOwner();
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Owned], owner);
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Owned), owner);
       await registry.ready;
 
       const owned = registry.listByOwner(`${owner.kind}:${owner.id}`);
@@ -420,12 +450,12 @@ describe('PromptRegistry', () => {
     it('should return empty array for unknown owner', async () => {
       @Prompt({ name: 'test', arguments: [] })
       class Test {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 't' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 't' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Test], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Test), createMockOwner());
       await registry.ready;
 
       const unknown = registry.listByOwner('unknown:owner');
@@ -437,12 +467,16 @@ describe('PromptRegistry', () => {
     it('should lookup by exported name', async () => {
       @Prompt({ name: 'exportedPrompt', arguments: [] })
       class ExportedPrompt {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'e' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [ExportedPrompt], createMockOwner());
+      const registry = new PromptRegistry(
+        createMockProviderRegistry(),
+        asPromptTypes(ExportedPrompt),
+        createMockOwner(),
+      );
       await registry.ready;
 
       const found = registry.getExported('exported_prompt');
@@ -453,12 +487,12 @@ describe('PromptRegistry', () => {
     it('should return undefined for non-existent exported name', async () => {
       @Prompt({ name: 'exists', arguments: [] })
       class Exists {
-        execute(args: Record<string, string>) {
-          return { messages: [{ role: 'user', content: { type: 'text', text: 'e' } }] };
+        async execute() {
+          return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'e' } }] };
         }
       }
 
-      const registry = new PromptRegistry(createMockProviderRegistry(), [Exists], createMockOwner());
+      const registry = new PromptRegistry(createMockProviderRegistry(), asPromptTypes(Exists), createMockOwner());
       await registry.ready;
 
       const notFound = registry.getExported('does_not_exist');
