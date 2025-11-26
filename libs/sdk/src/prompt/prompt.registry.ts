@@ -445,6 +445,17 @@ export default class PromptRegistry
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
   }
+
+  /**
+   * Get the MCP capabilities for prompts.
+   * These are reported to clients during initialization.
+   */
+  getCapabilities(): { listChanged: boolean } {
+    return {
+      // List change notifications are supported if we have any prompts registered
+      listChanged: this.hasAny(),
+    };
+  }
 }
 
 /* -------------------- lineage utility -------------------- */

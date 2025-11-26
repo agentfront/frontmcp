@@ -55,6 +55,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
           listChanged: true,
         },
         resources: this.scope.resources.getCapabilities(),
+        prompts: this.scope.prompts.getCapabilities(),
       },
       serverInfo: info,
     };
