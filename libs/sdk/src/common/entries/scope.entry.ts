@@ -15,6 +15,7 @@ import {
   ToolRegistryInterface,
   HookRegistryInterface,
   ResourceRegistryInterface,
+  PromptRegistryInterface,
 } from '../interfaces';
 import { FlowName, ScopeMetadata } from '../metadata';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../../auth/path.utils';
@@ -44,6 +45,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
   abstract get tools(): ToolRegistryInterface;
 
   abstract get resources(): ResourceRegistryInterface;
+
+  abstract get prompts(): PromptRegistryInterface;
 
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 

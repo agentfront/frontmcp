@@ -12,3 +12,7 @@ export const HttpHook = FlowHooksOf('http:request');
 export const ResourceHook = FlowHooksOf('resources:read-resource');
 export const ListResourcesHook = FlowHooksOf('resources:list-resources');
 export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-templates');
+
+// Prompt hooks
+export const PromptHook = FlowHooksOf('prompts:get-prompt');
+export const ListPromptsHook = FlowHooksOf('prompts:list-prompts');

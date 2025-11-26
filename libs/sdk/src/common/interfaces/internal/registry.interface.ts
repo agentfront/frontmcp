@@ -138,11 +138,17 @@ export interface ResourceRegistryInterface {
 }
 
 export interface PromptRegistryInterface {
-  // inline prompts plus discovered by nested tool registries
+  // owner reference for the registry
+  owner: EntryOwnerRef;
+
+  // inline prompts plus discovered by nested prompt registries
   getPrompts(): PromptEntry[];
 
   // inline prompts only
   getInlinePrompts(): PromptEntry[];
+
+  // find a prompt by name
+  findByName(name: string): PromptEntry | undefined;
 }
 
 export interface LoggerRegistryInterface {

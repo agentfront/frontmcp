@@ -24,6 +24,7 @@ import HttpRequestFlow from './flows/http.request.flow';
 import { TransportService } from '../transport/transport.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
+import PromptRegistry from '../prompt/prompt.registry';
 import HookRegistry from '../hooks/hook.registry';
 
 export class Scope extends ScopeEntry {
@@ -38,6 +39,7 @@ export class Scope extends ScopeEntry {
   private scopeHooks: HookRegistry;
   private scopeTools: ToolRegistry;
   private scopeResources: ResourceRegistry;
+  private scopePrompts: PromptRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   readonly entryPath: string;
@@ -89,6 +91,9 @@ export class Scope extends ScopeEntry {
 
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeResources.ready;
+
+    this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
+    await this.scopePrompts.ready;
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
@@ -155,6 +160,10 @@ export class Scope extends ScopeEntry {
 
   get resources(): ResourceRegistry {
     return this.scopeResources;
+  }
+
+  get prompts(): PromptRegistry {
+    return this.scopePrompts;
   }
 
   registryFlows(...flows: FlowType[]) {

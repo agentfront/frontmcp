@@ -7,6 +7,8 @@ export {
   ResourceNotFoundError,
   ResourceReadError,
   InvalidResourceUriError,
+  PromptNotFoundError,
+  PromptExecutionError,
   InvalidInputError,
   InvalidOutputError,
   InvalidMethodError,

@@ -171,6 +171,37 @@ export class InvalidResourceUriError extends PublicMcpError {
 }
 
 /**
+ * Prompt not found error
+ */
+export class PromptNotFoundError extends PublicMcpError {
+  constructor(promptName: string) {
+    super(`Prompt "${promptName}" not found`, 'PROMPT_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Prompt execution error (internal)
+ */
+export class PromptExecutionError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(promptName: string, originalError?: Error) {
+    super(
+      `Prompt "${promptName}" execution failed: ${originalError?.message || 'Unknown error'}`,
+      'PROMPT_EXECUTION_ERROR',
+    );
+    this.originalError = originalError;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}
+
+/**
  * Invalid input validation error
  */
 export class InvalidInputError extends PublicMcpError {
