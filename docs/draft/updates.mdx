@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-25" tags={["Releases"]}>
+<Update label="draft" description="2025-11-26" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -13,41 +13,47 @@ mode: 'center'
   >
     **Breaking changes**
 
-    🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
+    🚨 **Node 22+ runtime floor** - FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
     **Features**
 
-    🚀 **CodeCall meta-API plugin** – Collapse sprawling tool lists into the new CodeCall plugin: models search, describe, and execute tools through AgentScript plans that run inside Enclave with ast-guard validation.
+    🚀 **CodeCall meta-API plugin** - Collapse sprawling tool lists into searchable meta-tools, now with TF-IDF or Vectoria embeddings, VM presets, sidecar references, and an optional direct invoke mode so models can script complex workflows safely.
 
-    🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure.
+    🎨 **Platform-aware UI kit** - Ship HTMX-ready consent pages with the new `@frontmcp/ui` library; choose Tailwind themes, cache scripts for Claude Artifacts, and reuse HTML snippets across MCP resources.
 
-    🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with the new AST validator, mix in presets or custom rules, and block risky scripts before they reach a tool; new identifier, call-target, and sidecar rules ship out of the box.
+    🧭 **Resource endpoints** - Decorate read-only data with `@Resource` and `@ResourceTemplate`, attach metadata, and deliver URI templates so models can pull configuration, documents, or API snapshots without side effects.
 
-    🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall, showing how to orchestrate CRUD flows plus activity logging from a single meta-entry point.
+    🧠 **Vector discovery stack** - VectoriaDB and the new TF-IDF fallback index every tool locally, add HNSW acceleration, and expose storage adapters so semantic search works both online and offline.
+
+    🛡️ **AST Guard security toolkit** - Harden AgentScript execution with new identifier whitelists, sidecar limits, and preset refinements that block Unicode attacks, call-target assignment, and rogue globals.
+
+    🧾 **CRM toolset upgrade** - The demo CRM app now includes CrmStore, dedicated user and activity tools, and CodeCall wiring so you can study multi-step orchestration with logging and stats.
 
     **Fixes**
 
-    🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
+    🧰 **CodeCall validation** - Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
 
-    🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
+    🔐 **Identifier whitelists** - UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
 
     **Docs**
 
-    📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
+    📚 **Vector intelligence guide** - The VectoriaDB walkthrough now covers TF-IDF, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
 
-    🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
+    🖼️ **UI builder guide** - New documentation shows how to compose layouts, HTMX actions, and CDN-safe theming with `@frontmcp/ui`.
 
-    🗂️ **CRM & CodeCall example** – The apps reference now includes the CRM CodeCall sample so you can replicate multi-tool orchestration in your own servers.
+    🧩 **Script hardening playbook** - The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
+
+    🗂️ **CRM and CodeCall example** - A dedicated CrmMcpApp guide walks through the CodeCall search workflow, sample AgentScript plans, and Nx commands for running the demo.
 
     **Performance**
 
-    ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
+    ⚡ **Node 24 optimized runtime** - FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
 
-    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^22` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
+    🔧 **Typed init defaults** - `frontmcp init` now installs `@types/node@^22` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 
-    🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
+    🛠️ **Pinned Nx SHAs** - CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
 
   </Card>
 </Update>

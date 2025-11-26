@@ -1,0 +1,118 @@
+---
+title: Orchestrate CRM workflows with CodeCall
+slug: guides/crm-codecall-demo
+description: Walk through the CrmMcpApp sample that wires CodeCall, CrmStore, and user or activity tools into a secure orchestration surface.
+icon: building
+---
+
+`CrmMcpApp` (under `apps/demo/src/apps/crm`) bundles a realistic set of MCP tools plus the CodeCall plugin so you can see how search -> describe -> execute flows work end to end. The sample ships with an in-memory `CrmStore`, eight CRUD-style tools, and CodeCall configured in `codecall_only` mode.
+
+<CardGroup cols={2}>
+  <Card title="End-to-end orchestration" icon="workflow">
+    Models discover CRM tools via `codecall.search`, inspect schemas, then orchestrate multi-step plans inside Enclave.
+  </Card>
+  <Card title="Extensible data store" icon="database">
+    Replace the bundled `CrmStore` with your own persistence layer to pilot real-world CRM scenarios quickly.
+  </Card>
+</CardGroup>
+
+## Repository layout
+
+```
+apps/demo/src/apps/crm
+|- data/store.ts        # In-memory users and activities store
+|- index.ts             # App registration and CodeCall plugin config
+|- tools/               # Individual MCP tools (users and activities)
+```
+
+`index.ts` registers CodeCall with `mode: 'codecall_only'` and exposes all CRM tools through the plugin.
+
+## Tools provided
+
+**Users**
+
+| Tool           | Purpose                                    | Notable behavior                                                      |
+| -------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| `users:list`   | List users filtered by `status` or `role`. | Returns paginated arrays for CodeCall to slice or sort.               |
+| `users:get`    | Look up by ID or email.                    | Validates that at least one argument is provided.                     |
+| `users:create` | Add a user.                                | Rejects duplicate emails and defaults status to `pending`.            |
+| `users:update` | Patch an existing user.                    | Guards against email collisions and returns the updated record.       |
+| `users:delete` | Remove a user.                             | Errors if the ID does not exist and responds with a friendly message. |
+
+**Activities**
+
+| Tool               | Purpose                               | Notable behavior                                        |
+| ------------------ | ------------------------------------- | ------------------------------------------------------- |
+| `activities:list`  | View events filtered by user or type. | Sorts newest first and enforces an optional `limit`.    |
+| `activities:log`   | Append an activity.                   | Updates `lastLoginAt` automatically on login events.    |
+| `activities:stats` | Aggregate counts by type.             | Provides totals and per-type breakdowns for dashboards. |
+
+## Run the demo locally
+
+1. Install dependencies if you have not already:
+
+   ```bash
+   yarn install
+   ```
+
+2. Start the demo server:
+
+   ```bash
+   yarn nx serve demo
+   ```
+
+3. Open the MCP Inspector (or your preferred MCP client), connect to `localhost:3002`, and inspect the `crm` app.
+
+4. In the Inspector, run:
+
+   ```json
+   {"name":"codecall.search","arguments":{"query":"invite a pending user and log their login"}}
+   ```
+
+   Follow up with `codecall.describe`, then send a plan to `codecall.execute`.
+
+<Info>
+  CodeCall hides the CRM tools from `list_tools`, so the only way to reach them is via the meta-tools.
+</Info>
+
+### Sample AgentScript plan
+
+```ts
+const createUser = await callTool('users:create', {
+  email: 'peter@example.com',
+  name: 'Peter Parker',
+  role: 'user',
+  status: 'pending',
+});
+
+await callTool('activities:log', {
+  userId: createUser.user.id,
+  type: 'login',
+  description: 'Initial onboarding login',
+});
+
+return createUser.user;
+```
+
+Paste the plan into `codecall.execute`. The Enclave result includes `logs`, `toolCallCount`, and `duration` so you can render execution traces.
+
+## Customize the store
+
+`apps/demo/src/apps/crm/data/store.ts` exposes a simple API:
+
+- `CrmStore.users.list({ status, role })`
+- `CrmStore.users.get(id)`, `.getByEmail(email)`, `.create(data)`, `.update(id, patch)`, `.delete(id)`
+- `CrmStore.activities.list({ userId, type, limit })`, `.create(data)`, `.getStats(userId?)`
+
+Replace these methods with database queries, add new fields, or plug in external services (Salesforce, HubSpot, etc.). Because the tools only depend on `CrmStore`, no other files need to change.
+
+<Tip>
+  Add metadata (`codecall.tags`, `codecall.appId`) to each tool if you split the CRM domain into multiple apps. CodeCall search favors tools whose metadata matches the query.
+</Tip>
+
+## Production checklist
+
+- Enable persistence in `CrmStore` (Postgres, Redis, etc.) before running load tests.
+- Tighten CodeCall's `vm` preset for multi-tenant deployments (`locked_down` plus sidecar enabled).
+- Set `directCalls.allowedTools` if you want to expose low-risk tools (for example `users:list`) without running plans.
+- Wire the CRM app into your real `@FrontMcp` server so `codecall.search` can span CRM plus other domains.

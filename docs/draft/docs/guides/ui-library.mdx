@@ -1,0 +1,211 @@
+---
+title: Build LLM UIs with @frontmcp/ui
+slug: guides/ui-library
+description: Compose platform-aware HTML, HTMX interactions, and Tailwind themes for MCP apps without shipping a front-end framework.
+icon: paintbrush
+---
+
+`@frontmcp/ui` is a pure TypeScript and HTML component library for building consent forms, login screens, and operational dashboards that must render inside LLM chat surfaces (OpenAI GPTs, Claude Workflows, Gemini Live, ngrok tunnels, etc.). Components return strings of HTML with Tailwind v4 utility classes, HTMX attributes, and accessibility defaults baked in-no React, Vite, or bundlers required.
+
+<CardGroup cols={3}>
+  <Card title="Platform aware" icon="layers">
+    Detect OpenAI, Claude, Gemini, or generic browsers and adjust CDN scripts, inline styles, and layout constraints automatically.
+  </Card>
+  <Card title="HTMX everywhere" icon="bolt">
+    Buttons, forms, drawers, and pagination ship first-class HTMX bindings so you can sprinkle interactivity without JavaScript bundles.
+  </Card>
+  <Card title="Validated options" icon="shield">
+    Each component is guarded by Zod schemas that surface friendly error boxes instead of rendering broken markup.
+  </Card>
+</CardGroup>
+
+## When to use it
+
+- MCP apps that need a hosted consent or settings page reachable from multiple LLM vendors.
+- Agent surfaces that must render inside blocked-network environments (Claude Artifacts, corporate sandboxes).
+- Rapid prototyping for auth or reset flows where React or server-side templating would be overkill.
+
+## Install
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/ui
+```
+```bash pnpm
+pnpm add @frontmcp/ui
+```
+```bash yarn
+yarn add @frontmcp/ui
+```
+</CodeGroup>
+
+## Quick start
+
+```ts
+import { button, card, baseLayout, DEFAULT_THEME } from '@frontmcp/ui';
+
+const cta = button('Review request', { variant: 'primary', size: 'md' });
+
+const panel = card(
+  `
+  <h2>Expense #4820</h2>
+  <p>Meals and entertainment - $182.34</p>
+  ${cta}
+`,
+  { title: 'Approval needed', variant: 'elevated' },
+);
+
+const html = baseLayout(panel, {
+  title: 'Expense Approval',
+  description: 'Approve or reject the latest request.',
+  theme: DEFAULT_THEME,
+  width: 'md',
+  align: 'center',
+  scripts: { tailwind: true },
+});
+```
+
+Render the returned HTML string inside any HTTP handler or MCP resource.
+
+## Component overview
+
+| Category          | Highlights                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| Buttons and links | `button`, `primaryButton`, `dangerButton`, `buttonGroup`, `modalTrigger`                  |
+| Cards and layout  | `card`, `cardGroup`, `baseLayout`, `drawer`                                               |
+| Forms             | `form`, `formRow`, `input`, `select`, `radioGroup`, `checkbox`, `textarea`, `formActions` |
+| Feedback          | `alert`, `successAlert`, `warningAlert`, `badge`, `activeBadge`                           |
+| Data display      | `table`, `pagination`, `list`, `avatar`, `modal`, `confirmModal`                          |
+
+### Forms plus HTMX
+
+```ts
+import { form, input, checkbox, formActions, button } from '@frontmcp/ui';
+
+const loginForm = form(
+  `
+  ${input({ name: 'email', type: 'email', label: 'Work email', required: true })}
+  ${input({ name: 'password', type: 'password', label: 'Password', required: true })}
+  ${checkbox({ name: 'keepSignedIn', label: 'Keep me signed in' })}
+  ${formActions(button('Sign in', { type: 'submit', variant: 'primary' }))}
+`,
+  {
+    action: '/session',
+    method: 'post',
+    htmx: { post: '/api/session', target: '#result', swap: 'innerHTML' },
+  },
+);
+```
+
+Every component exposes an `htmx` object so you can progressively enhance interactions.
+
+## Theme system
+
+Use the built-in GitHub and OpenAI inspired themes or roll your own with `createTheme`.
+
+```ts
+import { baseLayout, DEFAULT_THEME, GITHUB_OPENAI_THEME, createTheme } from '@frontmcp/ui';
+
+const customTheme = createTheme({
+  name: 'brand-dark',
+  colors: {
+    semantic: {
+      primary: '#0ea5e9',
+      secondary: '#6366f1',
+      accent: '#14b8a6',
+    },
+  },
+  typography: {
+    families: {
+      sans: '"Inter", system-ui, sans-serif',
+    },
+  },
+  cdn: {
+    scripts: {
+      tailwind: 'https://cdn.example.com/tailwind.js',
+    },
+    fonts: {
+      stylesheets: ['https://fonts.example.com/css/inter.css'],
+    },
+  },
+});
+
+const html = baseLayout(content, { theme: customTheme, title: 'Portal' });
+```
+
+### CDN and offline scripts
+
+```ts
+import { buildCdnScriptsFromTheme, fetchAndCacheScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+
+const scripts = buildCdnScriptsFromTheme(DEFAULT_THEME); // <script> tags with SRI hashes
+
+// For blocked-network platforms (Claude Artifacts):
+await fetchAndCacheScriptsFromTheme(DEFAULT_THEME, { cacheDir: '.cache/ui-scripts' });
+const inlineScripts = buildCdnScriptsFromTheme(DEFAULT_THEME, { inline: true });
+```
+
+<Warning>
+  Claude Artifacts and other blocked-network surfaces require inline scripts. Cache and inline Tailwind or HTMX via
+  `fetchAndCacheScriptsFromTheme` before serving the page.
+</Warning>
+
+## Platform helpers
+
+```ts
+import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/ui';
+
+const platform = getPlatform(headers['user-agent']);
+
+if (needsInlineScripts(platform)) {
+  // Serve inline scripts and fonts
+} else if (canUseCdn(platform)) {
+  // Reference external CDNs with SRI
+}
+```
+
+Platform utilities detect OpenAI, Claude, Gemini, and ngrok so you can tailor script loading, button sizing, or modal behavior per surface.
+
+## Validated options
+
+Every component ships with a Zod schema. Invalid props render an inline warning instead of throwing.
+
+```ts
+import { button, ButtonOptionsSchema } from '@frontmcp/ui';
+
+button('Delete', { variant: 'danger' }); // ok
+
+button('Delete', { variant: 'evil' as any });
+// Renders an error box detailing the invalid variant
+
+const parsed = ButtonOptionsSchema.safeParse(userInput);
+if (parsed.success) {
+  button('Submit', parsed.data);
+}
+```
+
+## Compose rich layouts
+
+```ts
+import { cardGroup, card, modal, modalTrigger, drawer, button } from '@frontmcp/ui';
+
+const actions = cardGroup([
+  card('<p>Review expenses</p>', { title: 'Approvals', footer: modalTrigger({ targetId: 'bulk-modal', text: 'Bulk approve' }) }),
+  card('<p>Invite teammates</p>', { title: 'Access control', footer: button('Invite', { variant: 'secondary' }) }),
+]);
+
+const bulkModal = modal('<p>Confirm bulk approval?</p>', {
+  id: 'bulk-modal',
+  title: 'Bulk approve',
+  actions: {
+    confirm: { text: 'Approve', variant: 'primary', htmx: { post: '/api/approve' } },
+    cancel: { text: 'Cancel', variant: 'ghost' },
+  },
+});
+```
+
+Combine cards, drawers, and modals to recreate complete workflows without touching low-level HTML.
+
+<Tip>
+  Because everything is just strings, you can render the same layout from an MCP resource, an Express route, or a static site generator.
+</Tip>

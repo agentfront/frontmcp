@@ -1,47 +1,49 @@
 ---
 title: Semantic Search with VectoriaDB
 slug: guides/vectoriadb
-description: Index your FrontMCP tools with VectoriaDB for offline semantic discovery and personalized tool recommendations.
+description: Index your FrontMCP tools with VectoriaDB or the zero-dependency TF-IDF engine to power on-device semantic discovery.
 icon: magnifying-glass
 ---
 
-VectoriaDB is FrontMCP's in-memory vector database built on transformers.js. Use it to surface the right tool, prompt, or document snippet from natural-language queries without shipping data to an external service. This guide shows how to fold VectoriaDB into a FrontMCP server for always-on semantic discovery.
+VectoriaDB is FrontMCP's in-memory vector database built on transformers.js. It now ships with two complementary engines:
+
+- **VectoriaDB (ML embeddings)** for high-recall semantic search with cosine similarity, metadata filters, persistence, and optional HNSW acceleration.
+- **TFIDFVectoria** for ultra-lightweight deployments that cannot download a model but still need ranked search.
+
+Use them to suggest the right tool, snippet, or knowledge-base entry without leaking data to third-party services.
 
 <CardGroup cols={3}>
   <Card title="Offline embeddings" icon="bolt">
-    Embeddings run locally via transformers.js, so your users' data never leaves the server and you avoid API quotas.
+    Run Xenova transformers entirely on your server, with no API keys and no request latency.
   </Card>
-  <Card title="Type-safe metadata" icon="brackets-curly">
-    Strong generics ensure every document you index keeps the same shape as your tool metadata.
+  <Card title="Zero-dependency fallback" icon="feather">
+    TF-IDF indexing works anywhere (even CI) and is the default strategy used by the CodeCall plugin.
   </Card>
   <Card title="Operational guardrails" icon="shield">
-    Built-in rate limits, batch validation, HNSW indexing, and storage adapters keep the index production ready.
+    Rate limits, batch validation, storage adapters, and HNSW indices keep the index production ready.
   </Card>
 </CardGroup>
 
 ## What you'll build
 
-- A typed document shape for every tool, app, or resource you want to search
-- An indexing routine that stays in sync with `toolRegistry.getTools(true)`
-- Semantic queries with metadata filters, score thresholds, and pagination controls
-- Persistent caches (file or Redis) so restarts do not require re-embedding everything
-- Tunable HNSW search for large inventories
+- A typed document shape for every tool, adapter, or document you want to search.
+- An indexing routine that stays in sync with `toolRegistry.getTools(true)`.
+- Natural-language queries with metadata filters, thresholds, and pagination.
+- Optional persistence so restarts do not require re-embedding everything.
+- Tuned performance knobs (HNSW, TF-IDF reindexing, limits).
 
 <Note>
-  The default Xenova `all-MiniLM-L6-v2` model is ~22 MB. The first initialization downloads and caches it under
-  `cacheDir`; subsequent boots reuse the local copy.
+  The default Xenova `all-MiniLM-L6-v2` model is about 22 MB. The first initialization downloads and caches it under `cacheDir`;
+  subsequent boots reuse the local copy. The TF-IDF engine requires no downloads at all.
 </Note>
 
 ## Prerequisites
 
-- Node.js 22 or later (Node 24 is recommended and is what FrontMCP tests against)
-- An existing FrontMCP server with at least one app and tool registry
-- Ability to install npm packages in the server workspace
-- Optional: writable disk or Redis if you plan to persist embeddings between restarts
+- Node.js 22 or later (Node 24 is recommended and is what FrontMCP tests against).
+- A FrontMCP server with at least one app and tool registry.
+- Ability to install npm packages (plus optional write access for cache directories).
 
-## Step 1: Install & initialize VectoriaDB
-
-Install the package alongside your server:
+## Install the library
 
 <CodeGroup>
 ```bash npm
@@ -55,7 +57,7 @@ yarn add vectoriadb
 ```
 </CodeGroup>
 
-Initialize a singleton database during server startup (for example inside your custom bootstrap or provider):
+## Option A - ML embeddings with VectoriaDB
 
 ```ts
 import { VectoriaDB, DocumentMetadata } from 'vectoriadb';
@@ -69,17 +71,57 @@ interface ToolDocument extends DocumentMetadata {
 
 export const toolIndex = new VectoriaDB<ToolDocument>({
   cacheDir: './.cache/transformers',
-  defaultSimilarityThreshold: 0.4,
+  defaultSimilarityThreshold: 0.45,
+  useHNSW: true,
+  hnsw: { M: 16, efConstruction: 200, efSearch: 64 },
 });
 
 await toolIndex.initialize(); // downloads and warms the embedding model once
 ```
 
-`initialize()` must run before `add`, `search`, or `update`. Calling it twice is safe because VectoriaDB short-circuits if it is already ready.
+`initialize()` must run before calling `add`, `search`, or `update`. Calling it twice is safe; VectoriaDB short-circuits when it is already ready.
+
+## Option B - zero-dependency TF-IDF indexing
+
+```ts
+import { TFIDFVectoria, DocumentMetadata } from 'vectoriadb';
+
+interface ToolDocument extends DocumentMetadata {
+  toolName: string;
+  owner: string;
+  tags: string[];
+}
+
+export const toolIndex = new TFIDFVectoria<ToolDocument>({
+  defaultTopK: 10,
+  defaultSimilarityThreshold: 0,
+});
+
+toolIndex.addDocuments([
+  {
+    id: 'crm.users:list',
+    text: 'List CRM users filtered by role or status',
+    metadata: {
+      id: 'crm.users:list',
+      toolName: 'crm.users:list',
+      owner: 'crm',
+      tags: ['crm', 'users'],
+    },
+  },
+]);
+
+toolIndex.reindex(); // build the TF-IDF matrix (call after bulk changes)
+```
+
+Use TF-IDF when you cannot download ML models (CI, offline dev boxes, restricted tenants) but still want ranked search. You can mix and match strategies per environment by reading from configuration.
+
+<Tip>
+  The CodeCall plugin uses TF-IDF by default. Flip to ML embeddings by setting `embedding.strategy: 'ml'` when initializing the plugin.
+</Tip>
 
 ## Step 2: Index your tools
 
-Collect metadata from the tool registry (apps, plugins, adapters, or scopes) and write it into the database. Each document needs a unique `id`, the natural-language `text` you want to vectorize, and `metadata` that extends `DocumentMetadata`.
+Collect metadata from the tool registry and write it into the database. Each document needs a unique `id`, searchable `text`, and metadata extending `DocumentMetadata`.
 
 ```ts
 import type { ToolEntry, ToolRegistryInterface } from '@frontmcp/sdk';
@@ -106,16 +148,14 @@ function collectToolDocuments(tools: ToolEntry[]): Array<{ id: string; text: str
 }
 
 export async function indexTools(toolRegistry: ToolRegistryInterface) {
-  const tools = toolRegistry.getTools(true); // include hidden tools so you can filter later
+  const tools = toolRegistry.getTools(true); // include hidden tools
   await toolIndex.addMany(collectToolDocuments(tools));
 }
 ```
 
-`addMany` validates every document, enforces `maxBatchSize`, and prevents duplicates. Use it after deployments or whenever your tool inventory changes.
+`addMany` validates every document, enforces `maxBatchSize`, and prevents duplicates.
 
 ## Step 3: Run semantic search
-
-Query the index anywhere you can run async code (for example inside a custom MCP tool that recommends next actions):
 
 ```ts
 const matches = await toolIndex.search('reset a billing password', {
@@ -129,19 +169,18 @@ for (const match of matches) {
 }
 ```
 
-`search` returns the best matches sorted by cosine similarity. Use `filter` to enforce authorization, `includeVector` to inspect raw vectors, and `threshold` to drop low-confidence hits.
+`search` returns the best matches sorted by cosine similarity (VectoriaDB) or TF-IDF score. Use `filter` to enforce authorization, `includeVector` to inspect raw vectors, and `threshold` to drop low-confidence hits.
 
 <Tip>
-  Keep the index current with `updateMetadata`, `update`, or `updateMany`. Metadata-only updates never trigger re-embedding,
-  while text changes re-embed only the affected documents.
+  Keep the index current with `updateMetadata`, `update`, or `updateMany`. Metadata-only updates never trigger re-embedding, while text changes re-embed only the affected documents.
 </Tip>
 
 ## Persist embeddings between restarts
 
-Avoid re-indexing on every boot by swapping the default in-memory adapter with the provided file or Redis adapters plus a deterministic tools hash.
+Swap the default in-memory adapter with a file or Redis adapter plus a deterministic tools hash.
 
 ```ts
-import { FileStorageAdapter, createToolsHash } from 'vectoriadb';
+import { FileStorageAdapter, createToolsHash, VectoriaDB } from 'vectoriadb';
 
 export async function warmToolIndex(toolRegistry: ToolRegistryInterface) {
   const documents = collectToolDocuments(toolRegistry.getTools(true));
@@ -159,26 +198,25 @@ export async function warmToolIndex(toolRegistry: ToolRegistryInterface) {
 
   if (toolIndex.size() === 0) {
     await toolIndex.addMany(documents);
-    await toolIndex.saveToStorage(); // persist embeddings to disk
+    await toolIndex.saveToStorage();
   }
 
   return toolIndex;
 }
 ```
 
-`toolsHash` automatically invalidates the cache when your tool list or descriptions change. Call `saveToStorage()` after indexing; `initialize()` transparently loads the cache on the next boot.
+`toolsHash` automatically invalidates the cache when your tool list or descriptions change. Call `saveToStorage()` after indexing; `initialize()` loads the cache on the next boot.
 
 <Note>
-  Need a shared cache across pods? Swap in `RedisStorageAdapter` with your preferred Redis client and namespace. TTLs and
-  key prefixes are configurable per adapter.
+  Need a shared cache across pods? Swap in `RedisStorageAdapter` with your preferred Redis client and namespace. TTLs and key prefixes are configurable per adapter.
 </Note>
 
-## Scale & tune search
+## Scale and tune search
 
-- Enable `useHNSW` for datasets above roughly ten thousand documents. HNSW provides sub-millisecond queries with more than 95% recall.
-- Adjust `threshold` and `topK` per query to trade recall for precision.
-- Guard resource usage with `maxDocuments`, `maxDocumentSize`, and `maxBatchSize` (VectoriaDB enforces these automatically).
-- Set a custom `cacheDir` if your runtime has strict filesystem policies.
+- Enable `useHNSW` when you have more than 10k documents. HNSW provides sub-millisecond queries with more than 95 percent recall.
+- Adjust `threshold` and `topK` for each query to trade recall for precision.
+- Guard resource usage with `maxDocuments`, `maxDocumentSize`, and `maxBatchSize`.
+- TF-IDF indexes recompute synchronously; call `reindex()` after large batch updates to refresh the matrix.
 
 ```ts
 const toolIndex = new VectoriaDB<ToolDocument>({
@@ -191,7 +229,7 @@ const toolIndex = new VectoriaDB<ToolDocument>({
 
 ## Handle errors and monitor health
 
-All errors extend `VectoriaError` and ship with machine-readable `code` values so you can branch on them.
+All errors extend `VectoriaError` and ship with machine-readable `code` values.
 
 ```ts
 import {
@@ -216,7 +254,7 @@ try {
 }
 ```
 
-Use `toolIndex.getStats()` to feed dashboards or health endpoints:
+Use `toolIndex.getStats()` for dashboards or health endpoints:
 
 ```ts
 const stats = toolIndex.getStats();
@@ -231,6 +269,5 @@ const stats = toolIndex.getStats();
 ```
 
 <Info>
-  Pair stats with `toolIndex.size()`, `toolIndex.clear()`, and `toolIndex.clearStorage()` to expose maintenance commands or
-  admin tooling.
+  Pair stats with `toolIndex.size()`, `toolIndex.clear()`, and `toolIndex.clearStorage()` to expose maintenance commands or admin tooling.
 </Info>

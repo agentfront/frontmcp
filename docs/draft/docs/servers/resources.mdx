@@ -10,14 +10,15 @@ Resources expose **readable data** to an AI model's context. Unlike tools that e
 
 In the Model Context Protocol, resources serve a fundamentally different purpose than tools:
 
-| Aspect | Resource | Tool |
-|--------|----------|------|
-| **Purpose** | Provide data to read | Execute actions |
-| **Direction** | Model pulls data on demand | Model triggers execution |
-| **Idempotent** | Always (read-only) | Not necessarily |
-| **Use case** | Context loading, data retrieval | Side effects, mutations |
+| Aspect         | Resource                        | Tool                     |
+| -------------- | ------------------------------- | ------------------------ |
+| **Purpose**    | Provide data to read            | Execute actions          |
+| **Direction**  | Model pulls data on demand      | Model triggers execution |
+| **Idempotent** | Always (read-only)              | Not necessarily          |
+| **Use case**   | Context loading, data retrieval | Side effects, mutations  |
 
 Resources are ideal for:
+
 - **Configuration** — expose app settings, feature flags, environment info
 - **User data** — profiles, preferences, permissions
 - **Documents** — files, templates, knowledge base articles
@@ -233,14 +234,14 @@ execute(uri: string) {
 
 **Field descriptions:**
 
-| Field | Description |
-|-------|-------------|
-| `name` | Programmatic identifier used internally and in MCP responses |
-| `uri` / `uriTemplate` | The address clients use to request this resource |
-| `title` | Human-friendly name for UI display |
-| `description` | Helps the model understand when to use this resource |
-| `mimeType` | Content type hint; auto-detected for JSON/text if omitted |
-| `icons` | Array of icons for visual representation in clients |
+| Field                 | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `name`                | Programmatic identifier used internally and in MCP responses |
+| `uri` / `uriTemplate` | The address clients use to request this resource             |
+| `title`               | Human-friendly name for UI display                           |
+| `description`         | Helps the model understand when to use this resource         |
+| `mimeType`            | Content type hint; auto-detected for JSON/text if omitted    |
+| `icons`               | Array of icons for visual representation in clients          |
 
 ---
 
@@ -412,13 +413,14 @@ class GitHubRepo {
 
 Resources integrate with the MCP protocol via three flows:
 
-| Flow | Description |
-|------|-------------|
-| `resources/list` | Returns all static resources |
-| `resources/templates/list` | Returns all resource templates |
-| `resources/read` | Reads content from a specific URI |
+| Flow                       | Description                       |
+| -------------------------- | --------------------------------- |
+| `resources/list`           | Returns all static resources      |
+| `resources/templates/list` | Returns all resource templates    |
+| `resources/read`           | Reads content from a specific URI |
 
 When a client requests `resources/read` with a URI:
+
 1. The SDK matches the URI against registered resources and templates
 2. For templates, parameters are extracted from the URI
 3. The `execute()` method is called with the URI and parameters
@@ -429,6 +431,7 @@ When a client requests `resources/read` with a URI:
 ## Best Practices
 
 **Do:**
+
 - Use descriptive `name` and `description` fields to help models understand resource purpose
 - Return structured data (objects) when possible for better model comprehension
 - Use templates for parameterized data instead of creating many static resources
@@ -436,6 +439,7 @@ When a client requests `resources/read` with a URI:
 - Handle errors gracefully and return meaningful error messages
 
 **Don't:**
+
 - Use resources for operations with side effects (use tools instead)
 - Return extremely large datasets—paginate or summarize when needed
 - Expose sensitive data without proper authentication checks
