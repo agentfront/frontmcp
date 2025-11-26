@@ -192,6 +192,7 @@ export class Enclave {
     this.validator = new JSAstValidator(createAgentScriptPreset({
       allowedGlobals: [
         'callTool',
+        'parallel',
         'Math',
         'JSON',
         'Array',
@@ -206,6 +207,7 @@ export class Enclave {
         '__safe_doWhile',
         '__safe_concat',
         '__safe_template',
+        '__safe_parallel',
         ...customAllowedGlobals,
       ],
     }));

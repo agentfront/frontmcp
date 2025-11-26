@@ -338,6 +338,109 @@ export function createSafeRuntime(
   }
 
   /**
+   * Safe parallel execution wrapper
+   *
+   * Executes multiple async functions in parallel while:
+   * - Respecting the shared tool call limit (all parallel calls share the limit)
+   * - Enforcing a maximum concurrency limit to prevent resource exhaustion
+   * - Handling timeouts and cancellation properly
+   *
+   * @param fns - Array of async functions to execute in parallel
+   * @param options - Optional configuration { maxConcurrency?: number }
+   * @returns Array of results in the same order as inputs
+   */
+  async function __safe_parallel<T>(
+    fns: Array<() => Promise<T>>,
+    options?: { maxConcurrency?: number },
+  ): Promise<T[]> {
+    // Check if aborted
+    if (context.aborted) {
+      throw new Error('Execution aborted');
+    }
+
+    // Validate inputs
+    if (!Array.isArray(fns)) {
+      throw new TypeError('__safe_parallel requires an array of functions');
+    }
+
+    if (fns.length === 0) {
+      return [];
+    }
+
+    // Enforce maximum array size to prevent DoS
+    const MAX_PARALLEL_ITEMS = 100;
+    if (fns.length > MAX_PARALLEL_ITEMS) {
+      throw new Error(
+        `Cannot execute more than ${MAX_PARALLEL_ITEMS} operations in parallel. ` +
+          `Split into smaller batches.`,
+      );
+    }
+
+    // Validate all items are functions
+    for (let i = 0; i < fns.length; i++) {
+      if (typeof fns[i] !== 'function') {
+        throw new TypeError(`Item at index ${i} is not a function`);
+      }
+    }
+
+    // Get concurrency limit (default: 10, max: 20)
+    const MAX_CONCURRENCY = 20;
+    const concurrency = Math.min(
+      Math.max(1, options?.maxConcurrency ?? 10),
+      MAX_CONCURRENCY,
+    );
+
+    // Track results in original order
+    const results: T[] = new Array(fns.length);
+    const errors: Array<{ index: number; error: Error }> = [];
+
+    // Process in batches with concurrency limit
+    let currentIndex = 0;
+
+    async function runNext(): Promise<void> {
+      while (currentIndex < fns.length) {
+        // Check if aborted before starting new work
+        if (context.aborted) {
+          throw new Error('Execution aborted');
+        }
+
+        const index = currentIndex++;
+        const fn = fns[index];
+
+        try {
+          const result = await fn();
+          results[index] = result;
+        } catch (error) {
+          errors.push({
+            index,
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+        }
+      }
+    }
+
+    // Start workers up to concurrency limit
+    const workers = Array.from({ length: Math.min(concurrency, fns.length) }, () =>
+      runNext(),
+    );
+
+    // Wait for all workers to complete
+    await Promise.all(workers);
+
+    // If any errors occurred, throw an aggregate error
+    if (errors.length > 0) {
+      const errorMessages = errors
+        .map((e) => `[${e.index}]: ${e.error.message}`)
+        .join('\n');
+      throw new Error(
+        `${errors.length} of ${fns.length} parallel operations failed:\n${errorMessages}`,
+      );
+    }
+
+    return results;
+  }
+
+  /**
    * Safe do-while loop wrapper
    * - Enforces iteration limit
    * - Tracks iteration count
@@ -385,6 +488,7 @@ export function createSafeRuntime(
     __safe_doWhile,
     __safe_concat,
     __safe_template,
+    __safe_parallel,
 
     // Whitelisted safe globals (passed through)
     Math: Math,
@@ -518,6 +622,60 @@ export function serializeSafeRuntime(): string {
       }
 
       throw new Error('Cannot interpolate reference IDs in template literals: reference system not configured.');
+    }
+
+    // Safe parallel execution
+    async function __safe_parallel(fns, options) {
+      if (!Array.isArray(fns)) {
+        throw new TypeError('__safe_parallel requires an array of functions');
+      }
+
+      if (fns.length === 0) {
+        return [];
+      }
+
+      const MAX_PARALLEL_ITEMS = 100;
+      if (fns.length > MAX_PARALLEL_ITEMS) {
+        throw new Error('Cannot execute more than ' + MAX_PARALLEL_ITEMS + ' operations in parallel.');
+      }
+
+      for (let i = 0; i < fns.length; i++) {
+        if (typeof fns[i] !== 'function') {
+          throw new TypeError('Item at index ' + i + ' is not a function');
+        }
+      }
+
+      const MAX_CONCURRENCY = 20;
+      const concurrency = Math.min(Math.max(1, (options && options.maxConcurrency) || 10), MAX_CONCURRENCY);
+
+      const results = new Array(fns.length);
+      const errors = [];
+      let currentIndex = 0;
+
+      async function runNext() {
+        while (currentIndex < fns.length) {
+          const index = currentIndex++;
+          try {
+            results[index] = await fns[index]();
+          } catch (error) {
+            errors.push({ index: index, error: error });
+          }
+        }
+      }
+
+      const workers = [];
+      for (let i = 0; i < Math.min(concurrency, fns.length); i++) {
+        workers.push(runNext());
+      }
+
+      await Promise.all(workers);
+
+      if (errors.length > 0) {
+        const msgs = errors.map(function(e) { return '[' + e.index + ']: ' + (e.error && e.error.message || e.error); }).join('\\n');
+        throw new Error(errors.length + ' of ' + fns.length + ' parallel operations failed:\\n' + msgs);
+      }
+
+      return results;
     }
 
     // Whitelisted globals (already available)

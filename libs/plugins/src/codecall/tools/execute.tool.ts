@@ -10,6 +10,36 @@ import {
 } from './execute.schema';
 import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import EnclaveService from '../services/enclave.service';
+import { assertNotSelfReference } from '../security/self-reference-guard';
+import {
+  createToolCallError,
+  TOOL_CALL_ERROR_CODES,
+  SelfReferenceError,
+  ToolCallResult,
+  CallToolOptions,
+  ToolCallErrorCode,
+} from '../errors/tool-call.errors';
+
+/**
+ * Determine the error code from an error object.
+ * Used to categorize errors for sanitized reporting.
+ */
+function getErrorCode(error: unknown): ToolCallErrorCode {
+  if (!(error instanceof Error)) {
+    return TOOL_CALL_ERROR_CODES.EXECUTION;
+  }
+
+  // Check for specific error types
+  if (error.name === 'ZodError' || error.message?.includes('validation')) {
+    return TOOL_CALL_ERROR_CODES.VALIDATION;
+  }
+
+  if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
+    return TOOL_CALL_ERROR_CODES.TIMEOUT;
+  }
+
+  return TOOL_CALL_ERROR_CODES.EXECUTION;
+}
 
 @Tool({
   name: 'codecall:execute',
@@ -29,19 +59,45 @@ export default class ExecuteTool extends ToolContext {
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
 
     const environment: CodeCallVmEnvironment = {
-      callTool: async <TInput, TResult>(name: string, toolInput: TInput): Promise<TResult> => {
-        // Check if tool is allowed
+      callTool: async <TInput, TResult>(
+        name: string,
+        toolInput: TInput,
+        options?: CallToolOptions,
+      ): Promise<TResult | ToolCallResult<TResult>> => {
+        const throwOnError = options?.throwOnError !== false; // Default: true
+
+        // ============================================================
+        // SECURITY LAYER 1: Self-reference blocking (FIRST CHECK)
+        // This MUST be the first check - no exceptions, no try/catch
+        // ============================================================
+        assertNotSelfReference(name);
+
+        // ============================================================
+        // SECURITY LAYER 2: Whitelist check (if configured)
+        // ============================================================
         if (allowedToolSet && !allowedToolSet.has(name)) {
-          throw new Error(`Tool "${name}" is not in the allowedTools list`);
+          const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name);
+          if (throwOnError) {
+            throw error;
+          }
+          return { success: false, error };
         }
 
+        // ============================================================
+        // Tool execution with result-based error handling
+        // All errors from here are sanitized before exposure
+        // ============================================================
         try {
           // Find the tool in the registry
           const tools = this.scope.tools.getTools(true);
           const tool = tools.find((t) => t.name === name || t.fullName === name);
 
           if (!tool) {
-            throw new Error(`Tool "${name}" not found`);
+            const error = createToolCallError(TOOL_CALL_ERROR_CODES.NOT_FOUND, name);
+            if (throwOnError) {
+              throw error;
+            }
+            return { success: false, error };
           }
 
           // Create a tool context and execute
@@ -53,15 +109,28 @@ export default class ExecuteTool extends ToolContext {
           );
 
           const result = await toolContext.execute(toolInput as any);
-          return result as TResult;
-        } catch (error: any) {
-          // Re-throw with tool context
-          const toolError = new Error(error.message || 'Tool call failed');
-          (toolError as any).toolName = name;
-          (toolError as any).toolInput = toolInput;
-          (toolError as any).code = error.code;
-          (toolError as any).details = error.details;
-          throw toolError;
+
+          // Success path
+          if (throwOnError) {
+            return result as TResult;
+          }
+          return { success: true, data: result as TResult };
+        } catch (error: unknown) {
+          // ============================================================
+          // Error sanitization - NEVER expose internal details
+          // ============================================================
+
+          // Determine error code from the error type
+          const errorCode = getErrorCode(error);
+          const rawMessage = error instanceof Error ? error.message : undefined;
+
+          const sanitizedError = createToolCallError(errorCode, name, rawMessage);
+
+          if (throwOnError) {
+            // Throw sanitized error (no stack trace, no internal details)
+            throw sanitizedError;
+          }
+          return { success: false, error: sanitizedError };
         }
       },
 

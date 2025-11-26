@@ -1,10 +1,8 @@
 import 'reflect-metadata';
 import { PromptInstance } from '../prompt.instance';
-import { Prompt, prompt } from '../../common/decorators/prompt.decorator';
+import { PromptKind, Prompt, prompt, PromptContext } from '../../common';
 import { normalizePrompt } from '../prompt.utils';
-import { PromptKind } from '../../common/records';
 import { createMockProviderRegistry, createMockOwner } from '../../__test-utils__/mocks';
-import { PromptContext } from '../../common/interfaces/prompt.interface';
 
 describe('PromptInstance', () => {
   describe('constructor', () => {

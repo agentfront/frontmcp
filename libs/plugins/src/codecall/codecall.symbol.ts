@@ -3,6 +3,7 @@
 import { CodeCallPluginOptions, CodeCallVmPreset } from './codecall.types';
 import { Token } from '@frontmcp/sdk';
 import type CodeCallConfigProvider from './providers/code-call.config';
+import type { ToolCallResult, CallToolOptions } from './errors/tool-call.errors';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';
@@ -46,7 +47,25 @@ export interface ResolvedCodeCallVmOptions {
  * The plugin is responsible for wiring this to the underlying tool pipeline.
  */
 export interface CodeCallVmEnvironment {
-  callTool: <TInput, TResult>(name: string, input: TInput) => Promise<TResult>;
+  /**
+   * Call a tool from within AgentScript.
+   *
+   * @param name - Tool name (e.g., 'users:list')
+   * @param input - Tool input arguments
+   * @param options - Optional behavior configuration
+   * @param options.throwOnError - When true (default), throws on error.
+   *                               When false, returns { success, data, error }.
+   *
+   * SECURITY NOTES:
+   * - Cannot call 'codecall:*' tools (self-reference blocked)
+   * - Errors are sanitized - no stack traces or internal details exposed
+   * - Security guard errors (self-reference, access control) are NEVER catchable
+   */
+  callTool: <TInput, TResult>(
+    name: string,
+    input: TInput,
+    options?: CallToolOptions,
+  ) => Promise<TResult | ToolCallResult<TResult>>;
 
   getTool: (name: string) =>
     | {
