@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-25" tags={["Releases"]}>
+<Update label="draft" description="2025-11-26" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -17,13 +17,17 @@ mode: 'center'
 
     **Features**
 
+    🎨 **Platform-aware UI library** – Build HTML-only consent, troubleshooting, and widget-rich flows with the new `@frontmcp/ui` package, complete with Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
+
+    🛰️ **Prompt & resource discovery** – Servers now answer `prompts/list`, `prompts/get`, `resources/list`, and `resources/templates/list` with owner-aware names and `list_changed` notifications, so clients can build live pickers without guessing metadata.
+
     🚀 **CodeCall meta-API plugin** – Collapse sprawling tool lists into the new CodeCall plugin: models search, describe, and execute tools through AgentScript plans that run inside Enclave with ast-guard validation.
 
     🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure.
 
     🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with the new AST validator, mix in presets or custom rules, and block risky scripts before they reach a tool; new identifier, call-target, and sidecar rules ship out of the box.
 
-    🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall, showing how to orchestrate CRUD flows plus activity logging from a single meta-entry point.
+    🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
 
     **Fixes**
 
@@ -33,11 +37,15 @@ mode: 'center'
 
     **Docs**
 
+    🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
+
+    🛰️ **Discovery reference** – Added `/docs/servers/discovery` to explain `prompts/list`, `prompts/get`, and `resources/templates/list` responses plus the new `list_changed` notifications.
+
     📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
 
     🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
 
-    🗂️ **CRM & CodeCall example** – The apps reference now includes the CRM CodeCall sample so you can replicate multi-tool orchestration in your own servers.
+    🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
 
     **Performance**
 
@@ -45,7 +53,7 @@ mode: 'center'
 
     **Build/CI**
 
-    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^22` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
+    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 
     🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
 
