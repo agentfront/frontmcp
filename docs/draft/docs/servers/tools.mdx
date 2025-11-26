@@ -4,7 +4,11 @@ slug: servers/tools
 icon: wrench
 ---
 
-Tools are **typed actions** your server can execute. They’re described with Zod schemas and exposed via MCP. Implement as a class with `@Tool({...})` or as a function via `tool()`.
+Tools are **typed actions** your server can execute. They're described with Zod schemas and exposed via MCP. Implement as a class with `@Tool({...})` or as a function via `tool()`.
+
+<Info>
+This feature implements the [MCP Tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools). FrontMCP handles all protocol details automatically.
+</Info>
 
 ## Minimal tool (class)
 
@@ -87,3 +91,50 @@ class CalcApp {}
 
 - Return any serializable type; if you provide `outputSchema`, it will validate.
 - Errors are surfaced via MCP error responses; you can also throw typed errors inside executors.
+
+---
+
+## MCP Protocol Integration
+
+Tools integrate with the MCP protocol via two flows:
+
+| Flow | Description |
+|------|-------------|
+| `tools/list` | Returns all available tools with their metadata and input schemas |
+| `tools/call` | Executes a specific tool with provided arguments |
+
+When a client requests `tools/call` with a name and arguments:
+1. The SDK locates the tool by name
+2. Arguments are validated against the tool's `inputSchema`
+3. The `execute()` method is called with the validated arguments
+4. The return value is validated against `outputSchema` (if provided) and converted to MCP format
+
+### Capabilities
+
+FrontMCP automatically advertises tool capabilities during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "tools": {
+      "subscribe": true,
+      "listChanged": true
+    }
+  }
+}
+```
+
+| Capability | Description |
+|------------|-------------|
+| `subscribe` | When `true`, clients can subscribe to tool list changes |
+| `listChanged` | When `true`, the server will send `notifications/tools/list_changed` when tools are added or removed |
+
+The SDK sets `listChanged: true` when you have any tools registered, enabling clients to receive real-time notifications when tools are dynamically added or removed (e.g., via adapters or plugins).
+
+### Change Notifications
+
+When tools change dynamically, FrontMCP automatically sends `notifications/tools/list_changed` to connected clients. Clients that support this notification will refresh their tool list.
+
+<Tip>
+For the full protocol specification, see [MCP Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
+</Tip>

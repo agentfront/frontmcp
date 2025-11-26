@@ -6,6 +6,10 @@ icon: message-lines
 
 Prompts are **reusable prompt templates** with typed arguments. They encapsulate system instructions, conversation starters, or any repeatable interaction pattern that clients can discover and invoke with parameters.
 
+<Info>
+This feature implements the [MCP Prompts specification](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts). FrontMCP handles all protocol details automatically.
+</Info>
+
 ## Why Prompts?
 
 In the Model Context Protocol, prompts serve a distinct purpose from tools and resources:
@@ -454,6 +458,34 @@ When a client requests `prompts/get` with a name and arguments:
 2. Arguments are validated against the prompt's definition
 3. The `execute()` method is called with the arguments
 4. The return value is converted to MCP `GetPromptResult` format
+
+### Capabilities
+
+FrontMCP automatically advertises prompt capabilities during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "prompts": {
+      "listChanged": true
+    }
+  }
+}
+```
+
+| Capability | Description |
+|------------|-------------|
+| `listChanged` | When `true`, the server will send `notifications/prompts/list_changed` when the prompt list changes (prompts added/removed dynamically) |
+
+The SDK sets `listChanged: true` when you have any prompts registered, enabling clients to receive real-time notifications when prompts are dynamically added or removed.
+
+### Change Notifications
+
+When prompts change dynamically (e.g., via adapters or plugins), FrontMCP automatically sends `notifications/prompts/list_changed` to connected clients. Clients that support this notification will refresh their prompt list.
+
+<Tip>
+For the full protocol specification, see [MCP Prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts).
+</Tip>
 
 ---
 
