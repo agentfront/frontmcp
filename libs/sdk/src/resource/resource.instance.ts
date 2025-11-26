@@ -18,7 +18,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { matchUriTemplate, parseUriTemplate, buildParsedResourceResult } from './resource.utils';
+import { parseUriTemplate, buildParsedResourceResult } from './resource.utils';
 import { ResourceTemplateRecord, ResourceTemplateKind } from './resource.types';
 
 export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out> {
@@ -28,6 +28,12 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
 
   /** Parsed URI template info for template resources */
   private templateInfo?: { pattern: RegExp; paramNames: string[] };
+
+  /**
+   * The concrete request URI, set when create() is called.
+   * For template resources, this is the resolved URI (e.g., /docs/123 not /docs/{id}).
+   */
+  private requestUri?: string;
 
   constructor(record: ResourceRecord | ResourceTemplateRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
@@ -74,12 +80,19 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
   /**
    * Match a URI against this resource.
    * For static resources: exact match against uri
-   * For templates: pattern match and extract parameters
+   * For templates: pattern match and extract parameters using pre-parsed templateInfo
    */
   override matchUri(uri: string): { matches: boolean; params: Record<string, string> } {
-    if (this.isTemplate && this.templateInfo && this.uriTemplate) {
-      const params = matchUriTemplate(this.uriTemplate, uri);
-      if (params) {
+    if (this.isTemplate && this.templateInfo) {
+      // Use pre-parsed templateInfo for efficient matching (avoids re-parsing on each request)
+      const { pattern, paramNames } = this.templateInfo;
+      const match = uri.match(pattern);
+
+      if (match) {
+        const params: Record<string, string> = {};
+        paramNames.forEach((name, index) => {
+          params[name] = decodeURIComponent(match[index + 1]);
+        });
         return { matches: true, params };
       }
       return { matches: false, params: {} };
@@ -96,6 +109,9 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
    * Create a resource context (class or function wrapper).
    */
   override create(uri: string, params: Record<string, string>, ctx: ResourceReadExtra): ResourceContext<In, Out> {
+    // Store the concrete request URI for use in parseOutput
+    this.requestUri = uri;
+
     const metadata = this.metadata;
     const providers = this.providers;
     const scope = this.providers.getActiveScope();
@@ -132,7 +148,8 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
    * Convert the raw resource return value into an MCP ReadResourceResult.
    */
   override parseOutput(raw: Out): ParsedResourceResult {
-    const uri = this.isTemplate ? this.uriTemplate! : this.uri!;
+    // Use the concrete request URI if available (set by create()), otherwise fall back to static uri or template
+    const uri = this.requestUri || (this.isTemplate ? this.uriTemplate! : this.uri!);
     const mimeType = this.metadata.mimeType;
 
     // If raw is already in ReadResourceResult format

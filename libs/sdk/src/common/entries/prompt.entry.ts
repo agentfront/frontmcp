@@ -13,8 +13,8 @@ export type AnyPromptRecord =
   | PromptRecord
   | {
       kind: string;
-      // Type<any> for class-based prompts, function signature for function-based prompts
-      provide: Type<any> | ((...args: any[]) => any);
+      // Type<unknown> for class-based prompts, generic function signature for function-based prompts
+      provide: Type<unknown> | ((...args: unknown[]) => unknown);
       metadata: PromptMetadata;
     };
 
@@ -54,11 +54,12 @@ export abstract class PromptEntry extends BaseEntry<AnyPromptRecord, PromptInter
 
   /**
    * Convert the raw prompt return value into an MCP GetPromptResult.
+   * Accepts any raw output from the prompt execute method and normalizes it.
    */
-  abstract parseOutput(result: GetPromptResult): ParsedPromptResult;
+  abstract parseOutput(raw: unknown): ParsedPromptResult;
 
   /**
    * Safe version of parseOutput that returns success/error instead of throwing.
    */
-  abstract safeParseOutput(raw: any): PromptSafeTransformResult<ParsedPromptResult>;
+  abstract safeParseOutput(raw: unknown): PromptSafeTransformResult<ParsedPromptResult>;
 }

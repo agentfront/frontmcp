@@ -24,6 +24,14 @@ export class PromptEmitter {
   }
 
   emit(e: PromptChangeEvent) {
-    for (const l of [...this.listeners]) l(e);
+    for (const l of [...this.listeners]) {
+      try {
+        l(e);
+      } catch (err) {
+        // Log error but continue notifying other listeners
+        // Using console.error as this is a critical path that shouldn't fail silently
+        console.error('PromptEmitter listener error:', err);
+      }
+    }
   }
 }

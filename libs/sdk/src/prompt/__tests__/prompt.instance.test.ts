@@ -1,30 +1,10 @@
 import 'reflect-metadata';
 import { PromptInstance } from '../prompt.instance';
-import { Prompt } from '../../common/decorators/prompt.decorator';
+import { Prompt, prompt } from '../../common/decorators/prompt.decorator';
 import { normalizePrompt } from '../prompt.utils';
 import { PromptKind } from '../../common/records';
-
-// Mock the dependencies that PromptInstance needs
-const createMockProviderRegistry = () => {
-  const mockScope = {
-    logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
-    providers: {
-      getHooksRegistry: jest.fn().mockReturnValue({
-        registerHooks: jest.fn().mockResolvedValue(undefined),
-      }),
-    },
-  };
-
-  return {
-    getActiveScope: jest.fn().mockReturnValue(mockScope),
-  } as any;
-};
-
-const createMockOwner = () => ({
-  kind: 'app' as const,
-  id: 'test-app',
-  ref: {} as any,
-});
+import { createMockProviderRegistry, createMockOwner } from '../../__test-utils__/mocks';
+import { PromptContext } from '../../common/interfaces/prompt.interface';
 
 describe('PromptInstance', () => {
   describe('constructor', () => {
@@ -453,6 +433,91 @@ describe('PromptInstance', () => {
 
       expect(instance.metadata.name).toBe('meta-access');
       expect(instance.metadata.title).toBe('Access Title');
+    });
+  });
+
+  describe('create', () => {
+    it('should create context for CLASS_TOKEN prompt', async () => {
+      @Prompt({
+        name: 'class-prompt',
+        arguments: [{ name: 'topic', required: false }],
+      })
+      class ClassPrompt extends PromptContext {
+        async execute(args: Record<string, string>) {
+          return {
+            messages: [{ role: 'user' as const, content: { type: 'text' as const, text: args['topic'] || 'default' } }],
+          };
+        }
+      }
+
+      const record = normalizePrompt(ClassPrompt);
+      const instance = new PromptInstance(record, createMockProviderRegistry(), createMockOwner());
+      await instance.ready;
+
+      const mockCtx = {
+        authInfo: { token: 'test-token' },
+      } as any;
+
+      const context = instance.create({ topic: 'test' }, mockCtx);
+      expect(context).toBeDefined();
+      expect(context.args).toEqual({ topic: 'test' });
+    });
+
+    it('should create context for FUNCTION prompt', async () => {
+      const FunctionPrompt = prompt({
+        name: 'function-prompt',
+        arguments: [{ name: 'name', required: true }],
+      })((args) => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `Hello ${args?.['name']}` } }],
+      }));
+
+      const record = normalizePrompt(FunctionPrompt);
+      expect(record.kind).toBe(PromptKind.FUNCTION);
+
+      const instance = new PromptInstance(record, createMockProviderRegistry(), createMockOwner());
+      await instance.ready;
+
+      const mockCtx = {
+        authInfo: { token: 'test-token' },
+      } as any;
+
+      const context = instance.create({ name: 'World' }, mockCtx);
+      expect(context).toBeDefined();
+      expect(context.args).toEqual({ name: 'World' });
+    });
+  });
+
+  describe('safeParseOutput failure', () => {
+    it('should return error for invalid output that throws', async () => {
+      @Prompt({
+        name: 'failing-output',
+        arguments: [],
+      })
+      class FailingOutput {
+        execute() {
+          return { messages: [] };
+        }
+      }
+
+      const record = normalizePrompt(FailingOutput);
+      const instance = new PromptInstance(record, createMockProviderRegistry(), createMockOwner());
+      await instance.ready;
+
+      // Mock parseOutput to throw
+      const originalParseOutput = instance.parseOutput.bind(instance);
+      instance.parseOutput = jest.fn().mockImplementation(() => {
+        throw new Error('Parsing failed');
+      });
+
+      const result = instance.safeParseOutput({ invalid: 'data' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toBe('Parsing failed');
+      }
+
+      // Restore original
+      instance.parseOutput = originalParseOutput;
     });
   });
 });

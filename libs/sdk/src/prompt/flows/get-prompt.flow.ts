@@ -28,6 +28,8 @@ const stateSchema = z.object({
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   // z.any() used because PromptEntry is a complex abstract class type
   prompt: z.any() as z.ZodType<PromptEntry>,
+  // Cached parsed arguments to avoid parsing twice (once in createPromptContext, once in execute)
+  parsedArgs: z.record(z.string()).optional(),
   // z.any() used because PromptContext is a complex abstract class type
   promptContext: z.any() as z.ZodType<PromptContext>,
   // z.any() used because prompt output type varies by prompt implementation
@@ -131,8 +133,9 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     const { prompt, input } = this.state.required;
 
     try {
-      // Parse and validate arguments
+      // Parse and validate arguments, cache for reuse in execute stage
       const parsedArgs = prompt.parseArguments(input.arguments);
+      this.state.set('parsedArgs', parsedArgs);
 
       const context = prompt.create(parsedArgs, ctx);
       const promptHooks = this.scope.hooks.getClsHooks(prompt.record.provide).map((hook) => {
@@ -156,7 +159,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   async execute() {
     this.logger.verbose('execute:start');
     const promptContext = this.state.promptContext;
-    const { input } = this.state.required;
+    const { input, parsedArgs } = this.state.required;
 
     if (!promptContext) {
       this.logger.warn('execute: promptContext not found, skipping execution');
@@ -165,8 +168,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     promptContext.mark('execute');
 
     try {
-      // Parse arguments again for execution
-      const parsedArgs = this.state.required.prompt.parseArguments(input.arguments);
+      // Use cached parsed arguments from createPromptContext stage
       promptContext.output = await promptContext.execute(parsedArgs);
       this.logger.verbose('execute:done');
     } catch (error) {

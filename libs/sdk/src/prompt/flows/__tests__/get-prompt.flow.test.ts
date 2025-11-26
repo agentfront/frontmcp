@@ -6,6 +6,7 @@ import {
   createMockPromptEntry,
   addPromptToMock,
 } from '../../../__test-utils__/mocks/prompt-registry.mock';
+import { InvalidMethodError, InvalidInputError, PromptNotFoundError, PromptExecutionError } from '../../../errors';
 
 describe('GetPromptFlow', () => {
   // Create mock dependencies
@@ -364,7 +365,7 @@ describe('GetPromptFlow', () => {
   });
 
   describe('invalid configurations', () => {
-    it('should throw InvalidMethodError for wrong method', async () => {
+    it('should throw InvalidInputError for wrong method', async () => {
       const promptRegistry = createMockPromptRegistry();
       const input = {
         request: { method: 'prompts/list', params: { name: 'test' } },
@@ -373,13 +374,12 @@ describe('GetPromptFlow', () => {
 
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
+      // MCP schema validation fails before method check
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-      // Error is either InvalidMethodError with method name or InvalidInputError
-      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
-    it('should throw InvalidMethodError for tools/call method', async () => {
+    it('should throw InvalidInputError for tools/call method', async () => {
       const promptRegistry = createMockPromptRegistry();
       const input = {
         request: { method: 'tools/call', params: { name: 'test' } },
@@ -388,8 +388,9 @@ describe('GetPromptFlow', () => {
 
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
+      // MCP schema validation fails before method check
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
     it('should throw PromptNotFoundError for non-existent prompt', async () => {
@@ -405,7 +406,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(PromptNotFoundError);
       expect((result.error as Error).message).toContain('non-existent');
     });
 
@@ -418,7 +419,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
     it('should throw InvalidInputError for missing params.name', async () => {
@@ -434,7 +435,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
     it('should throw InvalidInputError for null input', async () => {
@@ -443,7 +444,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(null, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(InvalidInputError);
     });
 
     it('should throw error for missing required argument', async () => {
@@ -467,7 +468,7 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(result.error).toBeInstanceOf(PromptExecutionError);
     });
   });
 

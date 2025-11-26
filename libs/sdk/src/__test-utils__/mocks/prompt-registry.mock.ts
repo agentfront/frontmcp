@@ -8,8 +8,8 @@ import { PromptMetadata } from '../../common/metadata';
 /**
  * Creates a mock PromptRegistry for testing
  */
-export function createMockPromptRegistry(overrides: Partial<any> = {}) {
-  const prompts = new Map<string, any>();
+export function createMockPromptRegistry(overrides: Partial<Record<string, unknown>> = {}) {
+  const prompts = new Map<string, ReturnType<typeof createMockPromptEntry>>();
 
   return {
     prompts,
@@ -52,8 +52,8 @@ export function createMockPromptRegistry(overrides: Partial<any> = {}) {
       return Array.from(prompts.values());
     }),
 
-    exportResolvedNames: jest.fn((opts?: any) => {
-      const result: Array<{ name: string; instance: any }> = [];
+    exportResolvedNames: jest.fn(() => {
+      const result: Array<{ name: string; instance: ReturnType<typeof createMockPromptEntry> }> = [];
       prompts.forEach((instance, name) => {
         result.push({ name, instance });
       });

@@ -76,8 +76,9 @@ export class PromptInstance extends PromptEntry {
       case PromptKind.FUNCTION:
         return new FunctionPromptContext(record as PromptFunctionTokenRecord, promptCtorArgs);
       default:
-        // This should be unreachable if all PromptKind values are handled
-        throw new Error(`Unhandled prompt kind: ${(record as any).kind}`);
+        // Exhaustive check: TypeScript will error if a new PromptKind is added but not handled
+        // The assertion below catches runtime cases that TypeScript can't detect
+        throw new Error(`Unhandled prompt kind: ${(record as { kind: string }).kind}`);
     }
   }
 
@@ -116,14 +117,14 @@ export class PromptInstance extends PromptEntry {
   /**
    * Convert the raw prompt return value into an MCP GetPromptResult.
    */
-  override parseOutput(raw: any): ParsedPromptResult {
+  override parseOutput(raw: unknown): ParsedPromptResult {
     return buildParsedPromptResult(raw, this.metadata);
   }
 
   /**
    * Safe version of parseOutput that returns success/error instead of throwing.
    */
-  override safeParseOutput(raw: any): PromptSafeTransformResult<ParsedPromptResult> {
+  override safeParseOutput(raw: unknown): PromptSafeTransformResult<ParsedPromptResult> {
     try {
       return { success: true, data: this.parseOutput(raw) };
     } catch (error: unknown) {

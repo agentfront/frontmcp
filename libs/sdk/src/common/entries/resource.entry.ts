@@ -16,8 +16,8 @@ export type AnyResourceRecord =
   | ResourceRecord
   | {
       kind: string;
-      // Type<any> for class-based resources, function signature for function-based resources
-      provide: Type<any> | ((...args: any[]) => any);
+      // Type<unknown> for class-based resources, generic function signature for function-based resources
+      provide: Type<unknown> | ((...args: unknown[]) => unknown);
       metadata: ResourceMetadata | ResourceTemplateMetadata;
     };
 

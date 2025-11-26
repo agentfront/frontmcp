@@ -74,11 +74,11 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
-    let params: any;
+    let params: { cursor?: string } | undefined;
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
-      params = inputData.request.params;
+      params = inputData.request.params as { cursor?: string } | undefined;
     } catch (e) {
       throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.errors : undefined);
     }

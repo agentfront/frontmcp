@@ -107,6 +107,11 @@ export abstract class PromptContext {
     FlowControl.respond<GetPromptResult>(value);
   }
 
+  /** Get the error that caused the prompt to fail, if any. */
+  public get error(): Error | undefined {
+    return this._error;
+  }
+
   /** Fail the run (invoker will run error/finalize). */
   protected fail(err: Error): never {
     this._error = err;

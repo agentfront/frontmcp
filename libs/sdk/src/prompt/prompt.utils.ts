@@ -45,7 +45,13 @@ export function collectPromptMetadata(cls: PromptType): PromptMetadata {
 }
 
 /**
- * Normalize any prompt input (class or function) to a PromptRecord
+ * Normalize any prompt input (class or function) to a PromptRecord.
+ *
+ * @param item - The prompt input to normalize. Accepts:
+ *   - A class decorated with @FrontMcpPrompt
+ *   - A function returned from prompt() builder
+ *   The `any` type is intentional to handle both decorator patterns and provide
+ *   meaningful error messages for invalid inputs.
  */
 export function normalizePrompt(item: any): PromptRecord {
   // Function-style decorator: prompt({ name: '...' })(handler)
@@ -81,6 +87,11 @@ export function promptDiscoveryDeps(rec: PromptRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case PromptKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    default: {
+      // Exhaustive check: ensures all PromptKind values are handled
+      const _exhaustive: never = rec;
+      throw new Error(`Unhandled prompt kind: ${(_exhaustive as PromptRecord).kind}`);
+    }
   }
 }
 
@@ -122,9 +133,16 @@ export function buildParsedPromptResult(raw: any, metadata: PromptMetadata): Get
 /**
  * Normalize a single message to PromptMessage format
  */
-function normalizePromptMessage(msg: any): PromptMessage {
-  // If already in correct format
-  if (msg && msg.role && msg.content) {
+function normalizePromptMessage(msg: unknown): PromptMessage {
+  // If already in correct format with valid role and content
+  if (
+    msg &&
+    typeof msg === 'object' &&
+    'role' in msg &&
+    'content' in msg &&
+    typeof (msg as Record<string, unknown>)['role'] === 'string' &&
+    typeof (msg as Record<string, unknown>)['content'] === 'object'
+  ) {
     return msg as PromptMessage;
   }
 

@@ -191,6 +191,8 @@ describe('prompt.utils', () => {
     it('should handle undefined raw value', () => {
       const result = buildParsedPromptResult(undefined, metadata);
       expect(result.messages).toHaveLength(1);
+      // JSON.stringify(undefined) returns undefined (not a string), so the text is undefined
+      expect((result.messages[0].content as { text: unknown }).text).toBeUndefined();
     });
 
     it('should handle number raw value', () => {
@@ -220,7 +222,7 @@ describe('prompt.utils', () => {
 
       const record = normalizePrompt(NoDeps);
       const deps = promptDiscoveryDeps(record);
-      expect(Array.isArray(deps)).toBe(true);
+      expect(deps).toEqual([]);
     });
 
     it('should return empty array for function prompt', () => {
@@ -233,7 +235,7 @@ describe('prompt.utils', () => {
 
       const record = normalizePrompt(functionPrompt);
       const deps = promptDiscoveryDeps(record);
-      expect(Array.isArray(deps)).toBe(true);
+      expect(deps).toEqual([]);
     });
   });
 

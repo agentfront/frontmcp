@@ -2,39 +2,10 @@ import 'reflect-metadata';
 import PromptRegistry from '../prompt.registry';
 import { Prompt } from '../../common/decorators/prompt.decorator';
 import { PromptType } from '../../common/interfaces/prompt.interface';
+import { createMockProviderRegistry, createMockOwner } from '../../__test-utils__/mocks';
 
 // Helper to cast test classes to PromptType
-const asPromptTypes = (...classes: any[]): PromptType[] => classes as unknown as PromptType[];
-
-// Mock the complex dependencies
-const createMockHookRegistry = () => ({
-  registerHooks: jest.fn().mockResolvedValue(undefined),
-});
-
-const createMockScope = () => ({
-  logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
-  providers: {
-    getHooksRegistry: jest.fn().mockReturnValue(createMockHookRegistry()),
-  },
-  registryFlows: jest.fn().mockResolvedValue(undefined),
-});
-
-const createMockProviderRegistry = () => {
-  const mockScope = createMockScope();
-
-  return {
-    getActiveScope: jest.fn().mockReturnValue(mockScope),
-    get: jest.fn().mockReturnValue(undefined),
-    getRegistries: jest.fn().mockReturnValue([]),
-    addRegistry: jest.fn(),
-  } as any;
-};
-
-const createMockOwner = () => ({
-  kind: 'app' as const,
-  id: 'test-app',
-  ref: {} as any,
-});
+const asPromptTypes = (...classes: unknown[]): PromptType[] => classes as unknown as PromptType[];
 
 describe('PromptRegistry', () => {
   describe('Registration', () => {
@@ -444,7 +415,8 @@ describe('PromptRegistry', () => {
       await registry.ready;
 
       const owned = registry.listByOwner(`${owner.kind}:${owner.id}`);
-      expect(owned.length).toBeGreaterThanOrEqual(0); // May be 0 if owner key format differs
+      // The owner key format is "kind:id", so this should find the prompt
+      expect(owned.length).toBeGreaterThan(0);
     });
 
     it('should return empty array for unknown owner', async () => {

@@ -30,6 +30,9 @@ import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from '
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 
+/** Maximum attempts for name disambiguation to prevent infinite loops */
+const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
+
 export default class PromptRegistry
   extends RegistryAbstract<
     PromptInstance, // instances map holds PromptInstance
@@ -187,7 +190,8 @@ export default class PromptRegistry
     return all
       .filter((r) => {
         const meta = r.instance.metadata;
-        const hidden = 'hideFromDiscovery' in meta && (meta as any).hideFromDiscovery === true;
+        const hidden =
+          'hideFromDiscovery' in meta && (meta as { hideFromDiscovery?: boolean }).hideFromDiscovery === true;
         return !hidden || includeHidden;
       })
       .map((r) => r.instance);
@@ -324,16 +328,19 @@ export default class PromptRegistry
 
     return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, instance]) => ({ name, instance }));
 
-    function disambiguate(candidate: string, pool: Map<string, any>, cfg: Required<PromptExportOptions>): string {
+    function disambiguate(
+      candidate: string,
+      pool: Map<string, PromptInstance>,
+      cfg: Required<PromptExportOptions>,
+    ): string {
       if (!pool.has(candidate)) return candidate;
-      const maxAttempts = 10000;
       let n = 2;
-      while (n <= maxAttempts) {
+      while (n <= MAX_DISAMBIGUATE_ATTEMPTS) {
         const withN = ensureMaxLen(`${candidate}${sepFor(cfg.case)}${n}`, cfg.maxLen);
         if (!pool.has(withN)) return withN;
         n++;
       }
-      throw new Error(`Failed to disambiguate name "${candidate}" after ${maxAttempts} attempts`);
+      throw new Error(`Failed to disambiguate name "${candidate}" after ${MAX_DISAMBIGUATE_ATTEMPTS} attempts`);
     }
   }
 
@@ -428,7 +435,8 @@ export default class PromptRegistry
         if ('name' in cls && typeof cls.name === 'string') return cls.name;
       }
     } catch {
-      /* ignore */
+      // Silently ignore errors - provider ID lookup is best-effort for prefixing
+      // and should not fail the overall operation
     }
     return undefined;
   }

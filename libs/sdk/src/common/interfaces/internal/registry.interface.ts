@@ -142,7 +142,7 @@ export interface PromptRegistryInterface {
   owner: EntryOwnerRef;
 
   // inline prompts plus discovered by nested prompt registries
-  getPrompts(): PromptEntry[];
+  getPrompts(includeHidden?: boolean): PromptEntry[];
 
   // inline prompts only
   getInlinePrompts(): PromptEntry[];
