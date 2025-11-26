@@ -11,6 +11,7 @@
 import {
   type PlatformCapabilities,
   type ThemeConfig,
+  type DeepPartial,
   OPENAI_PLATFORM,
   canUseCdn,
   needsInlineScripts,
@@ -100,8 +101,8 @@ export interface BaseLayoutOptions {
   /** Target platform capabilities */
   platform?: PlatformCapabilities;
 
-  /** Theme configuration */
-  theme?: Partial<ThemeConfig>;
+  /** Theme configuration (deep partial - nested properties are also optional) */
+  theme?: DeepPartial<ThemeConfig>;
 
   /** Include HTMX (default: based on platform) */
   includeHtmx?: boolean;
@@ -269,19 +270,8 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
     titleSuffix = 'FrontMCP',
   } = options;
 
-  // Merge theme
-  const theme: ThemeConfig = {
-    ...DEFAULT_THEME,
-    ...themeOverrides,
-    colors: {
-      ...DEFAULT_THEME.colors,
-      ...themeOverrides?.colors,
-      semantic: { ...DEFAULT_THEME.colors.semantic, ...themeOverrides?.colors?.semantic },
-      surface: { ...DEFAULT_THEME.colors.surface, ...themeOverrides?.colors?.surface },
-      text: { ...DEFAULT_THEME.colors.text, ...themeOverrides?.colors?.text },
-      border: { ...DEFAULT_THEME.colors.border, ...themeOverrides?.colors?.border },
-    },
-  };
+  // Merge theme using the centralized mergeThemes function for proper deep merging
+  const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
 
   // Determine if we should include HTMX
   const shouldIncludeHtmx = includeHtmx ?? platform.supportsHtmx;
@@ -372,12 +362,14 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
 // ============================================
 
 /**
- * Create a layout builder with preset options
+ * Create a layout builder with preset options.
+ * The returned function accepts optional options that extend/override the defaults.
+ * If defaults include `title`, the returned function's options are fully optional.
  */
 export function createLayoutBuilder(
   defaults: Partial<BaseLayoutOptions>,
-): (content: string, options: BaseLayoutOptions) => string {
-  return (content: string, options: BaseLayoutOptions) => {
+): (content: string, options?: Partial<BaseLayoutOptions>) => string {
+  return (content: string, options: Partial<BaseLayoutOptions> = {}) => {
     // Deep merge themes using mergeThemes
     // Start with DEFAULT_THEME as base, then merge defaults.theme, then options.theme
     let mergedTheme = DEFAULT_THEME;
@@ -388,11 +380,17 @@ export function createLayoutBuilder(
       mergedTheme = mergeThemes(mergedTheme, options.theme);
     }
 
-    const merged: BaseLayoutOptions = {
+    const merged = {
       ...defaults,
       ...options,
       theme: mergedTheme,
-    };
+    } as BaseLayoutOptions;
+
+    // Ensure title exists (from defaults or options)
+    if (!merged.title) {
+      throw new Error('createLayoutBuilder: title is required either in defaults or options');
+    }
+
     return baseLayout(content, merged);
   };
 }

@@ -39,6 +39,19 @@
 import { DEFAULT_THEME as _DEFAULT_THEME, GITHUB_OPENAI_THEME as _GITHUB_OPENAI_THEME } from './presets';
 
 // ============================================
+// Utility Types
+// ============================================
+
+/**
+ * Deep partial type - makes all properties and nested properties optional
+ */
+export type DeepPartial<T> = T extends object
+  ? {
+      [P in keyof T]?: DeepPartial<T[P]>;
+    }
+  : T;
+
+// ============================================
 // Color Types
 // ============================================
 
@@ -419,11 +432,18 @@ export const DEFAULT_THEME = _DEFAULT_THEME;
 
 /**
  * Deep merge two theme configurations (internal helper without dark handling)
- * Accepts Partial<ThemeConfig> for base to safely handle dark variants which may not have all required properties
+ * Accepts DeepPartial<ThemeConfig> for both base and override to safely handle partial nested properties
+ * Note: This function assumes at least one of base/override provides required values (typically DEFAULT_THEME)
  */
-function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConfig>): Omit<ThemeConfig, 'dark'> {
+function mergeThemesCore(
+  base: DeepPartial<ThemeConfig>,
+  override: DeepPartial<ThemeConfig>,
+): Omit<ThemeConfig, 'dark'> {
   // Provide safe defaults for required nested properties
   const baseColors = base.colors ?? { semantic: { primary: '#24292f' } };
+
+  // Filter out undefined values from arrays
+  const filterStrings = (arr: (string | undefined)[]): string[] => arr.filter((s): s is string => s !== undefined);
 
   return {
     ...base,
@@ -431,11 +451,11 @@ function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConf
     colors: {
       ...baseColors,
       ...override.colors,
-      semantic: { ...baseColors.semantic, ...override.colors?.semantic },
+      semantic: { ...baseColors.semantic, ...override.colors?.semantic } as ThemeColors['semantic'],
       surface: { ...baseColors.surface, ...override.colors?.surface },
       text: { ...baseColors.text, ...override.colors?.text },
       border: { ...baseColors.border, ...override.colors?.border },
-      custom: { ...baseColors.custom, ...override.colors?.custom },
+      custom: { ...baseColors.custom, ...override.colors?.custom } as Record<string, string> | undefined,
     },
     typography: {
       ...base.typography,
@@ -460,34 +480,34 @@ function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConf
       ...override.cdn,
       fonts: {
         // Concatenate then dedupe so base entries are preserved without duplicates
-        preconnect: Array.from(
-          new Set([...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])]),
+        preconnect: filterStrings(
+          Array.from(new Set([...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])])),
         ),
-        stylesheets: Array.from(
-          new Set([...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])]),
+        stylesheets: filterStrings(
+          Array.from(new Set([...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])])),
         ),
       },
       icons: {
         ...base.cdn?.icons,
         ...override.cdn?.icons,
         // Deep merge script to preserve integrity when only url is overridden
-        script: override.cdn?.icons?.script
+        script: (override.cdn?.icons?.script
           ? { ...base.cdn?.icons?.script, ...override.cdn?.icons?.script }
-          : base.cdn?.icons?.script,
+          : base.cdn?.icons?.script) as CdnScriptResource | undefined,
       },
       scripts: {
         // tailwind is a simple string, just use override or base
         tailwind: override.cdn?.scripts?.tailwind ?? base.cdn?.scripts?.tailwind,
         // Deep merge htmx/alpine to preserve integrity when only url is overridden
-        htmx: override.cdn?.scripts?.htmx
+        htmx: (override.cdn?.scripts?.htmx
           ? { ...base.cdn?.scripts?.htmx, ...override.cdn?.scripts?.htmx }
-          : base.cdn?.scripts?.htmx,
-        alpine: override.cdn?.scripts?.alpine
+          : base.cdn?.scripts?.htmx) as CdnScriptResource | undefined,
+        alpine: (override.cdn?.scripts?.alpine
           ? { ...base.cdn?.scripts?.alpine, ...override.cdn?.scripts?.alpine }
-          : base.cdn?.scripts?.alpine,
+          : base.cdn?.scripts?.alpine) as CdnScriptResource | undefined,
       },
     },
-    customVars: { ...base.customVars, ...override.customVars },
+    customVars: { ...base.customVars, ...override.customVars } as Record<string, string> | undefined,
     customCss: [base.customCss, override.customCss].filter(Boolean).join('\n'),
   };
 }
@@ -501,7 +521,7 @@ function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConf
  * - The resulting dark variant never contains a nested .dark property
  * - This prevents infinite recursion and ensures clean dark theme composition
  */
-export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): ThemeConfig {
+export function mergeThemes(base: ThemeConfig, override: DeepPartial<ThemeConfig>): ThemeConfig {
   // Merge the main (light) theme properties
   const merged = mergeThemesCore(base, override);
 
