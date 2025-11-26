@@ -419,19 +419,23 @@ export const DEFAULT_THEME = _DEFAULT_THEME;
 
 /**
  * Deep merge two theme configurations (internal helper without dark handling)
+ * Accepts Partial<ThemeConfig> for base to safely handle dark variants which may not have all required properties
  */
-function mergeThemesCore(base: ThemeConfig, override: Partial<ThemeConfig>): Omit<ThemeConfig, 'dark'> {
+function mergeThemesCore(base: Partial<ThemeConfig>, override: Partial<ThemeConfig>): Omit<ThemeConfig, 'dark'> {
+  // Provide safe defaults for required nested properties
+  const baseColors = base.colors ?? { semantic: { primary: '#24292f' } };
+
   return {
     ...base,
     ...override,
     colors: {
-      ...base.colors,
+      ...baseColors,
       ...override.colors,
-      semantic: { ...base.colors.semantic, ...override.colors?.semantic },
-      surface: { ...base.colors.surface, ...override.colors?.surface },
-      text: { ...base.colors.text, ...override.colors?.text },
-      border: { ...base.colors.border, ...override.colors?.border },
-      custom: { ...base.colors.custom, ...override.colors?.custom },
+      semantic: { ...baseColors.semantic, ...override.colors?.semantic },
+      surface: { ...baseColors.surface, ...override.colors?.surface },
+      text: { ...baseColors.text, ...override.colors?.text },
+      border: { ...baseColors.border, ...override.colors?.border },
+      custom: { ...baseColors.custom, ...override.colors?.custom },
     },
     typography: {
       ...base.typography,
@@ -502,10 +506,11 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
 
   if (override.dark !== undefined) {
     // Merge override.dark on top of base.dark (or base if no base.dark)
+    // darkBase may be partial (from base.dark) - mergeThemesCore handles this safely
     const darkBase = base.dark ?? base;
     // Strip any .dark from override.dark to prevent nesting
     const { dark: _nestedDark, ...overrideDarkWithoutNested } = override.dark;
-    darkVariant = mergeThemesCore(darkBase as ThemeConfig, overrideDarkWithoutNested);
+    darkVariant = mergeThemesCore(darkBase, overrideDarkWithoutNested);
   } else if (base.dark !== undefined) {
     // Preserve base.dark, but strip any nested .dark property
     const { dark: _nestedDark, ...baseDarkWithoutNested } = base.dark;

@@ -119,6 +119,24 @@ function getSizeClasses(size: ButtonSize, iconOnly: boolean): string {
 }
 
 /**
+ * Sanitize a data-* attribute key to prevent malformed attributes / injection
+ * Returns null if the key is invalid after sanitization
+ */
+function sanitizeDataKey(key: string): string | null {
+  // Only allow lowercase letters, numbers, underscores, and hyphens
+  const sanitized = key
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!sanitized) {
+    console.warn(`[frontmcp/ui] Dropping invalid data-* key: "${key}"`);
+    return null;
+  }
+  return sanitized;
+}
+
+/**
  * Build HTMX attributes string
  */
 function buildHtmxAttrs(htmx?: ButtonOptions['htmx']): string {
@@ -172,12 +190,21 @@ function isValidHrefProtocol(href: string): boolean {
  * - The `iconBefore` and `iconAfter` options accept raw HTML strings for SVG icons.
  *   These are NOT escaped and should only contain trusted content (e.g., icon library output).
  *   Never pass user-provided content to these options.
- * - The `href` option is validated to prevent javascript:, data:, and vbscript: protocols.
+ * - The `href` option uses an allowlist for safe protocols. Only the following are allowed:
+ *   - `http://`, `https://` - absolute URLs
+ *   - `/` - absolute paths (e.g., "/login", "/api/users")
+ *   - `#` - anchor links (e.g., "#section")
+ *   - `mailto:` - email links
+ *   - `tel:` - phone links
+ *   Note: Bare relative URLs like "login" or "./foo" are NOT allowed and will fall back to
+ *   button behavior. Use absolute paths ("/login") instead.
+ * - The `data` option keys are sanitized to prevent malformed attributes.
  *
  * **Accessibility:**
  * - When `iconOnly: true`, the `text` parameter is automatically used as `aria-label`
  *   unless an explicit `ariaLabel` option is provided.
  * - Empty button text with `iconOnly: false` will log a warning for accessibility.
+ * - Icon-only buttons without text or ariaLabel will log a warning.
  */
 export function button(text: string, options: ButtonOptions = {}): string {
   // Validate options using Zod schema
@@ -217,6 +244,13 @@ export function button(text: string, options: ButtonOptions = {}): string {
     console.warn('[frontmcp/ui] Button has empty text. Consider providing text or using iconOnly with ariaLabel.');
   }
 
+  // Warn about icon-only buttons without accessible label
+  if (iconOnly && !ariaLabel && !text.trim()) {
+    console.warn(
+      '[frontmcp/ui] iconOnly button requires non-empty text or ariaLabel for accessibility; control will have no label.',
+    );
+  }
+
   // Validate href protocol
   if (href && !isValidHrefProtocol(href)) {
     console.warn(`[frontmcp/ui] Button href contains potentially dangerous protocol: "${href.slice(0, 20)}..."`);
@@ -244,7 +278,11 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const htmxAttrs = buildHtmxAttrs(htmx);
   const dataAttrs = data
     ? Object.entries(data)
-        .map(([key, val]) => `data-${key}="${escapeHtml(val)}"`)
+        .map(([key, val]) => {
+          const safeKey = sanitizeDataKey(key);
+          return safeKey ? `data-${safeKey}="${escapeHtml(val)}"` : '';
+        })
+        .filter(Boolean)
         .join(' ')
     : '';
 
@@ -255,7 +293,8 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const targetAttr = target ? `target="${escapeHtml(target)}"` : '';
 
   // For icon-only buttons, use text as aria-label if no explicit ariaLabel provided (WCAG)
-  const effectiveAriaLabel = ariaLabel ?? (iconOnly && text ? text : undefined);
+  const trimmedText = text.trim();
+  const effectiveAriaLabel = ariaLabel ?? (iconOnly && trimmedText ? trimmedText : undefined);
   const ariaLabelAttr = effectiveAriaLabel ? `aria-label="${escapeHtml(effectiveAriaLabel)}"` : '';
 
   // Build content (both icons hide during loading for consistent visual behavior)
