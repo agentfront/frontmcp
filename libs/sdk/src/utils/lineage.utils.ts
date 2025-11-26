@@ -48,8 +48,8 @@ export function parseQualifiedName(qualifiedName: string): { lineage: EntryLinea
     const kind = part.slice(0, colonIdx);
     if (kind !== 'scope' && kind !== 'app' && kind !== 'plugin') continue;
     const id = part.slice(colonIdx + 1);
-    // ref is set to undefined as any since we're parsing from string - the ref
-    // would need to be resolved from context which this utility doesn't have access to
+    // `ref` is required by EntryOwnerRef but cannot be resolved from string parsing.
+    // Callers must resolve the ref from context if needed.
     lineage.push({ kind, id, ref: undefined as any });
   }
 

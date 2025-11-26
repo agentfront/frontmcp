@@ -65,7 +65,6 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
     if (hooks.length > 0) {
       await this.hooks.registerHooks(true, ...hooks);
     }
-    return Promise.resolve();
   }
 
   getMetadata(): ResourceMetadata | ResourceTemplateMetadata {

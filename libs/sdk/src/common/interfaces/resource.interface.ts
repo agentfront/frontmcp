@@ -47,7 +47,7 @@ export abstract class ResourceContext<In = any, Out = any> {
   /** Extracted URI template parameters (empty for static resources) */
   readonly params: Record<string, string>;
 
-  protected activeStage: string = 'init';
+  protected activeStage = 'init';
 
   // ---- OUTPUT storages (backing fields)
   private _output?: Out;

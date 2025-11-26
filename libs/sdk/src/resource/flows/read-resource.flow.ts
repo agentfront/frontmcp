@@ -23,10 +23,14 @@ const stateSchema = z.object({
   input: z.object({
     uri: z.string().min(1),
   }),
+  // z.any() used because AuthInfo is a complex external type from @modelcontextprotocol/sdk
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   params: z.record(z.string()).default({}), // URI template parameters
+  // z.any() used because ResourceEntry is a complex abstract class type
   resource: z.any() as z.ZodType<ResourceEntry>,
+  // z.any() used because ResourceContext is a complex abstract class type
   resourceContext: z.any() as z.ZodType<ResourceContext>,
+  // z.any() used because resource output type varies by resource implementation
   rawOutput: z.any().optional(),
   output: outputSchema,
 });
@@ -103,7 +107,8 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
-    // Store resource owner ID in the flow input for hook filtering
+    // Store resource owner ID in the flow input for hook filtering.
+    // This mutation allows hooks to filter by resource owner during execution.
     if (match.instance.owner) {
       (this.rawInput as any)._resourceOwnerId = match.instance.owner.id;
     }
@@ -166,6 +171,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('validateOutput:start');
     const { resourceContext } = this.state;
     if (!resourceContext) {
+      this.logger.warn('validateOutput: resourceContext not found, skipping validation');
       return;
     }
     resourceContext.mark('validateOutput');

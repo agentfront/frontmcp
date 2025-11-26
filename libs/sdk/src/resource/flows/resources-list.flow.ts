@@ -18,13 +18,15 @@ const stateSchema = z.object({
   resources: z.array(
     z.object({
       ownerName: z.string(),
-      resource: z.any(), // ResourceEntry
+      // z.any() used because ResourceEntry is a complex abstract class type
+      resource: z.any(),
     }),
   ),
   resolvedResources: z.array(
     z.object({
       ownerName: z.string(),
-      resource: z.any(), // ResourceEntry
+      // z.any() used because ResourceEntry is a complex abstract class type
+      resource: z.any(),
       finalName: z.string(),
     }),
   ),
@@ -163,6 +165,12 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
 
     try {
       const resolved = this.state.required.resolvedResources;
+
+      // Log resources that will be filtered out due to missing URI
+      const withoutUri = resolved.filter(({ resource }) => resource.uri == null);
+      if (withoutUri.length > 0) {
+        this.logger.warn(`parseResources: ${withoutUri.length} resource(s) skipped due to missing URI`);
+      }
 
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)

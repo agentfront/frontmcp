@@ -198,7 +198,11 @@ export default class ResourceRegistry
     const all = this.listAllIndexed();
     return all
       .filter((r) => !r.isTemplate)
-      .filter((r) => (r.instance.metadata as any).hideFromDiscovery !== true || includeHidden)
+      .filter((r) => {
+        const meta = r.instance.metadata;
+        const hidden = 'hideFromDiscovery' in meta && meta.hideFromDiscovery === true;
+        return !hidden || includeHidden;
+      })
       .map((r) => r.instance);
   }
 
@@ -468,15 +472,18 @@ export default class ResourceRegistry
   /** Best-effort provider id used for prefixing. */
   private providerIdOf(inst: ResourceInstance): string | undefined {
     try {
-      const meta: any = inst.getMetadata?.();
-      const maybe = meta?.providerId ?? meta?.provider ?? meta?.ownerId ?? undefined;
-      if (typeof maybe === 'string' && maybe.length) return maybe;
+      const meta: unknown = inst.getMetadata?.();
+      if (!meta || typeof meta !== 'object') return undefined;
 
-      const cls: any = meta && meta.cls ? meta.cls : undefined;
-      if (cls) {
+      const metaObj = meta as Record<string, unknown>;
+      const maybe = metaObj['providerId'] ?? metaObj['provider'] ?? metaObj['ownerId'];
+      if (typeof maybe === 'string' && maybe.length > 0) return maybe;
+
+      const cls = metaObj['cls'];
+      if (cls && typeof cls === 'function') {
         const id = getMetadata('id', cls);
-        if (typeof id === 'string' && id.length) return id;
-        if (cls.name) return cls.name;
+        if (typeof id === 'string' && id.length > 0) return id;
+        if ('name' in cls && typeof cls.name === 'string') return cls.name;
       }
     } catch {
       /* ignore */

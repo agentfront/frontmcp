@@ -5,9 +5,11 @@ import { BaseEntry, EntryOwnerRef } from './base.entry';
 import { ResourceRecord, ResourceFunctionRecord } from '../records';
 import { ResourceContext, ResourceInterface } from '../interfaces';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { ReadResourceRequest, ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
+import { ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+
+import { Type } from '../interfaces';
 
 // Resource template records defined in resource.types.ts to avoid circular imports
 // This union type covers both ResourceRecord and ResourceTemplateRecord since they have the same structure
@@ -15,7 +17,8 @@ export type AnyResourceRecord =
   | ResourceRecord
   | {
       kind: string;
-      provide: any;
+      // Type<any> for class-based resources, function signature for function-based resources
+      provide: Type<any> | ((...args: any[]) => any);
       metadata: ResourceMetadata | ResourceTemplateMetadata;
     };
 
