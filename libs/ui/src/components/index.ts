@@ -1,14 +1,32 @@
 /**
- * UI Components Module
+ * @file index.ts
+ * @description UI Components Module for FrontMCP.
  *
- * Provides reusable UI components for FrontMCP pages.
+ * Provides reusable UI components for FrontMCP pages including:
+ * - Button, Card, Badge, Alert, Avatar, Modal, Table, Form, List components
+ * - Zod schemas for all component options (for runtime validation)
+ * - Full HTMX support for dynamic interactions
+ *
+ * @module @frontmcp/ui/components
  */
+
+// Component Schemas (Zod validation)
+export * from './button.schema';
+export * from './card.schema';
+export * from './badge.schema';
+export * from './alert.schema';
+export * from './avatar.schema';
+export * from './modal.schema';
+export * from './table.schema';
+export * from './form.schema';
+export * from './list.schema';
 
 // Button components
 export {
   type ButtonVariant,
   type ButtonSize,
   type ButtonOptions,
+  type ButtonGroupOptions,
   button,
   buttonGroup,
   primaryButton,

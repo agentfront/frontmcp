@@ -1,31 +1,43 @@
-import { DEFAULT_THEME, createTheme, buildThemeCss, ThemeConfig } from './theme';
+import { DEFAULT_THEME, GITHUB_OPENAI_THEME, createTheme, buildThemeCss, ThemeConfig } from './theme';
 
 describe('Theme System', () => {
-  describe('DEFAULT_THEME', () => {
+  describe('DEFAULT_THEME (GitHub/OpenAI Style)', () => {
+    it('should be the same as GITHUB_OPENAI_THEME', () => {
+      expect(DEFAULT_THEME).toBe(GITHUB_OPENAI_THEME);
+    });
+
     it('should have all required color properties', () => {
       expect(DEFAULT_THEME.colors.semantic).toBeDefined();
-      expect(DEFAULT_THEME.colors.semantic.primary).toBe('#3b82f6');
-      expect(DEFAULT_THEME.colors.semantic.secondary).toBe('#8b5cf6');
-      expect(DEFAULT_THEME.colors.semantic.success).toBe('#22c55e');
-      expect(DEFAULT_THEME.colors.semantic.warning).toBe('#f59e0b');
-      expect(DEFAULT_THEME.colors.semantic.danger).toBe('#ef4444');
+      // GitHub/OpenAI theme uses gray-black colors
+      expect(DEFAULT_THEME.colors.semantic.primary).toBe('#24292f');
+      expect(DEFAULT_THEME.colors.semantic.secondary).toBe('#57606a');
+      expect(DEFAULT_THEME.colors.semantic.success).toBe('#1a7f37');
+      expect(DEFAULT_THEME.colors.semantic.warning).toBe('#9a6700');
+      expect(DEFAULT_THEME.colors.semantic.danger).toBe('#cf222e');
     });
 
     it('should have surface colors', () => {
       expect(DEFAULT_THEME.colors.surface).toBeDefined();
-      expect(DEFAULT_THEME.colors.surface?.background).toBe('#f9fafb');
-      expect(DEFAULT_THEME.colors.surface?.surface).toBe('#ffffff');
+      expect(DEFAULT_THEME.colors.surface?.background).toBe('#ffffff');
+      expect(DEFAULT_THEME.colors.surface?.surface).toBe('#f6f8fa');
     });
 
     it('should have text colors', () => {
       expect(DEFAULT_THEME.colors.text).toBeDefined();
-      expect(DEFAULT_THEME.colors.text?.primary).toBe('#111827');
-      expect(DEFAULT_THEME.colors.text?.secondary).toBe('#6b7280');
+      expect(DEFAULT_THEME.colors.text?.primary).toBe('#24292f');
+      expect(DEFAULT_THEME.colors.text?.secondary).toBe('#57606a');
     });
 
     it('should have border colors', () => {
       expect(DEFAULT_THEME.colors.border).toBeDefined();
-      expect(DEFAULT_THEME.colors.border?.default).toBe('#e5e7eb');
+      expect(DEFAULT_THEME.colors.border?.default).toBe('#d0d7de');
+    });
+
+    it('should have CDN configuration', () => {
+      expect(DEFAULT_THEME.cdn).toBeDefined();
+      expect(DEFAULT_THEME.cdn?.fonts?.preconnect).toContain('https://fonts.googleapis.com');
+      expect(DEFAULT_THEME.cdn?.scripts?.tailwind).toBeDefined();
+      expect(DEFAULT_THEME.cdn?.scripts?.htmx).toBeDefined();
     });
 
     it('should have typography settings', () => {

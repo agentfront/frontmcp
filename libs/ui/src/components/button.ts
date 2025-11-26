@@ -1,76 +1,77 @@
 /**
- * Button Component
+ * @file button.ts
+ * @description Button Component for FrontMCP UI.
  *
- * Versatile button component with multiple variants and states.
+ * Versatile button component with multiple variants, sizes, and states.
+ * Includes HTMX support for dynamic interactions without JavaScript.
+ *
+ * @example Basic button
+ * ```typescript
+ * import { button } from '@frontmcp/ui';
+ *
+ * // Primary button (default)
+ * const html = button('Click Me');
+ * // <button type="button" class="...bg-primary...">Click Me</button>
+ * ```
+ *
+ * @example Button variants
+ * ```typescript
+ * import { button, primaryButton, dangerButton, outlineButton } from '@frontmcp/ui';
+ *
+ * // Using variant option
+ * const secondary = button('Save', { variant: 'secondary' });
+ * const danger = button('Delete', { variant: 'danger' });
+ *
+ * // Using shorthand functions
+ * const primary = primaryButton('Submit');
+ * const outline = outlineButton('Cancel');
+ * ```
+ *
+ * @example Button with loading state
+ * ```typescript
+ * const loadingBtn = button('Saving...', {
+ *   loading: true,
+ *   disabled: true,
+ * });
+ * ```
+ *
+ * @example Button with HTMX
+ * ```typescript
+ * const htmxBtn = button('Load More', {
+ *   htmx: {
+ *     get: '/api/items?page=2',
+ *     target: '#items-list',
+ *     swap: 'beforeend',
+ *   },
+ * });
+ * ```
+ *
+ * @example Button group
+ * ```typescript
+ * import { button, buttonGroup } from '@frontmcp/ui';
+ *
+ * const group = buttonGroup([
+ *   button('Edit', { variant: 'outline' }),
+ *   button('Delete', { variant: 'danger' }),
+ * ], { attached: true });
+ * ```
+ *
+ * @module @frontmcp/ui/components/button
  */
 
 import { escapeHtml } from '../layouts/base';
+import { validateOptions } from '../validation';
+import {
+  ButtonOptionsSchema,
+  ButtonGroupOptionsSchema,
+  type ButtonOptions,
+  type ButtonVariant,
+  type ButtonSize,
+  type ButtonGroupOptions,
+} from './button.schema';
 
-// ============================================
-// Button Types
-// ============================================
-
-/**
- * Button variant styles
- */
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success' | 'link';
-
-/**
- * Button size options
- */
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-
-/**
- * Button component options
- */
-export interface ButtonOptions {
-  /** Button variant */
-  variant?: ButtonVariant;
-  /** Button size */
-  size?: ButtonSize;
-  /** Button type attribute */
-  type?: 'button' | 'submit' | 'reset';
-  /** Disabled state */
-  disabled?: boolean;
-  /** Loading state */
-  loading?: boolean;
-  /** Full width */
-  fullWidth?: boolean;
-  /** Icon before text */
-  iconBefore?: string;
-  /** Icon after text */
-  iconAfter?: string;
-  /** Icon only (no text) */
-  iconOnly?: boolean;
-  /** Additional CSS classes */
-  className?: string;
-  /** Button ID */
-  id?: string;
-  /** Name attribute */
-  name?: string;
-  /** Value attribute */
-  value?: string;
-  /** Click handler (URL for links) */
-  href?: string;
-  /** Open in new tab */
-  target?: '_blank' | '_self';
-  /** HTMX attributes */
-  htmx?: {
-    get?: string;
-    post?: string;
-    put?: string;
-    delete?: string;
-    target?: string;
-    swap?: string;
-    trigger?: string;
-    confirm?: string;
-    indicator?: string;
-  };
-  /** Data attributes */
-  data?: Record<string, string>;
-  /** ARIA label */
-  ariaLabel?: string;
-}
+// Re-export types from schema
+export type { ButtonOptions, ButtonVariant, ButtonSize, ButtonGroupOptions };
 
 // ============================================
 // Button Builder
@@ -145,8 +146,23 @@ const loadingSpinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none"
 
 /**
  * Build a button component
+ *
+ * @param text - Button label text
+ * @param options - Button configuration options
+ * @returns HTML string for the button, or validation error box on invalid input
  */
 export function button(text: string, options: ButtonOptions = {}): string {
+  // Validate options using Zod schema
+  const validation = validateOptions<ButtonOptions>(options, {
+    schema: ButtonOptionsSchema,
+    componentName: 'button',
+  });
+
+  if (!validation.success) {
+    return validation.error;
+  }
+
+  const validatedOptions = validation.data;
   const {
     variant = 'primary',
     size = 'md',
@@ -166,7 +182,7 @@ export function button(text: string, options: ButtonOptions = {}): string {
     htmx,
     data,
     ariaLabel,
-  } = options;
+  } = validatedOptions;
 
   const variantClasses = getVariantClasses(variant);
   const sizeClasses = getSizeClasses(size, iconOnly);
@@ -224,17 +240,24 @@ export function button(text: string, options: ButtonOptions = {}): string {
 
 /**
  * Build a button group
+ *
+ * @param buttons - Array of button HTML strings
+ * @param options - Button group configuration options
+ * @returns HTML string for the button group, or validation error box on invalid input
  */
-export function buttonGroup(
-  buttons: string[],
-  options: {
-    attached?: boolean;
-    direction?: 'horizontal' | 'vertical';
-    gap?: 'sm' | 'md' | 'lg';
-    className?: string;
-  } = {},
-): string {
-  const { attached = false, direction = 'horizontal', gap = 'md', className = '' } = options;
+export function buttonGroup(buttons: string[], options: ButtonGroupOptions = {}): string {
+  // Validate options using Zod schema
+  const validation = validateOptions<ButtonGroupOptions>(options, {
+    schema: ButtonGroupOptionsSchema,
+    componentName: 'buttonGroup',
+  });
+
+  if (!validation.success) {
+    return validation.error;
+  }
+
+  const validatedOptions = validation.data;
+  const { attached = false, direction = 'horizontal', gap = 'md', className = '' } = validatedOptions;
 
   if (attached) {
     const classes =

@@ -1,12 +1,33 @@
 /**
- * CDN Configuration
+ * @file cdn.ts
+ * @description CDN Configuration for FrontMCP UI.
  *
  * Centralized configuration for all CDN resources used by FrontMCP UI.
  * All resources are loaded at runtime - no build step required.
  *
  * For platforms with blocked network (e.g., Claude Artifacts),
  * scripts can be fetched once and cached for inline injection.
+ *
+ * CDN URLs can be customized via theme configuration for:
+ * - Using private CDN mirrors
+ * - Self-hosting resources
+ * - Compliance with CSP policies
+ *
+ * @example
+ * ```typescript
+ * import { buildCdnScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+ *
+ * // Use default CDN URLs
+ * const scripts = buildCdnScripts();
+ *
+ * // Use theme-configured CDN URLs
+ * const themedScripts = buildCdnScriptsFromTheme(DEFAULT_THEME);
+ * ```
+ *
+ * @module @frontmcp/ui/theme/cdn
  */
+
+import type { ThemeConfig } from './theme';
 
 // ============================================
 // CDN URLs
@@ -246,4 +267,133 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   }
 
   return scripts.join('\n  ');
+}
+
+// ============================================
+// Theme-Aware CDN Builders
+// ============================================
+
+/**
+ * Options for theme-aware CDN script building
+ */
+export interface ThemeCdnScriptOptions {
+  /** Include Tailwind CSS (default: true) */
+  tailwind?: boolean;
+  /** Include HTMX (default: true) */
+  htmx?: boolean;
+  /** Include Alpine.js (default: false) */
+  alpine?: boolean;
+  /** Include icon library (default: false) */
+  icons?: boolean;
+  /** Use inline scripts from cache (for blocked network) */
+  inline?: boolean;
+}
+
+/**
+ * Build font preconnect links from theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @returns HTML preconnect link tags
+ */
+export function buildFontPreconnectFromTheme(theme: ThemeConfig): string {
+  const preconnect = theme.cdn?.fonts?.preconnect ?? CDN.fonts.preconnect;
+  return preconnect.map((url, i) => `<link rel="preconnect" href="${url}"${i > 0 ? ' crossorigin' : ''}>`).join('\n  ');
+}
+
+/**
+ * Build font stylesheet links from theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @returns HTML stylesheet link tags
+ */
+export function buildFontStylesheetsFromTheme(theme: ThemeConfig): string {
+  const stylesheets = theme.cdn?.fonts?.stylesheets ?? [CDN.fonts.inter];
+  return stylesheets.map((url) => `<link href="${url}" rel="stylesheet">`).join('\n  ');
+}
+
+/**
+ * Build all CDN script tags from theme configuration
+ *
+ * Uses theme.cdn configuration if available, falls back to global CDN defaults.
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @param options - Script inclusion options
+ * @returns HTML script tags
+ */
+export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnScriptOptions = {}): string {
+  const { tailwind = true, htmx = true, alpine = false, icons = false, inline = false } = options;
+
+  const scripts: string[] = [];
+
+  // Get URLs from theme or fallback to defaults
+  const tailwindUrl = theme.cdn?.scripts?.tailwind ?? CDN.tailwind;
+  const htmxConfig = theme.cdn?.scripts?.htmx ?? CDN.htmx;
+  const alpineConfig = theme.cdn?.scripts?.alpine ?? CDN.alpine;
+  const iconsConfig = theme.cdn?.icons?.script ?? CDN.icons;
+
+  if (inline) {
+    // Use cached inline scripts
+    if (tailwind && isScriptCached(tailwindUrl)) {
+      scripts.push(buildInlineScriptTag(getCachedScript(tailwindUrl)!));
+    }
+    if (htmx && isScriptCached(htmxConfig.url)) {
+      scripts.push(buildInlineScriptTag(getCachedScript(htmxConfig.url)!));
+    }
+    if (alpine && isScriptCached(alpineConfig.url)) {
+      scripts.push(buildInlineScriptTag(getCachedScript(alpineConfig.url)!));
+    }
+    if (icons && isScriptCached(iconsConfig.url)) {
+      scripts.push(buildInlineScriptTag(getCachedScript(iconsConfig.url)!));
+    }
+  } else {
+    // Use CDN URLs from theme
+    if (tailwind) {
+      scripts.push(buildScriptTag(tailwindUrl));
+    }
+    if (htmx) {
+      scripts.push(buildScriptTag(htmxConfig.url, htmxConfig.integrity));
+    }
+    if (alpine) {
+      scripts.push(buildScriptTag(alpineConfig.url, alpineConfig.integrity, { defer: true }));
+    }
+    if (icons) {
+      scripts.push(buildScriptTag(iconsConfig.url));
+    }
+  }
+
+  return scripts.join('\n  ');
+}
+
+/**
+ * Fetch and cache scripts based on theme CDN configuration
+ *
+ * @param theme - Theme configuration with CDN settings
+ * @param options - Which scripts to cache
+ * @returns Map of cached script URLs to content
+ */
+export async function fetchAndCacheScriptsFromTheme(
+  theme: ThemeConfig,
+  options: {
+    tailwind?: boolean;
+    htmx?: boolean;
+    alpine?: boolean;
+    icons?: boolean;
+  } = {},
+): Promise<Map<string, string>> {
+  const { tailwind = true, htmx = true, alpine = false, icons = false } = options;
+  const urls: string[] = [];
+
+  // Get URLs from theme or fallback to defaults
+  const tailwindUrl = theme.cdn?.scripts?.tailwind ?? CDN.tailwind;
+  const htmxConfig = theme.cdn?.scripts?.htmx ?? CDN.htmx;
+  const alpineConfig = theme.cdn?.scripts?.alpine ?? CDN.alpine;
+  const iconsConfig = theme.cdn?.icons?.script ?? CDN.icons;
+
+  if (tailwind) urls.push(tailwindUrl);
+  if (htmx) urls.push(htmxConfig.url);
+  if (alpine) urls.push(alpineConfig.url);
+  if (icons) urls.push(iconsConfig.url);
+
+  await Promise.all(urls.map(fetchScript));
+  return scriptCache;
 }

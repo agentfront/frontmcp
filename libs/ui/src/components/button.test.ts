@@ -218,4 +218,96 @@ describe('Button Component', () => {
       expect(html).toContain('hover:underline');
     });
   });
+
+  describe('Validation', () => {
+    it('should return error box for invalid variant', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = button('Test', { variant: 'invalid' as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="button"');
+      expect(html).toContain('data-param="variant"');
+    });
+
+    it('should return error box for invalid size', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = button('Test', { size: 'huge' as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="button"');
+      expect(html).toContain('data-param="size"');
+    });
+
+    it('should return error box for invalid type', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = button('Test', { type: 'custom' as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="button"');
+      expect(html).toContain('data-param="type"');
+    });
+
+    it('should return error box for unknown properties (strict mode)', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = button('Test', { unknownProp: 'value' } as any);
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="button"');
+    });
+
+    it('should return error box for invalid htmx configuration', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = button('Test', { htmx: { invalidKey: 'value' } as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="button"');
+    });
+
+    it('should accept valid options without error', () => {
+      const html = button('Test', {
+        variant: 'primary',
+        size: 'md',
+        type: 'submit',
+        disabled: false,
+        loading: false,
+        fullWidth: true,
+        className: 'custom-class',
+      });
+      expect(html).not.toContain('validation-error');
+      expect(html).toContain('<button');
+    });
+  });
+
+  describe('buttonGroup Validation', () => {
+    const buttons = [button('One'), button('Two')];
+
+    it('should return error box for invalid direction', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = buttonGroup(buttons, { direction: 'diagonal' as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="buttonGroup"');
+      expect(html).toContain('data-param="direction"');
+    });
+
+    it('should return error box for invalid gap', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = buttonGroup(buttons, { gap: 'xl' as any });
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="buttonGroup"');
+      expect(html).toContain('data-param="gap"');
+    });
+
+    it('should return error box for unknown properties (strict mode)', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = buttonGroup(buttons, { unknownProp: true } as any);
+      expect(html).toContain('validation-error');
+      expect(html).toContain('data-component="buttonGroup"');
+    });
+
+    it('should accept valid options without error', () => {
+      const html = buttonGroup(buttons, {
+        attached: true,
+        direction: 'horizontal',
+        gap: 'md',
+        className: 'custom-class',
+      });
+      expect(html).not.toContain('validation-error');
+      expect(html).toContain('<div');
+    });
+  });
 });
