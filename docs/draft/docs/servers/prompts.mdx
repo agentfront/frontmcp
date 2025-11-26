@@ -14,14 +14,15 @@ This feature implements the [MCP Prompts specification](https://modelcontextprot
 
 In the Model Context Protocol, prompts serve a distinct purpose from tools and resources:
 
-| Aspect | Prompt | Tool | Resource |
-|--------|--------|------|----------|
-| **Purpose** | Provide templated instructions | Execute actions | Provide data |
-| **Output** | Messages for the model | Execution results | Content to read |
-| **Arguments** | Named string parameters | Typed schema inputs | URI parameters |
-| **Use case** | Conversation templates, workflows | Side effects, mutations | Context loading |
+| Aspect        | Prompt                            | Tool                    | Resource        |
+| ------------- | --------------------------------- | ----------------------- | --------------- |
+| **Purpose**   | Provide templated instructions    | Execute actions         | Provide data    |
+| **Output**    | Messages for the model            | Execution results       | Content to read |
+| **Arguments** | Named string parameters           | Typed schema inputs     | URI parameters  |
+| **Use case**  | Conversation templates, workflows | Side effects, mutations | Context loading |
 
 Prompts are ideal for:
+
 - **System instructions** — reusable persona definitions, behavior guidelines
 - **Conversation starters** — standardized ways to begin specific tasks
 - **Workflow templates** — multi-turn interaction patterns
@@ -191,13 +192,13 @@ execute(args: Record<string, string>) {
 
 **Field descriptions:**
 
-| Field | Description |
-|-------|-------------|
-| `name` | Programmatic identifier used internally and in MCP responses |
-| `title` | Human-friendly name for UI display |
-| `description` | Helps clients and models understand when to use this prompt |
-| `arguments` | Named parameters that can be filled in by clients |
-| `icons` | Array of icons for visual representation in clients |
+| Field         | Description                                                  |
+| ------------- | ------------------------------------------------------------ |
+| `name`        | Programmatic identifier used internally and in MCP responses |
+| `title`       | Human-friendly name for UI display                           |
+| `description` | Helps clients and models understand when to use this prompt  |
+| `arguments`   | Named parameters that can be filled in by clients            |
+| `icons`       | Array of icons for visual representation in clients          |
 
 ---
 
@@ -448,12 +449,13 @@ Focus on:
 
 Prompts integrate with the MCP protocol via two flows:
 
-| Flow | Description |
-|------|-------------|
-| `prompts/list` | Returns all available prompts with their metadata |
-| `prompts/get` | Returns the messages for a specific prompt with arguments filled in |
+| Flow           | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| `prompts/list` | Returns all available prompts with their metadata                   |
+| `prompts/get`  | Returns the messages for a specific prompt with arguments filled in |
 
 When a client requests `prompts/get` with a name and arguments:
+
 1. The SDK locates the prompt by name
 2. Arguments are validated against the prompt's definition
 3. The `execute()` method is called with the arguments
@@ -473,8 +475,8 @@ FrontMCP automatically advertises prompt capabilities during MCP initialization:
 }
 ```
 
-| Capability | Description |
-|------------|-------------|
+| Capability    | Description                                                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `listChanged` | When `true`, the server will send `notifications/prompts/list_changed` when the prompt list changes (prompts added/removed dynamically) |
 
 The SDK sets `listChanged: true` when you have any prompts registered, enabling clients to receive real-time notifications when prompts are dynamically added or removed.
@@ -492,6 +494,7 @@ For the full protocol specification, see [MCP Prompts](https://modelcontextproto
 ## Best Practices
 
 **Do:**
+
 - Use descriptive `name` and `description` fields to help clients understand prompt purpose
 - Define clear `arguments` with descriptions to guide users
 - Keep prompts focused on a single task or interaction pattern
@@ -499,6 +502,7 @@ For the full protocol specification, see [MCP Prompts](https://modelcontextproto
 - Return structured messages with appropriate roles
 
 **Don't:**
+
 - Create prompts that perform side effects (use tools instead)
 - Hardcode values that should be arguments
 - Create overly complex prompts—split into multiple prompts if needed
