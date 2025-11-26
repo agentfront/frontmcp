@@ -104,3 +104,57 @@ export default class CrmApp {}
 })
 export default class BillingApp {}
 ```
+
+---
+
+## Example: CodeCall-enabled CRM app
+
+Need to orchestrate dozens of tools without overwhelming `list_tools`? The demo CRM app wires CodeCallPlugin into a focused group of user and activity tools so models plan in JavaScript while you keep a single entry point.
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { CodeCallPlugin } from '@frontmcp/plugins';
+
+import UsersListTool from './tools/users-list.tool';
+import UsersGetTool from './tools/users-get.tool';
+import UsersCreateTool from './tools/users-create.tool';
+import UsersUpdateTool from './tools/users-update.tool';
+import UsersDeleteTool from './tools/users-delete.tool';
+import ActivitiesListTool from './tools/activities-list.tool';
+import ActivitiesLogTool from './tools/activities-log.tool';
+import ActivitiesStatsTool from './tools/activities-stats.tool';
+
+@App({
+  id: 'crm',
+  name: 'CRM Demo with CodeCall',
+  description: 'A demo CRM application showcasing CodeCall plugin for AgentScript-based tool orchestration',
+  plugins: [
+    CodeCallPlugin.init({
+      topK: 10, // Return up to 10 tools in search results
+      // Default mode is `codecall_only`, so individual tools stay hidden from list_tools
+    }),
+  ],
+  tools: [
+    UsersListTool,
+    UsersGetTool,
+    UsersCreateTool,
+    UsersUpdateTool,
+    UsersDeleteTool,
+    ActivitiesListTool,
+    ActivitiesLogTool,
+    ActivitiesStatsTool,
+  ],
+})
+export default class CrmMcpApp {}
+```
+
+Each tool talks to the in-memory `CrmStore` (`apps/demo/src/apps/crm/data/store.ts`) so the sample can list, create, update, delete users, and capture activities without a database. `ActivitiesLogTool` updates `lastLoginAt` on login events, while `ActivitiesStatsTool` surfaces per-user counts that you can feed back into CodeCall plans.
+
+Key ideas demonstrated:
+
+- Keep every CRUD tool available to CodeCall by setting `enabledInCodeCall: true` in each `@Tool` definition.
+- Let CodeCall orchestrate multiple concerns (users + activities) while the app exposes only the CodeCall meta-tools to clients.
+
+<Tip>
+  Need to mix direct tool calls with CodeCall? Switch the plugin to `mode: 'metadata_driven'` or disable `enabledInCodeCall` per tool so you can decide which ones stay searchable only through the meta-API.
+</Tip>

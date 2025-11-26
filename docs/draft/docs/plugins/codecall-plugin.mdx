@@ -121,10 +121,10 @@ Configure CodeCall behavior when registering the plugin:
 <ParamField path="mode" type="'codecall_only' | 'codecall_opt_in' | 'metadata_driven'" default="'codecall_only'">
   Controls which tools are visible in `list_tools` and usable via CodeCall
 
-  - **`codecall_only`** - Hide all tools by default, make all available via CodeCall (best for large toolsets)
-  - **`codecall_opt_in`** - Hide all tools, only enable specific tools for CodeCall (best for selective exposure)
-  - **`metadata_driven`** - No defaults, configure everything per-tool (best for small toolsets with mixed usage)
-</ParamField>
+- **`codecall_only`** - Hide all tools by default, make all available via CodeCall (best for large toolsets)
+- **`codecall_opt_in`** - Hide all tools, only enable specific tools for CodeCall (best for selective exposure)
+- **`metadata_driven`** - No defaults, configure everything per-tool (best for small toolsets with mixed usage)
+  </ParamField>
 
 <ParamField path="topK" type="number" default="8">
   Maximum number of tools to return from `codecall.search`
@@ -317,6 +317,7 @@ CodeCall supports visibility into execution plan progress:
 #### Automatic Tool Call Events
 
 Every `callTool()` inside a plan can emit:
+
 - **"tool call started"** event (with tool name + input)
 - **"tool call finished"** event (with tool name + result + status)
 
@@ -356,6 +357,7 @@ mcpNotify('step_completed', { step: 'sync_billing' });
 CodeCall runs **on top of** your existing FrontMCP pipeline. When a plan calls `callTool()`:
 
 - The request still flows through:
+
   - PII plugins (scrubbing/masking)
   - Auth plugins
   - Rate limiting
@@ -364,6 +366,7 @@ CodeCall runs **on top of** your existing FrontMCP pipeline. When a plan calls `
 - CodeCall sees the **same response** a normal tool call would see after plugins run
 
 **This means:**
+
 - CodeCall cannot leak more data than normal tool calls
 - PII redaction logic stays in your PII plugin, not in CodeCall
 - Privacy guarantees are consistent across all tool invocations
@@ -391,6 +394,7 @@ If your transport doesn't support notifications:
 Some tools may be discoverable but require additional authorization before execution. In these cases:
 
 - The tool returns a structured "authorization required" response with:
+
   - OAuth URL to start the flow
   - Required scope/reason
   - Tool name
@@ -402,6 +406,7 @@ Some tools may be discoverable but require additional authorization before execu
   - Retry execution after permissions are granted
 
 This keeps separation of concerns:
+
 - **CodeCall:** Code orchestration + sandboxing
 - **Auth plugin:** Identity/permissions orchestration
 
@@ -447,6 +452,7 @@ This keeps separation of concerns:
     // Avoid: no scoping (searches all apps)
     // Only use when truly needed
     ```
+
   </Accordion>
 
   <Accordion title="5. Set Appropriate Limits">
@@ -534,17 +540,17 @@ return { users: activeUsers, total };
 
 AgentScript provides a limited set of safe globals:
 
-| Global | Description | Example |
-| ------ | ----------- | ------- |
-| `callTool` | Call MCP tools | `await callTool('users:list', {})` |
-| `Math` | Mathematical operations | `Math.max(1, 2, 3)` |
-| `JSON` | JSON parsing/stringification | `JSON.parse('{"a":1}')` |
-| `Array` | Array constructor and methods | `Array.isArray(x)` |
-| `Object` | Object methods | `Object.keys(obj)` |
-| `String` | String methods | `String(123)` |
-| `Number` | Number methods | `Number.isNaN(x)` |
-| `Date` | Date operations | `new Date()` |
-| `console`* | Logging (if enabled) | `console.log('debug')` |
+| Global      | Description                   | Example                            |
+| ----------- | ----------------------------- | ---------------------------------- |
+| `callTool`  | Call MCP tools                | `await callTool('users:list', {})` |
+| `Math`      | Mathematical operations       | `Math.max(1, 2, 3)`                |
+| `JSON`      | JSON parsing/stringification  | `JSON.parse('{"a":1}')`            |
+| `Array`     | Array constructor and methods | `Array.isArray(x)`                 |
+| `Object`    | Object methods                | `Object.keys(obj)`                 |
+| `String`    | String methods                | `String(123)`                      |
+| `Number`    | Number methods                | `Number.isNaN(x)`                  |
+| `Date`      | Date operations               | `new Date()`                       |
+| `console`\* | Logging (if enabled)          | `console.log('debug')`             |
 
 <Note>
   `console` is only available when `enclave.allowConsole: true` is configured. Standard safe globals like `undefined`, `null`, `true`, `false`, `NaN`, `Infinity`, `isNaN`, `isFinite`, `parseInt`, `parseFloat` are also available.
@@ -600,6 +606,7 @@ These constructs are blocked by ast-guard's AST validation:
     const doubled = nums.map(n => n * 2);
     ```
     **Why:** Prevents recursion and complex control flow. Arrow functions are allowed for functional array operations.
+
   </Accordion>
 
   <Accordion title="Unbounded Loops">
@@ -614,6 +621,7 @@ These constructs are blocked by ast-guard's AST validation:
     for (const item of array) { /* ... */ }
     ```
     **Why:** Prevents infinite loops. Allowed loops are transformed to enforce iteration limits.
+
   </Accordion>
 
   <Accordion title="Dangerous APIs">
@@ -727,11 +735,11 @@ return {
 
 Even valid AgentScript code is subject to runtime limits enforced by Enclave:
 
-| Limit | Default | Purpose |
-| ----- | ------- | ------- |
-| `timeoutMs` | 30000 (30s) | Maximum execution time |
-| `maxToolCalls` | 100 | Maximum `callTool()` invocations |
-| `maxIterations` | 10000 | Maximum loop iterations (all loops combined) |
+| Limit           | Default     | Purpose                                      |
+| --------------- | ----------- | -------------------------------------------- |
+| `timeoutMs`     | 30000 (30s) | Maximum execution time                       |
+| `maxToolCalls`  | 100         | Maximum `callTool()` invocations             |
+| `maxIterations` | 10000       | Maximum loop iterations (all loops combined) |
 
 When limits are exceeded, execution stops immediately with an appropriate error status.
 
@@ -766,12 +774,12 @@ return { success: true, user: result.data };
 
 CodeCall exposes four meta-tools to models:
 
-| Tool | Purpose | VM Required | Best For |
-| ---- | ------- | ----------- | -------- |
-| **`codecall.search`** | Find tools by natural language query | No | Tool discovery, app-scoped searches |
-| **`codecall.describe`** | Get input/output schemas for tools | No | Schema inspection before execution |
-| **`codecall.execute`** | Run JavaScript execution plans | Yes | Multi-tool workflows, filtering, joins |
-| **`codecall.invoke`** | Direct tool call without VM (optional) | No | Simple single-tool invocations |
+| Tool                    | Purpose                                | VM Required | Best For                               |
+| ----------------------- | -------------------------------------- | ----------- | -------------------------------------- |
+| **`codecall.search`**   | Find tools by natural language query   | No          | Tool discovery, app-scoped searches    |
+| **`codecall.describe`** | Get input/output schemas for tools     | No          | Schema inspection before execution     |
+| **`codecall.execute`**  | Run JavaScript execution plans         | Yes         | Multi-tool workflows, filtering, joins |
+| **`codecall.invoke`**   | Direct tool call without VM (optional) | No          | Simple single-tool invocations         |
 
 ### Search Tool API (`codecall.search`)
 
@@ -796,7 +804,8 @@ Find tools by natural language description.
 <ParamField path="excludeToolNames" type="string[]">
   Array of tool names you have ALREADY fetched or described in this conversation. These tools will be excluded from search results to avoid redundant lookups.
 
-  **IMPORTANT:** Only include tools you have actually searched for or described before - do not guess or assume tool names.
+**IMPORTANT:** Only include tools you have actually searched for or described before - do not guess or assume tool names.
+
 </ParamField>
 
 <ParamField path="topK" type="number" default="8">
@@ -890,9 +899,10 @@ Get detailed schemas and usage examples for specific tools discovered through se
 <ParamField path="toolNames" type="string[]" required>
   Array of unique tool names (from codecall:search results) to fetch their detailed schemas and usage examples.
 
-  Example: `["users:list", "billing:getInvoice"]`
+Example: `["users:list", "billing:getInvoice"]`
 
-  **Note:** Duplicate tool names are not allowed and will cause a validation error.
+**Note:** Duplicate tool names are not allowed and will cause a validation error.
+
 </ParamField>
 
 **Output:**
@@ -933,6 +943,7 @@ Get detailed schemas and usage examples for specific tools discovered through se
         </ResponseField>
       </Expandable>
     </ResponseField>
+
   </Expandable>
 </ResponseField>
 
@@ -990,7 +1001,8 @@ Directly invoke a single tool without running JavaScript code. Use this for simp
 <ParamField path="tool" type="string" required>
   The name of the tool to invoke (e.g., `"users:getById"`, `"billing:getInvoice"`).
 
-  Must be a tool you discovered via codecall:search.
+Must be a tool you discovered via codecall:search.
+
 </ParamField>
 
 <ParamField path="input" type="object" required>
@@ -1080,30 +1092,35 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 <ParamField path="script" type="string" required>
   JavaScript code to execute in the sandboxed VM. The script can call tools using the `callTool(toolName, input)` function and access results.
 
-  Example:
-  ```js
-  const user = await callTool('users:getById', { id: 'user_123' });
-  const orders = await callTool('orders:listByUser', { userId: user.id });
-  return { user, orderCount: orders.length };
-  ```
+Example:
+
+```js
+const user = await callTool('users:getById', { id: 'user_123' });
+const orders = await callTool('orders:listByUser', { userId: user.id });
+return { user, orderCount: orders.length };
+```
+
 </ParamField>
 
 <ParamField path="allowedTools" type="string[]">
   Optional allowlist of tools that can be called from the script. If not provided, all discovered tools are allowed.
 
-  Use this to restrict script capabilities:
-  ```json
-  {
-    "script": "const user = await callTool('users:getById', { id: '123' });",
-    "allowedTools": ["users:getById", "users:list"]
-  }
-  ```
+Use this to restrict script capabilities:
+
+```json
+{
+  "script": "const user = await callTool('users:getById', { id: '123' });",
+  "allowedTools": ["users:getById", "users:list"]
+}
+```
+
 </ParamField>
 
 <ParamField path="timeoutMs" type="number">
   Optional execution timeout in milliseconds. Defaults to the plugin's configured timeout.
 
-  If the script exceeds this time, execution is terminated with a `timeout` status.
+If the script exceeds this time, execution is terminated with a `timeout` status.
+
 </ParamField>
 
 **Output (Success):**
@@ -1219,14 +1236,14 @@ Run JavaScript code in a sandboxed VM to orchestrate multiple tools, filter resu
 
 When `codecall.execute` runs, results include a `status` field:
 
-| Status | Meaning | Retry? |
-| ------ | ------- | ------ |
-| **`ok`** | Script executed successfully | N/A |
-| **`syntax_error`** | JavaScript parse error | No - fix the script |
+| Status               | Meaning                                 | Retry?                              |
+| -------------------- | --------------------------------------- | ----------------------------------- |
+| **`ok`**             | Script executed successfully            | N/A                                 |
+| **`syntax_error`**   | JavaScript parse error                  | No - fix the script                 |
 | **`illegal_access`** | Attempted to use blocked builtin/global | No - rewrite without forbidden APIs |
-| **`runtime_error`** | Bug in the JavaScript plan | No - fix the script logic |
-| **`tool_error`** | Specific tool call failed | Maybe - check tool input |
-| **`timeout`** | Script exceeded `timeoutMs` | No - optimize or increase timeout |
+| **`runtime_error`**  | Bug in the JavaScript plan              | No - fix the script logic           |
+| **`tool_error`**     | Specific tool call failed               | Maybe - check tool input            |
+| **`timeout`**        | Script exceeded `timeoutMs`             | No - optimize or increase timeout   |
 
 This lets models distinguish "my code is wrong" from "this specific tool call failed with input X".
 
@@ -1246,6 +1263,7 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
     - Check that plugin `mode` matches your intent
     - Improve tool descriptions to match search queries
     - Use broader search terms
+
   </Accordion>
 
   <Accordion title="Execution plans timing out">
@@ -1260,6 +1278,7 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
     - Optimize slow tools or use caching
     - Check for accidental blocking operations
     - Enclave automatically enforces iteration limits to prevent infinite loops
+
   </Accordion>
 
   <Accordion title="Illegal access errors">
@@ -1271,6 +1290,7 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
     - Ensure execution plan doesn't use `eval`, `Function`, `require`, `process`, etc.
     - Check the [ast-guard documentation](/docs/guides/ast-guard) for allowed globals
     - Use whitelisted globals: `Math`, `JSON`, `Array`, `Object`, `String`, `Number`, `Date`, `callTool`
+
   </Accordion>
 
   <Accordion title="Tool not allowed in execution plan">
@@ -1284,6 +1304,7 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
     - Check `codecall.enabledInCodeCall: true` in tool metadata
     - Review `directCalls.allowedTools` configuration
     - Try removing allowlist to allow all CodeCall-enabled tools
+
   </Accordion>
 
   <Accordion title="PII leaking through execution plans">
@@ -1294,6 +1315,7 @@ This lets models distinguish "my code is wrong" from "this specific tool call fa
     - Check that PII plugin runs on `afterToolCall` hook
     - Ensure tool results are being scrubbed properly
     - CodeCall cannot bypass pipeline hooks
+
   </Accordion>
 </AccordionGroup>
 
