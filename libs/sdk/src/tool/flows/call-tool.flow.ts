@@ -1,5 +1,14 @@
 // tools/flows/call-tool.flow.ts
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolContext, ToolEntry } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  FlowPlan,
+  FlowRunOptions,
+  ToolContext,
+  ToolEntry,
+  isOrchestratedMode,
+} from '../../common';
 import { z } from 'zod';
 import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -9,6 +18,7 @@ import {
   InvalidInputError,
   InvalidOutputError,
   ToolExecutionError,
+  AuthorizationRequiredError,
 } from '../../errors';
 
 const inputSchema = z.object({
@@ -34,7 +44,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'findTool', 'createToolCallContext', 'acquireQuota', 'acquireSemaphore'],
+  pre: [
+    'parseInput',
+    'findTool',
+    'checkToolAuthorization',
+    'createToolCallContext',
+    'acquireQuota',
+    'acquireSemaphore',
+  ],
   execute: ['validateInput', 'execute', 'validateOutput'],
   finalize: ['releaseSemaphore', 'releaseQuota', 'finalize'],
 } as const satisfies FlowPlan<string>;
@@ -122,6 +139,97 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.info(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /**
+   * Check if the tool's parent app is authorized.
+   * For progressive authorization, tools from unauthorized apps
+   * return an AuthorizationRequiredError with an auth_url.
+   */
+  @Stage('checkToolAuthorization')
+  async checkToolAuthorization() {
+    this.logger.verbose('checkToolAuthorization:start');
+    const { tool, authInfo } = this.state;
+
+    // Get authorization from authInfo.extra if available
+    const authorization = authInfo?.extra?.['authorization'] as
+      | {
+          authorizedAppIds?: string[];
+          authorizedApps?: Record<string, unknown>;
+        }
+      | undefined;
+
+    // No auth context = public mode, skip authorization check
+    if (!authorization) {
+      this.logger.verbose('checkToolAuthorization:skip (no auth context)');
+      return;
+    }
+
+    // Get app ID from tool owner (uses existing lineage system)
+    const appId = tool?.owner?.id;
+    if (!appId) {
+      // Tool has no owner = global tool, skip app-level authorization check
+      this.logger.verbose('checkToolAuthorization:skip (no owner)');
+      return;
+    }
+
+    // Check if app is authorized using existing session structure
+    const isAppAuthorized =
+      authorization.authorizedAppIds?.includes(appId) || appId in (authorization.authorizedApps || {});
+
+    if (!isAppAuthorized) {
+      // Get incremental auth configuration from scope's auth options
+      const apps = this.scope.apps.getApps();
+      const app = apps.find((a) => a.metadata.id === appId);
+      const authOptions = this.scope.auth?.options;
+
+      // Determine skippedAppBehavior:
+      // 1. Only applies in orchestrated mode with incrementalAuth configured
+      // 2. Default to 'anonymous' if not configured (allow anonymous fallback)
+      let skippedBehavior: 'anonymous' | 'require-auth' = 'anonymous';
+
+      if (authOptions && isOrchestratedMode(authOptions)) {
+        // Orchestrated mode - check incrementalAuth config
+        const incrementalConfig = authOptions.incrementalAuth;
+        if (incrementalConfig) {
+          // If incremental auth is disabled, always require auth
+          if (incrementalConfig.enabled === false) {
+            skippedBehavior = 'require-auth';
+          } else {
+            skippedBehavior = incrementalConfig.skippedAppBehavior || 'anonymous';
+          }
+        }
+        // If incrementalAuth not configured, default is enabled with 'anonymous' behavior
+      }
+      // For public/transparent modes, default 'anonymous' behavior applies
+
+      if (skippedBehavior === 'anonymous' && app?.metadata?.auth?.mode === 'public') {
+        // App supports anonymous - continue with anonymous access
+        this.logger.verbose(`checkToolAuthorization: using anonymous for ${appId}`);
+        return;
+      }
+
+      // Require explicit authorization - build auth URL
+      const authUrl = this.buildProgressiveAuthUrl(appId, tool?.fullName || '');
+
+      this.logger.info(`checkToolAuthorization: authorization required for app "${appId}"`);
+      throw new AuthorizationRequiredError({
+        appId,
+        toolId: tool?.fullName || tool?.name || 'unknown',
+        authUrl,
+        message: `Authorization required for ${appId}. Please authorize to use ${tool?.fullName || tool?.name}.`,
+      });
+    }
+
+    this.logger.verbose('checkToolAuthorization:done');
+  }
+
+  /**
+   * Build the URL for progressive/incremental authorization
+   */
+  private buildProgressiveAuthUrl(appId: string, toolId: string): string {
+    const baseUrl = this.scope.fullPath || '';
+    return `${baseUrl}/oauth/authorize?app=${encodeURIComponent(appId)}&tool=${encodeURIComponent(toolId)}`;
   }
 
   @Stage('createToolCallContext')

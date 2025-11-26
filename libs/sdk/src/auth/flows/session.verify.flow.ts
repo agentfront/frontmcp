@@ -1,22 +1,24 @@
 // auth/flows/session.verify.flow.ts
 import {
   authorizationSchema,
-  Flow, FlowBase,
+  Flow,
+  FlowBase,
   FlowRunOptions,
-  StageHookOf, userClaimSchema,
-  RemoteAuthOptions, sessionIdSchema, httpRequestInputSchema, FlowPlan,
+  StageHookOf,
+  userClaimSchema,
+  sessionIdSchema,
+  httpRequestInputSchema,
+  FlowPlan,
+  AuthOptions,
+  isTransparentMode,
+  TransparentAuthOptions,
 } from '../../common';
 import 'reflect-metadata';
-import {z} from 'zod';
-import {getRequestBaseUrl, normalizeEntryPrefix, normalizeScopeBase} from '../path.utils';
-import {
-  deriveTypedUser,
-  extractBearerToken,
-  isJwt,
-} from '../session/utils/auth-token.utils';
-import {JwksService, ProviderVerifyRef, VerifyResult} from '../jwks';
-import {parseSessionHeader} from '../session/utils/session-id.utils';
-
+import { z } from 'zod';
+import { getRequestBaseUrl, normalizeEntryPrefix, normalizeScopeBase } from '../path.utils';
+import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
+import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
+import { parseSessionHeader } from '../session/utils/session-id.utils';
 
 const inputSchema = httpRequestInputSchema;
 
@@ -38,7 +40,7 @@ const UnauthorizedSchema = z
     kind: z.literal('unauthorized'),
     prmMetadataHeader: z.string().describe('Path to protected resource metadata'),
   })
-  .describe('401 Unauthorized with \'WWW-Authenticate\' header for requesting authentication\'');
+  .describe("401 Unauthorized with 'WWW-Authenticate' header for requesting authentication'");
 
 const AuthorizedSchema = z
   .object({
@@ -46,7 +48,6 @@ const AuthorizedSchema = z
     authorization: authorizationSchema.describe('Session information if session id is present'),
   })
   .describe('Authorized session information');
-
 
 export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema]);
 
@@ -78,11 +79,9 @@ const Stage = StageHookOf(name);
   access: 'authorized',
 })
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
-
-
   @Stage('parseInput')
   async parseInput() {
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
     const entryPath = normalizeEntryPrefix(this.scope.entryPath);
     const routeBase = normalizeScopeBase(this.scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, entryPath);
@@ -96,10 +95,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const sessionProtocol = httpTransportHeader
       ? 'http'
       : sessionIdHeader
-        ? 'streamable-http'
-        : sessionIdQuery
-          ? 'sse'
-          : undefined;
+      ? 'streamable-http'
+      : sessionIdQuery
+      ? 'sse'
+      : undefined;
 
     const token = extractBearerToken(authorizationHeader);
 
@@ -118,7 +117,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   }
 
   @Stage('requireAuthorizationHeader', {
-    filter: ({state}) => !state.authorizationHeader,
+    filter: ({ state }) => !state.authorizationHeader,
   })
   async requireAuthorizationOrChallenge() {
     this.respond({
@@ -126,7 +125,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       prmMetadataHeader: this.state.required.prmMetadataHeader,
     });
   }
-
 
   /**
    * If Authorization is a JWT:
@@ -152,26 +150,30 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Best-effort verification using locally known keys (gateway/local provider cache).
     let verify: Promise<VerifyResult>;
-    if (this.scope.auth.options.type === 'local') { // TODO: fix
-      verify = jwks.verifyGatewayToken(token, this.state.required.baseUrl);
+    const authOptions = this.scope.auth.options as AuthOptions;
 
-    } else {
-      const primary = this.scope.auth.options as RemoteAuthOptions;
+    // Transparent mode uses remote provider's keys, all other modes use local keys
+    if (isTransparentMode(authOptions)) {
+      const primary = authOptions as TransparentAuthOptions;
       const issuer = this.scope.auth.issuer;
       const providerRefs: ProviderVerifyRef[] = [
         {
-          id: primary.id ?? 'default',
+          id: primary.remote.id ?? 'default',
           issuerUrl: issuer,
-          jwks: primary.jwks,
-          jwksUri: primary.jwksUri,
+          jwks: primary.remote.jwks,
+          jwksUri: primary.remote.jwksUri,
         },
       ];
       verify = jwks.verifyTransparentToken(token, providerRefs);
+    } else {
+      // Public or orchestrated mode - verify against local gateway keys
+      verify = jwks.verifyGatewayToken(token, this.state.required.baseUrl);
     }
+
     const result = await verify;
 
     if (result.ok) {
-      this.state.set({jwtPayload: result.payload});
+      this.state.set({ jwtPayload: result.payload });
       return;
     }
     this.respond({
@@ -193,7 +195,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    */
   @Stage('parseSessionHeader')
   async parseSessionHeader() {
-    const {sessionIdHeader, required: {token}} = this.state;
+    const {
+      sessionIdHeader,
+      required: { token },
+    } = this.state;
 
     const session = parseSessionHeader(sessionIdHeader, token);
     if (session) {
@@ -204,7 +209,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   @Stage('buildAuthorizedOutput')
   async buildAuthorizedOutput() {
     const {
-      required: {token, user},
+      required: { token, user },
       session,
     } = this.state;
 
@@ -217,5 +222,4 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       },
     });
   }
-
 }

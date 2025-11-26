@@ -1,19 +1,23 @@
-import {FrontMcpAuth, ProviderScope, RemoteAuthOptions, ScopeEntry, ServerRequest} from '../../common';
-import {URL} from 'url';
+import { FrontMcpAuth, ProviderScope, ScopeEntry, ServerRequest } from '../../common';
+import { TransparentAuthOptions } from '../../common/types/options/auth.options';
+import { URL } from 'url';
 import ProviderRegistry from '../../provider/provider.registry';
-import {JwksService} from '../jwks';
+import { JwksService } from '../jwks';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import SessionVerifyFlow from '../flows/session.verify.flow';
-import {Scope} from '../../scope';
+import { Scope } from '../../scope';
 
-
-export class RemotePrimaryAuth extends FrontMcpAuth<RemoteAuthOptions> {
+export class RemotePrimaryAuth extends FrontMcpAuth<TransparentAuthOptions> {
   override ready: Promise<void>;
   private jwks = new JwksService();
 
-  constructor(private readonly scope: ScopeEntry, private readonly providers: ProviderRegistry, options: RemoteAuthOptions) {
+  constructor(
+    private readonly scope: ScopeEntry,
+    private readonly providers: ProviderRegistry,
+    options: TransparentAuthOptions,
+  ) {
     super(options);
     this.ready = this.initialize();
   }
@@ -26,9 +30,8 @@ export class RemotePrimaryAuth extends FrontMcpAuth<RemoteAuthOptions> {
     return Promise.resolve();
   }
 
-
   get issuer(): string {
-    return this.options.baseUrl;
+    return this.options.remote.provider;
   }
 
   protected async initialize() {
@@ -47,13 +50,12 @@ export class RemotePrimaryAuth extends FrontMcpAuth<RemoteAuthOptions> {
     return Promise.resolve();
   }
 
-
   private async registerAuthFlows(scope: Scope) {
     await scope.registryFlows(
-      WellKnownPrmFlow, /** /.well-known/oauth-protected-resource */
-      WellKnownAsFlow, /** /.well-known/oauth-authorization-server */
-      WellKnownJwksFlow, /** /.well-known/jwks.json */
-      SessionVerifyFlow, /** Session verification flow */
+      WellKnownPrmFlow /** /.well-known/oauth-protected-resource */,
+      WellKnownAsFlow /** /.well-known/oauth-authorization-server */,
+      WellKnownJwksFlow /** /.well-known/jwks.json */,
+      SessionVerifyFlow /** Session verification flow */,
     );
   }
 }

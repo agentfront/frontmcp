@@ -1,14 +1,23 @@
 // auth/flows/well-known.jwks.flow.ts
 import {
-  Flow, FlowBase, FlowPlan,
-  FlowRunOptions, httpInputSchema, HttpJsonSchema, HttpRedirectSchema, httpRespond, HttpTextSchema,
-  RemoteAuthOptions, ScopeEntry, ServerRequest, StageHookOf,
+  Flow,
+  FlowBase,
+  FlowPlan,
+  FlowRunOptions,
+  httpInputSchema,
+  HttpJsonSchema,
+  HttpRedirectSchema,
+  httpRespond,
+  HttpTextSchema,
+  ScopeEntry,
+  ServerRequest,
+  StageHookOf,
 } from '../../common';
+import { AuthOptions, isTransparentMode } from '../../common/types/options/auth.options';
 import 'reflect-metadata';
-import {z} from 'zod';
-import {makeWellKnownPaths} from '../path.utils';
-import {JwksService} from '../jwks';
-
+import { z } from 'zod';
+import { makeWellKnownPaths } from '../path.utils';
+import { JwksService } from '../jwks';
 
 const inputSchema = httpInputSchema;
 
@@ -38,7 +47,6 @@ declare global {
 const name = 'well-known.jwks' as const;
 const Stage = StageHookOf(name);
 
-
 @Flow({
   name,
   plan,
@@ -63,7 +71,7 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
 
   @Stage('collectData')
   async collectData() {
-    const {isOrchestrated} = this.state.required;
+    const { isOrchestrated } = this.state.required;
     const jwksSvc = this.get(JwksService);
 
     // Orchestrated gateway → serve own JWKS
@@ -76,16 +84,23 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const primary = this.scope.auth.options as RemoteAuthOptions;
-    if (primary) {
-      if (primary.jwks && primary.jwks.keys.length) {
-        this.respond(httpRespond.json(primary.jwks));
+    const options = this.scope.auth.options;
+    if (options && isTransparentMode(options)) {
+      // Transparent mode - use remote provider's JWKS
+      if (options.remote.jwks && options.remote.jwks.keys.length) {
+        this.respond(httpRespond.json(options.remote.jwks));
       } else {
-        const location = primary.jwksUri ?? `${primary.baseUrl}/.well-known/jwks.json`;
+        const location = options.remote.jwksUri ?? `${options.remote.provider}/.well-known/jwks.json`;
         this.respond(httpRespond.redirect(location));
       }
     } else {
-      this.respond(httpRespond.notFound());
+      // Public or orchestrated mode - serve local JWKS
+      const keysDoc = jwksSvc.getPublicJwks();
+      if (keysDoc?.keys && Array.isArray(keysDoc.keys)) {
+        this.respond(httpRespond.json(keysDoc));
+      } else {
+        this.respond(httpRespond.notFound());
+      }
     }
   }
 }
