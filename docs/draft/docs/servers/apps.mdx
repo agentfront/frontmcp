@@ -4,9 +4,9 @@ slug: servers/apps
 icon: cube
 ---
 
-Apps are how you **group capabilities** in FrontMCP. Each app can contribute **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. Apps may run _locally_ (in this process) or be _remote_ (URL/worker).
+Apps are how you **group capabilities** in FrontMCP. Each app can contribute **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**.
 
-## Minimal local app
+## Minimal app
 
 ```ts
 import { App } from '@frontmcp/sdk';
@@ -28,7 +28,7 @@ export default class Server {}
 
 ---
 
-## Local app options
+## App options
 
 ```ts
 @App({
@@ -59,37 +59,6 @@ export default class Server {}
 
 ---
 
-## Remote apps
-
-Define an app that proxies to a **worker file** or a **URL**:
-
-```ts
-@App({
-  name: 'Remote CRM',
-  urlType: 'url', // 'url' | 'worker'
-  url: 'https://crm.example.com/mcp',
-  auth: { type: 'remote', name: 'crm-idp', baseUrl: 'https://idp.example.com' },
-  standalone: true,
-})
-export default class CrmApp {}
-```
-
-**Fields**
-
-```ts
-{
-  id?: string;
-  name: string;
-  description?: string;
-  urlType: 'worker' | 'url';
-  url: string;
-  auth?: AuthOptions;
-  standalone?: 'includeInParent' | boolean;
-}
-```
-
----
-
 ## Example: app with adapter + providers
 
 ```ts
@@ -104,3 +73,13 @@ export default class CrmApp {}
 })
 export default class BillingApp {}
 ```
+
+---
+
+## Remote Apps (Roadmap)
+
+<Info>
+  **Coming soon:** Connect to remote MCP servers and register them as `@App({ remote: true })`.
+  This will allow you to encapsulate external MCP servers and forward traffic with authentication,
+  treating them as first-class apps in your FrontMCP server.
+</Info>
