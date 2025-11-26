@@ -101,13 +101,13 @@ const validator = new JSAstValidator(createAgentScriptPreset({
 
 ### AgentScript Preset Options
 
-| Option | Type | Default | Description |
-| ------ | ---- | ------- | ----------- |
-| `requireCallTool` | `boolean` | `false` | Require at least one `callTool()` invocation in the code |
-| `allowedGlobals` | `string[]` | Standard safe globals | Identifiers that can be referenced without declaration |
-| `allowArrowFunctions` | `boolean` | `true` | Allow arrow functions for array methods |
-| `allowedLoops` | `object` | `for` and `for-of` | Configure which loop types are allowed |
-| `additionalDisallowedIdentifiers` | `string[]` | `[]` | Additional identifiers to block |
+| Option                            | Type       | Default               | Description                                              |
+| --------------------------------- | ---------- | --------------------- | -------------------------------------------------------- |
+| `requireCallTool`                 | `boolean`  | `false`               | Require at least one `callTool()` invocation in the code |
+| `allowedGlobals`                  | `string[]` | Standard safe globals | Identifiers that can be referenced without declaration   |
+| `allowArrowFunctions`             | `boolean`  | `true`                | Allow arrow functions for array methods                  |
+| `allowedLoops`                    | `object`   | `for` and `for-of`    | Configure which loop types are allowed                   |
+| `additionalDisallowedIdentifiers` | `string[]` | `[]`                  | Additional identifiers to block                          |
 
 <Tip>
   Use `requireCallTool: true` to ensure AgentScript code actually interacts with tools rather than just performing local computations. This is useful for preventing scripts that do nothing useful.
@@ -115,20 +115,20 @@ const validator = new JSAstValidator(createAgentScriptPreset({
 
 ### What AgentScript Blocks
 
-| Category | Blocked Constructs | Why |
-| -------- | ------------------ | --- |
-| **Code execution** | `eval`, `Function`, `AsyncFunction`, `GeneratorFunction` | Prevents dynamic code injection |
-| **System access** | `process`, `require`, `module`, `__dirname`, `__filename`, `Buffer` | Prevents Node.js API access |
-| **Global objects** | `window`, `globalThis`, `global`, `self`, `this` | Prevents sandbox escape |
-| **Timers** | `setTimeout`, `setInterval`, `setImmediate` | Prevents timing attacks and async escape |
-| **Prototype** | `__proto__`, `constructor`, `prototype` | Prevents prototype pollution |
-| **Metaprogramming** | `Proxy`, `Reflect` | Prevents interception and reflection |
-| **Network** | `fetch`, `XMLHttpRequest`, `WebSocket` | Prevents network access |
-| **Storage** | `localStorage`, `sessionStorage`, `indexedDB` | Prevents data persistence |
-| **Native code** | `WebAssembly`, `Worker`, `SharedWorker` | Prevents native execution |
-| **Weak references** | `WeakMap`, `WeakSet`, `WeakRef` | Prevents reference manipulation |
-| **User functions** | `function foo() {}`, `const f = function() {}` | Prevents recursion (arrow functions allowed) |
-| **Unbounded loops** | `while`, `do-while`, `for-in` | Prevents infinite loops and prototype walking |
+| Category            | Blocked Constructs                                                  | Why                                           |
+| ------------------- | ------------------------------------------------------------------- | --------------------------------------------- |
+| **Code execution**  | `eval`, `Function`, `AsyncFunction`, `GeneratorFunction`            | Prevents dynamic code injection               |
+| **System access**   | `process`, `require`, `module`, `__dirname`, `__filename`, `Buffer` | Prevents Node.js API access                   |
+| **Global objects**  | `window`, `globalThis`, `global`, `self`, `this`                    | Prevents sandbox escape                       |
+| **Timers**          | `setTimeout`, `setInterval`, `setImmediate`                         | Prevents timing attacks and async escape      |
+| **Prototype**       | `__proto__`, `constructor`, `prototype`                             | Prevents prototype pollution                  |
+| **Metaprogramming** | `Proxy`, `Reflect`                                                  | Prevents interception and reflection          |
+| **Network**         | `fetch`, `XMLHttpRequest`, `WebSocket`                              | Prevents network access                       |
+| **Storage**         | `localStorage`, `sessionStorage`, `indexedDB`                       | Prevents data persistence                     |
+| **Native code**     | `WebAssembly`, `Worker`, `SharedWorker`                             | Prevents native execution                     |
+| **Weak references** | `WeakMap`, `WeakSet`, `WeakRef`                                     | Prevents reference manipulation               |
+| **User functions**  | `function foo() {}`, `const f = function() {}`                      | Prevents recursion (arrow functions allowed)  |
+| **Unbounded loops** | `while`, `do-while`, `for-in`                                       | Prevents infinite loops and prototype walking |
 
 ### What AgentScript Allows
 
@@ -209,13 +209,13 @@ Transformations provide:
 
 ast-guard includes four security presets for different use cases:
 
-| Preset | Use Case | Security Level |
-| ------ | -------- | -------------- |
-| **AgentScript** | LLM-generated code, CodeCall | Highest - whitelist-only |
-| **STRICT** | Untrusted guest code | High - no loops, no async |
-| **SECURE** | Automation scripts | Medium - bounded loops only |
-| **STANDARD** | Trusted scripts | Low - basic guardrails |
-| **PERMISSIVE** | Internal/test code | Minimal - eval blocked |
+| Preset          | Use Case                     | Security Level              |
+| --------------- | ---------------------------- | --------------------------- |
+| **AgentScript** | LLM-generated code, CodeCall | Highest - whitelist-only    |
+| **STRICT**      | Untrusted guest code         | High - no loops, no async   |
+| **SECURE**      | Automation scripts           | Medium - bounded loops only |
+| **STANDARD**    | Trusted scripts              | Low - basic guardrails      |
+| **PERMISSIVE**  | Internal/test code           | Minimal - eval blocked      |
 
 ```ts
 import { JSAstValidator, createAgentScriptPreset, Presets } from 'ast-guard';
@@ -359,6 +359,7 @@ const rule = new NoCallTargetAssignmentRule({
 ```
 
 This blocks:
+
 - `callTool = malicious;` - Direct assignment
 - `const callTool = () => {};` - Variable shadowing
 - `const { callTool } = obj;` - Destructuring shadowing
@@ -436,11 +437,11 @@ const rule = new UnknownGlobalRule({
 });
 ```
 
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `allowedGlobals` | `['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date']` | Identifiers that can be referenced without declaration |
-| `allowStandardGlobals` | `true` | Include safe built-ins like `undefined`, `NaN`, `isNaN`, `parseInt`, etc. |
-| `message` | Auto-generated | Custom error message for violations |
+| Option                 | Default                                                                       | Description                                                               |
+| ---------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `allowedGlobals`       | `['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date']` | Identifiers that can be referenced without declaration                    |
+| `allowStandardGlobals` | `true`                                                                        | Include safe built-ins like `undefined`, `NaN`, `isNaN`, `parseInt`, etc. |
+| `message`              | Auto-generated                                                                | Custom error message for violations                                       |
 
 <Note>
   `UnknownGlobalRule` uses a flat symbol table for performance. It collects all declarations across the AST without tracking lexical scope. This is an intentional simplification for AgentScript v1 where user-defined functions are blocked by default (`NoUserDefinedFunctionsRule`). If you enable user functions, be aware that inner-scope declarations will "whitelist" that identifier name globally.

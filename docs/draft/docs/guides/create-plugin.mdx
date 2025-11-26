@@ -419,10 +419,10 @@ export * from './my-plugin.types';
 
 ### Available Hooks
 
-| Hook | Flow | Stages |
-|------|------|--------|
-| `ToolHook` | `tools:call-tool` | parseInput, findTool, createToolCallContext, acquireQuota, acquireSemaphore, validateInput, execute, validateOutput, releaseSemaphore, releaseQuota, finalize |
-| `ListToolsHook` | `tools:list-tools` | parseInput, findTools, resolveConflicts, parseTools |
+| Hook            | Flow               | Stages                                                                                                                                                        |
+| --------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ToolHook`      | `tools:call-tool`  | parseInput, findTool, createToolCallContext, acquireQuota, acquireSemaphore, validateInput, execute, validateOutput, releaseSemaphore, releaseQuota, finalize |
+| `ListToolsHook` | `tools:list-tools` | parseInput, findTools, resolveConflicts, parseTools                                                                                                           |
 
 ### Hook Timing
 
@@ -438,12 +438,12 @@ export * from './my-plugin.types';
 
 Lower numbers run first. Common conventions:
 
-| Priority | Use Case |
-|----------|----------|
-| 100-500 | Critical security checks |
-| 500-900 | Authorization, validation |
-| 900-1000 | Standard plugin behavior |
-| 1000+ | Logging, metrics |
+| Priority | Use Case                  |
+| -------- | ------------------------- |
+| 100-500  | Critical security checks  |
+| 500-900  | Authorization, validation |
+| 900-1000 | Standard plugin behavior  |
+| 1000+    | Logging, metrics          |
 
 ### FlowCtxOf State
 
@@ -493,6 +493,7 @@ async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
 ```
 
 **Guidelines:**
+
 - **Authorization hooks** - Throw errors to block execution
 - **Caching/logging hooks** - Catch errors and continue gracefully
 - **Cleanup hooks (Did)** - Always wrap in try/catch to avoid breaking the response
@@ -511,6 +512,7 @@ async checkCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
 ## Complete Example
 
 See the built-in plugins for complete examples:
+
 - **CachePlugin** - Caching with Redis/memory, hooks, dynamic providers
 - **CodeCallPlugin** - Complex plugin with tools, multiple providers, Zod validation
 - **SiteAuthorizationPlugin** - Simple authorization plugin with hooks
