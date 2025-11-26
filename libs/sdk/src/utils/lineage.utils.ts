@@ -45,8 +45,11 @@ export function parseQualifiedName(qualifiedName: string): { lineage: EntryLinea
   for (const part of parts) {
     const colonIdx = part.indexOf(':');
     if (colonIdx === -1) continue;
-    const kind = part.slice(0, colonIdx) as 'scope' | 'app' | 'plugin';
+    const kind = part.slice(0, colonIdx);
+    if (kind !== 'scope' && kind !== 'app' && kind !== 'plugin') continue;
     const id = part.slice(colonIdx + 1);
+    // ref is set to undefined as any since we're parsing from string - the ref
+    // would need to be resolved from context which this utility doesn't have access to
     lineage.push({ kind, id, ref: undefined as any });
   }
 

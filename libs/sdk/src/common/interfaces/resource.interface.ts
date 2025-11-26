@@ -23,7 +23,7 @@ type HistoryEntry<T> = {
   note?: string;
 };
 
-export type ResourceCtorArgs<In> = {
+export type ResourceCtorArgs = {
   metadata: ResourceMetadata | ResourceTemplateMetadata;
   uri: string;
   params: Record<string, string>;
@@ -50,7 +50,6 @@ export abstract class ResourceContext<In = any, Out = any> {
   protected activeStage: string;
 
   // ---- OUTPUT storages (backing fields)
-  private _outputDraft?: Partial<Out> | any;
   private _output?: Out;
 
   private _error?: Error;
@@ -58,7 +57,7 @@ export abstract class ResourceContext<In = any, Out = any> {
   // ---- histories
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
-  constructor(args: ResourceCtorArgs<In>) {
+  constructor(args: ResourceCtorArgs) {
     const { metadata, uri, params, providers, logger, authInfo } = args;
     this.runId = randomUUID();
     this.resourceName = metadata.name;

@@ -134,7 +134,7 @@ export interface ResourceRegistryInterface {
   getInlineResources(): ResourceEntry<any, any>[];
 
   // find a resource by URI (exact match first, then template matching)
-  findResourceForUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined;
+  findResourceForUri(uri: string): { instance: ResourceEntry<any, any>; params: Record<string, string> } | undefined;
 }
 
 export interface PromptRegistryInterface {

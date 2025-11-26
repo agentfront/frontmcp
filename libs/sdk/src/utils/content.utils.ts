@@ -52,6 +52,10 @@ export function sanitizeToJson(value: unknown): unknown {
     }
 
     if (Array.isArray(val)) {
+      if (seen.has(val)) {
+        return undefined;
+      }
+      seen.add(val);
       return val.map(sanitize);
     }
 

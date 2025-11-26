@@ -13,11 +13,24 @@ export interface ParsedUriTemplate {
  * Parse a URI template (RFC 6570 Level 1) into a regex pattern and parameter names.
  * Supports simple string substitution: {param}
  *
+ * Note: This implements RFC 6570 Level 1 only (simple string substitution).
+ * Advanced operators like {+path}, {#fragment}, or {?query} are not supported.
+ *
  * @example
  * parseUriTemplate("file:///{path}") => { pattern: /^file:\/\/\/([^/]+)$/, paramNames: ["path"] }
  * parseUriTemplate("users/{userId}/posts/{postId}") => { pattern: /^users\/([^/]+)\/posts\/([^/]+)$/, paramNames: ["userId", "postId"] }
+ *
+ * @throws Error if template is too long (>1000 chars) or has too many parameters (>50)
  */
 export function parseUriTemplate(template: string): ParsedUriTemplate {
+  if (template.length > 1000) {
+    throw new Error('URI template too long (max 1000 characters)');
+  }
+  const paramCount = (template.match(/\{[^}]+\}/g) || []).length;
+  if (paramCount > 50) {
+    throw new Error('URI template has too many parameters (max 50)');
+  }
+
   const paramNames: string[] = [];
 
   // Escape special regex characters, but handle {param} placeholders

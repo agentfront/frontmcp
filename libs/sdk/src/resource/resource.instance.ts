@@ -103,7 +103,7 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
 
-    const resourceCtorArgs: ResourceCtorArgs<In> = {
+    const resourceCtorArgs: ResourceCtorArgs = {
       metadata,
       uri,
       params,
@@ -117,12 +117,15 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
     switch (record.kind) {
       case ResourceKind.CLASS_TOKEN:
       case ResourceTemplateKind.CLASS_TOKEN:
-        return new (record.provide as unknown as new (args: ResourceCtorArgs<In>) => ResourceContext<In, Out>)(
+        return new (record.provide as unknown as new (args: ResourceCtorArgs) => ResourceContext<In, Out>)(
           resourceCtorArgs,
         );
       case ResourceKind.FUNCTION:
       case ResourceTemplateKind.FUNCTION:
         return new FunctionResourceContext<In, Out>(record as ResourceFunctionRecord, resourceCtorArgs);
+      default:
+        // This should be unreachable if all ResourceKind and ResourceTemplateKind values are handled
+        throw new Error(`Unhandled resource kind: ${(record as any).kind}`);
     }
   }
 
@@ -175,7 +178,7 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
  * Resource context for function-decorated resources.
  */
 class FunctionResourceContext<In = any, Out = any> extends ResourceContext<In, Out> {
-  constructor(private readonly record: ResourceFunctionRecord, args: ResourceCtorArgs<In>) {
+  constructor(private readonly record: ResourceFunctionRecord, args: ResourceCtorArgs) {
     super(args);
   }
 

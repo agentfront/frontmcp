@@ -103,13 +103,10 @@ export function normalizeOwnerPath(ownerKey: string, kind: NameCase): string {
   const levels = ownerKey.split('/');
   const normLevels = levels.map((level) => {
     const parts = level.split(':'); // ["app","Portal"]
-    return parts
-      .map((p) => normalizeSegment(p, kind))
-      .join(kind === 'snake' ? '_' : kind === 'kebab' ? '-' : kind === 'dot' ? '.' : '');
+    return parts.map((p) => normalizeSegment(p, kind)).join(sepFor(kind));
   });
   if (kind === 'camel') return normLevels.map((seg) => seg.charAt(0).toLowerCase() + seg.slice(1)).join('');
-  const sep = kind === 'snake' ? '_' : kind === 'kebab' ? '-' : '.';
-  return normLevels.join(sep);
+  return normLevels.join(sepFor(kind));
 }
 
 /**

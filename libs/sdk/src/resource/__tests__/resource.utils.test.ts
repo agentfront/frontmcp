@@ -202,7 +202,9 @@ describe('Resource Utils', () => {
   describe('isResourceTemplate', () => {
     it('should return true for function-style template', () => {
       const funcTemplate = function () {
-        return () => {};
+        return () => {
+          /* no-op handler for test */
+        };
       };
       Object.assign(funcTemplate, {
         [FrontMcpResourceTemplateTokens.type]: 'function-resource-template',

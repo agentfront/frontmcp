@@ -41,8 +41,12 @@ describe('Content Utils', () => {
     });
 
     it('should drop functions', () => {
-      expect(sanitizeToJson(() => {})).toBeUndefined();
-      expect(sanitizeToJson(function test() {})).toBeUndefined();
+      expect(sanitizeToJson(() => 42)).toBeUndefined();
+      expect(
+        sanitizeToJson(function test() {
+          return 42;
+        }),
+      ).toBeUndefined();
     });
 
     it('should drop symbols', () => {
@@ -133,7 +137,7 @@ describe('Content Utils', () => {
     it('should sanitize before structuring', () => {
       const obj = {
         date: new Date('2024-01-15T10:30:00.000Z'),
-        func: () => {},
+        func: () => 42,
       };
       const result = toStructuredContent(obj);
 

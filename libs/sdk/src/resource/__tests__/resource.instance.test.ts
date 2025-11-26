@@ -454,7 +454,7 @@ describe('ResourceInstance', () => {
       }
     });
 
-    it('should return success false for valid but processable output', async () => {
+    it('should handle null output gracefully', async () => {
       @Resource({
         name: 'safe-process',
         uri: 'safe://process',
