@@ -98,12 +98,13 @@ export function promptDiscoveryDeps(rec: PromptRecord): Token[] {
 /**
  * Build a parsed prompt result from raw output
  */
-export function buildParsedPromptResult(raw: any, metadata: PromptMetadata): GetPromptResult {
+export function buildParsedPromptResult(raw: unknown, metadata: PromptMetadata): GetPromptResult {
   // If already in GetPromptResult format
   if (raw && typeof raw === 'object' && 'messages' in raw && Array.isArray(raw.messages)) {
+    const rawObj = raw as { description?: string; messages: unknown[] };
     return {
-      description: raw.description ?? metadata.description,
-      messages: raw.messages as PromptMessage[],
+      description: rawObj.description ?? metadata.description,
+      messages: rawObj.messages as PromptMessage[],
     };
   }
 

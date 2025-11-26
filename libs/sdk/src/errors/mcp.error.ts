@@ -367,7 +367,7 @@ export class InvalidHookFlowError extends InternalMcpError {
  */
 export class PromptNotFoundError extends PublicMcpError {
   constructor(promptName: string) {
-    super(`Prompt not found: ${promptName}`, 'PROMPT_NOT_FOUND');
+    super(`Prompt not found: ${promptName}`, 'PROMPT_NOT_FOUND', 404);
   }
 }
 
@@ -385,6 +385,13 @@ export class PromptExecutionError extends InternalMcpError {
     );
     this.promptName = promptName;
     this.originalError = cause;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
   }
 }
 

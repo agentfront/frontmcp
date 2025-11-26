@@ -26,17 +26,17 @@ export type ParsedPromptResult = GetPromptResult;
 export type PromptSafeTransformResult<T> = { success: true; data: T } | { success: false; error: Error };
 
 export abstract class PromptEntry extends BaseEntry<AnyPromptRecord, PromptInterface, PromptMetadata> {
-  owner: EntryOwnerRef;
+  owner!: EntryOwnerRef;
 
   /**
    * The name of the prompt, as declared in the metadata.
    */
-  name: string;
+  name!: string;
 
   /**
    * The full name of the prompt, including the owner name as prefix.
    */
-  fullName: string;
+  fullName!: string;
 
   /**
    * Create a prompt context (class or function wrapper).

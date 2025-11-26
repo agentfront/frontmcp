@@ -141,7 +141,7 @@ class FunctionPromptContext extends PromptContext {
     super(args);
   }
 
-  execute(args: Record<string, string>): Promise<any> {
+  execute(args: Record<string, string>): Promise<unknown> {
     return this.record.provide(args, this);
   }
 }
