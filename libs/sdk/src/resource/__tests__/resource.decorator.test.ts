@@ -7,7 +7,7 @@ import {
   FrontMcpResource,
   FrontMcpResourceTemplate,
 } from '../../common/decorators/resource.decorator';
-import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../../common/tokens';
+import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../../common';
 
 describe('Resource Decorators', () => {
   describe('@Resource decorator', () => {
@@ -108,7 +108,7 @@ describe('Resource Decorators', () => {
       })
       class TestTemplate {
         execute(uri: string, params: Record<string, string>) {
-          return { text: `content for ${params.id}` };
+          return { text: `content for ${params['id']}` };
         }
       }
 
@@ -242,7 +242,7 @@ describe('Resource Decorators', () => {
       const MyTemplate = resourceTemplate({
         name: 'func-template',
         uriTemplate: 'func://{id}',
-      })((uri, params) => ({ contents: [{ uri, text: `content for ${params.id}` }] }));
+      })((uri, params) => ({ contents: [{ uri, text: `content for ${params['id']}` }] }));
 
       expect(typeof MyTemplate).toBe('function');
     });
@@ -276,7 +276,7 @@ describe('Resource Decorators', () => {
       const MyTemplate = resourceTemplate({
         name: 'callable',
         uriTemplate: 'call://{id}',
-      })((uri, params) => ({ contents: [{ uri, text: `user ${params.id}` }] }));
+      })((uri, params) => ({ contents: [{ uri, text: `user ${params['id']}` }] }));
 
       const execute = MyTemplate();
       expect(typeof execute).toBe('function');
@@ -287,7 +287,7 @@ describe('Resource Decorators', () => {
         name: 'params-test',
         uriTemplate: 'users://{userId}/posts/{postId}',
       })((uri, params) => ({
-        contents: [{ uri, text: `User: ${params.userId}, Post: ${params.postId}` }],
+        contents: [{ uri, text: `User: ${params['userId']}, Post: ${params['postId']}` }],
       }));
 
       const execute = MyTemplate();
