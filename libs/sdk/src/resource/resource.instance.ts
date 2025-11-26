@@ -30,7 +30,7 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
   private templateInfo?: { pattern: RegExp; paramNames: string[] };
 
   constructor(record: ResourceRecord | ResourceTemplateRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
-    super(record as ResourceRecord);
+    super(record);
     this.owner = owner;
     this.providers = providers;
     this.name = record.metadata.name;

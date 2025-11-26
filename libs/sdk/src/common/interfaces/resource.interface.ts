@@ -47,7 +47,7 @@ export abstract class ResourceContext<In = any, Out = any> {
   /** Extracted URI template parameters (empty for static resources) */
   readonly params: Record<string, string>;
 
-  protected activeStage: string;
+  protected activeStage: string = 'init';
 
   // ---- OUTPUT storages (backing fields)
   private _output?: Out;
@@ -61,6 +61,8 @@ export abstract class ResourceContext<In = any, Out = any> {
     const { metadata, uri, params, providers, logger, authInfo } = args;
     this.runId = randomUUID();
     this.resourceName = metadata.name;
+    // resourceId uses the metadata name as the stable identifier for the resource type
+    // (runId is the unique instance identifier for this specific execution)
     this.resourceId = metadata.name;
     this.metadata = metadata;
     this.uri = uri;

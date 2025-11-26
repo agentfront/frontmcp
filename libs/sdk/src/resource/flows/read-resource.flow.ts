@@ -147,6 +147,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const { input, params } = this.state.required;
 
     if (!resourceContext) {
+      this.logger.warn('execute: resourceContext not found, skipping execution');
       return;
     }
     resourceContext.mark('execute');

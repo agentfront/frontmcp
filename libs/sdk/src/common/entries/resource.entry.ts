@@ -2,15 +2,22 @@
 
 import { z } from 'zod';
 import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { ResourceRecord } from '../records';
+import { ResourceRecord, ResourceFunctionRecord } from '../records';
 import { ResourceContext, ResourceInterface } from '../interfaces';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ReadResourceRequest, ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 
-// Resource template record and kind are in resource.types.ts to avoid circular imports
-// We import them dynamically where needed
+// Resource template records defined in resource.types.ts to avoid circular imports
+// This union type covers both ResourceRecord and ResourceTemplateRecord since they have the same structure
+export type AnyResourceRecord =
+  | ResourceRecord
+  | {
+      kind: string;
+      provide: any;
+      metadata: ResourceMetadata | ResourceTemplateMetadata;
+    };
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
@@ -20,7 +27,7 @@ export type ParsedResourceResult = ReadResourceResult;
 export type ResourceSafeTransformResult<T> = { success: true; data: T } | { success: false; error: Error };
 
 export abstract class ResourceEntry<In = any, Out = any> extends BaseEntry<
-  ResourceRecord,
+  AnyResourceRecord,
   ResourceInterface<In, Out>,
   ResourceMetadata | ResourceTemplateMetadata
 > {

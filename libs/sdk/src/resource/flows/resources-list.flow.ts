@@ -164,14 +164,16 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     try {
       const resolved = this.state.required.resolvedResources;
 
-      const resources: ResponseResourceItem[] = resolved.map(({ finalName, resource }) => ({
-        uri: resource.uri!,
-        name: finalName,
-        title: resource.metadata.title,
-        description: resource.metadata.description,
-        mimeType: resource.metadata.mimeType,
-        icons: resource.metadata.icons,
-      }));
+      const resources: ResponseResourceItem[] = resolved
+        .filter(({ resource }) => resource.uri != null)
+        .map(({ finalName, resource }) => ({
+          uri: resource.uri,
+          name: finalName,
+          title: resource.metadata.title,
+          description: resource.metadata.description,
+          mimeType: resource.metadata.mimeType,
+          icons: resource.metadata.icons,
+        }));
 
       const preview = this.sample(resources.map((r) => r.name)).join(', ');
       const extra = resources.length > 5 ? `, +${resources.length - 5} more` : '';
