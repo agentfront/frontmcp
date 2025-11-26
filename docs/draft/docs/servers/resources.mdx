@@ -6,6 +6,10 @@ icon: book-open
 
 Resources expose **readable data** to an AI model's context. Unlike tools that execute actions with side effects, resources are designed for read-only data retrieval—configuration files, user profiles, documents, API responses, or any content the model needs to reference.
 
+<Info>
+This feature implements the [MCP Resources specification](https://modelcontextprotocol.io/specification/2025-11-25/server/resources). FrontMCP handles all protocol details automatically.
+</Info>
+
 ## Why Resources?
 
 In the Model Context Protocol, resources serve a fundamentally different purpose than tools:
@@ -423,6 +427,40 @@ When a client requests `resources/read` with a URI:
 2. For templates, parameters are extracted from the URI
 3. The `execute()` method is called with the URI and parameters
 4. The return value is converted to MCP `ReadResourceResult` format
+
+### Capabilities
+
+FrontMCP automatically advertises resource capabilities during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "resources": {
+      "subscribe": true,
+      "listChanged": true
+    }
+  }
+}
+```
+
+| Capability | Description |
+|------------|-------------|
+| `subscribe` | When `true`, clients can subscribe to individual resource changes via `resources/subscribe` |
+| `listChanged` | When `true`, the server will send `notifications/resources/list_changed` when resources are added or removed |
+
+The SDK sets these capabilities based on your registered resources:
+- `listChanged: true` when you have any resources registered
+- `subscribe: true` when subscription support is enabled
+
+### Change Notifications
+
+When resources change dynamically (e.g., via adapters or plugins), FrontMCP automatically sends `notifications/resources/list_changed` to connected clients. Clients that support this notification will refresh their resource list.
+
+For subscribed resources, the server sends `notifications/resources/updated` when the content changes.
+
+<Tip>
+For the full protocol specification, see [MCP Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources).
+</Tip>
 
 ---
 

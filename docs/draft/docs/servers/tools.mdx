@@ -4,9 +4,37 @@ slug: servers/tools
 icon: wrench
 ---
 
-Tools are **typed actions** your server can execute. They’re described with Zod schemas and exposed via MCP. Implement as a class with `@Tool({...})` or as a function via `tool()`.
+Tools are **typed actions** that execute operations with side effects. They're the primary way to enable an AI model to interact with external systems—calling APIs, modifying data, performing calculations, or triggering workflows.
 
-## Minimal tool (class)
+<Info>
+This feature implements the [MCP Tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools). FrontMCP handles all protocol details automatically.
+</Info>
+
+## Why Tools?
+
+In the Model Context Protocol, tools serve a distinct purpose from resources and prompts:
+
+| Aspect | Tool | Resource | Prompt |
+|--------|------|----------|--------|
+| **Purpose** | Execute actions | Provide data | Provide templated instructions |
+| **Direction** | Model triggers execution | Model pulls data | Model uses messages |
+| **Side effects** | Yes (mutations, API calls) | No (read-only) | No (message generation) |
+| **Use case** | Actions, calculations, integrations | Context loading | Conversation templates |
+
+Tools are ideal for:
+- **API integrations** — call external services, webhooks, third-party APIs
+- **Data mutations** — create, update, delete records
+- **Calculations** — perform computations, transformations
+- **System operations** — file operations, process management
+- **Workflows** — trigger multi-step processes, orchestration
+
+---
+
+## Creating Tools
+
+### Class Style
+
+Use class decorators for tools that need dependency injection, lifecycle hooks, or complex logic:
 
 ```ts
 import { Tool } from '@frontmcp/sdk';
@@ -17,73 +45,530 @@ import { z } from 'zod';
   description: 'Greets a user by name',
   inputSchema: { name: z.string() },
 })
-export default class GreetTool {
+class GreetTool {
   async execute({ name }: { name: string }) {
     return `Hello, ${name}!`;
   }
 }
 ```
 
-Register it on an app:
+### Function Style
 
-```ts
-@App({ id: 'hello', name: 'Hello', tools: [GreetTool] })
-export default class HelloApp {}
-```
-
-## Inline tool (function builder)
+For simpler tools, use the functional builder:
 
 ```ts
 import { tool } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-export const Add = tool({
-  name: 'add',
-  description: 'Add two numbers',
-  inputSchema: { a: z.number(), b: z.number() },
-})((input) => input.a + input.b);
-```
-
-Add to app:
-
-```ts
-@App({ name: 'Calc', tools: [Add] })
-class CalcApp {}
+const GreetTool = tool({
+  name: 'greet',
+  description: 'Greets a user by name',
+  inputSchema: { name: z.string() },
+})(({ name }) => `Hello, ${name}!`);
 ```
 
 ---
 
-## Tool metadata
+## Registering Tools
+
+Add tools to your app via the `tools` array:
+
+```ts
+import { App } from '@frontmcp/sdk';
+
+@App({
+  id: 'my-app',
+  name: 'My Application',
+  tools: [GreetTool, CalculateTool, SendEmailTool],
+})
+class MyApp {}
+```
+
+Tools can also be generated dynamically by **adapters** (e.g., OpenAPI adapter) or **plugins**.
+
+---
+
+## Input Schemas
+
+Tools use Zod schemas for type-safe input validation. The schema is automatically converted to JSON Schema for MCP protocol compatibility.
+
+### Basic Types
 
 ```ts
 @Tool({
-  id?: string,
-  name: string,
-  description?: string,
-  inputSchema: ZodSchema,
-  rawInputSchema?: JSONSchema7,
-  outputSchema?: ZodSchema,
-  tags?: string[],
-  annotations?: {
-    title?: string,
-    readOnlyHint?: boolean,
-    destructiveHint?: boolean,
-    idempotentHint?: boolean,
-    openWorldHint?: boolean,
+  name: 'user-action',
+  inputSchema: {
+    userId: z.string(),
+    count: z.number(),
+    enabled: z.boolean(),
   },
-  hideFromDiscovery?: boolean, // default false
 })
 ```
 
-**Notes**
+### With Descriptions
 
-- `annotations` hint model & UI behavior (read-only, idempotent, etc.).
-- `hideFromDiscovery` keeps a tool callable but off `tool/list`.
-- Tools can attach **per-tool hooks** (see _Advanced → Hooks_).
+```ts
+@Tool({
+  name: 'send-email',
+  inputSchema: {
+    to: z.string().email().describe('Recipient email address'),
+    subject: z.string().describe('Email subject line'),
+    body: z.string().describe('Email body content'),
+  },
+})
+```
+
+### Optional and Default Values
+
+```ts
+@Tool({
+  name: 'search',
+  inputSchema: {
+    query: z.string(),
+    limit: z.number().default(10).describe('Max results to return'),
+    offset: z.number().optional().describe('Pagination offset'),
+  },
+})
+```
+
+### Complex Types
+
+```ts
+@Tool({
+  name: 'create-order',
+  inputSchema: {
+    customerId: z.string(),
+    items: z.array(z.object({
+      productId: z.string(),
+      quantity: z.number().min(1),
+    })),
+    shipping: z.enum(['standard', 'express', 'overnight']),
+  },
+})
+```
 
 ---
 
-## Return values
+## Output Schemas
 
-- Return any serializable type; if you provide `outputSchema`, it will validate.
-- Errors are surfaced via MCP error responses; you can also throw typed errors inside executors.
+Optionally define an output schema for response validation:
+
+```ts
+@Tool({
+  name: 'calculate-total',
+  inputSchema: {
+    items: z.array(z.object({
+      price: z.number(),
+      quantity: z.number(),
+    })),
+  },
+  outputSchema: z.object({
+    subtotal: z.number(),
+    tax: z.number(),
+    total: z.number(),
+  }),
+})
+class CalculateTotalTool {
+  execute({ items }) {
+    const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const tax = subtotal * 0.1;
+    return { subtotal, tax, total: subtotal + tax };
+  }
+}
+```
+
+---
+
+## Return Values
+
+Tools support multiple return formats. The SDK automatically converts your return value to the MCP `CallToolResult` format.
+
+### Simple Returns
+
+```ts
+// String -> text content
+execute() {
+  return 'Operation completed successfully';
+}
+
+// Object -> auto-serialized to JSON
+execute() {
+  return { id: '123', status: 'created' };
+}
+
+// Number/Boolean -> converted to text
+execute() {
+  return 42;
+}
+```
+
+### Full MCP Format
+
+For complete control over the response, return the full `CallToolResult` structure:
+
+```ts
+execute() {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: 'Operation completed',
+      },
+    ],
+    isError: false,
+  };
+}
+```
+
+### Multiple Content Items
+
+Return an array to include multiple content blocks:
+
+```ts
+execute() {
+  return {
+    content: [
+      { type: 'text', text: 'Summary of results' },
+      { type: 'text', text: JSON.stringify(details) },
+    ],
+  };
+}
+```
+
+---
+
+## Tool Metadata
+
+```ts
+@Tool({
+  name: string,              // Required: unique identifier
+  description?: string,      // Optional: hint for the LLM
+  inputSchema: ZodSchema,    // Required: Zod schema for input validation
+  outputSchema?: ZodSchema,  // Optional: Zod schema for output validation
+  title?: string,            // Optional: human-readable display name
+  icons?: Icon[],            // Optional: UI icons
+  tags?: string[],           // Optional: categorization tags
+  annotations?: {            // Optional: MCP tool annotations
+    title?: string;          //   - display title
+    readOnlyHint?: boolean;  //   - hint that tool is read-only
+    destructiveHint?: boolean; // - hint that tool is destructive
+    idempotentHint?: boolean;  // - hint that tool is idempotent
+    openWorldHint?: boolean;   // - hint for open-world assumption
+  },
+  hideFromDiscovery?: boolean, // Optional: hide from tools/list (default: false)
+})
+```
+
+**Field descriptions:**
+
+| Field | Description |
+|-------|-------------|
+| `name` | Programmatic identifier used internally and in MCP responses |
+| `description` | Helps the model understand when and how to use this tool |
+| `inputSchema` | Zod schema defining expected input parameters |
+| `outputSchema` | Zod schema for validating and documenting output |
+| `title` | Human-friendly name for UI display |
+| `icons` | Array of icons for visual representation in clients |
+| `tags` | Categorization for organization and filtering |
+| `annotations` | MCP-defined hints about tool behavior |
+| `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
+
+---
+
+## Tool Annotations
+
+Annotations provide hints to clients about tool behavior:
+
+```ts
+@Tool({
+  name: 'delete-record',
+  description: 'Permanently delete a record',
+  inputSchema: { id: z.string() },
+  annotations: {
+    destructiveHint: true,  // Warns clients this operation is destructive
+  },
+})
+```
+
+| Annotation | Description |
+|------------|-------------|
+| `title` | Display title for the tool |
+| `readOnlyHint` | Tool doesn't modify state (like a resource, but returns computed data) |
+| `destructiveHint` | Tool performs irreversible operations (delete, overwrite) |
+| `idempotentHint` | Multiple identical calls produce the same result |
+| `openWorldHint` | Tool interacts with external systems (APIs, services) |
+
+---
+
+## Tool Context
+
+Class-based tools have access to a rich execution context via `this`:
+
+```ts
+@Tool({
+  name: 'context-example',
+  inputSchema: { query: z.string() },
+})
+class ContextExampleTool {
+  async execute({ query }: { query: string }) {
+    // Input received by the tool
+    this.input;              // { query: 'value' }
+    this.metadata;           // Tool metadata (name, description, etc.)
+
+    // Authentication
+    this.authInfo;           // Auth context from MCP session
+
+    // Dependency injection
+    this.get(ConfigService); // Resolve a provider
+    this.tryGet(Cache);      // Resolve or return undefined
+
+    // Scope access
+    this.scope;              // Access the current scope
+
+    // Utilities
+    this.fetch(url);         // Built-in fetch for HTTP requests
+
+    // Flow control
+    this.respond(value);     // End execution with a response
+
+    return `Processed: ${query}`;
+  }
+}
+```
+
+### Using Providers
+
+Inject services via the `get()` method:
+
+```ts
+@Tool({
+  name: 'create-user',
+  inputSchema: {
+    email: z.string().email(),
+    name: z.string(),
+  },
+})
+class CreateUserTool {
+  async execute({ email, name }) {
+    const db = this.get(DatabaseProvider);
+    const user = await db.users.create({ email, name });
+    return { id: user.id, email: user.email };
+  }
+}
+```
+
+---
+
+## Real-World Examples
+
+### Calculator Tool
+
+```ts
+@Tool({
+  name: 'calculate',
+  description: 'Perform mathematical calculations',
+  inputSchema: {
+    expression: z.string().describe('Mathematical expression to evaluate'),
+  },
+  annotations: {
+    readOnlyHint: true,
+    idempotentHint: true,
+  },
+})
+class CalculateTool {
+  execute({ expression }) {
+    // Using a safe math parser (not eval!)
+    const result = safeEvaluate(expression);
+    return { expression, result };
+  }
+}
+```
+
+### API Integration Tool
+
+```ts
+@Tool({
+  name: 'create-github-issue',
+  description: 'Create a new issue in a GitHub repository',
+  inputSchema: {
+    owner: z.string().describe('Repository owner'),
+    repo: z.string().describe('Repository name'),
+    title: z.string().describe('Issue title'),
+    body: z.string().optional().describe('Issue body'),
+    labels: z.array(z.string()).optional().describe('Labels to apply'),
+  },
+  annotations: {
+    openWorldHint: true,
+  },
+})
+class CreateGitHubIssueTool {
+  async execute({ owner, repo, title, body, labels }) {
+    const config = this.get(ConfigProvider);
+
+    const response = await this.fetch(
+      `https://api.github.com/repos/${owner}/${repo}/issues`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${config.githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+        body: JSON.stringify({ title, body, labels }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const issue = await response.json();
+    return {
+      id: issue.id,
+      number: issue.number,
+      url: issue.html_url,
+    };
+  }
+}
+```
+
+### Database Mutation Tool
+
+```ts
+@Tool({
+  name: 'update-user-status',
+  description: 'Update a user\'s account status',
+  inputSchema: {
+    userId: z.string().describe('User ID'),
+    status: z.enum(['active', 'suspended', 'deleted']).describe('New status'),
+    reason: z.string().optional().describe('Reason for status change'),
+  },
+  annotations: {
+    destructiveHint: true,
+  },
+})
+class UpdateUserStatusTool {
+  async execute({ userId, status, reason }) {
+    const db = this.get(DatabaseProvider);
+    const audit = this.get(AuditLogProvider);
+
+    const user = await db.users.findById(userId);
+    if (!user) {
+      throw new Error(`User ${userId} not found`);
+    }
+
+    await db.users.update(userId, { status });
+    await audit.log({
+      action: 'user_status_change',
+      userId,
+      previousStatus: user.status,
+      newStatus: status,
+      reason,
+      performedBy: this.authInfo?.userId,
+    });
+
+    return {
+      userId,
+      previousStatus: user.status,
+      newStatus: status,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+```
+
+### File Operation Tool
+
+```ts
+@Tool({
+  name: 'write-file',
+  description: 'Write content to a file',
+  inputSchema: {
+    path: z.string().describe('File path'),
+    content: z.string().describe('File content'),
+    encoding: z.enum(['utf-8', 'base64']).default('utf-8'),
+  },
+})
+class WriteFileTool {
+  async execute({ path, content, encoding }) {
+    const fs = await import('fs/promises');
+    const pathModule = await import('path');
+
+    // Security: validate path is within allowed directory
+    const safePath = pathModule.resolve(process.cwd(), 'workspace', path);
+    if (!safePath.startsWith(pathModule.resolve(process.cwd(), 'workspace'))) {
+      throw new Error('Path traversal not allowed');
+    }
+
+    await fs.writeFile(safePath, content, encoding);
+
+    return {
+      path: safePath,
+      size: Buffer.byteLength(content, encoding),
+      written: true,
+    };
+  }
+}
+```
+
+---
+
+## MCP Protocol Integration
+
+Tools integrate with the MCP protocol via two flows:
+
+| Flow | Description |
+|------|-------------|
+| `tools/list` | Returns all available tools with their metadata and input schemas |
+| `tools/call` | Executes a specific tool with provided arguments |
+
+When a client requests `tools/call` with a name and arguments:
+1. The SDK locates the tool by name
+2. Arguments are validated against the tool's `inputSchema`
+3. The `execute()` method is called with the validated arguments
+4. The return value is validated against `outputSchema` (if provided) and converted to MCP `CallToolResult` format
+
+### Capabilities
+
+FrontMCP automatically advertises tool capabilities during MCP initialization:
+
+```json
+{
+  "capabilities": {
+    "tools": {
+      "listChanged": true
+    }
+  }
+}
+```
+
+| Capability | Description |
+|------------|-------------|
+| `listChanged` | When `true`, the server will send `notifications/tools/list_changed` when tools are added or removed |
+
+The SDK sets `listChanged: true` when you have any tools registered, enabling clients to receive real-time notifications when tools are dynamically added or removed.
+
+### Change Notifications
+
+When tools change dynamically (e.g., via adapters or plugins), FrontMCP automatically sends `notifications/tools/list_changed` to connected clients. Clients that support this notification will refresh their tool list.
+
+<Tip>
+For the full protocol specification, see [MCP Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
+</Tip>
+
+---
+
+## Best Practices
+
+**Do:**
+- Use descriptive `name` and `description` fields to help models understand tool purpose
+- Define clear input schemas with `.describe()` on each field
+- Use appropriate annotations (`destructiveHint`, `idempotentHint`, etc.) to guide client behavior
+- Validate inputs thoroughly and return meaningful error messages
+- Keep tools focused on a single action or operation
+
+**Don't:**
+- Create tools for read-only data retrieval (use resources instead)
+- Skip input validation—always define a proper `inputSchema`
+- Ignore error handling—wrap external calls in try/catch
+- Create overly complex tools—split into multiple tools if needed
+- Expose sensitive operations without proper authentication checks

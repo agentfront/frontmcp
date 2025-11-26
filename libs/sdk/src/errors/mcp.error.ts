@@ -359,6 +359,43 @@ export class InvalidHookFlowError extends InternalMcpError {
 }
 
 // ============================================================================
+// Prompt Errors
+// ============================================================================
+
+/**
+ * Prompt not found error.
+ */
+export class PromptNotFoundError extends PublicMcpError {
+  constructor(promptName: string) {
+    super(`Prompt not found: ${promptName}`, 'PROMPT_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Prompt execution error - wraps errors during prompt execution.
+ */
+export class PromptExecutionError extends InternalMcpError {
+  readonly promptName: string;
+  readonly originalError?: Error;
+
+  constructor(promptName: string, cause?: Error) {
+    super(
+      cause ? `Prompt execution failed: ${cause.message}` : `Prompt execution failed: ${promptName}`,
+      'PROMPT_EXECUTION_FAILED',
+    );
+    this.promptName = promptName;
+    this.originalError = cause;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}
+
+// ============================================================================
 // Error Utilities
 // ============================================================================
 
