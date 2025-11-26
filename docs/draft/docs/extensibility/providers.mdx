@@ -1,13 +1,13 @@
 ---
 title: Context Providers
 sidebarTitle: Providers
-slug: servers/extensibility/providers
+slug: extensibility/providers
 icon: boxes
 ---
 
 **Providers** are dependency-injected singletons (or scoped singletons) that your apps, tools, adapters, and plugins can use — e.g., config, DB pools, Redis clients, KMS, HTTP clients.
 
-They’re declared with `@Provider()` and registered at **server** or **app** scope. Resolution is hierarchical: **tool → app → server**.
+They're declared with `@Provider()` and registered at **server** or **app** scope. Resolution is hierarchical: **tool → app → server**.
 
 ## Define a provider
 
@@ -67,6 +67,6 @@ FrontMCP resolves providers for your executors and hooks. Keep your tool logic p
 - Reserve **REQUEST** for ephemeral state.
 
 <Info>
-  Provider injection/consumption follows your runtime’s DI rules. In general: register providers at the minimal scope
+  Provider injection/consumption follows your runtime's DI rules. In general: register providers at the minimal scope
   and let the framework resolve them for tools and hooks at execution time.
 </Info>

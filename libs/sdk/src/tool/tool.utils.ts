@@ -6,7 +6,6 @@ import {
   Token,
   ToolRecord,
   ToolKind,
-  EntryLineage,
   Type,
   ToolContext,
   extendedToolMetadata,
@@ -14,7 +13,7 @@ import {
 } from '../common';
 import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
 import { getMetadata } from '../utils/metadata.utils';
-import { NameCase } from './tool.types';
+import { toStructuredContent } from '../utils/content.utils';
 import {
   AudioContent,
   ContentBlock,
@@ -24,6 +23,22 @@ import {
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
+
+// Re-export shared naming utilities for backwards compatibility
+export {
+  type NameCase,
+  splitWords,
+  toCase,
+  sepFor,
+  normalizeSegment,
+  normalizeProviderId,
+  normalizeOwnerPath,
+  shortHash,
+  ensureMaxLen,
+} from '../utils/naming.utils';
+
+// Re-export shared lineage utilities for backwards compatibility
+export { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 
 export function collectToolMetadata(cls: ToolType): ToolMetadata {
   const extended = getMetadata(extendedToolMetadata, cls);
@@ -78,117 +93,13 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
   }
 }
 
-// Allowed chars per MCP spec: a-zA-Z0-9 _ -. /
-const MCP_ALLOWED = /[A-Za-z0-9_\-./]/;
-
-export function splitWords(input: string): string[] {
-  const parts: string[] = [];
-  let buff = '';
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    const isAlphaNum = /[A-Za-z0-9]/.test(ch);
-    if (!isAlphaNum) {
-      if (buff) {
-        parts.push(buff);
-        buff = '';
-      }
-      continue;
-    }
-    if (buff && /[a-z]/.test(buff[buff.length - 1]) && /[A-Z]/.test(ch)) {
-      parts.push(buff);
-      buff = ch;
-    } else {
-      buff += ch;
-    }
-  }
-  if (buff) parts.push(buff);
-  return parts;
-}
-
-export function toCase(words: string[], kind: NameCase): string {
-  const safe = words.filter(Boolean);
-  switch (kind) {
-    case 'snake':
-      return safe.map((w) => w.toLowerCase()).join('_');
-    case 'kebab':
-      return safe.map((w) => w.toLowerCase()).join('-');
-    case 'dot':
-      return safe.map((w) => w.toLowerCase()).join('.');
-    case 'camel':
-      if (safe.length === 0) return '';
-      return (
-        safe[0].toLowerCase() +
-        safe
-          .slice(1)
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join('')
-      );
-  }
-}
-
-export function normalizeSegment(raw: string, kind: NameCase): string {
-  const words = splitWords(raw);
-  let cased = toCase(words, kind);
-  cased = [...cased].filter((ch) => MCP_ALLOWED.test(ch)).join('');
-  return cased || 'x';
-}
-
-export function normalizeProviderId(raw: string | undefined, kind: NameCase): string | undefined {
-  if (!raw) return undefined;
-  const tokens = raw.split(/\W+/);
-  const cased = toCase(tokens, kind);
-  const safe = [...cased].filter((ch) => MCP_ALLOWED.test(ch)).join('');
-  return safe || undefined;
-}
-
-export function normalizeOwnerPath(ownerKey: string, kind: NameCase): string {
-  const levels = ownerKey.split('/');
-  const normLevels = levels.map((level) => {
-    const parts = level.split(':'); // ["app","Portal"]
-    return parts
-      .map((p) => normalizeSegment(p, kind))
-      .join(kind === 'snake' ? '_' : kind === 'kebab' ? '-' : kind === 'dot' ? '.' : '');
-  });
-  if (kind === 'camel') return normLevels.map((seg) => seg.charAt(0).toLowerCase() + seg.slice(1)).join('');
-  const sep = kind === 'snake' ? '_' : kind === 'kebab' ? '-' : '.';
-  return normLevels.join(sep);
-}
-
-export function shortHash(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = (h << 5) + h + s.charCodeAt(i);
-  return (h >>> 0).toString(16).slice(-6).padStart(6, '0');
-}
-
-export function ensureMaxLen(name: string, max: number): string {
-  if (name.length <= max) return name;
-  const hash = shortHash(name);
-  const lastSep = Math.max(name.lastIndexOf('_'), name.lastIndexOf('-'), name.lastIndexOf('.'), name.lastIndexOf('/'));
-  const tail = lastSep > 0 ? name.slice(lastSep + 1) : name.slice(-Math.max(3, Math.min(16, Math.floor(max / 4))));
-  const budget = Math.max(1, max - (1 + hash.length + 1 + tail.length));
-  const prefix = name.slice(0, budget);
-  return `${prefix}-${hash}-${tail}`.slice(0, max);
-}
-
-export function sepFor(kind: NameCase): string {
-  return kind === 'snake' ? '_' : kind === 'kebab' ? '-' : kind === 'dot' ? '.' : '';
-}
-
-export function ownerKeyOf(lineage: EntryLineage): string {
-  return lineage.map((o) => `${o.kind}:${o.id}`).join('/');
-}
-
-export function qualifiedNameOf(lineage: EntryLineage, name: string): string {
-  return `${ownerKeyOf(lineage)}:${name}`;
-}
-
 export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult {
   const content: ContentBlock[] = [];
   let structuredData: Record<string, any> | undefined;
 
   // No outputSchema → the best effort: treat the result as structured JSON and text fallback
   if (!descriptor) {
-    const structuredContent = getStructuredContent(raw);
+    const structuredContent = toStructuredContent(raw);
     const sanitized = structuredContent ?? raw;
     content.push(makeJsonTextContent(sanitized));
     return { content, structuredContent };
@@ -208,7 +119,7 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
     });
 
     // Check if we have at least one non-primitive item
-    const hasNonPrimitive = parsedItems.some(item => !item.isPrimitive);
+    const hasNonPrimitive = parsedItems.some((item) => !item.isPrimitive);
 
     if (hasNonPrimitive && parsedItems.length > 1) {
       // Multiple items with at least one non-string/primitive: use numeric indices
@@ -276,7 +187,7 @@ export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedTool
  */
 function parseSingleValue(
   descriptor: any,
-  value: unknown
+  value: unknown,
 ): { blocks: ContentBlock[]; parsedValue?: any; isPrimitive: boolean } {
   // Literal primitives + special content types
   if (typeof descriptor === 'string') {
@@ -319,10 +230,12 @@ function parseSingleValue(
 
         return {
           blocks: [makePrimitiveTextContent(value)],
-          parsedValue: dateValue ? {
-            iso: dateValue.toISOString(),
-            timeInMilli: dateValue.getTime(),
-          } : null,
+          parsedValue: dateValue
+            ? {
+                iso: dateValue.toISOString(),
+                timeInMilli: dateValue.getTime(),
+              }
+            : null,
           isPrimitive: false,
         };
       }
@@ -376,7 +289,7 @@ function parseSingleValue(
 
   if (descriptor instanceof ZodNumber) {
     const parseResult = descriptor.safeParse(value);
-    const numValue = parseResult.success ? parseResult.data : (typeof value === 'number' ? value : Number(value));
+    const numValue = parseResult.success ? parseResult.data : typeof value === 'number' ? value : Number(value);
     return {
       blocks: [makePrimitiveTextContent(value)],
       parsedValue: isNaN(numValue) ? null : numValue,
@@ -396,7 +309,7 @@ function parseSingleValue(
 
   if (descriptor instanceof ZodBigInt) {
     const parseResult = descriptor.safeParse(value);
-    const bigIntValue = parseResult.success ? parseResult.data : (typeof value === 'bigint' ? value : null);
+    const bigIntValue = parseResult.success ? parseResult.data : typeof value === 'bigint' ? value : null;
     return {
       blocks: [makePrimitiveTextContent(value)],
       parsedValue: bigIntValue !== null ? bigIntValue.toString() : null,
@@ -406,13 +319,15 @@ function parseSingleValue(
 
   if (descriptor instanceof ZodDate) {
     const parseResult = descriptor.safeParse(value);
-    const dateValue = parseResult.success ? parseResult.data : (value instanceof Date ? value : null);
+    const dateValue = parseResult.success ? parseResult.data : value instanceof Date ? value : null;
     return {
       blocks: [makePrimitiveTextContent(value)],
-      parsedValue: dateValue ? {
-        iso: dateValue.toISOString(),
-        timeInMilli: dateValue.getTime(),
-      } : null,
+      parsedValue: dateValue
+        ? {
+            iso: dateValue.toISOString(),
+            timeInMilli: dateValue.getTime(),
+          }
+        : null,
       isPrimitive: false,
     };
   }
@@ -425,10 +340,10 @@ function parseSingleValue(
     // Use Zod to parse and validate
     const parseResult = descriptor.safeParse(value);
     if (parseResult.success) {
-      parsedValue = getStructuredContent(parseResult.data);
+      parsedValue = toStructuredContent(parseResult.data);
     } else {
       // Validation failed, use sanitized raw value
-      parsedValue = getStructuredContent(value);
+      parsedValue = toStructuredContent(value);
     }
   } else if (typeof descriptor === 'object' && descriptor !== null) {
     // ZodRawShape or plain object - try to create a Zod object schema
@@ -436,16 +351,16 @@ function parseSingleValue(
       const schema = z.object(descriptor);
       const parseResult = schema.safeParse(value);
       if (parseResult.success) {
-        parsedValue = getStructuredContent(parseResult.data);
+        parsedValue = toStructuredContent(parseResult.data);
       } else {
-        parsedValue = getStructuredContent(value);
+        parsedValue = toStructuredContent(value);
       }
     } catch {
       // Fallback to sanitized content
-      parsedValue = getStructuredContent(value);
+      parsedValue = toStructuredContent(value);
     }
   } else {
-    parsedValue = getStructuredContent(value);
+    parsedValue = toStructuredContent(value);
   }
 
   return {
@@ -488,82 +403,4 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
 
   // If the value is null/undefined or doesn't match, we just skip it.
   return [];
-}
-
-/**
- * Sanitize arbitrary JS values into JSON-safe objects suitable for:
- *   - MCP `structuredContent`
- *   - JSON.stringify without circular reference errors
- *
- * Rules:
- *   - Drop functions and symbols.
- *   - BigInt → string.
- *   - Date → ISO string.
- *   - Error → { name, message, stack }.
- *   - Map → plain object.
- *   - Set → array.
- *   - Protect against circular references via WeakSet.
- */
-function getStructuredContent(value: unknown): any | undefined {
-  const seen = new WeakSet<object>();
-
-  function sanitize(val: any): any {
-    if (typeof val === 'function' || typeof val === 'symbol') {
-      return undefined;
-    }
-
-    if (typeof val === 'bigint') {
-      return val.toString();
-    }
-
-    if (val instanceof Date) {
-      return val.toISOString();
-    }
-
-    if (val instanceof Error) {
-      return {
-        name: val.name,
-        message: val.message,
-        stack: val.stack,
-      };
-    }
-
-    if (val instanceof Map) {
-      const obj: Record<string, any> = {};
-      for (const [k, v] of val.entries()) {
-        obj[String(k)] = sanitize(v);
-      }
-      return obj;
-    }
-
-    if (val instanceof Set) {
-      return Array.from(val).map(sanitize);
-    }
-
-    if (Array.isArray(val)) {
-      return val.map(sanitize);
-    }
-
-    if (val && typeof val === 'object') {
-      if (seen.has(val)) {
-        // Drop circular references
-        return undefined;
-      }
-      seen.add(val);
-
-      const sanitized: Record<string, any> = {};
-      for (const [key, value] of Object.entries(val)) {
-        const clean = sanitize(value);
-        if (clean !== undefined) {
-          sanitized[key] = clean;
-        }
-      }
-      return sanitized;
-    }
-
-    // Primitives pass through
-    return val;
-  }
-
-  return sanitize(value);
 }

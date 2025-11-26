@@ -99,12 +99,8 @@ export default class PluginRegistry
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
       await adapters.ready;
 
-      const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], {
-        kind: 'plugin',
-        id: rec.metadata.name,
-        ref: token,
-      });
-      const resources = new ResourceRegistry(providers, rec.metadata.resources ?? []);
+      const tools = new ToolRegistry(providers, rec.metadata.tools ?? [], pluginOwner);
+      const resources = new ResourceRegistry(providers, rec.metadata.resources ?? [], pluginOwner);
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? []);
 
       await Promise.all([tools.ready, resources.ready, prompts.ready]);

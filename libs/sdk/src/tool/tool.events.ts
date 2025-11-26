@@ -1,9 +1,18 @@
 import { ToolInstance } from './tool.instance';
 
 export type ToolChangeKind = 'added' | 'updated' | 'removed' | 'reset';
+
+/**
+ * The scope of a change event.
+ * - `global`: Change affects all sessions
+ * - `session`: Change affects only a specific session
+ */
+export type ToolChangeScope = 'global' | 'session';
+
 export type ToolChangeEvent = {
   kind: ToolChangeKind;
-  scope: 'global' | 'session';
+  /** Whether the change affects all sessions or a specific session */
+  changeScope: ToolChangeScope;
   sessionId?: string;
   relatedRequestId?: string;
   version: number;

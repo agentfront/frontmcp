@@ -123,6 +123,138 @@ export * from './errors';
 - **Purpose**: Development and testing playground for FrontMCP packages
 - **Usage**: Testing integrations, examples, and development workflows
 
+## SDK Code Guidelines
+
+### Type System Patterns
+
+**Use `unknown` instead of `any` for generic types:**
+
+```typescript
+// ✅ Good - explicit constraint with unknown default
+class ResourceContext<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ExecutionContextBase<Out>
+
+// ❌ Bad - loose any types
+class ResourceContext<In = any, Out = any>
+```
+
+**Use type parameters with constraints:**
+
+```typescript
+// ✅ Good - constrained generic
+export type ResourceCtorArgs<Params extends Record<string, string> = Record<string, string>>
+
+// ❌ Bad - unconstrained
+export type ResourceCtorArgs<Params = any>
+```
+
+**Create shared base classes for common functionality:**
+
+```typescript
+// ExecutionContextBase provides: get(), tryGet(), scope, fail(), mark(), fetch()
+export abstract class ToolContext extends ExecutionContextBase<Out>
+export abstract class ResourceContext extends ExecutionContextBase<Out>
+```
+
+### Error Handling
+
+**Use specific error classes with MCP error codes:**
+
+```typescript
+export const MCP_ERROR_CODES = {
+  RESOURCE_NOT_FOUND: -32002,
+  INVALID_REQUEST: -32600,
+  METHOD_NOT_FOUND: -32601,
+  INVALID_PARAMS: -32602,
+  INTERNAL_ERROR: -32603,
+  PARSE_ERROR: -32700,
+} as const;
+
+export class ResourceNotFoundError extends PublicMcpError {
+  readonly mcpErrorCode = MCP_ERROR_CODES.RESOURCE_NOT_FOUND;
+
+  toJsonRpcError() {
+    return { code: this.mcpErrorCode, message: this.getPublicMessage(), data: { uri: this.uri } };
+  }
+}
+```
+
+**Avoid non-null assertions - use proper error handling:**
+
+```typescript
+// ✅ Good
+const rec = this.defs.get(token);
+if (!rec) {
+  throw new DependencyNotFoundError('AuthRegistry', tokenName(token));
+}
+
+// ❌ Bad - non-null assertion
+const rec = this.defs.get(token)!;
+```
+
+### Registry Patterns
+
+**Use getCapabilities() for dynamic capability exposure:**
+
+```typescript
+// In registry
+getCapabilities(): { subscribe: boolean; listChanged: boolean } {
+  return { subscribe: false, listChanged: this.hasAny() };
+}
+
+// In transport adapter
+resources: this.scope.resources.getCapabilities(), // Not hardcoded!
+```
+
+### Change Events
+
+**Use `changeScope` instead of `scope` to avoid confusion with Scope class:**
+
+```typescript
+export type ResourceChangeEvent = {
+  kind: ResourceChangeKind;
+  changeScope: ResourceChangeScope; // Not 'scope'!
+  // ...
+};
+```
+
+### URI Validation
+
+**Validate URIs per RFC 3986 at metadata level:**
+
+```typescript
+uri: z.string().min(1).refine(isValidMcpUri, {
+  message: 'URI must have a valid scheme (e.g., file://, https://, custom://)',
+}),
+```
+
+### Hook Validation
+
+**Fail fast on invalid hook flows:**
+
+```typescript
+const validFlows = ['resources:read-resource', 'resources:list-resources'];
+const invalidHooks = allHooks.filter((hook) => !validFlows.includes(hook.metadata.flow));
+
+if (invalidHooks.length > 0) {
+  throw new InvalidHookFlowError(`Resource "${className}" has hooks for unsupported flows: ${invalidFlowNames}`);
+}
+```
+
+### Record Types
+
+**Centralize record types in common/records:**
+
+```typescript
+// In libs/sdk/src/common/records/resource.record.ts
+export type AnyResourceRecord = ResourceRecord | ResourceTemplateRecord;
+
+// Import from common, not from module-specific files
+import { AnyResourceRecord } from '../common/records';
+```
+
 ## Anti-Patterns to Avoid
 
 ❌ **Don't**: Add backwards compatibility exports in new libraries
@@ -131,6 +263,10 @@ export * from './errors';
 ❌ **Don't**: Ignore error class `instanceof` checks in tests
 ❌ **Don't**: Use `any` type without strong justification
 ❌ **Don't**: Commit code with test failures or build warnings
+❌ **Don't**: Use non-null assertions (`!`) - throw proper errors instead
+❌ **Don't**: Mutate rawInput in flows - use state.set() for flow state
+❌ **Don't**: Hardcode capabilities in adapters - use registry.getCapabilities()
+❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
 
 ✅ **Do**: Use clean, descriptive names for everything
 ✅ **Do**: Test all code paths including errors
@@ -139,3 +275,6 @@ export * from './errors';
 ✅ **Do**: Achieve 95%+ test coverage
 ✅ **Do**: Use strict TypeScript settings
 ✅ **Do**: Write comprehensive security documentation
+✅ **Do**: Use `unknown` instead of `any` for generic type defaults
+✅ **Do**: Validate hooks match their entry type (fail fast)
+✅ **Do**: Use specific MCP error classes with JSON-RPC codes

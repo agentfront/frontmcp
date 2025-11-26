@@ -1,14 +1,11 @@
-import { randomUUID } from 'crypto';
-import { FuncType, Token, Type } from './base.interface';
+import { FuncType, Type } from './base.interface';
 import { ProviderRegistryInterface } from './internal';
 import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
-import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
-import { Scope } from '../../scope';
-import { ScopeEntry } from '../entries';
+import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -19,12 +16,9 @@ type HistoryEntry<T> = {
   note?: string;
 };
 
-export type ToolCtorArgs<In> = {
+export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: ToolMetadata;
   input: In;
-  providers: ProviderRegistryInterface;
-  logger: FrontMcpLogger;
-  authInfo: AuthInfo;
 };
 
 export abstract class ToolContext<
@@ -32,17 +26,10 @@ export abstract class ToolContext<
   OutSchema extends ToolOutputType = ToolOutputType,
   In = ToolInputOf<{ inputSchema: InSchema }>,
   Out = ToolOutputOf<{ outputSchema: OutSchema }>,
-> {
-  private providers: ProviderRegistryInterface;
-  readonly authInfo: AuthInfo;
-
-  protected readonly runId: string;
+> extends ExecutionContextBase<Out> {
   protected readonly toolId: string;
   protected readonly toolName: string;
   readonly metadata: ToolMetadata;
-  protected readonly logger: FrontMcpLogger;
-
-  protected activeStage: string;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -52,42 +39,24 @@ export abstract class ToolContext<
   private _outputDraft?: Partial<Out> | any;
   private _output?: Out;
 
-  private _error?: Error;
-
   // ---- histories
   private readonly _inputHistory: HistoryEntry<In>[] = [];
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
   constructor(args: ToolCtorArgs<In>) {
-    const { metadata, input, providers, logger, authInfo } = args;
-    this.runId = randomUUID();
+    const { metadata, input, providers, logger } = args;
+    super({
+      providers,
+      logger: logger.child(`tool:${metadata.id ?? metadata.name}`),
+      authInfo: args.authInfo,
+    });
     this.toolName = metadata.name;
     this.toolId = metadata.id ?? metadata.name;
     this.metadata = metadata;
     this._input = input;
-    this.providers = providers;
-    this.logger = logger.child(`tool:${this.toolId}`);
-    this.authInfo = authInfo;
   }
 
   abstract execute(input: In): Promise<Out>;
-
-  get<T>(token: Token<T>): T {
-    return this.providers.get(token);
-  }
-
-  get scope(): ScopeEntry {
-    return this.providers.getScope();
-  }
-
-  tryGet<T>(token: Token<T>): T | undefined {
-    try {
-      return this.providers.get(token);
-    } catch (e) {
-      this.logger.warn("Requesting provider that doesn't exist: ", token);
-      return undefined;
-    }
-  }
 
   public get input(): In {
     return this._input as In;
@@ -123,19 +92,5 @@ export abstract class ToolContext<
     // record validated output and surface the value via control flow
     this.output = value;
     FlowControl.respond<Out>(value);
-  }
-
-  /** Fail the run (invoker will run error/finalize). */
-  protected fail(err: Error): never {
-    this._error = err;
-    FlowControl.fail(err);
-  }
-
-  mark(stage: string): void {
-    this.activeStage = stage;
-  }
-
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    return fetch(input, init);
   }
 }

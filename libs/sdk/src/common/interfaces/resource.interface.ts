@@ -1,39 +1,103 @@
-import { ResourceMetadata } from '../metadata';
-import { FuncType, Token, Type } from './base.interface';
+// file: libs/sdk/src/common/interfaces/resource.interface.ts
 
+import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
+import { FuncType, Type } from './base.interface';
+import { ProviderRegistryInterface } from './internal';
+import { FrontMcpLogger } from './logger.interface';
+import { FlowControl } from './flow.interface';
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
-export interface ResourceInterface<In = any, Out = any> {
-  execute(input: In, context: ResourceContext<In, Out>): Promise<Out>;
+/**
+ * Base interface for resource implementations.
+ * @template Params - Type for URI template parameters (defaults to generic string record)
+ * @template Out - Type for the resource output
+ */
+export interface ResourceInterface<Params extends Record<string, string> = Record<string, string>, Out = unknown> {
+  execute(uri: string, params: Params): Promise<Out>;
 }
 
-export type ResourceType<In = any, Out = any> =
-  | Type<ResourceInterface<In, Out>>
-  | FuncType<ResourceInterface<In, Out>>
+/**
+ * Type for resource class or function.
+ * @template Params - Type for URI template parameters
+ * @template Out - Type for the resource output
+ */
+export type ResourceType<Params extends Record<string, string> = Record<string, string>, Out = unknown> =
+  | Type<ResourceInterface<Params, Out>>
+  | FuncType<ResourceInterface<Params, Out>>;
 
+type HistoryEntry<T> = {
+  at: number;
+  stage?: string;
+  value: T | undefined;
+  note?: string;
+};
 
-export interface ResourceContext<In, Out> {
-  readonly resourceId: string;
-  readonly resourceName: string;
-  readonly metadata: ResourceMetadata;
+export type ResourceCtorArgs<Params extends Record<string, string> = Record<string, string>> =
+  ExecutionContextBaseArgs & {
+    metadata: ResourceMetadata | ResourceTemplateMetadata;
+    uri: string;
+    params: Params;
+  };
 
+/**
+ * Abstract base class for resource execution contexts.
+ * @template Params - Type for URI template parameters (e.g., `{ userId: string }`)
+ * @template Out - Type for the resource output
+ */
+export abstract class ResourceContext<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ExecutionContextBase<Out> {
+  protected readonly resourceId: string;
+  protected readonly resourceName: string;
+  readonly metadata: ResourceMetadata | ResourceTemplateMetadata;
 
-  get<T>(token: Token<T>): T;
+  /** The actual URI being read */
+  readonly uri: string;
+  /** Extracted URI template parameters (empty for static resources) */
+  readonly params: Params;
 
-  tryGet<T>(token: Token<T>): T | undefined;
+  // ---- OUTPUT storages (backing fields)
+  private _output?: Out;
 
-  get inputHistory(): In[];
+  // ---- histories
+  private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
-  get outputHistory(): Out[];
+  constructor(args: ResourceCtorArgs<Params>) {
+    const { metadata, uri, params, providers, logger } = args;
+    super({
+      providers,
+      logger: logger.child(`resource:${metadata.name}`),
+      authInfo: args.authInfo,
+    });
+    this.resourceName = metadata.name;
+    // resourceId uses the metadata name as the stable identifier for the resource type
+    // (runId is the unique instance identifier for this specific execution)
+    this.resourceId = metadata.name;
+    this.metadata = metadata;
+    this.uri = uri;
+    this.params = params;
+  }
 
-  set input(value: In);
+  abstract execute(uri: string, params: Params): Promise<Out>;
 
-  get input(): In;
+  public get output(): Out | undefined {
+    return this._output;
+  }
 
-  set output(value: Out);
+  public set output(v: Out | undefined) {
+    this._output = v;
+    this._outputHistory.push({ at: Date.now(), stage: this.activeStage, value: v });
+  }
 
-  get output(): Out | undefined;
+  public get outputHistory(): ReadonlyArray<HistoryEntry<Out>> {
+    return this._outputHistory;
+  }
 
-  respond(value: Out): never;
-
-  fail(reason: string, error: any): never;
+  respond(value: Out): never {
+    // record validated output and surface the value via control flow
+    this.output = value;
+    FlowControl.respond<Out>(value);
+  }
 }

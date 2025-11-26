@@ -1,30 +1,24 @@
-import {
-  EntryLineage,
-  EntryOwnerRef,
-  Token,
-  ToolEntry,
-  ToolRecord,
-  ToolRegistryInterface,
-  ToolType
-} from '../common';
-import {getMetadata} from '../utils/metadata.utils';
-import {ToolChangeEvent, ToolEmitter} from './tool.events';
+import { EntryLineage, EntryOwnerRef, Token, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
+import { getMetadata } from '../utils/metadata.utils';
+import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {
   ensureMaxLen,
   normalizeOwnerPath,
   normalizeProviderId,
   normalizeSegment,
-  normalizeTool, ownerKeyOf, qualifiedNameOf, sepFor,
-  toolDiscoveryDeps
+  normalizeTool,
+  ownerKeyOf,
+  qualifiedNameOf,
+  sepFor,
+  toolDiscoveryDeps,
 } from './tool.utils';
-import {tokenName} from '../utils/token.utils';
-import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
-import {ToolInstance} from './tool.instance';
-import {DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool} from "./tool.types";
-import ToolsListFlow from "./flows/tools-list.flow";
-import CallToolFlow from "./flows/call-tool.flow";
-
+import { tokenName } from '../utils/token.utils';
+import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
+import { ToolInstance } from './tool.instance';
+import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';
+import ToolsListFlow from './flows/tools-list.flow';
+import CallToolFlow from './flows/call-tool.flow';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -174,9 +168,9 @@ export default class ToolRegistry
   }
 
   getTools(includeHidden = false): ToolEntry<any, any>[] {
-    const local = [...this.localRows].flat().map(t => t.instance);
-    const adopted = [...this.adopted.values()].flat().map(t => t.instance);
-    return [...local, ...adopted].filter(t => t.metadata.hideFromDiscovery !== true || includeHidden);
+    const local = [...this.localRows].flat().map((t) => t.instance);
+    const adopted = [...this.adopted.values()].flat().map((t) => t.instance);
+    return [...local, ...adopted].filter((t) => t.metadata.hideFromDiscovery !== true || includeHidden);
   }
 
   getInlineTools(): ToolEntry<any, any>[] {
@@ -329,7 +323,7 @@ export default class ToolRegistry
     if (opts.immediate) {
       cb({
         kind: 'reset',
-        scope: 'global',
+        changeScope: 'global',
         version: this.version,
         snapshot: this.listAllInstances().filter(filter),
       });
@@ -339,7 +333,7 @@ export default class ToolRegistry
 
   private bump(kind: ToolChangeEvent['kind']) {
     const version = ++this.version;
-    this.emitter.emit({ kind, scope: 'global', version, snapshot: this.listAllInstances() });
+    this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
   }
 
   /* -------------------- Helpers -------------------- */
