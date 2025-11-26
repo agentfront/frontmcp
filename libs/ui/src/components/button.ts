@@ -149,11 +149,15 @@ const loadingSpinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none"
  */
 function isValidHrefProtocol(href: string): boolean {
   const trimmed = href.trim().toLowerCase();
-  // Block javascript:, data:, vbscript: and other dangerous protocols
-  if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('vbscript:')) {
-    return false;
-  }
-  return true;
+  // Allow only safe protocols (allowlist approach is more secure than blocklist)
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('mailto:') ||
+    trimmed.startsWith('tel:')
+  );
 }
 
 /**
@@ -254,9 +258,9 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const effectiveAriaLabel = ariaLabel ?? (iconOnly && text ? text : undefined);
   const ariaLabelAttr = effectiveAriaLabel ? `aria-label="${escapeHtml(effectiveAriaLabel)}"` : '';
 
-  // Build content
+  // Build content (both icons hide during loading for consistent visual behavior)
   const iconBeforeHtml = iconBefore && !loading ? `<span class="${iconOnly ? '' : 'mr-2'}">${iconBefore}</span>` : '';
-  const iconAfterHtml = iconAfter ? `<span class="${iconOnly ? '' : 'ml-2'}">${iconAfter}</span>` : '';
+  const iconAfterHtml = iconAfter && !loading ? `<span class="${iconOnly ? '' : 'ml-2'}">${iconAfter}</span>` : '';
   const loadingHtml = loading ? loadingSpinner : '';
   const textHtml = iconOnly ? '' : escapeHtml(text);
 
@@ -284,6 +288,11 @@ export function button(text: string, options: ButtonOptions = {}): string {
  * @returns HTML string for the button group, or validation error box on invalid input
  */
 export function buttonGroup(buttons: string[], options: ButtonGroupOptions = {}): string {
+  if (buttons.length === 0) {
+    console.warn('[frontmcp/ui] buttonGroup called with empty buttons array');
+    return '';
+  }
+
   // Validate options using Zod schema
   const validation = validateOptions<ButtonGroupOptions>(options, {
     schema: ButtonGroupOptionsSchema,

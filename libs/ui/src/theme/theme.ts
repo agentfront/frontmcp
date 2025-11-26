@@ -454,9 +454,30 @@ function mergeThemesCore(base: ThemeConfig, override: Partial<ThemeConfig>): Omi
     cdn: {
       ...base.cdn,
       ...override.cdn,
-      fonts: { ...base.cdn?.fonts, ...override.cdn?.fonts },
-      icons: { ...base.cdn?.icons, ...override.cdn?.icons },
-      scripts: { ...base.cdn?.scripts, ...override.cdn?.scripts },
+      fonts: {
+        // Concatenate arrays rather than replace (allows adding to preconnect/stylesheets)
+        preconnect: [...(base.cdn?.fonts?.preconnect ?? []), ...(override.cdn?.fonts?.preconnect ?? [])],
+        stylesheets: [...(base.cdn?.fonts?.stylesheets ?? []), ...(override.cdn?.fonts?.stylesheets ?? [])],
+      },
+      icons: {
+        ...base.cdn?.icons,
+        ...override.cdn?.icons,
+        // Deep merge script to preserve integrity when only url is overridden
+        script: override.cdn?.icons?.script
+          ? { ...base.cdn?.icons?.script, ...override.cdn?.icons?.script }
+          : base.cdn?.icons?.script,
+      },
+      scripts: {
+        // tailwind is a simple string, just use override or base
+        tailwind: override.cdn?.scripts?.tailwind ?? base.cdn?.scripts?.tailwind,
+        // Deep merge htmx/alpine to preserve integrity when only url is overridden
+        htmx: override.cdn?.scripts?.htmx
+          ? { ...base.cdn?.scripts?.htmx, ...override.cdn?.scripts?.htmx }
+          : base.cdn?.scripts?.htmx,
+        alpine: override.cdn?.scripts?.alpine
+          ? { ...base.cdn?.scripts?.alpine, ...override.cdn?.scripts?.alpine }
+          : base.cdn?.scripts?.alpine,
+      },
     },
     customVars: { ...base.customVars, ...override.customVars },
     customCss: [base.customCss, override.customCss].filter(Boolean).join('\n'),
