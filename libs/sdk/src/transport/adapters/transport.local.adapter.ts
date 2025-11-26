@@ -47,7 +47,6 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   connectServer() {
     const { info } = this.scope.metadata;
 
-    // TODO: collect server options from scope
     const serverOptions = {
       instructions: '',
       capabilities: {
@@ -55,10 +54,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
           subscribe: true,
           listChanged: true,
         },
-        resources: {
-          subscribe: false, // Deferred to future branch
-          listChanged: false, // Deferred to future branch
-        },
+        resources: this.scope.resources.getCapabilities(),
       },
       serverInfo: info,
     };

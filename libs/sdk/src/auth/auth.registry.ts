@@ -19,6 +19,7 @@ import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
 import { tokenName } from '../utils/token.utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
+import { DependencyNotFoundError } from '../errors/mcp.error';
 
 export class AuthRegistry
   extends RegistryAbstract<AuthProviderEntry, AuthProviderRecord, AuthProviderType[]>
@@ -84,14 +85,21 @@ export class AuthRegistry
 
   protected buildGraph() {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new DependencyNotFoundError('AuthRegistry', tokenName(token));
+      }
       const deps = authDiscoveryDeps(rec);
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
           throw new Error(`AuthProvider ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
         }
-        this.graph.get(token)!.add(d);
+        const graphEntry = this.graph.get(token);
+        if (!graphEntry) {
+          throw new DependencyNotFoundError('AuthRegistry', `graph entry for ${tokenName(token)}`);
+        }
+        graphEntry.add(d);
       }
     }
   }
@@ -104,7 +112,10 @@ export class AuthRegistry
   }
 
   getPrimary(): FrontMcpAuth {
-    return this.primary!;
+    if (!this.primary) {
+      throw new DependencyNotFoundError('AuthRegistry', 'primary auth provider');
+    }
+    return this.primary;
   }
 
   getAuthProviders(): AuthProviderEntry[] {

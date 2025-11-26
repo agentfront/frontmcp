@@ -13,27 +13,26 @@ import {
   ResourceMetadata,
   ResourceTemplateMetadata,
   ResourceFunctionRecord,
+  ResourceTemplateRecord,
+  ResourceTemplateKind,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { parseUriTemplate, buildParsedResourceResult } from './resource.utils';
-import { ResourceTemplateRecord, ResourceTemplateKind } from './resource.types';
+import { matchUriTemplate, parseUriTemplate, buildParsedResourceResult } from './resource.utils';
+import { InvalidHookFlowError } from '../errors/mcp.error';
 
-export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out> {
+export class ResourceInstance<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ResourceEntry<Params, Out> {
   private readonly providers: ProviderRegistry;
   readonly scope: Scope;
   readonly hooks: HookRegistry;
 
   /** Parsed URI template info for template resources */
   private templateInfo?: { pattern: RegExp; paramNames: string[] };
-
-  /**
-   * The concrete request URI, set when create() is called.
-   * For template resources, this is the resolved URI (e.g., /docs/123 not /docs/{id}).
-   */
-  private requestUri?: string;
 
   constructor(record: ResourceRecord | ResourceTemplateRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
@@ -61,15 +60,28 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
   }
 
   protected async initialize(): Promise<void> {
-    // Register hooks for resources:read-resource, resources:list-resources flows
-    const hooks = normalizeHooksFromCls(this.record.provide).filter(
-      (hook) =>
-        hook.metadata.flow === 'resources:read-resource' ||
-        hook.metadata.flow === 'resources:list-resources' ||
-        hook.metadata.flow === 'resources:list-resource-templates',
-    );
-    if (hooks.length > 0) {
-      await this.hooks.registerHooks(true, ...hooks);
+    // Valid flows for resource hooks
+    const validFlows = ['resources:read-resource', 'resources:list-resources', 'resources:list-resource-templates'];
+
+    const allHooks = normalizeHooksFromCls(this.record.provide);
+
+    // Separate valid and invalid hooks
+    const validHooks = allHooks.filter((hook) => validFlows.includes(hook.metadata.flow));
+    const invalidHooks = allHooks.filter((hook) => !validFlows.includes(hook.metadata.flow));
+
+    // Throw error for invalid hooks (fail fast)
+    if (invalidHooks.length > 0) {
+      const className = (this.record.provide as any)?.name ?? 'Unknown';
+      const invalidFlowNames = invalidHooks.map((h) => h.metadata.flow).join(', ');
+      throw new InvalidHookFlowError(
+        `Resource "${className}" has hooks for unsupported flows: ${invalidFlowNames}. ` +
+          `Only resource flows (${validFlows.join(', ')}) are supported on resource classes.`,
+      );
+    }
+
+    // Register valid hooks
+    if (validHooks.length > 0) {
+      await this.hooks.registerHooks(true, ...validHooks);
     }
   }
 
@@ -80,45 +92,35 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
   /**
    * Match a URI against this resource.
    * For static resources: exact match against uri
-   * For templates: pattern match and extract parameters using pre-parsed templateInfo
+   * For templates: pattern match and extract parameters
    */
-  override matchUri(uri: string): { matches: boolean; params: Record<string, string> } {
-    if (this.isTemplate && this.templateInfo) {
-      // Use pre-parsed templateInfo for efficient matching (avoids re-parsing on each request)
-      const { pattern, paramNames } = this.templateInfo;
-      const match = uri.match(pattern);
-
-      if (match) {
-        const params: Record<string, string> = {};
-        paramNames.forEach((name, index) => {
-          params[name] = decodeURIComponent(match[index + 1]);
-        });
-        return { matches: true, params };
+  override matchUri(uri: string): { matches: boolean; params: Params } {
+    if (this.isTemplate && this.templateInfo && this.uriTemplate) {
+      const params = matchUriTemplate(this.uriTemplate, uri);
+      if (params) {
+        return { matches: true, params: params as Params };
       }
-      return { matches: false, params: {} };
+      return { matches: false, params: {} as Params };
     }
 
     // Static resource: exact match
     if (this.uri === uri) {
-      return { matches: true, params: {} };
+      return { matches: true, params: {} as Params };
     }
-    return { matches: false, params: {} };
+    return { matches: false, params: {} as Params };
   }
 
   /**
    * Create a resource context (class or function wrapper).
    */
-  override create(uri: string, params: Record<string, string>, ctx: ResourceReadExtra): ResourceContext<In, Out> {
-    // Store the concrete request URI for use in parseOutput
-    this.requestUri = uri;
-
+  override create(uri: string, params: Params, ctx: ResourceReadExtra): ResourceContext<Params, Out> {
     const metadata = this.metadata;
     const providers = this.providers;
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
 
-    const resourceCtorArgs: ResourceCtorArgs = {
+    const resourceCtorArgs: ResourceCtorArgs<Params> = {
       metadata,
       uri,
       params,
@@ -132,12 +134,12 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
     switch (record.kind) {
       case ResourceKind.CLASS_TOKEN:
       case ResourceTemplateKind.CLASS_TOKEN:
-        return new (record.provide as unknown as new (args: ResourceCtorArgs) => ResourceContext<In, Out>)(
+        return new (record.provide as unknown as new (args: ResourceCtorArgs<Params>) => ResourceContext<Params, Out>)(
           resourceCtorArgs,
         );
       case ResourceKind.FUNCTION:
       case ResourceTemplateKind.FUNCTION:
-        return new FunctionResourceContext<In, Out>(record as ResourceFunctionRecord, resourceCtorArgs);
+        return new FunctionResourceContext<Params, Out>(record as ResourceFunctionRecord, resourceCtorArgs);
       default:
         // This should be unreachable if all ResourceKind and ResourceTemplateKind values are handled
         throw new Error(`Unhandled resource kind: ${(record as any).kind}`);
@@ -148,8 +150,7 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
    * Convert the raw resource return value into an MCP ReadResourceResult.
    */
   override parseOutput(raw: Out): ParsedResourceResult {
-    // Use the concrete request URI if available (set by create()), otherwise fall back to static uri or template
-    const uri = this.requestUri || (this.isTemplate ? this.uriTemplate! : this.uri!);
+    const uri = this.isTemplate ? this.uriTemplate! : this.uri!;
     const mimeType = this.metadata.mimeType;
 
     // If raw is already in ReadResourceResult format
@@ -193,12 +194,15 @@ export class ResourceInstance<In = any, Out = any> extends ResourceEntry<In, Out
 /**
  * Resource context for function-decorated resources.
  */
-class FunctionResourceContext<In = any, Out = any> extends ResourceContext<In, Out> {
-  constructor(private readonly record: ResourceFunctionRecord, args: ResourceCtorArgs) {
+class FunctionResourceContext<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ResourceContext<Params, Out> {
+  constructor(private readonly record: ResourceFunctionRecord, args: ResourceCtorArgs<Params>) {
     super(args);
   }
 
-  execute(uri: string, params: Record<string, string>): Promise<Out> {
+  execute(uri: string, params: Params): Promise<Out> {
     return this.record.provide(uri, params, this);
   }
 }

@@ -1,25 +1,12 @@
 // file: libs/sdk/src/common/entries/resource.entry.ts
 
 import { BaseEntry, EntryOwnerRef } from './base.entry';
-import { ResourceRecord, ResourceFunctionRecord } from '../records';
+import { AnyResourceRecord } from '../records';
 import { ResourceContext, ResourceInterface } from '../interfaces';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-
-import { Type } from '../interfaces';
-
-// Resource template records defined in resource.types.ts to avoid circular imports
-// This union type covers both ResourceRecord and ResourceTemplateRecord since they have the same structure
-export type AnyResourceRecord =
-  | ResourceRecord
-  | {
-      kind: string;
-      // Type<unknown> for class-based resources, generic function signature for function-based resources
-      provide: Type<unknown> | ((...args: unknown[]) => unknown);
-      metadata: ResourceMetadata | ResourceTemplateMetadata;
-    };
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
@@ -28,11 +15,15 @@ export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
 export type ParsedResourceResult = ReadResourceResult;
 export type ResourceSafeTransformResult<T> = { success: true; data: T } | { success: false; error: Error };
 
-export abstract class ResourceEntry<In = any, Out = any> extends BaseEntry<
-  AnyResourceRecord,
-  ResourceInterface<In, Out>,
-  ResourceMetadata | ResourceTemplateMetadata
-> {
+/**
+ * Base class for resource entries.
+ * @template Params - Type for URI template parameters (e.g., `{ userId: string }`)
+ * @template Out - Type for the resource output
+ */
+export abstract class ResourceEntry<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends BaseEntry<AnyResourceRecord, ResourceInterface<Params, Out>, ResourceMetadata | ResourceTemplateMetadata> {
   owner: EntryOwnerRef;
 
   /**
@@ -66,7 +57,7 @@ export abstract class ResourceEntry<In = any, Out = any> extends BaseEntry<
    * @param params Extracted URI template parameters (empty for static resources)
    * @param ctx Request context with auth info
    */
-  abstract create(uri: string, params: Record<string, string>, ctx: ResourceReadExtra): ResourceContext<In, Out>;
+  abstract create(uri: string, params: Params, ctx: ResourceReadExtra): ResourceContext<Params, Out>;
 
   /**
    * Convert the raw resource return value (Out) into an MCP ReadResourceResult.
@@ -83,5 +74,5 @@ export abstract class ResourceEntry<In = any, Out = any> extends BaseEntry<
    * For static resources: exact match against uri
    * For templates: pattern match and extract parameters
    */
-  abstract matchUri(uri: string): { matches: boolean; params: Record<string, string> };
+  abstract matchUri(uri: string): { matches: boolean; params: Params };
 }

@@ -9,6 +9,7 @@ export * from './records';
 export * from './entries';
 export * from './utils';
 export * from './schemas';
+export * from './flow/flow.utils';
 
 export * from './decorators-old/async-with.decorator';
 export * from './decorators-old/session-hook.decorator';

@@ -8,4 +8,3 @@ export * from './hook-registry.mock';
 export * from './tool-registry.mock';
 export * from './plugin-registry.mock';
 export * from './resource-registry.mock';
-export * from './prompt-registry.mock';

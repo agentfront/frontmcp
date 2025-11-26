@@ -9,8 +9,7 @@ import {
 } from '../resource.utils';
 import { Resource, ResourceTemplate, resource } from '../../common/decorators/resource.decorator';
 import { FrontMcpResourceTokens, FrontMcpResourceTemplateTokens } from '../../common/tokens';
-import { ResourceKind } from '../../common/records';
-import { ResourceTemplateKind } from '../resource.types';
+import { ResourceKind, ResourceTemplateKind } from '../../common/records';
 
 describe('Resource Utils', () => {
   describe('collectResourceMetadata', () => {

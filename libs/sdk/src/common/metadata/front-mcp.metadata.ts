@@ -1,4 +1,4 @@
-import {z} from 'zod';
+import { z } from 'zod';
 import {
   AuthOptions,
   authOptionsSchema,
@@ -15,9 +15,10 @@ import {
 import {
   annotatedFrontMcpAppSchema,
   annotatedFrontMcpProvidersSchema,
+  annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import {AppType, ProviderType} from '../interfaces';
-
+import { AppType, ProviderType, ResourceType, ToolType } from '../interfaces';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -33,19 +34,30 @@ export interface FrontMcpBaseMetadata {
    */
   providers?: ProviderType[];
 
+  /**
+   * Shared tools that are available to all apps.
+   * These are merged (additively) with app-specific tools.
+   */
+  tools?: ToolType[];
 
+  /**
+   * Shared resources that are available to all apps.
+   * These are merged (additively) with app-specific resources.
+   */
+  resources?: ResourceType[];
 }
 
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
+  resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
   http: httpOptionsSchema.optional().default({}),
   session: sessionOptionsSchema.optional().default({}),
   logging: loggingOptionsSchema.optional().default({}),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
-
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
   splitByApp?: false;
@@ -54,9 +66,8 @@ export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
 
 const frontMcpMultiAppSchema = frontMcpBaseSchema.extend({
   splitByApp: z.literal(false).default(false).describe('If true, each app gets its own scope & basePath.'),
-  auth: authOptionsSchema.optional().describe('Configures the server\'s default authentication provider.'),
+  auth: authOptionsSchema.optional().describe("Configures the server's default authentication provider."),
 } satisfies RawZodShape<FrontMcpMultiAppMetadata, FrontMcpBaseMetadata>);
-
 
 export interface FrontMcpSplitByAppMetadata extends FrontMcpBaseMetadata {
   splitByApp: true;
@@ -68,14 +79,12 @@ const frontMcpSplitByAppSchema = frontMcpBaseSchema.extend({
   auth: z.never().optional(),
 } satisfies RawZodShape<FrontMcpSplitByAppMetadata, FrontMcpBaseMetadata>);
 
-
 export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMetadata;
 
 export const frontMcpMetadataSchema = frontMcpMultiAppSchema.or(frontMcpSplitByAppSchema);
 
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;
 export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
-
 
 export type FrontMcpConfigType = z.infer<typeof frontMcpMetadataSchema>;
 

@@ -4,9 +4,17 @@ import { ResourceInstance } from './resource.instance';
 
 export type ResourceChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 
+/**
+ * The scope of a change event.
+ * - `global`: Change affects all sessions
+ * - `session`: Change affects only a specific session
+ */
+export type ResourceChangeScope = 'global' | 'session';
+
 export type ResourceChangeEvent = {
   kind: ResourceChangeKind;
-  scope: 'global' | 'session';
+  /** Whether the change affects all sessions or a specific session */
+  changeScope: ResourceChangeScope;
   sessionId?: string;
   relatedRequestId?: string;
   version: number;

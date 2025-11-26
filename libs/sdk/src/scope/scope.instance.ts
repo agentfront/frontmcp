@@ -24,8 +24,8 @@ import HttpRequestFlow from './flows/http.request.flow';
 import { TransportService } from '../transport/transport.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
-import PromptRegistry from '../prompt/prompt.registry';
 import HookRegistry from '../hooks/hook.registry';
+import PromptRegistry from '../prompt/prompt.registry';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
