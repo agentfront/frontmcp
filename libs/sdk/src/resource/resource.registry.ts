@@ -6,6 +6,7 @@ import {
   Token,
   ResourceEntry,
   ResourceRecord,
+  ResourceTemplateRecord,
   ResourceRegistryInterface,
   ResourceType,
 } from '../common';
@@ -28,12 +29,7 @@ import {
 import { tokenName } from '../utils/token.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ResourceInstance } from './resource.instance';
-import {
-  DEFAULT_RESOURCE_EXPORT_OPTS,
-  ResourceExportOptions,
-  IndexedResource,
-  ResourceTemplateRecord,
-} from './resource.types';
+import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
@@ -405,7 +401,7 @@ export default class ResourceRegistry
     if (opts.immediate) {
       cb({
         kind: 'reset',
-        scope: 'global',
+        changeScope: 'global',
         version: this.version,
         snapshot: this.listAllInstances().filter(filter),
       });
@@ -415,7 +411,7 @@ export default class ResourceRegistry
 
   private bump(kind: ResourceChangeEvent['kind']) {
     const version = ++this.version;
-    this.emitter.emit({ kind, scope: 'global', version, snapshot: this.listAllInstances() });
+    this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
   }
 
   /* -------------------- Helpers -------------------- */
@@ -494,6 +490,19 @@ export default class ResourceRegistry
   /** True if this registry (or adopted children) has any resources. */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
+  }
+
+  /**
+   * Get the MCP capabilities for resources.
+   * These are reported to clients during initialization.
+   */
+  getCapabilities(): { subscribe: boolean; listChanged: boolean } {
+    return {
+      // Subscription support is deferred to a future implementation
+      subscribe: false,
+      // List change notifications are supported if we have any resources registered
+      listChanged: this.hasAny(),
+    };
   }
 }
 

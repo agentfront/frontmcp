@@ -1,20 +1,30 @@
 // file: libs/sdk/src/common/interfaces/resource.interface.ts
 
-import { randomUUID } from 'crypto';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { FuncType, Token, Type } from './base.interface';
+import { FuncType, Type } from './base.interface';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
-import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { ScopeEntry } from '../entries';
+import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
 
-export interface ResourceInterface<In = any, Out = any> {
-  execute(uri: string, params: Record<string, string>): Promise<Out>;
+/**
+ * Base interface for resource implementations.
+ * @template Params - Type for URI template parameters (defaults to generic string record)
+ * @template Out - Type for the resource output
+ */
+export interface ResourceInterface<Params extends Record<string, string> = Record<string, string>, Out = unknown> {
+  execute(uri: string, params: Params): Promise<Out>;
 }
 
-export type ResourceType<In = any, Out = any> = Type<ResourceInterface<In, Out>> | FuncType<ResourceInterface<In, Out>>;
+/**
+ * Type for resource class or function.
+ * @template Params - Type for URI template parameters
+ * @template Out - Type for the resource output
+ */
+export type ResourceType<Params extends Record<string, string> = Record<string, string>, Out = unknown> =
+  | Type<ResourceInterface<Params, Out>>
+  | FuncType<ResourceInterface<Params, Out>>;
 
 type HistoryEntry<T> = {
   at: number;
@@ -23,43 +33,44 @@ type HistoryEntry<T> = {
   note?: string;
 };
 
-export type ResourceCtorArgs = {
-  metadata: ResourceMetadata | ResourceTemplateMetadata;
-  uri: string;
-  params: Record<string, string>;
-  providers: ProviderRegistryInterface;
-  logger: FrontMcpLogger;
-  authInfo: AuthInfo;
-};
+export type ResourceCtorArgs<Params extends Record<string, string> = Record<string, string>> =
+  ExecutionContextBaseArgs & {
+    metadata: ResourceMetadata | ResourceTemplateMetadata;
+    uri: string;
+    params: Params;
+  };
 
-export abstract class ResourceContext<In = any, Out = any> {
-  private providers: ProviderRegistryInterface;
-  readonly authInfo: AuthInfo;
-
-  protected readonly runId: string;
+/**
+ * Abstract base class for resource execution contexts.
+ * @template Params - Type for URI template parameters (e.g., `{ userId: string }`)
+ * @template Out - Type for the resource output
+ */
+export abstract class ResourceContext<
+  Params extends Record<string, string> = Record<string, string>,
+  Out = unknown,
+> extends ExecutionContextBase<Out> {
   protected readonly resourceId: string;
   protected readonly resourceName: string;
   readonly metadata: ResourceMetadata | ResourceTemplateMetadata;
-  protected readonly logger: FrontMcpLogger;
 
   /** The actual URI being read */
   readonly uri: string;
   /** Extracted URI template parameters (empty for static resources) */
-  readonly params: Record<string, string>;
-
-  protected activeStage = 'init';
+  readonly params: Params;
 
   // ---- OUTPUT storages (backing fields)
   private _output?: Out;
 
-  private _error?: Error;
-
   // ---- histories
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
-  constructor(args: ResourceCtorArgs) {
-    const { metadata, uri, params, providers, logger, authInfo } = args;
-    this.runId = randomUUID();
+  constructor(args: ResourceCtorArgs<Params>) {
+    const { metadata, uri, params, providers, logger } = args;
+    super({
+      providers,
+      logger: logger.child(`resource:${metadata.name}`),
+      authInfo: args.authInfo,
+    });
     this.resourceName = metadata.name;
     // resourceId uses the metadata name as the stable identifier for the resource type
     // (runId is the unique instance identifier for this specific execution)
@@ -67,30 +78,9 @@ export abstract class ResourceContext<In = any, Out = any> {
     this.metadata = metadata;
     this.uri = uri;
     this.params = params;
-    this.providers = providers;
-    this.logger = logger.child(`resource:${this.resourceId}`);
-    this.authInfo = authInfo;
   }
 
-  abstract execute(uri: string, params: Record<string, string>): Promise<Out>;
-
-  get<T>(token: Token<T>): T {
-    return this.providers.get(token);
-  }
-
-  get scope(): ScopeEntry {
-    return this.providers.getScope();
-  }
-
-  tryGet<T>(token: Token<T>): T | undefined {
-    try {
-      return this.providers.get(token);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
-      return undefined;
-    }
-  }
+  abstract execute(uri: string, params: Params): Promise<Out>;
 
   public get output(): Out | undefined {
     return this._output;
@@ -109,19 +99,5 @@ export abstract class ResourceContext<In = any, Out = any> {
     // record validated output and surface the value via control flow
     this.output = value;
     FlowControl.respond<Out>(value);
-  }
-
-  /** Fail the run (invoker will run error/finalize). */
-  protected fail(err: Error): never {
-    this._error = err;
-    FlowControl.fail(err);
-  }
-
-  mark(stage: string): void {
-    this.activeStage = stage;
-  }
-
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    return fetch(input, init);
   }
 }

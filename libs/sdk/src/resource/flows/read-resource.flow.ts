@@ -33,6 +33,8 @@ const stateSchema = z.object({
   // z.any() used because resource output type varies by resource implementation
   rawOutput: z.any().optional(),
   output: outputSchema,
+  // Resource owner ID for hook filtering (stored in state instead of mutating rawInput)
+  resourceOwnerId: z.string().optional(),
 });
 
 const plan = {
@@ -107,10 +109,9 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
-    // Store resource owner ID in the flow input for hook filtering.
-    // This mutation allows hooks to filter by resource owner during execution.
+    // Store resource owner ID in flow state for hook filtering
     if (match.instance.owner) {
-      (this.rawInput as any)._resourceOwnerId = match.instance.owner.id;
+      this.state.set('resourceOwnerId', match.instance.owner.id);
     }
 
     this.logger = this.logger.child(`ReadResourceFlow(${uri})`);

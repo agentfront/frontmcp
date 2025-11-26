@@ -1,36 +1,9 @@
 // file: libs/sdk/src/resource/resource.types.ts
 
-import { EntryLineage, Token, Type, FuncType, ResourceTemplateMetadata } from '../common';
+import { EntryLineage, Token, Type, FuncType } from '../common';
 import { ResourceInstance } from './resource.instance';
 import ResourceRegistry from './resource.registry';
-import { ResourceEntry } from '../common/entries';
 import type { NameCase } from '../utils/naming.utils';
-
-// Re-export NameCase as ResourceNameCase for backwards compatibility
-export type ResourceNameCase = NameCase;
-
-// ============================================================================
-// Resource Template Record Types (extending resource.record.ts)
-// ============================================================================
-
-export enum ResourceTemplateKind {
-  CLASS_TOKEN = 'CLASS_TOKEN',
-  FUNCTION = 'FUNCTION',
-}
-
-export type ResourceTemplateClassTokenRecord = {
-  kind: ResourceTemplateKind.CLASS_TOKEN;
-  provide: Type<ResourceEntry>;
-  metadata: ResourceTemplateMetadata;
-};
-
-export type ResourceTemplateFunctionRecord = {
-  kind: ResourceTemplateKind.FUNCTION;
-  provide: (...args: any[]) => any | Promise<any>;
-  metadata: ResourceTemplateMetadata;
-};
-
-export type ResourceTemplateRecord = ResourceTemplateClassTokenRecord | ResourceTemplateFunctionRecord;
 
 // ============================================================================
 // Resource Template Type (interface equivalent)
@@ -74,7 +47,7 @@ export type IndexedResource = {
 // ============================================================================
 
 export type ResourceExportOptions = {
-  case?: ResourceNameCase; // default 'snake'
+  case?: NameCase; // default 'snake'
   maxLen?: number; // default 64
   prefixChildrenOnConflict?: boolean; // default true
   prefixSource?: 'provider' | 'owner'; // default 'provider'

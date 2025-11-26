@@ -22,13 +22,13 @@ const stateSchema = z.object({
   templates: z.array(
     z.object({
       ownerName: z.string(),
-      template: z.any(), // ResourceEntry (template)
+      template: z.instanceof(ResourceEntry),
     }),
   ),
   resolvedTemplates: z.array(
     z.object({
       ownerName: z.string(),
-      template: z.any(),
+      template: z.instanceof(ResourceEntry),
       finalName: z.string(),
     }),
   ),
@@ -168,14 +168,16 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     try {
       const resolved = this.state.required.resolvedTemplates;
 
-      const resourceTemplates: ResponseTemplateItem[] = resolved.map(({ finalName, template }) => ({
-        uriTemplate: template.uriTemplate,
-        name: finalName,
-        title: template.metadata.title,
-        description: template.metadata.description,
-        mimeType: template.metadata.mimeType,
-        icons: template.metadata.icons,
-      }));
+      const resourceTemplates: ResponseTemplateItem[] = resolved
+        .filter(({ template }) => template.uriTemplate != null)
+        .map(({ finalName, template }) => ({
+          uriTemplate: template.uriTemplate!, // Guaranteed by filter above
+          name: finalName,
+          title: template.metadata.title,
+          description: template.metadata.description,
+          mimeType: template.metadata.mimeType,
+          icons: template.metadata.icons,
+        }));
 
       const preview = this.sample(resourceTemplates.map((t) => t.name)).join(', ');
       const extra = resourceTemplates.length > 5 ? `, +${resourceTemplates.length - 5} more` : '';

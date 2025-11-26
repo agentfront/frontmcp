@@ -1,6 +1,10 @@
 import { Type } from '../interfaces';
-import { ResourceMetadata } from '../metadata';
+import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ResourceEntry } from '../entries';
+
+// ============================================================================
+// Static Resource Records
+// ============================================================================
 
 export enum ResourceKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
@@ -10,22 +14,42 @@ export enum ResourceKind {
 export type ResourceClassTokenRecord = {
   kind: ResourceKind.CLASS_TOKEN;
   provide: Type<ResourceEntry>;
-  metadata: ResourceMetadata
+  metadata: ResourceMetadata;
 };
 
 export type ResourceFunctionRecord = {
   kind: ResourceKind.FUNCTION;
   provide: (...args: any[]) => any | Promise<any>;
-  metadata: ResourceMetadata
+  metadata: ResourceMetadata;
 };
 
-export type ResourceRecord =
-  | ResourceClassTokenRecord
-  | ResourceFunctionRecord;
+export type ResourceRecord = ResourceClassTokenRecord | ResourceFunctionRecord;
 
+// ============================================================================
+// Resource Template Records
+// ============================================================================
 
-// TODO: support resource templates
-// ResourceTemplateKind,
-// ResourceTemplateClassToken,
-// ResourceTemplateFunction,
-// ResourceTemplateRecord,
+export enum ResourceTemplateKind {
+  CLASS_TOKEN = 'CLASS_TOKEN',
+  FUNCTION = 'FUNCTION',
+}
+
+export type ResourceTemplateClassTokenRecord = {
+  kind: ResourceTemplateKind.CLASS_TOKEN;
+  provide: Type<ResourceEntry>;
+  metadata: ResourceTemplateMetadata;
+};
+
+export type ResourceTemplateFunctionRecord = {
+  kind: ResourceTemplateKind.FUNCTION;
+  provide: (...args: any[]) => any | Promise<any>;
+  metadata: ResourceTemplateMetadata;
+};
+
+export type ResourceTemplateRecord = ResourceTemplateClassTokenRecord | ResourceTemplateFunctionRecord;
+
+// ============================================================================
+// Union type for any resource record (static or template)
+// ============================================================================
+
+export type AnyResourceRecord = ResourceRecord | ResourceTemplateRecord;

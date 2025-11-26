@@ -24,6 +24,7 @@ import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import { buildParsedToolResult } from './tool.utils';
+import { InvalidHookFlowError } from '../errors/mcp.error';
 
 export class ToolInstance<
   InSchema extends ToolInputType = ToolInputType,
@@ -58,11 +59,28 @@ export class ToolInstance<
   }
 
   protected async initialize() {
-    const hooks = normalizeHooksFromCls(this.record.provide).filter(
-      (hook) => hook.metadata.flow === 'tools:call-tool' || hook.metadata.flow === 'tools:list-tools',
-    );
-    if (hooks.length > 0) {
-      await this.hooks.registerHooks(true, ...hooks);
+    // Valid flows for tool hooks
+    const validFlows = ['tools:call-tool', 'tools:list-tools'];
+
+    const allHooks = normalizeHooksFromCls(this.record.provide);
+
+    // Separate valid and invalid hooks
+    const validHooks = allHooks.filter((hook) => validFlows.includes(hook.metadata.flow));
+    const invalidHooks = allHooks.filter((hook) => !validFlows.includes(hook.metadata.flow));
+
+    // Throw error for invalid hooks (fail fast)
+    if (invalidHooks.length > 0) {
+      const className = (this.record.provide as any)?.name ?? 'Unknown';
+      const invalidFlowNames = invalidHooks.map((h) => h.metadata.flow).join(', ');
+      throw new InvalidHookFlowError(
+        `Tool "${className}" has hooks for unsupported flows: ${invalidFlowNames}. ` +
+          `Only tool flows (${validFlows.join(', ')}) are supported on tool classes.`,
+      );
+    }
+
+    // Register valid hooks
+    if (validHooks.length > 0) {
+      await this.hooks.registerHooks(true, ...validHooks);
     }
     return Promise.resolve();
   }

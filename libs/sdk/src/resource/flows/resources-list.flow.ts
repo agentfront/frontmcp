@@ -18,15 +18,13 @@ const stateSchema = z.object({
   resources: z.array(
     z.object({
       ownerName: z.string(),
-      // z.any() used because ResourceEntry is a complex abstract class type
-      resource: z.any(),
+      resource: z.instanceof(ResourceEntry),
     }),
   ),
   resolvedResources: z.array(
     z.object({
       ownerName: z.string(),
-      // z.any() used because ResourceEntry is a complex abstract class type
-      resource: z.any(),
+      resource: z.instanceof(ResourceEntry),
       finalName: z.string(),
     }),
   ),
@@ -175,7 +173,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)
         .map(({ finalName, resource }) => ({
-          uri: resource.uri,
+          uri: resource.uri!, // Guaranteed by filter above
           name: finalName,
           title: resource.metadata.title,
           description: resource.metadata.description,

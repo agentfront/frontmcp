@@ -11,12 +11,14 @@ import {
   Token,
   ResourceRecord,
   ResourceKind,
+  ResourceTemplateRecord,
+  ResourceTemplateKind,
   Type,
   ResourceEntry,
 } from '../common';
 import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
 import { getMetadata } from '../utils/metadata.utils';
-import { ResourceTemplateRecord, ResourceTemplateKind, ResourceTemplateType } from './resource.types';
+import { ResourceTemplateType } from './resource.types';
 
 // Re-export shared naming utilities (ResourceNameCase is exported from resource.types.ts)
 export {
@@ -168,5 +170,10 @@ export function resourceDiscoveryDeps(rec: ResourceRecord | ResourceTemplateReco
     case ResourceKind.CLASS_TOKEN:
     case ResourceTemplateKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
+    default: {
+      // Exhaustive check - this should never happen if all ResourceKind and ResourceTemplateKind are handled
+      const _exhaustiveCheck: never = rec;
+      throw new Error(`Unhandled resource kind: ${(rec as { kind: string }).kind}`);
+    }
   }
 }
