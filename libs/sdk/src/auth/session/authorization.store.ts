@@ -501,7 +501,7 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void> {
-    const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
+    const ttl = Math.max(Math.ceil((record.expiresAt - Date.now()) / 1000), 1);
     await this.redis.set(this.key('code', record.code), JSON.stringify(record), 'EX', ttl);
   }
 
@@ -525,7 +525,7 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async storePendingAuthorization(record: PendingAuthorizationRecord): Promise<void> {
-    const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
+    const ttl = Math.max(Math.ceil((record.expiresAt - Date.now()) / 1000), 1);
     await this.redis.set(this.key('pending', record.id), JSON.stringify(record), 'EX', ttl);
   }
 

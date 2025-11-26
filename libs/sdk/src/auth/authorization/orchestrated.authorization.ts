@@ -498,7 +498,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
    * Get tool IDs authorized through an app.
    */
   getAppToolIds(appId: string): string[] | undefined {
-    return this.#mutableAuthorizedApps.get(appId)?.toolIds ?? this.authorizedApps[appId]?.toolIds;
+    return this.#mutableAuthorizedApps.get(appId)?.toolIds ?? this.authorizedApps?.[appId]?.toolIds;
   }
 
   /**

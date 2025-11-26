@@ -7,7 +7,6 @@ import {
   InMemoryAuthorizationVault,
   AuthorizationVault,
   AuthorizationVaultEntry,
-  ProviderToken,
   VaultConsentRecord,
   VaultFederatedRecord,
   PendingIncrementalAuth,
@@ -21,7 +20,6 @@ import {
   MtlsCredential,
   CustomCredential,
   // Schemas
-  providerTokenSchema,
   vaultConsentRecordSchema,
   vaultFederatedRecordSchema,
   pendingIncrementalAuthSchema,
@@ -44,51 +42,6 @@ describe('Authorization Vault', () => {
   // ============================================
 
   describe('Schemas', () => {
-    describe('providerTokenSchema', () => {
-      it('should validate a complete provider token', () => {
-        const token: ProviderToken = {
-          providerId: 'slack',
-          accessToken: 'xoxb-1234567890',
-          refreshToken: 'xoxr-refresh-token',
-          expiresAt: Date.now() + 3600000,
-          scopes: ['chat:write', 'channels:read'],
-          userInfo: {
-            sub: 'U123456',
-            email: 'user@example.com',
-            name: 'Test User',
-          },
-          acquiredAt: Date.now(),
-        };
-
-        const result = providerTokenSchema.safeParse(token);
-        expect(result.success).toBe(true);
-      });
-
-      it('should validate minimal provider token', () => {
-        const token = {
-          providerId: 'github',
-          accessToken: 'ghp_xxxxx',
-          scopes: ['repo', 'user'],
-          acquiredAt: Date.now(),
-        };
-
-        const result = providerTokenSchema.safeParse(token);
-        expect(result.success).toBe(true);
-      });
-
-      it('should reject empty providerId', () => {
-        const token = {
-          providerId: '',
-          accessToken: 'token',
-          scopes: [],
-          acquiredAt: Date.now(),
-        };
-
-        const result = providerTokenSchema.safeParse(token);
-        expect(result.success).toBe(false);
-      });
-    });
-
     describe('vaultConsentRecordSchema', () => {
       it('should validate consent record', () => {
         const consent: VaultConsentRecord = {
@@ -205,14 +158,6 @@ describe('Authorization Vault', () => {
           clientId: 'client-789',
           createdAt: Date.now(),
           lastAccessAt: Date.now(),
-          providerTokens: {
-            slack: {
-              providerId: 'slack',
-              accessToken: 'xoxb-token',
-              scopes: ['chat:write'],
-              acquiredAt: Date.now(),
-            },
-          },
           appCredentials: {},
           consent: {
             enabled: true,
@@ -242,7 +187,6 @@ describe('Authorization Vault', () => {
           clientId: 'client-789',
           createdAt: Date.now(),
           lastAccessAt: Date.now(),
-          providerTokens: {},
           pendingAuths: [],
           authorizedAppIds: [],
           skippedAppIds: [],
@@ -259,7 +203,6 @@ describe('Authorization Vault', () => {
           clientId: 'client-789',
           createdAt: Date.now(),
           lastAccessAt: Date.now(),
-          providerTokens: {},
           pendingAuths: [],
           authorizedAppIds: [],
           skippedAppIds: [],
@@ -296,8 +239,8 @@ describe('Authorization Vault', () => {
       it('should validate complete OAuth credential', () => {
         const credential: OAuthCredential = {
           type: 'oauth',
-          accessToken: 'xoxb-1234567890',
-          refreshToken: 'xoxr-refresh',
+          accessToken: 'test-slack-access-token',
+          refreshToken: 'test-refresh',
           tokenType: 'Bearer',
           expiresAt: Date.now() + 3600000,
           scopes: ['chat:write', 'channels:read'],
@@ -656,8 +599,8 @@ describe('Authorization Vault', () => {
           providerId: 'slack-oauth',
           credential: {
             type: 'oauth',
-            accessToken: 'xoxb-token',
-            refreshToken: 'xoxr-refresh',
+            accessToken: 'test-slack-token',
+            refreshToken: 'test-refresh',
             tokenType: 'Bearer',
             scopes: ['chat:write'],
           },
@@ -774,7 +717,6 @@ describe('Authorization Vault', () => {
         expect(entry.clientId).toBe('client-456');
         expect(entry.createdAt).toBeDefined();
         expect(entry.lastAccessAt).toBeDefined();
-        expect(entry.providerTokens).toEqual({});
         expect(entry.pendingAuths).toEqual([]);
         expect(entry.authorizedAppIds).toEqual([]);
         expect(entry.skippedAppIds).toEqual([]);
@@ -902,74 +844,6 @@ describe('Authorization Vault', () => {
 
       it('should not throw for non-existent entry', async () => {
         await expect(vault.delete('non-existent')).resolves.not.toThrow();
-      });
-    });
-
-    describe('Provider Tokens', () => {
-      it('should add a provider token', async () => {
-        const entry = await vault.create({
-          userSub: 'user-123',
-          clientId: 'client-456',
-        });
-
-        const token: ProviderToken = {
-          providerId: 'slack',
-          accessToken: 'xoxb-token',
-          scopes: ['chat:write'],
-          acquiredAt: Date.now(),
-        };
-
-        await vault.addProviderToken(entry.id, token);
-
-        const retrieved = await vault.get(entry.id);
-        expect(retrieved?.providerTokens['slack']).toEqual(token);
-      });
-
-      it('should overwrite existing provider token', async () => {
-        const entry = await vault.create({
-          userSub: 'user-123',
-          clientId: 'client-456',
-        });
-
-        const token1: ProviderToken = {
-          providerId: 'slack',
-          accessToken: 'old-token',
-          scopes: ['chat:write'],
-          acquiredAt: Date.now(),
-        };
-
-        const token2: ProviderToken = {
-          providerId: 'slack',
-          accessToken: 'new-token',
-          scopes: ['chat:write', 'channels:read'],
-          acquiredAt: Date.now(),
-        };
-
-        await vault.addProviderToken(entry.id, token1);
-        await vault.addProviderToken(entry.id, token2);
-
-        const retrieved = await vault.get(entry.id);
-        expect(retrieved?.providerTokens['slack'].accessToken).toBe('new-token');
-      });
-
-      it('should remove a provider token', async () => {
-        const entry = await vault.create({
-          userSub: 'user-123',
-          clientId: 'client-456',
-        });
-
-        const token: ProviderToken = {
-          providerId: 'slack',
-          accessToken: 'xoxb-token',
-          scopes: ['chat:write'],
-          acquiredAt: Date.now(),
-        };
-
-        await vault.addProviderToken(entry.id, token);
-        await vault.removeProviderToken(entry.id, 'slack');
-
-        const retrieved = await vault.get(entry.id);
-        expect(retrieved?.providerTokens['slack']).toBeUndefined();
       });
     });
 
@@ -1298,8 +1172,8 @@ describe('Authorization Vault', () => {
             providerId: 'slack-oauth',
             credential: {
               type: 'oauth',
-              accessToken: 'xoxb-token',
-              refreshToken: 'xoxr-refresh',
+              accessToken: 'test-slack-token',
+              refreshToken: 'test-refresh',
               tokenType: 'Bearer',
               scopes: ['chat:write'],
             },
@@ -1312,7 +1186,7 @@ describe('Authorization Vault', () => {
           const retrieved = await vault.getCredential(entry.id, 'slack', 'slack-oauth');
           expect(retrieved).not.toBeNull();
           expect(retrieved?.credential.type).toBe('oauth');
-          expect((retrieved?.credential as OAuthCredential).accessToken).toBe('xoxb-token');
+          expect((retrieved?.credential as OAuthCredential).accessToken).toBe('test-slack-token');
         });
 
         it('should add an API key credential', async () => {
@@ -1326,7 +1200,7 @@ describe('Authorization Vault', () => {
             providerId: 'openai-api',
             credential: {
               type: 'api_key',
-              key: 'sk-1234567890',
+              key: 'test-api-key-1234',
               headerName: 'Authorization',
               headerPrefix: 'Bearer ',
             },
@@ -1339,7 +1213,7 @@ describe('Authorization Vault', () => {
           const retrieved = await vault.getCredential(entry.id, 'openai', 'openai-api');
           expect(retrieved).not.toBeNull();
           expect(retrieved?.credential.type).toBe('api_key');
-          expect((retrieved?.credential as ApiKeyCredential).key).toBe('sk-1234567890');
+          expect((retrieved?.credential as ApiKeyCredential).key).toBe('test-api-key-1234');
         });
 
         it('should add a Basic Auth credential', async () => {
@@ -2202,19 +2076,10 @@ describe('Authorization Vault', () => {
       // 4. App should now be authorized
       expect(await vault.isAppAuthorized(entry.id, 'slack')).toBe(true);
 
-      // 5. Add provider token
-      await vault.addProviderToken(entry.id, {
-        providerId: 'slack',
-        accessToken: 'xoxb-slack-token',
-        scopes: ['chat:write'],
-        acquiredAt: Date.now(),
-      });
-
-      // 6. Verify final state
+      // 5. Verify final state
       const finalEntry = await vault.get(entry.id);
       expect(finalEntry?.authorizedAppIds).toContain('slack');
       expect(finalEntry?.skippedAppIds).not.toContain('slack');
-      expect(finalEntry?.providerTokens['slack']).toBeDefined();
     });
 
     it('should handle cancelled authorization', async () => {

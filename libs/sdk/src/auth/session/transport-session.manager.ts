@@ -114,6 +114,7 @@ export class TransportSessionManager {
       // Redis store would be instantiated here
       // For now, fall back to in-memory
       // TODO: Implement RedisSessionStore
+      console.warn('[TransportSessionManager] Redis store requested but not implemented - falling back to in-memory');
       this.store = new InMemorySessionStore();
     } else {
       this.store = new InMemorySessionStore();

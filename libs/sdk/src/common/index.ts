@@ -11,9 +11,6 @@ export * from './utils';
 export * from './schemas';
 export * from './flow/flow.utils';
 
-export * from './decorators-old/async-with.decorator';
-export * from './decorators-old/session-hook.decorator';
-
 export * from './interfaces/tool-hook.interface';
 export * from './interfaces/session-hook.interface';
 export * from './interfaces/auth-hook.interface';

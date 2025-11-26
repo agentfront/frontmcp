@@ -327,8 +327,6 @@ export type EncryptedVaultEntry = z.infer<typeof encryptedVaultEntrySchema>;
  * Sensitive data that gets encrypted
  */
 export interface VaultSensitiveData {
-  /** Provider tokens (legacy) */
-  providerTokens: Record<string, unknown>;
   /** App credentials */
   appCredentials: Record<string, unknown>;
   /** Consent record */

@@ -131,10 +131,11 @@ export class AuthRegistry
   private getAppMetadata(app: AppType): { id?: string; name: string; auth?: AuthOptions } | undefined {
     // Value type: has metadata directly
     if (typeof app === 'object' && 'name' in app) {
+      const appValue = app as { id?: string; name: string; auth?: AuthOptions };
       return {
-        id: (app as any).id,
-        name: (app as any).name,
-        auth: (app as any).auth,
+        id: appValue.id,
+        name: appValue.name,
+        auth: appValue.auth,
       };
     }
 

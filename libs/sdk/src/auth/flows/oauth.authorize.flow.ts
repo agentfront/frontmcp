@@ -42,6 +42,7 @@ import {
   buildIncrementalAuthPage,
   buildFederatedLoginPage,
   buildErrorPage,
+  escapeHtml,
   type AppAuthCard,
   type ProviderCard,
 } from '../ui';
@@ -330,7 +331,12 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     }
 
     // Store pending authorization request
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
+    const auth = this.scope.auth;
+    if (!auth || !('authorizationStore' in auth)) {
+      this.respond(httpRespond.html(this.renderErrorPage('server_error', 'Authorization not configured'), 500));
+      return;
+    }
+    const localAuth = auth as LocalPrimaryAuth;
     const store = localAuth.authorizationStore as InMemoryAuthorizationStore;
 
     // Build federated login state if multiple providers
@@ -582,7 +588,6 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       app,
       toolId: toolId || 'unknown tool',
       sessionHint: pendingAuthId,
-      csrfToken: '', // No CSRF needed for GET form
       callbackPath,
     });
   }
@@ -647,10 +652,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           .map(
             (tool) => `
         <label class="tool-card">
-          <input type="checkbox" name="tools" value="${tool.id}" checked>
+          <input type="checkbox" name="tools" value="${escapeHtml(tool.id)}" checked>
           <div class="tool-content">
-            <div class="tool-name">${tool.name}</div>
-            ${tool.description ? `<div class="tool-description">${tool.description}</div>` : ''}
+            <div class="tool-name">${escapeHtml(tool.name)}</div>
+            ${tool.description ? `<div class="tool-description">${escapeHtml(tool.description)}</div>` : ''}
           </div>
         </label>
       `,
@@ -660,11 +665,13 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         return `
         <div class="app-group">
           <div class="app-group-header">
-            <span class="app-group-icon">${appName.charAt(0).toUpperCase()}</span>
-            <span class="app-group-name">${appName}</span>
-            <button type="button" class="toggle-app" onclick="toggleAppTools('${appId}')">Toggle All</button>
+            <span class="app-group-icon">${escapeHtml(appName.charAt(0).toUpperCase())}</span>
+            <span class="app-group-name">${escapeHtml(appName)}</span>
+            <button type="button" class="toggle-app" data-app-id="${escapeHtml(
+              appId,
+            )}" onclick="toggleAppTools(this.dataset.appId)">Toggle All</button>
           </div>
-          <div class="app-tools" data-app="${appId}">
+          <div class="app-tools" data-app="${escapeHtml(appId)}">
             ${toolCardsHtml}
           </div>
         </div>
@@ -819,14 +826,14 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       userEmail || userName
         ? `
     <div class="user-info">
-      Logged in as: <strong>${userName || userEmail}</strong>
+      Logged in as: <strong>${escapeHtml(userName || userEmail || '')}</strong>
     </div>
     `
         : ''
     }
 
-    <form action="${callbackPath}" method="POST" id="consent-form">
-      <input type="hidden" name="pending_auth_id" value="${pendingAuthId}">
+    <form action="${escapeHtml(callbackPath)}" method="POST" id="consent-form">
+      <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
 
       <div class="select-controls">
         <label>
@@ -929,8 +936,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   <div class="error-container">
     <div class="error-icon">⚠️</div>
     <h1>Authorization Error</h1>
-    <p><span class="error-code">${error}</span></p>
-    <p>${description}</p>
+    <p><span class="error-code">${escapeHtml(error)}</span></p>
+    <p>${escapeHtml(description)}</p>
   </div>
 </body>
 </html>`;

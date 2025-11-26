@@ -24,7 +24,8 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
+import { escapeHtml } from '../ui';
 
 const inputSchema = httpInputSchema;
 
@@ -275,15 +276,33 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       skippedProviders,
     } = this.state.required;
 
+    // Validate required fields before creating authorization code
+    if (!clientId || !redirectUri || !codeChallenge || !userSub) {
+      const missingFields = [
+        !clientId && 'clientId',
+        !redirectUri && 'redirectUri',
+        !codeChallenge && 'codeChallenge',
+        !userSub && 'userSub',
+      ].filter(Boolean);
+      this.logger.error(`Missing required fields for authorization code: ${missingFields.join(', ')}`);
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('server_error', 'Authorization request is incomplete. Please try again.'),
+          500,
+        ),
+      );
+      return;
+    }
+
     const localAuth = this.scope.auth as LocalPrimaryAuth;
 
     // Create the authorization code with consent/federated data
     const code = await localAuth.createAuthorizationCode({
-      clientId: clientId!,
-      redirectUri: redirectUri!,
+      clientId,
+      redirectUri,
       scopes: scopes ?? [],
-      codeChallenge: codeChallenge!,
-      userSub: userSub!,
+      codeChallenge,
+      userSub,
       userEmail: email,
       userName: name,
       state: originalState,
@@ -308,9 +327,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   async redirectToClient() {
     const { redirectUri, authorizationCode, originalState, isIncremental, targetAppId } = this.state.required;
 
+    // Validate required fields for redirect
+    if (!redirectUri || !authorizationCode) {
+      this.logger.error('Missing redirectUri or authorizationCode for redirect');
+      this.respond(
+        httpRespond.html(
+          this.renderErrorPage('server_error', 'Failed to complete authorization. Please try again.'),
+          500,
+        ),
+      );
+      return;
+    }
+
     // Build the redirect URL with the authorization code
-    const url = new URL(redirectUri!);
-    url.searchParams.set('code', authorizationCode!);
+    const url = new URL(redirectUri);
+    url.searchParams.set('code', authorizationCode);
     if (originalState) {
       url.searchParams.set('state', originalState);
     }
@@ -337,8 +368,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   private generateUserSub(email: string): string {
     // Create a deterministic UUID from the email for demo purposes
     // In production, this would be the actual user ID
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(email.toLowerCase()).digest('hex');
+    const hash = createHash('sha256').update(email.toLowerCase()).digest('hex');
     // Format as UUID
     return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
   }
@@ -347,6 +377,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * Render an error page
    */
   private renderErrorPage(error: string, description: string): string {
+    // Escape user-provided content to prevent XSS attacks
+    const safeError = escapeHtml(error);
+    const safeDescription = escapeHtml(description);
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -388,8 +422,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   <div class="error-container">
     <div class="error-icon">⚠️</div>
     <h1>Authorization Error</h1>
-    <p><span class="error-code">${error}</span></p>
-    <p>${description}</p>
+    <p><span class="error-code">${safeError}</span></p>
+    <p>${safeDescription}</p>
     <a href="javascript:history.back()" class="retry-link">← Go Back</a>
   </div>
 </body>

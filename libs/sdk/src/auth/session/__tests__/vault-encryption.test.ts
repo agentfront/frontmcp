@@ -361,17 +361,12 @@ describe('VaultEncryption', () => {
 
     it('should encrypt and decrypt complex nested structures', () => {
       const data = {
-        providerTokens: {
-          slack: {
+        appCredentials: {
+          'slack:api': {
+            type: 'oauth',
             accessToken: 'slack-token',
             scopes: ['chat:write'],
           },
-          github: {
-            accessToken: 'github-token',
-            scopes: ['repo'],
-          },
-        },
-        appCredentials: {
           'openai:api': {
             type: 'api_key',
             key: 'sk-...',

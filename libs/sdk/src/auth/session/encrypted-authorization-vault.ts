@@ -25,12 +25,12 @@
 
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { VaultEncryption, EncryptedData, VaultSensitiveData, encryptedDataSchema } from './vault-encryption';
 import {
   AuthorizationVault,
   AuthorizationVaultEntry,
   AppCredential,
-  ProviderToken,
   VaultConsentRecord,
   VaultFederatedRecord,
   PendingIncrementalAuth,
@@ -86,6 +86,12 @@ export interface EncryptionContext {
   vaultId: string;
 }
 
+/**
+ * Module-level AsyncLocalStorage for request-scoped encryption context.
+ * This ensures concurrent requests don't interfere with each other's encryption keys.
+ */
+const encryptionContextStorage = new AsyncLocalStorage<EncryptionContext>();
+
 // ============================================
 // Encrypted Redis Vault Implementation
 // ============================================
@@ -95,10 +101,10 @@ export interface EncryptionContext {
  *
  * All sensitive data (tokens, credentials, consent, pending auths)
  * is encrypted using a key derived from the client's JWT.
+ *
+ * Use `runWithContext()` to set encryption context for concurrent safety.
  */
 export class EncryptedRedisVault implements AuthorizationVault {
-  private encryptionContext: EncryptionContext | null = null;
-
   constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly redis: any,
@@ -107,31 +113,37 @@ export class EncryptedRedisVault implements AuthorizationVault {
   ) {}
 
   /**
-   * Set the encryption context for the current request
-   * MUST be called before any vault operations
+   * Run a callback with encryption context set for the current async scope.
+   * This is the recommended way to set encryption context as it is safe for
+   * concurrent requests (each request gets its own isolated context).
    *
-   * @param key - Encryption key derived from JWT
-   * @param vaultId - Vault ID (from JWT jti)
+   * @param context - Encryption context with key and vaultId
+   * @param fn - Async function to run with the context
+   * @returns The result of the callback
+   *
+   * @example
+   * ```typescript
+   * const result = await vault.runWithContext({ key, vaultId }, async () => {
+   *   await vault.get(id);
+   *   await vault.update(id, data);
+   *   return 'done';
+   * });
+   * ```
    */
-  setEncryptionContext(key: Buffer, vaultId: string): void {
-    this.encryptionContext = { key, vaultId };
+  runWithContext<T>(context: EncryptionContext, fn: () => T | Promise<T>): T | Promise<T> {
+    return encryptionContextStorage.run(context, fn);
   }
 
   /**
-   * Clear the encryption context after request completes
-   */
-  clearEncryptionContext(): void {
-    this.encryptionContext = null;
-  }
-
-  /**
-   * Get current encryption key or throw
+   * Get current encryption key from AsyncLocalStorage.
    */
   private getKey(): Buffer {
-    if (!this.encryptionContext) {
-      throw new Error('Encryption context not set. Call setEncryptionContext() first.');
+    const asyncContext = encryptionContextStorage.getStore();
+    if (asyncContext) {
+      return asyncContext.key;
     }
-    return this.encryptionContext.key;
+
+    throw new Error('Encryption context not set. Use runWithContext() before performing vault operations.');
   }
 
   /**
@@ -176,7 +188,6 @@ export class EncryptedRedisVault implements AuthorizationVault {
       clientId: redisEntry.clientId,
       createdAt: redisEntry.createdAt,
       lastAccessAt: redisEntry.lastAccessAt,
-      providerTokens: sensitive.providerTokens as Record<string, ProviderToken>,
       appCredentials: sensitive.appCredentials as Record<string, AppCredential>,
       consent: sensitive.consent as VaultConsentRecord | undefined,
       federated: sensitive.federated as VaultFederatedRecord | undefined,
@@ -191,7 +202,6 @@ export class EncryptedRedisVault implements AuthorizationVault {
    */
   private toRedisEntry(entry: AuthorizationVaultEntry): RedisVaultEntry {
     const sensitive: VaultSensitiveData = {
-      providerTokens: entry.providerTokens,
       appCredentials: entry.appCredentials,
       consent: entry.consent,
       federated: entry.federated,
@@ -260,7 +270,6 @@ export class EncryptedRedisVault implements AuthorizationVault {
       clientId: params.clientId,
       createdAt: now,
       lastAccessAt: now,
-      providerTokens: {},
       appCredentials: {},
       consent: params.consent,
       federated: params.federated,
@@ -286,7 +295,9 @@ export class EncryptedRedisVault implements AuthorizationVault {
 
   async update(id: string, updates: Partial<AuthorizationVaultEntry>): Promise<void> {
     const entry = await this.loadEntry(id);
-    if (!entry) return;
+    if (!entry) {
+      throw new Error(`Vault entry not found: ${id}`);
+    }
 
     Object.assign(entry, updates, { lastAccessAt: Date.now() });
     await this.saveEntry(entry);
@@ -294,24 +305,6 @@ export class EncryptedRedisVault implements AuthorizationVault {
 
   async delete(id: string): Promise<void> {
     await this.redis.del(this.redisKey(id));
-  }
-
-  async addProviderToken(vaultId: string, token: ProviderToken): Promise<void> {
-    const entry = await this.loadEntry(vaultId);
-    if (!entry) return;
-
-    entry.providerTokens[token.providerId] = token;
-    entry.lastAccessAt = Date.now();
-    await this.saveEntry(entry);
-  }
-
-  async removeProviderToken(vaultId: string, providerId: string): Promise<void> {
-    const entry = await this.loadEntry(vaultId);
-    if (!entry) return;
-
-    delete entry.providerTokens[providerId];
-    entry.lastAccessAt = Date.now();
-    await this.saveEntry(entry);
   }
 
   async updateConsent(vaultId: string, consent: VaultConsentRecord): Promise<void> {

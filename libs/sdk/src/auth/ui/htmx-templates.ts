@@ -196,7 +196,6 @@ export function buildIncrementalAuthPage(params: {
   app: AppAuthCard;
   toolId: string;
   sessionHint: string;
-  csrfToken: string;
   callbackPath: string;
 }): string {
   const { app, toolId, sessionHint, callbackPath } = params;

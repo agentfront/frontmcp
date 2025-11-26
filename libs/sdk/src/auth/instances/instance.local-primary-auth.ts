@@ -1,7 +1,7 @@
 import { SignJWT } from 'jose';
 import { URL } from 'url';
 import { randomBytes, randomUUID } from 'crypto';
-import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest } from '../../common';
+import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
 import {
   PublicAuthOptions,
   OrchestratedLocalOptions,
@@ -71,7 +71,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly host: string;
   readonly port: number;
   readonly issuer: string;
-  readonly keys: any[] = [];
+  readonly keys: JWK[] = [];
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
   readonly authorizationStore: AuthorizationStore;
@@ -81,6 +81,17 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   private readonly accessTokenTtlSeconds = 3600;
   /** Default refresh token TTL (30 days) */
   private readonly refreshTokenTtlSeconds = 30 * 24 * 3600;
+
+  /**
+   * Get the authorization store as InMemoryAuthorizationStore with type guard.
+   * This ensures type safety when using InMemory-specific methods.
+   */
+  private getInMemoryStore(): InMemoryAuthorizationStore {
+    if (!(this.authorizationStore instanceof InMemoryAuthorizationStore)) {
+      throw new Error('LocalPrimaryAuth requires InMemoryAuthorizationStore for record creation methods');
+    }
+    return this.authorizationStore;
+  }
 
   constructor(private scope: ScopeEntry, private providers: ProviderRegistry, options: LocalPrimaryAuthOptions) {
     super(options);
@@ -267,7 +278,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const accessToken = await this.signAccessToken(user, codeRecord.scopes, codeRecord.resource, consentMetadata);
 
     // Create refresh token
-    const refreshTokenRecord = (this.authorizationStore as InMemoryAuthorizationStore).createRefreshTokenRecord({
+    const refreshTokenRecord = this.getInMemoryStore().createRefreshTokenRecord({
       clientId,
       userSub: user.sub,
       scopes: codeRecord.scopes,
@@ -316,7 +327,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const accessToken = await this.signAccessToken(user, tokenRecord.scopes, tokenRecord.resource);
 
     // Rotate refresh token
-    const newRefreshRecord = (this.authorizationStore as InMemoryAuthorizationStore).createRefreshTokenRecord({
+    const newRefreshRecord = this.getInMemoryStore().createRefreshTokenRecord({
       clientId,
       userSub: tokenRecord.userSub,
       scopes: tokenRecord.scopes,
@@ -355,7 +366,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     consentEnabled?: boolean;
     federatedLoginUsed?: boolean;
   }): Promise<string> {
-    const store = this.authorizationStore as InMemoryAuthorizationStore;
+    const store = this.getInMemoryStore();
     const codeRecord = store.createCodeRecord({
       clientId: params.clientId,
       redirectUri: params.redirectUri,

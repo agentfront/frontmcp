@@ -212,37 +212,6 @@ export const appCredentialSchema = z.object({
 
 export type AppCredential = z.infer<typeof appCredentialSchema>;
 
-// ============================================
-// Legacy Provider Token Schema (for backwards compatibility)
-// ============================================
-
-/**
- * Provider token stored in vault (legacy, maps to OAuth credential)
- * @deprecated Use appCredentials with credential type instead
- */
-export const providerTokenSchema = z.object({
-  /** Provider ID (e.g., 'slack', 'github') */
-  providerId: z.string().min(1),
-  /** Access token for the provider */
-  accessToken: z.string(),
-  /** Refresh token for the provider (optional) */
-  refreshToken: z.string().optional(),
-  /** Token expiration timestamp (epoch ms) */
-  expiresAt: z.number().optional(),
-  /** Granted scopes */
-  scopes: z.array(z.string()),
-  /** Provider-specific user info */
-  userInfo: z
-    .object({
-      sub: z.string().optional(),
-      email: z.string().optional(),
-      name: z.string().optional(),
-    })
-    .optional(),
-  /** Timestamp when token was acquired */
-  acquiredAt: z.number(),
-});
-
 /**
  * Consent record stored in vault
  */
@@ -315,8 +284,6 @@ export const authorizationVaultEntrySchema = z.object({
   createdAt: z.number(),
   /** Last access timestamp */
   lastAccessAt: z.number(),
-  /** Provider tokens (keyed by provider ID) - legacy, use appCredentials */
-  providerTokens: z.record(z.string(), providerTokenSchema),
   /** App credentials (keyed by `${appId}:${providerId}`) */
   appCredentials: z.record(z.string(), appCredentialSchema).default({}),
   /** Consent record */
@@ -335,7 +302,6 @@ export const authorizationVaultEntrySchema = z.object({
 // Types
 // ============================================
 
-export type ProviderToken = z.infer<typeof providerTokenSchema>;
 export type VaultConsentRecord = z.infer<typeof vaultConsentRecordSchema>;
 export type VaultFederatedRecord = z.infer<typeof vaultFederatedRecordSchema>;
 export type PendingIncrementalAuth = z.infer<typeof pendingIncrementalAuthSchema>;
@@ -374,16 +340,6 @@ export interface AuthorizationVault {
    * Delete vault entry
    */
   delete(id: string): Promise<void>;
-
-  /**
-   * Add a provider token to the vault
-   */
-  addProviderToken(vaultId: string, token: ProviderToken): Promise<void>;
-
-  /**
-   * Remove a provider token from the vault
-   */
-  removeProviderToken(vaultId: string, providerId: string): Promise<void>;
 
   /**
    * Update consent in the vault
@@ -540,7 +496,6 @@ export class InMemoryAuthorizationVault implements AuthorizationVault {
       clientId: params.clientId,
       createdAt: now,
       lastAccessAt: now,
-      providerTokens: {},
       appCredentials: {},
       consent: params.consent,
       federated: params.federated,
@@ -557,8 +512,8 @@ export class InMemoryAuthorizationVault implements AuthorizationVault {
     const entry = this.vaults.get(id);
     if (!entry) return null;
 
-    // Update last access time
-    entry.lastAccessAt = Date.now();
+    // Note: lastAccessAt is updated on explicit operations, not on read
+    // This prevents unnecessary writes on read operations
     return entry;
   }
 
@@ -571,22 +526,6 @@ export class InMemoryAuthorizationVault implements AuthorizationVault {
 
   async delete(id: string): Promise<void> {
     this.vaults.delete(id);
-  }
-
-  async addProviderToken(vaultId: string, token: ProviderToken): Promise<void> {
-    const entry = this.vaults.get(vaultId);
-    if (!entry) return;
-
-    entry.providerTokens[token.providerId] = token;
-    entry.lastAccessAt = Date.now();
-  }
-
-  async removeProviderToken(vaultId: string, providerId: string): Promise<void> {
-    const entry = this.vaults.get(vaultId);
-    if (!entry) return;
-
-    delete entry.providerTokens[providerId];
-    entry.lastAccessAt = Date.now();
   }
 
   async updateConsent(vaultId: string, consent: VaultConsentRecord): Promise<void> {
@@ -907,7 +846,6 @@ export class RedisAuthorizationVault implements AuthorizationVault {
       clientId: params.clientId,
       createdAt: now,
       lastAccessAt: now,
-      providerTokens: {},
       appCredentials: {},
       consent: params.consent,
       federated: params.federated,
@@ -925,9 +863,8 @@ export class RedisAuthorizationVault implements AuthorizationVault {
     if (!data) return null;
 
     const entry = JSON.parse(data) as AuthorizationVaultEntry;
-    entry.lastAccessAt = Date.now();
-    await this.redis.set(this.key(id), JSON.stringify(entry));
-
+    // Note: lastAccessAt is updated on explicit operations, not on read
+    // This prevents unnecessary writes on read operations
     return entry;
   }
 
@@ -941,22 +878,6 @@ export class RedisAuthorizationVault implements AuthorizationVault {
 
   async delete(id: string): Promise<void> {
     await this.redis.del(this.key(id));
-  }
-
-  async addProviderToken(vaultId: string, token: ProviderToken): Promise<void> {
-    const entry = await this.get(vaultId);
-    if (!entry) return;
-
-    entry.providerTokens[token.providerId] = token;
-    await this.redis.set(this.key(vaultId), JSON.stringify(entry));
-  }
-
-  async removeProviderToken(vaultId: string, providerId: string): Promise<void> {
-    const entry = await this.get(vaultId);
-    if (!entry) return;
-
-    delete entry.providerTokens[providerId];
-    await this.redis.set(this.key(vaultId), JSON.stringify(entry));
   }
 
   async updateConsent(vaultId: string, consent: VaultConsentRecord): Promise<void> {

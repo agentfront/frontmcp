@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { getRequestBaseUrl, normalizeEntryPrefix, normalizeScopeBase } from '../path.utils';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
+import type { JSONWebKeySet } from 'jose';
 import {
   buildPrmUrl,
   buildUnauthorizedHeader,
@@ -18,6 +19,7 @@ import {
   TransparentAuthorization,
   OrchestratedAuthorization,
   Authorization,
+  TransparentVerifiedPayload,
 } from '../authorization';
 import { AuthMode } from '../authorization/authorization.types';
 import { authUserSchema, llmSafeAuthContextSchema } from '../authorization/authorization.types';
@@ -146,14 +148,6 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
 
     if (authOptions && 'mode' in authOptions) {
       authMode = authOptions.mode as AuthMode;
-    } else if (authOptions && 'type' in authOptions) {
-      // Legacy compatibility
-      const legacyType = (authOptions as any).type;
-      if (legacyType === 'local') {
-        authMode = 'orchestrated';
-      } else if (legacyType === 'remote') {
-        authMode = 'transparent';
-      }
     }
 
     this.logger.debug(`Auth mode determined: ${authMode}`);
@@ -167,15 +161,16 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     filter: ({ state }) => state.authMode === 'public' && !state.token,
   })
   async handlePublicMode() {
-    const authOptions = this.scope.auth?.options as any;
+    const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
 
     // Create anonymous authorization
+    const publicAccess = authOptions?.['publicAccess'] as Record<string, unknown> | undefined;
     const authorization = PublicAuthorization.create({
-      scopes: authOptions?.anonymousScopes ?? ['anonymous'],
-      ttlMs: this.parseTtl(authOptions?.sessionTtl),
-      issuer: authOptions?.issuer ?? this.state.required.baseUrl,
-      allowedTools: authOptions?.publicAccess?.tools ?? 'all',
-      allowedPrompts: authOptions?.publicAccess?.prompts ?? 'all',
+      scopes: (authOptions?.['anonymousScopes'] as string[] | undefined) ?? ['anonymous'],
+      ttlMs: this.parseTtl(authOptions?.['sessionTtl'] as string | number | undefined),
+      issuer: (authOptions?.['issuer'] as string | undefined) ?? this.state.required.baseUrl,
+      allowedTools: (publicAccess?.['tools'] as string[] | 'all' | undefined) ?? 'all',
+      allowedPrompts: (publicAccess?.['prompts'] as string[] | 'all' | undefined) ?? 'all',
     });
 
     this.logger.info(`Created anonymous authorization: ${authorization.id}`);
@@ -232,13 +227,13 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       verifyResult = await jwks.verifyGatewayToken(token, baseUrl);
     } else {
       // Transparent: verify against upstream provider
-      const authOptions = this.scope.auth?.options as any;
+      const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
       const providerRefs: ProviderVerifyRef[] = [
         {
-          id: authOptions?.id ?? 'default',
-          issuerUrl: this.scope.auth.issuer,
-          jwks: authOptions?.jwks,
-          jwksUri: authOptions?.jwksUri,
+          id: (authOptions?.['id'] as string | undefined) ?? 'default',
+          issuerUrl: this.scope.auth?.issuer ?? '',
+          jwks: authOptions?.['jwks'] as JSONWebKeySet | undefined,
+          jwksUri: authOptions?.['jwksUri'] as string | undefined,
         },
       ];
       verifyResult = await jwks.verifyTransparentToken(token, providerRefs);
@@ -255,8 +250,10 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     }
 
     // Validate audience
-    const authOptions = this.scope.auth?.options as any;
-    const expectedAudience = authOptions?.expectedAudience ?? deriveExpectedAudience(baseUrl);
+    const authOptionsForAudience = this.scope.auth?.options as Record<string, unknown> | undefined;
+    const expectedAudience =
+      (authOptionsForAudience?.['expectedAudience'] as string | string[] | undefined) ??
+      deriveExpectedAudience(baseUrl);
     const expectedAudienceArray = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
 
     const audResult = validateAudience(verifyResult.payload?.aud as string | string[] | undefined, {
@@ -275,7 +272,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     }
 
     // Check required scopes
-    const requiredScopes = authOptions?.requiredScopes ?? [];
+    const requiredScopes = (authOptionsForAudience?.['requiredScopes'] as string[] | undefined) ?? [];
     if (requiredScopes.length > 0) {
       const tokenScopes = this.parseScopes(verifyResult.payload?.scope);
       const hasAllScopes = requiredScopes.every((s: string) => tokenScopes.includes(s));
@@ -319,12 +316,14 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
 
     if (authMode === 'transparent') {
       // Transparent mode: pass-through token
-      const authOptions = this.scope.auth?.options as any;
+      const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
+      // jwtPayload has been verified and should contain sub from the upstream token
+      const payload = jwtPayload as TransparentVerifiedPayload;
       authorization = TransparentAuthorization.fromVerifiedToken({
         token,
-        payload: jwtPayload as any,
+        payload,
         providerId: this.scope.auth?.id ?? 'default',
-        providerName: authOptions?.name,
+        providerName: authOptions?.['name'] as string | undefined,
       });
     } else if (authMode === 'orchestrated') {
       // Orchestrated mode: local auth server

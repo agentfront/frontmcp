@@ -212,7 +212,7 @@ export function deriveExpectedAudience(resourceUrl: string): string[] {
  * AudienceValidator class for reusable validation with configuration
  */
 export class AudienceValidator {
-  private readonly options: AudienceValidatorOptions;
+  private options: AudienceValidatorOptions;
 
   constructor(options: Partial<AudienceValidatorOptions> & { expectedAudiences?: string[] } = {}) {
     this.options = {

@@ -430,7 +430,7 @@ export const flowScenarios = {
   /**
    * Single app incremental auth scenario
    */
-  incrementalAuth: (appId: string = 'slack') =>
+  incrementalAuth: (appId = 'slack') =>
     createMockScopeEntry({
       auth: { mode: 'orchestrated', type: 'local' },
       apps: [{ id: appId, name: appId.charAt(0).toUpperCase() + appId.slice(1) }],

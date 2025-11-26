@@ -189,8 +189,6 @@ export function detectAuthProviders(
   const uniqueProviderCount = providers.size;
   const hasMultipleProviders = uniqueProviderCount > 1;
   const hasChildOnlyProviders = childProviderIds.length > 0 && !parentProviderId;
-  const childHasDifferentProvider =
-    childProviderIds.length > 0 && parentProviderId && !childProviderIds.includes(parentProviderId);
 
   const requiresOrchestration =
     hasMultipleProviders || hasChildOnlyProviders || (childProviderIds.length > 0 && parentProviderId !== undefined);

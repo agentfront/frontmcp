@@ -47,6 +47,51 @@ graph TB
 
 ---
 
+## Security & Limitations
+
+> **WARNING**: This section documents intentional security shortcuts for development convenience. Review carefully before deploying to production.
+
+### Development-Only Features
+
+| Feature                | Description                                                                 | Production Risk                                                 |
+| ---------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Default JWT Secret** | If `JWT_SECRET` env var is not set, a random in-process secret is generated | Tokens become invalid on restart; predictable in some scenarios |
+| **In-Memory Storage**  | `InMemoryAuthorizationStore` loses all data on restart                      | Session loss; not suitable for multi-instance deployments       |
+| **Localhost DCR**      | Dynamic Client Registration only allows localhost redirect URIs             | N/A - disabled in production by default                         |
+| **Demo Login Page**    | Built-in login page accepts any email without validation                    | Must be replaced with real identity provider                    |
+
+### When NOT to Use Each Mode
+
+| Mode                    | Do NOT Use When                                          |
+| ----------------------- | -------------------------------------------------------- |
+| **Public**              | You need user identity, audit trails, or access control  |
+| **Transparent**         | You need to orchestrate tokens across multiple providers |
+| **Orchestrated Local**  | You're running multiple server instances without Redis   |
+| **Orchestrated Remote** | The upstream IdP doesn't support the required scopes     |
+
+### What Verification is Skipped
+
+| Scenario                                | Skipped Verification        | Why                              |
+| --------------------------------------- | --------------------------- | -------------------------------- |
+| Public mode with `allowAnonymous: true` | Token verification entirely | Anonymous access by design       |
+| `type: 'local'` without IdP             | User authentication         | Demo login only validates format |
+| Missing `expectedAudience`              | Audience claim validation   | Defaults to issuer URL           |
+| In-memory JWKS                          | Key persistence             | Keys regenerate on restart       |
+
+### Production Deployment Checklist
+
+- [ ] Set `JWT_SECRET` environment variable (min 32 bytes, high entropy)
+- [ ] Configure Redis for `AuthorizationStore` and `TokenStorage`
+- [ ] Replace demo login page with real identity provider
+- [ ] Set explicit `expectedAudience` matching your resource server
+- [ ] Enable HTTPS (required for OAuth 2.1 compliance)
+- [ ] Configure rate limiting on `/oauth/register` and `/oauth/token`
+- [ ] Review `publicAccess.tools` whitelist if using public mode
+- [ ] Test token refresh flows under load
+- [ ] Set up monitoring for token verification failures
+
+---
+
 ## Authentication Modes
 
 ### 1. Public Mode (`mode: 'public'`)
