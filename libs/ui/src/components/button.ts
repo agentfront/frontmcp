@@ -145,11 +145,35 @@ const loadingSpinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none"
 </svg>`;
 
 /**
+ * Validate href protocol to prevent javascript: and other dangerous protocols
+ */
+function isValidHrefProtocol(href: string): boolean {
+  const trimmed = href.trim().toLowerCase();
+  // Block javascript:, data:, vbscript: and other dangerous protocols
+  if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('vbscript:')) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Build a button component
  *
- * @param text - Button label text
+ * @param text - Button label text (used as aria-label for icon-only buttons)
  * @param options - Button configuration options
  * @returns HTML string for the button, or validation error box on invalid input
+ *
+ * @remarks
+ * **Security considerations:**
+ * - The `iconBefore` and `iconAfter` options accept raw HTML strings for SVG icons.
+ *   These are NOT escaped and should only contain trusted content (e.g., icon library output).
+ *   Never pass user-provided content to these options.
+ * - The `href` option is validated to prevent javascript:, data:, and vbscript: protocols.
+ *
+ * **Accessibility:**
+ * - When `iconOnly: true`, the `text` parameter is automatically used as `aria-label`
+ *   unless an explicit `ariaLabel` option is provided.
+ * - Empty button text with `iconOnly: false` will log a warning for accessibility.
  */
 export function button(text: string, options: ButtonOptions = {}): string {
   // Validate options using Zod schema
@@ -184,6 +208,17 @@ export function button(text: string, options: ButtonOptions = {}): string {
     ariaLabel,
   } = validatedOptions;
 
+  // Warn about empty button text (accessibility concern)
+  if (!iconOnly && !text.trim()) {
+    console.warn('[frontmcp/ui] Button has empty text. Consider providing text or using iconOnly with ariaLabel.');
+  }
+
+  // Validate href protocol
+  if (href && !isValidHrefProtocol(href)) {
+    console.warn(`[frontmcp/ui] Button href contains potentially dangerous protocol: "${href.slice(0, 20)}..."`);
+    // Don't render the href - fall back to button behavior
+  }
+
   const variantClasses = getVariantClasses(variant);
   const sizeClasses = getSizeClasses(size, iconOnly);
 
@@ -213,8 +248,11 @@ export function button(text: string, options: ButtonOptions = {}): string {
   const nameAttr = name ? `name="${escapeHtml(name)}"` : '';
   const valueAttr = value ? `value="${escapeHtml(value)}"` : '';
   const disabledAttr = disabled || loading ? 'disabled' : '';
-  const ariaLabelAttr = ariaLabel ? `aria-label="${escapeHtml(ariaLabel)}"` : '';
   const targetAttr = target ? `target="${escapeHtml(target)}"` : '';
+
+  // For icon-only buttons, use text as aria-label if no explicit ariaLabel provided (WCAG)
+  const effectiveAriaLabel = ariaLabel ?? (iconOnly && text ? text : undefined);
+  const ariaLabelAttr = effectiveAriaLabel ? `aria-label="${escapeHtml(effectiveAriaLabel)}"` : '';
 
   // Build content
   const iconBeforeHtml = iconBefore && !loading ? `<span class="${iconOnly ? '' : 'mr-2'}">${iconBefore}</span>` : '';
@@ -224,8 +262,8 @@ export function button(text: string, options: ButtonOptions = {}): string {
 
   const contentHtml = `${loadingHtml}${iconBeforeHtml}${textHtml}${iconAfterHtml}`;
 
-  // Use anchor tag if href provided
-  if (href && !disabled && !loading) {
+  // Use anchor tag if href provided and protocol is safe
+  if (href && !disabled && !loading && isValidHrefProtocol(href)) {
     return `<a href="${escapeHtml(
       href,
     )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr}>

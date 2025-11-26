@@ -418,9 +418,9 @@ export const DEFAULT_THEME = _DEFAULT_THEME;
 // ============================================
 
 /**
- * Deep merge two theme configurations
+ * Deep merge two theme configurations (internal helper without dark handling)
  */
-export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): ThemeConfig {
+function mergeThemesCore(base: ThemeConfig, override: Partial<ThemeConfig>): Omit<ThemeConfig, 'dark'> {
   return {
     ...base,
     ...override,
@@ -458,9 +458,42 @@ export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): 
       icons: { ...base.cdn?.icons, ...override.cdn?.icons },
       scripts: { ...base.cdn?.scripts, ...override.cdn?.scripts },
     },
-    dark: override.dark !== undefined ? mergeThemes(base, override.dark as Partial<ThemeConfig>) : base.dark,
     customVars: { ...base.customVars, ...override.customVars },
     customCss: [base.customCss, override.customCss].filter(Boolean).join('\n'),
+  };
+}
+
+/**
+ * Deep merge two theme configurations
+ *
+ * @remarks
+ * Dark variant handling:
+ * - When override.dark is provided, it's merged on top of base.dark (if present) or base
+ * - The resulting dark variant never contains a nested .dark property
+ * - This prevents infinite recursion and ensures clean dark theme composition
+ */
+export function mergeThemes(base: ThemeConfig, override: Partial<ThemeConfig>): ThemeConfig {
+  // Merge the main (light) theme properties
+  const merged = mergeThemesCore(base, override);
+
+  // Handle dark variant separately to avoid nested .dark properties
+  let darkVariant: Partial<ThemeConfig> | undefined;
+
+  if (override.dark !== undefined) {
+    // Merge override.dark on top of base.dark (or base if no base.dark)
+    const darkBase = base.dark ?? base;
+    // Strip any .dark from override.dark to prevent nesting
+    const { dark: _nestedDark, ...overrideDarkWithoutNested } = override.dark;
+    darkVariant = mergeThemesCore(darkBase as ThemeConfig, overrideDarkWithoutNested);
+  } else if (base.dark !== undefined) {
+    // Preserve base.dark, but strip any nested .dark property
+    const { dark: _nestedDark, ...baseDarkWithoutNested } = base.dark;
+    darkVariant = baseDarkWithoutNested;
+  }
+
+  return {
+    ...merged,
+    dark: darkVariant,
   };
 }
 
@@ -577,6 +610,24 @@ export function buildThemeCss(theme: ThemeConfig): string {
 
 /**
  * Build complete style block with @theme and custom CSS
+ *
+ * @remarks
+ * **Security/Trust Model:**
+ * The `theme.customCss` property is injected directly into a `<style>` tag without
+ * sanitization. This is intentional - CSS customization requires full CSS syntax support.
+ *
+ * **Trust assumptions:**
+ * - Theme configurations should only come from trusted sources (developer-defined themes)
+ * - Never pass user-provided input directly to `customCss`
+ * - If you need user-customizable styles, validate/sanitize them before including in a theme
+ *
+ * **Why no sanitization:**
+ * - CSS sanitization is complex and often breaks legitimate styles
+ * - The theme system is designed for developer use, not end-user customization
+ * - Developers creating themes are trusted to provide safe CSS
+ *
+ * @param theme - Theme configuration with optional customCss
+ * @returns HTML style block with Tailwind @theme directive
  */
 export function buildStyleBlock(theme: ThemeConfig): string {
   const themeCss = buildThemeCss(theme);
