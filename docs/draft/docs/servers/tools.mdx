@@ -14,14 +14,15 @@ This feature implements the [MCP Tools specification](https://modelcontextprotoc
 
 In the Model Context Protocol, tools serve a distinct purpose from resources and prompts:
 
-| Aspect | Tool | Resource | Prompt |
-|--------|------|----------|--------|
-| **Purpose** | Execute actions | Provide data | Provide templated instructions |
-| **Direction** | Model triggers execution | Model pulls data | Model uses messages |
-| **Side effects** | Yes (mutations, API calls) | No (read-only) | No (message generation) |
-| **Use case** | Actions, calculations, integrations | Context loading | Conversation templates |
+| Aspect           | Tool                                | Resource         | Prompt                         |
+| ---------------- | ----------------------------------- | ---------------- | ------------------------------ |
+| **Purpose**      | Execute actions                     | Provide data     | Provide templated instructions |
+| **Direction**    | Model triggers execution            | Model pulls data | Model uses messages            |
+| **Side effects** | Yes (mutations, API calls)          | No (read-only)   | No (message generation)        |
+| **Use case**     | Actions, calculations, integrations | Context loading  | Conversation templates         |
 
 Tools are ideal for:
+
 - **API integrations** — call external services, webhooks, third-party APIs
 - **Data mutations** — create, update, delete records
 - **Calculations** — perform computations, transformations
@@ -261,16 +262,16 @@ execute() {
 
 **Field descriptions:**
 
-| Field | Description |
-|-------|-------------|
-| `name` | Programmatic identifier used internally and in MCP responses |
-| `description` | Helps the model understand when and how to use this tool |
-| `inputSchema` | Zod schema defining expected input parameters |
-| `outputSchema` | Zod schema for validating and documenting output |
-| `title` | Human-friendly name for UI display |
-| `icons` | Array of icons for visual representation in clients |
-| `tags` | Categorization for organization and filtering |
-| `annotations` | MCP-defined hints about tool behavior |
+| Field               | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `name`              | Programmatic identifier used internally and in MCP responses |
+| `description`       | Helps the model understand when and how to use this tool     |
+| `inputSchema`       | Zod schema defining expected input parameters                |
+| `outputSchema`      | Zod schema for validating and documenting output             |
+| `title`             | Human-friendly name for UI display                           |
+| `icons`             | Array of icons for visual representation in clients          |
+| `tags`              | Categorization for organization and filtering                |
+| `annotations`       | MCP-defined hints about tool behavior                        |
 | `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
 
 ---
@@ -290,13 +291,13 @@ Annotations provide hints to clients about tool behavior:
 })
 ```
 
-| Annotation | Description |
-|------------|-------------|
-| `title` | Display title for the tool |
-| `readOnlyHint` | Tool doesn't modify state (like a resource, but returns computed data) |
-| `destructiveHint` | Tool performs irreversible operations (delete, overwrite) |
-| `idempotentHint` | Multiple identical calls produce the same result |
-| `openWorldHint` | Tool interacts with external systems (APIs, services) |
+| Annotation        | Description                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| `title`           | Display title for the tool                                             |
+| `readOnlyHint`    | Tool doesn't modify state (like a resource, but returns computed data) |
+| `destructiveHint` | Tool performs irreversible operations (delete, overwrite)              |
+| `idempotentHint`  | Multiple identical calls produce the same result                       |
+| `openWorldHint`   | Tool interacts with external systems (APIs, services)                  |
 
 ---
 
@@ -516,12 +517,13 @@ class WriteFileTool {
 
 Tools integrate with the MCP protocol via two flows:
 
-| Flow | Description |
-|------|-------------|
+| Flow         | Description                                                       |
+| ------------ | ----------------------------------------------------------------- |
 | `tools/list` | Returns all available tools with their metadata and input schemas |
-| `tools/call` | Executes a specific tool with provided arguments |
+| `tools/call` | Executes a specific tool with provided arguments                  |
 
 When a client requests `tools/call` with a name and arguments:
+
 1. The SDK locates the tool by name
 2. Arguments are validated against the tool's `inputSchema`
 3. The `execute()` method is called with the validated arguments
@@ -541,8 +543,8 @@ FrontMCP automatically advertises tool capabilities during MCP initialization:
 }
 ```
 
-| Capability | Description |
-|------------|-------------|
+| Capability    | Description                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
 | `listChanged` | When `true`, the server will send `notifications/tools/list_changed` when tools are added or removed |
 
 The SDK sets `listChanged: true` when you have any tools registered, enabling clients to receive real-time notifications when tools are dynamically added or removed.
@@ -560,6 +562,7 @@ For the full protocol specification, see [MCP Tools](https://modelcontextprotoco
 ## Best Practices
 
 **Do:**
+
 - Use descriptive `name` and `description` fields to help models understand tool purpose
 - Define clear input schemas with `.describe()` on each field
 - Use appropriate annotations (`destructiveHint`, `idempotentHint`, etc.) to guide client behavior
@@ -567,6 +570,7 @@ For the full protocol specification, see [MCP Tools](https://modelcontextprotoco
 - Keep tools focused on a single action or operation
 
 **Don't:**
+
 - Create tools for read-only data retrieval (use resources instead)
 - Skip input validation—always define a proper `inputSchema`
 - Ignore error handling—wrap external calls in try/catch
