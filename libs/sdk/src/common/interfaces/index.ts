@@ -1,4 +1,5 @@
 export * from './base.interface';
+export * from './execution-context.interface';
 export * from './front-mcp.interface';
 export * from './server.interface';
 export * from './scope.interface';
@@ -14,4 +15,4 @@ export * from './resource.interface';
 export * from './prompt.interface';
 export * from './logger.interface';
 
-export * from './internal'
+export * from './internal';

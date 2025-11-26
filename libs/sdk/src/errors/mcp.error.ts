@@ -2,6 +2,27 @@
 import { randomBytes } from 'crypto';
 
 /**
+ * MCP-specific error codes per JSON-RPC specification.
+ * These codes are used in the JSON-RPC error response format.
+ */
+export const MCP_ERROR_CODES = {
+  /** Resource not found (-32002) */
+  RESOURCE_NOT_FOUND: -32002,
+  /** Invalid request (-32600) */
+  INVALID_REQUEST: -32600,
+  /** Method not found (-32601) */
+  METHOD_NOT_FOUND: -32601,
+  /** Invalid params (-32602) */
+  INVALID_PARAMS: -32602,
+  /** Internal error (-32603) */
+  INTERNAL_ERROR: -32603,
+  /** Parse error (-32700) */
+  PARSE_ERROR: -32700,
+} as const;
+
+export type McpErrorCode = (typeof MCP_ERROR_CODES)[keyof typeof MCP_ERROR_CODES];
+
+/**
  * Base class for all MCP-related errors
  */
 export abstract class McpError extends Error {
@@ -125,11 +146,74 @@ export class InternalMcpError extends McpError {
 // ============================================================================
 
 /**
- * Tool didn't find an error
+ * Tool not found error
  */
 export class ToolNotFoundError extends PublicMcpError {
   constructor(toolName: string) {
     super(`Tool "${toolName}" not found`, 'TOOL_NOT_FOUND', 404);
+  }
+}
+
+/**
+ * Resource not found error
+ */
+export class ResourceNotFoundError extends PublicMcpError {
+  readonly uri: string;
+  readonly mcpErrorCode = MCP_ERROR_CODES.RESOURCE_NOT_FOUND;
+
+  constructor(uri: string) {
+    super(`Resource not found: ${uri}`, 'RESOURCE_NOT_FOUND', 404);
+    this.uri = uri;
+  }
+
+  /**
+   * Convert to JSON-RPC error format per MCP specification.
+   *
+   * @example
+   * {
+   *   "code": -32002,
+   *   "message": "Resource not found: file:///missing.txt",
+   *   "data": { "uri": "file:///missing.txt" }
+   * }
+   */
+  toJsonRpcError(): {
+    code: number;
+    message: string;
+    data?: { uri: string };
+  } {
+    return {
+      code: this.mcpErrorCode,
+      message: this.getPublicMessage(),
+      data: { uri: this.uri },
+    };
+  }
+}
+
+/**
+ * Resource read error (internal)
+ */
+export class ResourceReadError extends InternalMcpError {
+  readonly originalError?: Error;
+
+  constructor(uri: string, originalError?: Error) {
+    super(`Resource "${uri}" read failed: ${originalError?.message || 'Unknown error'}`, 'RESOURCE_READ_ERROR');
+    this.originalError = originalError;
+  }
+
+  override getInternalMessage(): string {
+    if (this.originalError?.stack) {
+      return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
+    }
+    return this.message;
+  }
+}
+
+/**
+ * Invalid resource URI error
+ */
+export class InvalidResourceUriError extends PublicMcpError {
+  constructor(uri: string, reason?: string) {
+    super(`Invalid resource URI: ${uri}${reason ? ` (${reason})` : ''}`, 'INVALID_RESOURCE_URI', 400);
   }
 }
 
@@ -251,6 +335,26 @@ export class GenericServerError extends InternalMcpError {
       return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
     }
     return this.message;
+  }
+}
+
+/**
+ * Dependency not found error (internal) - thrown when a required dependency
+ * is not found in a registry during initialization.
+ */
+export class DependencyNotFoundError extends InternalMcpError {
+  constructor(registryName: string, dependencyName: string) {
+    super(`Dependency "${dependencyName}" not found in ${registryName}`, 'DEPENDENCY_NOT_FOUND');
+  }
+}
+
+/**
+ * Invalid hook flow error - thrown when a hook is registered with a flow
+ * that is not supported by the entry type (e.g., tool hook on resource class).
+ */
+export class InvalidHookFlowError extends InternalMcpError {
+  constructor(message: string) {
+    super(message, 'INVALID_HOOK_FLOW');
   }
 }
 

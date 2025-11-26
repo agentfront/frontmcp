@@ -2,7 +2,6 @@ import { tokenFactory } from './base.tokens';
 import { RawMetadataShape } from '../types';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 
-
 export const FrontMcpResourceTokens = {
   type: tokenFactory.type('resource'),
   name: tokenFactory.meta('name'),
@@ -25,3 +24,6 @@ export const FrontMcpResourceTemplateTokens = {
   metadata: tokenFactory.meta('metadata'), // used in resourceTemplate({}) construction
 } as const satisfies RawMetadataShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>;
 
+// Extended metadata symbols for class decorators
+export const extendedResourceMetadata = tokenFactory.meta('extendedResourceMetadata');
+export const extendedResourceTemplateMetadata = tokenFactory.meta('extendedResourceTemplateMetadata');
