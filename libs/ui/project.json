@@ -1,0 +1,33 @@
+{
+  "name": "ui",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/ui/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-tsc": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/ui/dist",
+        "main": "libs/ui/src/index.ts",
+        "tsConfig": "libs/ui/tsconfig.lib.json",
+        "assets": ["README.md", "LICENSE"]
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-tsc"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/ui/dist/package.json"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/ui/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    }
+  }
+}
