@@ -116,8 +116,6 @@ That's it! The library handles:
 | `mcp`    | Auto-connected MCP client for making requests |
 | `server` | Server instance with control methods          |
 | `auth`   | Token factory for authentication testing      |
-| `scope`  | Access to internal FrontMCP scope (advanced)  |
-| `http`   | HTTP mock for external API calls              |
 
 ### Test Configuration
 
@@ -843,8 +841,6 @@ test.describe('Logging', () => {
 ### Testing Plugins
 
 ```typescript
-import { MyPlugin } from './src/plugins/my-plugin';
-
 test.describe('Plugin Testing', () => {
   test.use({ server: MyServer });
 
@@ -860,9 +856,10 @@ test.describe('Plugin Testing', () => {
     expect(result).toBeSuccessful();
   });
 
-  test('access plugin instance', async ({ scope }) => {
-    const plugin = scope.providers.get(MyPlugin);
-    expect(plugin).toBeDefined();
+  test('plugin tool returns expected data', async ({ mcp }) => {
+    const result = await mcp.tools.call('plugin:my-action', { data: 'test' });
+    expect(result).toBeSuccessful();
+    expect(result.json()).toMatchObject({ processed: true });
   });
 });
 ```
@@ -870,6 +867,8 @@ test.describe('Plugin Testing', () => {
 ### Testing Adapters
 
 ```typescript
+import { httpMock } from '@frontmcp/testing';
+
 test.describe('OpenAPI Adapter', () => {
   test.use({
     server: MyServer,
@@ -882,17 +881,83 @@ test.describe('OpenAPI Adapter', () => {
     expect(tools).toContainTool('openapi:createUser');
   });
 
-  test('calls external API', async ({ mcp, http }) => {
-    // Mock external API
-    http.mock('GET', 'https://api.example.com/users', {
-      status: 200,
-      body: [{ id: 1, name: 'John' }],
-    });
+  test('calls external API', async ({ mcp }) => {
+    // Mock external API using httpMock
+    const interceptor = httpMock.interceptor();
+    interceptor.get('https://api.example.com/users', [{ id: 1, name: 'John' }]);
 
     const result = await mcp.tools.call('openapi:getUsers', {});
 
     expect(result).toBeSuccessful();
     expect(result.json()).toContainEqual({ id: 1, name: 'John' });
+
+    interceptor.restore();
+  });
+});
+```
+
+### HTTP Mocking
+
+Mock external HTTP requests made by your tools for fully offline testing:
+
+```typescript
+import { httpMock, httpResponse } from '@frontmcp/testing';
+
+test.describe('HTTP Mocking', () => {
+  test('mock external API calls', async ({ mcp }) => {
+    // Create an HTTP interceptor
+    const interceptor = httpMock.interceptor();
+
+    // Mock GET request
+    interceptor.get('https://api.weather.com/london', {
+      temperature: 72,
+      conditions: 'sunny',
+    });
+
+    // Mock POST request with pattern matching
+    interceptor.post(/api\.example\.com\/users/, {
+      status: 201,
+      body: { id: 2, name: 'Jane' },
+    });
+
+    // Call your tool that makes HTTP requests
+    const result = await mcp.tools.call('fetch-weather', { city: 'london' });
+    expect(result).toBeSuccessful();
+
+    // Verify all mocks were used
+    interceptor.assertDone();
+
+    // Clean up
+    interceptor.restore();
+  });
+
+  test('use response helpers', async ({ mcp }) => {
+    const interceptor = httpMock.interceptor();
+
+    // Use helper methods for common responses
+    interceptor.get('/api/data', httpResponse.json({ id: 1 }));
+    interceptor.get('/api/missing', httpResponse.notFound());
+    interceptor.get('/api/slow', httpResponse.delayed({ data: 'result' }, 500));
+
+    // ...test your tools...
+
+    interceptor.restore();
+  });
+
+  test('track calls', async ({ mcp }) => {
+    const interceptor = httpMock.interceptor();
+    const handle = interceptor.get('https://api.example.com/users', []);
+
+    await mcp.tools.call('list-users', {});
+
+    // Check call count
+    expect(handle.callCount()).toBe(1);
+
+    // Get call details
+    const calls = handle.calls();
+    expect(calls[0].headers['authorization']).toBeDefined();
+
+    interceptor.restore();
   });
 });
 ```

@@ -612,6 +612,193 @@ mockResponse.errors.unauthorized();
 
 ---
 
+### 7. HTTP Mocking (`src/http-mock/`)
+
+The HTTP mocking system intercepts `fetch()` calls made by tools, enabling fully offline testing of MCP servers.
+
+#### Files
+
+| File                 | Purpose                          |
+| -------------------- | -------------------------------- |
+| `http-mock.types.ts` | TypeScript interfaces            |
+| `http-mock.ts`       | Fetch interceptor implementation |
+| `index.ts`           | Barrel exports                   |
+
+#### Why HTTP Mocking?
+
+MCP tools often make HTTP requests to external APIs:
+
+```typescript
+@Tool({ name: 'fetch-weather' })
+async getWeather(ctx: ToolContext<{ city: string }>) {
+  // This fetch call needs to be mocked for offline testing
+  const response = await fetch(`https://api.weather.com/${ctx.input.city}`);
+  const data = await response.json();
+  return ctx.text(`Weather: ${data.temperature}°F`);
+}
+```
+
+Without HTTP mocking, tests would fail offline or make real API calls.
+
+#### Basic Usage
+
+```typescript
+import { httpMock, httpResponse } from '@frontmcp/testing';
+
+// Create an HTTP interceptor
+const interceptor = httpMock.interceptor();
+
+// Mock a GET request
+interceptor.get('https://api.weather.com/london', {
+  temperature: 72,
+  conditions: 'sunny',
+});
+
+// Run your test
+const result = await mcp.tools.call('fetch-weather', { city: 'london' });
+expect(result).toBeSuccessful();
+expect(result.text()).toContain('72');
+
+// Verify all mocks were used
+interceptor.assertDone();
+
+// Clean up
+interceptor.restore();
+```
+
+#### URL Matching
+
+```typescript
+// Exact URL match
+interceptor.get('https://api.example.com/users/1', { id: 1 });
+
+// Pattern matching with RegExp
+interceptor.get(/api\.example\.com\/users\/\d+/, { id: 1 });
+
+// Custom matcher function
+interceptor.mock({
+  match: {
+    url: (url) => url.startsWith('https://api.'),
+    method: 'GET',
+  },
+  response: { body: { success: true } },
+});
+```
+
+#### Request Matching
+
+```typescript
+// Match by method
+interceptor.post('https://api.example.com/users', { id: 2 });
+
+// Match by headers
+interceptor.mock({
+  match: {
+    url: 'https://api.example.com/auth',
+    headers: {
+      authorization: /^Bearer /,
+    },
+  },
+  response: { body: { authenticated: true } },
+});
+
+// Match by body
+interceptor.mock({
+  match: {
+    url: 'https://api.example.com/users',
+    method: 'POST',
+    body: { name: 'John' }, // Partial match
+  },
+  response: { status: 201, body: { id: 1, name: 'John' } },
+});
+```
+
+#### Response Helpers
+
+```typescript
+import { httpResponse } from '@frontmcp/testing';
+
+// JSON response
+interceptor.get('/api/data', httpResponse.json({ id: 1 }));
+
+// Text response
+interceptor.get('/api/text', httpResponse.text('Hello World'));
+
+// Error responses
+interceptor.get('/api/missing', httpResponse.notFound());
+interceptor.get('/api/error', httpResponse.serverError('Database down'));
+interceptor.get('/api/auth', httpResponse.unauthorized());
+
+// Delayed response (simulate latency)
+interceptor.get('/api/slow', httpResponse.delayed({ data: 'result' }, 500));
+```
+
+#### Tracking Calls
+
+```typescript
+const handle = interceptor.get('https://api.example.com/users', []);
+
+// Run tests...
+await mcp.tools.call('list-users', {});
+
+// Check how many times the mock was called
+console.log(handle.callCount()); // 1
+
+// Get all intercepted requests
+const calls = handle.calls();
+console.log(calls[0].headers); // Request headers
+console.log(calls[0].body); // Request body
+
+// Wait for a specific number of calls
+await handle.waitForCalls(3, 5000); // Wait up to 5s for 3 calls
+```
+
+#### One-Time Mocks
+
+```typescript
+// Only match once (useful for testing retries)
+interceptor.mock({
+  match: { url: '/api/flaky' },
+  response: httpResponse.serverError(),
+  times: 1,
+});
+
+// Second call will use this mock
+interceptor.mock({
+  match: { url: '/api/flaky' },
+  response: { body: { success: true } },
+});
+```
+
+#### Passthrough Mode
+
+```typescript
+// Allow unmatched requests to go through to the real network
+interceptor.allowPassthrough(true);
+
+// Now only matched requests are mocked, others hit the real API
+interceptor.get('/api/mocked', { mocked: true });
+```
+
+#### Cleanup
+
+```typescript
+// Remove specific mock
+const handle = interceptor.get('/api/users', []);
+handle.remove();
+
+// Clear all mocks in interceptor
+interceptor.clear();
+
+// Restore original fetch (important!)
+interceptor.restore();
+
+// Or disable all HTTP mocking globally
+httpMock.disable();
+```
+
+---
+
 ## Test Lifecycle
 
 Here's what happens when you run a test file:
@@ -982,6 +1169,11 @@ libs/testing/
 │   │   ├── interceptor.types.ts    # TypeScript interfaces
 │   │   ├── interceptor-chain.ts    # Core interceptor chain
 │   │   └── mock-registry.ts        # Mock registry and helpers
+│   │
+│   ├── http-mock/
+│   │   ├── index.ts                # HTTP mock exports
+│   │   ├── http-mock.types.ts      # TypeScript interfaces
+│   │   └── http-mock.ts            # Fetch interceptor implementation
 │   │
 │   ├── assertions/
 │   │   └── mcp-assertions.ts       # Functional assertions

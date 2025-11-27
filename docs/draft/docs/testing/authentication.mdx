@@ -1,0 +1,375 @@
+---
+title: Authentication Testing
+sidebarTitle: Authentication
+slug: testing/authentication
+icon: key
+description: Test authentication flows with JWT token generation
+---
+
+Testing authentication is critical for MCP servers that require authorization. The `auth` fixture provides tools for creating test tokens, testing expiration, and validating scope enforcement.
+
+---
+
+## Why Test Authentication?
+
+Authentication tests verify that your server:
+- Rejects requests without valid tokens
+- Accepts requests with valid tokens
+- Enforces token expiration
+- Validates token signatures
+- Respects scope-based permissions
+
+---
+
+## Creating Test Tokens
+
+The `auth` fixture generates real JWT tokens using RS256 signing:
+
+```ts
+test('basic token creation', async ({ mcp, auth }) => {
+  const token = await auth.createToken({
+    sub: 'user-123',           // Subject (user ID)
+    scopes: ['read', 'write'], // OAuth scopes
+    email: 'user@example.com', // Email claim
+    name: 'John Doe',          // Name claim
+  });
+
+  await mcp.authenticate(token);
+
+  // Now all requests include this token
+  const tools = await mcp.tools.list();
+  expect(tools.length).toBeGreaterThan(0);
+});
+```
+
+### Token Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `sub` | `string` | Yes | Subject (user identifier) |
+| `scopes` | `string[]` | No | OAuth scopes |
+| `email` | `string` | No | Email claim |
+| `name` | `string` | No | Name claim |
+| `claims` | `Record<string, unknown>` | No | Additional custom claims |
+| `expiresIn` | `number` | No | Token lifetime in seconds (default: 3600) |
+
+### Custom Claims
+
+Add any custom claims your server needs:
+
+```ts
+const token = await auth.createToken({
+  sub: 'user-123',
+  claims: {
+    tenantId: 'tenant-abc',
+    role: 'admin',
+    permissions: ['users:read', 'users:write'],
+    metadata: { region: 'us-east' },
+  },
+});
+```
+
+---
+
+## Pre-built Test Users
+
+The `auth` fixture includes pre-configured test users for common scenarios:
+
+```ts
+test('using pre-built users', async ({ mcp, auth }) => {
+  // Admin with full permissions
+  const adminToken = await auth.createToken(auth.users.admin);
+
+  // Regular user
+  const userToken = await auth.createToken(auth.users.user);
+
+  // Read-only user
+  const readOnlyToken = await auth.createToken(auth.users.readOnly);
+});
+```
+
+### User Definitions
+
+| User | `sub` | Scopes |
+|------|-------|--------|
+| `admin` | `test-admin` | `['*']` (all scopes) |
+| `user` | `test-user` | `['read', 'write']` |
+| `readOnly` | `test-readonly` | `['read']` |
+
+---
+
+## Testing Token Expiration
+
+### Expired Tokens
+
+```ts
+test('rejects expired tokens', async ({ mcp, auth }) => {
+  const expiredToken = await auth.createExpiredToken({
+    sub: 'user-123',
+  });
+
+  await expect(mcp.authenticate(expiredToken))
+    .rejects.toThrow('expired');
+});
+```
+
+### Short-Lived Tokens
+
+```ts
+test('token expires after time limit', async ({ mcp, auth }) => {
+  // Token expires in 1 second
+  const token = await auth.createToken({
+    sub: 'user-123',
+    expiresIn: 1,
+  });
+
+  await mcp.authenticate(token);
+
+  // First request succeeds
+  await mcp.tools.list();
+
+  // Wait for expiration
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Next request fails
+  await expect(mcp.tools.list())
+    .rejects.toThrow('expired');
+});
+```
+
+---
+
+## Testing Invalid Tokens
+
+### Invalid Signature
+
+```ts
+test('rejects invalid signature', async ({ mcp, auth }) => {
+  // Create a token with an invalid signature
+  const invalidToken = auth.createInvalidToken({
+    sub: 'user-123',
+  });
+
+  await expect(mcp.authenticate(invalidToken))
+    .rejects.toThrow('invalid signature');
+});
+```
+
+### Malformed Token
+
+```ts
+test('rejects malformed token', async ({ mcp }) => {
+  await expect(mcp.authenticate('not.a.valid.token'))
+    .rejects.toThrow();
+
+  await expect(mcp.authenticate(''))
+    .rejects.toThrow();
+});
+```
+
+---
+
+## Testing Scope Enforcement
+
+### Scope-Based Access Control
+
+```ts
+test('enforces read-only scope', async ({ mcp, auth }) => {
+  // Create read-only token
+  const readOnlyToken = await auth.createToken({
+    sub: 'user-123',
+    scopes: ['read'],
+  });
+
+  await mcp.authenticate(readOnlyToken);
+
+  // Read operations succeed
+  const tools = await mcp.tools.list();
+  expect(tools.length).toBeGreaterThan(0);
+
+  // Write operations fail (assuming tool requires 'write' scope)
+  const result = await mcp.tools.call('create-note', { title: 'Test' });
+  expect(result).toBeError(); // Insufficient permissions
+});
+```
+
+### Testing Multiple Scopes
+
+```ts
+test('requires specific scopes', async ({ server, auth }) => {
+  // Create clients with different scopes
+  const readClient = await server.createClient({
+    token: await auth.createToken({ sub: 'user-1', scopes: ['read'] }),
+  });
+
+  const writeClient = await server.createClient({
+    token: await auth.createToken({ sub: 'user-2', scopes: ['write'] }),
+  });
+
+  const fullClient = await server.createClient({
+    token: await auth.createToken({ sub: 'user-3', scopes: ['read', 'write'] }),
+  });
+
+  // Test each client's access
+  expect(await readClient.resources.list()).toHaveLength(5);
+
+  const readResult = await readClient.tools.call('create-note', { title: 'Test' });
+  expect(readResult).toBeError();
+
+  const writeResult = await writeClient.tools.call('create-note', { title: 'Test' });
+  expect(writeResult).toBeSuccessful();
+
+  // Cleanup
+  await readClient.disconnect();
+  await writeClient.disconnect();
+  await fullClient.disconnect();
+});
+```
+
+---
+
+## JWKS Integration
+
+For servers that verify tokens against JWKS endpoints:
+
+```ts
+test('JWKS endpoint', async ({ auth }) => {
+  // Get the public JWKS
+  const jwks = await auth.getJwks();
+
+  expect(jwks.keys).toHaveLength(1);
+  expect(jwks.keys[0].kty).toBe('RSA');
+  expect(jwks.keys[0].use).toBe('sig');
+});
+
+test('issuer and audience', async ({ auth }) => {
+  const issuer = auth.getIssuer();
+  const audience = auth.getAudience();
+
+  expect(issuer).toContain('frontmcp-test');
+  expect(audience).toBe('mcp-server');
+});
+```
+
+---
+
+## Testing Auth Modes
+
+### Public Mode (No Auth)
+
+```ts
+test.describe('Public Mode', () => {
+  test.use({
+    server: './src/main.ts',
+    auth: { mode: 'public' },
+  });
+
+  test('allows anonymous access', async ({ mcp }) => {
+    expect(mcp.auth.isAnonymous).toBe(true);
+
+    // All operations work without token
+    const tools = await mcp.tools.list();
+    expect(tools.length).toBeGreaterThan(0);
+  });
+});
+```
+
+### Orchestrated Mode (Auth Required)
+
+```ts
+test.describe('Orchestrated Mode', () => {
+  test.use({
+    server: './src/main.ts',
+    auth: { mode: 'orchestrated', type: 'local' },
+  });
+
+  test('requires authentication', async ({ mcp }) => {
+    // Without token, requests fail
+    await expect(mcp.tools.list())
+      .rejects.toThrow('Unauthorized');
+  });
+
+  test('works with valid token', async ({ mcp, auth }) => {
+    const token = await auth.createToken({ sub: 'user-123' });
+    await mcp.authenticate(token);
+
+    const tools = await mcp.tools.list();
+    expect(tools.length).toBeGreaterThan(0);
+  });
+});
+```
+
+---
+
+## Real-World Examples
+
+### Testing User Isolation
+
+```ts
+test('users can only access their own data', async ({ server, auth }) => {
+  const user1Client = await server.createClient({
+    token: await auth.createToken({ sub: 'user-1' }),
+  });
+
+  const user2Client = await server.createClient({
+    token: await auth.createToken({ sub: 'user-2' }),
+  });
+
+  // User 1 creates a note
+  await user1Client.tools.call('create-note', {
+    title: 'Private Note',
+  });
+
+  // User 2 cannot see it
+  const user2Notes = await user2Client.resources.read('notes://all');
+  expect(user2Notes.json().notes).toHaveLength(0);
+
+  // User 1 can see it
+  const user1Notes = await user1Client.resources.read('notes://all');
+  expect(user1Notes.json().notes).toHaveLength(1);
+
+  await user1Client.disconnect();
+  await user2Client.disconnect();
+});
+```
+
+### Testing Admin Operations
+
+```ts
+test('admin can perform privileged operations', async ({ server, auth }) => {
+  const userClient = await server.createClient({
+    token: await auth.createToken(auth.users.user),
+  });
+
+  const adminClient = await server.createClient({
+    token: await auth.createToken(auth.users.admin),
+  });
+
+  // Regular user cannot delete all notes
+  const userResult = await userClient.tools.call('admin:clear-all', {});
+  expect(userResult).toBeError();
+
+  // Admin can delete all notes
+  const adminResult = await adminClient.tools.call('admin:clear-all', {});
+  expect(adminResult).toBeSuccessful();
+
+  await userClient.disconnect();
+  await adminClient.disconnect();
+});
+```
+
+---
+
+## Best Practices
+
+**Do:**
+- Test both positive (valid token) and negative (invalid/expired) cases
+- Test scope enforcement for all protected operations
+- Use pre-built test users for common scenarios
+- Clean up created clients after multi-user tests
+
+**Don't:**
+- Hard-code tokens in tests (always use `auth.createToken()`)
+- Skip expiration testing
+- Assume scopes are enforced without testing
+- Forget to test anonymous access for public endpoints

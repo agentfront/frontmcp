@@ -184,3 +184,22 @@ export type {
   MockHandle,
   InterceptorChain,
 } from './interceptor';
+
+// ═══════════════════════════════════════════════════════════════════
+// HTTP MOCKING (for offline testing)
+// ═══════════════════════════════════════════════════════════════════
+
+export { httpMock, httpResponse } from './http-mock';
+
+export type {
+  HttpMethod,
+  HttpRequestMatcher,
+  HttpMockResponse,
+  HttpMockDefinition,
+  HttpRequestInfo,
+  HttpMockHandle,
+  HttpInterceptor,
+  HttpMockManager,
+  /** @deprecated Use HttpInterceptor instead */
+  HttpMockScope,
+} from './http-mock';

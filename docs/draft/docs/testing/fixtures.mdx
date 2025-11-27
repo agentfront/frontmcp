@@ -1,0 +1,388 @@
+---
+title: Test Fixtures
+sidebarTitle: Fixtures
+slug: testing/fixtures
+icon: puzzle-piece
+description: Playwright-inspired fixture system for MCP testing
+---
+
+`@frontmcp/testing` uses a **fixture-based** testing approach inspired by Playwright. Fixtures are pre-configured objects automatically injected into your test functions, eliminating boilerplate setup code.
+
+---
+
+## Available Fixtures
+
+| Fixture  | Type | Description |
+|----------|------|-------------|
+| `mcp`    | `McpTestClient` | Auto-connected MCP client for making requests |
+| `auth`   | `AuthFixture` | Token factory for authentication testing |
+| `server` | `ServerFixture` | Server control and multi-client creation |
+
+```ts
+test('example using all fixtures', async ({ mcp, auth, server }) => {
+  // All fixtures are ready to use
+});
+```
+
+---
+
+## Configuring Fixtures
+
+Use `test.use()` to configure fixtures for your test file:
+
+```ts
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: './src/main.ts',     // Server entry file
+  port: 3003,                   // Port number
+  transport: 'streamable-http', // Transport type
+  auth: { mode: 'public' },    // Auth configuration
+  logLevel: 'debug',            // Log level
+  env: { API_KEY: 'test' },    // Environment variables
+  startupTimeout: 30000,        // Startup timeout (ms)
+});
+
+test('my test', async ({ mcp }) => {
+  // ...
+});
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `server` | `string` | — | Path to server entry file (required) |
+| `port` | `number` | Auto | Port to run server on |
+| `transport` | `'sse' \| 'streamable-http'` | `'streamable-http'` | Transport protocol |
+| `auth` | `object` | — | Auth configuration |
+| `logLevel` | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'` | Server log level |
+| `env` | `Record<string, string>` | — | Environment variables |
+| `startupTimeout` | `number` | `30000` | Server startup timeout in ms |
+| `baseUrl` | `string` | — | Connect to existing server instead of starting one |
+
+---
+
+## MCP Client Fixture
+
+The `mcp` fixture is your primary interface for testing MCP servers.
+
+### Tools API
+
+```ts
+test('testing tools', async ({ mcp }) => {
+  // List all tools
+  const tools = await mcp.tools.list();
+  expect(tools).toContainTool('create-note');
+
+  // Call a tool
+  const result = await mcp.tools.call('create-note', {
+    title: 'Test Note',
+    content: 'Hello world',
+  });
+  expect(result).toBeSuccessful();
+
+  // Access result content
+  const data = result.json();
+  expect(data.id).toBeDefined();
+});
+```
+
+### Resources API
+
+```ts
+test('testing resources', async ({ mcp }) => {
+  // List static resources
+  const resources = await mcp.resources.list();
+  expect(resources).toContainResource('notes://all');
+
+  // List resource templates
+  const templates = await mcp.resources.listTemplates();
+  expect(templates).toContainResourceTemplate('notes://note/{id}');
+
+  // Read a resource
+  const content = await mcp.resources.read('notes://note/123');
+  expect(content).toHaveMimeType('application/json');
+  expect(content.json().id).toBe('123');
+});
+```
+
+### Prompts API
+
+```ts
+test('testing prompts', async ({ mcp }) => {
+  // List prompts
+  const prompts = await mcp.prompts.list();
+  expect(prompts).toContainPrompt('summarize-notes');
+
+  // Get a prompt
+  const result = await mcp.prompts.get('summarize-notes', {
+    tag: 'work',
+    format: 'detailed',
+  });
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0].role).toBe('user');
+});
+```
+
+### Session & Server Info
+
+```ts
+test('session info', async ({ mcp }) => {
+  // Session
+  expect(mcp.isConnected()).toBe(true);
+  expect(mcp.sessionId).toBeDefined();
+
+  // Server info
+  expect(mcp.serverInfo.name).toBe('my-server');
+  expect(mcp.protocolVersion).toBe('2024-11-05');
+
+  // Capabilities
+  expect(mcp.hasCapability('tools')).toBe(true);
+  expect(mcp.capabilities.resources?.subscribe).toBe(false);
+});
+```
+
+### Raw Protocol Access
+
+```ts
+test('raw protocol', async ({ mcp }) => {
+  // Send any JSON-RPC request
+  const response = await mcp.raw.request({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/list',
+    params: {},
+  });
+  expect(response.result.tools).toBeDefined();
+
+  // Send notification
+  await mcp.raw.notify({
+    jsonrpc: '2.0',
+    method: 'notifications/initialized',
+  });
+
+  // Test parse errors
+  const errorResponse = await mcp.raw.sendRaw('invalid json');
+  expect(errorResponse).toHaveErrorCode(-32700);
+});
+```
+
+### Logging & Debugging
+
+```ts
+test('logs and traces', async ({ mcp }) => {
+  await mcp.tools.call('create-note', { title: 'Test' });
+
+  // Access captured logs
+  const logs = mcp.logs.all();
+  const errors = mcp.logs.filter('error');
+  const matches = mcp.logs.search('note');
+
+  // Access request traces
+  const traces = mcp.trace.all();
+  const lastTrace = mcp.trace.last();
+  expect(lastTrace.durationMs).toBeLessThan(1000);
+
+  // Clear for next test
+  mcp.logs.clear();
+  mcp.trace.clear();
+});
+```
+
+---
+
+## Auth Fixture
+
+The `auth` fixture creates JWT tokens for testing authentication flows.
+
+### Creating Tokens
+
+```ts
+test('token creation', async ({ mcp, auth }) => {
+  // Create a token with custom claims
+  const token = await auth.createToken({
+    sub: 'user-123',
+    scopes: ['read', 'write'],
+    email: 'user@example.com',
+    name: 'John Doe',
+    claims: { tenantId: 'tenant-1' },
+    expiresIn: 3600, // 1 hour
+  });
+
+  // Authenticate the MCP client
+  await mcp.authenticate(token);
+
+  // Now requests include the token
+  const tools = await mcp.tools.list();
+});
+```
+
+### Pre-built Test Users
+
+```ts
+test('using test users', async ({ auth }) => {
+  // Pre-defined users with common permission sets
+  const adminToken = await auth.createToken(auth.users.admin);
+  const userToken = await auth.createToken(auth.users.user);
+  const readOnlyToken = await auth.createToken(auth.users.readOnly);
+});
+```
+
+### Testing Edge Cases
+
+```ts
+test('expired token', async ({ mcp, auth }) => {
+  const expiredToken = await auth.createExpiredToken({ sub: 'user-123' });
+
+  await expect(mcp.authenticate(expiredToken))
+    .rejects.toThrow('expired');
+});
+
+test('invalid signature', async ({ mcp, auth }) => {
+  const invalidToken = auth.createInvalidToken({ sub: 'user-123' });
+
+  await expect(mcp.authenticate(invalidToken))
+    .rejects.toThrow('invalid signature');
+});
+```
+
+### JWKS Access
+
+```ts
+test('JWKS integration', async ({ auth }) => {
+  // Get public keys for verification
+  const jwks = await auth.getJwks();
+  expect(jwks.keys).toHaveLength(1);
+
+  // Get issuer and audience
+  const issuer = auth.getIssuer();
+  const audience = auth.getAudience();
+});
+```
+
+---
+
+## Server Fixture
+
+The `server` fixture provides server control and multi-client support.
+
+### Server Information
+
+```ts
+test('server info', async ({ server }) => {
+  expect(server.info.baseUrl).toContain('localhost');
+  expect(server.info.port).toBe(3003);
+  expect(server.info.pid).toBeDefined();
+});
+```
+
+### Creating Additional Clients
+
+```ts
+test('multi-client testing', async ({ server, auth }) => {
+  // Create clients with different configurations
+  const sseClient = await server.createClient({
+    transport: 'sse',
+  });
+
+  const authenticatedClient = await server.createClient({
+    token: await auth.createToken({ sub: 'user-1' }),
+  });
+
+  // Use both clients
+  const tools1 = await sseClient.tools.list();
+  const tools2 = await authenticatedClient.tools.list();
+
+  // Clean up
+  await sseClient.disconnect();
+  await authenticatedClient.disconnect();
+});
+```
+
+### Server Logs
+
+```ts
+test('server logs', async ({ server, mcp }) => {
+  await mcp.tools.call('create-note', { title: 'Test' });
+
+  // Get server-side logs
+  const logs = server.getLogs();
+  expect(logs.some(log => log.includes('create-note'))).toBe(true);
+
+  // Clear logs
+  server.clearLogs();
+});
+```
+
+### Restart Server
+
+```ts
+test('server restart', async ({ server, mcp }) => {
+  // Restart the server
+  await server.restart();
+
+  // Client automatically reconnects
+  const tools = await mcp.tools.list();
+  expect(tools.length).toBeGreaterThan(0);
+});
+```
+
+---
+
+## Fixture Lifecycle
+
+Understanding when fixtures are created and destroyed:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  1. FILE LOAD                                                              │
+│     - test.use() stores configuration                                      │
+│     - afterAll cleanup hook is registered                                  │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  2. FIRST TEST STARTS                                                      │
+│     - Server is started (shared across all tests in file)                  │
+│     - Token factory is created (shared)                                    │
+│     - Health check polling until server is ready                           │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  3. EACH TEST                                                              │
+│     a. New McpTestClient is created and connected                          │
+│     b. Fixtures (mcp, auth, server) are injected into test                 │
+│     c. Test runs                                                           │
+│     d. Client disconnects (server stays running)                           │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  4. AFTER ALL TESTS                                                        │
+│     - Server is stopped                                                    │
+│     - All resources are cleaned up                                         │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+<Info>
+  The server is **shared** across all tests in a file for performance. Starting a server is expensive (100-500ms), so sharing it dramatically improves test speed.
+</Info>
+
+---
+
+## Best Practices
+
+**Do:**
+- Use `test.use()` once at the top of each test file
+- Clear logs and traces between tests if needed
+- Disconnect additional clients created via `server.createClient()`
+- Use `port: 0` for automatic port selection in CI
+
+**Don't:**
+- Modify shared server state without cleanup
+- Create many clients without disconnecting them
+- Rely on test execution order
+- Use hardcoded ports in parallel test runs
