@@ -137,7 +137,7 @@ Transformations include:
 - **Main wrapper**: Wrap code in `async function __ag_main()` for top-level await
 - **Safe callTool**: Transform `callTool` → `__safe_callTool` (proxied through Enclave)
 - **Safe loops**: Transform `for`, `while`, `do-while` → safe versions with iteration limits
-- **Safe console**: Transform `console` → `__safe_console` (captured for logging)
+- **Safe console**: Transform `console` → `__safe_console` (captured for logging with rate limiting)
 
 ### Layer 3: Runtime Sandboxing
 
@@ -145,7 +145,7 @@ Code executes in an isolated Node.js vm context:
 
 - **Isolated context**: Fresh context with no access to host environment
 - **Controlled globals**: Only whitelisted globals available (`Math`, `JSON`, `Array`, etc.)
-- **Resource limits**: Timeout, iteration count, and tool call limits enforced
+- **Resource limits**: Timeout, iteration count, tool call limits, and console rate limits enforced
 - **Stack sanitization**: Error stack traces sanitized to prevent information leakage
 
 ### Layer 4: Reference Sidecar (Optional)
@@ -190,6 +190,14 @@ When enabled, large data is handled separately:
 
 <ParamField path="allowFunctionsInGlobals" type="boolean" default="false">
   Allow functions in the `globals` object. Required when providing callback functions or utilities.
+</ParamField>
+
+<ParamField path="maxConsoleOutputBytes" type="number" default="1048576">
+  Maximum total console output in bytes (default 1MB). Prevents I/O flood attacks via excessive logging.
+</ParamField>
+
+<ParamField path="maxConsoleCalls" type="number" default="1000">
+  Maximum number of console calls allowed (default 1000). Prevents I/O flood attacks via rapid-fire logging.
 </ParamField>
 
 <ParamField path="sidecar" type="object">
@@ -377,6 +385,7 @@ const enclave = new Enclave({
 - **Code injection** - Blocked by AST validation
 - **Infinite loops** - Limited by `maxIterations`
 - **Resource exhaustion** - Limited by `timeout` and `maxToolCalls`
+- **I/O flood attacks** - Limited by `maxConsoleOutputBytes` and `maxConsoleCalls`
 - **Global access** - Blocked by AST validation and isolated context
 - **Prototype pollution** - Blocked by AST validation
 - **Information leakage** - Stack traces sanitized

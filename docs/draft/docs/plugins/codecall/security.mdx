@@ -351,6 +351,8 @@ let __safe_bypass = 123;
 | `timeoutMs` | 3,500ms | Maximum execution time |
 | `maxIterations` | 5,000 | Maximum loop iterations |
 | `maxToolCalls` | 100 | Maximum tool invocations |
+| `maxConsoleOutputBytes` | 64KB | Maximum console output (I/O flood protection) |
+| `maxConsoleCalls` | 100 | Maximum console calls (I/O flood protection) |
 
 ```ts
 CodeCallPlugin.init({
@@ -363,12 +365,12 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset | Timeout | Iterations | Tool Calls | Use Case |
-|--------|---------|------------|------------|----------|
-| `locked_down` | 2s | 2,000 | 10 | Ultra-sensitive data |
-| `secure` | 3.5s | 5,000 | 100 | **Production default** |
-| `balanced` | 5s | 10,000 | 200 | Complex workflows |
-| `experimental` | 10s | 20,000 | 500 | Development only |
+| Preset | Timeout | Iterations | Tool Calls | Console Output | Console Calls | Use Case |
+|--------|---------|------------|------------|----------------|---------------|----------|
+| `locked_down` | 2s | 2,000 | 10 | 32KB | 50 | Ultra-sensitive data |
+| `secure` | 3.5s | 5,000 | 100 | 64KB | 100 | **Production default** |
+| `balanced` | 5s | 10,000 | 200 | 256KB | 500 | Complex workflows |
+| `experimental` | 10s | 20,000 | 500 | 1MB | 1000 | Development only |
 
 ---
 
@@ -544,6 +546,9 @@ Before deploying CodeCall to production:
   </Card>
   <Card title="Resource Exhaustion" icon="infinity">
     Timeouts, iteration limits, and tool call caps
+  </Card>
+  <Card title="I/O Flood Attacks" icon="wave-pulse">
+    Console output size and call count limits prevent logging abuse
   </Card>
   <Card title="Information Leakage" icon="eye">
     Stack traces and file paths sanitized from outputs

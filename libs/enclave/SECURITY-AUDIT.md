@@ -1,9 +1,9 @@
 # Enclave Security Audit Report
 
-**Date:** 2025-11-25
-**Package:** `@frontmcp/enclave` v0.0.1
-**Test Suite:** 125 security tests
-**Pass Rate:** 93/125 passing (74%)
+**Date:** 2025-11-27
+**Package:** `@frontmcp/enclave` v0.0.2
+**Test Suite:** 423 security tests
+**Pass Rate:** 423/423 passing (100%)
 
 ## Executive Summary
 
@@ -382,11 +382,12 @@ The @frontmcp/enclave package provides **bank-grade security** for AgentScript e
 - ✅ **Complete global access isolation**
 - ✅ **No sandbox escape paths**
 - ✅ **Comprehensive resource limits**
-- ✅ **74% test pass rate** (93/125 passing)
+- ✅ **I/O flood protection** (console rate limiting)
+- ✅ **100% test pass rate** (423/423 passing)
 
-The failing tests are primarily due to parser limitations with top-level return statements, not actual security vulnerabilities. All critical security mechanisms are functioning correctly.
+All security mechanisms are functioning correctly with zero failures or skipped tests.
 
-**Security Rating: A** (Excellent)
+**Security Rating: A+** (Excellent)
 
 **Recommended for production use** with noted limitations documented.
 
@@ -396,11 +397,11 @@ The failing tests are primarily due to parser limitations with top-level return 
 
 ### Overall Security Testing
 
-- **Total Security Tests:** 125
-- **Passing:** 93 (74%)
-- **Failing:** 31 (25%) - Due to transformer limitations, not security issues
-- **Skipped:** 1 (<1%)
-- **Categories Tested:** 16
+- **Total Security Tests:** 423
+- **Passing:** 423 (100%)
+- **Failing:** 0
+- **Skipped:** 0
+- **Categories Tested:** 18
 - **Critical Vulnerabilities Found:** 0
 - **Medium Issues Found:** 2
 - **Low Issues Found:** 2
