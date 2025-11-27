@@ -7,7 +7,7 @@ import {
   searchToolOutputSchema,
   searchToolDescription,
 } from './search.schema';
-import { ToolSearchService } from '../services/tool-search.service';
+import { ToolSearchService } from '../services';
 
 @Tool({
   name: 'codecall:search',
@@ -25,7 +25,7 @@ import { ToolSearchService } from '../services/tool-search.service';
 })
 export default class SearchTool extends ToolContext {
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
-    const { query, filter, excludeToolNames = [], topK = 8 } = input;
+    const { query, appIds, excludeToolNames = [], topK = 8 } = input;
 
     // Inject the ToolSearchService via DI
     const searchService = this.get(ToolSearchService);
@@ -34,7 +34,6 @@ export default class SearchTool extends ToolContext {
     // Check for excluded tools that don't exist in the index
     const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !searchService.hasTool(toolName));
 
-    console.log({ query, topK, filter, excludeToolNames });
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
         type: 'excluded_tool_not_found',
@@ -48,7 +47,7 @@ export default class SearchTool extends ToolContext {
     // Perform the search
     const searchResults = await searchService.search(query, {
       topK,
-      appIds: filter?.appIds,
+      appIds,
       excludeToolNames,
     });
 
@@ -65,7 +64,7 @@ export default class SearchTool extends ToolContext {
       warnings.push({
         type: 'no_results',
         message: `No tools found matching query "${query}"${
-          filter?.appIds ? ` in apps: ${filter.appIds.join(', ')}` : ''
+          appIds ? ` in apps: ${appIds.join(', ')}` : ''
         }. Try a broader query or remove app filters.`,
       });
     }

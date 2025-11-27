@@ -38,9 +38,9 @@
     }
   },
   "dependencies": {
-    "acorn": "^8.14.0",
-    "acorn-walk": "^8.3.4",
-    "astring": "^1.9.0",
+    "acorn": "8.15.0",
+    "acorn-walk": "8.3.4",
+    "astring": "1.9.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

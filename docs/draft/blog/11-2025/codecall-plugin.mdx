@@ -228,11 +228,33 @@ sequenceDiagram
 
 "But running LLM-generated code sounds terrifying."
 
-It should. That's why CodeCall implements **defense-in-depth** with three battle-tested security libraries:
+It should. That's why CodeCall implements **defense-in-depth** with battle-tested security libraries:
+
+### Layer 0: Pre-Scanner (NEW)
+
+Before the JavaScript parser even runs, [AST Guard's Pre-Scanner](/docs/guides/ast-guard) catches attacks that could DoS the parser itself:
+
+<AccordionGroup>
+  <Accordion title="Blocked: ReDoS Attacks" icon="clock">
+    - `/(a+)+$/` - Nested quantifiers ❌
+    - `/(a|a)+$/` - Overlapping alternation ❌
+    - Catastrophic backtracking patterns ❌
+  </Accordion>
+  <Accordion title="Blocked: Trojan Source (CVE-2021-42574)" icon="eye-slash">
+    - Unicode BiDi override characters ❌
+    - Right-to-Left text direction attacks ❌
+    - Code that appears different than it executes ❌
+  </Accordion>
+  <Accordion title="Blocked: Parser DoS" icon="layer-group">
+    - Deep nesting attacks `((((((x))))))` ❌
+    - 100MB+ input payloads ❌
+    - Null byte injection ❌
+  </Accordion>
+</AccordionGroup>
 
 ### Layer 1: AST Guard (Static Analysis)
 
-Before any code runs, [AST Guard](/docs/guides/ast-guard) parses the JavaScript into an Abstract Syntax Tree and validates every node:
+After pre-scanning, [AST Guard](/docs/guides/ast-guard) parses the JavaScript into an Abstract Syntax Tree and validates every node:
 
 <AccordionGroup>
   <Accordion title="Blocked: Code Injection" icon="syringe">
@@ -256,7 +278,7 @@ Before any code runs, [AST Guard](/docs/guides/ast-guard) parses the JavaScript 
   </Accordion>
 </AccordionGroup>
 
-**67 attack vectors blocked** before the code even runs.
+**80+ attack vectors blocked** before the code even runs.
 
 ### Layer 2: Enclave (Runtime Sandbox)
 
@@ -287,6 +309,8 @@ All results are cleaned before returning:
 - File paths scrubbed
 - Circular references handled
 - Oversized outputs truncated
+
+**Five layers of security** ensure that even if one layer is bypassed, others catch the attack.
 
 ---
 

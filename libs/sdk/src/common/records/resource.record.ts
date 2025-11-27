@@ -17,6 +17,8 @@ export type ResourceClassTokenRecord = {
   metadata: ResourceMetadata;
 };
 
+// NOTE: `any` is intentional - function providers must be loosely typed
+// to support various input/output schema combinations at runtime
 export type ResourceFunctionRecord = {
   kind: ResourceKind.FUNCTION;
   provide: (...args: any[]) => any | Promise<any>;
@@ -40,6 +42,7 @@ export type ResourceTemplateClassTokenRecord = {
   metadata: ResourceTemplateMetadata;
 };
 
+// NOTE: `any` is intentional - see ResourceFunctionRecord
 export type ResourceTemplateFunctionRecord = {
   kind: ResourceTemplateKind.FUNCTION;
   provide: (...args: any[]) => any | Promise<any>;

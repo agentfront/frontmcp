@@ -158,6 +158,30 @@ export interface TransformConfig {
 }
 
 /**
+ * Configuration for the pre-scanner (Layer 0)
+ */
+export interface PreScanConfig {
+  /**
+   * Whether pre-scanning is enabled.
+   * Default: true (pre-scanner runs before AST parsing)
+   */
+  enabled?: boolean;
+
+  /**
+   * Preset level for pre-scanner configuration.
+   * Options: 'agentscript' | 'strict' | 'secure' | 'standard' | 'permissive'
+   * Default: 'standard'
+   */
+  preset?: 'agentscript' | 'strict' | 'secure' | 'standard' | 'permissive';
+
+  /**
+   * Custom configuration overrides (merged with preset).
+   * See PreScannerConfig for available options.
+   */
+  config?: Record<string, unknown>;
+}
+
+/**
  * Configuration for the validator
  */
 export interface ValidationConfig {
@@ -171,6 +195,12 @@ export interface ValidationConfig {
   stopOnFirstError?: boolean;
   /** Transformation configuration */
   transform?: TransformConfig;
+  /**
+   * Pre-scanner configuration (Layer 0 defense).
+   * Runs BEFORE AST parsing to catch attacks that could DOS the parser.
+   * Default: enabled with 'standard' preset
+   */
+  preScan?: PreScanConfig;
 }
 
 /**
@@ -189,6 +219,16 @@ export interface ValidationResult {
   rulesExecuted?: number;
   /** Transformed code (if transformation is enabled) */
   transformedCode?: string;
+  /** Pre-scanner error if pre-scan failed */
+  preScanError?: Error;
+  /** Pre-scanner statistics (if pre-scan was run) */
+  preScanStats?: {
+    inputSize: number;
+    lineCount: number;
+    maxNestingDepthFound: number;
+    regexCount: number;
+    scanDurationMs: number;
+  };
 }
 
 /**

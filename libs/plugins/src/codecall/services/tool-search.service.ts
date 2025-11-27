@@ -17,6 +17,7 @@ import type {
 /**
  * Metadata structure for tool documents in the vector database
  */
+// NOTE: `any` is intentional - ToolEntry has constrained generics that don't work with `unknown`
 interface ToolMetadata extends DocumentMetadata {
   id: string;
   toolName: string;
@@ -28,6 +29,7 @@ interface ToolMetadata extends DocumentMetadata {
 /**
  * Search result for tool search
  */
+// NOTE: `any` is intentional - ToolEntry has constrained generics that don't work with `unknown`
 export interface SearchResult {
   tool: ToolEntry<any, any>;
   score: number;
@@ -295,6 +297,7 @@ export class ToolSearchService implements ToolSearch {
    * Extract CodeCall-specific metadata from a tool.
    */
   private getCodeCallMetadata(tool: ToolEntry<any, any>): CodeCallToolMetadata | undefined {
+    // NOTE: `any` cast is intentional - ToolMetadata has constrained generics
     return (tool.metadata as any)?.codecall as CodeCallToolMetadata | undefined;
   }
 

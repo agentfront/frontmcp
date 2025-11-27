@@ -5,11 +5,14 @@ description: Defense-in-depth security with AST validation, code transformation,
 icon: shield
 ---
 
-CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through four security layers before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
+CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through **five security layers** before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
 
 <CardGroup cols={2}>
-  <Card title="67 Attack Vectors Blocked" icon="shield-check">
-    AST Guard blocks eval, prototype pollution, Trojan Source, and more
+  <Card title="80+ Attack Vectors Blocked" icon="shield-check">
+    Pre-Scanner + AST Guard blocks ReDoS, BiDi attacks, eval, prototype pollution, and more
+  </Card>
+  <Card title="Layer 0 Defense" icon="radar">
+    Pre-Scanner catches attacks BEFORE parser execution - blocks parser-level DoS
   </Card>
   <Card title="Zero Trust Runtime" icon="lock">
     Enclave sandbox with whitelist-only globals and resource limits
@@ -17,18 +20,23 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
   <Card title="Self-Reference Guard" icon="ban">
     Scripts cannot call CodeCall tools - prevents recursive execution
   </Card>
-  <Card title="Sanitized Outputs" icon="filter">
-    Stack traces, file paths, and sensitive data removed from responses
-  </Card>
 </CardGroup>
 
 ---
 
 ## Security Pipeline
 
-Every script goes through this 4-layer pipeline:
+Every script goes through this 5-layer pipeline:
 
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 0: PRE-SCANNER (NEW)                                      │
+│  Defense-in-depth BEFORE parser runs                             │
+│  Library: ast-guard (pre-scanner module)                         │
+│  Blocks: ReDoS patterns, BiDi attacks, input size DoS, nesting  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  LAYER 1: AST VALIDATION                                         │
 │  Static analysis before any code runs                            │
@@ -57,6 +65,93 @@ Every script goes through this 4-layer pipeline:
 │  Clean results before returning                                  │
 │  Removes: stack traces, file paths, internal errors             │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Layer 0: Pre-Scanner (Defense-in-Depth)
+
+The Pre-Scanner is a new security layer that runs **BEFORE** the JavaScript parser (acorn). It provides defense-in-depth protection against attacks that could DoS or exploit the parser itself.
+
+### Why Layer 0?
+
+Traditional security scanners operate on the AST (Abstract Syntax Tree), which means they rely on the parser completing successfully. Sophisticated attackers can exploit this by:
+
+1. **Parser DoS**: Deeply nested brackets/braces can cause stack overflow in recursive descent parsers
+2. **ReDoS at Parse Time**: Complex regex literals can hang the parser
+3. **Memory Exhaustion**: Extremely large inputs can exhaust memory before validation
+4. **Trojan Source Attacks**: Unicode BiDi characters can make code appear different than it executes
+
+### Mandatory Limits (Cannot Be Disabled)
+
+These limits are enforced regardless of configuration:
+
+| Limit | Value | Purpose |
+|-------|-------|---------|
+| Max Input Size | 100 MB | Prevents memory exhaustion |
+| Max Nesting Depth | 200 levels | Prevents stack overflow |
+| Max Line Length | 100,000 chars | Handles minified code safely |
+| Max Regex Length | 1,000 chars | Prevents ReDoS |
+| Max Regex Count | 50 | Limits ReDoS attack surface |
+
+### Pre-Scanner Attacks Blocked
+
+<AccordionGroup>
+  <Accordion title="ReDoS (Regular Expression Denial of Service)" icon="clock">
+    **Blocked Patterns:**
+    - `(a+)+` - Nested quantifiers
+    - `(a|a)+` - Overlapping alternation
+    - `(.*a)+` - Greedy backtracking
+    - `(a+){2,}` - Star in repetition
+
+    **Why:** These patterns cause exponential backtracking that can hang the parser or runtime for hours.
+  </Accordion>
+
+  <Accordion title="BiDi/Trojan Source Attacks" icon="eye-slash">
+    **Blocked Characters:**
+    - U+202E (Right-to-Left Override)
+    - U+2066 (Left-to-Right Isolate)
+    - U+2069 (Pop Directional Isolate)
+
+    **Why:** Makes code appear different than it executes (CVE-2021-42574).
+  </Accordion>
+
+  <Accordion title="Parser Stack Overflow" icon="layer-group">
+    **Blocked:**
+    - Deeply nested brackets: `(((((((((x)))))))))`
+    - Deeply nested braces: `{{{{{{{{{}}}}}}}}}`
+
+    **Why:** Recursive descent parsers can overflow their stack on deep nesting.
+  </Accordion>
+
+  <Accordion title="Input Size DoS" icon="file-arrow-up">
+    **Blocked:**
+    - Inputs > 50KB (AgentScript preset)
+    - Inputs > configured maxInputSize
+
+    **Why:** Large inputs can exhaust memory before validation completes.
+  </Accordion>
+
+  <Accordion title="Null Byte Injection" icon="ban">
+    **Blocked:**
+    - `\x00` characters anywhere in input
+
+    **Why:** Often indicates binary data injection or attack payloads.
+  </Accordion>
+</AccordionGroup>
+
+### Pre-Scanner Configuration
+
+CodeCall uses the **AgentScript preset** which provides the strictest pre-scanning:
+
+```ts
+// AgentScript Pre-Scanner settings (automatic with CodeCall)
+{
+  regexMode: 'block',        // Block ALL regex literals
+  maxInputSize: 50_000,      // 50KB limit
+  maxNestingDepth: 30,       // Conservative nesting
+  bidiMode: 'strict',        // Block all BiDi characters
+}
 ```
 
 ---
@@ -483,8 +578,8 @@ Before deploying CodeCall to production:
   <Card title="Enclave" icon="lock" href="/docs/guides/enclave">
     Runtime sandbox configuration, sidecar storage, and advanced options
   </Card>
-  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/frontmcp/blob/main/libs/ast-guard/SECURITY-AUDIT.md">
-    Full list of 67 blocked attack vectors with examples
+  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/frontmcp/blob/main/libs/ast-guard/docs/SECURITY-AUDIT.md">
+    Full list of 80+ blocked attack vectors including Layer 0 Pre-Scanner
   </Card>
   <Card title="Configuration" icon="gear" href="/docs/plugins/codecall/configuration">
     Complete configuration reference for security settings

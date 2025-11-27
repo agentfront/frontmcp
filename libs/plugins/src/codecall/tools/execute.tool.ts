@@ -235,14 +235,20 @@ export default class ExecuteTool extends ToolContext {
         result: executionResult.result,
         logs: executionResult.logs.length > 0 ? executionResult.logs : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // Type-safe error handling
+      const errorName = error instanceof Error ? error.name : 'Error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const errorLoc = (error as { loc?: { line: number; column: number } }).loc;
+
       // Check for syntax errors
-      if (error.name === 'SyntaxError' || error.message?.includes('syntax')) {
+      if (errorName === 'SyntaxError' || errorMessage?.includes('syntax')) {
         return {
           status: 'syntax_error',
           error: {
-            message: error.message || 'Syntax error in script',
-            location: error.loc ? { line: error.loc.line, column: error.loc.column } : undefined,
+            message: errorMessage || 'Syntax error in script',
+            location: errorLoc ? { line: errorLoc.line, column: errorLoc.column } : undefined,
           },
         };
       }
@@ -252,9 +258,9 @@ export default class ExecuteTool extends ToolContext {
         status: 'runtime_error',
         error: {
           source: 'script',
-          message: error.message || 'An unexpected error occurred during script execution',
-          name: error.name || 'Error',
-          stack: error.stack,
+          message: errorMessage || 'An unexpected error occurred during script execution',
+          name: errorName,
+          stack: errorStack,
         },
       };
     }

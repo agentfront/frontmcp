@@ -167,12 +167,15 @@ export default class ToolRegistry
     this.bump('reset');
   }
 
+  // NOTE: `any` is intentional here - heterogeneous tool collections can't use `unknown`
+  // because ToolEntry has constrained generics (InSchema extends ToolInputType, etc.)
   getTools(includeHidden = false): ToolEntry<any, any>[] {
     const local = [...this.localRows].flat().map((t) => t.instance);
     const adopted = [...this.adopted.values()].flat().map((t) => t.instance);
     return [...local, ...adopted].filter((t) => t.metadata.hideFromDiscovery !== true || includeHidden);
   }
 
+  // NOTE: `any` is intentional - see getTools comment above
   getInlineTools(): ToolEntry<any, any>[] {
     return [...this.instances.values()];
   }

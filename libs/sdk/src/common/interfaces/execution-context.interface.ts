@@ -22,7 +22,7 @@ export type ExecutionContextBaseArgs = {
  * Abstract base class for execution contexts (tools, resources, prompts, etc.).
  * Provides common functionality for dependency injection, logging, and flow control.
  */
-export abstract class ExecutionContextBase<Out = any> {
+export abstract class ExecutionContextBase<Out = unknown> {
   private providers: ProviderRegistryInterface;
   readonly authInfo: AuthInfo;
 
