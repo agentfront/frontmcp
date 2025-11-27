@@ -22,13 +22,15 @@ import { z } from 'zod';
 })
 export default class ListNotesTool extends ToolContext {
   async execute(input: { tag?: string; limit?: number }) {
+    const { tag, limit } = input;
+
     // Mock data
     const mockNotes = [
       { id: 'note-1', title: 'Meeting Notes', tags: ['work'], createdAt: '2024-01-15T10:00:00Z' },
       { id: 'note-2', title: 'Shopping List', tags: ['personal'], createdAt: '2024-01-14T15:30:00Z' },
     ];
-    const filtered = input.tag ? mockNotes.filter((n) => n.tags.includes(input.tag)) : mockNotes;
+    const filtered = tag ? mockNotes.filter((n) => n.tags.includes(tag)) : mockNotes;
 
-    return { notes: filtered.slice(0, input.limit ?? 10), total: filtered.length };
+    return { notes: filtered.slice(0, limit ?? 10), total: filtered.length };
   }
 }
