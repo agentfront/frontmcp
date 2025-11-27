@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-26" tags={["Releases"]}>
+<Update label="draft" description="2025-11-27" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -29,6 +29,16 @@ mode: 'center'
 
     🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
 
+    🗒️ **Demo showcase notes app** – `apps/demo-showcase` bundles a full notes server with tools, resources, prompts, and OpenAPI wiring so you can see MCP discovery, tool orchestration, and auth-friendly server wiring in one place.
+
+    🧮 **Expense prompts & resources** – The expense demo now ships categorize/report prompts plus `expense://` resources, giving you copy-ready examples of both class and function styles.
+
+    **Testing**
+
+    🧪 **`@frontmcp/testing` preview** – New Jest preset, fixtures, HTTP mocking, interceptors, and rich matchers (`toContainTool`, `toHaveMimeType`, `toBeError`, etc.) make it trivial to spin up a server, issue MCP calls, and assert on structured results.
+
+    🔬 **Demo showcase e2e suites** – Tools, resources, prompts, and OpenAPI suites under `apps/demo-showcase/e2e` demonstrate the testing library in action, complete with per-suite ports, `httpMock` usage, and deterministic datastore resets.
+
     **Fixes**
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
@@ -47,13 +57,15 @@ mode: 'center'
 
     🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
 
+    📝 **Demo showcase notes guide** – New `/docs/guides/demo-showcase-notes` breaks down the notes app, datastore, prompts, resources, and Jest suites so you can reuse the patterns in your own repos.
+
     **Performance**
 
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
 
-    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
+    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^22` automatically, keeping editor IntelliSense aligned with the Node 22 runtime floor.
 
     🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
 

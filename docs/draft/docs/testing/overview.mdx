@@ -87,6 +87,7 @@ nx e2e my-app
 ```
 
 The library automatically:
+
 - Starts your FrontMCP server on the specified port
 - Connects an MCP client using Streamable-HTTP transport
 - Runs your tests with injected fixtures
@@ -100,11 +101,11 @@ The library automatically:
 
 Tests receive pre-configured fixtures via dependency injection:
 
-| Fixture  | Description |
-|----------|-------------|
-| `mcp`    | Auto-connected MCP client for making requests |
+| Fixture  | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `mcp`    | Auto-connected MCP client for making requests             |
 | `server` | Server control (restart, logs, create additional clients) |
-| `auth`   | Token factory for authentication testing |
+| `auth`   | Token factory for authentication testing                  |
 
 ```ts
 test('example with all fixtures', async ({ mcp, server, auth }) => {
@@ -173,6 +174,85 @@ test('mock tool response', async ({ mcp }) => {
   expect(result.json()).toEqual({ cached: true });
 });
 ```
+
+## Demo Showcase reference suite
+
+<Info>
+  The repo ships a full reference suite at <code>apps/demo-showcase</code> with a notes app, resources, prompts, and
+  OpenAPI wiring. Use it as a blueprint for structuring your own end-to-end tests and for learning the advanced
+  matchers in <code>@frontmcp/testing</code>.
+</Info>
+
+<CardGroup cols={2}>
+  <Card title="Notes app" icon="notebook-pen">
+    CRUD tools (`create-note`, `list-notes`, `get-note`, `delete-note`) drive an in-memory <code>notesStore</code> so tests can
+    reset the world with <code>notesStore.clear()</code>.
+  </Card>
+  <Card title="Resources & prompts" icon="book-open">
+    Resources expose `notes://all` plus the `notes://note/{noteId}` template, while prompts (`summarize-notes`,
+    `create-note-draft`) cover the new MCP prompt flow.
+  </Card>
+</CardGroup>
+
+```ts title="apps/demo-showcase/e2e/tools.e2e.ts"
+import { test } from '@frontmcp/testing';
+import { notesStore } from '../src/apps/notes/data/store';
+
+test.use({
+  server: './src/main.ts',
+  port: 3010,
+  logLevel: 'debug',
+});
+
+test.describe.skip('Tools', () => {
+  test.beforeEach(() => notesStore.clear());
+  // ...tool assertions using toContainTool/toBeSuccessful
+});
+```
+
+<Warning>
+  The suites are checked in as <code>test.describe.skip</code> until the local OAuth flow ships. Remove the skip once your auth
+  provider can mint test tokens.
+</Warning>
+
+HTTP mocking is covered end-to-end in <code>openapi.e2e.ts</code>:
+
+```ts title="apps/demo-showcase/e2e/openapi.e2e.ts"
+import { httpMock } from '@frontmcp/testing';
+
+const interceptor = httpMock.interceptor();
+interceptor.get('https://frontmcp-test.proxy.beeceptor.com/users', {
+  body: [
+    { id: 1, name: 'John Doe' },
+    { id: 2, name: 'Jane Doe' },
+  ],
+});
+interceptor.allowPassthrough(true);
+
+const tools = await mcp.tools.list();
+expect(tools).toContainTool('create-note');
+interceptor.restore();
+```
+
+<Steps>
+  <Step title="Run the showcase locally">
+    ```bash
+    pnpm nx serve demo-showcase
+    ```
+    The server listens on ports <code>3010-3013</code> for the different suites.
+  </Step>
+  <Step title="Execute the Jest suite">
+    ```bash
+    cd apps/demo-showcase
+    npx jest --config jest.e2e.config.ts
+    ```
+    The preset in <code>jest.e2e.config.ts</code> wires <code>@frontmcp/testing</code> automatically.
+  </Step>
+</Steps>
+
+<Tip>
+  For a full walkthrough of the app, prompts, resources, and tests, read the new guide at [Demo Showcase Notes App](/docs/guides/demo-showcase-notes).
+</Tip>
 
 ---
 

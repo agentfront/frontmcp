@@ -25,6 +25,7 @@ async getWeather(ctx: ToolContext<{ city: string }>) {
 ```
 
 Without HTTP mocking:
+
 - Tests fail offline
 - Tests depend on external API availability
 - Tests may hit rate limits
@@ -525,12 +526,14 @@ test('respects rate limits', async ({ mcp }) => {
 ## Best Practices
 
 **Do:**
+
 - Always call `restore()` in cleanup
 - Use `httpResponse` helpers for common responses
 - Verify mocks were used with `assertDone()`
 - Mock at the appropriate level of detail
 
 **Don't:**
+
 - Forget cleanup (breaks other tests)
 - Enable passthrough without good reason
 - Over-mock (test real HTTP handling sometimes)

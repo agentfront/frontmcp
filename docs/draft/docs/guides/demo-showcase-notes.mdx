@@ -1,0 +1,184 @@
+---
+title: Demo Showcase Notes App
+slug: guides/demo-showcase-notes
+icon: notebook-pen
+description: Explore the demo-showcase notes app with tools, resources, prompts, and reference Jest suites.
+---
+
+The `apps/demo-showcase` workspace bundles a full-featured notes application to demonstrate how tools, resources,
+prompts, and the new `@frontmcp/testing` package fit together. Use it as a reference implementation when building your
+own MCP servers or when writing end-to-end tests.
+
+<Info>
+  Source: <code>apps/demo-showcase</code>. All examples below are taken directly from the repository—no mock code or pseudocode.
+</Info>
+
+## App anatomy
+
+```ts title="apps/demo-showcase/src/apps/notes/index.ts"
+import { App } from '@frontmcp/sdk';
+import { CreateNoteTool, ListNotesTool, GetNoteTool, DeleteNoteTool } from './tools';
+import { NotesListResource, NoteByIdResource } from './resources';
+import { SummarizeNotesPrompt, CreateNoteDraftPrompt } from './prompts';
+
+@App({
+  id: 'notes',
+  name: 'Notes App',
+  tools: [CreateNoteTool, ListNotesTool, GetNoteTool, DeleteNoteTool],
+  resources: [NotesListResource, NoteByIdResource],
+  prompts: [SummarizeNotesPrompt, CreateNoteDraftPrompt],
+})
+export default class NotesApp {}
+```
+
+- **Notes store** – `apps/demo-showcase/src/apps/notes/data/store.ts` exposes an in-memory `notesStore` so tests can start
+  from a clean slate using `notesStore.clear()`.
+- **Auth-ready server** – `src/main.ts` wires the app into `@FrontMcp` with local auth (`allowAnonymous: true`) so the
+  suites can run without provisioning a remote IdP.
+- **Optional OpenAPI adapter** – The commented `OpenapiAdapter` block shows exactly how to re-enable remote Beeceptor
+  specs once the SDK bug is resolved.
+
+## Tool catalog
+
+| Tool          | Description                            | Highlights                                          |
+| ------------- | -------------------------------------- | --------------------------------------------------- |
+| `create-note` | Create a note with optional tags       | Returns typed `Note` objects with timestamps        |
+| `list-notes`  | List notes, optionally filtered by tag | Demonstrates array schemas and derived counts       |
+| `get-note`    | Fetch a single note by ID              | Throws structured errors when the note is missing   |
+| `delete-note` | Remove a note by ID                    | Returns a success payload with contextual messaging |
+
+Each tool lives in `apps/demo-showcase/src/apps/notes/tools` and uses Zod-powered schemas so the test suite can rely on
+data shapes.
+
+## Resources & prompts
+
+The showcase includes both static and templated resources:
+
+```ts title="apps/demo-showcase/src/apps/notes/resources/notes-list.resource.ts"
+@Resource({
+  name: 'notes-list',
+  uri: 'notes://all',
+  mimeType: 'application/json',
+})
+export default class NotesListResource extends ResourceContext {
+  async execute(uri: string) {
+    const notes = notesStore.list();
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            notes,
+            count: notes.length,
+            fetchedAt: new Date().toISOString(),
+          }, null, 2),
+        },
+      ],
+    };
+  }
+}
+```
+
+- `notes://all` returns a JSON envelope with `notes`, `count`, and `fetchedAt`.
+- `notes://note/{noteId}` is defined via `@ResourceTemplate` and returns either the requested note or a structured
+  `{ error, noteId }` payload when missing.
+
+Prompts live alongside the tools:
+
+- `summarize-notes` consumes the store, applies optional tag and format filters, and emits a single user message that
+  summarises the selected notes.
+- `create-note-draft` demonstrates the functional prompt builder, default arguments (`style = 'casual'`), and
+  multi-part instructions for models.
+
+Both prompts are automatically discoverable via `prompts/list` thanks to the decorators.
+
+## Testing with @frontmcp/testing
+
+Three suites cover tools, resources, and prompts under `apps/demo-showcase/e2e`.
+
+```ts title="apps/demo-showcase/e2e/prompts.e2e.ts"
+import { test, expect } from '@frontmcp/testing';
+import { notesStore } from '../src/apps/notes/data/store';
+
+test.use({ server: './src/main.ts', port: 3012 });
+
+test.describe.skip('Prompts', () => {
+  test.beforeEach(() => notesStore.clear());
+
+  test('lists prompts', async ({ mcp }) => {
+    const prompts = await mcp.prompts.list();
+    expect(prompts).toContainPrompt('summarize-notes');
+    expect(prompts).toContainPrompt('create-note-draft');
+  });
+
+  test('gets summarize-notes prompt', async ({ mcp }) => {
+    await mcp.tools.call('create-note', { title: 'Work Task', content: 'Document the release', tags: ['work'] });
+    const result = await mcp.prompts.get('summarize-notes', { tag: 'work' });
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toHaveRole('user');
+  });
+});
+```
+
+Key takeaways:
+
+- Each suite pins its own port (3010–3013) so tests can run concurrently without race conditions.
+- Custom matchers like `toContainPrompt`, `toHaveMimeType`, `toBeSuccessful`, and `toBeError` keep assertions terse.
+- `notesStore.clear()` in `beforeEach` means every test starts with a deterministic dataset.
+
+<Warning>
+  All suites currently use `test.describe.skip` until the `enhance-authentication` work lands. Remove the skip once your
+  local OAuth provider can mint tokens for the test runner.
+</Warning>
+
+### HTTP mocking for adapters
+
+```ts title="apps/demo-showcase/e2e/openapi.e2e.ts"
+import { httpMock } from '@frontmcp/testing';
+
+const interceptor = httpMock.interceptor();
+interceptor.get('https://frontmcp-test.proxy.beeceptor.com/users', {
+  body: [
+    { id: 1, name: 'John Doe' },
+    { id: 2, name: 'Jane Doe' },
+  ],
+});
+interceptor.allowPassthrough(true);
+
+const tools = await mcp.tools.list();
+expect(tools).toContainTool('create-note');
+interceptor.restore();
+```
+
+This example shows how to intercept remote calls while still allowing passthrough for the OpenAPI schema fetch. Copy it
+into your own suites whenever you need deterministic third-party responses.
+
+## Run it locally
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+  <Step title="Start the showcase server">
+    ```bash
+    pnpm nx serve demo-showcase
+    ```
+    The server boots the notes app on port 3010 by default (additional suites use 3011–3013).
+  </Step>
+  <Step title="Run the Jest suites">
+    ```bash
+    cd apps/demo-showcase
+    npx jest --config jest.e2e.config.ts
+    ```
+    The config lives alongside the app and already points to `@frontmcp/testing/jest-preset`.
+  </Step>
+</Steps>
+
+<Tip>
+  Extend the showcase by swapping the in-memory `notesStore` with your own persistence layer or by wiring the commented
+  `OpenapiAdapter` block back in—every test already asserts the MCP discovery flows, so you'll know immediately when a
+  regression slips in.
+</Tip>

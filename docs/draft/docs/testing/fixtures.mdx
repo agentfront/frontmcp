@@ -12,11 +12,11 @@ description: Playwright-inspired fixture system for MCP testing
 
 ## Available Fixtures
 
-| Fixture  | Type | Description |
-|----------|------|-------------|
+| Fixture  | Type            | Description                                   |
+| -------- | --------------- | --------------------------------------------- |
 | `mcp`    | `McpTestClient` | Auto-connected MCP client for making requests |
-| `auth`   | `AuthFixture` | Token factory for authentication testing |
-| `server` | `ServerFixture` | Server control and multi-client creation |
+| `auth`   | `AuthFixture`   | Token factory for authentication testing      |
+| `server` | `ServerFixture` | Server control and multi-client creation      |
 
 ```ts
 test('example using all fixtures', async ({ mcp, auth, server }) => {
@@ -50,16 +50,16 @@ test('my test', async ({ mcp }) => {
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `server` | `string` | — | Path to server entry file (required) |
-| `port` | `number` | Auto | Port to run server on |
-| `transport` | `'sse' \| 'streamable-http'` | `'streamable-http'` | Transport protocol |
-| `auth` | `object` | — | Auth configuration |
-| `logLevel` | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'` | Server log level |
-| `env` | `Record<string, string>` | — | Environment variables |
-| `startupTimeout` | `number` | `30000` | Server startup timeout in ms |
-| `baseUrl` | `string` | — | Connect to existing server instead of starting one |
+| Option           | Type                                     | Default             | Description                                        |
+| ---------------- | ---------------------------------------- | ------------------- | -------------------------------------------------- |
+| `server`         | `string`                                 | —                   | Path to server entry file (required)               |
+| `port`           | `number`                                 | Auto                | Port to run server on                              |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                                 |
+| `auth`           | `object`                                 | —                   | Auth configuration                                 |
+| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                                   |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables                              |
+| `startupTimeout` | `number`                                 | `30000`             | Server startup timeout in ms                       |
+| `baseUrl`        | `string`                                 | —                   | Connect to existing server instead of starting one |
 
 ---
 
@@ -376,12 +376,14 @@ Understanding when fixtures are created and destroyed:
 ## Best Practices
 
 **Do:**
+
 - Use `test.use()` once at the top of each test file
 - Clear logs and traces between tests if needed
 - Disconnect additional clients created via `server.createClient()`
 - Use `port: 0` for automatic port selection in CI
 
 **Don't:**
+
 - Modify shared server state without cleanup
 - Create many clients without disconnecting them
 - Rely on test execution order
