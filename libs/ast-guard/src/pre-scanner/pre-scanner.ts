@@ -124,7 +124,7 @@ export class PreScanner {
     // Fast path for empty input
     if (!source || source.length === 0) {
       return ScanState.quickFail({
-        code: PRESCANNER_ERROR_CODES.INPUT_TOO_LARGE, // Reusing code for invalid input
+        code: PRESCANNER_ERROR_CODES.INPUT_TOO_LARGE, // Note: Using INPUT_TOO_LARGE for empty input (no INVALID_INPUT code)
         message: 'Empty input is not valid source code',
       });
     }

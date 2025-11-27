@@ -351,13 +351,13 @@ function tryParseRegex(source: string, start: number): { pattern: string; flags:
   }
 
   // Empty pattern or unclosed - invalid
-  if (pattern.length === 0 || i === source.length + 1) {
+  if (pattern.length === 0 || source[i - 1] !== '/') {
     return null;
   }
 
-  // Parse flags
+  // Parse flags (includes ES2022 'd' indices and ES2024 'v' unicodeSets)
   let flags = '';
-  while (i < source.length && /[gimsuy]/.test(source[i])) {
+  while (i < source.length && /[dgimsuyv]/.test(source[i])) {
     flags += source[i];
     i++;
   }

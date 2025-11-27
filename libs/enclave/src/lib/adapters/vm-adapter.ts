@@ -327,14 +327,22 @@ export class VmAdapter implements SandboxAdapter {
       // Add __safe_console with rate limiting to prevent I/O flood attacks
       // Security: Limits total output bytes and call count
       // Note: The agentscript transformer converts `console` → `__safe_console` in whitelist mode
-      const consoleStats: ConsoleStats = { totalBytes: 0, callCount: 0 };
-      (baseSandbox as any).__safe_console = createSafeConsole(
-        {
-          maxConsoleOutputBytes: config.maxConsoleOutputBytes,
-          maxConsoleCalls: config.maxConsoleCalls,
-        },
-        consoleStats
-      );
+      // Skip if user already provided console via globals (already added with __safe_ prefix by safeRuntime)
+      if (!('__safe_console' in safeRuntime)) {
+        const consoleStats: ConsoleStats = { totalBytes: 0, callCount: 0 };
+        Object.defineProperty(baseSandbox, '__safe_console', {
+          value: createSafeConsole(
+            {
+              maxConsoleOutputBytes: config.maxConsoleOutputBytes,
+              maxConsoleCalls: config.maxConsoleCalls,
+            },
+            consoleStats
+          ),
+          writable: false,
+          configurable: false,
+          enumerable: true,
+        });
+      }
 
       // Wrap sandbox in protective Proxy to catch dynamic assignment attempts
       // Security: Prevents dynamic assignment like `this['__safe_callTool'] = malicious`

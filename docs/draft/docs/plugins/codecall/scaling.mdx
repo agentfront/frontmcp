@@ -486,7 +486,7 @@ import { RateLimitPlugin } from '@frontmcp/plugins';
     1. Profile tool call latency
     2. Increase `vm.timeoutMs` if tools are slow
     3. Break complex scripts into smaller pieces
-    4. Use `parallel()` for independent tool calls
+    4. Use `Promise.all()` for independent tool calls
   </Accordion>
 
   <Accordion title="Search returning irrelevant results">

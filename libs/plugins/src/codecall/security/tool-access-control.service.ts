@@ -229,11 +229,19 @@ export class ToolAccessControlService {
   /**
    * Convert a glob pattern to a RegExp.
    * Supports: * (any characters), ? (single character)
+   *
+   * Security: Prevents ReDoS by limiting pattern complexity and using non-greedy matching.
    */
   private globToRegex(pattern: string): RegExp {
+    // Prevent ReDoS: limit pattern complexity
+    const wildcardCount = (pattern.match(/\*/g) || []).length;
+    if (wildcardCount > 3 || pattern.length > 100) {
+      throw new Error(`Pattern too complex: ${pattern}`);
+    }
+
     const escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-      .replace(/\*/g, '.*') // * -> .*
+      .replace(/\*/g, '.*?') // * -> .*? (non-greedy to prevent backtracking)
       .replace(/\?/g, '.'); // ? -> .
 
     return new RegExp(`^${escaped}$`, 'i');

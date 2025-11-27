@@ -151,6 +151,7 @@ export default class DescribeTool extends ToolContext {
    * Extract app ID from tool metadata or owner.
    */
   private extractAppId(tool: {
+    name?: string;
     metadata?: { codecall?: { appId?: string }; source?: string };
     owner?: { id?: string };
   }): string {
@@ -170,7 +171,7 @@ export default class DescribeTool extends ToolContext {
     }
 
     // Extract from tool name (namespace:name -> namespace)
-    const nameParts = (tool as { name?: string }).name?.split(':');
+    const nameParts = tool.name?.split(':');
     if (nameParts && nameParts.length > 1) {
       return nameParts[0];
     }

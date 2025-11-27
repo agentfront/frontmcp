@@ -49,7 +49,7 @@ const FETCH_PATTERNS = /list|get|query|search|find|fetch|read|select/i;
 /**
  * Fields commonly used for limiting results
  */
-const LIMIT_FIELD_NAMES = ['limit', 'pageSize', 'count', 'max', 'top', 'size', 'take'];
+const LIMIT_FIELD_NAMES = ['limit', 'pagesize', 'count', 'max', 'top', 'size', 'take'];
 
 /**
  * Feature Extractor - extracts security-relevant features from code
@@ -74,7 +74,6 @@ export class FeatureExtractor {
     const sensitiveCategories = new Set<SensitiveCategory>();
 
     // Track loop depth during traversal
-    let loopDepth = 0;
     let maxLoopNesting = 0;
     let iteratesOverToolResults = false;
 
@@ -134,7 +133,9 @@ export class FeatureExtractor {
           if (awaitArg?.type === 'CallExpression') {
             const calleeName = awaitArg.callee?.name;
             if (calleeName === 'callTool' || calleeName === '__safe_callTool') {
-              toolResultVars.add(varNode.id.name!);
+              if (varNode.id.name) {
+                toolResultVars.add(varNode.id.name);
+              }
             }
           }
         }

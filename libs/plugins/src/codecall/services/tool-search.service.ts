@@ -15,6 +15,132 @@ import type {
 } from '../codecall.symbol';
 
 /**
+ * Common stop words that should not receive extra weighting.
+ * Moved to module level to avoid recreating the Set on every word check.
+ */
+const STOP_WORDS: ReadonlySet<string> = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'but',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'of',
+  'with',
+  'by',
+  'from',
+  'as',
+  'is',
+  'was',
+  'are',
+  'were',
+  'been',
+  'be',
+  'have',
+  'has',
+  'had',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'could',
+  'should',
+  'may',
+  'might',
+  'must',
+  'shall',
+  'can',
+  'this',
+  'that',
+  'these',
+  'those',
+  'then',
+  'than',
+  'when',
+  'where',
+  'which',
+  'while',
+  'what',
+  'who',
+  'whom',
+  'whose',
+  'why',
+  'how',
+  'all',
+  'each',
+  'every',
+  'both',
+  'few',
+  'more',
+  'most',
+  'other',
+  'some',
+  'such',
+  'only',
+  'same',
+  'into',
+  'over',
+  'after',
+  'before',
+  'between',
+  'under',
+  'again',
+  'once',
+  'here',
+  'there',
+  'about',
+  'also',
+  'just',
+  'like',
+  'very',
+  'even',
+  'back',
+  'well',
+  'come',
+  'make',
+  'know',
+  'take',
+  'see',
+  'look',
+  'give',
+  'find',
+  'tell',
+  'become',
+  'leave',
+  'feel',
+  'seem',
+  'want',
+  'show',
+  'mean',
+  'keep',
+  'let',
+  'begin',
+  'help',
+  'turn',
+  'start',
+  'need',
+  'work',
+  'part',
+  'place',
+  'case',
+  'week',
+  'point',
+  'fact',
+  'number',
+  'group',
+  'problem',
+  'optionally',
+  'optional',
+  'specific',
+]);
+
+/**
  * Metadata structure for tool documents in the vector database
  */
 // NOTE: `any` is intentional - ToolEntry has constrained generics that don't work with `unknown`
@@ -104,10 +230,12 @@ export interface ToolSearchServiceConfig {
  * Implements the ToolSearch interface for dependency injection
  */
 export class ToolSearchService implements ToolSearch {
+  private static readonly MAX_SUBSCRIPTION_RETRIES = 100;
   private vectorDB: TFIDFVectoria<ToolMetadata> | VectoriaDB<ToolMetadata>;
   private strategy: EmbeddingStrategy;
   private initialized = false;
   private mlInitialized = false;
+  private subscriptionRetries = 0;
   private config: Required<Omit<ToolSearchServiceConfig, 'includeTools' | 'mode'>> & {
     mode: CodeCallMode;
     includeTools?: IncludeToolsFilter;
@@ -162,10 +290,16 @@ export class ToolSearchService implements ToolSearch {
   private setupSubscription(): void {
     // If tools registry is not yet available, retry after a microtask
     if (!this.scope.tools) {
+      if (this.subscriptionRetries++ >= ToolSearchService.MAX_SUBSCRIPTION_RETRIES) {
+        console.warn('ToolSearchService: scope.tools not available after max retries');
+        return;
+      }
       // Use queueMicrotask to defer until after current initialization
       queueMicrotask(() => this.setupSubscription());
       return;
     }
+    // Reset retry counter on success
+    this.subscriptionRetries = 0;
 
     // Subscribe to tool changes with immediate=true to get current snapshot
     // This ensures tools are indexed as they become available, regardless of loading order
@@ -376,132 +510,11 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Common stop words that should not receive extra weighting
+   * Checks if a word is a common stop word that should not receive extra weighting.
+   * Uses module-level STOP_WORDS constant to avoid recreating the Set on each call.
    */
   private isStopWord(word: string): boolean {
-    const stopWords = new Set([
-      'the',
-      'a',
-      'an',
-      'and',
-      'or',
-      'but',
-      'in',
-      'on',
-      'at',
-      'to',
-      'for',
-      'of',
-      'with',
-      'by',
-      'from',
-      'as',
-      'is',
-      'was',
-      'are',
-      'were',
-      'been',
-      'be',
-      'have',
-      'has',
-      'had',
-      'do',
-      'does',
-      'did',
-      'will',
-      'would',
-      'could',
-      'should',
-      'may',
-      'might',
-      'must',
-      'shall',
-      'can',
-      'this',
-      'that',
-      'these',
-      'those',
-      'then',
-      'than',
-      'when',
-      'where',
-      'which',
-      'while',
-      'what',
-      'who',
-      'whom',
-      'whose',
-      'why',
-      'how',
-      'all',
-      'each',
-      'every',
-      'both',
-      'few',
-      'more',
-      'most',
-      'other',
-      'some',
-      'such',
-      'only',
-      'same',
-      'into',
-      'over',
-      'after',
-      'before',
-      'between',
-      'under',
-      'again',
-      'once',
-      'here',
-      'there',
-      'about',
-      'also',
-      'just',
-      'like',
-      'very',
-      'even',
-      'back',
-      'well',
-      'only',
-      'come',
-      'make',
-      'know',
-      'take',
-      'see',
-      'look',
-      'give',
-      'find',
-      'tell',
-      'become',
-      'leave',
-      'feel',
-      'seem',
-      'want',
-      'show',
-      'mean',
-      'keep',
-      'let',
-      'begin',
-      'help',
-      'turn',
-      'start',
-      'need',
-      'work',
-      'part',
-      'place',
-      'case',
-      'week',
-      'point',
-      'fact',
-      'number',
-      'group',
-      'problem',
-      'optionally',
-      'optional',
-      'specific',
-    ]);
-    return stopWords.has(word);
+    return STOP_WORDS.has(word);
   }
 
   /**

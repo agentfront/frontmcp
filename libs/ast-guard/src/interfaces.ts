@@ -221,7 +221,11 @@ export interface ValidationResult {
   transformedCode?: string;
   /** Pre-scanner error if pre-scan failed */
   preScanError?: Error;
-  /** Pre-scanner statistics (if pre-scan was run) */
+  /**
+   * Pre-scanner statistics (if pre-scan was run).
+   * Note: This is an intentional subset exposing only essential metrics.
+   * Internal stats like unicodeIssueCount are excluded from public API.
+   */
   preScanStats?: {
     inputSize: number;
     lineCount: number;
