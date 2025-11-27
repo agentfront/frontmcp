@@ -6,8 +6,8 @@
  * Import this file or ensure it's included in your tsconfig to get type checking.
  */
 
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@modelcontextprotocol/sdk/types.js';
-import type { ToolResultWrapper, ResourceContentWrapper, PromptResultWrapper } from '../client/mcp-test-client.types';
+// Note: These imports are used for documentation/JSDoc purposes in the interface comments
+// The actual runtime types are in mcp-matchers.ts
 
 /**
  * Custom MCP matchers for Jest
@@ -210,6 +210,8 @@ export interface McpMatchers<R = unknown> {
 // JEST TYPE AUGMENTATION
 // ═══════════════════════════════════════════════════════════════════
 
+/* eslint-disable @typescript-eslint/no-namespace */
+/* eslint-disable @typescript-eslint/no-empty-interface */
 declare global {
   namespace jest {
     // Extend expect matchers
@@ -222,6 +224,8 @@ declare global {
     interface InverseAsymmetricMatchers extends McpMatchers<void> {}
   }
 }
+/* eslint-enable @typescript-eslint/no-namespace */
+/* eslint-enable @typescript-eslint/no-empty-interface */
 
 // This export is needed to make this a module
 export {};

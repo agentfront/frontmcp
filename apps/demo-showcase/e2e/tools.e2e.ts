@@ -2,14 +2,14 @@ import { test, expect } from '@frontmcp/testing';
 import { notesStore, Note } from '../src/apps/notes/data/store';
 
 /** Response types for notes app */
-interface NoteResponse extends Note {}
+type NoteResponse = Note;
 interface NotesListResponse {
   notes: Note[];
   count: number;
 }
 interface DeleteResponse {
   success: boolean;
-  deletedId: string;
+  message: string;
 }
 
 /**

@@ -2,7 +2,7 @@ import { test, expect } from '@frontmcp/testing';
 import { notesStore, Note } from '../src/apps/notes/data/store';
 
 /** Response types for notes resources */
-interface NoteResponse extends Note {}
+type NoteResponse = Note;
 interface NotesListResourceResponse {
   notes: Note[];
   count: number;

@@ -118,7 +118,7 @@ export class StreamableHttpTransport implements McpTransport {
       });
 
       switch (interceptResult.type) {
-        case 'mock':
+        case 'mock': {
           // Return mock response directly, run through response interceptors
           const mockResponse = await this.interceptors.processResponse(
             message,
@@ -126,6 +126,7 @@ export class StreamableHttpTransport implements McpTransport {
             Date.now() - startTime,
           );
           return mockResponse as JsonRpcResponse & { result?: T };
+        }
 
         case 'error':
           throw interceptResult.error;
@@ -430,22 +431,29 @@ export class StreamableHttpTransport implements McpTransport {
    * id: xxx
    * data: {"jsonrpc":"2.0",...}
    *
+   * Multi-line data is supported per SSE spec - each line prefixed with "data: "
+   * gets concatenated with newlines.
+   *
    * @param text - The raw SSE response text
    * @param requestId - The original request ID
    * @returns Parsed JSON-RPC response
    */
   private parseSSEResponse(text: string, requestId: string | number | undefined): JsonRpcResponse {
     const lines = text.split('\n');
-    let jsonData: string | null = null;
+    const dataLines: string[] = [];
 
+    // Collect all data lines - SSE spec concatenates multi-line data with newlines
     for (const line of lines) {
       if (line.startsWith('data: ')) {
-        jsonData = line.slice(6); // Remove 'data: ' prefix
-        break;
+        dataLines.push(line.slice(6)); // Remove 'data: ' prefix
+      } else if (line === 'data:') {
+        // Empty data line represents a newline in the data
+        dataLines.push('');
       }
     }
 
-    if (jsonData) {
+    if (dataLines.length > 0) {
+      const jsonData = dataLines.join('\n');
       try {
         return JSON.parse(jsonData) as JsonRpcResponse;
       } catch {

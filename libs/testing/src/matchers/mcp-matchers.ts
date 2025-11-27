@@ -329,6 +329,10 @@ const toHaveMessages: MatcherFunction<[count: number]> = function (received, cou
 
 /**
  * Check if response is valid JSON-RPC 2.0
+ * A valid JSON-RPC 2.0 response must have:
+ * - jsonrpc: "2.0"
+ * - id (matching the request, can be null for notifications)
+ * - Either result OR error (but not both)
  */
 const toBeValidJsonRpc: MatcherFunction<[]> = function (received) {
   const response = received as Record<string, unknown>;
@@ -340,14 +344,29 @@ const toBeValidJsonRpc: MatcherFunction<[]> = function (received) {
     };
   }
 
-  const pass = response['jsonrpc'] === '2.0' && ('result' in response || 'error' in response);
+  const hasJsonRpc = response['jsonrpc'] === '2.0';
+  const hasId = 'id' in response;
+  const hasResult = 'result' in response;
+  const hasError = 'error' in response;
+  const hasExactlyOneResultOrError = (hasResult || hasError) && !(hasResult && hasError);
+
+  const pass = hasJsonRpc && hasId && hasExactlyOneResultOrError;
 
   return {
     pass,
-    message: () =>
-      pass
-        ? 'Expected response not to be valid JSON-RPC'
-        : `Expected valid JSON-RPC 2.0 response with "result" or "error"`,
+    message: () => {
+      if (pass) {
+        return 'Expected response not to be valid JSON-RPC';
+      }
+      const issues: string[] = [];
+      if (!hasJsonRpc) issues.push('missing or invalid "jsonrpc": "2.0"');
+      if (!hasId) issues.push('missing "id" field');
+      if (!hasExactlyOneResultOrError) {
+        if (!hasResult && !hasError) issues.push('missing "result" or "error"');
+        else issues.push('cannot have both "result" and "error"');
+      }
+      return `Expected valid JSON-RPC 2.0 response: ${issues.join(', ')}`;
+    },
   };
 };
 

@@ -23,7 +23,9 @@ test.describe.skip('OpenAPI Adapter', () => {
     // OpenAPI adapter tools have the adapter name prefix
     // The actual tools depend on the OpenAPI spec from Beeceptor
     const openapiTools = tools.filter((t) => t.name.startsWith('backend:api:'));
-    expect(openapiTools.length).toBeGreaterThanOrEqual(0);
+    // TODO: Once OpenAPI adapter is re-enabled, update this assertion to check for actual tools
+    // For now, just verify the filter ran without error
+    expect(Array.isArray(openapiTools)).toBe(true);
   });
 
   test.skip('mock OpenAPI endpoint call', async ({ mcp }) => {

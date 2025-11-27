@@ -406,6 +406,15 @@ function normalizeResponse(response: HttpMockResponse | Record<string, unknown>)
 }
 
 function createMockResponse(mock: HttpMockResponse): Response {
+  // Check for network error - throw instead of returning Response
+  // This simulates real network failures where fetch rejects
+  const mockAny = mock as HttpMockResponse & { _throwError?: boolean };
+  if (mockAny._throwError) {
+    const body = mock.body as Record<string, unknown> | undefined;
+    const message = body && typeof body === 'object' && 'message' in body ? String(body['message']) : 'Network error';
+    throw new TypeError(`fetch failed: ${message}`);
+  }
+
   const status = mock.status ?? 200;
   const statusText = mock.statusText ?? 'OK';
 
@@ -579,12 +588,17 @@ export const httpResponse = {
     return httpResponse.error(403, message);
   },
 
-  /** Create a network error (throws instead of returning response) */
+  /**
+   * Create a network error that causes fetch to reject
+   * This simulates real network failures where fetch throws instead of returning a Response
+   */
   networkError(message = 'Network error'): HttpMockResponse {
     return {
       status: 0,
       body: { _networkError: true, message },
-    };
+      // Mark this as a network error for the interceptor to throw
+      _throwError: true,
+    } as HttpMockResponse;
   },
 
   /** Create a delayed response */

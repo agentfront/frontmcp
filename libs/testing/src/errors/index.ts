@@ -10,6 +10,8 @@ export class TestClientError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'TestClientError';
+    // Fix prototype chain for proper instanceof checks in transpiled code
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 

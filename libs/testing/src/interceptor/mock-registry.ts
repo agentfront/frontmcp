@@ -94,7 +94,23 @@ export class DefaultMockRegistry implements MockRegistry {
 
       const actualValue = actual[key];
 
-      if (typeof value === 'object' && value !== null) {
+      // Handle arrays explicitly
+      if (Array.isArray(value)) {
+        if (!Array.isArray(actualValue)) return false;
+        if (value.length !== actualValue.length) return false;
+        for (let i = 0; i < value.length; i++) {
+          const expectedItem = value[i];
+          const actualItem = actualValue[i];
+          if (typeof expectedItem === 'object' && expectedItem !== null) {
+            if (typeof actualItem !== 'object' || actualItem === null) return false;
+            if (!this.paramsMatch(expectedItem as Record<string, unknown>, actualItem as Record<string, unknown>)) {
+              return false;
+            }
+          } else if (actualItem !== expectedItem) {
+            return false;
+          }
+        }
+      } else if (typeof value === 'object' && value !== null) {
         if (typeof actualValue !== 'object' || actualValue === null) return false;
         if (!this.paramsMatch(value as Record<string, unknown>, actualValue as Record<string, unknown>)) {
           return false;

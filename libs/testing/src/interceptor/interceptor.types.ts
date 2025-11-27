@@ -117,20 +117,16 @@ export interface InterceptorChain {
    * Process a request through the interceptor chain
    */
   processRequest(
-    request: import('../transport/transport.interface').JsonRpcRequest,
+    request: JsonRpcRequest,
     meta: InterceptorContext['meta'],
   ): Promise<
-    | { type: 'continue'; request: import('../transport/transport.interface').JsonRpcRequest }
-    | { type: 'mock'; response: import('../transport/transport.interface').JsonRpcResponse }
+    | { type: 'continue'; request: JsonRpcRequest }
+    | { type: 'mock'; response: JsonRpcResponse }
     | { type: 'error'; error: Error }
   >;
 
   /**
    * Process a response through the interceptor chain
    */
-  processResponse(
-    request: import('../transport/transport.interface').JsonRpcRequest,
-    response: import('../transport/transport.interface').JsonRpcResponse,
-    durationMs: number,
-  ): Promise<import('../transport/transport.interface').JsonRpcResponse>;
+  processResponse(request: JsonRpcRequest, response: JsonRpcResponse, durationMs: number): Promise<JsonRpcResponse>;
 }

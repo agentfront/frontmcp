@@ -36,8 +36,8 @@ module.exports = {
   testTimeout: 30000,
 
   // Setup files that run after Jest is initialized
-  // Path is relative to where the preset is installed (node_modules/@frontmcp/testing)
-  setupFilesAfterEnv: [require.resolve('./src/setup.js')],
+  // Path resolves to the compiled output when used from node_modules/@frontmcp/testing
+  setupFilesAfterEnv: [require.resolve('@frontmcp/testing/setup')],
 
   // Test file patterns for E2E tests
   testMatch: ['**/*.e2e.ts', '**/*.e2e.js', '**/e2e/**/*.test.ts', '**/e2e/**/*.test.js'],

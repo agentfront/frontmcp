@@ -202,6 +202,4 @@ export type {
   HttpMockHandle,
   HttpInterceptor,
   HttpMockManager,
-  /** @deprecated Use HttpInterceptor instead */
-  HttpMockScope,
 } from './http-mock';

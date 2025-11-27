@@ -248,17 +248,19 @@ export class TestServer {
       PORT: String(this.options.port),
     };
 
-    // Parse command and arguments
-    const [cmd, ...args] = this.options.command.split(' ');
-
-    this.process = spawn(cmd, args, {
+    // Use shell: true to handle complex commands with quoted arguments
+    // This avoids fragile command parsing with split(' ')
+    this.process = spawn(this.options.command, [], {
       cwd: this.options.cwd,
       env,
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    this._info.pid = this.process.pid;
+    // pid can be undefined if spawn fails
+    if (this.process.pid !== undefined) {
+      this._info.pid = this.process.pid;
+    }
 
     // Capture stdout
     this.process.stdout?.on('data', (data: Buffer) => {
@@ -278,8 +280,8 @@ export class TestServer {
       }
     });
 
-    // Handle process exit
-    this.process.on('exit', (code) => {
+    // Handle process exit - use once() to avoid memory leak from listener not being cleaned up
+    this.process.once('exit', (code) => {
       this.log(`Server process exited with code ${code}`);
     });
 
