@@ -18,6 +18,7 @@ import { FrontMcpAuth } from './primary-auth-provider.interface';
 import { FlowName } from '../../metadata';
 import { FlowCtxOf, FlowInputOf, FlowStagesOf } from '../flow.interface';
 import { HookRecord } from '../../records';
+import { ToolChangeEvent } from '../../../tool/tool.events';
 
 export interface ScopeRegistryInterface {
   getScopes(): ScopeEntry[];
@@ -118,6 +119,12 @@ export interface ToolRegistryInterface {
 
   // inline tools only
   getInlineTools(): ToolEntry<any, any>[];
+
+  // subscribe to tool change events
+  subscribe(
+    opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
+    cb: (evt: ToolChangeEvent) => void,
+  ): () => void;
 }
 
 export interface ResourceRegistryInterface {

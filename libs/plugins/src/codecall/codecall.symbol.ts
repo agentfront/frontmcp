@@ -1,9 +1,7 @@
 // file: libs/plugins/src/codecall/codecall.symbol.ts
 
-import { CodeCallPluginOptions, CodeCallVmPreset } from './codecall.types';
-import { Token } from '@frontmcp/sdk';
-import type CodeCallConfigProvider from './providers/code-call.config';
-import type { ToolCallResult, CallToolOptions } from './errors/tool-call.errors';
+import { CodeCallVmPreset } from './codecall.types';
+import type { ToolCallResult, CallToolOptions } from './errors';
 
 export interface CodeCallAstValidationIssue {
   kind: 'IllegalBuiltinAccess' | 'DisallowedGlobal' | 'DisallowedLoop' | 'ParseError';

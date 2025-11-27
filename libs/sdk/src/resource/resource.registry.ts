@@ -10,7 +10,7 @@ import {
   ResourceRegistryInterface,
   ResourceType,
 } from '../common';
-import { getMetadata } from '../utils/metadata.utils';
+import { getMetadata, tokenName } from '../utils';
 import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {
@@ -26,13 +26,13 @@ import {
   sepFor,
   resourceDiscoveryDeps,
 } from './resource.utils';
-import { tokenName } from '../utils/token.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ResourceInstance } from './resource.instance';
 import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
+import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
 export default class ResourceRegistry
   extends RegistryAbstract<
@@ -496,13 +496,17 @@ export default class ResourceRegistry
    * Get the MCP capabilities for resources.
    * These are reported to clients during initialization.
    */
-  getCapabilities(): { subscribe: boolean; listChanged: boolean } {
-    return {
-      // Subscription support is deferred to a future implementation
-      subscribe: false,
-      // List change notifications are supported if we have any resources registered
-      listChanged: this.hasAny(),
-    };
+  getCapabilities(): Partial<ServerCapabilities> {
+    return this.hasAny()
+      ? {
+          resources: {
+            // Subscription support is deferred to a future implementation
+            subscribe: false,
+            // List change notifications are only supported when resources are registered
+            listChanged: true,
+          },
+        }
+      : {};
   }
 }
 

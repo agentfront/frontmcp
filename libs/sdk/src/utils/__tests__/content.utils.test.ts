@@ -22,9 +22,9 @@ describe('Content Utils', () => {
       const error = new Error('Test error');
       const result = sanitizeToJson(error) as Record<string, unknown>;
 
-      expect(result.name).toBe('Error');
-      expect(result.message).toBe('Test error');
-      expect(typeof result.stack).toBe('string');
+      expect(result['name']).toBe('Error');
+      expect(result['message']).toBe('Test error');
+      expect(typeof result['stack']).toBe('string');
     });
 
     it('should convert Map to object', () => {
@@ -58,8 +58,8 @@ describe('Content Utils', () => {
       obj.self = obj;
 
       const result = sanitizeToJson(obj) as Record<string, unknown>;
-      expect(result.a).toBe(1);
-      expect(result.self).toBeUndefined();
+      expect(result['a']).toBe(1);
+      expect(result['self']).toBeUndefined();
     });
 
     it('should recursively sanitize nested objects', () => {

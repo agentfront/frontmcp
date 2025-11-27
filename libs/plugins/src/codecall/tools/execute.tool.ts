@@ -8,13 +8,13 @@ import {
   executeToolInputSchema,
   ExecuteToolInput,
 } from './execute.schema';
-import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import EnclaveService from '../services/enclave.service';
+import CodeCallConfig from '../providers/code-call.config';
 import { assertNotSelfReference } from '../security/self-reference-guard';
 import {
   createToolCallError,
   TOOL_CALL_ERROR_CODES,
-  SelfReferenceError,
   ToolCallResult,
   CallToolOptions,
   ToolCallErrorCode,
@@ -46,6 +46,10 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
   cache: {
     ttl: 0, // No caching - each execution is unique
     slideWindow: false,
+  },
+  codecall: {
+    enabledInCodeCall: false,
+    visibleInListTools: true,
   },
   description: executeToolDescription,
   inputSchema: executeToolInputSchema,
@@ -154,7 +158,7 @@ export default class ExecuteTool extends ToolContext {
 
       codecallContext: Object.freeze(context || {}),
 
-      console: this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any)?.allowConsole ? console : undefined,
+      console: this.tryGet(CodeCallConfig)?.get('resolvedVm.allowConsole') ? console : undefined,
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
@@ -167,9 +171,9 @@ export default class ExecuteTool extends ToolContext {
       },
     };
 
-    // Get the enclave service and execute
-    const enclaveService = this.get<EnclaveService>('codecall:enclave' as any);
-    const vmOptions = this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any);
+    // Get the enclave service and config
+    const enclaveService = this.get(EnclaveService);
+    const config = this.get(CodeCallConfig);
 
     try {
       const executionResult = await enclaveService.execute(script, environment);
@@ -179,7 +183,7 @@ export default class ExecuteTool extends ToolContext {
         return {
           status: 'timeout',
           error: {
-            message: `Script execution timed out after ${vmOptions?.timeoutMs || 30000}ms`,
+            message: `Script execution timed out after ${config.get('resolvedVm.timeoutMs')}ms`,
           },
         };
       }

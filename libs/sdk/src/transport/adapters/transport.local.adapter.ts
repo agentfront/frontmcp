@@ -50,9 +50,9 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
     const serverOptions = {
       instructions: '',
       capabilities: {
-        tools: this.scope.tools.getCapabilities(),
-        resources: this.scope.resources.getCapabilities(),
-        prompts: this.scope.prompts.getCapabilities(),
+        ...this.scope.tools.getCapabilities(),
+        ...this.scope.resources.getCapabilities(),
+        ...this.scope.prompts.getCapabilities(),
       },
       serverInfo: info,
     };

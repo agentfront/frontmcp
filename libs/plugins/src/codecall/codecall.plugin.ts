@@ -9,12 +9,9 @@ import {
   CodeCallToolMetadata,
   codeCallPluginOptionsSchema,
 } from './codecall.types';
-import { ToolSearchService } from './services/tool-search.service';
+import { ToolSearchService } from './services';
 
-import SearchTool from './tools/search.tool';
-import DescribeTool from './tools/describe.tool';
-import ExecuteTool from './tools/execute.tool';
-import InvokeTool from './tools/invoke.tool';
+import { SearchTool, DescribeTool, ExecuteTool, InvokeTool } from './tools';
 
 import CodeCallConfig from './providers/code-call.config';
 import EnclaveService from './services/enclave.service';
@@ -34,6 +31,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     super();
     // Parse options with Zod schema to apply all defaults
     this.options = codeCallPluginOptionsSchema.parse(options);
+    console.log('[CodeCall] Plugin initialized with mode:', this.options.mode);
   }
 
   /**
@@ -69,6 +67,8 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
           return new ToolSearchService(
             {
               embeddingOptions: parsedOptions.embedding,
+              mode: parsedOptions.mode,
+              includeTools: parsedOptions.includeTools,
             },
             scope,
           );
@@ -92,8 +92,11 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
   @ListToolsHook.Did('resolveConflicts', { priority: 1000 })
   async adjustListTools(flowCtx: FlowCtxOf<'tools:list-tools'>) {
     const { resolvedTools } = flowCtx.state;
+    console.log('[CodeCall] adjustListTools hook called, mode:', this.options.mode);
+    console.log('[CodeCall] Tools before filter:', resolvedTools?.length ?? 0);
 
     if (!resolvedTools || resolvedTools.length === 0) {
+      console.log('[CodeCall] No tools to filter, returning early');
       return;
     }
 
@@ -101,6 +104,8 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     const filteredTools = resolvedTools.filter(({ tool }) => {
       return this.shouldShowInListTools(tool, this.options.mode);
     });
+
+    console.log('[CodeCall] Tools after filter:', filteredTools.length);
 
     // Update the state with filtered tools
     flowCtx.state.set('resolvedTools', filteredTools);

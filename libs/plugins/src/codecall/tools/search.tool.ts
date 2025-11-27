@@ -15,6 +15,10 @@ import { ToolSearchService } from '../services/tool-search.service';
     ttl: 60, // 1 minute
     slideWindow: false,
   },
+  codecall: {
+    enabledInCodeCall: false,
+    visibleInListTools: true,
+  },
   description: searchToolDescription,
   inputSchema: searchToolInputSchema,
   outputSchema: searchToolOutputSchema,
@@ -30,6 +34,7 @@ export default class SearchTool extends ToolContext {
     // Check for excluded tools that don't exist in the index
     const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !searchService.hasTool(toolName));
 
+    console.log({ query, topK, filter, excludeToolNames });
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
         type: 'excluded_tool_not_found',

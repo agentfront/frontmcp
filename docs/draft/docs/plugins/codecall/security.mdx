@@ -1,0 +1,492 @@
+---
+title: Security Model
+sidebarTitle: Security
+description: Defense-in-depth security with AST validation, code transformation, runtime sandboxing, and output sanitization.
+icon: shield
+---
+
+CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through four security layers before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
+
+<CardGroup cols={2}>
+  <Card title="67 Attack Vectors Blocked" icon="shield-check">
+    AST Guard blocks eval, prototype pollution, Trojan Source, and more
+  </Card>
+  <Card title="Zero Trust Runtime" icon="lock">
+    Enclave sandbox with whitelist-only globals and resource limits
+  </Card>
+  <Card title="Self-Reference Guard" icon="ban">
+    Scripts cannot call CodeCall tools - prevents recursive execution
+  </Card>
+  <Card title="Sanitized Outputs" icon="filter">
+    Stack traces, file paths, and sensitive data removed from responses
+  </Card>
+</CardGroup>
+
+---
+
+## Security Pipeline
+
+Every script goes through this 4-layer pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1: AST VALIDATION                                         │
+│  Static analysis before any code runs                            │
+│  Library: ast-guard                                              │
+│  Blocks: eval, Function, dangerous globals, prototype attacks    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 2: CODE TRANSFORMATION                                    │
+│  Rewrite code for safe execution                                 │
+│  Adds: main wrapper, safe proxies, iteration limits             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 3: RUNTIME SANDBOX                                        │
+│  Execute in isolated context                                     │
+│  Library: Enclave (Node.js vm)                                   │
+│  Enforces: timeouts, iteration caps, tool call limits           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 4: OUTPUT SANITIZATION                                    │
+│  Clean results before returning                                  │
+│  Removes: stack traces, file paths, internal errors             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Layer 1: AST Validation
+
+[AST Guard](/docs/guides/ast-guard) parses JavaScript into an Abstract Syntax Tree and validates every node against security rules before any code executes.
+
+### Blocked Constructs
+
+<AccordionGroup>
+  <Accordion title="Code Execution Attacks" icon="code">
+    **Blocked:**
+    - `eval('malicious code')` - Dynamic code execution
+    - `new Function('return process')()` - Function constructor
+    - `setTimeout(() => {}, 0)` - Timer-based execution
+    - `setInterval`, `setImmediate` - Async execution escape
+
+    **Why:** These allow arbitrary code injection that bypasses AST validation.
+  </Accordion>
+
+  <Accordion title="Global/System Access" icon="globe">
+    **Blocked:**
+    - `process.env.SECRET` - Node.js process access
+    - `require('fs')` - Module loading
+    - `window.location` - Browser globals
+    - `global`, `globalThis` - Global object access
+    - `this` - Context leakage
+
+    **Why:** Prevents sandbox escape and system access.
+  </Accordion>
+
+  <Accordion title="Prototype Pollution" icon="virus">
+    **Blocked:**
+    - `obj.__proto__ = {}` - Direct prototype manipulation
+    - `obj.constructor.prototype` - Indirect prototype access
+    - `Object.prototype.polluted = true` - Global prototype pollution
+
+    **Why:** Prototype pollution can corrupt the entire runtime.
+  </Accordion>
+
+  <Accordion title="Unicode/Trojan Source Attacks" icon="eye-slash">
+    **Blocked:**
+    - Bidirectional override characters (CVE-2021-42574)
+    - Homoglyph attacks (Cyrillic 'а' vs Latin 'a')
+    - Zero-width characters
+    - Invisible formatting characters
+
+    **Why:** Makes code appear different than it executes.
+  </Accordion>
+
+  <Accordion title="Resource Exhaustion" icon="infinity">
+    **Blocked:**
+    - `while (true) {}` - Unbounded while loops
+    - `do {} while (true)` - Unbounded do-while loops
+    - `for (key in obj)` - Prototype chain walking
+    - Recursive function definitions
+
+    **Why:** Can freeze the server or exhaust memory.
+  </Accordion>
+</AccordionGroup>
+
+### AgentScript Preset
+
+CodeCall uses the **AgentScript preset** - the most restrictive preset designed for LLM-generated code:
+
+```ts
+import { createAgentScriptPreset } from 'ast-guard';
+
+const preset = createAgentScriptPreset({
+  // Whitelist-only globals
+  allowedGlobals: [
+    'callTool', 'getTool', 'codecallContext',
+    'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date',
+    'console', // optional, controlled by allowConsole
+  ],
+
+  // Only bounded loops allowed
+  allowedLoops: {
+    allowFor: true,      // for (let i = 0; i < n; i++)
+    allowForOf: true,    // for (const x of array)
+    allowWhile: false,   // ❌ blocked
+    allowDoWhile: false, // ❌ blocked
+    allowForIn: false,   // ❌ blocked (prototype walking)
+  },
+
+  // Arrow functions only (no recursion)
+  allowArrowFunctions: true,
+});
+```
+
+### What's Allowed
+
+```js
+// ✅ Tool calls
+const users = await callTool('users:list', { limit: 100 });
+
+// ✅ Variables
+const filtered = users.filter(u => u.active);
+let count = 0;
+
+// ✅ Bounded loops
+for (let i = 0; i < users.length; i++) { count++; }
+for (const user of users) { console.log(user.name); }
+
+// ✅ Array methods with arrow functions
+const names = users.map(u => u.name);
+const total = users.reduce((sum, u) => sum + u.score, 0);
+
+// ✅ Safe built-ins
+const max = Math.max(1, 2, 3);
+const parsed = JSON.parse('{"a":1}');
+const keys = Object.keys(obj);
+
+// ✅ Context access (read-only)
+const tenant = codecallContext.tenantId;
+
+// ✅ Return values
+return { count, names, total };
+```
+
+---
+
+## Layer 2: Code Transformation
+
+After AST validation passes, code is transformed for safe execution:
+
+### Transformations Applied
+
+| Original | Transformed | Purpose |
+|----------|-------------|---------|
+| Top-level code | `async function __ag_main() { ... }` | Enable top-level await |
+| `callTool(...)` | `__safe_callTool(...)` | Proxy through Enclave |
+| `for (...)` | Iteration-limited version | Enforce maxIterations |
+| `console.log(...)` | `__safe_console.log(...)` | Capture for logging |
+
+### Example
+
+```js
+// Input
+const users = await callTool('users:list', {});
+for (const user of users) {
+  console.log(user.name);
+}
+return users.length;
+
+// Transformed
+async function __ag_main() {
+  const users = await __safe_callTool('users:list', {});
+  __safe_forOf(users, (user) => {
+    __safe_console.log(user.name);
+  });
+  return users.length;
+}
+```
+
+### Reserved Prefixes
+
+User code **cannot** declare identifiers with these prefixes:
+
+- `__ag_` - AgentScript internal functions
+- `__safe_` - Safe runtime proxies
+
+```js
+// ❌ BLOCKED by AST validation
+const __ag_hack = 'foo';
+let __safe_bypass = 123;
+```
+
+---
+
+## Layer 3: Runtime Sandbox
+
+[Enclave](/docs/guides/enclave) executes transformed code in an isolated Node.js `vm` context.
+
+### Isolation Guarantees
+
+<CardGroup cols={2}>
+  <Card title="Fresh Context" icon="plus">
+    Each execution gets a new, isolated context with no access to the host environment
+  </Card>
+  <Card title="Controlled Globals" icon="list-check">
+    Only whitelisted globals available: Math, JSON, Array, Object, etc.
+  </Card>
+  <Card title="No Module Access" icon="ban">
+    No require, import, or dynamic module loading
+  </Card>
+  <Card title="No Async Escape" icon="clock">
+    No setTimeout, setInterval, or Promise.race tricks
+  </Card>
+</CardGroup>
+
+### Resource Limits
+
+| Limit | Default | Purpose |
+|-------|---------|---------|
+| `timeoutMs` | 3,500ms | Maximum execution time |
+| `maxIterations` | 5,000 | Maximum loop iterations |
+| `maxToolCalls` | 100 | Maximum tool invocations |
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    preset: 'secure',  // Uses defaults above
+    timeoutMs: 5000,   // Override timeout
+  },
+});
+```
+
+### VM Presets
+
+| Preset | Timeout | Iterations | Tool Calls | Use Case |
+|--------|---------|------------|------------|----------|
+| `locked_down` | 2s | 2,000 | 10 | Ultra-sensitive data |
+| `secure` | 3.5s | 5,000 | 100 | **Production default** |
+| `balanced` | 5s | 10,000 | 200 | Complex workflows |
+| `experimental` | 10s | 20,000 | 500 | Development only |
+
+---
+
+## Self-Reference Guard
+
+**Critical Security Feature:** Scripts cannot call CodeCall meta-tools from within scripts.
+
+```js
+// Inside codecall:execute script
+// ❌ BLOCKED - Self-reference detected
+const result = await callTool('codecall:execute', {
+  script: 'return "nested"'
+});
+// Returns: { success: false, error: { code: 'SELF_REFERENCE_BLOCKED' } }
+
+// ❌ Also blocked
+await callTool('codecall:search', { query: 'users' });
+await callTool('codecall:describe', { toolNames: ['users:list'] });
+await callTool('codecall:invoke', { tool: 'users:list', input: {} });
+```
+
+### Why This Matters
+
+Without self-reference blocking, an attacker could:
+
+1. **Recursive execution**: `codecall:execute` calls itself infinitely
+2. **Sandbox escape**: Nest executions to accumulate privileges
+3. **Resource exhaustion**: Each nested call multiplies resource usage
+4. **Audit bypass**: Hide malicious calls in nested scripts
+
+### Implementation
+
+The guard runs **before** any other security checks:
+
+```ts
+// execute.tool.ts - First line of callTool handler
+assertNotSelfReference(toolName);  // Throws if codecall:* tool
+```
+
+---
+
+## Layer 4: Output Sanitization
+
+All outputs are sanitized before returning to the client:
+
+### Sanitization Rules
+
+| Rule | Default | Purpose |
+|------|---------|---------|
+| `removeStackTraces` | `true` | Hide internal error details |
+| `removeFilePaths` | `true` | Hide server filesystem structure |
+| `maxDepth` | 10 | Prevent deeply nested objects |
+| `maxStringLength` | 10,000 | Truncate oversized strings |
+| `maxArrayLength` | 1,000 | Truncate large arrays |
+| `maxObjectKeys` | 100 | Limit object size |
+
+### What Gets Sanitized
+
+```json
+// Before sanitization
+{
+  "error": {
+    "message": "Cannot read property 'foo' of undefined",
+    "stack": "TypeError: Cannot read property 'foo'\n    at /app/src/tools/users.ts:42:15\n    at ...",
+    "path": "/app/src/tools/users.ts"
+  }
+}
+
+// After sanitization
+{
+  "error": {
+    "message": "Cannot read property 'foo' of undefined",
+    "code": "RUNTIME_ERROR"
+  }
+}
+```
+
+### Circular Reference Detection
+
+```js
+// Script returns circular reference
+const obj = { name: 'test' };
+obj.self = obj;
+return obj;
+
+// Sanitized output
+{
+  "name": "test",
+  "self": "[Circular]"
+}
+```
+
+---
+
+## Error Categories
+
+CodeCall categorizes all errors for safe exposure:
+
+| Category | Code | Exposed To Client | Contains |
+|----------|------|-------------------|----------|
+| Syntax | `SYNTAX_ERROR` | Message + location | Line/column of error |
+| Validation | `VALIDATION_ERROR` | Rule that failed | Blocked construct |
+| Timeout | `TIMEOUT` | Duration | - |
+| Self-Reference | `SELF_REFERENCE_BLOCKED` | Tool name | - |
+| Tool Not Found | `TOOL_NOT_FOUND` | Tool name | - |
+| Tool Error | `TOOL_ERROR` | Sanitized message | - |
+| Runtime | `RUNTIME_ERROR` | Sanitized message | - |
+
+```json
+// Example error response
+{
+  "status": "illegal_access",
+  "error": {
+    "kind": "IllegalBuiltinAccess",
+    "message": "Identifier 'eval' is not allowed in AgentScript"
+  }
+}
+```
+
+---
+
+## Security Checklist
+
+Before deploying CodeCall to production:
+
+<Steps>
+  <Step title="Choose VM Preset">
+    Use `secure` for production, `locked_down` for sensitive data.
+    ```ts
+    vm: { preset: 'secure' }
+    ```
+  </Step>
+  <Step title="Enable Audit Logging">
+    Monitor script execution, tool calls, and security events.
+    ```ts
+    // Subscribe to CodeCall events
+    scope.events.on('codecall:*', logEvent);
+    ```
+  </Step>
+  <Step title="Configure Tool Allowlists">
+    Limit which tools are accessible via CodeCall.
+    ```ts
+    codecall: { enabledInCodeCall: true }  // per-tool
+    includeTools: (tool) => !tool.name.startsWith('admin:')  // global
+    ```
+  </Step>
+  <Step title="Remove Stack Traces">
+    Ensure sanitization is enabled (default).
+    ```ts
+    sanitization: { removeStackTraces: true, removeFilePaths: true }
+    ```
+  </Step>
+  <Step title="Test Security Boundaries">
+    Run the attack vector tests from ast-guard's security audit.
+  </Step>
+</Steps>
+
+---
+
+## Threat Model
+
+### What CodeCall Protects Against
+
+<CardGroup cols={2}>
+  <Card title="Code Injection" icon="syringe">
+    AST validation blocks eval, Function, and dynamic code execution
+  </Card>
+  <Card title="Sandbox Escape" icon="door-open">
+    Isolated vm context with no access to Node.js APIs or globals
+  </Card>
+  <Card title="Prototype Pollution" icon="virus">
+    Blocked at AST level and isolated at runtime
+  </Card>
+  <Card title="Resource Exhaustion" icon="infinity">
+    Timeouts, iteration limits, and tool call caps
+  </Card>
+  <Card title="Information Leakage" icon="eye">
+    Stack traces and file paths sanitized from outputs
+  </Card>
+  <Card title="Recursive Execution" icon="arrows-rotate">
+    Self-reference guard blocks codecall:* tool calls
+  </Card>
+</CardGroup>
+
+### What CodeCall Does NOT Protect Against
+
+<Warning>
+  CodeCall is not a silver bullet. Defense-in-depth means combining CodeCall with other security measures.
+</Warning>
+
+| Threat | Mitigation |
+|--------|------------|
+| **Tool abuse** | Use `enabledInCodeCall: false` on sensitive tools |
+| **Algorithmic complexity** | Scripts can run O(n²) within limits - monitor performance |
+| **Memory exhaustion** | Large arrays/objects within timeout - set reasonable limits |
+| **Tool side effects** | Tool calls have real effects - use read-only tools where possible |
+| **Business logic bugs** | Script logic errors are not security issues |
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="AST Guard" icon="shield-check" href="/docs/guides/ast-guard">
+    Deep dive into AST validation rules, presets, and custom rule creation
+  </Card>
+  <Card title="Enclave" icon="lock" href="/docs/guides/enclave">
+    Runtime sandbox configuration, sidecar storage, and advanced options
+  </Card>
+  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/frontmcp/blob/main/libs/ast-guard/SECURITY-AUDIT.md">
+    Full list of 67 blocked attack vectors with examples
+  </Card>
+  <Card title="Configuration" icon="gear" href="/docs/plugins/codecall/configuration">
+    Complete configuration reference for security settings
+  </Card>
+</CardGroup>

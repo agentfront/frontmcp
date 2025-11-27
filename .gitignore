@@ -90,3 +90,5 @@ docs/docs.backup.json
 /libs/ast-guard/coverage/ast-guard/prettify.js
 /libs/ast-guard/coverage/ast-guard/sort-arrow-sprite.png
 /libs/ast-guard/coverage/ast-guard/sorter.js
+
+**/.cache/

@@ -28,6 +28,10 @@ import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
     ttl: 0, // No caching - each invocation is unique
     slideWindow: false,
   },
+  codecall: {
+    enabledInCodeCall: false,
+    visibleInListTools: true,
+  },
   description: invokeToolDescription,
   inputSchema: invokeToolInputSchema,
   outputSchema: invokeToolOutputSchema,

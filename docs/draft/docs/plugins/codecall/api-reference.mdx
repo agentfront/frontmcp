@@ -1,0 +1,553 @@
+---
+title: API Reference
+sidebarTitle: API Reference
+description: Complete reference for CodeCall meta-tools - search, describe, execute, and invoke.
+icon: book
+---
+
+CodeCall exposes four meta-tools that replace direct tool access. This page documents the complete API for each tool with request/response schemas and examples.
+
+---
+
+## codecall:search
+
+Search for tools by natural language query using semantic embeddings.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:search",
+  "input": {
+    "query": "string (required) - Natural language search query",
+    "topK": "number (optional, default: 5) - Maximum results to return",
+    "filter": {
+      "appIds": ["string"] // (optional) - Limit to specific apps
+    }
+  }
+}
+```
+
+### Response Schema
+
+```json
+{
+  "tools": [
+    {
+      "name": "string - Tool name (e.g., 'users:list')",
+      "appId": "string - Owning app ID",
+      "description": "string - Tool description",
+      "score": "number - Relevance score (0-1)"
+    }
+  ],
+  "totalIndexed": "number - Total tools in index"
+}
+```
+
+### Examples
+
+<CodeGroup>
+```json Search All Apps
+{
+  "tool": "codecall:search",
+  "input": {
+    "query": "get user profile information",
+    "topK": 5
+  }
+}
+```
+
+```json Filter by App
+{
+  "tool": "codecall:search",
+  "input": {
+    "query": "list all invoices",
+    "topK": 10,
+    "filter": {
+      "appIds": ["billing", "payments"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "tools": [
+    {
+      "name": "users:getProfile",
+      "appId": "user-service",
+      "description": "Get user profile by ID with full details",
+      "score": 0.94
+    },
+    {
+      "name": "users:list",
+      "appId": "user-service",
+      "description": "List all users with pagination and filtering",
+      "score": 0.78
+    },
+    {
+      "name": "auth:whoami",
+      "appId": "auth-service",
+      "description": "Get current authenticated user info",
+      "score": 0.72
+    }
+  ],
+  "totalIndexed": 156
+}
+```
+
+### Search Strategy
+
+CodeCall supports two embedding strategies:
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `tfidf` | TF-IDF text matching (default) | Fast, no model loading, works offline |
+| `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model |
+
+```ts
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'tfidf',      // or 'embedding'
+    similarityThreshold: 0.3,
+  },
+});
+```
+
+---
+
+## codecall:describe
+
+Get detailed schemas and documentation for specific tools.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:describe",
+  "input": {
+    "toolNames": ["string (required) - Array of tool names to describe"]
+  }
+}
+```
+
+### Response Schema
+
+```json
+{
+  "tools": [
+    {
+      "name": "string - Tool name",
+      "appId": "string - Owning app ID",
+      "description": "string - Full description",
+      "inputSchema": { /* JSON Schema */ },
+      "outputSchema": { /* JSON Schema or null */ },
+      "annotations": {
+        "destructiveHint": "boolean (optional)",
+        "idempotentHint": "boolean (optional)",
+        "openWorldHint": "boolean (optional)"
+      },
+      "usageExample": {
+        "description": "string - Example description",
+        "code": "string - Example AgentScript code"
+      }
+    }
+  ],
+  "notFound": ["string (optional) - Tool names that weren't found"]
+}
+```
+
+### Example
+
+<CodeGroup>
+```json Request
+{
+  "tool": "codecall:describe",
+  "input": {
+    "toolNames": ["users:list", "users:getById"]
+  }
+}
+```
+
+```json Response
+{
+  "tools": [
+    {
+      "name": "users:list",
+      "appId": "user-service",
+      "description": "List users with optional filtering and pagination",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["active", "inactive", "pending"],
+            "description": "Filter by user status"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["admin", "user", "guest"],
+            "description": "Filter by role"
+          },
+          "limit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Maximum results per page"
+          },
+          "offset": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0,
+            "description": "Pagination offset"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/User" }
+          },
+          "total": { "type": "number" },
+          "hasMore": { "type": "boolean" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "usageExample": {
+        "description": "List active users with pagination",
+        "code": "const result = await callTool('users:list', { status: 'active', limit: 50 });\nreturn result.users;"
+      }
+    }
+  ],
+  "notFound": []
+}
+```
+</CodeGroup>
+
+### Security Note
+
+<Warning>
+  `codecall:describe` will not return information about CodeCall meta-tools themselves. Attempting to describe `codecall:execute` returns the tool in `notFound`.
+</Warning>
+
+---
+
+## codecall:execute
+
+Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:execute",
+  "input": {
+    "script": "string (required) - JavaScript code to execute",
+    "context": { /* (optional) - Read-only context available as codecallContext */ },
+    "allowedTools": ["string (optional) - Whitelist of allowed tool names"]
+  }
+}
+```
+
+### Response Schema
+
+**Success:**
+```json
+{
+  "status": "ok",
+  "result": "any - Return value from script",
+  "logs": ["string (optional) - Console output if enabled"]
+}
+```
+
+**Error Responses:**
+
+<AccordionGroup>
+  <Accordion title="Syntax Error">
+    ```json
+    {
+      "status": "syntax_error",
+      "error": {
+        "message": "Unexpected token at line 5",
+        "location": { "line": 5, "column": 12 }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Validation Error (AST)">
+    ```json
+    {
+      "status": "illegal_access",
+      "error": {
+        "kind": "IllegalBuiltinAccess",
+        "message": "Identifier 'eval' is not allowed in AgentScript"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Runtime Error">
+    ```json
+    {
+      "status": "runtime_error",
+      "error": {
+        "source": "script",
+        "message": "Cannot read property 'name' of undefined",
+        "name": "TypeError"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Tool Error">
+    ```json
+    {
+      "status": "tool_error",
+      "error": {
+        "source": "tool",
+        "toolName": "users:list",
+        "message": "Rate limit exceeded",
+        "code": "RATE_LIMIT"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Timeout">
+    ```json
+    {
+      "status": "timeout",
+      "error": {
+        "message": "Script execution timed out after 3500ms"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Example
+
+<CodeGroup>
+```json Request
+{
+  "tool": "codecall:execute",
+  "input": {
+    "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a.email) };",
+    "context": {
+      "tenantId": "tenant-123"
+    }
+  }
+}
+```
+
+```json Response
+{
+  "status": "ok",
+  "result": {
+    "adminCount": 3,
+    "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
+  }
+}
+```
+</CodeGroup>
+
+### AgentScript API
+
+Inside `codecall:execute` scripts, these functions are available:
+
+#### callTool(name, input, options?)
+
+Call a tool and get the result.
+
+```ts
+// Basic call
+const users = await callTool('users:list', { limit: 100 });
+
+// With error handling option
+const result = await callTool('users:get', { id: 'invalid' }, {
+  throwOnError: false  // Returns { success, data, error } instead of throwing
+});
+
+if (result.success) {
+  return result.data;
+} else {
+  return { error: result.error.message };
+}
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `throwOnError` | `boolean` | `true` | Throw on error or return result object |
+
+#### getTool(name)
+
+Get metadata about a tool (name, description, schemas).
+
+```ts
+const meta = getTool('users:list');
+console.log(meta.description);
+console.log(meta.inputSchema);
+```
+
+#### codecallContext
+
+Read-only context object passed in the request.
+
+```ts
+// Access context
+const tenantId = codecallContext.tenantId;
+const userId = codecallContext.userId;
+
+// Cannot modify
+codecallContext.tenantId = 'other'; // ❌ Throws error (frozen object)
+```
+
+#### console (if enabled)
+
+Standard console methods, captured in response logs.
+
+```ts
+console.log('Processing users...');
+console.warn('Large dataset detected');
+console.error('Validation failed');
+```
+
+<Note>
+  Console is only available if `vm.allowConsole: true` in plugin config. Logs are returned in the `logs` array of the response.
+</Note>
+
+---
+
+## codecall:invoke
+
+Direct tool invocation without JavaScript execution. Useful for simple single-tool calls.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:invoke",
+  "input": {
+    "tool": "string (required) - Tool name to invoke",
+    "input": { /* (required) - Input to pass to the tool */ }
+  }
+}
+```
+
+### Response Schema
+
+**Success:**
+```json
+{
+  "status": "ok",
+  "result": "any - Tool return value"
+}
+```
+
+**Error:**
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "string - Error code",
+    "message": "string - Error message"
+  }
+}
+```
+
+### Example
+
+<CodeGroup>
+```json Request
+{
+  "tool": "codecall:invoke",
+  "input": {
+    "tool": "users:getById",
+    "input": { "id": "user-123" }
+  }
+}
+```
+
+```json Response
+{
+  "status": "ok",
+  "result": {
+    "id": "user-123",
+    "email": "alice@example.com",
+    "name": "Alice Smith",
+    "role": "admin",
+    "status": "active"
+  }
+}
+```
+</CodeGroup>
+
+### When to Use Invoke vs Execute
+
+| Use `codecall:invoke` | Use `codecall:execute` |
+|-----------------------|------------------------|
+| Single tool call | Multiple tool calls |
+| No data transformation needed | Filter/join/transform results |
+| Latency-sensitive (no VM overhead) | Complex orchestration logic |
+| Simple CRUD operations | Conditional workflows |
+
+---
+
+## Error Codes Reference
+
+| Code | Status | Description | Recovery |
+|------|--------|-------------|----------|
+| `SYNTAX_ERROR` | `syntax_error` | JavaScript syntax error | Fix syntax at indicated location |
+| `VALIDATION_ERROR` | `illegal_access` | AST validation failed | Remove blocked construct |
+| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:* tool | Use regular tools only |
+| `TOOL_NOT_FOUND` | `tool_error` | Tool doesn't exist | Check tool name spelling |
+| `ACCESS_DENIED` | `tool_error` | Tool not in allowedTools | Add to allowlist |
+| `EXECUTION_ERROR` | `runtime_error` | Runtime error in script | Debug script logic |
+| `TIMEOUT` | `timeout` | Exceeded time limit | Optimize or increase timeout |
+| `TOOL_EXECUTION_ERROR` | `tool_error` | Tool threw an error | Check tool input |
+
+---
+
+## Rate Limiting
+
+CodeCall meta-tools respect FrontMCP's rate limiting:
+
+```ts
+import { RateLimitPlugin } from '@frontmcp/plugins';
+
+@App({
+  plugins: [
+    CodeCallPlugin.init({ ... }),
+    RateLimitPlugin.init({
+      rules: [
+        { tool: 'codecall:execute', limit: 10, window: '1m' },
+        { tool: 'codecall:search', limit: 100, window: '1m' },
+      ],
+    }),
+  ],
+})
+```
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="AgentScript Guide" icon="code" href="/docs/plugins/codecall/agentscript">
+    Learn the AgentScript language in depth
+  </Card>
+  <Card title="Configuration" icon="gear" href="/docs/plugins/codecall/configuration">
+    Configure meta-tool behavior and limits
+  </Card>
+</CardGroup>

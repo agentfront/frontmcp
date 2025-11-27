@@ -1,6 +1,5 @@
-import {ClassType, FactoryType, Type, ValueType} from '../interfaces';
-import {PluginMetadata} from '../metadata';
-import {ProviderRecord} from "./provider.record";
+import { ClassType, FactoryType, ProviderType, Type, ValueType } from '../interfaces';
+import { PluginMetadata } from '../metadata';
 
 export enum PluginKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
@@ -11,33 +10,27 @@ export enum PluginKind {
 
 export interface PluginClassTokenRecord {
   kind: PluginKind.CLASS_TOKEN;
-  provide: Type,
+  provide: Type;
   metadata: PluginMetadata;
-  providers?: ProviderRecord[];
+  providers?: ProviderType[];
 }
 
 export interface PluginClassRecord extends ClassType<any> {
   kind: PluginKind.CLASS;
   metadata: PluginMetadata;
-  providers?: ProviderRecord[];
+  providers?: ProviderType[];
 }
 
 export interface PluginFactoryRecord extends FactoryType<any, any[]> {
   kind: PluginKind.FACTORY;
   metadata: PluginMetadata;
-  providers?: ProviderRecord[];
+  providers?: ProviderType[];
 }
 
 export interface PluginValueRecord extends ValueType<any> {
   kind: PluginKind.VALUE;
   metadata: PluginMetadata;
-  providers?: ProviderRecord[];
+  providers?: ProviderType[];
 }
 
-export type PluginRecord =
-  | PluginClassTokenRecord
-  | PluginClassRecord
-  | PluginFactoryRecord
-  | PluginValueRecord
-
-
+export type PluginRecord = PluginClassTokenRecord | PluginClassRecord | PluginFactoryRecord | PluginValueRecord;

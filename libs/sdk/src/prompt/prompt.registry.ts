@@ -29,6 +29,7 @@ import { PromptInstance } from './prompt.instance';
 import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from './prompt.types';
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
+import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -450,11 +451,15 @@ export default class PromptRegistry
    * Get the MCP capabilities for prompts.
    * These are reported to clients during initialization.
    */
-  getCapabilities(): { listChanged: boolean } {
-    return {
-      // List change notifications are supported if we have any prompts registered
-      listChanged: this.hasAny(),
-    };
+  getCapabilities(): Partial<ServerCapabilities> {
+    return this.hasAny()
+      ? {
+          prompts: {
+            // List change notifications are only supported when prompts are registered
+            listChanged: true,
+          },
+        }
+      : {};
   }
 }
 
