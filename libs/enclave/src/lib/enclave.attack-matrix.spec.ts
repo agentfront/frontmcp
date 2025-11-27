@@ -835,11 +835,10 @@ describe('Enclave Attack Matrix', () => {
       enclave.dispose();
     });
 
-    it.skip('ATK-44: should allow Date.now() for legitimate use', async () => {
-      // SKIP: Expression-only code doesn't return a value without explicit return
-      // This is a transformer limitation, not a security issue
+    it('ATK-44: should allow Date.now() for legitimate use', async () => {
       const enclave = new Enclave();
-      const code = `Date.now()`;
+      // AgentScript requires explicit return statements (like a function body)
+      const code = `return Date.now()`;
 
       const result = await enclave.run(code);
 

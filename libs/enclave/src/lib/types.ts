@@ -84,6 +84,18 @@ export interface SecurityLevelConfig {
    * Whether to allow functions in custom globals
    */
   allowFunctionsInGlobals: boolean;
+
+  /**
+   * Maximum total console output in bytes
+   * Prevents I/O flood attacks via console.log spam
+   */
+  maxConsoleOutputBytes: number;
+
+  /**
+   * Maximum number of console calls (log, warn, error, info)
+   * Prevents I/O flood attacks via excessive console calls
+   */
+  maxConsoleCalls: number;
 }
 
 /**
@@ -119,6 +131,8 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowUnboundedLoops: false,
     unicodeSecurityCheck: true,
     allowFunctionsInGlobals: false,
+    maxConsoleOutputBytes: 64 * 1024, // 64KB - prevent I/O flood attacks
+    maxConsoleCalls: 100,
   },
 
   /**
@@ -149,6 +163,8 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowUnboundedLoops: false,
     unicodeSecurityCheck: true,
     allowFunctionsInGlobals: false,
+    maxConsoleOutputBytes: 256 * 1024, // 256KB
+    maxConsoleCalls: 500,
   },
 
   /**
@@ -178,6 +194,8 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowUnboundedLoops: true,
     unicodeSecurityCheck: false,
     allowFunctionsInGlobals: false,
+    maxConsoleOutputBytes: 1024 * 1024, // 1MB
+    maxConsoleCalls: 1000,
   },
 
   /**
@@ -209,6 +227,8 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowUnboundedLoops: true,
     unicodeSecurityCheck: false,
     allowFunctionsInGlobals: true,
+    maxConsoleOutputBytes: 10 * 1024 * 1024, // 10MB
+    maxConsoleCalls: 10000,
   },
 };
 
@@ -352,6 +372,20 @@ export interface EnclaveConfig {
    * This function is called when the script calls __safe_callTool
    */
   toolHandler?: ToolHandler;
+
+  /**
+   * Maximum total console output in bytes
+   * Default: Determined by securityLevel (1MB for STANDARD)
+   * Prevents I/O flood attacks via console.log spam
+   */
+  maxConsoleOutputBytes?: number;
+
+  /**
+   * Maximum number of console calls (log, warn, error, info)
+   * Default: Determined by securityLevel (1000 for STANDARD)
+   * Prevents I/O flood attacks via excessive console calls
+   */
+  maxConsoleCalls?: number;
 }
 
 /**

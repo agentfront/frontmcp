@@ -159,6 +159,72 @@ function sanitizeStackTrace(stack: string | undefined, sanitize = true): string 
 const PROTECTED_PREFIXES = ['__safe_', '__ag_'];
 
 /**
+ * Console statistics for tracking I/O flood attacks
+ * @internal
+ */
+interface ConsoleStats {
+  totalBytes: number;
+  callCount: number;
+}
+
+/**
+ * Create a rate-limited console wrapper
+ * Security: Prevents I/O flood attacks via excessive console.log output
+ *
+ * @param config Configuration with maxConsoleOutputBytes and maxConsoleCalls
+ * @param stats Mutable stats object to track output across all console methods
+ * @returns Safe console object with rate limiting
+ */
+function createSafeConsole(
+  config: { maxConsoleOutputBytes: number; maxConsoleCalls: number },
+  stats: ConsoleStats
+): { log: typeof console.log; error: typeof console.error; warn: typeof console.warn; info: typeof console.info } {
+  const wrap = (method: (...args: unknown[]) => void) => (...args: unknown[]) => {
+    // Check call count limit BEFORE doing any work
+    stats.callCount++;
+    if (stats.callCount > config.maxConsoleCalls) {
+      throw new Error(
+        `Console call limit exceeded (max: ${config.maxConsoleCalls}). ` +
+        `This limit prevents I/O flood attacks.`
+      );
+    }
+
+    // Calculate output size
+    const output = args.map(a => {
+      if (a === undefined) return 'undefined';
+      if (a === null) return 'null';
+      if (typeof a === 'object') {
+        try {
+          return JSON.stringify(a);
+        } catch {
+          return String(a);
+        }
+      }
+      return String(a);
+    }).join(' ');
+
+    // Check output size limit
+    stats.totalBytes += output.length;
+    if (stats.totalBytes > config.maxConsoleOutputBytes) {
+      throw new Error(
+        `Console output size limit exceeded (max: ${config.maxConsoleOutputBytes} bytes). ` +
+        `This limit prevents I/O flood attacks.`
+      );
+    }
+
+    // Safe to call the real console method
+    method(...args);
+  };
+
+  return {
+    log: wrap(console.log.bind(console)),
+    error: wrap(console.error.bind(console)),
+    warn: wrap(console.warn.bind(console)),
+    info: wrap(console.info.bind(console)),
+  };
+}
+
+/**
  * Check if an identifier is protected
  */
 function isProtectedIdentifier(prop: string | symbol): boolean {
@@ -258,14 +324,17 @@ export class VmAdapter implements SandboxAdapter {
         }
       }
 
-      // Add console (bind to host console)
-      // These are just function references, safe to assign
-      (baseSandbox as any).console = {
-        log: console.log.bind(console),
-        error: console.error.bind(console),
-        warn: console.warn.bind(console),
-        info: console.info.bind(console),
-      };
+      // Add __safe_console with rate limiting to prevent I/O flood attacks
+      // Security: Limits total output bytes and call count
+      // Note: The agentscript transformer converts `console` → `__safe_console` in whitelist mode
+      const consoleStats: ConsoleStats = { totalBytes: 0, callCount: 0 };
+      (baseSandbox as any).__safe_console = createSafeConsole(
+        {
+          maxConsoleOutputBytes: config.maxConsoleOutputBytes,
+          maxConsoleCalls: config.maxConsoleCalls,
+        },
+        consoleStats
+      );
 
       // Wrap sandbox in protective Proxy to catch dynamic assignment attempts
       // Security: Prevents dynamic assignment like `this['__safe_callTool'] = malicious`

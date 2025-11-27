@@ -26,6 +26,8 @@ describe('Safe Runtime Reference Integration', () => {
       sanitizeStackTraces: false,
       maxSanitizeDepth: 20,
       maxSanitizeProperties: 500,
+      maxConsoleOutputBytes: 1024 * 1024,
+      maxConsoleCalls: 1000,
     },
     stats: {
       duration: 0,

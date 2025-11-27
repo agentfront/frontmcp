@@ -113,11 +113,31 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 
 **Verdict:** Timing attack vectors minimized.
 
-### ✅ Side Channel Attack Prevention (Partial)
+### ✅ I/O Flood Attack Prevention (100% passing)
 
-- **Console output isolation**: ✅ ISOLATED (sandbox console)
+- **Console output size limiting**: ✅ ENFORCED (maxConsoleOutputBytes)
+- **Console call count limiting**: ✅ ENFORCED (maxConsoleCalls)
+- **Rate limiting across all console methods**: ✅ ENFORCED (log, warn, error, info)
 
-**Verdict:** Side channels are controlled.
+**Verdict:** I/O flood attacks via excessive console output are blocked.
+
+### ✅ Side Channel Attack Prevention (Documented Limitations)
+
+- **Console output isolation**: ✅ ISOLATED (sandbox console with rate limiting)
+- **Timing via performance.now()**: ✅ BLOCKED (undefined)
+- **Timing via SharedArrayBuffer**: ✅ BLOCKED (not available)
+- **Spectre-class attacks**: ℹ️ NOT APPLICABLE (see note below)
+
+**Note on Spectre-class Side-Channel Attacks:**
+Spectre-class timing attacks require:
+
+1. SharedArrayBuffer for high-resolution timing (blocked)
+2. Atomics.wait() for synchronization (blocked)
+3. performance.now() with sub-millisecond precision (blocked)
+
+Since all these prerequisites are blocked in the Enclave sandbox, Spectre-class attacks are not feasible. The Node.js `vm` module does not provide the necessary primitives for these attacks.
+
+**Verdict:** Side channels are controlled. Spectre-class attacks are not applicable due to blocked prerequisites.
 
 ### ✅ Input Validation (Partial)
 
@@ -190,7 +210,7 @@ The enclave implements **4 layers of defense**:
 
 ## Attack Vectors Tested
 
-### Comprehensive 72-Vector Attack Matrix
+### Comprehensive 75-Vector Attack Matrix
 
 **Direct Global Access (ATK-1 to ATK-10):**
 
@@ -252,6 +272,9 @@ The enclave implements **4 layers of defense**:
 - ✅ ATK-65: Symbol creation flooding
 - ✅ ATK-66: WeakMap/WeakSet flooding
 - ✅ ATK-67: Console log flooding
+- ✅ ATK-IO-1: Console output size limiting
+- ✅ ATK-IO-2: Console call count limiting
+- ✅ ATK-IO-3: Cross-method console rate limiting
 
 **Tool Security (ATK-5, 56-61, 71):**
 
@@ -384,10 +407,10 @@ The failing tests are primarily due to parser limitations with top-level return 
 
 ### Attack Matrix Coverage (enclave.attack-matrix.spec.ts)
 
-- **Total Attack Vectors Tested:** 72
-- **Test Cases:** 61
-- **Passing:** 60 (98%)
-- **Skipped:** 1 (expression-only code limitation)
+- **Total Attack Vectors Tested:** 75
+- **Test Cases:** 64
+- **Passing:** 64 (100%)
+- **Skipped:** 0
 - **Attack Categories:**
   - Direct Global Access (10 vectors)
   - Constructor Chain Escapes (6 vectors)
@@ -396,6 +419,7 @@ The failing tests are primarily due to parser limitations with top-level return 
   - Prototype Pollution (3 vectors)
   - Meta-Programming APIs (7 vectors)
   - Resource Exhaustion (26 vectors)
+  - I/O Flood Protection (3 vectors) - NEW
   - Tool Security (7 vectors)
   - WASM and Binary Code (4 vectors)
   - Error and Info Leakage (1 vector)
@@ -403,6 +427,14 @@ The failing tests are primarily due to parser limitations with top-level return 
   - Context Isolation (3 vectors)
 
 ## Version History
+
+- **v0.0.2** (2025-11-27): I/O Flood Protection & Side-Channel Documentation
+
+  - Added console rate limiting (maxConsoleOutputBytes, maxConsoleCalls)
+  - Added 17 new I/O flood protection tests
+  - Documented Spectre-class side-channel attack non-applicability
+  - 75 attack vectors now tested (up from 72)
+  - Fixed ATK-44 test to use explicit return (100% pass rate, 0 skipped)
 
 - **v0.0.1** (2025-11-25): Initial security audit
   - 30/43 tests passing

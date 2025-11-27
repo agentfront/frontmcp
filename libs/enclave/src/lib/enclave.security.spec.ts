@@ -727,7 +727,7 @@ describe('Enclave Security Tests', () => {
   });
 
   describe('Side Channel Attack Prevention', () => {
-    it('should not allow console access (sandbox isolation)', async () => {
+    it('should allow console with rate limiting (I/O flood protection)', async () => {
       const enclave = new Enclave();
 
       const code = `
@@ -737,9 +737,32 @@ describe('Enclave Security Tests', () => {
 
       const result = await enclave.run(code);
 
-      // console is not a whitelisted global in the AgentScript sandbox
-      // This demonstrates sandbox isolation - code cannot access host console
+      // console is now available but rate-limited to prevent I/O flood attacks
+      // The transformer converts console → __safe_console which is rate-limited
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('done');
+
+      enclave.dispose();
+    });
+
+    it('should enforce console rate limits', async () => {
+      const enclave = new Enclave({
+        securityLevel: 'STRICT',
+        maxConsoleCalls: 5, // Very low limit for test
+      });
+
+      const code = `
+        for (let i = 0; i < 10; i++) {
+          console.log(i);
+        }
+        return 'done';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should hit console call limit
       expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('Console call limit exceeded');
 
       enclave.dispose();
     });

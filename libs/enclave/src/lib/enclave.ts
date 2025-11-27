@@ -54,6 +54,8 @@ function getConfigFromSecurityLevel(
   maxSanitizeDepth: number;
   maxSanitizeProperties: number;
   allowFunctionsInGlobals: boolean;
+  maxConsoleOutputBytes: number;
+  maxConsoleCalls: number;
 } {
   const levelConfig = SECURITY_LEVEL_CONFIGS[securityLevel];
 
@@ -65,6 +67,8 @@ function getConfigFromSecurityLevel(
     maxSanitizeDepth: options.maxSanitizeDepth ?? levelConfig.maxSanitizeDepth,
     maxSanitizeProperties: options.maxSanitizeProperties ?? levelConfig.maxSanitizeProperties,
     allowFunctionsInGlobals: options.allowFunctionsInGlobals ?? levelConfig.allowFunctionsInGlobals,
+    maxConsoleOutputBytes: options.maxConsoleOutputBytes ?? levelConfig.maxConsoleOutputBytes,
+    maxConsoleCalls: options.maxConsoleCalls ?? levelConfig.maxConsoleCalls,
   };
 }
 
@@ -136,6 +140,8 @@ export class Enclave {
     sanitizeStackTraces: boolean;
     maxSanitizeDepth: number;
     maxSanitizeProperties: number;
+    maxConsoleOutputBytes: number;
+    maxConsoleCalls: number;
   };
   private readonly securityLevel: SecurityLevel;
   private readonly validator: JSAstValidator;
@@ -170,6 +176,8 @@ export class Enclave {
       sanitizeStackTraces: securityConfig.sanitizeStackTraces,
       maxSanitizeDepth: securityConfig.maxSanitizeDepth,
       maxSanitizeProperties: securityConfig.maxSanitizeProperties,
+      maxConsoleOutputBytes: securityConfig.maxConsoleOutputBytes,
+      maxConsoleCalls: securityConfig.maxConsoleCalls,
       ...options,
       globals: {
         ...BASE_CONFIG.globals,
@@ -200,6 +208,7 @@ export class Enclave {
         'String',
         'Number',
         'Date',
+        'console',
         '__safe_callTool',
         '__safe_forOf',
         '__safe_for',
@@ -208,6 +217,7 @@ export class Enclave {
         '__safe_concat',
         '__safe_template',
         '__safe_parallel',
+        '__safe_console', // Transformed console with rate limiting
         ...customAllowedGlobals,
       ],
     }));
