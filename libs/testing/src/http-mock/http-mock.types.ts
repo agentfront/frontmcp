@@ -35,8 +35,8 @@ export interface HttpMockResponse {
   statusText?: string;
   /** Response headers */
   headers?: Record<string, string>;
-  /** Response body - string, object (will be JSON.stringify'd), or Buffer */
-  body?: string | Record<string, unknown> | Buffer | ArrayBuffer;
+  /** Response body - string, object/array (will be JSON.stringify'd), or Buffer */
+  body?: string | Record<string, unknown> | unknown[] | Buffer | ArrayBuffer;
   /** Delay before responding in ms */
   delay?: number;
 }
