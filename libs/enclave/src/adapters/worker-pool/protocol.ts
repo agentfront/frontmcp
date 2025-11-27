@@ -155,8 +155,8 @@ export interface ToolCallMessage {
   callId: string;
   /** Name of the tool to call */
   toolName: string;
-  /** Arguments for the tool */
-  args: unknown;
+  /** Arguments for the tool (must be object to match Zod schema) */
+  args: Record<string, unknown>;
 }
 
 /**

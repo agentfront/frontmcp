@@ -179,14 +179,15 @@ export class WorkerSlot extends EventEmitter {
    */
   private waitForReady(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new WorkerStartupError(`Worker ${this.id} startup timeout`));
-      }, this.options.startupTimeoutMs);
-
       const onReady = () => {
         clearTimeout(timeout);
         resolve();
       };
+
+      const timeout = setTimeout(() => {
+        this.off('ready', onReady); // Remove listener on timeout to prevent memory leak
+        reject(new WorkerStartupError(`Worker ${this.id} startup timeout`));
+      }, this.options.startupTimeoutMs);
 
       this.once('ready', onReady);
     });
@@ -239,6 +240,7 @@ export class WorkerSlot extends EventEmitter {
     }
 
     this.setStatus('terminating');
+    const worker = this._worker; // Capture reference to avoid race condition
 
     if (graceful) {
       // Send terminate message and wait
@@ -247,7 +249,11 @@ export class WorkerSlot extends EventEmitter {
       // Wait for graceful exit (with timeout)
       await Promise.race([
         new Promise<void>((resolve) => {
-          this._worker?.once('exit', () => resolve());
+          if (worker) {
+            worker.once('exit', () => resolve());
+          } else {
+            resolve();
+          }
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5000)),
       ]);
@@ -255,7 +261,11 @@ export class WorkerSlot extends EventEmitter {
 
     // Force terminate if still running
     if (this._worker) {
-      await this._worker.terminate();
+      try {
+        await this._worker.terminate();
+      } catch {
+        // Worker already exited
+      }
     }
 
     this.cleanup();
@@ -278,10 +288,6 @@ export class WorkerSlot extends EventEmitter {
    */
   async requestMemoryReport(timeoutMs = 1000): Promise<ResourceUsage> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Memory report timeout'));
-      }, timeoutMs);
-
       const handler = (msg: WorkerToMainMessage) => {
         if (msg.type === 'memory-report-result') {
           clearTimeout(timeout);
@@ -290,6 +296,11 @@ export class WorkerSlot extends EventEmitter {
           resolve(msg.usage);
         }
       };
+
+      const timeout = setTimeout(() => {
+        this.off('message', handler); // Remove listener on timeout to prevent memory leak
+        reject(new Error('Memory report timeout'));
+      }, timeoutMs);
 
       this.on('message', handler);
       this.sendMessage({ type: 'memory-report' });
@@ -313,6 +324,7 @@ export class WorkerSlot extends EventEmitter {
       this.emit('message', msg);
     } catch (error) {
       console.error(`Worker ${this.id} message parse error:`, error);
+      this.markForRecycle('protocol-error'); // Recycle on protocol errors (defensive)
     }
   }
 

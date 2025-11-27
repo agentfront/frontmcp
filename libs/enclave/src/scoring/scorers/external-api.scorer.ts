@@ -118,6 +118,17 @@ export class ExternalApiScorer extends BaseScorer {
         throw new Error('Invalid API response: missing score');
       }
 
+      // Validate risk level if present
+      const validRiskLevels = ['none', 'low', 'medium', 'high', 'critical'];
+      if (data.risk !== undefined && !validRiskLevels.includes(data.risk)) {
+        throw new Error(`Invalid API response: invalid risk level "${data.risk}"`);
+      }
+
+      // Validate signals array if present
+      if (data.signals !== undefined && !Array.isArray(data.signals)) {
+        throw new Error('Invalid API response: signals must be an array');
+      }
+
       return data;
     } finally {
       clearTimeout(timeout);

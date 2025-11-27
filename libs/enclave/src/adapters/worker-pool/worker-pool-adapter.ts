@@ -157,7 +157,9 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     }
 
     // Don't await - just trigger termination
-    Promise.allSettled(terminatePromises).catch(() => {});
+    Promise.allSettled(terminatePromises).catch((error) => {
+      console.error('Error during worker pool disposal:', error);
+    });
 
     this.slots.clear();
     this.rateLimiter.clear();
@@ -294,7 +296,9 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     for (let i = 0; i < excessCount; i++) {
       const slot = idleSlots[i];
       if (now - slot.lastActiveAt > this.config.idleTimeoutMs) {
-        slot.terminate(true).catch(() => {});
+        slot.terminate(true).catch((error) => {
+          console.error(`Failed to terminate idle worker ${slot.id}:`, error);
+        });
         this.slots.delete(slot.id);
       }
     }
@@ -331,7 +335,9 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       const watchdogId = setTimeout(() => {
         this._timeoutExecutions++;
         this._forcedTerminations++;
-        slot.terminate(false).catch(() => {});
+        slot.terminate(false).catch((error) => {
+          console.error('Watchdog termination failed:', error);
+        });
         reject(new WorkerTimeoutError());
       }, watchdogTimeout);
 

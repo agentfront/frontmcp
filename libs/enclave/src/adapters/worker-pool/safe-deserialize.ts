@@ -39,9 +39,12 @@ const MAX_DEPTH = 50;
  * @throws MessageValidationError if JSON is invalid
  */
 export function safeDeserialize(raw: string, maxSizeBytes?: number): unknown {
-  // Check size limit
-  if (maxSizeBytes !== undefined && raw.length > maxSizeBytes) {
-    throw new MessageSizeError(raw.length, maxSizeBytes);
+  // Check size limit (use actual byte length, not character count)
+  if (maxSizeBytes !== undefined) {
+    const byteLength = Buffer.byteLength(raw, 'utf-8');
+    if (byteLength > maxSizeBytes) {
+      throw new MessageSizeError(byteLength, maxSizeBytes);
+    }
   }
 
   try {

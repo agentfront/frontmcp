@@ -185,8 +185,9 @@ async function handleExecute(msg: ExecuteMessage): Promise<void> {
     });
   } finally {
     // Clear pending tool calls for this execution
+    // Use delimiter to avoid false positives (e.g., "req-1" matching "req-10-abc")
     for (const [callId, pending] of pendingToolCalls) {
-      if (callId.startsWith(msg.requestId)) {
+      if (callId.startsWith(`${msg.requestId}-`)) {
         pending.reject(new Error('Execution ended'));
         pendingToolCalls.delete(callId);
       }
