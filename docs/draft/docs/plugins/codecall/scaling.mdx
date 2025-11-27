@@ -189,25 +189,35 @@ CodeCall is stateless and scales horizontally.
 
 ### Architecture
 
-```
-┌─────────────┐     ┌─────────────────────────────────┐
-│  MCP Client │────▶│         Load Balancer           │
-└─────────────┘     └─────────────────────────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-              ┌──────────┐   ┌──────────┐   ┌──────────┐
-              │  Pod 1   │   │  Pod 2   │   │  Pod 3   │
-              │ CodeCall │   │ CodeCall │   │ CodeCall │
-              │ + Tools  │   │ + Tools  │   │ + Tools  │
-              └──────────┘   └──────────┘   └──────────┘
-                    │               │               │
-                    └───────────────┼───────────────┘
-                                    ▼
-                    ┌─────────────────────────────────┐
-                    │     Shared Backend Services     │
-                    │   (Database, Cache, etc.)       │
-                    └─────────────────────────────────┘
+```mermaid
+graph TD
+    %% Styling: Square corners, white bg, terminal look
+    classDef terminal fill:#fff,stroke:#333,stroke-width:1px,rx:0,ry:0,text-align:left;
+    classDef plain fill:#fff,stroke:#333,stroke-width:1px,rx:0,ry:0,text-align:center;
+
+    %% Nodes with HTML labels for width control
+    Client["<div style='padding:10px; font-weight:bold'>MCP Client</div>"]
+    LB["<div style='min-width:300px; padding:10px; font-weight:bold; text-align:center'>Load Balancer</div>"]
+
+    %% The Pods
+    P1["<div style='min-width:150px; text-align:center'><b>Pod 1</b><br/>CodeCall <> Tools</div>"]
+    P2["<div style='min-width:150px; text-align:center'><b>Pod 2</b><br/>CodeCall <> Tools</div>"]
+    P3["<div style='min-width:150px; text-align:center'><b>Pod 3</b><br/>CodeCall <> Tools</div>"]
+
+    %% Backend
+    Backend["<div style='min-width:300px; padding:10px; text-align:center'><b>Shared Backend Services</b><br/>(Database, Cache, etc.)</div>"]
+
+    %% Connections
+    Client --> LB
+    LB --> P1
+    LB --> P2
+    LB --> P3
+    P1 --> Backend
+    P2 --> Backend
+    P3 --> Backend
+
+    %% Apply Styles
+    class Client,LB,P1,P2,P3,Backend terminal;
 ```
 
 ### Shared Cache (Redis)
@@ -465,6 +475,251 @@ import { RateLimitPlugin } from '@frontmcp/plugins';
     CodeCallPlugin.init({ ... }),
   ],
 })
+```
+
+---
+
+## Audit Logging
+
+CodeCall provides comprehensive audit logging for compliance and security monitoring.
+
+### What Gets Logged
+
+| Event | Data Captured | Purpose |
+|-------|---------------|---------|
+| Script execution start | executionId, scriptHash, timestamp | Track execution lifecycle |
+| Tool calls | toolName, args (sanitized), duration, result | Audit trail of actions |
+| Security events | blocked construct, rule triggered | Security monitoring |
+| Scoring gate results | riskLevel, signals, score | Risk assessment audit |
+| Script completion | status, duration, toolCallCount | Performance tracking |
+
+### Enabling Audit Logging
+
+```ts
+import { AuditLogPlugin } from '@frontmcp/plugins';
+
+CodeCallPlugin.init({
+  audit: {
+    enabled: true,
+
+    // What to log
+    logScripts: true,          // Log script content (hashed by default)
+    logToolArgs: true,         // Log tool call arguments
+    logResults: false,         // Don't log result data (PII concerns)
+
+    // Redaction
+    redactFields: ['password', 'token', 'apiKey', 'secret'],
+
+    // External integration
+    sink: async (event) => {
+      await auditService.log(event);
+    },
+  },
+});
+```
+
+### Audit Event Schema
+
+```ts
+interface AuditEvent {
+  eventType: 'execution:start' | 'tool:call' | 'security:block' | 'execution:complete';
+  timestamp: string;          // ISO 8601
+  executionId: string;        // Unique execution identifier
+  tenantId?: string;          // From codecallContext
+  userId?: string;            // From codecallContext
+
+  // For tool:call events
+  tool?: {
+    name: string;
+    argsHash: string;         // SHA-256 of arguments (not raw args)
+    durationMs: number;
+    success: boolean;
+  };
+
+  // For security:block events
+  security?: {
+    rule: string;
+    construct: string;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+  };
+
+  // For execution:complete events
+  execution?: {
+    status: 'ok' | 'error' | 'timeout';
+    durationMs: number;
+    toolCallCount: number;
+    scoringResult?: {
+      riskLevel: string;
+      score: number;
+    };
+  };
+}
+```
+
+### Integration Examples
+
+<AccordionGroup>
+  <Accordion title="Datadog">
+    ```ts
+    audit: {
+      sink: async (event) => {
+        dogstatsd.increment('codecall.execution', 1, {
+          status: event.execution?.status,
+          tenant: event.tenantId,
+        });
+        dogstatsd.histogram('codecall.duration', event.execution?.durationMs);
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="AWS CloudWatch">
+    ```ts
+    import { CloudWatchLogsClient, PutLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
+
+    audit: {
+      sink: async (event) => {
+        await cloudwatch.send(new PutLogEventsCommand({
+          logGroupName: 'codecall-audit',
+          logStreamName: event.tenantId || 'default',
+          logEvents: [{ timestamp: Date.now(), message: JSON.stringify(event) }],
+        }));
+      },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Database">
+    ```ts
+    audit: {
+      sink: async (event) => {
+        await db.auditEvents.insert({
+          ...event,
+          createdAt: new Date(),
+        });
+      },
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Multi-Tenancy Patterns
+
+CodeCall supports multiple isolation strategies for multi-tenant deployments.
+
+### Tenant Context
+
+Pass tenant information via `codecallContext`:
+
+```json
+{
+  "tool": "codecall:execute",
+  "input": {
+    "script": "...",
+    "context": {
+      "tenantId": "acme-corp",
+      "userId": "user-123",
+      "permissions": ["read", "write"]
+    }
+  }
+}
+```
+
+### Per-Tenant Tool Filtering
+
+Restrict tools based on tenant:
+
+```ts
+CodeCallPlugin.init({
+  includeTools: (tool, context) => {
+    // Filter by tenant subscription
+    const tenantPlan = getTenantPlan(context.tenantId);
+
+    if (tenantPlan === 'free' && tool.metadata?.premium) {
+      return false;
+    }
+
+    // Filter by app ownership
+    if (tool.metadata?.codecall?.appId) {
+      return context.tenantApps?.includes(tool.metadata.codecall.appId);
+    }
+
+    return true;
+  },
+});
+```
+
+### Per-Tenant Configuration
+
+Different security levels per tenant:
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    // Dynamic preset based on tenant
+    preset: (context) => {
+      const trust = getTenantTrustLevel(context.tenantId);
+      return trust === 'enterprise' ? 'balanced' : 'secure';
+    },
+
+    // Dynamic timeout based on subscription
+    timeoutMs: (context) => {
+      return context.subscription === 'premium' ? 10000 : 3500;
+    },
+  },
+});
+```
+
+### Isolation Strategies
+
+| Strategy | Isolation Level | Cost | Use Case |
+|----------|-----------------|------|----------|
+| Shared pool | Low | $ | Dev/staging |
+| Tenant-specific limits | Medium | $$ | SaaS standard |
+| Separate worker pools | High | $$$ | Enterprise |
+| Dedicated instances | Maximum | $$$$ | Compliance-heavy |
+
+### Per-Tenant Resource Quotas
+
+```ts
+CodeCallPlugin.init({
+  quotas: {
+    enabled: true,
+
+    // Per-tenant limits
+    maxExecutionsPerMinute: (context) => {
+      const quotas = { free: 10, pro: 100, enterprise: 1000 };
+      return quotas[context.subscription] || 10;
+    },
+
+    maxToolCallsPerExecution: (context) => {
+      return context.subscription === 'enterprise' ? 500 : 100;
+    },
+
+    // Quota exceeded handler
+    onQuotaExceeded: (tenant, quotaType) => {
+      notifyTenant(tenant, `CodeCall quota exceeded: ${quotaType}`);
+      metrics.increment('codecall.quota.exceeded', { tenant, quotaType });
+    },
+  },
+});
+```
+
+### Audit Trail Separation
+
+Separate audit logs by tenant:
+
+```ts
+audit: {
+  sink: async (event) => {
+    // Route to tenant-specific log stream
+    const streamName = `codecall/${event.tenantId || 'default'}`;
+
+    await auditService.log(streamName, event);
+  },
+}
 ```
 
 ---

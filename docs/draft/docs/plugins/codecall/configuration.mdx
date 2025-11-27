@@ -317,6 +317,100 @@ CodeCallPlugin.init({
   </Tab>
 </Tabs>
 
+### Worker Pool Configuration (Advanced)
+
+For OS-level memory isolation, configure the Worker Pool adapter:
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    preset: 'secure',
+    adapter: 'worker_threads',  // Enable Worker Pool
+
+    workerPool: {
+      minWorkers: 2,              // Minimum warm workers
+      maxWorkers: 8,              // Maximum concurrent workers
+      memoryLimitPerWorker: 128 * 1024 * 1024,  // 128MB per worker
+      maxExecutionsPerWorker: 500,  // Recycle after N executions
+      maxMessagesPerSecond: 500,    // Rate limit per worker
+      maxPendingToolCalls: 50,      // Max concurrent tool calls
+      idleTimeoutMs: 30000,         // Release idle workers after 30s
+      queueTimeoutMs: 20000,        // Max queue wait time
+      maxQueueSize: 50,             // Max pending executions
+    },
+  },
+});
+```
+
+#### Worker Pool Presets by Security Level
+
+| Config | STRICT | SECURE | STANDARD | PERMISSIVE |
+|--------|--------|--------|----------|------------|
+| minWorkers | 2 | 2 | 2 | 4 |
+| maxWorkers | 4 | 8 | 16 | 32 |
+| memoryLimitPerWorker | 64MB | 128MB | 256MB | 512MB |
+| maxExecutionsPerWorker | 100 | 500 | 1,000 | 5,000 |
+| maxMessagesPerSecond | 100 | 500 | 1,000 | 5,000 |
+| maxPendingToolCalls | 10 | 50 | 100 | 1,000 |
+| maxQueueSize | 20 | 50 | 100 | 500 |
+| maxMessageSizeBytes | 1MB | 4MB | 16MB | 64MB |
+
+### Reference Sidecar Configuration (Pass-by-Reference)
+
+The Reference Sidecar handles large data transfer between scripts and tools. Instead of passing full data through the VM, large values are stored externally with reference IDs.
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    preset: 'secure',
+
+    sidecar: {
+      maxTotalSize: 64 * 1024 * 1024,     // 64MB total storage
+      maxReferenceSize: 16 * 1024 * 1024,  // 16MB per reference
+      extractionThreshold: 256 * 1024,     // Extract strings > 256KB
+      maxResolvedSize: 32 * 1024 * 1024,   // 32MB max when resolving
+      maxReferenceCount: 100,              // Max 100 references
+      maxResolutionDepth: 10,              // Max nesting depth
+      allowComposites: false,              // Block reference concatenation
+    },
+  },
+});
+```
+
+#### Sidecar Presets by Security Level
+
+| Config | STRICT | SECURE | STANDARD | PERMISSIVE |
+|--------|--------|--------|----------|------------|
+| maxTotalSize | 16MB | 64MB | 256MB | 1GB |
+| maxReferenceSize | 4MB | 16MB | 64MB | 256MB |
+| extractionThreshold | 64KB | 256KB | 1MB | 4MB |
+| maxResolvedSize | 8MB | 32MB | 128MB | 512MB |
+| maxReferenceCount | 50 | 100 | 500 | 1,000 |
+| maxResolutionDepth | 5 | 10 | 20 | 50 |
+| allowComposites | No | No | Yes | Yes |
+
+#### How Pass-by-Reference Works
+
+```mermaid
+sequenceDiagram
+    participant Script
+    participant Sidecar
+    participant Tool
+
+    Tool->>Sidecar: Returns large result (500KB)
+    Sidecar->>Sidecar: Store with ref ID
+    Sidecar->>Script: Return __REF_abc123__
+    Script->>Script: Process ref ID (not data)
+    Script->>Tool: Call with __REF_abc123__
+    Sidecar->>Tool: Resolve ref → actual data
+```
+
+**Benefits:**
+- Scripts don't need to handle large data in memory
+- VM stays lightweight and secure
+- Tool results can exceed VM memory limits
+- Reference IDs are opaque strings (no data leakage)
+
 ---
 
 ## Embedding Configuration
@@ -375,11 +469,78 @@ embedding: {
   Embedding strategy uses [VectoriaDB](/docs/guides/vectoriadb) internally. The model (~22MB) is downloaded on first use and cached locally.
 </Note>
 
+### Tool Search Tuning
+
+Fine-tune how `codecall:search` finds and ranks tools:
+
+```ts
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'tfidf',
+
+    search: {
+      // Term weighting (higher = more important)
+      weights: {
+        name: 2.0,         // Tool name matches
+        description: 3.0,  // Description matches (most important)
+        tags: 2.0,         // Tag matches
+      },
+
+      // Stop words to ignore during tokenization
+      stopWords: ['the', 'a', 'an', 'is', 'are', 'to', 'for'],
+
+      // Minimum score to include in results
+      minScore: 0.25,
+
+      // Maximum results to return
+      maxResults: 10,
+    },
+  },
+});
+```
+
+#### Scoring Mechanics
+
+When a user searches for "list users", the scoring works:
+
+```
+Tool: users:list
+- Name match "users" + "list": 2.0 × 2 = 4.0
+- Description "List all users in the system": 3.0 × 3 = 9.0
+- Tags ["users", "list", "admin"]: 2.0 × 2 = 4.0
+- Total: 17.0 (normalized)
+```
+
+#### Optimizing for Large Toolsets (100+)
+
+For large toolsets, consider these optimizations:
+
+```ts
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'embedding',  // Better semantic matching
+
+    search: {
+      // Pre-filter by namespace before semantic search
+      prefixFilter: true,
+
+      // Use approximate nearest neighbor for speed
+      useHNSW: true,
+      hnswEfConstruction: 200,  // Index quality
+      hnswEfSearch: 100,        // Search quality vs speed
+
+      // Batch indexing for startup performance
+      batchSize: 100,
+    },
+  },
+});
+```
+
 ---
 
 ## Direct Invocation
 
-Configure the `codecall:invoke` meta-tool:
+Configure the `codecall:invoke` meta-tool for direct tool calls without VM overhead:
 
 ```ts
 CodeCallPlugin.init({
@@ -389,6 +550,9 @@ CodeCallPlugin.init({
 
     // Optional: restrict to specific tools
     allowedTools: ['users:getById', 'billing:getInvoice'],
+
+    // Optional: timeout for direct calls (default: 30s)
+    timeoutMs: 30000,
   },
 });
 ```
@@ -400,6 +564,51 @@ CodeCallPlugin.init({
 | Single tool, no transformation | Multi-tool orchestration |
 | Latency-critical paths | Data filtering/joining |
 | Simple CRUD operations | Conditional logic |
+| Known tool name | Dynamic tool selection |
+
+### Performance Comparison
+
+```
+codecall:invoke (direct)
+├─ Parse input: ~0.1ms
+├─ Tool lookup: ~0.1ms
+├─ Tool execution: ~varies
+└─ Total overhead: ~0.2ms
+
+codecall:execute (VM)
+├─ Pre-scan: ~0.5ms
+├─ AST validation: ~1-2ms
+├─ Code transformation: ~0.5ms
+├─ AI scoring: ~1ms (if enabled)
+├─ VM execution: ~1-2ms
+├─ Tool execution: ~varies
+└─ Total overhead: ~4-6ms
+```
+
+### Error Response Format
+
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "TOOL_NOT_FOUND",
+    "message": "Tool 'users:delete' is not in the allowed list",
+    "tool": "users:delete",
+    "allowedTools": ["users:getById", "billing:getInvoice"]
+  }
+}
+```
+
+### Security Considerations
+
+<Warning>
+  Direct invocation bypasses the AI Scoring Gate. Only enable for tools you trust completely.
+</Warning>
+
+- **allowedTools**: Always specify an explicit allowlist in production
+- **No script execution**: Direct calls cannot run arbitrary code
+- **Same tool access rules**: Tool Access Control (whitelist/blacklist) still applies
+- **Audit logging**: Direct calls are logged the same as scripted calls
 
 ---
 
