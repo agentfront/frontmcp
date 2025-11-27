@@ -12,7 +12,7 @@
  */
 
 // Main Enclave class
-export { Enclave, runAgentScript } from './lib/enclave';
+export { Enclave, runAgentScript } from './enclave';
 
 // Types and interfaces
 export type {
@@ -29,10 +29,10 @@ export type {
   SecurityLevelConfig,
   ReferenceSidecarOptions,
   WorkerPoolConfig,
-} from './lib/types';
+} from './types';
 
 // Security level configurations
-export { SECURITY_LEVEL_CONFIGS } from './lib/types';
+export { SECURITY_LEVEL_CONFIGS } from './types';
 
 // AI Scoring Gate
 export {
@@ -54,7 +54,7 @@ export {
   // Constants
   DEFAULT_SCORING_CONFIG,
   RULE_THRESHOLDS,
-} from './lib/scoring';
+} from './scoring';
 
 export type {
   // Scorer interface
@@ -80,10 +80,10 @@ export type {
   ScoringCacheConfig,
   LocalLlmConfig,
   ExternalApiConfig,
-} from './lib/scoring';
+} from './scoring';
 
 // Safe runtime utilities
-export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './lib/safe-runtime';
+export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './safe-runtime';
 
 // Reference Sidecar (pass-by-reference support)
 export {
@@ -106,7 +106,7 @@ export {
   ResolutionLimitError,
   CompositeHandle,
   isCompositeHandle,
-} from './lib/sidecar';
+} from './sidecar';
 
 // Worker Pool Adapter (OS-level memory isolation)
 export {
@@ -139,4 +139,4 @@ export {
   QueueStats,
   MemoryMonitor,
   MemoryMonitorStats,
-} from './lib/adapters/worker-pool';
+} from './adapters/worker-pool';
