@@ -1,0 +1,40 @@
+{
+  "name": "testing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/testing/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-tsc": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/testing/dist",
+        "main": "libs/testing/src/index.ts",
+        "tsConfig": "libs/testing/tsconfig.lib.json",
+        "assets": ["README.md", "LICENSE", "libs/testing/jest-preset.js"]
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-tsc"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/testing/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/testing/jest.config.ts"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/testing/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    }
+  }
+}
