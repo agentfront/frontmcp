@@ -153,8 +153,13 @@ export type {
   TestUser,
 } from './fixtures';
 
-// Re-export expect from Jest for convenience
-export { expect } from '@jest/globals';
+// ═══════════════════════════════════════════════════════════════════
+// EXPECT (Primary API)
+// ═══════════════════════════════════════════════════════════════════
+
+// Export the pre-typed expect with MCP matchers (Playwright-style approach)
+// This provides proper typing without relying on global namespace augmentation
+export { expect } from './expect';
 
 // ═══════════════════════════════════════════════════════════════════
 // CUSTOM MATCHERS
@@ -162,9 +167,6 @@ export { expect } from '@jest/globals';
 
 export { mcpMatchers } from './matchers';
 export type { McpMatchers } from './matchers';
-
-// Import type augmentation for Jest matchers
-import './matchers/matcher-types';
 
 // ═══════════════════════════════════════════════════════════════════
 // INTERCEPTORS & MOCKING

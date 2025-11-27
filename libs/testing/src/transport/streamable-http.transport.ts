@@ -48,6 +48,11 @@ export class StreamableHttpTransport implements McpTransport {
     this.connectionCount++;
 
     try {
+      // If no auth token provided, request anonymous token from FrontMCP SDK
+      if (!this.authToken) {
+        await this.requestAnonymousToken();
+      }
+
       // StreamableHTTP doesn't require an explicit connection step
       // The session is established on the first request
       this.state = 'connected';
@@ -55,6 +60,47 @@ export class StreamableHttpTransport implements McpTransport {
     } catch (error) {
       this.state = 'error';
       throw error;
+    }
+  }
+
+  /**
+   * Request an anonymous token from the FrontMCP OAuth endpoint
+   * This allows the test client to authenticate without user interaction
+   */
+  private async requestAnonymousToken(): Promise<void> {
+    const clientId = crypto.randomUUID();
+    const tokenUrl = `${this.config.baseUrl}/oauth/token`;
+
+    this.log(`Requesting anonymous token from ${tokenUrl}`);
+
+    try {
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          grant_type: 'anonymous',
+          client_id: clientId,
+          resource: this.config.baseUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.log(`Failed to get anonymous token: ${response.status} ${errorText}`);
+        // Continue without token - server may allow unauthenticated access
+        return;
+      }
+
+      const tokenResponse = await response.json();
+      if (tokenResponse.access_token) {
+        this.authToken = tokenResponse.access_token;
+        this.log('Anonymous token acquired successfully');
+      }
+    } catch (error) {
+      this.log(`Error requesting anonymous token: ${error}`);
+      // Continue without token - server may allow unauthenticated access
     }
   }
 
@@ -94,7 +140,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/mcp`;
+    const url = `${this.config.baseUrl}/`;
     this.log(`POST ${url}`, message);
 
     const controller = new AbortController();
@@ -133,7 +179,8 @@ export class StreamableHttpTransport implements McpTransport {
           },
         };
       } else {
-        // Parse JSON-RPC response
+        // Parse response - may be JSON or SSE
+        const contentType = response.headers.get('content-type') ?? '';
         const text = await response.text();
         this.log('Response:', text);
 
@@ -144,6 +191,9 @@ export class StreamableHttpTransport implements McpTransport {
             id: message.id ?? null,
             result: undefined,
           };
+        } else if (contentType.includes('text/event-stream')) {
+          // Parse SSE response - extract data from event stream
+          jsonResponse = this.parseSSEResponse(text, message.id);
         } else {
           jsonResponse = JSON.parse(text) as JsonRpcResponse;
         }
@@ -179,7 +229,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/mcp`;
+    const url = `${this.config.baseUrl}/`;
     this.log(`POST ${url} (notification)`, message);
 
     const controller = new AbortController();
@@ -220,7 +270,7 @@ export class StreamableHttpTransport implements McpTransport {
     const headers = this.buildHeaders();
     this.lastRequestHeaders = headers;
 
-    const url = `${this.config.baseUrl}/mcp`;
+    const url = `${this.config.baseUrl}/`;
     this.log(`POST ${url} (raw)`, data);
 
     const controller = new AbortController();
@@ -340,7 +390,7 @@ export class StreamableHttpTransport implements McpTransport {
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Accept: 'application/json, text/event-stream',
     };
 
     // Add auth token
@@ -371,5 +421,47 @@ export class StreamableHttpTransport implements McpTransport {
     if (this.config.debug) {
       console.log(`[StreamableHTTP] ${message}`, data ?? '');
     }
+  }
+
+  /**
+   * Parse SSE (Server-Sent Events) response format
+   * SSE format is:
+   * event: message
+   * id: xxx
+   * data: {"jsonrpc":"2.0",...}
+   *
+   * @param text - The raw SSE response text
+   * @param requestId - The original request ID
+   * @returns Parsed JSON-RPC response
+   */
+  private parseSSEResponse(text: string, requestId: string | number | undefined): JsonRpcResponse {
+    const lines = text.split('\n');
+    let jsonData: string | null = null;
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        jsonData = line.slice(6); // Remove 'data: ' prefix
+        break;
+      }
+    }
+
+    if (jsonData) {
+      try {
+        return JSON.parse(jsonData) as JsonRpcResponse;
+      } catch {
+        this.log('Failed to parse SSE data as JSON:', jsonData);
+      }
+    }
+
+    // Fallback: return error response
+    return {
+      jsonrpc: '2.0',
+      id: requestId ?? null,
+      error: {
+        code: -32700,
+        message: 'Failed to parse SSE response',
+        data: text,
+      },
+    };
   }
 }
