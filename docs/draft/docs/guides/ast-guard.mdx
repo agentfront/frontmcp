@@ -93,26 +93,26 @@ if (!result.valid) {
 
 These limits protect against parser crashes and cannot be overridden:
 
-| Limit | Maximum | Purpose |
-|-------|---------|---------|
-| `ABSOLUTE_MAX_INPUT_SIZE` | 100MB | Prevents memory exhaustion |
-| `ABSOLUTE_MAX_NESTING` | 200 levels | Prevents parser stack overflow |
-| `ABSOLUTE_MAX_LINE_LENGTH` | 100,000 chars | Prevents minified/obfuscated DoS |
-| `ABSOLUTE_MAX_LINES` | 1,000,000 | Prevents extremely long files |
-| `ABSOLUTE_MAX_STRING` | 5MB | Prevents huge embedded strings |
-| `ABSOLUTE_MAX_REGEX_LENGTH` | 1,000 chars | Prevents ReDoS via complex patterns |
+| Limit                       | Maximum       | Purpose                             |
+| --------------------------- | ------------- | ----------------------------------- |
+| `ABSOLUTE_MAX_INPUT_SIZE`   | 100MB         | Prevents memory exhaustion          |
+| `ABSOLUTE_MAX_NESTING`      | 200 levels    | Prevents parser stack overflow      |
+| `ABSOLUTE_MAX_LINE_LENGTH`  | 100,000 chars | Prevents minified/obfuscated DoS    |
+| `ABSOLUTE_MAX_LINES`        | 1,000,000     | Prevents extremely long files       |
+| `ABSOLUTE_MAX_STRING`       | 5MB           | Prevents huge embedded strings      |
+| `ABSOLUTE_MAX_REGEX_LENGTH` | 1,000 chars   | Prevents ReDoS via complex patterns |
 
 ### Pre-Scanner Preset Comparison
 
-| Config | AgentScript | STRICT | SECURE | STANDARD | PERMISSIVE |
-|--------|-------------|--------|--------|----------|------------|
-| maxInputSize | 100KB | 500KB | 1MB | 5MB | 10MB |
-| maxLineLength | 2,000 | 5,000 | 8,000 | 10,000 | 50,000 |
-| maxLines | 1,000 | 2,000 | 5,000 | 10,000 | 100,000 |
-| maxNestingDepth | 20 | 30 | 40 | 50 | 100 |
-| regexMode | `block` | `analyze` | `analyze` | `analyze` | `allow` |
-| blockBidiPatterns | YES | YES | YES | NO | NO |
-| blockInvisibleChars | YES | YES | NO | NO | NO |
+| Config              | AgentScript | STRICT    | SECURE    | STANDARD  | PERMISSIVE |
+| ------------------- | ----------- | --------- | --------- | --------- | ---------- |
+| maxInputSize        | 100KB       | 500KB     | 1MB       | 5MB       | 10MB       |
+| maxLineLength       | 2,000       | 5,000     | 8,000     | 10,000    | 50,000     |
+| maxLines            | 1,000       | 2,000     | 5,000     | 10,000    | 100,000    |
+| maxNestingDepth     | 20          | 30        | 40        | 50        | 100        |
+| regexMode           | `block`     | `analyze` | `analyze` | `analyze` | `allow`    |
+| blockBidiPatterns   | YES         | YES       | YES       | NO        | NO         |
+| blockInvisibleChars | YES         | YES       | NO        | NO        | NO         |
 
 ### Regex Handling Modes
 
@@ -134,14 +134,14 @@ const result = analyzeForReDoS('(a+)+', 'catastrophic');
 
 The pre-scanner detects these dangerous regex patterns:
 
-| Pattern | Score | Example | Risk |
-|---------|-------|---------|------|
-| Nested quantifier | 90 | `(a+)+` | Exponential backtracking |
-| Star in repetition | 85 | `(a+){2,}` | Exponential backtracking |
-| Repetition in star | 85 | `(a{2,})+` | Exponential backtracking |
-| Overlapping alternation | 80 | `(a|ab)+` | Exponential backtracking |
-| Greedy backtracking | 75 | `(.*a)+` | Polynomial backtracking |
-| Multiple greedy | 70 | `.*foo.*bar` | Polynomial backtracking |
+| Pattern                 | Score | Example      | Risk                     |
+| ----------------------- | ----- | ------------ | ------------------------ | ------------------------ |
+| Nested quantifier       | 90    | `(a+)+`      | Exponential backtracking |
+| Star in repetition      | 85    | `(a+){2,}`   | Exponential backtracking |
+| Repetition in star      | 85    | `(a{2,})+`   | Exponential backtracking |
+| Overlapping alternation | 80    | `(a          | ab)+`                    | Exponential backtracking |
+| Greedy backtracking     | 75    | `(.*a)+`     | Polynomial backtracking  |
+| Multiple greedy         | 70    | `.*foo.*bar` | Polynomial backtracking  |
 
 ---
 
@@ -476,9 +476,10 @@ const rule = new StaticCallTargetRule({
 ```
 
 This blocks:
+
 - `callTool(toolName, args);` - Variable reference
 - `callTool("tool" + suffix, args);` - Concatenation
-- `callTool(\`tool_${id}\`, args);` - Template with expressions
+- `callTool(\`tool\_${id}\`, args);` - Template with expressions
 - `callTool(cond ? "a" : "b", args);` - Ternary expression
 
 ### NoRegexLiteralRule

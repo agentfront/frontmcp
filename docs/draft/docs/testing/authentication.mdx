@@ -13,6 +13,7 @@ Testing authentication is critical for MCP servers that require authorization. T
 ## Why Test Authentication?
 
 Authentication tests verify that your server:
+
 - Rejects requests without valid tokens
 - Accepts requests with valid tokens
 - Enforces token expiration
@@ -44,14 +45,14 @@ test('basic token creation', async ({ mcp, auth }) => {
 
 ### Token Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `sub` | `string` | Yes | Subject (user identifier) |
-| `scopes` | `string[]` | No | OAuth scopes |
-| `email` | `string` | No | Email claim |
-| `name` | `string` | No | Name claim |
-| `claims` | `Record<string, unknown>` | No | Additional custom claims |
-| `expiresIn` | `number` | No | Token lifetime in seconds (default: 3600) |
+| Option      | Type                      | Required | Description                               |
+| ----------- | ------------------------- | -------- | ----------------------------------------- |
+| `sub`       | `string`                  | Yes      | Subject (user identifier)                 |
+| `scopes`    | `string[]`                | No       | OAuth scopes                              |
+| `email`     | `string`                  | No       | Email claim                               |
+| `name`      | `string`                  | No       | Name claim                                |
+| `claims`    | `Record<string, unknown>` | No       | Additional custom claims                  |
+| `expiresIn` | `number`                  | No       | Token lifetime in seconds (default: 3600) |
 
 ### Custom Claims
 
@@ -90,11 +91,11 @@ test('using pre-built users', async ({ mcp, auth }) => {
 
 ### User Definitions
 
-| User | `sub` | Scopes |
-|------|-------|--------|
-| `admin` | `test-admin` | `['*']` (all scopes) |
-| `user` | `test-user` | `['read', 'write']` |
-| `readOnly` | `test-readonly` | `['read']` |
+| User       | `sub`           | Scopes               |
+| ---------- | --------------- | -------------------- |
+| `admin`    | `test-admin`    | `['*']` (all scopes) |
+| `user`     | `test-user`     | `['read', 'write']`  |
+| `readOnly` | `test-readonly` | `['read']`           |
 
 ---
 
@@ -363,12 +364,14 @@ test('admin can perform privileged operations', async ({ server, auth }) => {
 ## Best Practices
 
 **Do:**
+
 - Test both positive (valid token) and negative (invalid/expired) cases
 - Test scope enforcement for all protected operations
 - Use pre-built test users for common scenarios
 - Clean up created clients after multi-user tests
 
 **Don't:**
+
 - Hard-code tokens in tests (always use `auth.createToken()`)
 - Skip expiration testing
 - Assume scopes are enforced without testing

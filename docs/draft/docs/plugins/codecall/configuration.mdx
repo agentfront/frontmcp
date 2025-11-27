@@ -48,11 +48,11 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior |
-|---------------|----------|
-| `list_tools` | Only CodeCall meta-tools visible |
-| CodeCall | All tools searchable and callable |
-| Override | Set `visibleInListTools: true` per tool |
+| Tool Location | Behavior                                |
+| ------------- | --------------------------------------- |
+| `list_tools`  | Only CodeCall meta-tools visible        |
+| CodeCall      | All tools searchable and callable       |
+| Override      | Set `visibleInListTools: true` per tool |
 
 **Best for:** Large toolsets (20+), OpenAPI adapters, clean client experience.
 
@@ -66,10 +66,10 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior |
-|---------------|----------|
-| `list_tools` | All tools visible (default MCP behavior) |
-| CodeCall | Only tools with `enabledInCodeCall: true` |
+| Tool Location | Behavior                                  |
+| ------------- | ----------------------------------------- |
+| `list_tools`  | All tools visible (default MCP behavior)  |
+| CodeCall      | Only tools with `enabledInCodeCall: true` |
 
 **Best for:** Gradual migration, mixed direct/CodeCall access.
 
@@ -83,10 +83,10 @@ CodeCallPlugin.init({
 });
 ```
 
-| Tool Location | Behavior |
-|---------------|----------|
-| `list_tools` | Based on `visibleInListTools` (default: true) |
-| CodeCall | Based on `enabledInCodeCall` (default: false) |
+| Tool Location | Behavior                                      |
+| ------------- | --------------------------------------------- |
+| `list_tools`  | Based on `visibleInListTools` (default: true) |
+| CodeCall      | Based on `enabledInCodeCall` (default: false) |
 
 **Best for:** Small toolsets, fine-grained control.
 
@@ -115,11 +115,11 @@ Control individual tool behavior with the `codecall` metadata field:
 
 ### Metadata by Mode
 
-| Mode | `enabledInCodeCall` default | `visibleInListTools` default |
-|------|----------------------------|------------------------------|
-| `codecall_only` | `true` | `false` |
-| `codecall_opt_in` | `false` | `true` |
-| `metadata_driven` | `false` | `true` |
+| Mode              | `enabledInCodeCall` default | `visibleInListTools` default |
+| ----------------- | --------------------------- | ---------------------------- |
+| `codecall_only`   | `true`                      | `false`                      |
+| `codecall_opt_in` | `false`                     | `true`                       |
+| `metadata_driven` | `false`                     | `true`                       |
 
 ### Common Patterns
 
@@ -238,12 +238,12 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset | Timeout | Max Iterations | Console | Use Case |
-|--------|---------|----------------|---------|----------|
-| `locked_down` | 2s | 2,000 | No | Ultra-sensitive environments |
-| `secure` | 3.5s | 5,000 | Yes | **Production default** |
-| `balanced` | 5s | 10,000 | Yes | Complex workflows |
-| `experimental` | 10s | 20,000 | Yes | Development only |
+| Preset         | Timeout | Max Iterations | Console | Use Case                     |
+| -------------- | ------- | -------------- | ------- | ---------------------------- |
+| `locked_down`  | 2s      | 2,000          | No      | Ultra-sensitive environments |
+| `secure`       | 3.5s    | 5,000          | Yes     | **Production default**       |
+| `balanced`     | 5s      | 10,000         | Yes     | Complex workflows            |
+| `experimental` | 10s     | 20,000         | Yes     | Development only             |
 
 ### Preset Details
 
@@ -344,16 +344,16 @@ CodeCallPlugin.init({
 
 #### Worker Pool Presets by Security Level
 
-| Config | STRICT | SECURE | STANDARD | PERMISSIVE |
-|--------|--------|--------|----------|------------|
-| minWorkers | 2 | 2 | 2 | 4 |
-| maxWorkers | 4 | 8 | 16 | 32 |
-| memoryLimitPerWorker | 64MB | 128MB | 256MB | 512MB |
-| maxExecutionsPerWorker | 100 | 500 | 1,000 | 5,000 |
-| maxMessagesPerSecond | 100 | 500 | 1,000 | 5,000 |
-| maxPendingToolCalls | 10 | 50 | 100 | 1,000 |
-| maxQueueSize | 20 | 50 | 100 | 500 |
-| maxMessageSizeBytes | 1MB | 4MB | 16MB | 64MB |
+| Config                 | STRICT | SECURE | STANDARD | PERMISSIVE |
+| ---------------------- | ------ | ------ | -------- | ---------- |
+| minWorkers             | 2      | 2      | 2        | 4          |
+| maxWorkers             | 4      | 8      | 16       | 32         |
+| memoryLimitPerWorker   | 64MB   | 128MB  | 256MB    | 512MB      |
+| maxExecutionsPerWorker | 100    | 500    | 1,000    | 5,000      |
+| maxMessagesPerSecond   | 100    | 500    | 1,000    | 5,000      |
+| maxPendingToolCalls    | 10     | 50     | 100      | 1,000      |
+| maxQueueSize           | 20     | 50     | 100      | 500        |
+| maxMessageSizeBytes    | 1MB    | 4MB    | 16MB     | 64MB       |
 
 ### Reference Sidecar Configuration (Pass-by-Reference)
 
@@ -379,15 +379,15 @@ CodeCallPlugin.init({
 
 #### Sidecar Presets by Security Level
 
-| Config | STRICT | SECURE | STANDARD | PERMISSIVE |
-|--------|--------|--------|----------|------------|
-| maxTotalSize | 16MB | 64MB | 256MB | 1GB |
-| maxReferenceSize | 4MB | 16MB | 64MB | 256MB |
-| extractionThreshold | 64KB | 256KB | 1MB | 4MB |
-| maxResolvedSize | 8MB | 32MB | 128MB | 512MB |
-| maxReferenceCount | 50 | 100 | 500 | 1,000 |
-| maxResolutionDepth | 5 | 10 | 20 | 50 |
-| allowComposites | No | No | Yes | Yes |
+| Config              | STRICT | SECURE | STANDARD | PERMISSIVE |
+| ------------------- | ------ | ------ | -------- | ---------- |
+| maxTotalSize        | 16MB   | 64MB   | 256MB    | 1GB        |
+| maxReferenceSize    | 4MB    | 16MB   | 64MB     | 256MB      |
+| extractionThreshold | 64KB   | 256KB  | 1MB      | 4MB        |
+| maxResolvedSize     | 8MB    | 32MB   | 128MB    | 512MB      |
+| maxReferenceCount   | 50     | 100    | 500      | 1,000      |
+| maxResolutionDepth  | 5      | 10     | 20       | 50         |
+| allowComposites     | No     | No     | Yes      | Yes        |
 
 #### How Pass-by-Reference Works
 
@@ -406,6 +406,7 @@ sequenceDiagram
 ```
 
 **Benefits:**
+
 - Scripts don't need to handle large data in memory
 - VM stays lightweight and secure
 - Tool results can exceed VM memory limits
@@ -435,10 +436,10 @@ CodeCallPlugin.init({
 
 ### Strategy Comparison
 
-| Strategy | Speed | Relevance | Setup | Best For |
-|----------|-------|-----------|-------|----------|
-| `tfidf` | ⚡ Fast | Good | None | Most use cases, offline |
-| `embedding` | Slower | Better | Model download | Large toolsets (100+) |
+| Strategy    | Speed   | Relevance | Setup          | Best For                |
+| ----------- | ------- | --------- | -------------- | ----------------------- |
+| `tfidf`     | ⚡ Fast | Good      | None           | Most use cases, offline |
+| `embedding` | Slower  | Better    | Model download | Large toolsets (100+)   |
 
 ### TF-IDF Configuration
 
@@ -450,6 +451,7 @@ embedding: {
 ```
 
 TF-IDF extracts searchable text from:
+
 - Tool name (tokenized: `users:list` → `users`, `list`)
 - Description (weighted 3x)
 - Key terms from description (4+ characters, no stop words)
@@ -559,12 +561,12 @@ CodeCallPlugin.init({
 
 ### When to Use Direct Invoke
 
-| Use `codecall:invoke` | Use `codecall:execute` |
-|-----------------------|------------------------|
+| Use `codecall:invoke`          | Use `codecall:execute`   |
+| ------------------------------ | ------------------------ |
 | Single tool, no transformation | Multi-tool orchestration |
-| Latency-critical paths | Data filtering/joining |
-| Simple CRUD operations | Conditional logic |
-| Known tool name | Dynamic tool selection |
+| Latency-critical paths         | Data filtering/joining   |
+| Simple CRUD operations         | Conditional logic        |
+| Known tool name                | Dynamic tool selection   |
 
 ### Performance Comparison
 
@@ -662,12 +664,12 @@ export default class MyApp {}
 
 Override configuration via environment variables:
 
-| Variable | Overrides | Example |
-|----------|-----------|---------|
-| `CODECALL_VM_TIMEOUT` | `vm.timeoutMs` | `5000` |
-| `CODECALL_VM_PRESET` | `vm.preset` | `secure` |
-| `CODECALL_EMBEDDING_STRATEGY` | `embedding.strategy` | `tfidf` |
-| `CODECALL_MODE` | `mode` | `codecall_only` |
+| Variable                      | Overrides            | Example         |
+| ----------------------------- | -------------------- | --------------- |
+| `CODECALL_VM_TIMEOUT`         | `vm.timeoutMs`       | `5000`          |
+| `CODECALL_VM_PRESET`          | `vm.preset`          | `secure`        |
+| `CODECALL_EMBEDDING_STRATEGY` | `embedding.strategy` | `tfidf`         |
+| `CODECALL_MODE`               | `mode`               | `codecall_only` |
 
 ```bash
 CODECALL_VM_TIMEOUT=10000 CODECALL_MODE=codecall_opt_in npm start

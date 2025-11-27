@@ -7,7 +7,6 @@ icon: code
 
 **CodeCall** transforms how LLMs interact with large toolsets. Instead of exposing hundreds of tool definitions that overwhelm the context window, CodeCall provides a small meta-API where the model discovers, describes, and orchestrates tools by writing JavaScript.
 
-
 <img
   noZoom
   className="blog-full-image dark-img"
@@ -67,12 +66,12 @@ As MCP servers grow, `list_tools` becomes unmanageable:
 
 CodeCall collapses your entire toolset into **4 meta-tools**:
 
-| Meta-Tool | Purpose |
-|-----------|---------|
-| `codecall:search` | Find relevant tools by natural language query |
-| `codecall:describe` | Get detailed schemas for selected tools |
-| `codecall:execute` | Run JavaScript that orchestrates multiple tools |
-| `codecall:invoke` | Direct single-tool calls (optional, no VM overhead) |
+| Meta-Tool           | Purpose                                             |
+| ------------------- | --------------------------------------------------- |
+| `codecall:search`   | Find relevant tools by natural language query       |
+| `codecall:describe` | Get detailed schemas for selected tools             |
+| `codecall:execute`  | Run JavaScript that orchestrates multiple tools     |
+| `codecall:invoke`   | Direct single-tool calls (optional, no VM overhead) |
 
 ### How It Works
 
@@ -179,6 +178,7 @@ Now your MCP client sees only 4 tools instead of potentially hundreds:
     For a workflow fetching users and invoices:
     - **Direct calls**: 3+ model round-trips, each with full tool list
     - **CodeCall**: 1 round-trip, script handles orchestration
+
   </Accordion>
 
   <Accordion title="In-Tool Filtering" icon="filter">
@@ -199,6 +199,7 @@ Now your MCP client sees only 4 tools instead of potentially hundreds:
     1. Build complex REST endpoints for every filter combination
     2. Fetch all 1000 users into LLM context (~50K tokens) and filter there
     3. Make multiple paginated calls with model round-trips
+
   </Accordion>
 
   <Accordion title="Any LLM Support" icon="globe">
@@ -209,6 +210,7 @@ Now your MCP client sees only 4 tools instead of potentially hundreds:
     - Custom agents
 
     Your infrastructure, your choice.
+
   </Accordion>
 
   <Accordion title="Self-Hosted Security" icon="lock">
@@ -262,8 +264,6 @@ Every script goes through this 6-layer pipeline:
 
 <img noZoom className="blog-full-image light-img" src="/assets/banners/codecall-plugin/security-layers.light.png" />
 <img noZoom className="blog-full-image dark-img" src="/assets/banners/codecall-plugin/security-layers.dark.png" />
-
-
 
 ---
 
