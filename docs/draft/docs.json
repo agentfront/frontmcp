@@ -95,10 +95,13 @@
                 "icon": "shield-check",
                 "pages": [
                   "docs/authentication/overview",
-                  "docs/authentication/token",
+                  "docs/authentication/modes",
+                  "docs/authentication/local",
                   "docs/authentication/remote",
                   "docs/authentication/remote-proxy",
-                  "docs/authentication/local"
+                  "docs/authentication/progressive",
+                  "docs/authentication/token",
+                  "docs/authentication/production"
                 ]
               },
               {

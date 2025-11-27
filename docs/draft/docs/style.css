@@ -1,7 +1,7 @@
-.content-area.max-w-xl {
+#content-area.max-w-xl {
   max-width: 46rem;
 }
 
-.content-area.max-w-3xl {
+#content-area.max-w-3xl {
   max-width: 52rem;
 }

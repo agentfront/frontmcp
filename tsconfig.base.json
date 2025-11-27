@@ -26,6 +26,7 @@
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/ui": ["libs/ui/src/index.ts"],
+      "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "ast-guard": ["libs/ast-guard/dist/src/index.d.ts"],
       "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"],
       "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"],

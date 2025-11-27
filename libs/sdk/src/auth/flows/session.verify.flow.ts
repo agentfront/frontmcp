@@ -11,6 +11,7 @@ import {
   FlowPlan,
   AuthOptions,
   isTransparentMode,
+  isPublicMode,
   TransparentAuthOptions,
 } from '../../common';
 import 'reflect-metadata';
@@ -52,7 +53,7 @@ const AuthorizedSchema = z
 export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema]);
 
 const plan = {
-  pre: ['parseInput', 'requireAuthorizationHeader', 'verifyIfJwt'],
+  pre: ['parseInput', 'handlePublicMode', 'requireAuthorizationHeader', 'verifyIfJwt'],
   execute: ['deriveUser', 'parseSessionHeader', 'buildAuthorizedOutput'],
 } as const satisfies FlowPlan<string>;
 
@@ -113,6 +114,36 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       sessionProtocol,
       prmMetadataPath,
       prmMetadataHeader,
+    });
+  }
+
+  /**
+   * Handle public mode - allow anonymous access without requiring authorization
+   * In public mode, we create an anonymous authorization and respond immediately
+   */
+  @Stage('handlePublicMode')
+  async handlePublicMode() {
+    const authOptions = this.scope.auth?.options as AuthOptions | undefined;
+
+    // Skip if not public mode or if authorization header is present (authenticated public)
+    if (!authOptions || !isPublicMode(authOptions)) {
+      return;
+    }
+
+    // If token is present, let the normal verification flow handle it
+    if (this.state.token) {
+      return;
+    }
+
+    // Public mode without token - create anonymous authorization
+    const user = { sub: `anon:${Date.now()}`, iss: 'public', name: 'Anonymous' };
+    this.respond({
+      kind: 'authorized',
+      authorization: {
+        token: '',
+        user,
+        session: undefined,
+      },
     });
   }
 
