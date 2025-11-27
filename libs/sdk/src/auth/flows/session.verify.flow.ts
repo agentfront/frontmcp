@@ -138,8 +138,17 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
+    // Check transport config for stateless mode
+    const transportConfig = authOptions.transport;
+    const enableStatelessHttp = transportConfig?.enableStatelessHttp ?? false;
+
+    // If stateless HTTP is enabled and no session header provided,
+    // don't set a protocol - let decideIntent determine it based on request
+    const hasSessionHeader = !!this.state.sessionIdHeader;
+    const shouldSetProtocol = hasSessionHeader || !enableStatelessHttp;
+
     // Determine protocol from session header or default to streamable-http
-    const protocol = this.state.sessionProtocol ?? 'streamable-http';
+    const protocol = shouldSetProtocol ? this.state.sessionProtocol ?? 'streamable-http' : undefined;
     const now = Date.now();
 
     // Public mode without token - create anonymous authorization WITH stateful session
@@ -156,7 +165,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         nodeId: 'public-node',
         authSig: 'public', // No auth signature for public mode
         iat: Math.floor(now / 1000),
-        protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http',
+        // Only set protocol if we should (stateful mode or session header present)
+        // If undefined, decideIntent will determine the protocol based on request
+        protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http' | undefined,
       },
     };
 

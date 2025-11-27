@@ -15,6 +15,8 @@ import {
   intentSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
+  AuthOptions,
+  TransportConfigInput,
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
@@ -102,13 +104,18 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
   async router() {
     const { request } = this.rawInput;
     this.logger.verbose('check request decision');
+
+    // Get transport config from auth options (with defaults)
+    const authOptions = this.scope.auth?.options as AuthOptions | undefined;
+    const transportConfig = (authOptions?.transport ?? {}) as Partial<TransportConfigInput>;
+
     const decision = decideIntent(request, {
-      enableLegacySSE: true,
-      enableSseListener: true,
-      enableStatelessHttp: false,
-      enableStatefulHttp: false,
-      enableStreamableHttp: true,
-      requireSessionForStreamable: true,
+      enableLegacySSE: transportConfig.enableLegacySSE ?? false,
+      enableSseListener: transportConfig.enableSseListener ?? true,
+      enableStatelessHttp: transportConfig.enableStatelessHttp ?? false,
+      enableStatefulHttp: transportConfig.enableStatefulHttp ?? false,
+      enableStreamableHttp: transportConfig.enableStreamableHttp ?? true,
+      requireSessionForStreamable: transportConfig.requireSessionForStreamable ?? true,
       tolerateMissingAccept: true,
     });
 
@@ -226,7 +233,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     }) => intent === 'stateless-http',
   })
   async handleStatelessHttp() {
-    // this.scope.runFlow('mcp:transport:stateless-http', this.rawInput);
-    this.next();
+    const response = await this.scope.runFlow('handle:stateless-http', this.rawInput);
+    if (response) {
+      this.respond(response);
+    }
+    this.handled();
   }
 }

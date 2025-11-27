@@ -18,7 +18,7 @@ export interface HookMetadata<Name extends FlowName = FlowName, Stage = string, 
   type: HookStageType;
   flow: Name;
   stage: Stage;
-  target: Token;
+  target: Token | null; // null for TC39 decorators until resolved at execution time
   method: string;
   static?: boolean;
   owner?: EntryOwnerRef;

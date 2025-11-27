@@ -29,6 +29,9 @@ export class LocalTransporter implements Transporter {
         this.adapter = new TransportSSEAdapter(scope, key, onDispose ?? defaultOnDispose, res);
         break;
       case 'streamable-http':
+      case 'stateless-http':
+        // Both streamable-http and stateless-http use the same underlying adapter
+        // The difference is in how the transport is managed (singleton vs per-session)
         this.adapter = new TransportStreamableHttpAdapter(scope, key, onDispose ?? defaultOnDispose, res);
         break;
       default:

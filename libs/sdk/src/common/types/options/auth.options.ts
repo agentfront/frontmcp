@@ -258,6 +258,56 @@ export const incrementalAuthConfigSchema = z.object({
 });
 
 // ============================================
+// TRANSPORT CONFIG
+// Protocol enablement and behavior settings
+// ============================================
+
+/**
+ * Transport protocol configuration
+ * Controls which transport protocols are enabled and their behavior
+ */
+export const transportConfigSchema = z.object({
+  /**
+   * Enable legacy SSE transport (old HTTP+SSE protocol)
+   * @default false
+   */
+  enableLegacySSE: z.boolean().default(false),
+
+  /**
+   * Enable SSE listener for server-initiated messages (GET /mcp with Accept: text/event-stream)
+   * @default true
+   */
+  enableSseListener: z.boolean().default(true),
+
+  /**
+   * Enable streamable HTTP transport (POST with SSE response)
+   * @default true
+   */
+  enableStreamableHttp: z.boolean().default(true),
+
+  /**
+   * Enable stateless HTTP mode (requests without session ID)
+   * When enabled, allows requests without prior initialize
+   * Uses shared singleton transport for anonymous, per-token singleton for authenticated
+   * @default false
+   */
+  enableStatelessHttp: z.boolean().default(false),
+
+  /**
+   * Enable stateful HTTP transport (JSON-only responses)
+   * @default false
+   */
+  enableStatefulHttp: z.boolean().default(false),
+
+  /**
+   * Require session ID for streamable HTTP (non-stateless mode)
+   * When false, streamable HTTP requests don't require prior initialize
+   * @default true
+   */
+  requireSessionForStreamable: z.boolean().default(true),
+});
+
+// ============================================
 // PUBLIC MODE
 // No authentication required, anonymous access
 // ============================================
@@ -299,6 +349,12 @@ export const publicAuthOptionsSchema = z.object({
    * @default auto-generated
    */
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
+
+  /**
+   * Transport protocol configuration
+   * Controls which transports are enabled and their behavior
+   */
+  transport: transportConfigSchema.optional(),
 });
 
 // ============================================
@@ -343,6 +399,12 @@ export const transparentAuthOptionsSchema = z.object({
    * Public access config for anonymous users (when allowAnonymous=true)
    */
   publicAccess: publicAccessConfigSchema.optional(),
+
+  /**
+   * Transport protocol configuration
+   * Controls which transports are enabled and their behavior
+   */
+  transport: transportConfigSchema.optional(),
 });
 
 // ============================================
@@ -418,6 +480,12 @@ export const orchestratedLocalSchema = z.object({
    * @default { enabled: true, skippedAppBehavior: 'anonymous' }
    */
   incrementalAuth: incrementalAuthConfigSchema.optional(),
+
+  /**
+   * Transport protocol configuration
+   * Controls which transports are enabled and their behavior
+   */
+  transport: transportConfigSchema.optional(),
 });
 
 /**
@@ -493,6 +561,12 @@ export const orchestratedRemoteSchema = z.object({
    * @default { enabled: true, skippedAppBehavior: 'anonymous' }
    */
   incrementalAuth: incrementalAuthConfigSchema.optional(),
+
+  /**
+   * Transport protocol configuration
+   * Controls which transports are enabled and their behavior
+   */
+  transport: transportConfigSchema.optional(),
 });
 
 // Combined orchestrated schema
@@ -567,6 +641,12 @@ export type SkippedAppBehavior = z.infer<typeof skippedAppBehaviorSchema>;
  */
 export type ConsentConfig = z.infer<typeof consentConfigSchema>;
 export type ConsentConfigInput = z.input<typeof consentConfigSchema>;
+
+/**
+ * Transport protocol configuration
+ */
+export type TransportConfig = z.infer<typeof transportConfigSchema>;
+export type TransportConfigInput = z.input<typeof transportConfigSchema>;
 
 /**
  * Public mode options (output type with defaults applied)

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import {RawZodShape} from "../common.types";
-import {HttpRequestIntent} from "../../utils";
+import { RawZodShape } from '../common.types';
+import { HttpRequestIntent } from '../../utils';
 
 /**
  * Decoded JWT payload (if any) or empty object
@@ -17,21 +17,22 @@ export type UserClaim = {
   preferred_username?: string;
   name?: string;
   picture?: string;
-}
-export const userClaimSchema = z.object({
-  iss: z.string(),
-  sid: z.string().optional(),
-  sub: z.string(),
-  exp: z.number().optional(),
-  iat: z.number().optional(),
-  aud: z.union([z.string(), z.array(z.string())]).optional(),
-  email: z.string().optional(),
-  username: z.string().optional(),
-  preferred_username: z.string().optional(),
-  name: z.string().optional(),
-  picture: z.string().optional(),
-} satisfies RawZodShape<UserClaim>).passthrough();
-
+};
+export const userClaimSchema = z
+  .object({
+    iss: z.string(),
+    sid: z.string().optional(),
+    sub: z.string(),
+    exp: z.number().optional(),
+    iat: z.number().optional(),
+    aud: z.union([z.string(), z.array(z.string())]).optional(),
+    email: z.string().optional(),
+    username: z.string().optional(),
+    preferred_username: z.string().optional(),
+    name: z.string().optional(),
+    picture: z.string().optional(),
+  } satisfies RawZodShape<UserClaim>)
+  .passthrough();
 
 export type SessionIdPayload = {
   /* The actual node id that handle the transport session */
@@ -42,23 +43,16 @@ export type SessionIdPayload = {
   uuid: string;
   /* The timestamp of the session creation */
   iat: number;
-  /* The protocol used in existing transport */
-  protocol: HttpRequestIntent;
-}
+  /* The protocol used in existing transport - optional for stateless mode */
+  protocol?: HttpRequestIntent;
+};
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
   authSig: z.string(),
   uuid: z.string().uuid(),
   iat: z.number(),
-  protocol: z.enum([
-    'legacy-sse',
-    'sse',
-    'streamable-http',
-    'stateful-http',
-    'stateless-http',
-  ]),
+  protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
 } satisfies RawZodShape<SessionIdPayload>);
-
 
 export interface Authorization {
   token: string;
@@ -72,7 +66,7 @@ export interface Authorization {
 export const sessionIdSchema = z.object({
   id: z.string(),
   payload: sessionIdPayloadSchema,
-} satisfies RawZodShape<{ id: string, payload: SessionIdPayload }>);
+} satisfies RawZodShape<{ id: string; payload: SessionIdPayload }>);
 
 export const authorizationSchema = z.object({
   token: z.string(),

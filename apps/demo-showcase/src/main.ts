@@ -16,6 +16,14 @@ const port = parseInt(process.env['PORT'] ?? '3010', 10);
     issuer: 'demo-showcase',
     sessionTtl: 300, // 5 minute sessions for demo/testing
     anonymousScopes: ['read', 'write'],
+    // Transport config: enable stateless HTTP for public access without session ID
+    transport: {
+      enableStreamableHttp: true,
+      enableStatelessHttp: true, // Enable stateless HTTP for anonymous requests
+      requireSessionForStreamable: false, // Don't require session for streamable HTTP
+      enableLegacySSE: false,
+      enableSseListener: true,
+    },
   },
 })
 export default class Server {}
