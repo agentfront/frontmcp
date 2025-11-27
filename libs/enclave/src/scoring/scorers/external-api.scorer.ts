@@ -129,6 +129,23 @@ export class ExternalApiScorer extends BaseScorer {
         throw new Error('Invalid API response: signals must be an array');
       }
 
+      // Validate signal structure
+      if (data.signals !== undefined) {
+        for (const signal of data.signals) {
+          if (
+            typeof signal.id !== 'string' ||
+            typeof signal.score !== 'number' ||
+            typeof signal.description !== 'string' ||
+            typeof signal.level !== 'string'
+          ) {
+            throw new Error('Invalid API response: signal missing required fields');
+          }
+          if (!validRiskLevels.includes(signal.level)) {
+            throw new Error(`Invalid API response: invalid signal level "${signal.level}"`);
+          }
+        }
+      }
+
       return data;
     } finally {
       clearTimeout(timeout);

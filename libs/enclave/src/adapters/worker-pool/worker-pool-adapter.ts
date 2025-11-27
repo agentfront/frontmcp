@@ -173,7 +173,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
   // ============================================================================
 
   private async createAndAddSlot(): Promise<WorkerSlot> {
-    const slotId = `worker-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const slotId = `worker-${Date.now()}-${crypto.randomUUID()}`;
     const slot = new WorkerSlot(slotId, {
       memoryLimitMB: Math.round(this.config.memoryLimitPerWorker / 1024 / 1024),
     });
@@ -316,7 +316,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     code: string,
     context: ExecutionContext,
   ): Promise<ExecutionResult<T>> {
-    const requestId = `exec-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const requestId = `exec-${Date.now()}-${crypto.randomUUID()}`;
     const startTime = Date.now();
 
     // Serialize config
