@@ -156,9 +156,12 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       terminatePromises.push(slot.terminate(false));
     }
 
-    // Don't await - just trigger termination
-    Promise.allSettled(terminatePromises).catch((error) => {
-      console.error('Error during worker pool disposal:', error);
+    // Don't await - just trigger termination and log any failures
+    Promise.allSettled(terminatePromises).then((results) => {
+      const failures = results.filter((r) => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.error(`${failures.length} worker(s) failed to terminate during disposal`);
+      }
     });
 
     this.slots.clear();
@@ -356,6 +359,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
             // Execution complete
             clearTimeout(watchdogId);
             slot.off('message', messageHandler);
+            slot.off('error', errorHandler);
 
             const duration = Date.now() - startTime;
             const result = this.buildResult<T>(msg, duration);
@@ -367,6 +371,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
         } catch (error) {
           clearTimeout(watchdogId);
           slot.off('message', messageHandler);
+          slot.off('error', errorHandler);
           reject(error);
         }
       };

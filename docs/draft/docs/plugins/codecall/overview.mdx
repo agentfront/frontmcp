@@ -258,75 +258,12 @@ CodeCall is built on three battle-tested FrontMCP libraries:
   </Card>
 </CardGroup>
 
-### Security Pipeline
+Every script goes through this 6-layer pipeline:
 
-Every script goes through a 6-layer security pipeline:
+<img noZoom className="blog-full-image light-img" src="/assets/banners/codecall-plugin/security-layers.light.png" />
+<img noZoom className="blog-full-image dark-img" src="/assets/banners/codecall-plugin/security-layers.dark.png" />
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        SCRIPT INPUT                              │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 0: PRE-SCANNER (ast-guard)                               │
-│  • Block ReDoS, BiDi attacks before parsing                     │
-│  • Input size and nesting limits                                │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 1: AST VALIDATION (ast-guard)                            │
-│  • Parse JavaScript to AST                                       │
-│  • Block eval, Function, dangerous globals                       │
-│  • Block prototype manipulation                                  │
-│  • Enforce whitelist-only identifiers                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 2: CODE TRANSFORMATION                                    │
-│  • Wrap in async main function                                   │
-│  • Transform callTool → __safe_callTool (proxied)               │
-│  • Transform loops → iteration-limited versions                  │
-│  • Add resource tracking                                         │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3: AI SCORING GATE (Enclave)                             │
-│  • Semantic analysis via AST features                            │
-│  • Exfiltration pattern detection                                │
-│  • Sensitive field access tracking                               │
-│  • Risk scoring with configurable thresholds                     │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 4: RUNTIME SANDBOX (Enclave)                             │
-│  • Standard: Node.js vm (prototype isolation)                    │
-│  • Optional: Worker Pool (OS-level isolation)                    │
-│    - Dual-layer sandbox (worker thread + VM)                     │
-│    - Hard halt via worker.terminate()                            │
-│    - Per-worker memory limits                                    │
-│  • Controlled globals only (Math, JSON, Array, etc.)            │
-│  • Timeout enforcement and tool call counting                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 5: OUTPUT SANITIZATION                                    │
-│  • Remove stack traces                                           │
-│  • Scrub file paths                                              │
-│  • Truncate oversized outputs                                    │
-│  • Detect circular references                                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                       SAFE RESULT                                │
-└─────────────────────────────────────────────────────────────────┘
-```
+
 
 ---
 

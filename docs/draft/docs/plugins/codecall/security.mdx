@@ -31,53 +31,37 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
 
 Every script goes through this 6-layer pipeline:
 
+```mermaid
+graph TD
+    %% Define simple styling for the box border and background
+    classDef terminal fill:#fff,stroke:#333,stroke-width:1px,rx:0,ry:0,text-align:left;
+
+    %% Nodes with explicit HTML width wrappers
+    %% We use a div with min-width to FORCE the box to be wide
+
+    Input["<div style='min-width:400px; text-align:center; font-weight:bold;'>SCRIPT INPUT</div>"]
+
+    L0["<div style='min-width:400px'><b>LAYER 0: PRE-SCANNER (ast-guard)</b><br/>- Block ReDoS, BiDi attacks before parsing<br/>- Input size and nesting limits</div>"]
+
+    L1["<div style='min-width:400px'><b>LAYER 1: AST VALIDATION (ast-guard)</b><br/>- Parse JavaScript to AST<br/>- Block eval, Function, dangerous globals<br/>- Block prototype manipulation<br/>- Enforce whitelist-only identifiers</div>"]
+
+    L2["<div style='min-width:400px'><b>LAYER 2: CODE TRANSFORMATION</b><br/>- Wrap in async main function<br/>- Transform callTool -> proxied<br/>- Transform loops -> iteration-limited<br/>- Add resource tracking</div>"]
+
+    L3["<div style='min-width:400px'><b>LAYER 3: AI SCORING GATE (Enclave)</b><br/>- Semantic analysis via AST features<br/>- Exfiltration pattern detection<br/>- Sensitive field access tracking<br/>- Risk scoring</div>"]
+
+    L4["<div style='min-width:400px'><b>LAYER 4: RUNTIME SANDBOX (Enclave)</b><br/>- Standard: Node.js vm (prototype isolation)<br/>- Optional: Worker Pool (OS-level)<br/>- Controlled globals (Math, JSON, etc.)<br/>- Timeout enforcement</div>"]
+
+    L5["<div style='min-width:400px'><b>LAYER 5: OUTPUT SANITIZATION</b><br/>- Remove stack traces<br/>- Scrub file paths<br/>- Truncate oversized outputs<br/>- Detect circular references</div>"]
+
+    Result["<div style='min-width:400px; text-align:center; font-weight:bold;'>SAFE RESULT</div>"]
+
+    %% Connections
+    Input --> L0 --> L1 --> L2 --> L3 --> L4 --> L5 --> Result
+
+    %% Apply Styles
+    class Input,L0,L1,L2,L3,L4,L5,Result terminal;
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 0: PRE-SCANNER                                            │
-│  Defense-in-depth BEFORE parser runs                             │
-│  Library: ast-guard (pre-scanner module)                         │
-│  Blocks: ReDoS patterns, BiDi attacks, input size DoS, nesting  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 1: AST VALIDATION                                         │
-│  Static analysis before any code runs                            │
-│  Library: ast-guard                                              │
-│  Blocks: eval, Function, dangerous globals, prototype attacks    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 2: CODE TRANSFORMATION                                    │
-│  Rewrite code for safe execution                                 │
-│  Adds: main wrapper, safe proxies, iteration limits             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3: AI SCORING GATE (NEW)                                  │
-│  Semantic security analysis with pluggable scorers               │
-│  Library: Enclave (scoring module)                               │
-│  Detects: exfiltration patterns, bulk ops, sensitive access     │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 4: RUNTIME SANDBOX                                        │
-│  Execute in isolated context                                     │
-│  Library: Enclave                                                │
-│  Standard: Node.js vm | Optional: Worker Pool (worker_threads)  │
-│  Enforces: timeouts, iteration caps, tool call limits           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 5: OUTPUT SANITIZATION                                    │
-│  Clean results before returning                                  │
-│  Removes: stack traces, file paths, internal errors             │
-└─────────────────────────────────────────────────────────────────┘
-```
+
 
 ---
 

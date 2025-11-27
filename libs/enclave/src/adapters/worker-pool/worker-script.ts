@@ -246,8 +246,9 @@ function handleAbort(requestId: string): void {
   }
 
   // Reject all pending tool calls for this request
+  // Use delimiter to avoid false positives (e.g., "req-1" matching "req-10-abc")
   for (const [callId, pending] of pendingToolCalls) {
-    if (callId.startsWith(requestId)) {
+    if (callId.startsWith(`${requestId}-`)) {
       pending.reject(new Error('Execution aborted'));
       pendingToolCalls.delete(callId);
     }
@@ -371,7 +372,7 @@ function createProxiedCallTool(requestId: string, config: SerializedConfig) {
         requestId,
         callId,
         toolName,
-        args: sanitizeObject(args),
+        args: sanitizeObject(args) as Record<string, unknown>,
       });
     });
   };

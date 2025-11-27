@@ -15,7 +15,7 @@ import type { ExtractedFeatures, ScoringResult, ExternalApiConfig, RiskLevel } f
  */
 interface ApiResponse {
   score: number;
-  risk: RiskLevel;
+  risk?: RiskLevel;
   signals?: Array<{
     id: string;
     score: number;
