@@ -268,7 +268,17 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     // If slot is executing, we need to force terminate
     if (slot.isExecuting) {
       this._forcedTerminations++;
-      slot.terminate(false).catch(() => {});
+      slot
+        .terminate(false)
+        .then(() => {
+          this.slots.delete(slotId);
+          this.rateLimiter.reset(slotId);
+        })
+        .catch((error) => {
+          console.error('Failed to terminate memory-exceeded worker:', error);
+          this.slots.delete(slotId);
+          this.rateLimiter.reset(slotId);
+        });
     }
   }
 

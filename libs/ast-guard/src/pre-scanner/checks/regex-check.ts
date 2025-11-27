@@ -42,6 +42,24 @@ export const REDOS_THRESHOLDS = {
 } as const;
 
 /**
+ * JavaScript keywords that can be followed by a regex literal.
+ * These keywords complete a statement or expression, so / after them is a regex, not division.
+ */
+const REGEX_KEYWORD_PREFIXES = new Set([
+  'return',
+  'throw',
+  'case',
+  'typeof',
+  'void',
+  'delete',
+  'in',
+  'instanceof',
+  'new',
+  'yield',
+  'await',
+]);
+
+/**
  * Result of ReDoS analysis for a single pattern
  */
 export interface ReDoSAnalysisResult {
@@ -176,6 +194,8 @@ function findRegexLiterals(source: string): Array<{
 
   // Track context to distinguish regex from division
   let lastSignificantToken: 'operator' | 'identifier' | 'number' | 'close' | 'other' = 'other';
+  // Buffer for tracking identifier/keyword being scanned
+  let identifierBuffer = '';
 
   for (let i = 0; i < source.length; i++) {
     const char = source[i];
@@ -277,15 +297,27 @@ function findRegexLiterals(source: string): Array<{
 
     // Track token types for regex vs division detection
     if (isIdentifierChar(char)) {
-      lastSignificantToken = 'identifier';
-    } else if (isDigit(char)) {
-      lastSignificantToken = 'number';
-    } else if (char === ')' || char === ']') {
-      lastSignificantToken = 'close';
-    } else if (isOperator(char)) {
-      lastSignificantToken = 'operator';
-    } else if (!isWhitespace(char)) {
-      lastSignificantToken = 'other';
+      identifierBuffer += char;
+    } else {
+      // Check if the completed identifier is a keyword that allows regex
+      if (identifierBuffer) {
+        if (REGEX_KEYWORD_PREFIXES.has(identifierBuffer)) {
+          lastSignificantToken = 'other'; // Allows regex after keyword
+        } else {
+          lastSignificantToken = 'identifier'; // Regular identifier
+        }
+        identifierBuffer = '';
+      }
+      // Handle other token types
+      if (isDigit(char)) {
+        lastSignificantToken = 'number';
+      } else if (char === ')' || char === ']') {
+        lastSignificantToken = 'close';
+      } else if (isOperator(char)) {
+        lastSignificantToken = 'operator';
+      } else if (!isWhitespace(char)) {
+        lastSignificantToken = 'other';
+      }
     }
   }
 
@@ -476,41 +508,48 @@ export function analyzeForReDoS(pattern: string, level: 'catastrophic' | 'polyno
 /**
  * Calculate star height (nesting depth of quantifiers).
  * Star height > 1 indicates potential vulnerability.
+ *
+ * Uses a group stack to properly track nested quantified groups.
+ * For example, (a+)+ has star height 2:
+ * - Level 1: a+ (char with quantifier)
+ * - Level 2: (a+)+ (group containing quantified content, itself quantified)
  */
 export function calculateStarHeight(pattern: string): number {
   let maxHeight = 0;
-  let currentHeight = 0;
-  let inQuantifier = false;
+  const groupStack: boolean[] = []; // Track if each group level has quantified content
 
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i];
 
     if (char === '(') {
-      // Entering a group
-      if (inQuantifier) {
-        currentHeight++;
-        if (currentHeight > maxHeight) {
-          maxHeight = currentHeight;
-        }
-      }
+      groupStack.push(false); // Push new group, not yet containing quantified content
     } else if (char === ')') {
-      // Check if followed by quantifier
       const next = pattern[i + 1];
-      if (next === '+' || next === '*' || next === '?') {
-        inQuantifier = true;
-        currentHeight++;
-        if (currentHeight > maxHeight) {
-          maxHeight = currentHeight;
+      const hasQuantifier = next === '+' || next === '*' || next === '?';
+
+      if (hasQuantifier) {
+        // Count nested quantified groups including this one
+        const depth = groupStack.filter((g) => g).length + 1;
+        if (depth > maxHeight) {
+          maxHeight = depth;
         }
+        groupStack.pop();
+        // Mark parent group as containing quantified content
+        if (groupStack.length > 0) {
+          groupStack[groupStack.length - 1] = true;
+        }
+      } else {
+        groupStack.pop();
       }
-    } else if (char === '+' || char === '*') {
-      if (i > 0 && pattern[i - 1] !== ')') {
-        // Direct quantifier on character
-        currentHeight++;
-        if (currentHeight > maxHeight) {
-          maxHeight = currentHeight;
-        }
-        currentHeight--;
+    } else if ((char === '+' || char === '*') && pattern[i - 1] !== ')') {
+      // Direct quantifier on character within current group
+      const depth = groupStack.filter((g) => g).length + 1;
+      if (depth > maxHeight) {
+        maxHeight = depth;
+      }
+      // Mark current group as containing quantified content
+      if (groupStack.length > 0) {
+        groupStack[groupStack.length - 1] = true;
       }
     }
   }

@@ -262,6 +262,12 @@ export class ToolSearchService implements ToolSearch {
       includeTools: config.includeTools,
     };
 
+    // Validate mode parameter at runtime
+    const validModes = ['codecall_only', 'codecall_opt_in', 'metadata_driven'] as const;
+    if (!validModes.includes(this.config.mode as (typeof validModes)[number])) {
+      throw new Error(`Invalid CodeCall mode: ${this.config.mode}. Valid modes: ${validModes.join(', ')}`);
+    }
+
     // Initialize the appropriate vector database
     if (this.strategy === 'ml') {
       this.vectorDB = new VectoriaDB<ToolMetadata>({
@@ -313,18 +319,19 @@ export class ToolSearchService implements ToolSearch {
    * Handles tool change events by reindexing all tools from the snapshot
    */
   private async handleToolChange(tools: ToolEntry<any, any>[]): Promise<void> {
-    // Initialize ML model if needed (first time only)
-    if (!this.mlInitialized && this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
-      await this.vectorDB.initialize();
-      this.mlInitialized = true;
-    }
-
     // Clear and rebuild index
     this.vectorDB.clear();
 
     if (tools.length === 0) {
       this.initialized = true;
       return;
+    }
+
+    // Initialize ML model if needed (first time only, and only when we have tools)
+    // Deferred initialization avoids async operations when there's nothing to index
+    if (!this.mlInitialized && this.strategy === 'ml' && this.vectorDB instanceof VectoriaDB) {
+      await this.vectorDB.initialize();
+      this.mlInitialized = true;
     }
 
     // Filter tools based on CodeCall config and per-tool metadata
@@ -406,6 +413,11 @@ export class ToolSearchService implements ToolSearch {
           return false;
         }
         break;
+
+      default:
+        // This should never happen due to constructor validation
+        // but provides defense-in-depth and satisfies exhaustive checking
+        throw new Error(`Unknown CodeCall mode: ${this.config.mode}`);
     }
 
     // Apply custom includeTools filter if provided

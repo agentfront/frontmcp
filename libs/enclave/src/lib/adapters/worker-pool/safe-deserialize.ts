@@ -28,6 +28,10 @@ const MAX_DEPTH = 50;
  * - Enforces maximum nesting depth
  * - Enforces maximum message size
  *
+ * Note: We parse first, then sanitize recursively. This ensures proper depth
+ * tracking (the JSON.parse reviver processes bottom-up which makes depth
+ * tracking unreliable).
+ *
  * @param raw - Raw JSON string
  * @param maxSizeBytes - Maximum allowed message size (optional)
  * @returns Deserialized value
@@ -41,41 +45,47 @@ export function safeDeserialize(raw: string, maxSizeBytes?: number): unknown {
   }
 
   try {
-    let currentDepth = 0;
-
-    return JSON.parse(raw, (key, value) => {
-      // Strip dangerous keys
-      if (DANGEROUS_KEYS.has(key)) {
-        return undefined;
-      }
-
-      // Track depth for arrays and objects
-      if (typeof value === 'object' && value !== null) {
-        currentDepth++;
-        if (currentDepth > MAX_DEPTH) {
-          throw new MessageValidationError(`Message exceeds maximum depth of ${MAX_DEPTH}`);
-        }
-
-        // Create null-prototype objects to prevent prototype pollution
-        if (!Array.isArray(value)) {
-          const safeObj = Object.create(null);
-          for (const k of Object.keys(value)) {
-            if (!DANGEROUS_KEYS.has(k)) {
-              safeObj[k] = value[k];
-            }
-          }
-          return safeObj;
-        }
-      }
-
-      return value;
-    });
+    const parsed = JSON.parse(raw);
+    // Use sanitizeObject for proper recursive depth tracking
+    return sanitizeObjectWithDepthCheck(parsed, 0);
   } catch (error) {
     if (error instanceof MessageValidationError || error instanceof MessageSizeError) {
       throw error;
     }
     throw new MessageValidationError('Invalid JSON');
   }
+}
+
+/**
+ * Internal sanitization with depth checking that throws on exceeded depth
+ */
+function sanitizeObjectWithDepthCheck(value: unknown, depth: number): unknown {
+  if (depth > MAX_DEPTH) {
+    throw new MessageValidationError(`Message exceeds maximum depth of ${MAX_DEPTH}`);
+  }
+
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeObjectWithDepthCheck(item, depth + 1));
+  }
+
+  // Create a null-prototype object
+  const result = Object.create(null);
+
+  for (const key of Object.keys(value as object)) {
+    if (!DANGEROUS_KEYS.has(key)) {
+      result[key] = sanitizeObjectWithDepthCheck((value as Record<string, unknown>)[key], depth + 1);
+    }
+  }
+
+  return result;
 }
 
 /**

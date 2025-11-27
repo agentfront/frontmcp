@@ -191,6 +191,7 @@ export class MemoryMonitor extends EventEmitter {
 
       return usage;
     } catch {
+      this._checkFailureCount++;
       return null;
     }
   }

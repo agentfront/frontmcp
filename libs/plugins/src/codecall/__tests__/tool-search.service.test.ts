@@ -435,18 +435,21 @@ describe('ToolSearchService', () => {
       const { scope } = createMockScope([]);
       const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
       expect(service.getStrategy()).toBe('tfidf');
+      service.dispose();
     });
 
     it('should create service with ML strategy', async () => {
       const { scope } = createMockScope([]);
       const service = new ToolSearchService({ strategy: 'ml' }, scope);
       expect(service.getStrategy()).toBe('ml');
+      service.dispose();
     });
 
     it('should default to TF-IDF strategy', async () => {
       const { scope } = createMockScope([]);
       const service = new ToolSearchService({}, scope);
       expect(service.getStrategy()).toBe('tfidf');
+      service.dispose();
     });
 
     it('should accept embedding options', async () => {
@@ -460,6 +463,7 @@ describe('ToolSearchService', () => {
         scope,
       );
       expect(service.getStrategy()).toBe('tfidf');
+      service.dispose();
     });
 
     it('should default to codecall_only mode', async () => {
@@ -471,6 +475,8 @@ describe('ToolSearchService', () => {
       const newService = new ToolSearchService({}, newScope);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(newService.getTotalCount()).toBe(1);
+      service.dispose();
+      newService.dispose();
     });
   });
 
@@ -486,6 +492,54 @@ describe('ToolSearchService', () => {
       // Initialize should be a no-op
       await service.initialize();
       expect(service.getTotalCount()).toBe(1);
+
+      // Clean up subscription to prevent async cleanup issues
+      service.dispose();
+    });
+  });
+
+  describe('Constructor validation', () => {
+    it('should throw for invalid mode string', () => {
+      const { scope } = createMockScope([]);
+      expect(() => new ToolSearchService({ mode: 'invalid' as any }, scope)).toThrow('Invalid CodeCall mode: invalid');
+    });
+
+    it('should apply default mode when null is passed', () => {
+      const { scope } = createMockScope([]);
+      // When mode is explicitly null, it should default to 'codecall_only' (via nullish coalescing)
+      const service = new ToolSearchService({ mode: null as any }, scope);
+      expect(service.getStrategy()).toBe('tfidf');
+      service.dispose();
+    });
+
+    it('should throw for undefined mode when explicitly passed', () => {
+      const { scope } = createMockScope([]);
+      // When mode is explicitly undefined, it should default to 'codecall_only' and not throw
+      // This tests that the default value is applied before validation
+      const service = new ToolSearchService({ mode: undefined }, scope);
+      expect(service.getStrategy()).toBe('tfidf');
+      service.dispose();
+    });
+
+    it('should accept valid mode: codecall_only', () => {
+      const { scope } = createMockScope([]);
+      const service = new ToolSearchService({ mode: 'codecall_only' }, scope);
+      expect(service).toBeDefined();
+      service.dispose();
+    });
+
+    it('should accept valid mode: codecall_opt_in', () => {
+      const { scope } = createMockScope([]);
+      const service = new ToolSearchService({ mode: 'codecall_opt_in' }, scope);
+      expect(service).toBeDefined();
+      service.dispose();
+    });
+
+    it('should accept valid mode: metadata_driven', () => {
+      const { scope } = createMockScope([]);
+      const service = new ToolSearchService({ mode: 'metadata_driven' }, scope);
+      expect(service).toBeDefined();
+      service.dispose();
     });
   });
 });

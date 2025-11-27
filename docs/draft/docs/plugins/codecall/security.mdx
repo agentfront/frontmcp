@@ -91,8 +91,8 @@ Traditional security scanners operate on the AST (Abstract Syntax Tree), which m
 
 1. **Parser DoS**: Deeply nested brackets/braces can cause stack overflow in recursive descent parsers
 2. **ReDoS at Parse Time**: Complex regex literals can hang the parser
-3. **Memory Exhaustion**: Extremely large inputs can exhaust memory before validation
-4. **Trojan Source Attacks**: Unicode BiDi characters can make code appear different than it executes
+3. **Memory Exhaustion**: Very large inputs can exhaust memory before validation
+4. **Trojan Source Attacks**: Unicode BiDi characters can make code appear different from how it executes
 
 ### Mandatory Limits (Cannot Be Disabled)
 
@@ -125,7 +125,7 @@ These limits are enforced regardless of configuration:
     - U+2066 (Left-to-Right Isolate)
     - U+2069 (Pop Directional Isolate)
 
-    **Why:** Makes code appear different than it executes (CVE-2021-42574).
+    **Why:** Makes code appear different from how it executes (CVE-2021-42574).
   </Accordion>
 
   <Accordion title="Parser Stack Overflow" icon="layer-group">
@@ -212,7 +212,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - Zero-width characters
     - Invisible formatting characters
 
-    **Why:** Makes code appear different than it executes.
+    **Why:** Makes code appear different from how it executes.
   </Accordion>
 
   <Accordion title="Resource Exhaustion" icon="infinity">

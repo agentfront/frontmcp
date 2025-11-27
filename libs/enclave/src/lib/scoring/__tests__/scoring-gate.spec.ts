@@ -168,10 +168,16 @@ describe('ScoringGate', () => {
         const data = await callTool('data:search', { query: '*' });
       `);
 
-      // With blockThreshold of 30, the gate is properly configured
-      // The result depends on the actual score computed by the rule-based scorer
+      // Verify threshold behavior based on actual score
       expect(result.totalScore).toBeDefined();
       expect(typeof result.allowed).toBe('boolean');
+      // If score >= blockThreshold, should be blocked; otherwise allowed
+      const score = result.totalScore!;
+      if (score >= 30) {
+        expect(result.allowed).toBe(false);
+      } else {
+        expect(result.allowed).toBe(true);
+      }
       gate.dispose();
     });
 
@@ -187,10 +193,22 @@ describe('ScoringGate', () => {
         const data = await callTool('data:list', { limit: 100 });
       `);
 
-      // With warnThreshold of 10 and blockThreshold of 90, the gate is properly configured
-      // The result depends on the actual score computed by the rule-based scorer
+      // Verify threshold behavior based on actual score
       expect(result.totalScore).toBeDefined();
       expect(typeof result.warned).toBe('boolean');
+      // If score >= warnThreshold and < blockThreshold, should warn but allow
+      const score = result.totalScore!;
+      if (score >= 10 && score < 90) {
+        expect(result.warned).toBe(true);
+        expect(result.allowed).toBe(true);
+      } else if (score >= 90) {
+        // Should be blocked
+        expect(result.allowed).toBe(false);
+      } else {
+        // Below warn threshold - no warning
+        expect(result.warned).toBeFalsy();
+        expect(result.allowed).toBe(true);
+      }
       gate.dispose();
     });
   });
