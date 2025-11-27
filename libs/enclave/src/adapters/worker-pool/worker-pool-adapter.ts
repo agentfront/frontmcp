@@ -31,6 +31,7 @@ import {
   WorkerMemoryError,
   MessageValidationError,
   TooManyPendingCallsError,
+  QueueFullError,
 } from './errors';
 
 /**
@@ -190,7 +191,13 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     return slot;
   }
 
-  private async acquireSlot(signal?: AbortSignal): Promise<WorkerSlot> {
+  private async acquireSlot(signal?: AbortSignal, retryCount = 0): Promise<WorkerSlot> {
+    // Guard against infinite recursion in rapid slot recycling scenarios
+    const MAX_ACQUIRE_RETRIES = 3;
+    if (retryCount >= MAX_ACQUIRE_RETRIES) {
+      throw new QueueFullError(this.executionQueue.getStats().length, this.config.maxQueueSize);
+    }
+
     // Try to find an idle slot
     for (const slot of this.slots.values()) {
       if (slot.isIdle) {
@@ -212,8 +219,8 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     // Double check slot is still available
     const slot = this.slots.get(slotId);
     if (!slot || !slot.isIdle) {
-      // Slot was removed/recycled, try again
-      return this.acquireSlot(signal);
+      // Slot was removed/recycled, try again with incremented retry count
+      return this.acquireSlot(signal, retryCount + 1);
     }
 
     slot.acquire(`exec-${Date.now()}`);
@@ -268,11 +275,15 @@ export class WorkerPoolAdapter implements SandboxAdapter {
         .then(() => {
           this.slots.delete(slotId);
           this.rateLimiter.reset(slotId);
+          // Notify queue that a slot may be available for replacement
+          this.executionQueue.notifySlotAvailable(slotId);
         })
         .catch((error) => {
           console.error('Failed to terminate memory-exceeded worker:', error);
           this.slots.delete(slotId);
           this.rateLimiter.reset(slotId);
+          // Still notify queue even on error
+          this.executionQueue.notifySlotAvailable(slotId);
         });
     }
   }
@@ -449,6 +460,14 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     }
   }
 
+  /**
+   * Build result from worker message.
+   *
+   * Note: The `msg.value as T` assertion is inherent to cross-thread
+   * serialization boundaries. The worker sanitizes output via sanitizeObject()
+   * before sending, but full runtime type validation would require schema
+   * definitions which are not available at this layer.
+   */
   private buildResult<T>(msg: ExecutionResultMessage, duration: number): ExecutionResult<T> {
     if (msg.success) {
       return {

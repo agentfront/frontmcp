@@ -11,6 +11,11 @@ import { BaseScorer } from '../scorer.interface';
 import type { ExtractedFeatures, ScoringResult, ExternalApiConfig, RiskLevel } from '../types';
 
 /**
+ * Valid risk levels for API response validation
+ */
+const VALID_RISK_LEVELS: readonly string[] = ['none', 'low', 'medium', 'high', 'critical'];
+
+/**
  * External API response schema
  */
 interface ApiResponse {
@@ -39,9 +44,9 @@ export class ExternalApiScorer extends BaseScorer {
     this.config = {
       endpoint: config.endpoint,
       apiKey: config.apiKey ?? '',
-      timeoutMs: config.timeoutMs ?? 5000,
-      headers: config.headers ?? {},
-      retries: config.retries ?? 1,
+      timeoutMs: Math.max(0, config.timeoutMs ?? 5000),
+      headers: { ...(config.headers ?? {}) },
+      retries: Math.max(0, Math.min(10, config.retries ?? 1)),
     };
     this.ready = true;
   }
@@ -105,7 +110,8 @@ export class ExternalApiScorer extends BaseScorer {
 
       if (!response.ok) {
         const body = await response.text().catch(() => '');
-        throw new Error(`API returned ${response.status}: ${body}`);
+        const truncatedBody = body.length > 200 ? body.slice(0, 200) + '...' : body;
+        throw new Error(`API returned ${response.status}: ${truncatedBody}`);
       }
 
       const data = (await response.json()) as ApiResponse;
@@ -119,8 +125,7 @@ export class ExternalApiScorer extends BaseScorer {
       }
 
       // Validate risk level if present
-      const validRiskLevels = ['none', 'low', 'medium', 'high', 'critical'];
-      if (data.risk !== undefined && !validRiskLevels.includes(data.risk)) {
+      if (data.risk !== undefined && !VALID_RISK_LEVELS.includes(data.risk)) {
         throw new Error(`Invalid API response: invalid risk level "${data.risk}"`);
       }
 
@@ -140,7 +145,7 @@ export class ExternalApiScorer extends BaseScorer {
           ) {
             throw new Error('Invalid API response: signal missing required fields');
           }
-          if (!validRiskLevels.includes(signal.level)) {
+          if (!VALID_RISK_LEVELS.includes(signal.level)) {
             throw new Error(`Invalid API response: invalid signal level "${signal.level}"`);
           }
         }
