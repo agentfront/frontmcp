@@ -7,6 +7,9 @@
 import { z } from 'zod';
 import { consentConfigSchema } from '../../common';
 
+// Re-export schema for tests
+export { consentConfigSchema };
+
 // ============================================
 // Consent Configuration Schemas
 // ============================================

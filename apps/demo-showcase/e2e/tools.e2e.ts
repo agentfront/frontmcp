@@ -15,22 +15,18 @@ interface DeleteResponse {
 /**
  * E2E Tests for Demo Showcase Tools
  *
- * Note: These tests require a running FrontMCP server with proper OAuth configuration.
- * The SDK requires OAuth/DCR flow to register HTTP routes.
- *
- * To run these tests:
- * 1. Start the server with proper auth: `nx serve demo-showcase`
- * 2. Run tests: `npx jest --config jest.e2e.config.ts`
- *
- * Currently skipped pending local auth implementation (see enhance-authentication PR).
+ * These tests use public mode - no authentication required.
+ * Server runs with `auth: { mode: 'public' }` which creates
+ * stateful sessions with short TTL, suitable for CI/CD pipelines.
  */
 test.use({
   server: './src/main.ts',
   port: 3010,
   logLevel: 'debug',
+  publicMode: true, // Skip authentication - server is in public mode
 });
 
-test.describe.skip('Tools', () => {
+test.describe('Tools', () => {
   test.beforeEach(() => {
     // Clear the store before each test
     notesStore.clear();

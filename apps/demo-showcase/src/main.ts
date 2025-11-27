@@ -10,12 +10,12 @@ const port = parseInt(process.env['PORT'] ?? '3010', 10);
   logging: { level: LogLevel.Info },
   http: { port },
   auth: {
-    mode: 'orchestrated',
-    type: 'local',
-    sessionMode: 'stateful',
-    tokenStorage: { type: 'memory' },
-    allowDefaultPublic: true, // Allow anonymous access for demo
-    anonymousScopes: ['anonymous'],
+    // Public mode for E2E tests and demos - no Authorization header required
+    // Sessions are stateful with short TTL, suitable for CI/CD pipelines
+    mode: 'public',
+    issuer: 'demo-showcase',
+    sessionTtl: 300, // 5 minute sessions for demo/testing
+    anonymousScopes: ['read', 'write'],
   },
 })
 export default class Server {}

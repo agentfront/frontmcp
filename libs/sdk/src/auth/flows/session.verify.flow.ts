@@ -121,7 +121,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
   /**
    * Handle public mode - allow anonymous access without requiring authorization
-   * In public mode, we create an anonymous authorization and respond immediately
+   * In public mode, we create an anonymous authorization with a stateful session
+   * but NO token. This allows public docs/CI to work without Authorization header.
    */
   @Stage('handlePublicMode')
   async handlePublicMode() {
@@ -137,14 +138,34 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Public mode without token - create anonymous authorization
-    const user = { sub: `anon:${Date.now()}`, iss: 'public', name: 'Anonymous' };
+    // Determine protocol from session header or default to streamable-http
+    const protocol = this.state.sessionProtocol ?? 'streamable-http';
+    const now = Date.now();
+
+    // Public mode without token - create anonymous authorization WITH stateful session
+    // Session is required for transport layer to function correctly
+    const user = { sub: `anon:${now}`, iss: 'public', name: 'Anonymous' };
+    const uuid = crypto.randomUUID();
+    const sessionId = `pub:${now}:${uuid.slice(0, 8)}`;
+
+    // Create a valid session payload matching the SessionIdPayload schema
+    const anonymousSession = {
+      id: sessionId,
+      payload: {
+        uuid,
+        nodeId: 'public-node',
+        authSig: 'public', // No auth signature for public mode
+        iat: Math.floor(now / 1000),
+        protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http',
+      },
+    };
+
     this.respond({
       kind: 'authorized',
       authorization: {
         token: '',
         user,
-        session: undefined,
+        session: anonymousSession,
       },
     });
   }

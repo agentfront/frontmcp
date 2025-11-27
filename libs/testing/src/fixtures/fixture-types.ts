@@ -25,6 +25,12 @@ export interface TestConfig {
     mode?: 'public' | 'orchestrated';
     type?: 'local' | 'remote';
   };
+  /**
+   * Enable public mode for the test client.
+   * When true, no Authorization header is sent and anonymous token is not requested.
+   * Use this for testing servers configured with `auth: { mode: 'public' }`.
+   */
+  publicMode?: boolean;
   /** Server log level */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Environment variables to pass to the server */

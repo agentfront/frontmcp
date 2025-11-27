@@ -29,18 +29,21 @@ export class StreamableHttpTransport implements McpTransport {
   private reconnectCount = 0;
   private lastRequestHeaders: Record<string, string> = {};
   private interceptors?: InterceptorChain;
+  private readonly publicMode: boolean;
 
   constructor(config: TransportConfig) {
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''), // Remove trailing slash
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       auth: config.auth ?? {},
+      publicMode: config.publicMode ?? false,
       debug: config.debug ?? false,
       interceptors: config.interceptors,
     };
 
     this.authToken = config.auth?.token;
     this.interceptors = config.interceptors;
+    this.publicMode = config.publicMode ?? false;
   }
 
   async connect(): Promise<void> {
@@ -48,6 +51,13 @@ export class StreamableHttpTransport implements McpTransport {
     this.connectionCount++;
 
     try {
+      // Public mode: Skip all authentication - connect without any token
+      if (this.publicMode) {
+        this.log('Public mode: connecting without authentication');
+        this.state = 'connected';
+        return;
+      }
+
       // If no auth token provided, request anonymous token from FrontMCP SDK
       if (!this.authToken) {
         await this.requestAnonymousToken();
@@ -394,17 +404,18 @@ export class StreamableHttpTransport implements McpTransport {
       Accept: 'application/json, text/event-stream',
     };
 
-    // Add auth token
-    if (this.authToken) {
+    // Only add Authorization header if we have a token AND not in public mode
+    // Public mode explicitly skips auth headers for CI/CD and public docs testing
+    if (this.authToken && !this.publicMode) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
-    // Add session ID
+    // Always send session ID if we have one (even in public mode - server creates sessions)
     if (this.sessionId) {
       headers['mcp-session-id'] = this.sessionId;
     }
 
-    // Add custom headers from config
+    // Add custom headers from config (allow override even in public mode)
     if (this.config.auth.headers) {
       Object.assign(headers, this.config.auth.headers);
     }

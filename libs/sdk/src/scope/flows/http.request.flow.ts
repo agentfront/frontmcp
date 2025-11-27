@@ -119,10 +119,13 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       if (authorization.session) {
         request[ServerRequestTokens.sessionId] = authorization.session.id;
 
-        const intent = authorization.session.payload.protocol;
-        this.logger.info(`decision from session: ${intent}`);
-        this.state.set('intent', intent);
-        return;
+        // Safely access payload.protocol with null check
+        const protocol = authorization.session.payload?.protocol;
+        if (protocol) {
+          this.logger.info(`decision from session: ${protocol}`);
+          this.state.set('intent', protocol);
+          return;
+        }
       }
 
       if (decision.intent === 'unknown') {
