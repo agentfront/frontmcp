@@ -1,5 +1,6 @@
 ---
 title: Semantic Search with VectoriaDB
+sidebarTitle: VectoriaDB
 slug: guides/vectoriadb
 description: Index your FrontMCP tools with VectoriaDB for offline semantic discovery and personalized tool recommendations.
 icon: magnifying-glass
@@ -189,15 +190,151 @@ const toolIndex = new VectoriaDB<ToolDocument>({
 });
 ```
 
+### Complete Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `modelName` | string | `'Xenova/all-MiniLM-L6-v2'` | Embedding model to use |
+| `cacheDir` | string | `'./.cache/transformers'` | Model cache directory |
+| `dimensions` | number | Auto-detected | Vector dimensions |
+| `defaultSimilarityThreshold` | number | `0.3` | Minimum similarity score |
+| `defaultTopK` | number | `10` | Default results limit |
+| `useHNSW` | boolean | `false` | Enable HNSW index |
+| `maxDocuments` | number | `100000` | Max documents (DoS protection) |
+| `maxDocumentSize` | number | `1000000` | Max document size in chars |
+| `maxBatchSize` | number | `1000` | Max batch operation size |
+| `verboseErrors` | boolean | `true` | Enable detailed errors |
+
+### HNSW Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `M` | 16 | Connections per node in layer > 0 (higher = better recall) |
+| `M0` | 32 | Connections for layer 0 (typically M * 2) |
+| `efConstruction` | 200 | Candidate list size during construction |
+| `efSearch` | 50 | Candidate list size during search |
+
+---
+
+## TF-IDF Variant (Zero Dependencies)
+
+For scenarios where ML model downloads aren't acceptable, use the TF-IDF variant:
+
+```ts
+import { TFIDFVectoria } from 'vectoriadb';
+
+interface ToolDocument extends DocumentMetadata {
+  toolName: string;
+  category: string;
+}
+
+const db = new TFIDFVectoria<ToolDocument>({
+  defaultSimilarityThreshold: 0.0,
+  defaultTopK: 10,
+});
+
+// Add documents
+db.addDocument('tool1', 'User authentication tool', { id: 'tool1', toolName: 'auth', category: 'security' });
+db.addDocument('tool2', 'User profile retrieval', { id: 'tool2', toolName: 'profile', category: 'user' });
+
+// Reindex after adding documents (required for IDF update)
+db.reindex();
+
+// Search
+const results = db.search('authentication', { topK: 5 });
+```
+
+### When to Use TF-IDF vs ML Embeddings
+
+| Feature | TFIDFVectoria | VectoriaDB |
+|---------|---------------|------------|
+| Dependencies | Zero | transformers.js (~22MB model) |
+| Initialization | Synchronous | Async (model download) |
+| Semantic understanding | Keyword-based | Full semantic |
+| Best for | Small corpora (under 10K docs) | Any size |
+| Reindex required | Yes, after changes | No |
+
+---
+
+## Storage Adapters
+
+### File Adapter
+
+```ts
+import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
+
+const toolIndex = new VectoriaDB<ToolDocument>({
+  storageAdapter: new FileStorageAdapter({
+    cacheDir: './.cache/vectoriadb',
+    namespace: 'tool-index',
+  }),
+});
+```
+
+### Redis Adapter
+
+For multi-pod environments, use Redis to share embeddings:
+
+```ts
+import { VectoriaDB, RedisStorageAdapter } from 'vectoriadb';
+import Redis from 'ioredis';
+
+const redisClient = new Redis();
+
+const toolIndex = new VectoriaDB<ToolDocument>({
+  storageAdapter: new RedisStorageAdapter({
+    client: redisClient,
+    namespace: 'tool-index',
+    ttl: 86400,        // 24 hours (default)
+    keyPrefix: 'vectoriadb',
+  }),
+});
+```
+
+### Memory Adapter (Default)
+
+No persistence - embeddings are lost on restart:
+
+```ts
+import { VectoriaDB, MemoryStorageAdapter } from 'vectoriadb';
+
+const toolIndex = new VectoriaDB<ToolDocument>({
+  storageAdapter: new MemoryStorageAdapter({ namespace: 'tools' }),
+});
+```
+
+---
+
 ## Handle errors and monitor health
 
 All errors extend `VectoriaError` and ship with machine-readable `code` values so you can branch on them.
+
+### Error Types
+
+| Error | Code | Description |
+|-------|------|-------------|
+| `VectoriaNotInitializedError` | `NOT_INITIALIZED` | Call `initialize()` first |
+| `DocumentValidationError` | `DOCUMENT_VALIDATION_ERROR` | Invalid document data |
+| `DocumentNotFoundError` | `DOCUMENT_NOT_FOUND` | Document ID doesn't exist |
+| `DocumentExistsError` | `DOCUMENT_EXISTS` | Document ID already exists |
+| `DuplicateDocumentError` | `DUPLICATE_DOCUMENT` | Duplicate in batch |
+| `QueryValidationError` | `QUERY_VALIDATION_ERROR` | Invalid search query |
+| `EmbeddingError` | `EMBEDDING_ERROR` | Model embedding failed |
+| `StorageError` | `STORAGE_ERROR` | Storage operation failed |
+| `ConfigurationError` | `CONFIGURATION_ERROR` | Invalid config |
 
 ```ts
 import {
   VectoriaError,
   VectoriaNotInitializedError,
   DocumentValidationError,
+  DocumentNotFoundError,
+  DocumentExistsError,
+  DuplicateDocumentError,
+  QueryValidationError,
+  EmbeddingError,
+  StorageError,
+  ConfigurationError,
 } from 'vectoriadb';
 
 try {

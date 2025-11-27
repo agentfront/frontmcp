@@ -152,7 +152,10 @@
                   "docs/guides/create-plugin",
                   "docs/guides/add-openapi-adapter",
                   "docs/guides/caching-and-cache-miss",
-                  "docs/guides/customize-flow-stages"
+                  "docs/guides/customize-flow-stages",
+                  "docs/guides/ast-guard",
+                  "docs/guides/enclave",
+                  "docs/guides/vectoriadb"
                 ]
               },
               {
