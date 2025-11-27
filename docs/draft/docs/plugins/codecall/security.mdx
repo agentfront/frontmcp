@@ -75,7 +75,7 @@ Traditional security scanners operate on the AST (Abstract Syntax Tree), which m
 
 1. **Parser DoS**: Deeply nested brackets/braces can cause stack overflow in recursive descent parsers
 2. **ReDoS at Parse Time**: Complex regex literals can hang the parser
-3. **Memory Exhaustion**: Very large inputs can exhaust memory before validation
+3. **Memory Exhaustion**: Large inputs can exhaust memory before validation
 4. **Trojan Source Attacks**: Unicode BiDi characters can make code appear different from how it executes
 
 ### Mandatory Limits (Cannot Be Disabled)

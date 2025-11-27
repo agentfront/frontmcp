@@ -233,12 +233,14 @@ When enabled, large data is handled separately:
   Allow functions in the `globals` object. Required when providing callback functions or utilities.
 </ParamField>
 
-<ParamField path="maxConsoleOutputBytes" type="number" default="1048576">
-  Maximum total console output in bytes (default 1MB). Prevents I/O flood attacks via excessive logging.
+<ParamField path="maxConsoleOutputBytes" type="number">
+  Maximum total console output in bytes. Prevents I/O flood attacks via excessive logging.
+  Defaults vary by security level: STRICT=64KB, SECURE=256KB, STANDARD=1MB, PERMISSIVE=10MB.
 </ParamField>
 
-<ParamField path="maxConsoleCalls" type="number" default="1000">
-  Maximum number of console calls allowed (default 1000). Prevents I/O flood attacks via rapid-fire logging.
+<ParamField path="maxConsoleCalls" type="number">
+  Maximum number of console calls allowed. Prevents I/O flood attacks via rapid-fire logging.
+  Defaults vary by security level: STRICT=100, SECURE=500, STANDARD=1000, PERMISSIVE=10000.
 </ParamField>
 
 <ParamField path="sidecar" type="object">
@@ -363,12 +365,13 @@ The rule-based scorer detects these patterns:
 
 | Rule | Score | Description |
 |------|-------|-------------|
-| `SENSITIVE_FIELD` | 25 | Queries password/token/secret fields |
-| `EXCESSIVE_LIMIT` | 20 | limit > 10,000 |
+| `SENSITIVE_FIELD` | 35 | Queries password/token/secret fields |
+| `EXCESSIVE_LIMIT` | 25 | limit > 10,000 |
 | `WILDCARD_QUERY` | 20 | query="*" or filter={} |
-| `LOOP_TOOL_CALL` | 35 | callTool inside for/for-of loop |
-| `EXFIL_PATTERN` | 40 | list→send or query→export sequence |
-| `EXTREME_VALUE` | 15 | Numeric arg > 1,000,000 |
+| `LOOP_TOOL_CALL` | 25 | callTool inside for/for-of loop |
+| `EXFIL_PATTERN` | 50 | list→send or query→export sequence |
+| `EXTREME_VALUE` | 30 | Numeric arg > 1,000,000 |
+| `DYNAMIC_TOOL` | 20 | Variable tool name (not static string) |
 | `BULK_OPERATION` | 15 | Tool name contains bulk/batch/all |
 
 ### Caching

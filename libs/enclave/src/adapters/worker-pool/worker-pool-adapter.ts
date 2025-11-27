@@ -97,7 +97,15 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       for (let i = 0; i < this.config.minWorkers; i++) {
         spawnPromises.push(this.createAndAddSlot());
       }
-      await Promise.all(spawnPromises);
+      try {
+        await Promise.all(spawnPromises);
+      } catch (error) {
+        // Clean up any workers that were created before the failure
+        const terminatePromises = Array.from(this.slots.values()).map((slot) => slot.terminate(false).catch(() => {}));
+        await Promise.allSettled(terminatePromises);
+        this.slots.clear();
+        throw error;
+      }
     }
 
     // Start memory monitoring
@@ -228,6 +236,11 @@ export class WorkerPoolAdapter implements SandboxAdapter {
   }
 
   private releaseSlot(slot: WorkerSlot): void {
+    // Don't operate on terminated/recycling slots
+    if (slot.status === 'terminated' || slot.status === 'recycling' || slot.status === 'terminating') {
+      return;
+    }
+
     // Check if slot needs recycling
     if (slot.executionCount >= this.config.maxExecutionsPerWorker) {
       slot.markForRecycle('max-executions');
@@ -344,22 +357,23 @@ export class WorkerPoolAdapter implements SandboxAdapter {
     };
 
     return new Promise<ExecutionResult<T>>((resolve, reject) => {
-      // Set up watchdog timeout (VM timeout + buffer)
-      const watchdogTimeout = context.config.timeout + 5000;
-      const watchdogId = setTimeout(() => {
-        this._timeoutExecutions++;
-        this._forcedTerminations++;
-        slot.terminate(false).catch((error) => {
-          console.error('Watchdog termination failed:', error);
-        });
-        reject(new WorkerTimeoutError());
-      }, watchdogTimeout);
-
       // Pending tool calls for this execution
       const pendingToolCalls = new Map<string, boolean>();
 
+      // Forward declarations for cleanup function
+      let messageHandler: (msg: WorkerToMainMessage) => Promise<void>;
+      let errorHandler: (error: Error) => void;
+      let watchdogId: ReturnType<typeof setTimeout>;
+
+      // Cleanup function to remove handlers
+      const cleanup = () => {
+        clearTimeout(watchdogId);
+        slot.off('message', messageHandler);
+        slot.off('error', errorHandler);
+      };
+
       // Message handler
-      const messageHandler = async (msg: WorkerToMainMessage) => {
+      messageHandler = async (msg: WorkerToMainMessage) => {
         try {
           // Rate limiting
           this.rateLimiter.checkLimit(slot.id);
@@ -368,10 +382,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
             await this.handleToolCall(slot, msg, context, pendingToolCalls);
           } else if (isExecutionResultMessage(msg) && msg.requestId === requestId) {
             // Execution complete
-            clearTimeout(watchdogId);
-            slot.off('message', messageHandler);
-            slot.off('error', errorHandler);
-
+            cleanup();
             const duration = Date.now() - startTime;
             const result = this.buildResult<T>(msg, duration);
             resolve(result);
@@ -380,22 +391,30 @@ export class WorkerPoolAdapter implements SandboxAdapter {
             this.handleConsoleMessage(msg);
           }
         } catch (error) {
-          clearTimeout(watchdogId);
-          slot.off('message', messageHandler);
-          slot.off('error', errorHandler);
+          cleanup();
           reject(error);
         }
       };
 
-      slot.on('message', messageHandler);
-
       // Handle slot error
-      const errorHandler = (error: Error) => {
-        clearTimeout(watchdogId);
-        slot.off('message', messageHandler);
-        slot.off('error', errorHandler);
+      errorHandler = (error: Error) => {
+        cleanup();
         reject(error);
       };
+
+      // Set up watchdog timeout (VM timeout + buffer)
+      const watchdogTimeout = context.config.timeout + 5000;
+      watchdogId = setTimeout(() => {
+        this._timeoutExecutions++;
+        this._forcedTerminations++;
+        cleanup();
+        slot.terminate(false).catch((error) => {
+          console.error('Watchdog termination failed:', error);
+        });
+        reject(new WorkerTimeoutError());
+      }, watchdogTimeout);
+
+      slot.on('message', messageHandler);
       slot.once('error', errorHandler);
 
       // Send execute message
