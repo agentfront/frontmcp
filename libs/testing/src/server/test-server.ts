@@ -90,7 +90,12 @@ export class TestServer {
   static async start(options: TestServerOptions): Promise<TestServer> {
     const port = options.port ?? (await findAvailablePort());
     const server = new TestServer(options, port);
-    await server.startProcess();
+    try {
+      await server.startProcess();
+    } catch (error) {
+      await server.stop(); // Clean up spawned process to prevent leaks
+      throw error;
+    }
     return server;
   }
 
@@ -115,7 +120,12 @@ export class TestServer {
     };
 
     const server = new TestServer(serverOptions, port);
-    await server.startProcess();
+    try {
+      await server.startProcess();
+    } catch (error) {
+      await server.stop(); // Clean up spawned process to prevent leaks
+      throw error;
+    }
     return server;
   }
 
@@ -283,6 +293,14 @@ export class TestServer {
       this.logs.push(`[ERROR] ${text}`);
       if (this.options.debug) {
         console.error('[SERVER ERROR]', text);
+      }
+    });
+
+    // Handle spawn errors to prevent unhandled error events
+    this.process.on('error', (err) => {
+      this.logs.push(`[SPAWN ERROR] ${err.message}`);
+      if (this.options.debug) {
+        console.error('[SERVER SPAWN ERROR]', err);
       }
     });
 
