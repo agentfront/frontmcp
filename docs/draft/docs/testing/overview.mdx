@@ -150,9 +150,9 @@ import { httpMock } from '@frontmcp/testing';
 test('tool with external API', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
-  interceptor.get('https://api.example.com/users', [
-    { id: 1, name: 'John' },
-  ]);
+  interceptor.get('https://api.example.com/users', {
+    body: [{ id: 1, name: 'John' }],
+  });
 
   const result = await mcp.tools.call('fetch-users', {});
   expect(result).toBeSuccessful();

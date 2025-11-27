@@ -51,12 +51,14 @@ pnpm add -D @frontmcp/testing
 {
   "peerDependencies": {
     "@frontmcp/sdk": "^0.4.0",
+    "jest": "^29.0.0",
+    "@jest/globals": "^29.0.0",
     "@playwright/test": "^1.40.0"
   }
 }
 ```
 
-> **Note:** `@playwright/test` is optional - only needed for browser-based OAuth flow testing.
+> **Note:** `@playwright/test` is optional - only needed for browser-based OAuth flow testing. `jest` and `@jest/globals` are optional if using a different test runner.
 
 ---
 
@@ -535,7 +537,8 @@ test.describe('Tools', () => {
     expect(result).toBeSuccessful();
     expect(result).toHaveTextContent();
 
-    const data = result.json();
+    // Use generic type parameter for type-safe JSON parsing
+    const data = result.json<{ id: string; title: string }>();
     expect(data.id).toBeDefined();
     expect(data.title).toBe('Test Note');
   });
@@ -884,7 +887,10 @@ test.describe('OpenAPI Adapter', () => {
   test('calls external API', async ({ mcp }) => {
     // Mock external API using httpMock
     const interceptor = httpMock.interceptor();
-    interceptor.get('https://api.example.com/users', [{ id: 1, name: 'John' }]);
+    // Use { body: ... } format for response data
+    interceptor.get('https://api.example.com/users', {
+      body: [{ id: 1, name: 'John' }],
+    });
 
     const result = await mcp.tools.call('openapi:getUsers', {});
 
@@ -908,10 +914,9 @@ test.describe('HTTP Mocking', () => {
     // Create an HTTP interceptor
     const interceptor = httpMock.interceptor();
 
-    // Mock GET request
+    // Mock GET request - use { body: ... } for response data
     interceptor.get('https://api.weather.com/london', {
-      temperature: 72,
-      conditions: 'sunny',
+      body: { temperature: 72, conditions: 'sunny' },
     });
 
     // Mock POST request with pattern matching
@@ -946,7 +951,7 @@ test.describe('HTTP Mocking', () => {
 
   test('track calls', async ({ mcp }) => {
     const interceptor = httpMock.interceptor();
-    const handle = interceptor.get('https://api.example.com/users', []);
+    const handle = interceptor.get('https://api.example.com/users', { body: [] });
 
     await mcp.tools.call('list-users', {});
 

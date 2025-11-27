@@ -44,8 +44,7 @@ test('mock external API', async ({ mcp }) => {
 
   // Mock a GET request
   interceptor.get('https://api.weather.com/london', {
-    temperature: 72,
-    conditions: 'sunny',
+    body: { temperature: 72, conditions: 'sunny' },
   });
 
   // Call the tool - HTTP request is intercepted
@@ -68,7 +67,7 @@ test('mock external API', async ({ mcp }) => {
 ### Exact URL Match
 
 ```ts
-interceptor.get('https://api.example.com/users/1', { id: 1 });
+interceptor.get('https://api.example.com/users/1', { body: { id: 1 } });
 ```
 
 ### Partial URL Match
@@ -77,17 +76,17 @@ URLs are matched if they contain the specified string:
 
 ```ts
 // Matches any URL containing '/users'
-interceptor.get('/users', [{ id: 1 }, { id: 2 }]);
+interceptor.get('/users', { body: [{ id: 1 }, { id: 2 }] });
 ```
 
 ### Regular Expression
 
 ```ts
 // Match URLs with pattern
-interceptor.get(/api\.example\.com\/users\/\d+/, { id: 1 });
+interceptor.get(/api\.example\.com\/users\/\d+/, { body: { id: 1 } });
 
 // Match any user ID
-interceptor.get(/\/users\/[a-z0-9-]+/, { id: 'matched' });
+interceptor.get(/\/users\/[a-z0-9-]+/, { body: { id: 'matched' } });
 ```
 
 ### Custom Matcher Function
@@ -108,13 +107,13 @@ interceptor.mock({
 ### Convenience Methods
 
 ```ts
-interceptor.get('/api/data', { result: 'get' });
-interceptor.post('/api/data', { result: 'post' });
-interceptor.put('/api/data', { result: 'put' });
-interceptor.delete('/api/data', { result: 'delete' });
+interceptor.get('/api/data', { body: { result: 'get' } });
+interceptor.post('/api/data', { body: { result: 'post' } });
+interceptor.put('/api/data', { body: { result: 'put' } });
+interceptor.delete('/api/data', { body: { result: 'delete' } });
 
 // Match any method
-interceptor.any('/api/data', { result: 'any' });
+interceptor.any('/api/data', { body: { result: 'any' } });
 ```
 
 ### Full Mock Definition
@@ -272,7 +271,7 @@ test('simulate retry scenario', async ({ mcp }) => {
 test('verify HTTP calls', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
-  const handle = interceptor.post('/api/users', { id: 1 });
+  const handle = interceptor.post('/api/users', { body: { id: 1 } });
 
   await mcp.tools.call('create-user', { name: 'John', email: 'john@test.com' });
 
@@ -295,7 +294,7 @@ test('verify HTTP calls', async ({ mcp }) => {
 ```ts
 test('wait for async operations', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
-  const handle = interceptor.get('/api/webhook', { received: true });
+  const handle = interceptor.get('/api/webhook', { body: { received: true } });
 
   // Trigger async operation that makes HTTP call
   await mcp.tools.call('trigger-webhook', {});
@@ -319,7 +318,7 @@ test('partial mocking', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
   // Only mock specific endpoint
-  interceptor.get('/api/mocked', { mocked: true });
+  interceptor.get('/api/mocked', { body: { mocked: true } });
 
   // Allow other requests through
   interceptor.allowPassthrough(true);
@@ -350,8 +349,8 @@ test('partial mocking', async ({ mcp }) => {
 test('verify all mocks used', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
-  interceptor.get('/api/users', [], { times: 1 });
-  interceptor.get('/api/orders', [], { times: 1 });
+  interceptor.get('/api/users', { body: [] }, { times: 1 });
+  interceptor.get('/api/orders', { body: [] }, { times: 1 });
 
   await mcp.tools.call('fetch-all-data', {});
 
@@ -368,8 +367,8 @@ test('verify all mocks used', async ({ mcp }) => {
 test('check unused mocks', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
-  interceptor.get('/api/users', [], { times: 1 });
-  interceptor.get('/api/orders', [], { times: 1 });
+  interceptor.get('/api/users', { body: [] }, { times: 1 });
+  interceptor.get('/api/orders', { body: [] }, { times: 1 });
 
   await mcp.tools.call('fetch-users-only', {});
 
@@ -397,7 +396,7 @@ test('with cleanup', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
   try {
-    interceptor.get('/api/data', { result: true });
+    interceptor.get('/api/data', { body: { result: true } });
     await mcp.tools.call('fetch-data', {});
   } finally {
     interceptor.restore();
@@ -419,12 +418,12 @@ afterEach(() => {
 });
 
 test('test 1', async ({ mcp }) => {
-  interceptor.get('/api/data', { test: 1 });
+  interceptor.get('/api/data', { body: { test: 1 } });
   // ...
 });
 
 test('test 2', async ({ mcp }) => {
-  interceptor.get('/api/data', { test: 2 });
+  interceptor.get('/api/data', { body: { test: 2 } });
   // ...
 });
 ```
@@ -449,18 +448,22 @@ test('openapi adapter calls external API', async ({ mcp }) => {
   const interceptor = httpMock.interceptor();
 
   interceptor.get('https://api.example.com/openapi.json', {
-    openapi: '3.0.0',
-    paths: {
-      '/users': {
-        get: { operationId: 'getUsers' },
+    body: {
+      openapi: '3.0.0',
+      paths: {
+        '/users': {
+          get: { operationId: 'getUsers' },
+        },
       },
     },
   });
 
-  interceptor.get('https://api.example.com/users', [
-    { id: 1, name: 'John' },
-    { id: 2, name: 'Jane' },
-  ]);
+  interceptor.get('https://api.example.com/users', {
+    body: [
+      { id: 1, name: 'John' },
+      { id: 2, name: 'Jane' },
+    ],
+  });
 
   const result = await mcp.tools.call('openapi:getUsers', {});
   expect(result).toBeSuccessful();
