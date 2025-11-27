@@ -347,7 +347,7 @@ CodeCall dramatically reduces token usage:
 | Factor | Impact | Optimization |
 |--------|--------|--------------|
 | VM isolation | ~10ms overhead | Use `codecall:invoke` for simple calls |
-| Embedding inference | ~50ms/query | Use TF-IDF for <100 tools |
+| Embedding inference | ~50ms/query | Use TF-IDF for fewer than 100 tools |
 | Tool calls | Dominant cost | Optimize underlying tools |
 
 ### Cost vs. Performance Tradeoffs
