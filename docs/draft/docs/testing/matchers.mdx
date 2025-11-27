@@ -1,0 +1,314 @@
+---
+title: Custom Matchers
+sidebarTitle: Matchers
+slug: testing/matchers
+icon: check-double
+description: MCP-specific Jest matchers for cleaner assertions
+---
+
+`@frontmcp/testing` extends Jest's `expect` with MCP-specific matchers that provide cleaner assertions and better error messages.
+
+---
+
+## Tool Matchers
+
+### toContainTool
+
+Check if a tools array contains a tool by name:
+
+```ts
+const tools = await mcp.tools.list();
+
+expect(tools).toContainTool('create-note');
+expect(tools).not.toContainTool('unknown-tool');
+```
+
+**Error message example:**
+```
+Expected tools to contain "create-note", but got: [list-notes, delete-note]
+```
+
+---
+
+## Result Matchers
+
+### toBeSuccessful
+
+Check if a tool call or resource read succeeded:
+
+```ts
+const result = await mcp.tools.call('create-note', { title: 'Test' });
+
+expect(result).toBeSuccessful();
+```
+
+### toBeError
+
+Check if a result is an error, optionally with a specific error code:
+
+```ts
+const result = await mcp.tools.call('create-note', {});
+
+// Any error
+expect(result).toBeError();
+
+// Specific error code
+expect(result).toBeError(-32602); // Invalid params
+```
+
+**Common MCP Error Codes:**
+
+| Code | Name | Description |
+|------|------|-------------|
+| `-32700` | Parse error | Invalid JSON |
+| `-32600` | Invalid request | Invalid JSON-RPC |
+| `-32601` | Method not found | Unknown method |
+| `-32602` | Invalid params | Invalid parameters |
+| `-32603` | Internal error | Server error |
+| `-32001` | Unauthorized | Authentication required |
+| `-32002` | Resource not found | Resource doesn't exist |
+| `-32800` | Request cancelled | Request was cancelled |
+
+---
+
+## Content Matchers
+
+### toHaveTextContent
+
+Check if a result contains text content:
+
+```ts
+const result = await mcp.tools.call('echo', { message: 'hello' });
+
+// Has any text content
+expect(result).toHaveTextContent();
+
+// Has specific text content
+expect(result).toHaveTextContent('hello');
+
+// With partial match
+expect(result).toHaveTextContent('ell');
+```
+
+### toHaveImageContent
+
+Check if a result contains image content:
+
+```ts
+const result = await mcp.tools.call('generate-chart', { data: [1, 2, 3] });
+
+expect(result).toHaveImageContent();
+```
+
+### toHaveResourceContent
+
+Check if a result contains embedded resource content:
+
+```ts
+const result = await mcp.tools.call('fetch-document', { id: '123' });
+
+expect(result).toHaveResourceContent();
+```
+
+### toHaveMimeType
+
+Check the MIME type of resource content:
+
+```ts
+const content = await mcp.resources.read('data://config');
+
+expect(content).toHaveMimeType('application/json');
+expect(content).toHaveMimeType('text/plain');
+```
+
+---
+
+## Resource Matchers
+
+### toContainResource
+
+Check if a resources array contains a resource by URI:
+
+```ts
+const resources = await mcp.resources.list();
+
+expect(resources).toContainResource('notes://all');
+expect(resources).toContainResource('config://settings');
+```
+
+### toContainResourceTemplate
+
+Check if a resource templates array contains a template:
+
+```ts
+const templates = await mcp.resources.listTemplates();
+
+expect(templates).toContainResourceTemplate('notes://note/{id}');
+expect(templates).toContainResourceTemplate('users://user/{userId}/profile');
+```
+
+---
+
+## Prompt Matchers
+
+### toContainPrompt
+
+Check if a prompts array contains a prompt by name:
+
+```ts
+const prompts = await mcp.prompts.list();
+
+expect(prompts).toContainPrompt('summarize-notes');
+expect(prompts).toContainPrompt('prioritize-tasks');
+```
+
+### toHaveMessages
+
+Check the number of messages in a prompt result:
+
+```ts
+const result = await mcp.prompts.get('multi-turn', { context: 'test' });
+
+expect(result).toHaveMessages(3);
+```
+
+### toHaveRole
+
+Check the role of a message:
+
+```ts
+const result = await mcp.prompts.get('assistant-prompt', {});
+
+expect(result.messages[0]).toHaveRole('user');
+expect(result.messages[1]).toHaveRole('assistant');
+```
+
+### toContainText
+
+Check if a message contains specific text:
+
+```ts
+const result = await mcp.prompts.get('summarize', { topic: 'TypeScript' });
+
+expect(result.messages[0]).toContainText('TypeScript');
+expect(result.messages[0]).toContainText('summarize');
+```
+
+---
+
+## JSON-RPC Matchers
+
+### toBeValidJsonRpc
+
+Validate JSON-RPC response structure:
+
+```ts
+const response = await mcp.raw.request({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list',
+  params: {},
+});
+
+expect(response).toBeValidJsonRpc();
+```
+
+### toHaveResult
+
+Check that a response has a result (not an error):
+
+```ts
+const response = await mcp.raw.request({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list',
+  params: {},
+});
+
+expect(response).toHaveResult();
+expect(response.result.tools).toBeDefined();
+```
+
+### toHaveError
+
+Check that a response is an error:
+
+```ts
+const response = await mcp.raw.request({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'unknown/method',
+  params: {},
+});
+
+expect(response).toHaveError();
+```
+
+### toHaveErrorCode
+
+Check for a specific error code:
+
+```ts
+const response = await mcp.raw.sendRaw('not valid json');
+
+expect(response).toHaveErrorCode(-32700); // Parse error
+```
+
+---
+
+## Using with Negation
+
+All matchers support `.not` for negation:
+
+```ts
+const tools = await mcp.tools.list();
+expect(tools).not.toContainTool('deleted-tool');
+
+const result = await mcp.tools.call('safe-action', {});
+expect(result).not.toBeError();
+
+const resources = await mcp.resources.list();
+expect(resources).not.toContainResource('private://secret');
+```
+
+---
+
+## TypeScript Support
+
+The matchers are fully typed. TypeScript will autocomplete matcher names and validate arguments:
+
+```ts
+// ✓ TypeScript knows these matchers
+expect(tools).toContainTool('name');
+expect(result).toBeSuccessful();
+expect(result).toBeError(-32602);
+
+// ✗ TypeScript errors on invalid matchers
+expect(tools).toContainsTool('name'); // Typo caught
+expect(result).toBeError('invalid'); // Wrong argument type
+```
+
+---
+
+## Best Practices
+
+**Do:**
+- Use specific matchers for clearer error messages
+- Combine matchers for comprehensive validation
+- Use error code constants instead of magic numbers
+
+**Don't:**
+- Check internal implementation details
+- Use generic `.toBe(true)` when specific matchers exist
+- Ignore error codes in failure tests
+
+```ts
+// Good: Specific and informative
+expect(result).toBeSuccessful();
+expect(result).toHaveTextContent();
+expect(result.json()).toHaveProperty('id');
+
+// Bad: Generic and unclear
+expect(result.isSuccess).toBe(true);
+expect(result.raw.content.length).toBeGreaterThan(0);
+```

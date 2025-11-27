@@ -1,0 +1,537 @@
+---
+title: HTTP Mocking
+sidebarTitle: HTTP Mocking
+slug: testing/http-mocking
+icon: globe
+description: Mock external HTTP requests for offline testing
+---
+
+MCP tools often make HTTP requests to external APIs. The HTTP mocking system intercepts `fetch()` calls, enabling fully offline testing of your MCP server.
+
+---
+
+## Why HTTP Mocking?
+
+Consider a tool that fetches weather data:
+
+```ts
+@Tool({ name: 'fetch-weather' })
+async getWeather(ctx: ToolContext<{ city: string }>) {
+  // This fetch call needs to be mocked for offline testing
+  const response = await fetch(`https://api.weather.com/${ctx.input.city}`);
+  const data = await response.json();
+  return ctx.text(`Weather: ${data.temperature}°F`);
+}
+```
+
+Without HTTP mocking:
+- Tests fail offline
+- Tests depend on external API availability
+- Tests may hit rate limits
+- Tests are slow due to network latency
+- Tests can't simulate error conditions
+
+---
+
+## Basic Usage
+
+```ts
+import { httpMock, httpResponse } from '@frontmcp/testing';
+
+test('mock external API', async ({ mcp }) => {
+  // Create an HTTP interceptor
+  const interceptor = httpMock.interceptor();
+
+  // Mock a GET request
+  interceptor.get('https://api.weather.com/london', {
+    body: { temperature: 72, conditions: 'sunny' },
+  });
+
+  // Call the tool - HTTP request is intercepted
+  const result = await mcp.tools.call('fetch-weather', { city: 'london' });
+  expect(result).toBeSuccessful();
+  expect(result.text()).toContain('72');
+
+  // Verify mock was used
+  interceptor.assertDone();
+
+  // Clean up (important!)
+  interceptor.restore();
+});
+```
+
+---
+
+## URL Matching
+
+### Exact URL Match
+
+```ts
+interceptor.get('https://api.example.com/users/1', { body: { id: 1 } });
+```
+
+### Partial URL Match
+
+URLs are matched if they contain the specified string:
+
+```ts
+// Matches any URL containing '/users'
+interceptor.get('/users', { body: [{ id: 1 }, { id: 2 }] });
+```
+
+### Regular Expression
+
+```ts
+// Match URLs with pattern
+interceptor.get(/api\.example\.com\/users\/\d+/, { body: { id: 1 } });
+
+// Match any user ID
+interceptor.get(/\/users\/[a-z0-9-]+/, { body: { id: 'matched' } });
+```
+
+### Custom Matcher Function
+
+```ts
+interceptor.mock({
+  match: {
+    url: (url) => url.startsWith('https://api.') && url.includes('/v2/'),
+  },
+  response: { body: { version: 2 } },
+});
+```
+
+---
+
+## HTTP Methods
+
+### Convenience Methods
+
+```ts
+interceptor.get('/api/data', { body: { result: 'get' } });
+interceptor.post('/api/data', { body: { result: 'post' } });
+interceptor.put('/api/data', { body: { result: 'put' } });
+interceptor.delete('/api/data', { body: { result: 'delete' } });
+
+// Match any method
+interceptor.any('/api/data', { body: { result: 'any' } });
+```
+
+### Full Mock Definition
+
+```ts
+interceptor.mock({
+  match: {
+    url: '/api/users',
+    method: 'POST',          // Single method
+    // method: ['POST', 'PUT'], // Multiple methods
+  },
+  response: { status: 201, body: { id: 1 } },
+});
+```
+
+---
+
+## Request Matching
+
+### Match by Headers
+
+```ts
+interceptor.mock({
+  match: {
+    url: '/api/protected',
+    headers: {
+      'authorization': /^Bearer /,
+      'content-type': 'application/json',
+    },
+  },
+  response: { body: { authenticated: true } },
+});
+```
+
+### Match by Request Body
+
+```ts
+// Exact match
+interceptor.mock({
+  match: {
+    url: '/api/users',
+    method: 'POST',
+    body: { name: 'John', email: 'john@example.com' },
+  },
+  response: { status: 201, body: { id: 1 } },
+});
+
+// Partial match - only checks specified keys
+interceptor.mock({
+  match: {
+    url: '/api/users',
+    method: 'POST',
+    body: { name: 'John' }, // Matches if body contains name: 'John'
+  },
+  response: { status: 201, body: { id: 1 } },
+});
+
+// Custom matcher
+interceptor.mock({
+  match: {
+    url: '/api/users',
+    body: (body) => body.age >= 18,
+  },
+  response: { body: { eligible: true } },
+});
+```
+
+---
+
+## Response Helpers
+
+### httpResponse Utilities
+
+```ts
+import { httpResponse } from '@frontmcp/testing';
+
+// JSON response (auto-sets Content-Type)
+interceptor.get('/api/data', httpResponse.json({ id: 1 }));
+
+// Text response
+interceptor.get('/api/text', httpResponse.text('Hello World'));
+
+// HTML response
+interceptor.get('/page', httpResponse.html('<h1>Welcome</h1>'));
+
+// Error responses
+interceptor.get('/api/missing', httpResponse.notFound());
+interceptor.get('/api/auth', httpResponse.unauthorized());
+interceptor.get('/api/forbidden', httpResponse.forbidden());
+interceptor.get('/api/error', httpResponse.serverError('Database down'));
+
+// Custom error
+interceptor.get('/api/rate-limit', httpResponse.error(429, 'Too many requests'));
+
+// Delayed response
+interceptor.get('/api/slow', httpResponse.delayed({ data: 'result' }, 500));
+```
+
+### Full Response Object
+
+```ts
+interceptor.mock({
+  match: { url: '/api/custom' },
+  response: {
+    status: 201,
+    statusText: 'Created',
+    headers: {
+      'x-request-id': 'abc123',
+      'cache-control': 'no-cache',
+    },
+    body: { id: 1, created: true },
+    delay: 100, // ms
+  },
+});
+```
+
+---
+
+## One-Time Mocks
+
+Create mocks that only match a limited number of times:
+
+```ts
+test('simulate retry scenario', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  // First request fails
+  interceptor.mock({
+    match: { url: '/api/flaky' },
+    response: httpResponse.serverError('Temporary failure'),
+    times: 1,
+  });
+
+  // Subsequent requests succeed
+  interceptor.mock({
+    match: { url: '/api/flaky' },
+    response: { body: { success: true } },
+  });
+
+  // Tool with retry logic
+  const result = await mcp.tools.call('resilient-fetch', {});
+  expect(result).toBeSuccessful();
+
+  interceptor.restore();
+});
+```
+
+---
+
+## Call Tracking
+
+### Track Mock Usage
+
+```ts
+test('verify HTTP calls', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  const handle = interceptor.post('/api/users', { body: { id: 1 } });
+
+  await mcp.tools.call('create-user', { name: 'John', email: 'john@test.com' });
+
+  // Check call count
+  expect(handle.callCount()).toBe(1);
+
+  // Get call details
+  const calls = handle.calls();
+  expect(calls[0].url).toContain('/api/users');
+  expect(calls[0].method).toBe('POST');
+  expect(calls[0].headers['content-type']).toBe('application/json');
+  expect(calls[0].body).toEqual({ name: 'John', email: 'john@test.com' });
+
+  interceptor.restore();
+});
+```
+
+### Wait for Calls
+
+```ts
+test('wait for async operations', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+  const handle = interceptor.get('/api/webhook', { body: { received: true } });
+
+  // Trigger async operation that makes HTTP call
+  await mcp.tools.call('trigger-webhook', {});
+
+  // Wait for up to 5 seconds for 3 calls
+  const calls = await handle.waitForCalls(3, 5000);
+  expect(calls).toHaveLength(3);
+
+  interceptor.restore();
+});
+```
+
+---
+
+## Passthrough Mode
+
+Allow unmatched requests to reach the real network:
+
+```ts
+test('partial mocking', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  // Only mock specific endpoint
+  interceptor.get('/api/mocked', { body: { mocked: true } });
+
+  // Allow other requests through
+  interceptor.allowPassthrough(true);
+
+  // This uses the mock
+  const result1 = await fetch('/api/mocked');
+  expect(await result1.json()).toEqual({ mocked: true });
+
+  // This hits the real API
+  const result2 = await fetch('https://real-api.com/data');
+  // ... real response
+
+  interceptor.restore();
+});
+```
+
+<Warning>
+  By default, unmatched requests throw an error. Only enable passthrough when you specifically need some requests to hit real endpoints.
+</Warning>
+
+---
+
+## Verification
+
+### Assert All Mocks Used
+
+```ts
+test('verify all mocks used', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  interceptor.get('/api/users', { body: [] }, { times: 1 });
+  interceptor.get('/api/orders', { body: [] }, { times: 1 });
+
+  await mcp.tools.call('fetch-all-data', {});
+
+  // Throws if any mock with `times` wasn't used
+  interceptor.assertDone();
+
+  interceptor.restore();
+});
+```
+
+### Check Pending Mocks
+
+```ts
+test('check unused mocks', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  interceptor.get('/api/users', { body: [] }, { times: 1 });
+  interceptor.get('/api/orders', { body: [] }, { times: 1 });
+
+  await mcp.tools.call('fetch-users-only', {});
+
+  // Check which mocks weren't used
+  const pending = interceptor.pending();
+  expect(pending).toHaveLength(1);
+  expect(pending[0].match.url).toBe('/api/orders');
+
+  interceptor.restore();
+});
+```
+
+---
+
+## Cleanup
+
+<Warning>
+  Always call `interceptor.restore()` to restore the original `fetch` function. Failing to do so will affect other tests.
+</Warning>
+
+### Pattern: Using try/finally
+
+```ts
+test('with cleanup', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  try {
+    interceptor.get('/api/data', { body: { result: true } });
+    await mcp.tools.call('fetch-data', {});
+  } finally {
+    interceptor.restore();
+  }
+});
+```
+
+### Pattern: beforeEach/afterEach
+
+```ts
+let interceptor: ReturnType<typeof httpMock.interceptor>;
+
+beforeEach(() => {
+  interceptor = httpMock.interceptor();
+});
+
+afterEach(() => {
+  interceptor.restore();
+});
+
+test('test 1', async ({ mcp }) => {
+  interceptor.get('/api/data', { body: { test: 1 } });
+  // ...
+});
+
+test('test 2', async ({ mcp }) => {
+  interceptor.get('/api/data', { body: { test: 2 } });
+  // ...
+});
+```
+
+### Global Disable
+
+```ts
+afterAll(() => {
+  // Disable all HTTP mocking globally
+  httpMock.disable();
+});
+```
+
+---
+
+## Real-World Examples
+
+### Testing OpenAPI Adapter
+
+```ts
+test('openapi adapter calls external API', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  interceptor.get('https://api.example.com/openapi.json', {
+    body: {
+      openapi: '3.0.0',
+      paths: {
+        '/users': {
+          get: { operationId: 'getUsers' },
+        },
+      },
+    },
+  });
+
+  interceptor.get('https://api.example.com/users', {
+    body: [
+      { id: 1, name: 'John' },
+      { id: 2, name: 'Jane' },
+    ],
+  });
+
+  const result = await mcp.tools.call('openapi:getUsers', {});
+  expect(result).toBeSuccessful();
+  expect(result.json()).toHaveLength(2);
+
+  interceptor.restore();
+});
+```
+
+### Testing Error Handling
+
+```ts
+test('handles API errors gracefully', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  interceptor.get('/api/data', httpResponse.serverError('Database unavailable'));
+
+  const result = await mcp.tools.call('fetch-with-fallback', {});
+
+  // Tool should handle error and return fallback
+  expect(result).toBeSuccessful();
+  expect(result.json()).toEqual({ fallback: true });
+
+  interceptor.restore();
+});
+```
+
+### Testing Rate Limiting
+
+```ts
+test('respects rate limits', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  // First request succeeds
+  interceptor.mock({
+    match: { url: '/api/data' },
+    response: { body: { data: 'first' } },
+    times: 1,
+  });
+
+  // Second request rate limited
+  interceptor.mock({
+    match: { url: '/api/data' },
+    response: httpResponse.error(429, 'Rate limit exceeded'),
+  });
+
+  const result1 = await mcp.tools.call('fetch-data', {});
+  expect(result1).toBeSuccessful();
+
+  const result2 = await mcp.tools.call('fetch-data', {});
+  expect(result2).toBeError();
+
+  interceptor.restore();
+});
+```
+
+---
+
+## Best Practices
+
+**Do:**
+- Always call `restore()` in cleanup
+- Use `httpResponse` helpers for common responses
+- Verify mocks were used with `assertDone()`
+- Mock at the appropriate level of detail
+
+**Don't:**
+- Forget cleanup (breaks other tests)
+- Enable passthrough without good reason
+- Over-mock (test real HTTP handling sometimes)
+- Hard-code response data that should be dynamic

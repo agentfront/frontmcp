@@ -25,6 +25,7 @@
       "@frontmcp/enclave": ["libs/enclave/src/index.ts"],
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
+      "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "@frontmcp/ui": ["libs/ui/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "ast-guard": ["libs/ast-guard/dist/src/index.d.ts"],

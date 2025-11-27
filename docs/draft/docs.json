@@ -123,6 +123,19 @@
                 "pages": ["docs/plugins/overview", "docs/plugins/cache-plugin", "docs/plugins/codecall-plugin"]
               },
               {
+                "group": "Testing",
+                "icon": "flask-vial",
+                "pages": [
+                  "docs/testing/overview",
+                  "docs/testing/fixtures",
+                  "docs/testing/matchers",
+                  "docs/testing/authentication",
+                  "docs/testing/interceptors",
+                  "docs/testing/http-mocking",
+                  "docs/testing/api-reference"
+                ]
+              },
+              {
                 "group": "Guides",
                 "pages": [
                   "docs/guides/create-plugin",
