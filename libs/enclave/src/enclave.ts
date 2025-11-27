@@ -27,6 +27,7 @@ import type {
   SecurityLevel,
   SecurityLevelConfig,
   ReferenceSidecarOptions,
+  SecureProxyLevelConfig,
 } from './types';
 import type { WorkerPoolConfig } from './adapters/worker-pool/config';
 import { SECURITY_LEVEL_CONFIGS } from './types';
@@ -59,8 +60,15 @@ function getConfigFromSecurityLevel(
   allowFunctionsInGlobals: boolean;
   maxConsoleOutputBytes: number;
   maxConsoleCalls: number;
+  secureProxyConfig: SecureProxyLevelConfig;
 } {
   const levelConfig = SECURITY_LEVEL_CONFIGS[securityLevel];
+
+  // Merge secure proxy config: explicit options override level defaults
+  const secureProxyConfig: SecureProxyLevelConfig = {
+    ...levelConfig.secureProxy,
+    ...(options.secureProxyConfig ?? {}),
+  };
 
   return {
     timeout: options.timeout ?? levelConfig.timeout,
@@ -72,6 +80,7 @@ function getConfigFromSecurityLevel(
     allowFunctionsInGlobals: options.allowFunctionsInGlobals ?? levelConfig.allowFunctionsInGlobals,
     maxConsoleOutputBytes: options.maxConsoleOutputBytes ?? levelConfig.maxConsoleOutputBytes,
     maxConsoleCalls: options.maxConsoleCalls ?? levelConfig.maxConsoleCalls,
+    secureProxyConfig,
   };
 }
 
@@ -146,6 +155,7 @@ export class Enclave {
     maxConsoleOutputBytes: number;
     maxConsoleCalls: number;
     workerPoolConfig?: Partial<WorkerPoolConfig>;
+    secureProxyConfig: SecureProxyLevelConfig;
   };
   private readonly securityLevel: SecurityLevel;
   private readonly validator: JSAstValidator;
@@ -173,6 +183,8 @@ export class Enclave {
     }
 
     // Merge with defaults, applying security level configuration
+    // Note: We explicitly set secureProxyConfig AFTER spreading options to ensure
+    // the merged config from securityConfig takes precedence over partial options
     this.config = {
       ...BASE_CONFIG,
       timeout: securityConfig.timeout,
@@ -184,6 +196,8 @@ export class Enclave {
       maxConsoleOutputBytes: securityConfig.maxConsoleOutputBytes,
       maxConsoleCalls: securityConfig.maxConsoleCalls,
       ...options,
+      // secureProxyConfig must come AFTER options spread to use the merged config
+      secureProxyConfig: securityConfig.secureProxyConfig,
       globals: {
         ...BASE_CONFIG.globals,
         ...options.globals,
@@ -359,6 +373,7 @@ export class Enclave {
         toolHandler: toolHandler || this.config.toolHandler,
         sidecar,
         referenceConfig: this.referenceConfig,
+        secureProxyConfig: this.config.secureProxyConfig,
       };
 
       // Set up timeout
@@ -473,7 +488,7 @@ export class Enclave {
     switch (this.config.adapter) {
       case 'vm': {
         const { VmAdapter } = await import('./adapters/vm-adapter.js');
-        this.adapter = new VmAdapter();
+        this.adapter = new VmAdapter(this.securityLevel);
         return this.adapter!;
       }
 

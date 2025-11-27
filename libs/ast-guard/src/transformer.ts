@@ -56,6 +56,63 @@ const JS_KEYWORDS = new Set([
 ]);
 
 /**
+ * Recursively collect all binding identifiers from patterns (destructuring, etc.)
+ *
+ * Handles:
+ * - Identifier: `const x = ...`
+ * - ObjectPattern: `const { a, b } = ...`
+ * - ArrayPattern: `const [a, b] = ...`
+ * - AssignmentPattern: `const { a = defaultVal } = ...`
+ * - RestElement: `const { ...rest } = ...` or `const [...rest] = ...`
+ *
+ * @param pattern The pattern node to collect identifiers from
+ * @param identifiers Set to add collected identifier names to
+ */
+function collectPatternIdentifiers(pattern: any, identifiers: Set<string>): void {
+  if (!pattern) return;
+
+  switch (pattern.type) {
+    case 'Identifier':
+      identifiers.add(pattern.name);
+      break;
+
+    case 'ObjectPattern':
+      if (pattern.properties) {
+        for (const prop of pattern.properties) {
+          if (prop.type === 'Property') {
+            // { key: value } - the value is the binding
+            collectPatternIdentifiers(prop.value, identifiers);
+          } else if (prop.type === 'RestElement') {
+            // { ...rest }
+            collectPatternIdentifiers(prop.argument, identifiers);
+          }
+        }
+      }
+      break;
+
+    case 'ArrayPattern':
+      if (pattern.elements) {
+        for (const elem of pattern.elements) {
+          if (elem) {
+            collectPatternIdentifiers(elem, identifiers);
+          }
+        }
+      }
+      break;
+
+    case 'AssignmentPattern':
+      // { a = defaultValue } - the left side is the binding
+      collectPatternIdentifiers(pattern.left, identifiers);
+      break;
+
+    case 'RestElement':
+      // [...rest] or { ...rest }
+      collectPatternIdentifiers(pattern.argument, identifiers);
+      break;
+  }
+}
+
+/**
  * Determine if an identifier should be transformed
  *
  * @param identifierName The identifier name to check
@@ -127,22 +184,20 @@ export function transformAst(ast: acorn.Node, config: TransformConfig): void {
 
   if (mode === 'whitelist') {
     // First pass: collect all locally-declared identifiers
+    // This includes destructuring patterns (ObjectPattern, ArrayPattern, etc.)
     walk.simple(ast, {
       VariableDeclarator: (node: any) => {
-        if (node.id && node.id.type === 'Identifier') {
-          localBindings.add(node.id.name);
-        }
+        // Use collectPatternIdentifiers to handle all patterns including destructuring
+        collectPatternIdentifiers(node.id, localBindings);
       },
       FunctionDeclaration: (node: any) => {
         if (node.id && node.id.type === 'Identifier') {
           localBindings.add(node.id.name);
         }
-        // Add function parameters
+        // Add function parameters (including destructuring)
         if (node.params) {
           node.params.forEach((param: any) => {
-            if (param.type === 'Identifier') {
-              localBindings.add(param.name);
-            }
+            collectPatternIdentifiers(param, localBindings);
           });
         }
       },
@@ -150,29 +205,40 @@ export function transformAst(ast: acorn.Node, config: TransformConfig): void {
         if (node.id && node.id.type === 'Identifier') {
           localBindings.add(node.id.name);
         }
-        // Add function parameters
+        // Add function parameters (including destructuring)
         if (node.params) {
           node.params.forEach((param: any) => {
-            if (param.type === 'Identifier') {
-              localBindings.add(param.name);
-            }
+            collectPatternIdentifiers(param, localBindings);
           });
         }
       },
       ArrowFunctionExpression: (node: any) => {
-        // Add arrow function parameters
+        // Add arrow function parameters (including destructuring)
         if (node.params) {
           node.params.forEach((param: any) => {
-            if (param.type === 'Identifier') {
-              localBindings.add(param.name);
-            }
+            collectPatternIdentifiers(param, localBindings);
           });
         }
       },
       CatchClause: (node: any) => {
-        // Add catch clause parameter
-        if (node.param && node.param.type === 'Identifier') {
-          localBindings.add(node.param.name);
+        // Add catch clause parameter (including destructuring)
+        if (node.param) {
+          collectPatternIdentifiers(node.param, localBindings);
+        }
+      },
+      // For-in / For-of loop variables
+      ForInStatement: (node: any) => {
+        if (node.left.type === 'VariableDeclaration') {
+          node.left.declarations.forEach((decl: any) => {
+            collectPatternIdentifiers(decl.id, localBindings);
+          });
+        }
+      },
+      ForOfStatement: (node: any) => {
+        if (node.left.type === 'VariableDeclaration') {
+          node.left.declarations.forEach((decl: any) => {
+            collectPatternIdentifiers(decl.id, localBindings);
+          });
         }
       },
     });
@@ -217,6 +283,33 @@ export function transformAst(ast: acorn.Node, config: TransformConfig): void {
         }
 
         if (parent.type === 'VariableDeclarator' && parent.id === node) {
+          return;
+        }
+
+        // Don't transform identifiers in destructuring binding positions
+        // For { a } or { a: b }, the binding is 'a' (shorthand) or 'b' (with alias)
+        if (parent.type === 'Property' && parent.value === node) {
+          // Check if this Property is inside an ObjectPattern (destructuring)
+          if (ancestors.length > 2) {
+            const grandparent = ancestors[ancestors.length - 3];
+            if (grandparent.type === 'ObjectPattern') {
+              return;
+            }
+          }
+        }
+
+        // Don't transform identifiers directly in ArrayPattern
+        if (parent.type === 'ArrayPattern') {
+          return;
+        }
+
+        // Don't transform RestElement arguments (e.g., ...rest)
+        if (parent.type === 'RestElement' && parent.argument === node) {
+          return;
+        }
+
+        // Don't transform AssignmentPattern left side (default values in destructuring)
+        if (parent.type === 'AssignmentPattern' && parent.left === node) {
           return;
         }
       }

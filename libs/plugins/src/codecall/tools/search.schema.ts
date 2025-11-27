@@ -26,8 +26,8 @@ The search returns tools sorted by relevance with scores. Higher scores mean bet
 export const searchToolInputSchema = z.object({
   query: z
     .string()
-    .min('return callTool("a",{})'.length)
-    .max(100 * 1024) // 100 KB
+    .min(2)
+    .max(2048)
     .describe(
       'Natural language description of what tools you need. Be specific about the functionality you are looking for.',
     ),

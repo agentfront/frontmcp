@@ -13,6 +13,7 @@ import {
   RequiredFunctionCallRule,
   NoRegexLiteralRule,
   NoRegexMethodsRule,
+  NoComputedDestructuringRule,
 } from '../rules';
 
 /**
@@ -305,6 +306,11 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'SharedArrayBuffer',
     'importScripts',
 
+    // Node.js 24+ dangerous APIs (sandbox escape vectors)
+    'ShadowRealm', // Escape via isolated execution
+    'Iterator', // Iterator helpers can access prototype chain
+    'AsyncIterator', // Async iterator helpers can access prototype chain
+
     ...(options.additionalDisallowedIdentifiers || []),
   ];
   rules.push(new DisallowedIdentifierRule({ disallowed: dangerousIdentifiers }));
@@ -374,6 +380,11 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
       allowStringArguments: false, // Block even string arguments for maximum security
     }),
   );
+
+  // 14. Block computed property names in destructuring patterns
+  // This prevents runtime property name construction attacks like:
+  //   const {['const'+'ructor']:Func} = callTool;  // Bypasses static analysis!
+  rules.push(new NoComputedDestructuringRule());
 
   return rules;
 }

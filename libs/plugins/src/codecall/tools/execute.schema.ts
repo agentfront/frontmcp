@@ -96,6 +96,8 @@ return results.sort((a, b) => b.totalAmount - a.totalAmount);
 export const executeToolInputSchema = z.object({
   script: z
     .string()
+    .min('return callTool("a",{})'.length)
+    .max(100 * 1024) // 100 KB
     .describe(
       'JavaScript code to execute in the sandbox. Must return a value (implicitly or via explicit return). Use callTool(name, input) to invoke tools.',
     ),
