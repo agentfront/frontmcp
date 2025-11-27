@@ -5,6 +5,7 @@
  * which MCP tools they want to expose to the LLM.
  */
 import { z } from 'zod';
+import { consentConfigSchema } from '../../common';
 
 // ============================================
 // Consent Configuration Schemas
@@ -61,65 +62,6 @@ export const consentStateSchema = z.object({
   /** Custom consent message */
   customMessage: z.string().optional(),
 });
-
-/**
- * Consent configuration schema (for auth options)
- */
-export const consentConfigSchema = z.object({
-  /**
-   * Enable consent flow for tool selection
-   * When enabled, users can choose which tools to expose to the LLM
-   * @default false
-   */
-  enabled: z.boolean().default(false),
-
-  /**
-   * Group tools by app in the consent UI
-   * @default true
-   */
-  groupByApp: z.boolean().default(true),
-
-  /**
-   * Show tool descriptions in consent UI
-   * @default true
-   */
-  showDescriptions: z.boolean().default(true),
-
-  /**
-   * Allow selecting all tools at once
-   * @default true
-   */
-  allowSelectAll: z.boolean().default(true),
-
-  /**
-   * Require at least one tool to be selected
-   * @default true
-   */
-  requireSelection: z.boolean().default(true),
-
-  /**
-   * Custom message to display on consent page
-   */
-  customMessage: z.string().optional(),
-
-  /**
-   * Remember consent for future sessions
-   * @default true
-   */
-  rememberConsent: z.boolean().default(true),
-
-  /**
-   * Tools to exclude from consent (always available)
-   * Useful for essential tools that should always be accessible
-   */
-  excludedTools: z.array(z.string()).optional(),
-
-  /**
-   * Tools to always include in consent (pre-selected)
-   */
-  defaultSelectedTools: z.array(z.string()).optional(),
-});
-
 // ============================================
 // Federated Login Schemas
 // ============================================

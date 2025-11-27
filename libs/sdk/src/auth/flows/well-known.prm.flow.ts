@@ -1,17 +1,20 @@
 // auth/flows/well-known.prm.flow.ts
 import 'reflect-metadata';
-import {z} from 'zod';
+import { z } from 'zod';
 import {
   Flow,
-  FlowBase, FlowPlan,
+  FlowBase,
+  FlowPlan,
   FlowRunOptions,
   httpInputSchema,
   HttpJsonSchema,
   ScopeEntry,
   ServerRequest,
   StageHookOf,
+  computeResource,
+  getRequestBaseUrl,
+  makeWellKnownPaths,
 } from '../../common';
-import {computeResource, getRequestBaseUrl, makeWellKnownPaths} from '../path.utils';
 
 const inputSchema = httpInputSchema;
 
@@ -71,22 +74,24 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
   @Stage('parseInput')
   async parseInput() {
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
     const scope = this.scope;
     if (!request) throw new Error('Request is undefined');
 
     const resource = computeResource(request, scope.entryPath, scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, scope.entryPath);
-    this.state.set(stateSchema.parse({
-      resource,
-      baseUrl,
-      scopesSupported: ['openid', 'profile', 'email'],
-      isOrchestrated: false,//scope.orchestrated,// TODO: fix
-    }));
+    this.state.set(
+      stateSchema.parse({
+        resource,
+        baseUrl,
+        scopesSupported: ['openid', 'profile', 'email'],
+        isOrchestrated: false, //scope.orchestrated,// TODO: fix
+      }),
+    );
   }
 
   @Stage('collectData') async collectData() {
-    const {resource, baseUrl, scopesSupported, isOrchestrated} = this.state.required;
+    const { resource, baseUrl, scopesSupported, isOrchestrated } = this.state.required;
 
     if (isOrchestrated) {
       this.respond({

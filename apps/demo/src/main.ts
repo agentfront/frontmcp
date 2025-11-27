@@ -11,9 +11,16 @@ import EmployeeTimeMcpApp from './apps/employee-time';
     port: 3002,
   },
   auth: {
-    type: 'remote',
-    name: 'frontegg',
-    baseUrl: 'https://sample-app.frontegg.com',
+    mode: 'transparent',
+    remote: {
+      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
+      name: 'frontegg',
+      dcrEnabled: false,
+    },
+    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
+    requiredScopes: [],
+    allowAnonymous: true, // Allow anonymous access for demo
+    anonymousScopes: ['anonymous'],
   },
 })
 export default class Server {}

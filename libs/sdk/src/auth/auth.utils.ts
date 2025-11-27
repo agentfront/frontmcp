@@ -1,13 +1,13 @@
 // auth/auth.utils.ts
-import { depsOfClass, isClass, tokenName } from '../utils/token.utils';
+import { depsOfClass, isClass, tokenName, getMetadata } from '../utils';
 import {
   AuthProviderMetadata,
   FrontMcpAuthProviderTokens,
   AuthProviderType,
   Token,
-  AuthProviderRecord, AuthProviderKind,
+  AuthProviderRecord,
+  AuthProviderKind,
 } from '../common';
-import { getMetadata } from '../utils/metadata.utils';
 
 export function collectAuthMetadata(cls: AuthProviderType): AuthProviderMetadata {
   return Object.entries(FrontMcpAuthProviderTokens).reduce((metadata, [key, token]) => {
@@ -33,9 +33,7 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(
-          `'useClass' on auth '${tokenName(provide)}' must be a class.`,
-        );
+        throw new Error(`'useClass' on auth '${tokenName(provide)}' must be a class.`);
       }
       return {
         kind: AuthProviderKind.CLASS,
@@ -47,9 +45,7 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(
-          `'useFactory' on auth '${tokenName(provide)}' must be a function.`,
-        );
+        throw new Error(`'useFactory' on auth '${tokenName(provide)}' must be a function.`);
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -72,11 +68,8 @@ export function normalizeAuth(item: AuthProviderType): AuthProviderRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(
-    `Invalid auth '${name}'. Expected a class or a auth object.`,
-  );
+  throw new Error(`Invalid auth '${name}'. Expected a class or a auth object.`);
 }
-
 
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.

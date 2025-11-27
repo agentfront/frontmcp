@@ -12,11 +12,11 @@ import {
   ScopeEntry,
   ServerRequest,
   StageHookOf,
+  isTransparentMode,
+  makeWellKnownPaths,
 } from '../../common';
-import { AuthOptions, isTransparentMode } from '../../common/types/options/auth.options';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { makeWellKnownPaths } from '../path.utils';
 import { JwksService } from '../jwks';
 
 const inputSchema = httpInputSchema;

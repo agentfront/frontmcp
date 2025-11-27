@@ -84,8 +84,14 @@ describe('Base Layout', () => {
 
     it('should escape multiple special characters', () => {
       const input = '<script>alert("XSS & \'attack\'")</script>';
-      const expected = '&lt;script&gt;alert(&quot;XSS &amp; &#39;attack&#39;&quot;)&lt;/script&gt;';
+      // Forward slash is now escaped per OWASP guidelines
+      const expected = '&lt;script&gt;alert(&quot;XSS &amp; &#39;attack&#39;&quot;)&lt;&#x2F;script&gt;';
       expect(escapeHtml(input)).toBe(expected);
+    });
+
+    it('should escape forward slashes', () => {
+      expect(escapeHtml('path/to/file')).toBe('path&#x2F;to&#x2F;file');
+      expect(escapeHtml('</script>')).toBe('&lt;&#x2F;script&gt;');
     });
   });
 

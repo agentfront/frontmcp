@@ -96,7 +96,10 @@ export function validateAudience(
   // Handle empty expected audiences (accept any)
   if (expectedAudiences.length === 0) {
     const firstAud = Array.isArray(tokenAudience) ? tokenAudience[0] : tokenAudience;
-    return { valid: true, matchedAudience: firstAud };
+    return {
+      valid: false,
+      error: 'No expected audiences configured - cannot validate token',
+    };
   }
 
   // Normalize token audience to array
@@ -135,11 +138,18 @@ function matchesAudience(
     if (tokenAud.toLowerCase() === expectedAud.toLowerCase()) return true;
   }
 
-  // Wildcard matching
+  // Wildcard matching with ReDoS protection
   if (allowWildcards && expectedAud.includes('*')) {
+    // Limit wildcards to prevent potential ReDoS from complex patterns
+    const wildcardCount = (expectedAud.match(/\*/g) || []).length;
+    if (wildcardCount > 2) {
+      // Reject patterns with more than 2 wildcards for safety
+      return false;
+    }
+
     const pattern = expectedAud
       .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
-      .replace(/\*/g, '.*'); // Convert * to .*
+      .replace(/\*/g, '[^.]*'); // Convert * to non-greedy segment match (safer than .*)
     const regex = new RegExp(`^${pattern}$`, caseSensitive ? '' : 'i');
     if (regex.test(tokenAud)) return true;
   }
@@ -216,7 +226,7 @@ export class AudienceValidator {
 
   constructor(options: Partial<AudienceValidatorOptions> & { expectedAudiences?: string[] } = {}) {
     this.options = {
-      expectedAudiences: options.expectedAudiences ?? [],
+      expectedAudiences: [...(options.expectedAudiences ?? [])],
       allowNoAudience: options.allowNoAudience ?? false,
       caseSensitive: options.caseSensitive ?? true,
       allowWildcards: options.allowWildcards ?? false,

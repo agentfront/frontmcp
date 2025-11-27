@@ -2,7 +2,8 @@
 
 import { randomUUID } from 'crypto';
 import { AuthorizationBase } from './authorization.class';
-import { AuthorizationCreateCtx, AuthMode, AuthUser } from './authorization.types';
+import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
+import { AuthMode } from '../../common';
 
 /**
  * Context for creating a PublicAuthorization

@@ -1,9 +1,19 @@
 // auth/flows/auth.verify.flow.ts
 
-import { Flow, FlowBase, FlowRunOptions, StageHookOf, httpRequestInputSchema, FlowPlan } from '../../common';
+import {
+  Flow,
+  FlowBase,
+  FlowRunOptions,
+  StageHookOf,
+  httpRequestInputSchema,
+  getRequestBaseUrl,
+  normalizeEntryPrefix,
+  normalizeScopeBase,
+  FlowPlan,
+  AuthMode,
+} from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { getRequestBaseUrl, normalizeEntryPrefix, normalizeScopeBase } from '../path.utils';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
 import type { JSONWebKeySet } from 'jose';
@@ -12,8 +22,9 @@ import {
   buildUnauthorizedHeader,
   buildInvalidTokenHeader,
   buildInsufficientScopeHeader,
-} from '../utils/www-authenticate.utils';
-import { validateAudience, deriveExpectedAudience } from '../utils/audience.validator';
+  validateAudience,
+  deriveExpectedAudience,
+} from '../utils';
 import {
   PublicAuthorization,
   TransparentAuthorization,
@@ -21,8 +32,7 @@ import {
   Authorization,
   TransparentVerifiedPayload,
 } from '../authorization';
-import { AuthMode } from '../authorization/authorization.types';
-import { authUserSchema, llmSafeAuthContextSchema } from '../authorization/authorization.types';
+import { authUserSchema, llmSafeAuthContextSchema } from '../authorization';
 
 // Input schema
 const inputSchema = httpRequestInputSchema;
@@ -228,10 +238,20 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     } else {
       // Transparent: verify against upstream provider
       const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
+      const issuerUrl = this.scope.auth?.issuer;
+      if (!issuerUrl) {
+        this.logger.warn('No issuer URL configured for transparent mode');
+        this.respond({
+          kind: 'unauthorized',
+          wwwAuthenticateHeader: buildInvalidTokenHeader(prmUrl, 'Server misconfiguration'),
+          reason: 'No issuer URL configured',
+        });
+        return;
+      }
       const providerRefs: ProviderVerifyRef[] = [
         {
           id: (authOptions?.['id'] as string | undefined) ?? 'default',
-          issuerUrl: this.scope.auth?.issuer ?? '',
+          issuerUrl,
           jwks: authOptions?.['jwks'] as JSONWebKeySet | undefined,
           jwksUri: authOptions?.['jwksUri'] as string | undefined,
         },

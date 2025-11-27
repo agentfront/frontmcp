@@ -2,8 +2,9 @@
 
 import { createHash } from 'crypto';
 import { AuthorizationBase } from './authorization.class';
-import { AuthorizationCreateCtx, AuthMode, AuthUser } from './authorization.types';
+import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { ProviderSnapshot } from '../session/session.types';
+import { AuthMode } from '../../common';
 
 /**
  * Verified JWT payload from transparent auth provider

@@ -13,10 +13,12 @@ import {
   isTransparentMode,
   isPublicMode,
   TransparentAuthOptions,
+  getRequestBaseUrl,
+  normalizeEntryPrefix,
+  normalizeScopeBase,
 } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { getRequestBaseUrl, normalizeEntryPrefix, normalizeScopeBase } from '../path.utils';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
 import { parseSessionHeader } from '../session/utils/session-id.utils';

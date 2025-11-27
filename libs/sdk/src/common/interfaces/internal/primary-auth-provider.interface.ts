@@ -1,6 +1,19 @@
 import { ServerRequest } from '../server.interface';
+import { AuthOptions, isPublicMode, isTransparentMode, isOrchestratedMode, isOrchestratedRemote } from '../../types';
 import { urlToSafeId } from '../../utils';
-import { AuthOptions, isPublicMode, isTransparentMode, isOrchestratedMode, isOrchestratedLocal } from '../../types';
+
+/**
+ * Convert URL to a safe provider ID (hostname with dots replaced)
+ * Matches the logic in auth-provider-detection.ts for consistency
+ */
+function urlToProviderId(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/\./g, '_');
+  } catch {
+    return url.replace(/[^a-zA-Z0-9]/g, '_');
+  }
+}
 
 /**
  * Base class for primary auth provider.
@@ -25,7 +38,9 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   }
 
   /**
-   * Derive the provider ID from options
+   * Derive the provider ID from options.
+   * This logic MUST match deriveProviderId in auth-provider-detection.ts
+   * to ensure consistent provider IDs across the system.
    */
   private deriveId(options: AuthOptions): string {
     if (isPublicMode(options)) {
@@ -37,14 +52,14 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
     }
 
     if (isOrchestratedMode(options)) {
-      if (isOrchestratedLocal(options)) {
-        return options.local?.issuer ?? 'orchestrated-local';
-      } else {
-        return options.local?.issuer ?? options.remote.id ?? urlToSafeId(options.remote.provider);
+      if (isOrchestratedRemote(options)) {
+        return options.remote.id ?? urlToSafeId(options.remote.provider);
       }
+      // Local orchestrated – match detection defaults
+      return options.local?.issuer ?? 'local';
     }
 
-    return 'default';
+    return 'unknown';
   }
 
   abstract fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;

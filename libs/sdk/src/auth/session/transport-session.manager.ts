@@ -121,9 +121,23 @@ export class TransportSessionManager {
     }
 
     // Derive encryption key from secret or generate one
-    const secret = config.encryptionSecret || process.env['MCP_SESSION_SECRET'] || getMachineId();
+    const secret = config.encryptionSecret || process.env['MCP_SESSION_SECRET'];
+    if (!secret) {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new Error(
+          '[TransportSessionManager] MCP_SESSION_SECRET or encryptionSecret is required in production. ' +
+            'Set the MCP_SESSION_SECRET environment variable or provide encryptionSecret in config.',
+        );
+      }
+      // Development fallback - NOT secure for production
+      console.warn(
+        '[TransportSessionManager] Using machine ID as session encryption secret - NOT SECURE FOR PRODUCTION. ' +
+          'Set MCP_SESSION_SECRET or provide encryptionSecret in config.',
+      );
+    }
+    const effectiveSecret = secret || getMachineId();
     this.encryptionKey = hkdfSha256(
-      Buffer.from(secret),
+      Buffer.from(effectiveSecret),
       Buffer.from('mcp-session-salt'),
       Buffer.from('transport-session'),
       32,

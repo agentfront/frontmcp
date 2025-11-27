@@ -1,10 +1,11 @@
 // auth/authorization/orchestrated.authorization.ts
 
-import { createHash, randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import { AuthorizationBase } from './authorization.class';
-import { AuthorizationCreateCtx, AuthMode, AuthUser } from './authorization.types';
-import { ProviderSnapshot, EncBlob } from '../session/session.types';
+import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
+import { ProviderSnapshot } from '../session/session.types';
 import { EncryptedBlob } from '../session';
+import { AuthMode } from '../../common';
 
 /**
  * Token store interface for orchestrated mode
@@ -487,7 +488,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
    * Get all authorized app IDs (includes progressively authorized apps).
    */
   getAllAuthorizedAppIds(): string[] {
-    const baseIds = new Set(this.authorizedAppIds);
+    const baseIds = new Set(this.authorizedAppIds ?? []);
     for (const appId of this.#mutableAuthorizedApps.keys()) {
       baseIds.add(appId);
     }

@@ -934,9 +934,17 @@ describe('OAuth Authorize Flow', () => {
   // ============================================
 
   describe('Invalid PKCE', () => {
-    it('should reject challenge shorter than 43 characters', () => {
-      const shortChallenge = 'too-short';
-      expect(shortChallenge.length).toBeLessThan(43);
+    it('should reject challenge shorter than 43 characters', async () => {
+      const scope = flowScenarios.orchestratedLocal();
+      const metadata = createFlowMetadata();
+      const params = createValidOAuthRequest();
+      params.code_challenge = 'too-short'; // < 43 chars
+      const input = createOAuthInput(params);
+
+      const flow = new OauthAuthorizeFlow(metadata, input, scope, jest.fn(), new Map());
+      const { output } = await runFlowStages(flow, ['parseInput', 'validateInput']);
+
+      expectOAuthHtmlPage(output, { status: 400 });
     });
 
     it('should reject challenge longer than 128 characters', () => {

@@ -3,10 +3,7 @@
 import { z } from 'zod';
 import { ProviderSnapshot } from '../session/session.types';
 import { TransportSession, TransportProtocol } from '../session';
-import type { AuthMode } from '../../common/types/options/auth.options';
-
-// Re-export AuthMode for external consumers
-export type { AuthMode } from '../../common/types/options/auth.options';
+import type { AuthMode } from '../../common';
 
 /**
  * User identity from authentication

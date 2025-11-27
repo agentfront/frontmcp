@@ -31,17 +31,12 @@ import {
 } from '../../common';
 import { z, ZodError } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import {
-  InMemoryAuthorizationStore,
-  FederatedLoginStateRecord,
-  ConsentStateRecord,
-} from '../session/authorization.store';
+import { InMemoryAuthorizationStore, FederatedLoginStateRecord, ConsentStateRecord } from '../session';
 import { AuthProviderDetectionResult, DetectedAuthProvider } from '../detection';
 import {
   buildLoginPage,
   buildIncrementalAuthPage,
   buildFederatedLoginPage,
-  buildErrorPage,
   escapeHtml,
   type AppAuthCard,
   type ProviderCard,

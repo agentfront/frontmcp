@@ -4,7 +4,6 @@ import { randomUUID } from 'crypto';
 import {
   Authorization,
   AuthorizationCreateCtx,
-  AuthMode,
   AuthorizedPrompt,
   AuthorizedTool,
   AuthUser,
@@ -13,6 +12,7 @@ import {
 import { TransportSession, TransportProtocol, SessionJwtPayload } from '../session';
 import { ProviderSnapshot } from '../session/session.types';
 import { encryptJson } from '../session/utils/session-id.utils';
+import { AuthMode } from '../../common';
 
 // Single-process machine id generated at server launch
 const MACHINE_ID = (() => {

@@ -121,7 +121,7 @@ This document outlines the development plan for completing the FrontMCP authenti
 
 **Architecture**:
 
-```
+```text
 Server (Global Auth - Orchestrated)
 ├── /slack (standalone: true → direct Slack OAuth)
 ├── /crm (nested → federated via parent)
@@ -448,34 +448,6 @@ const { payload } = await jwtVerify(token, JWKS, { issuer });
 | No consent screen          | Medium   | Auto-grants all scopes                  |
 | No client validation       | High     | Any client_id accepted                  |
 | No redirect_uri validation | High     | Should validate against registered URIs |
-
----
-
-## Implementation Priority
-
-```mermaid
-gantt
-    title Authentication Roadmap
-    dateFormat  YYYY-MM-DD
-    section Phase 1
-    Token Introspection     :p1a, 2024-01-01, 3d
-    Token Revocation        :p1b, after p1a, 2d
-    UserInfo Endpoint       :p1c, after p1b, 2d
-    Dynamic Client Reg      :p1d, after p1c, 5d
-    section Phase 2
-    JWT Verification Fix    :p2a, after p1d, 3d
-    Asymmetric Signing      :p2b, after p2a, 3d
-    PKCE Hardening          :p2c, after p2b, 2d
-    Rate Limiting           :p2d, after p2c, 2d
-    section Phase 3
-    PAR Support             :p3a, after p2d, 3d
-    Device Flow             :p3b, after p3a, 5d
-    OpenID Connect          :p3c, after p3b, 5d
-    section Phase 4
-    Redis Validation        :p4a, after p3c, 3d
-    Key Management          :p4b, after p4a, 5d
-    Observability           :p4c, after p4b, 3d
-```
 
 ---
 

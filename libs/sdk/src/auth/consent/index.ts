@@ -4,7 +4,6 @@ export {
   consentToolItemSchema,
   consentSelectionSchema,
   consentStateSchema,
-  consentConfigSchema,
   federatedProviderItemSchema,
   federatedLoginStateSchema,
   federatedSelectionSchema,

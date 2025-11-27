@@ -162,6 +162,11 @@ export const skippedAppBehaviorSchema = z.enum(['anonymous', 'require-auth']);
 /**
  * Consent configuration for tool selection
  * Allows users to choose which MCP tools to expose to the LLM
+ *
+ * Note: This schema is the canonical definition. It is duplicated in
+ * auth/consent/consent.types.ts for domain-specific use. Both schemas
+ * MUST be kept in sync. The duplication exists to avoid circular
+ * dependencies between common/ and auth/ modules.
  */
 export const consentConfigSchema = z.object({
   /**

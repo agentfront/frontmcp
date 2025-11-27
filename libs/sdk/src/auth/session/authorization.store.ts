@@ -502,7 +502,7 @@ export class RedisAuthorizationStore implements AuthorizationStore {
 
   async storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void> {
     const ttl = Math.max(Math.ceil((record.expiresAt - Date.now()) / 1000), 1);
-    await this.redis.set(this.key('code', record.code), JSON.stringify(record), 'EX', ttl);
+    await this.redis.set(this.key('code', record.code), JSON.stringify(record), 'EX', Math.max(ttl, 1));
   }
 
   async getAuthorizationCode(code: string): Promise<AuthorizationCodeRecord | null> {

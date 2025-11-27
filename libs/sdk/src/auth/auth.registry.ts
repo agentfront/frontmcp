@@ -25,11 +25,11 @@ import {
   AppType,
 } from '../common';
 import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
-import { tokenName } from '../utils/token.utils';
+import { tokenName } from '../utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';
-import { DependencyNotFoundError } from '../errors/mcp.error';
+import { DependencyNotFoundError } from '../errors';
 
 /**
  * Default auth options when none provided - public mode with all tools open

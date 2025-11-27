@@ -10,10 +10,12 @@ const port = parseInt(process.env['PORT'] ?? '3010', 10);
   logging: { level: LogLevel.Info },
   http: { port },
   auth: {
+    mode: 'orchestrated',
     type: 'local',
-    id: 'local',
-    name: 'Local Auth',
-    allowAnonymous: true,
+    sessionMode: 'stateful',
+    tokenStorage: { type: 'memory' },
+    allowDefaultPublic: true, // Allow anonymous access for demo
+    anonymousScopes: ['anonymous'],
   },
 })
 export default class Server {}

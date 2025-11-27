@@ -439,7 +439,7 @@ sequenceDiagram
 // 201 Created
 {
   "client_id": "550e8400-e29b-41d4-a716-446655440000",
-  "client_secret": "dGhpcyBpcyBhIHNlY3JldA",  // if confidential
+  "client_secret": "dGhpcyBpcyBhIHNlY3JldA",  // Example placeholder only (base64: "this is a secret"), not a real credential
   "client_id_issued_at": 1234567890,
   "client_secret_expires_at": 0,  // 0 = never expires
   "token_endpoint_auth_method": "none",
