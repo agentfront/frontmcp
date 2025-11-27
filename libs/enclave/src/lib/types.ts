@@ -475,6 +475,7 @@ export interface SafeRuntimeContext {
 import type { ReferenceSidecar } from './sidecar/reference-sidecar';
 import type { ReferenceConfig } from './sidecar/reference-config';
 import type { ScoringGateConfig, ScoringGateResult } from './scoring/types';
+import type { WorkerPoolConfig } from './adapters/worker-pool/config';
 
 /**
  * Internal execution context (tracks state during execution)
@@ -731,7 +732,35 @@ export interface CreateEnclaveOptions extends EnclaveConfig {
    * ```
    */
   scoringGate?: ScoringGateConfig;
+
+  /**
+   * Worker Pool Adapter configuration
+   *
+   * Only used when adapter is set to 'worker_threads'.
+   * Provides OS-level memory isolation via worker threads with:
+   * - Pool management (min/max workers, scaling)
+   * - Memory monitoring and enforcement
+   * - Hard halt capability via worker.terminate()
+   * - Rate limiting for message flood protection
+   * - Dual-layer sandbox (worker thread + VM context)
+   *
+   * @example
+   * ```typescript
+   * const enclave = new Enclave({
+   *   adapter: 'worker_threads',
+   *   workerPoolConfig: {
+   *     minWorkers: 2,
+   *     maxWorkers: 8,
+   *     memoryLimitPerWorker: 256 * 1024 * 1024, // 256MB
+   *   },
+   * });
+   * ```
+   */
+  workerPoolConfig?: Partial<WorkerPoolConfig>;
 }
 
 // Re-export scoring types for convenience
 export type { ScoringGateConfig, ScoringGateResult };
+
+// Re-export worker pool types for convenience
+export type { WorkerPoolConfig };

@@ -18,11 +18,25 @@ This guide covers everything you need to deploy CodeCall in production: performa
 | AST Parsing | 1-5ms | Scales with code size |
 | AST Validation | 2-10ms | Depends on rule count |
 | Code Transformation | 1-3ms | One-time per script |
+| AI Scoring Gate | ~1ms | Rule-based (cached) |
 | VM Execution | Variable | Depends on script complexity |
 | Tool Calls | Variable | Network/database bound |
 | Output Sanitization | 1-5ms | Scales with output size |
 
 **Total overhead** (excluding tool calls): ~10-25ms for typical scripts.
+
+### Worker Pool Mode
+
+When using Worker Pool adapter for OS-level isolation, latency changes slightly:
+
+| Metric | Standard VM | Worker Pool (4 workers) |
+|--------|-------------|-------------------------|
+| Cold start | ~5ms | ~50ms (pool warm-up) |
+| Warm execution | ~1ms | ~3ms (message passing) |
+| Concurrent capacity | 1 | 4 (parallel isolation) |
+| Memory per execution | Shared | Isolated per worker |
+
+Worker Pool adds ~2-3ms latency per execution due to message passing overhead, but provides OS-level isolation and hard halt capability.
 
 ### Throughput
 
@@ -30,11 +44,38 @@ This guide covers everything you need to deploy CodeCall in production: performa
 |---------------|-------------|-------|
 | Single instance, TF-IDF | ~500 | Bottleneck: VM isolation |
 | Single instance, Embeddings | ~200 | Bottleneck: Model inference |
+| Single instance, Worker Pool (4 workers) | ~800 | Parallel isolation |
 | Multi-instance (4 pods) | ~1,500+ | Near-linear scaling |
+| Multi-instance + Worker Pool | ~3,000+ | Best isolation + throughput |
 
 <Note>
   Throughput depends heavily on script complexity and tool call latency. These numbers assume simple scripts with 1-3 tool calls.
 </Note>
+
+### Worker Pool Scaling Guidelines
+
+| Workload | minWorkers | maxWorkers | memoryLimit | Use Case |
+|----------|------------|------------|-------------|----------|
+| Low volume | 1 | 2 | 128MB | &lt;10 req/min |
+| Medium volume | 2 | 4 | 256MB | 10-100 req/min |
+| High volume | 4 | 8 | 256MB | 100-500 req/min |
+| Burst traffic | 2 | 16 | 128MB | Spiky workloads |
+
+```ts
+// Worker Pool for production
+CodeCallPlugin.init({
+  vm: {
+    adapter: 'worker_threads',
+    preset: 'secure',
+    workerPoolConfig: {
+      minWorkers: 2,
+      maxWorkers: 8,
+      memoryLimitPerWorker: 256 * 1024 * 1024,  // 256MB
+      maxExecutionsPerWorker: 1000,              // Recycle after 1000 executions
+    },
+  },
+});
+```
 
 ---
 

@@ -14,11 +14,14 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
   <Card title="Layer 0 Defense" icon="radar">
     Pre-Scanner catches attacks BEFORE parser execution - blocks parser-level DoS
   </Card>
-  <Card title="AI Scoring Gate (NEW)" icon="brain">
+  <Card title="AI Scoring Gate" icon="brain">
     Semantic analysis detects exfiltration patterns, bulk operations, and sensitive data access
   </Card>
   <Card title="Zero Trust Runtime" icon="lock">
     Enclave sandbox with whitelist-only globals and resource limits
+  </Card>
+  <Card title="Worker Pool (Optional)" icon="server">
+    OS-level memory isolation via worker threads with hard halt capability
   </Card>
 </CardGroup>
 
@@ -63,7 +66,8 @@ Every script goes through this 6-layer pipeline:
 ┌─────────────────────────────────────────────────────────────────┐
 │  LAYER 4: RUNTIME SANDBOX                                        │
 │  Execute in isolated context                                     │
-│  Library: Enclave (Node.js vm)                                   │
+│  Library: Enclave                                                │
+│  Standard: Node.js vm | Optional: Worker Pool (worker_threads)  │
 │  Enforces: timeouts, iteration caps, tool call limits           │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -505,6 +509,80 @@ CodeCallPlugin.init({
 | `balanced` | 5s | 10,000 | 200 | 256KB | 500 | Complex workflows |
 | `experimental` | 10s | 20,000 | 500 | 1MB | 1000 | Development only |
 
+### Worker Pool Adapter (Optional)
+
+For environments requiring **OS-level memory isolation**, enable the Worker Pool Adapter:
+
+```ts
+import { Enclave } from '@frontmcp/enclave';
+
+const enclave = new Enclave({
+  adapter: 'worker_threads',  // Enable Worker Pool
+  workerPoolConfig: {
+    minWorkers: 2,
+    maxWorkers: 8,
+    memoryLimitPerWorker: 256 * 1024 * 1024,  // 256MB
+  },
+});
+```
+
+#### Dual-Layer Sandbox
+
+When using Worker Pool, code runs in a **dual-layer sandbox**:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Worker Thread (OS-level isolation)              │
+│  ┌─────────────────────────────────────────────┐│
+│  │  VM Context (prototype isolation)           ││
+│  │  - Whitelist-only globals                   ││
+│  │  - __safe_* runtime functions               ││
+│  └─────────────────────────────────────────────┘│
+│  - parentPort removed from globals              │
+│  - JSON-only message serialization              │
+│  - Hard halt via worker.terminate()             │
+└─────────────────────────────────────────────────┘
+```
+
+#### When to Use Worker Pool
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Trusted internal scripts | Standard VM (lower overhead) |
+| Multi-tenant execution | Worker Pool (OS isolation) |
+| Untrusted AI-generated code | Worker Pool (hard halt) |
+| Memory-sensitive workloads | Worker Pool (per-worker limits) |
+
+#### Worker Pool Security Features
+
+| Feature | Protection |
+|---------|------------|
+| `worker.terminate()` | Hard halt runaway scripts (VM timeout bypass) |
+| `--max-old-space-size` | Per-worker memory limits |
+| JSON-only serialization | Prevents structured clone gadget attacks |
+| Dangerous global removal | parentPort, workerData inaccessible |
+| Rate limiting | Message flood protection |
+| Safe deserialize | Prototype pollution prevention |
+
+#### Worker Pool Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `minWorkers` | 2 | Minimum warm workers |
+| `maxWorkers` | CPU count | Maximum concurrent workers |
+| `memoryLimitPerWorker` | 128MB | Per-worker memory limit |
+| `maxMessagesPerSecond` | 1000 | Rate limit per worker |
+| `maxExecutionsPerWorker` | 1000 | Recycle after N executions |
+
+#### Worker Pool Presets
+
+| Level | minWorkers | maxWorkers | memoryLimit | messagesPerSec |
+|-------|------------|------------|-------------|----------------|
+| STRICT | 2 | 4 | 64MB | 100 |
+| SECURE | 2 | 8 | 128MB | 500 |
+| STANDARD | 2 | 16 | 256MB | 1000 |
+| PERMISSIVE | 4 | 32 | 512MB | 5000 |
+
 ---
 
 ## Self-Reference Guard
@@ -611,6 +689,10 @@ CodeCall categorizes all errors for safe exposure:
 | Tool Not Found | `TOOL_NOT_FOUND` | Tool name | - |
 | Tool Error | `TOOL_ERROR` | Sanitized message | - |
 | Runtime | `RUNTIME_ERROR` | Sanitized message | - |
+| Worker Timeout | `WORKER_TIMEOUT` | Duration | Worker terminated |
+| Worker Memory | `WORKER_MEMORY_EXCEEDED` | Memory usage | Worker recycled |
+| Message Flood | `MESSAGE_FLOOD_ERROR` | Rate limit | Worker terminated |
+| Queue Full | `QUEUE_FULL_ERROR` | Queue size | Request rejected |
 
 ```json
 // Example error response
@@ -704,6 +786,9 @@ Before deploying CodeCall to production:
   </Card>
   <Card title="Recursive Execution" icon="arrows-rotate">
     Self-reference guard blocks codecall:* tool calls
+  </Card>
+  <Card title="VM Timeout Bypass" icon="clock">
+    Worker Pool provides hard halt via worker.terminate() when VM timeout fails
   </Card>
 </CardGroup>
 

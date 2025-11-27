@@ -28,6 +28,7 @@ export type {
   SecurityLevel,
   SecurityLevelConfig,
   ReferenceSidecarOptions,
+  WorkerPoolConfig,
 } from './lib/types';
 
 // Security level configurations
@@ -106,3 +107,36 @@ export {
   CompositeHandle,
   isCompositeHandle,
 } from './lib/sidecar';
+
+// Worker Pool Adapter (OS-level memory isolation)
+export {
+  // Main adapter
+  WorkerPoolAdapter,
+  // Configuration
+  WorkerSlotStatus,
+  ResourceUsage,
+  WorkerPoolMetrics,
+  DEFAULT_WORKER_POOL_CONFIG,
+  WORKER_POOL_PRESETS,
+  buildWorkerPoolConfig,
+  // Errors
+  WorkerPoolError,
+  WorkerTimeoutError,
+  WorkerMemoryError,
+  WorkerCrashedError,
+  WorkerPoolDisposedError,
+  QueueFullError,
+  QueueTimeoutError,
+  ExecutionAbortedError,
+  MessageFloodError,
+  MessageValidationError,
+  MessageSizeError,
+  WorkerStartupError,
+  TooManyPendingCallsError,
+  // Utility classes
+  WorkerSlot,
+  ExecutionQueue,
+  QueueStats,
+  MemoryMonitor,
+  MemoryMonitorStats,
+} from './lib/adapters/worker-pool';

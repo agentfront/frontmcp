@@ -28,6 +28,7 @@ import type {
   SecurityLevelConfig,
   ReferenceSidecarOptions,
 } from './types';
+import type { WorkerPoolConfig } from './adapters/worker-pool/config';
 import { SECURITY_LEVEL_CONFIGS } from './types';
 import { createSafeRuntime } from './safe-runtime';
 import { validateGlobals } from './globals-validator';
@@ -144,6 +145,7 @@ export class Enclave {
     maxSanitizeProperties: number;
     maxConsoleOutputBytes: number;
     maxConsoleCalls: number;
+    workerPoolConfig?: Partial<WorkerPoolConfig>;
   };
   private readonly securityLevel: SecurityLevel;
   private readonly validator: JSAstValidator;
@@ -487,8 +489,15 @@ export class Enclave {
       case 'isolated-vm':
         throw new Error('isolated-vm adapter not yet implemented');
 
-      case 'worker_threads':
-        throw new Error('worker_threads adapter not yet implemented');
+      case 'worker_threads': {
+        const { WorkerPoolAdapter } = await import('./adapters/worker-pool/index.js');
+        this.adapter = new WorkerPoolAdapter(
+          this.config.workerPoolConfig,
+          this.securityLevel
+        );
+        await (this.adapter as { initialize?: () => Promise<void> }).initialize?.();
+        return this.adapter!;
+      }
 
       default:
         throw new Error(`Unknown adapter: ${this.config.adapter}`);

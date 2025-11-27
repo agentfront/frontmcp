@@ -260,11 +260,18 @@ CodeCall is built on three battle-tested FrontMCP libraries:
 
 ### Security Pipeline
 
-Every script goes through a 4-layer security pipeline:
+Every script goes through a 6-layer security pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        SCRIPT INPUT                              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 0: PRE-SCANNER (ast-guard)                               │
+│  • Block ReDoS, BiDi attacks before parsing                     │
+│  • Input size and nesting limits                                │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -287,16 +294,28 @@ Every script goes through a 4-layer security pipeline:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3: RUNTIME SANDBOX (Enclave)                             │
-│  • Isolated Node.js vm context                                   │
-│  • Controlled globals only (Math, JSON, Array, etc.)            │
-│  • Timeout enforcement                                           │
-│  • Tool call counting                                            │
+│  LAYER 3: AI SCORING GATE (Enclave)                             │
+│  • Semantic analysis via AST features                            │
+│  • Exfiltration pattern detection                                │
+│  • Sensitive field access tracking                               │
+│  • Risk scoring with configurable thresholds                     │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 4: OUTPUT SANITIZATION                                    │
+│  LAYER 4: RUNTIME SANDBOX (Enclave)                             │
+│  • Standard: Node.js vm (prototype isolation)                    │
+│  • Optional: Worker Pool (OS-level isolation)                    │
+│    - Dual-layer sandbox (worker thread + VM)                     │
+│    - Hard halt via worker.terminate()                            │
+│    - Per-worker memory limits                                    │
+│  • Controlled globals only (Math, JSON, Array, etc.)            │
+│  • Timeout enforcement and tool call counting                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 5: OUTPUT SANITIZATION                                    │
 │  • Remove stack traces                                           │
 │  • Scrub file paths                                              │
 │  • Truncate oversized outputs                                    │
