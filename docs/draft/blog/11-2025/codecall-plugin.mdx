@@ -230,7 +230,7 @@ sequenceDiagram
 
 It should. That's why CodeCall implements **defense-in-depth** with battle-tested security libraries:
 
-### Layer 0: Pre-Scanner (NEW)
+### Layer 0: Pre-Scanner
 
 Before the JavaScript parser even runs, [AST Guard's Pre-Scanner](/docs/guides/ast-guard) catches attacks that could DoS the parser itself:
 
@@ -280,7 +280,47 @@ After pre-scanning, [AST Guard](/docs/guides/ast-guard) parses the JavaScript in
 
 **80+ attack vectors blocked** before the code even runs.
 
-### Layer 2: Enclave (Runtime Sandbox)
+### Layer 2: Code Transformation
+
+Code is rewritten for safe execution:
+- Wraps in `async function __ag_main()` for top-level await
+- Transforms `callTool` → `__safe_callTool` for tracking
+- Adds iteration limits to all loops
+- Whitelists only safe globals
+
+### Layer 3: AI Scoring Gate (NEW)
+
+The **AI Scoring Gate** detects semantic attack patterns that syntactic validation can't catch:
+
+<AccordionGroup>
+  <Accordion title="Data Exfiltration Detection" icon="file-export">
+    Detects **fetch→send patterns**: scripts that list sensitive data then send it externally
+    ```javascript
+    // ❌ BLOCKED - Exfiltration pattern detected
+    const users = await callTool('users:list', { fields: ['password', 'apiKey'] });
+    await callTool('webhooks:send', { data: users });
+    // Score: 100 (SENSITIVE_FIELD + EXFIL_PATTERN)
+    ```
+  </Accordion>
+  <Accordion title="Bulk Harvesting Prevention" icon="database">
+    Flags **excessive limits** and bulk operation patterns
+    - `limit: 100000` → +25 risk score
+    - `bulkDelete`, `batchProcess` → +20 risk score
+  </Accordion>
+  <Accordion title="Fan-Out Attack Detection" icon="arrows-rotate">
+    Detects tool calls inside loops that could multiply requests
+    ```javascript
+    // ⚠️ WARNING - Fan-out pattern
+    for (const user of users) {
+      await callTool('emails:send', { to: user.email });
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+**8 detection rules** with configurable block/warn thresholds (default: block at 70, warn at 40).
+
+### Layer 4: Runtime Sandbox
 
 [Enclave](/docs/guides/enclave) executes validated code in an isolated Node.js `vm` context:
 
@@ -291,7 +331,7 @@ After pre-scanning, [AST Guard](/docs/guides/ast-guard) parses the JavaScript in
 - Tool call caps (default 100)
 - I/O flood protection (console rate limiting)
 
-### Layer 3: Self-Reference Guard
+### Layer 5: Self-Reference Guard
 
 Scripts **cannot** call CodeCall tools from within scripts. This prevents:
 - Recursive execution attacks
@@ -303,7 +343,7 @@ Scripts **cannot** call CodeCall tools from within scripts. This prevents:
 await callTool('codecall:execute', { script: '...' }); // ❌ BLOCKED
 ```
 
-### Layer 4: Output Sanitization
+### Layer 6: Output Sanitization
 
 All results are cleaned before returning:
 - Stack traces removed
@@ -311,7 +351,7 @@ All results are cleaned before returning:
 - Circular references handled
 - Oversized outputs truncated
 
-**Five layers of security** ensure that even if one layer is bypassed, others catch the attack.
+**Six layers of security** ensure that even if one layer is bypassed, others catch the attack.
 
 ---
 

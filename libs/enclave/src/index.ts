@@ -33,6 +33,54 @@ export type {
 // Security level configurations
 export { SECURITY_LEVEL_CONFIGS } from './lib/types';
 
+// AI Scoring Gate
+export {
+  // Main orchestrator
+  ScoringGate,
+  ScoringGateError,
+  createScoringGate,
+  // Feature extraction
+  FeatureExtractor,
+  // Cache
+  ScoringCache,
+  // Scorer interface and base class
+  BaseScorer,
+  // Scorer implementations
+  DisabledScorer,
+  RuleBasedScorer,
+  ExternalApiScorer,
+  ExternalApiScorerError,
+  // Constants
+  DEFAULT_SCORING_CONFIG,
+  RULE_THRESHOLDS,
+} from './lib/scoring';
+
+export type {
+  // Scorer interface
+  Scorer,
+  // Core types
+  ScorerType,
+  RiskLevel,
+  SensitiveCategory,
+  RuleId,
+  // Feature types
+  ExtractedFeatures,
+  ExtractedToolCall,
+  PatternSignals,
+  NumericSignals,
+  SensitiveAccess,
+  ExtractionMeta,
+  // Scoring types
+  RiskSignal,
+  ScoringResult,
+  ScoringGateResult,
+  // Configuration types
+  ScoringGateConfig,
+  ScoringCacheConfig,
+  LocalLlmConfig,
+  ExternalApiConfig,
+} from './lib/scoring';
+
 // Safe runtime utilities
 export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './lib/safe-runtime';
 

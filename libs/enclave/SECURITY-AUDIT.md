@@ -1,13 +1,13 @@
 # Enclave Security Audit Report
 
 **Date:** 2025-11-27
-**Package:** `@frontmcp/enclave` v0.0.2
-**Test Suite:** 423 security tests
-**Pass Rate:** 423/423 passing (100%)
+**Package:** `@frontmcp/enclave` v0.4.0
+**Test Suite:** 516 security tests
+**Pass Rate:** 516/516 passing (100%)
 
 ## Executive Summary
 
-The @frontmcp/enclave package provides a **defense-in-depth security architecture** for safe AgentScript execution. The package successfully blocks **all major attack vectors** including code injection, prototype pollution, sandbox escapes, and resource exhaustion attacks.
+The @frontmcp/enclave package provides a **defense-in-depth security architecture** for safe AgentScript execution. The package successfully blocks **all major attack vectors** including code injection, prototype pollution, sandbox escapes, resource exhaustion attacks, and now includes the **AI Scoring Gate** for semantic security analysis.
 
 ## Security Test Results
 
@@ -121,6 +121,23 @@ The @frontmcp/enclave package provides a **defense-in-depth security architectur
 
 **Verdict:** I/O flood attacks via excessive console output are blocked.
 
+### ✅ AI Scoring Gate - Semantic Analysis (NEW - 100% passing)
+
+- **Exfiltration pattern detection**: ✅ DETECTED (list→send sequences)
+- **Sensitive field access**: ✅ DETECTED (password, token, apiKey, SSN)
+- **Excessive limit values**: ✅ DETECTED (> 10,000)
+- **Bulk operation patterns**: ✅ DETECTED (bulk/batch/mass keywords)
+- **Loop tool calls**: ✅ DETECTED (fan-out risk)
+- **Dynamic tool names**: ✅ DETECTED (non-static tool invocation)
+- **Wildcard queries**: ✅ DETECTED (\* patterns)
+- **Extreme numeric values**: ✅ DETECTED (> 1,000,000)
+- **Risk level calculation**: ✅ ENFORCED (none/low/medium/high/critical)
+- **Configurable thresholds**: ✅ ENFORCED (block/warn thresholds)
+- **LRU caching with TTL**: ✅ ENFORCED
+- **Fail-open/fail-closed modes**: ✅ ENFORCED
+
+**Verdict:** AI Scoring Gate successfully detects semantic attack patterns with 8 detection rules.
+
 ### ✅ Side Channel Attack Prevention (Documented Limitations)
 
 - **Console output isolation**: ✅ ISOLATED (sandbox console with rate limiting)
@@ -179,34 +196,53 @@ Since all these prerequisites are blocked in the Enclave sandbox, Spectre-class 
 
 ## Security Architecture
 
-The enclave implements **4 layers of defense**:
+The enclave implements **6 layers of defense** (0-5):
 
-1. **Layer 1 - AST Validation** (`ast-guard`)
+1. **Layer 0 - Pre-Scanner** (`ast-guard`)
+
+   - Runs BEFORE parser to block parser-level attacks
+   - Blocks ReDoS, BiDi attacks, input size DoS
+
+2. **Layer 1 - AST Validation** (`ast-guard`)
 
    - Blocks eval, Function constructor
    - Validates identifier usage
    - Prevents reserved prefix usage
    - Checks for dangerous patterns
 
-2. **Layer 2 - Code Transformation**
+3. **Layer 2 - Code Transformation**
 
    - Wraps code in `async function __ag_main()`
    - Transforms `callTool` → `__safe_callTool`
    - Transforms loops → `__safe_forOf`, `__safe_for`, etc.
    - Whitelists safe globals only
 
-3. **Layer 3 - Runtime Wrappers**
+4. **Layer 3 - AI Scoring Gate** (NEW)
+
+   - Semantic security analysis via AST feature extraction
+   - 8 detection rules for attack patterns
+   - Risk scoring (0-100) with configurable thresholds
+   - Exfiltration pattern detection (fetch→send)
+   - Sensitive field access tracking
+   - LRU caching with TTL
+   - Pluggable scorer architecture (disabled/rule-based/external-api)
+
+5. **Layer 4 - Runtime Sandbox** (Node.js `vm` module)
 
    - `__safe_callTool`: Tracks and limits tool calls
    - `__safe_forOf`: Tracks and limits iterations
    - `__safe_for`, `__safe_while`: Loop guards
    - Enforces maxToolCalls and maxIterations
-
-4. **Layer 4 - VM Sandbox** (Node.js `vm` module)
    - Isolates execution context
    - Controls available globals
    - Blocks access to process, require, etc.
    - Enforces timeout limits
+
+6. **Layer 5 - Output Sanitization**
+   - Removes stack traces
+   - Sanitizes file paths
+   - Handles circular references
+   - Truncates oversized outputs
 
 ## Attack Vectors Tested
 
@@ -383,7 +419,8 @@ The @frontmcp/enclave package provides **bank-grade security** for AgentScript e
 - ✅ **No sandbox escape paths**
 - ✅ **Comprehensive resource limits**
 - ✅ **I/O flood protection** (console rate limiting)
-- ✅ **100% test pass rate** (423/423 passing)
+- ✅ **AI Scoring Gate** (semantic attack pattern detection)
+- ✅ **100% test pass rate** (516/516 passing)
 
 All security mechanisms are functioning correctly with zero failures or skipped tests.
 
@@ -397,18 +434,18 @@ All security mechanisms are functioning correctly with zero failures or skipped 
 
 ### Overall Security Testing
 
-- **Total Security Tests:** 423
-- **Passing:** 423 (100%)
+- **Total Security Tests:** 516
+- **Passing:** 516 (100%)
 - **Failing:** 0
 - **Skipped:** 0
-- **Categories Tested:** 18
+- **Categories Tested:** 19
 - **Critical Vulnerabilities Found:** 0
 - **Medium Issues Found:** 2
 - **Low Issues Found:** 2
 
 ### Attack Matrix Coverage (enclave.attack-matrix.spec.ts)
 
-- **Total Attack Vectors Tested:** 75
+- **Total Attack Vectors Tested:** 75+
 - **Test Cases:** 64
 - **Passing:** 64 (100%)
 - **Skipped:** 0
@@ -420,14 +457,47 @@ All security mechanisms are functioning correctly with zero failures or skipped 
   - Prototype Pollution (3 vectors)
   - Meta-Programming APIs (7 vectors)
   - Resource Exhaustion (26 vectors)
-  - I/O Flood Protection (3 vectors) - NEW
+  - I/O Flood Protection (3 vectors)
   - Tool Security (7 vectors)
   - WASM and Binary Code (4 vectors)
   - Error and Info Leakage (1 vector)
   - Timing and Side Channels (3 vectors)
   - Context Isolation (3 vectors)
 
+### AI Scoring Gate Coverage (scoring/\*.spec.ts)
+
+- **Test Files:** 3
+- **Test Cases:** 93
+- **Passing:** 93 (100%)
+- **Detection Rules Tested:**
+  - SENSITIVE_FIELD detection
+  - EXCESSIVE_LIMIT detection
+  - WILDCARD_QUERY detection
+  - LOOP_TOOL_CALL detection
+  - EXFIL_PATTERN detection
+  - EXTREME_VALUE detection
+  - DYNAMIC_TOOL detection
+  - BULK_OPERATION detection
+- **Scoring Features Tested:**
+  - Feature extraction from AST
+  - Risk level calculation
+  - LRU caching with TTL
+  - Fail-open/fail-closed modes
+  - Threshold configuration
+
 ## Version History
+
+- **v0.4.0** (2025-11-27): AI Scoring Gate
+
+  - Added AI Scoring Gate for semantic security analysis
+  - 8 detection rules for attack pattern identification
+  - Exfiltration pattern detection (fetch→send sequences)
+  - Sensitive field access tracking (password, token, SSN, etc.)
+  - Risk scoring (0-100) with configurable thresholds
+  - LRU cache with TTL for scoring results
+  - Pluggable scorer architecture (disabled/rule-based/external-api)
+  - 93 new tests for scoring module
+  - 516 total tests (up from 423)
 
 - **v0.0.2** (2025-11-27): I/O Flood Protection & Side-Channel Documentation
 

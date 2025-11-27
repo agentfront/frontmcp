@@ -255,6 +255,11 @@ export interface ExecutionResult<T = unknown> {
    * Execution statistics
    */
   stats: ExecutionStats;
+
+  /**
+   * AI scoring result (if scoring gate is enabled)
+   */
+  scoringResult?: ScoringGateResult;
 }
 
 /**
@@ -469,6 +474,7 @@ export interface SafeRuntimeContext {
 // Forward reference - imported at runtime to avoid circular dependency
 import type { ReferenceSidecar } from './sidecar/reference-sidecar';
 import type { ReferenceConfig } from './sidecar/reference-config';
+import type { ScoringGateConfig, ScoringGateResult } from './scoring/types';
 
 /**
  * Internal execution context (tracks state during execution)
@@ -689,4 +695,43 @@ export interface CreateEnclaveOptions extends EnclaveConfig {
    * ```
    */
   sidecar?: ReferenceSidecarOptions;
+
+  /**
+   * AI Scoring Gate configuration
+   *
+   * Adds semantic security analysis that detects attack patterns
+   * beyond what static AST validation can catch:
+   * - Data exfiltration patterns (list→send)
+   * - Excessive access (high limits, wildcards)
+   * - Fan-out attacks (tool calls in loops)
+   * - Sensitive data access (passwords, tokens)
+   *
+   * Runs AFTER AST validation but BEFORE code execution.
+   *
+   * @example
+   * ```typescript
+   * // Rule-based scorer (~1ms, zero dependencies)
+   * const enclave = new Enclave({
+   *   scoringGate: {
+   *     scorer: 'rule-based',
+   *     blockThreshold: 70,
+   *   },
+   * });
+   *
+   * // External API scorer (best detection)
+   * const enclave = new Enclave({
+   *   scoringGate: {
+   *     scorer: 'external-api',
+   *     externalApi: {
+   *       endpoint: 'https://api.example.com/score',
+   *       apiKey: process.env.SCORING_API_KEY,
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  scoringGate?: ScoringGateConfig;
 }
+
+// Re-export scoring types for convenience
+export type { ScoringGateConfig, ScoringGateResult };

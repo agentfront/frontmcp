@@ -5,7 +5,7 @@ description: Defense-in-depth security with AST validation, code transformation,
 icon: shield
 ---
 
-CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through **five security layers** before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
+CodeCall implements **bank-grade security** through a defense-in-depth architecture. Every script passes through **six security layers** before execution, ensuring that even if one layer is bypassed, others catch malicious behavior.
 
 <CardGroup cols={2}>
   <Card title="80+ Attack Vectors Blocked" icon="shield-check">
@@ -14,11 +14,11 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
   <Card title="Layer 0 Defense" icon="radar">
     Pre-Scanner catches attacks BEFORE parser execution - blocks parser-level DoS
   </Card>
+  <Card title="AI Scoring Gate (NEW)" icon="brain">
+    Semantic analysis detects exfiltration patterns, bulk operations, and sensitive data access
+  </Card>
   <Card title="Zero Trust Runtime" icon="lock">
     Enclave sandbox with whitelist-only globals and resource limits
-  </Card>
-  <Card title="Self-Reference Guard" icon="ban">
-    Scripts cannot call CodeCall tools - prevents recursive execution
   </Card>
 </CardGroup>
 
@@ -26,11 +26,11 @@ CodeCall implements **bank-grade security** through a defense-in-depth architect
 
 ## Security Pipeline
 
-Every script goes through this 5-layer pipeline:
+Every script goes through this 6-layer pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 0: PRE-SCANNER (NEW)                                      │
+│  LAYER 0: PRE-SCANNER                                            │
 │  Defense-in-depth BEFORE parser runs                             │
 │  Library: ast-guard (pre-scanner module)                         │
 │  Blocks: ReDoS patterns, BiDi attacks, input size DoS, nesting  │
@@ -53,7 +53,15 @@ Every script goes through this 5-layer pipeline:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3: RUNTIME SANDBOX                                        │
+│  LAYER 3: AI SCORING GATE (NEW)                                  │
+│  Semantic security analysis with pluggable scorers               │
+│  Library: Enclave (scoring module)                               │
+│  Detects: exfiltration patterns, bulk ops, sensitive access     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 4: RUNTIME SANDBOX                                        │
 │  Execute in isolated context                                     │
 │  Library: Enclave (Node.js vm)                                   │
 │  Enforces: timeouts, iteration caps, tool call limits           │
@@ -61,7 +69,7 @@ Every script goes through this 5-layer pipeline:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 4: OUTPUT SANITIZATION                                    │
+│  LAYER 5: OUTPUT SANITIZATION                                    │
 │  Clean results before returning                                  │
 │  Removes: stack traces, file paths, internal errors             │
 └─────────────────────────────────────────────────────────────────┘
@@ -323,7 +331,132 @@ let __safe_bypass = 123;
 
 ---
 
-## Layer 3: Runtime Sandbox
+## Layer 3: AI Scoring Gate (NEW)
+
+The **AI Scoring Gate** is a semantic security layer that analyzes code behavior patterns to detect sophisticated attacks that syntactic validation alone cannot catch. It runs after AST validation but before VM execution.
+
+### Why Semantic Analysis?
+
+AST validation catches structural threats (eval, prototype pollution), but some attacks are semantically valid code that behaves maliciously:
+
+- **Data exfiltration**: Fetch sensitive data, then send it externally
+- **Bulk data harvesting**: Request excessive limits to scrape data
+- **Credential theft**: Access password/token fields and export them
+- **Fan-out attacks**: Loop over results and call tools for each item
+
+The Scoring Gate uses **feature extraction** and **rule-based analysis** to assign risk scores to these behavioral patterns.
+
+### Detection Rules (8 Built-in)
+
+| Rule ID | Score | Trigger |
+|---------|-------|---------|
+| `SENSITIVE_FIELD` | +35 | Access to password, token, secret, apiKey, SSN, etc. |
+| `EXCESSIVE_LIMIT` | +25 | Limit values > 10,000 |
+| `WILDCARD_QUERY` | +20 | Query patterns like `*` or `SELECT *` |
+| `LOOP_TOOL_CALL` | +25-35 | Tool calls inside loops (potential fan-out) |
+| `EXFIL_PATTERN` | +40 | Fetch→Send sequence (list data, then webhook/email) |
+| `EXTREME_VALUE` | +30 | Numeric values > 1,000,000 |
+| `DYNAMIC_TOOL` | +25 | Tool name from variable (not string literal) |
+| `BULK_OPERATION` | +20 | Tool names with bulk/batch/mass/all keywords |
+
+### Risk Levels
+
+| Total Score | Risk Level | Default Action |
+|-------------|------------|----------------|
+| 0-19 | `none` | Allow |
+| 20-39 | `low` | Allow |
+| 40-69 | `medium` | **Warn** (configurable) |
+| 70-89 | `high` | **Block** (configurable) |
+| 90-100 | `critical` | **Block** |
+
+### Example: Exfiltration Detection
+
+```js
+// This code triggers EXFIL_PATTERN + SENSITIVE_FIELD + EXCESSIVE_LIMIT
+const users = await callTool('users:list', {
+  limit: 100000,
+  fields: ['email', 'password', 'apiKey']
+});
+await callTool('webhooks:send', { data: users });
+
+// Score breakdown:
+// - SENSITIVE_FIELD: +35 (password, apiKey)
+// - EXCESSIVE_LIMIT: +25 (100000 > 10000)
+// - EXFIL_PATTERN: +40 (list → send)
+// Total: 100 → BLOCKED (critical risk)
+```
+
+### Scorer Modes
+
+The Scoring Gate supports pluggable scorers for different deployment scenarios:
+
+| Mode | Latency | Description |
+|------|---------|-------------|
+| `disabled` | ~0ms | Pass-through, no scoring (for trusted environments) |
+| `rule-based` | ~1ms | Zero-dependency TypeScript rules (recommended) |
+| `external-api` | ~100ms | External scoring API for advanced ML models |
+
+### Configuration
+
+```ts
+import { createEnclave } from '@frontmcp/enclave';
+
+const enclave = createEnclave({
+  scoringGate: {
+    scorer: 'rule-based',    // 'disabled' | 'rule-based' | 'external-api'
+    blockThreshold: 70,      // Block if score >= 70
+    warnThreshold: 40,       // Warn if score >= 40
+    failOpen: true,          // Allow on scorer errors (production default)
+    cache: {
+      enabled: true,
+      ttlMs: 60000,          // Cache scores for 1 minute
+      maxEntries: 1000,
+    },
+  },
+});
+```
+
+### Fail-Open vs Fail-Closed
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `failOpen: true` | Allow execution if scorer fails | **Production default** - availability over security |
+| `failOpen: false` | Block execution if scorer fails | High-security environments |
+
+### Scoring Result
+
+Every execution includes scoring metadata:
+
+```ts
+const result = await enclave.run(code, { tools });
+
+console.log(result.scoringResult);
+// {
+//   allowed: true,
+//   warned: true,
+//   totalScore: 45,
+//   riskLevel: 'medium',
+//   signals: [
+//     { id: 'EXCESSIVE_LIMIT', score: 25, message: 'Limit 15000 > 10000' },
+//     { id: 'WILDCARD_QUERY', score: 20, message: 'Wildcard query "*" detected' }
+//   ],
+//   latencyMs: 0.8,
+//   cached: false
+// }
+```
+
+### Caching
+
+The Scoring Gate uses an **LRU cache** with TTL to avoid re-scoring identical code:
+
+- Same code → same features → same score
+- Cache hit latency: ~0.01ms
+- Configurable TTL and max entries
+- Automatic pruning of expired entries
+
+---
+
+## Layer 4: Runtime Sandbox
 
 [Enclave](/docs/guides/enclave) executes transformed code in an isolated Node.js `vm` context.
 
@@ -412,7 +545,7 @@ assertNotSelfReference(toolName);  // Throws if codecall:* tool
 
 ---
 
-## Layer 4: Output Sanitization
+## Layer 5: Output Sanitization
 
 All outputs are sanitized before returning to the client:
 
@@ -523,6 +656,16 @@ Before deploying CodeCall to production:
     sanitization: { removeStackTraces: true, removeFilePaths: true }
     ```
   </Step>
+  <Step title="Configure AI Scoring Gate">
+    Enable rule-based scoring with appropriate thresholds.
+    ```ts
+    scoringGate: {
+      scorer: 'rule-based',
+      blockThreshold: 70,
+      warnThreshold: 40,
+    }
+    ```
+  </Step>
   <Step title="Test Security Boundaries">
     Run the attack vector tests from ast-guard's security audit.
   </Step>
@@ -540,6 +683,12 @@ Before deploying CodeCall to production:
   </Card>
   <Card title="Sandbox Escape" icon="door-open">
     Isolated vm context with no access to Node.js APIs or globals
+  </Card>
+  <Card title="Data Exfiltration" icon="file-export">
+    AI Scoring Gate detects fetch→send patterns and sensitive data access
+  </Card>
+  <Card title="Bulk Data Harvesting" icon="database">
+    Scoring Gate flags excessive limits and bulk operations
   </Card>
   <Card title="Prototype Pollution" icon="virus">
     Blocked at AST level and isolated at runtime

@@ -33,6 +33,8 @@ import { createSafeRuntime } from './safe-runtime';
 import { validateGlobals } from './globals-validator';
 import { ReferenceSidecar } from './sidecar/reference-sidecar';
 import { REFERENCE_CONFIGS, ReferenceConfig } from './sidecar/reference-config';
+import { ScoringGate } from './scoring/scoring-gate';
+import type { ScoringGateConfig, ScoringGateResult } from './scoring/types';
 
 /**
  * Default security level
@@ -148,6 +150,7 @@ export class Enclave {
   private readonly validateCode: boolean;
   private readonly transformCode: boolean;
   private readonly referenceConfig?: ReferenceConfig;
+  private readonly scoringGate?: ScoringGate;
   private adapter?: SandboxAdapter;
 
   constructor(options: CreateEnclaveOptions = {}) {
@@ -229,7 +232,22 @@ export class Enclave {
     // Build reference config if sidecar is enabled
     this.referenceConfig = buildReferenceConfig(this.securityLevel, options.sidecar);
 
+    // Initialize scoring gate if configured
+    if (options.scoringGate && options.scoringGate.scorer !== 'disabled') {
+      this.scoringGate = new ScoringGate(options.scoringGate);
+    }
+
     // Adapter will be lazy-loaded based on config.adapter
+  }
+
+  /**
+   * Initialize async components (scoring gate, etc.)
+   *
+   * Call this before run() if using scorers that require initialization
+   * (e.g., local-llm needs to download the model)
+   */
+  async initialize(): Promise<void> {
+    await this.scoringGate?.initialize();
   }
 
   /**
@@ -306,6 +324,39 @@ export class Enclave {
         }
       }
 
+      // Step 2.5: AI Scoring Gate (if configured)
+      // This runs AFTER AST validation but BEFORE code execution
+      let scoringResult: ScoringGateResult | undefined;
+      if (this.scoringGate) {
+        scoringResult = await this.scoringGate.evaluate(transformedCode);
+
+        if (!scoringResult.allowed) {
+          const signalSummary = scoringResult.signals
+            ?.map(s => `${s.id}: ${s.description}`)
+            .join('; ') ?? 'Unknown risk';
+
+          return {
+            success: false,
+            error: {
+              name: 'ScoringGateError',
+              message: `Script blocked by AI scoring (score: ${scoringResult.totalScore}): ${signalSummary}`,
+              code: 'SCORING_BLOCKED',
+              data: {
+                totalScore: scoringResult.totalScore,
+                riskLevel: scoringResult.riskLevel,
+                signals: scoringResult.signals,
+              },
+            },
+            stats: {
+              ...stats,
+              duration: Date.now() - startTime,
+              endTime: Date.now(),
+            },
+            scoringResult,
+          };
+        }
+      }
+
       // Step 3: Create execution context
       const context: ExecutionContext = {
         config: this.config,
@@ -330,6 +381,11 @@ export class Enclave {
 
         // Clear timeout
         clearTimeout(timeoutId);
+
+        // Include scoring result in successful execution
+        if (scoringResult) {
+          return { ...result, scoringResult };
+        }
 
         return result;
       } catch (error: unknown) {
@@ -485,6 +541,14 @@ export class Enclave {
       this.adapter.dispose();
       this.adapter = undefined;
     }
+    this.scoringGate?.dispose();
+  }
+
+  /**
+   * Get scoring gate statistics (if configured)
+   */
+  getScoringStats(): ReturnType<ScoringGate['getCacheStats']> | null {
+    return this.scoringGate?.getCacheStats() ?? null;
   }
 }
 
