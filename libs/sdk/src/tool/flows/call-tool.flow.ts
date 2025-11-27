@@ -69,6 +69,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
+    // NOTE: `any` is intentional - Zod parsing validates these values
+    // Using unknown would require redundant type guards after schema validation
     let params: any;
     let ctx: any;
     try {

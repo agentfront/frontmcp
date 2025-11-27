@@ -1,0 +1,967 @@
+---
+title: API Reference
+sidebarTitle: API Reference
+description: Complete reference for CodeCall meta-tools - search, describe, execute, and invoke.
+icon: book
+---
+
+CodeCall exposes four meta-tools that replace direct tool access. This page documents the complete API for each tool with request/response schemas and examples.
+
+---
+
+## codecall:search
+
+Search for tools by natural language query using semantic embeddings.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:search",
+  "input": {
+    "query": "string (required) - Natural language search query",
+    "topK": "number (optional, default: 5) - Maximum results to return",
+    "filter": {
+      "appIds": ["string"] // (optional) - Limit to specific apps
+    }
+  }
+}
+```
+
+### Response Schema
+
+```json
+{
+  "tools": [
+    {
+      "name": "string - Tool name (e.g., 'users:list')",
+      "appId": "string - Owning app ID",
+      "description": "string - Tool description",
+      "score": "number - Relevance score (0-1)"
+    }
+  ],
+  "totalIndexed": "number - Total tools in index"
+}
+```
+
+### Examples
+
+<CodeGroup>
+  ```json Search All Apps
+  {
+    "tool": "codecall:search",
+    "input": {
+    "query": "get user profile information",
+    "topK": 5
+  }
+  }
+  ```
+
+  ```json Filter by App
+  {
+    "tool": "codecall:search",
+    "input": {
+    "query": "list all invoices",
+    "topK": 10,
+    "filter": {
+    "appIds": ["billing", "payments"]
+  }
+  }
+  }
+  ```
+</CodeGroup>
+
+### Response Example
+
+```json
+{
+  "tools": [
+    {
+      "name": "users:getProfile",
+      "appId": "user-service",
+      "description": "Get user profile by ID with full details",
+      "score": 0.94
+    },
+    {
+      "name": "users:list",
+      "appId": "user-service",
+      "description": "List all users with pagination and filtering",
+      "score": 0.78
+    },
+    {
+      "name": "auth:whoami",
+      "appId": "auth-service",
+      "description": "Get current authenticated user info",
+      "score": 0.72
+    }
+  ],
+  "totalIndexed": 156
+}
+```
+
+### Search Strategy
+
+CodeCall supports two embedding strategies:
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `tfidf` | TF-IDF text matching (default) | Fast, no model loading, works offline |
+| `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model |
+
+```ts
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'tfidf',      // or 'embedding'
+    similarityThreshold: 0.3,
+  },
+});
+```
+
+---
+
+## codecall:describe
+
+Get detailed schemas and documentation for specific tools.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:describe",
+  "input": {
+    "toolNames": ["string (required) - Array of tool names to describe"]
+  }
+}
+```
+
+### Response Schema
+
+```json
+{
+  "tools": [
+    {
+      "name": "string - Tool name",
+      "appId": "string - Owning app ID",
+      "description": "string - Full description",
+      "inputSchema": { /* JSON Schema */ },
+      "outputSchema": { /* JSON Schema or null */ },
+      "annotations": {
+        "destructiveHint": "boolean (optional)",
+        "idempotentHint": "boolean (optional)",
+        "openWorldHint": "boolean (optional)"
+      },
+      "usageExample": {
+        "description": "string - Example description",
+        "code": "string - Example AgentScript code"
+      }
+    }
+  ],
+  "notFound": ["string (optional) - Tool names that weren't found"]
+}
+```
+
+### Example
+
+<CodeGroup>
+  ```json Request
+  {
+    "tool": "codecall:describe",
+    "input": {
+    "toolNames": ["users:list", "users:getById"]
+  }
+  }
+  ```
+
+  ```json Response
+  {
+    "tools": [
+  {
+    "name": "users:list",
+    "appId": "user-service",
+    "description": "List users with optional filtering and pagination",
+    "inputSchema": {
+    "type": "object",
+    "properties": {
+    "status": {
+    "type": "string",
+    "enum": ["active", "inactive", "pending"],
+    "description": "Filter by user status"
+  },
+    "role": {
+    "type": "string",
+    "enum": ["admin", "user", "guest"],
+    "description": "Filter by role"
+  },
+    "limit": {
+    "type": "number",
+    "minimum": 1,
+    "maximum": 100,
+    "default": 20,
+    "description": "Maximum results per page"
+  },
+    "offset": {
+    "type": "number",
+    "minimum": 0,
+    "default": 0,
+    "description": "Pagination offset"
+  }
+  }
+  },
+    "outputSchema": {
+    "type": "object",
+    "properties": {
+    "users": {
+    "type": "array",
+    "items": {"$ref": "#/definitions/User"}
+  },
+    "total": {"type": "number"},
+    "hasMore": {"type": "boolean"}
+  }
+  },
+    "annotations": {
+    "readOnlyHint": true
+  },
+    "usageExample": {
+    "description": "List active users with pagination",
+    "code": "const result = await callTool('users:list', { status: 'active', limit: 50 });\nreturn result.users;"
+  }
+  }
+    ],
+    "notFound": []
+  }
+  ```
+</CodeGroup>
+
+### Security Note
+
+<Warning>
+  `codecall:describe` will not return information about CodeCall meta-tools themselves. Attempting to describe
+  `codecall:execute` returns the tool in `notFound`.
+</Warning>
+
+---
+
+## codecall:execute
+
+Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:execute",
+  "input": {
+    "script": "string (required) - JavaScript code to execute",
+    "context": { /* (optional) - Read-only context available as codecallContext */ },
+    "allowedTools": ["string (optional) - Whitelist of allowed tool names"]
+  }
+}
+```
+
+### Response Schema
+
+**Success:**
+```json
+{
+  "status": "ok",
+  "result": "any - Return value from script",
+  "logs": ["string (optional) - Console output if enabled"]
+}
+```
+
+**Error Responses:**
+
+<AccordionGroup>
+  <Accordion title="Syntax Error">
+    ```json
+    {
+      "status": "syntax_error",
+      "error": {
+      "message": "Unexpected token at line 5",
+      "location": {"line": 5, "column": 12}
+    }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Validation Error (AST)">
+    ```json
+    {
+      "status": "illegal_access",
+      "error": {
+      "kind": "IllegalBuiltinAccess",
+      "message": "Identifier 'eval' is not allowed in AgentScript"
+    }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Runtime Error">
+    ```json
+    {
+      "status": "runtime_error",
+      "error": {
+      "source": "script",
+      "message": "Cannot read property 'name' of undefined",
+      "name": "TypeError"
+    }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Tool Error">
+    ```json
+    {
+      "status": "tool_error",
+      "error": {
+      "source": "tool",
+      "toolName": "users:list",
+      "message": "Rate limit exceeded",
+      "code": "RATE_LIMIT"
+    }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Timeout">
+    ```json
+    {
+      "status": "timeout",
+      "error": {
+      "message": "Script execution timed out after 3500ms"
+    }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Example
+
+<CodeGroup>
+  ```json Request
+  {
+    "tool": "codecall:execute",
+    "input": {
+    "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a.email) };",
+    "context": {
+    "tenantId": "tenant-123"
+  }
+  }
+  }
+  ```
+
+  ```json Response
+  {
+    "status": "ok",
+    "result": {
+    "adminCount": 3,
+    "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
+  }
+  }
+  ```
+</CodeGroup>
+
+### AgentScript API
+
+Inside `codecall:execute` scripts, these functions are available:
+
+#### callTool(name, input, options?)
+
+Call a tool and get the result.
+
+```ts
+// Basic call
+const users = await callTool('users:list', { limit: 100 });
+
+// With error handling option
+const result = await callTool('users:get', { id: 'invalid' }, {
+  throwOnError: false  // Returns { success, data, error } instead of throwing
+});
+
+if (result.success) {
+  return result.data;
+} else {
+  return { error: result.error.message };
+}
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `throwOnError` | `boolean` | `true` | Throw on error or return result object |
+
+#### getTool(name)
+
+Get metadata about a tool (name, description, schemas).
+
+```ts
+const meta = getTool('users:list');
+console.log(meta.description);
+console.log(meta.inputSchema);
+```
+
+#### codecallContext
+
+Read-only context object passed in the request.
+
+```ts
+// Access context
+const tenantId = codecallContext.tenantId;
+const userId = codecallContext.userId;
+
+// Cannot modify
+codecallContext.tenantId = 'other'; // ❌ Throws error (frozen object)
+```
+
+#### console (if enabled)
+
+Standard console methods, captured in response logs.
+
+```ts
+console.log('Processing users...');
+console.warn('Large dataset detected');
+console.error('Validation failed');
+```
+
+<Note>
+  Console is only available if `vm.allowConsole: true` in plugin config. Logs are returned in the `logs` array of the
+  response.
+</Note>
+
+#### __safe_parallel(fns, options?)
+
+Execute multiple async operations in parallel with controlled concurrency.
+
+```ts
+// Fetch multiple users in parallel
+const userIds = ['user-1', 'user-2', 'user-3', 'user-4', 'user-5'];
+
+const users = await __safe_parallel(
+  userIds.map(id => () => callTool('users:get', { id })),
+  { maxConcurrency: 3 }  // Max 3 concurrent requests
+);
+
+return users;  // Array of results in same order as input
+```
+
+**Options:**
+
+| Option | Type | Default | Max | Description |
+|--------|------|---------|-----|-------------|
+| `maxConcurrency` | `number` | 10 | 20 | Max concurrent operations |
+
+**Limits:**
+
+| Limit | Value | Error |
+|-------|-------|-------|
+| Max array size | 100 | `Cannot execute more than 100 operations in parallel` |
+| Max concurrency | 20 | Silently clamped |
+
+**Error Handling:**
+
+```ts
+// If any operation fails, the entire parallel call fails
+try {
+  const results = await __safe_parallel([
+    () => callTool('users:get', { id: 'valid' }),
+    () => callTool('users:get', { id: 'invalid' }),  // Throws
+    () => callTool('users:get', { id: 'also-valid' }),
+  ]);
+} catch (error) {
+  // Error message: "1 of 3 parallel operations failed:
+  //   [1]: User not found"
+}
+```
+
+**Use Cases:**
+
+```ts
+// Batch fetching
+const ids = await callTool('users:listIds', { limit: 50 });
+const users = await __safe_parallel(
+  ids.map(id => () => callTool('users:get', { id }))
+);
+
+// Parallel aggregation
+const [orders, users, metrics] = await __safe_parallel([
+  () => callTool('orders:list', { status: 'pending' }),
+  () => callTool('users:list', { role: 'admin' }),
+  () => callTool('analytics:getMetrics', {}),
+]);
+```
+
+---
+
+## codecall:invoke
+
+Direct tool invocation without JavaScript execution. Useful for simple single-tool calls.
+
+### Request Schema
+
+```json
+{
+  "tool": "codecall:invoke",
+  "input": {
+    "tool": "string (required) - Tool name to invoke",
+    "input": { /* (required) - Input to pass to the tool */ }
+  }
+}
+```
+
+### Response Schema
+
+**Success:**
+```json
+{
+  "status": "ok",
+  "result": "any - Tool return value"
+}
+```
+
+**Error:**
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "string - Error code",
+    "message": "string - Error message"
+  }
+}
+```
+
+### Example
+
+<CodeGroup>
+  ```json Request
+  {
+    "tool": "codecall:invoke",
+    "input": {
+    "tool": "users:getById",
+    "input": {"id": "user-123"}
+  }
+  }
+  ```
+
+  ```json Response
+  {
+    "status": "ok",
+    "result": {
+    "id": "user-123",
+    "email": "alice@example.com",
+    "name": "Alice Smith",
+    "role": "admin",
+    "status": "active"
+  }
+  }
+  ```
+</CodeGroup>
+
+### When to Use Invoke vs Execute
+
+| Use `codecall:invoke` | Use `codecall:execute` |
+|-----------------------|------------------------|
+| Single tool call | Multiple tool calls |
+| No data transformation needed | Filter/join/transform results |
+| Latency-sensitive (no VM overhead) | Complex orchestration logic |
+| Simple CRUD operations | Conditional workflows |
+
+---
+
+## Error Codes Reference
+
+### Script Execution Errors
+
+| Code | Status | Description | Recovery |
+|------|--------|-------------|----------|
+| `SYNTAX_ERROR` | `syntax_error` | JavaScript syntax error | Fix syntax at indicated location |
+| `VALIDATION_ERROR` | `illegal_access` | AST validation failed | Remove blocked construct |
+| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:* tool | Use regular tools only |
+| `TOOL_NOT_FOUND` | `tool_error` | Tool doesn't exist | Check tool name spelling |
+| `ACCESS_DENIED` | `tool_error` | Tool not in allowedTools | Add to allowlist |
+| `EXECUTION_ERROR` | `runtime_error` | Runtime error in script | Debug script logic |
+| `TIMEOUT` | `timeout` | Exceeded time limit | Optimize or increase timeout |
+| `TOOL_EXECUTION_ERROR` | `tool_error` | Tool threw an error | Check tool input |
+
+### Worker Pool Errors (when adapter='worker_threads')
+
+| Error Class | Code | Description | Recovery |
+|-------------|------|-------------|----------|
+| `WorkerTimeoutError` | `WORKER_TIMEOUT` | Execution exceeded watchdog timeout | Reduce script complexity |
+| `WorkerMemoryError` | `WORKER_MEMORY_EXCEEDED` | Worker exceeded memory limit | Reduce data size or increase limit |
+| `WorkerCrashedError` | `WORKER_CRASHED` | Worker process crashed unexpectedly | Check for infinite recursion |
+| `WorkerPoolDisposedError` | `POOL_DISPOSED` | Pool was shut down during execution | Restart the server |
+| `QueueFullError` | `QUEUE_FULL` | Execution queue at capacity | Wait or scale up workers |
+| `QueueTimeoutError` | `QUEUE_TIMEOUT` | Waited too long in queue | Scale up workers |
+| `ExecutionAbortedError` | `EXECUTION_ABORTED` | Execution was cancelled | N/A (intentional) |
+| `MessageFloodError` | `MESSAGE_FLOOD` | Rate limit exceeded | Reduce callTool frequency |
+| `MessageValidationError` | `MESSAGE_INVALID` | Malformed message from worker | Report as bug |
+| `MessageSizeError` | `MESSAGE_TOO_LARGE` | Message exceeded size limit | Reduce result size |
+| `WorkerStartupError` | `WORKER_STARTUP_FAILED` | Worker failed to initialize | Check system resources |
+| `TooManyPendingCallsError` | `TOO_MANY_PENDING_CALLS` | Too many concurrent tool calls | Use sequential calls |
+
+---
+
+## Error Handling Patterns
+
+### Basic Pattern: throwOnError
+
+```ts
+// Default: throws on error
+const users = await callTool('users:list', { limit: 100 });
+
+// Safe pattern: returns result object
+const result = await callTool('users:get', { id: 'maybe-invalid' }, {
+  throwOnError: false
+});
+
+if (result.success) {
+  return { user: result.data };
+} else {
+  return { error: result.error.message, fallback: 'default-user' };
+}
+```
+
+### Retry Pattern
+
+```ts
+async function retryTool(toolName, args, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const result = await callTool(toolName, args, { throwOnError: false });
+
+    if (result.success) {
+      return result.data;
+    }
+
+    // Don't retry non-transient errors
+    if (result.error.code === 'NOT_FOUND' || result.error.code === 'VALIDATION_ERROR') {
+      throw new Error(result.error.message);
+    }
+
+    // Last attempt - throw
+    if (attempt === maxRetries) {
+      throw new Error(`Failed after ${maxRetries} attempts: ${result.error.message}`);
+    }
+
+    console.warn(`Attempt ${attempt} failed, retrying...`);
+  }
+}
+
+// Usage
+const data = await retryTool('api:fetch', { url: '/data' });
+```
+
+### Fallback Pattern
+
+```ts
+// Try primary, fall back to secondary
+const result = await callTool('cache:get', { key: 'users' }, { throwOnError: false });
+
+const users = result.success
+  ? result.data
+  : await callTool('db:query', { table: 'users' });  // Fallback to DB
+
+return users;
+```
+
+### Partial Success Pattern
+
+```ts
+// Process items, collect both successes and failures
+const ids = ['id-1', 'id-2', 'id-3', 'id-4'];
+const results = { success: [], failed: [] };
+
+for (const id of ids) {
+  const result = await callTool('users:get', { id }, { throwOnError: false });
+
+  if (result.success) {
+    results.success.push(result.data);
+  } else {
+    results.failed.push({ id, error: result.error.message });
+  }
+}
+
+return {
+  users: results.success,
+  errors: results.failed,
+  successRate: results.success.length / ids.length,
+};
+```
+
+---
+
+## Debugging Guide
+
+### Using console.log
+
+```ts
+// Enable in config
+CodeCallPlugin.init({
+  vm: { allowConsole: true }
+});
+
+// In script
+const users = await callTool('users:list', { limit: 10 });
+console.log('Fetched users:', users.length);
+
+for (const user of users) {
+  console.log('Processing:', user.id, user.email);
+}
+
+// Logs appear in response.logs array
+```
+
+### Interpreting Error Messages
+
+<AccordionGroup>
+  <Accordion title="Maximum iteration limit exceeded">
+    **Cause:** Loop ran more than `maxIterations` times
+    **Fix:** Use pagination or filter data before looping
+
+    ```ts
+    // Bad: looping over potentially large dataset
+    for (const item of items) { ... }
+
+    // Good: paginate or limit
+    const page = items.slice(0, 100);
+    for (const item of page) { ... }
+    ```
+  </Accordion>
+
+  <Accordion title="Maximum tool call limit exceeded">
+    **Cause:** Script called more than `maxToolCalls` tools
+    **Fix:** Batch operations or use `__safe_parallel`
+
+    ```ts
+    // Bad: one tool call per item
+    for (const id of ids) {
+      await callTool('users:get', { id });
+    }
+
+    // Good: batch fetch
+    const users = await callTool('users:getBatch', { ids });
+    ```
+  </Accordion>
+
+  <Accordion title="Script execution timed out">
+    **Cause:** Script ran longer than `timeoutMs`
+    **Fix:** Optimize, use less data, or increase timeout
+
+    ```ts
+    // Check preset timeout
+    // locked_down: 2s, secure: 3.5s, balanced: 5s
+    CodeCallPlugin.init({
+      vm: { preset: 'balanced', timeoutMs: 8000 }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Identifier 'X' is not allowed">
+    **Cause:** Used a blocked identifier (eval, require, etc.)
+    **Fix:** Use allowed alternatives
+
+    ```ts
+    // Blocked
+    eval('code');
+    require('module');
+    setTimeout(fn, 100);
+
+    // Allowed
+    // Use callTool for external operations
+    await callTool('code:run', { script: 'code' });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Development Mode
+
+For easier debugging during development:
+
+```ts
+CodeCallPlugin.init({
+  vm: {
+    preset: 'experimental',  // Longer timeouts, more iterations
+    allowConsole: true,
+  },
+
+  // Don't sanitize errors in development
+  sanitization: {
+    removeStackTraces: process.env.NODE_ENV === 'production',
+    removeFilePaths: process.env.NODE_ENV === 'production',
+  },
+});
+```
+
+---
+
+## Testing Strategy
+
+### Unit Testing AgentScript
+
+```ts
+import { Enclave } from '@frontmcp/enclave';
+
+describe('AgentScript', () => {
+  let enclave: Enclave;
+
+  beforeEach(() => {
+    enclave = new Enclave({ securityLevel: 'STANDARD' });
+  });
+
+  afterEach(() => {
+    enclave.dispose();
+  });
+
+  it('should execute basic script', async () => {
+    const result = await enclave.execute(`
+      return 1 + 1;
+    `);
+
+    expect(result.success).toBe(true);
+    expect(result.value).toBe(2);
+  });
+
+  it('should call tools', async () => {
+    const mockToolHandler = jest.fn().mockResolvedValue({ users: [] });
+
+    const result = await enclave.execute(`
+      const data = await callTool('users:list', {});
+      return data.users.length;
+    `, { toolHandler: mockToolHandler });
+
+    expect(mockToolHandler).toHaveBeenCalledWith('users:list', {});
+    expect(result.value).toBe(0);
+  });
+});
+```
+
+### Integration Testing with Mock Tools
+
+```ts
+import { App, Tool, ToolContext } from '@frontmcp/sdk';
+import { CodeCallPlugin } from '@frontmcp/plugins';
+
+// Create test app with mock tools
+@App({ id: 'test-app', plugins: [CodeCallPlugin.init()] })
+class TestApp {
+  @Tool({ name: 'users:list' })
+  async listUsers(ctx: ToolContext) {
+    return [
+      { id: '1', name: 'Alice' },
+      { id: '2', name: 'Bob' },
+    ];
+  }
+}
+
+describe('CodeCall Integration', () => {
+  it('should execute scripts with real tools', async () => {
+    const response = await callMcpTool('codecall:execute', {
+      script: `
+        const users = await callTool('users:list', {});
+        return users.map(u => u.name);
+      `,
+    });
+
+    expect(response.status).toBe('ok');
+    expect(response.result).toEqual(['Alice', 'Bob']);
+  });
+});
+```
+
+### Testing Security Rules
+
+```ts
+describe('Security', () => {
+  it('should block eval', async () => {
+    const result = await enclave.execute(`
+      eval('1 + 1');
+    `);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain('eval');
+  });
+
+  it('should block self-reference', async () => {
+    const result = await callMcpTool('codecall:execute', {
+      script: `
+        await callTool('codecall:execute', { script: 'return 1' });
+      `,
+    });
+
+    expect(result.status).toBe('illegal_access');
+    expect(result.error.code).toBe('SELF_REFERENCE_BLOCKED');
+  });
+
+  it('should enforce iteration limit', async () => {
+    const result = await enclave.execute(`
+      let i = 0;
+      for (const x of Array(100000)) { i++; }
+      return i;
+    `, { config: { maxIterations: 1000 } });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain('iteration limit');
+  });
+});
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Test CodeCall Scripts
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+      - run: npm test
+
+      # Run CodeCall-specific security tests
+      - run: npm run test:security
+        env:
+          CODECALL_VM_PRESET: secure
+```
+
+---
+
+## Rate Limiting
+
+CodeCall meta-tools respect FrontMCP's rate limiting:
+
+```ts
+import { RateLimitPlugin } from '@frontmcp/plugins';
+
+@App({
+  plugins: [
+    CodeCallPlugin.init({ ... }),
+    RateLimitPlugin.init({
+      rules: [
+        { tool: 'codecall:execute', limit: 10, window: '1m' },
+        { tool: 'codecall:search', limit: 100, window: '1m' },
+      ],
+    }),
+  ],
+})
+```
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="AgentScript Guide" icon="code" href="/docs/plugins/codecall/agentscript">
+    Learn the AgentScript language in depth
+  </Card>
+  <Card title="Configuration" icon="gear" href="/docs/plugins/codecall/configuration">
+    Configure meta-tool behavior and limits
+  </Card>
+</CardGroup>

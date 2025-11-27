@@ -86,8 +86,9 @@ export default class PluginRegistry
       const providers = new ProviderRegistry(rec.metadata.providers ?? [], this.providers);
       await providers.ready;
 
-      // Pass the owner context to nested plugins (plugins can be owned by apps or other plugins)
-      const pluginOwner = this.owner || {
+      // Create a plugin-specific owner (NOT the parent's owner)
+      // This ensures plugin tools have kind='plugin' for proper filtering in adoption
+      const pluginOwner = {
         kind: 'plugin' as const,
         id: rec.metadata.name,
         ref: token,
@@ -104,6 +105,13 @@ export default class PluginRegistry
       const prompts = new PromptRegistry(providers, rec.metadata.prompts ?? [], pluginOwner);
 
       await Promise.all([tools.ready, resources.ready, prompts.ready]);
+
+      // Register plugin registries with parent provider registry (app's providers)
+      // This makes plugin tools discoverable during app's ToolRegistry adoption (Path 2)
+      // Note: We don't add to scope-level providers to maintain app isolation
+      this.providers.addRegistry('ToolRegistry', tools);
+      this.providers.addRegistry('ResourceRegistry', resources);
+      this.providers.addRegistry('PromptRegistry', prompts);
 
       this.pProviders.set(token, providers);
       this.pPlugins.set(token, plugins);

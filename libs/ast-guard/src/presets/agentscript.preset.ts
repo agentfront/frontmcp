@@ -11,6 +11,8 @@ import {
   UnreachableCodeRule,
   StaticCallTargetRule,
   RequiredFunctionCallRule,
+  NoRegexLiteralRule,
+  NoRegexMethodsRule,
 } from '../rules';
 
 /**
@@ -356,6 +358,22 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
       }),
     );
   }
+
+  // 12. Block ALL regex literals (ReDoS prevention)
+  // AgentScript agents should use API filtering, not regex
+  rules.push(
+    new NoRegexLiteralRule({
+      blockAll: true, // Block all regex literals in AgentScript
+    }),
+  );
+
+  // 13. Block regex methods on strings and regex objects
+  // Prevents ReDoS via .match(), .test(), .replace(), etc.
+  rules.push(
+    new NoRegexMethodsRule({
+      allowStringArguments: false, // Block even string arguments for maximum security
+    }),
+  );
 
   return rules;
 }

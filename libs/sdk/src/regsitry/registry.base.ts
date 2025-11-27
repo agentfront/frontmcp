@@ -1,21 +1,19 @@
 import { RegistryKind, RegistryType, Token } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 
-
 export type RegistryBuildMapResult<Record> = {
   tokens: Set<Token>;
   defs: Map<Token, Record>;
   graph: Map<Token, Set<Token>>;
-}
+};
 
 export abstract class RegistryAbstract<
   Interface,
   Record,
   MetadataType,
-  ProviderRegistryType extends (ProviderRegistry | undefined) = ProviderRegistry
+  ProviderRegistryType extends ProviderRegistry | undefined = ProviderRegistry,
 > {
   protected asyncTimeoutMs: 30000;
-
 
   ready: Promise<void>;
 
@@ -29,12 +27,11 @@ export abstract class RegistryAbstract<
   /** Dependency graph by token */
   protected graph: Map<Token, Set<Token>>;
 
-
   /** All apps that are provided (graph nodes) */
   protected readonly instances: Map<Token<Interface>, Interface> = new Map();
 
   protected constructor(name: RegistryKind, providers: ProviderRegistryType, metadata: MetadataType, auto = true) {
-    providers?.addRegistry(name, this as any as RegistryType);
+    providers?.addRegistry(name, this as any);
     this.providers = providers;
     this.list = metadata;
 

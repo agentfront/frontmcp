@@ -6,12 +6,36 @@ export const executeToolDescription = `Execute AgentScript code to orchestrate m
 AgentScript is a restricted JavaScript subset designed for AI agent orchestration. It allows chaining tool calls, transforming data, and implementing logic without sandbox escape risks.
 
 ## callTool API
-\`await callTool(toolName: string, args: object): Promise<any>\`
+\`await callTool(toolName: string, args: object, options?: { throwOnError?: boolean }): Promise<T | Result<T>>\`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| toolName | string | Tool identifier (e.g., 'users:list') |
-| args | object | Tool arguments as key-value pairs |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| toolName | string | required | Tool identifier (e.g., 'users:list') |
+| args | object | required | Tool arguments as key-value pairs |
+| options.throwOnError | boolean | true | When false, returns \`{ success, data, error }\` instead of throwing |
+
+## Result-Based Error Handling (Recommended)
+\`\`\`javascript
+// Safe pattern - no try/catch needed
+const result = await callTool('users:get', { id: '123' }, { throwOnError: false });
+if (!result.success) {
+  return { failed: true, reason: result.error.code };
+}
+return result.data;
+\`\`\`
+
+## Error Codes
+| Code | Description |
+|------|-------------|
+| NOT_FOUND | Tool not found in registry |
+| VALIDATION | Input validation failed |
+| EXECUTION | Tool execution error |
+| TIMEOUT | Tool execution timed out |
+| ACCESS_DENIED | Tool access not permitted |
+
+## Security Restrictions
+- **Cannot call codecall:* tools** - Self-reference is blocked
+- **Errors are sanitized** - No stack traces or internal details exposed
 
 ## Allowed Features
 | Feature | Example |

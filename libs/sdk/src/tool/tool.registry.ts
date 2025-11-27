@@ -1,5 +1,5 @@
 import { EntryLineage, EntryOwnerRef, Token, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
-import { getMetadata } from '../utils/metadata.utils';
+import { getMetadata, tokenName } from '../utils';
 import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {
@@ -13,12 +13,12 @@ import {
   sepFor,
   toolDiscoveryDeps,
 } from './tool.utils';
-import { tokenName } from '../utils/token.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ToolInstance } from './tool.instance';
 import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
+import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -167,12 +167,15 @@ export default class ToolRegistry
     this.bump('reset');
   }
 
+  // NOTE: `any` is intentional here - heterogeneous tool collections can't use `unknown`
+  // because ToolEntry has constrained generics (InSchema extends ToolInputType, etc.)
   getTools(includeHidden = false): ToolEntry<any, any>[] {
     const local = [...this.localRows].flat().map((t) => t.instance);
     const adopted = [...this.adopted.values()].flat().map((t) => t.instance);
     return [...local, ...adopted].filter((t) => t.metadata.hideFromDiscovery !== true || includeHidden);
   }
 
+  // NOTE: `any` is intentional - see getTools comment above
   getInlineTools(): ToolEntry<any, any>[] {
     return [...this.instances.values()];
   }
@@ -396,11 +399,15 @@ export default class ToolRegistry
    * Get the MCP capabilities for tools.
    * These are reported to clients during initialization.
    */
-  getCapabilities(): { listChanged: boolean } {
-    return {
-      // List change notifications are supported if we have any tools registered
-      listChanged: this.hasAny(),
-    };
+  getCapabilities(): Partial<ServerCapabilities> {
+    return this.hasAny()
+      ? {
+          tools: {
+            // List change notifications are supported if we have any tools registered
+            listChanged: true,
+          },
+        }
+      : {};
   }
 }
 

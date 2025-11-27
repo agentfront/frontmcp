@@ -12,7 +12,7 @@
  */
 
 // Main Enclave class
-export { Enclave, runAgentScript } from './lib/enclave';
+export { Enclave, runAgentScript } from './enclave';
 
 // Types and interfaces
 export type {
@@ -28,13 +28,62 @@ export type {
   SecurityLevel,
   SecurityLevelConfig,
   ReferenceSidecarOptions,
-} from './lib/types';
+  WorkerPoolConfig,
+} from './types';
 
 // Security level configurations
-export { SECURITY_LEVEL_CONFIGS } from './lib/types';
+export { SECURITY_LEVEL_CONFIGS } from './types';
+
+// AI Scoring Gate
+export {
+  // Main orchestrator
+  ScoringGate,
+  ScoringGateError,
+  createScoringGate,
+  // Feature extraction
+  FeatureExtractor,
+  // Cache
+  ScoringCache,
+  // Scorer interface and base class
+  BaseScorer,
+  // Scorer implementations
+  DisabledScorer,
+  RuleBasedScorer,
+  ExternalApiScorer,
+  ExternalApiScorerError,
+  // Constants
+  DEFAULT_SCORING_CONFIG,
+  RULE_THRESHOLDS,
+} from './scoring';
+
+export type {
+  // Scorer interface
+  Scorer,
+  // Core types
+  ScorerType,
+  RiskLevel,
+  SensitiveCategory,
+  RuleId,
+  // Feature types
+  ExtractedFeatures,
+  ExtractedToolCall,
+  PatternSignals,
+  NumericSignals,
+  SensitiveAccess,
+  ExtractionMeta,
+  // Scoring types
+  RiskSignal,
+  ScoringResult,
+  ScoringGateResult,
+  // Configuration types
+  ScoringGateConfig,
+  ScoringCacheConfig,
+  LocalLlmConfig,
+  ExternalApiConfig,
+} from './scoring';
 
 // Safe runtime utilities
-export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './lib/safe-runtime';
+export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './safe-runtime';
 
 // Reference Sidecar (pass-by-reference support)
 export {
@@ -57,4 +106,37 @@ export {
   ResolutionLimitError,
   CompositeHandle,
   isCompositeHandle,
-} from './lib/sidecar';
+} from './sidecar';
+
+// Worker Pool Adapter (OS-level memory isolation)
+export {
+  // Main adapter
+  WorkerPoolAdapter,
+  // Configuration
+  WorkerSlotStatus,
+  ResourceUsage,
+  WorkerPoolMetrics,
+  DEFAULT_WORKER_POOL_CONFIG,
+  WORKER_POOL_PRESETS,
+  buildWorkerPoolConfig,
+  // Errors
+  WorkerPoolError,
+  WorkerTimeoutError,
+  WorkerMemoryError,
+  WorkerCrashedError,
+  WorkerPoolDisposedError,
+  QueueFullError,
+  QueueTimeoutError,
+  ExecutionAbortedError,
+  MessageFloodError,
+  MessageValidationError,
+  MessageSizeError,
+  WorkerStartupError,
+  TooManyPendingCallsError,
+  // Utility classes
+  WorkerSlot,
+  ExecutionQueue,
+  QueueStats,
+  MemoryMonitor,
+  MemoryMonitorStats,
+} from './adapters/worker-pool';

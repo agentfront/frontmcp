@@ -1,5 +1,6 @@
 ---
 title: Secure Code Execution with Enclave
+sidebarTitle: Enclave
 slug: guides/enclave
 description: Execute untrusted JavaScript safely using Enclave's defense-in-depth security model combining AST validation, code transformation, and runtime sandboxing.
 icon: shield-halved
@@ -85,6 +86,46 @@ if (result.success) {
 enclave.dispose();
 ```
 
+## Security Level Presets
+
+Enclave provides pre-configured security profiles that balance functionality against risk:
+
+```ts
+import { Enclave } from '@frontmcp/enclave';
+
+// Use STRICT for untrusted AI-generated code
+const strictEnclave = new Enclave({ securityLevel: 'STRICT' });
+
+// Use STANDARD for internal tools (default)
+const standardEnclave = new Enclave({ securityLevel: 'STANDARD' });
+
+// Override specific values from the preset
+const customEnclave = new Enclave({
+  securityLevel: 'SECURE',
+  timeout: 20000,  // Override SECURE's 15s default
+});
+```
+
+### Security Level Comparison
+
+| Setting | STRICT | SECURE | STANDARD | PERMISSIVE |
+|---------|--------|--------|----------|------------|
+| timeout | 5s | 15s | 30s | 60s |
+| maxIterations | 1,000 | 5,000 | 10,000 | 100,000 |
+| maxToolCalls | 10 | 50 | 100 | 1,000 |
+| maxConsoleCalls | 100 | 500 | 1,000 | 10,000 |
+| maxConsoleOutputBytes | 64KB | 256KB | 1MB | 10MB |
+| sanitizeStackTraces | YES | YES | NO | NO |
+| blockTimingAPIs | YES | NO | NO | NO |
+| allowUnboundedLoops | NO | NO | YES | YES |
+| unicodeSecurityCheck | YES | YES | NO | NO |
+
+<Warning>
+  Use `STRICT` for any untrusted code, including AI-generated scripts from external sources or user-submitted scripts.
+</Warning>
+
+---
+
 ## Defense-in-Depth Security Model
 
 Enclave uses a four-layer security approach:
@@ -137,7 +178,7 @@ Transformations include:
 - **Main wrapper**: Wrap code in `async function __ag_main()` for top-level await
 - **Safe callTool**: Transform `callTool` → `__safe_callTool` (proxied through Enclave)
 - **Safe loops**: Transform `for`, `while`, `do-while` → safe versions with iteration limits
-- **Safe console**: Transform `console` → `__safe_console` (captured for logging)
+- **Safe console**: Transform `console` → `__safe_console` (captured for logging with rate limiting)
 
 ### Layer 3: Runtime Sandboxing
 
@@ -145,7 +186,7 @@ Code executes in an isolated Node.js vm context:
 
 - **Isolated context**: Fresh context with no access to host environment
 - **Controlled globals**: Only whitelisted globals available (`Math`, `JSON`, `Array`, etc.)
-- **Resource limits**: Timeout, iteration count, and tool call limits enforced
+- **Resource limits**: Timeout, iteration count, tool call limits, and console rate limits enforced
 - **Stack sanitization**: Error stack traces sanitized to prevent information leakage
 
 ### Layer 4: Reference Sidecar (Optional)
@@ -190,6 +231,16 @@ When enabled, large data is handled separately:
 
 <ParamField path="allowFunctionsInGlobals" type="boolean" default="false">
   Allow functions in the `globals` object. Required when providing callback functions or utilities.
+</ParamField>
+
+<ParamField path="maxConsoleOutputBytes" type="number">
+  Maximum total console output in bytes. Prevents I/O flood attacks via excessive logging.
+  Defaults vary by security level: STRICT=64KB, SECURE=256KB, STANDARD=1MB, PERMISSIVE=10MB.
+</ParamField>
+
+<ParamField path="maxConsoleCalls" type="number">
+  Maximum number of console calls allowed. Prevents I/O flood attacks via rapid-fire logging.
+  Defaults vary by security level: STRICT=100, SECURE=500, STANDARD=1000, PERMISSIVE=10000.
 </ParamField>
 
 <ParamField path="sidecar" type="object">
@@ -262,6 +313,148 @@ const result = ref + "_suffix";  // ✅ ALLOWED - use with caution
 ```
 
 Keep `allowComposites: false` unless you specifically need string concatenation with large data.
+
+## AI Scoring Gate
+
+The Scoring Gate adds semantic security analysis that detects attack patterns beyond static AST validation:
+
+- **Data exfiltration** - list→send or query→export sequences
+- **Excessive access** - High limits, wildcard queries
+- **Fan-out attacks** - Tool calls inside loops
+- **Sensitive data access** - Passwords, tokens, PII fields
+
+```ts
+import { Enclave } from '@frontmcp/enclave';
+
+// Rule-based scorer (~1ms latency, zero dependencies)
+const enclave = new Enclave({
+  scoringGate: {
+    scorer: 'rule-based',
+    blockThreshold: 70,     // Score >= 70 blocks execution
+    warnThreshold: 40,      // Score >= 40 logs warning
+    failOpen: true,         // Allow if scoring fails (default)
+  },
+});
+
+// External API scorer (best detection, ~100ms latency)
+const enclaveWithApi = new Enclave({
+  scoringGate: {
+    scorer: 'external-api',
+    externalApi: {
+      endpoint: 'https://api.example.com/score',
+      apiKey: process.env.SCORING_API_KEY,
+      timeoutMs: 5000,
+      retries: 1,
+    },
+  },
+});
+```
+
+### Scorer Types
+
+| Type | Latency | Dependencies | Detection |
+|------|---------|--------------|-----------|
+| `disabled` | 0ms | None | None |
+| `rule-based` | ~1ms | None | Good |
+| `local-llm` | ~5-10ms | Model download | Better |
+| `external-api` | ~100ms | Network | Best |
+
+### Detection Rules
+
+The rule-based scorer detects these patterns:
+
+| Rule | Score | Description |
+|------|-------|-------------|
+| `SENSITIVE_FIELD` | 35 | Queries password/token/secret fields |
+| `EXCESSIVE_LIMIT` | 25 | limit > 10,000 |
+| `WILDCARD_QUERY` | 20 | query="*" or filter={} |
+| `LOOP_TOOL_CALL` | 25 | callTool inside for/for-of loop |
+| `EXFIL_PATTERN` | 50 | list→send or query→export sequence |
+| `EXTREME_VALUE` | 30 | Numeric arg > 1,000,000 |
+| `DYNAMIC_TOOL` | 20 | Variable tool name (not static string) |
+| `BULK_OPERATION` | 15 | Tool name contains bulk/batch/all |
+
+### Caching
+
+Results are cached by code hash (default: 5 minutes, 1000 entries):
+
+```ts
+const enclave = new Enclave({
+  scoringGate: {
+    scorer: 'rule-based',
+    cache: {
+      enabled: true,
+      ttlMs: 300000,    // 5 minutes
+      maxEntries: 1000,
+    },
+  },
+});
+```
+
+---
+
+## Worker Pool Adapter
+
+For OS-level memory isolation, use the worker threads adapter:
+
+```ts
+import { Enclave } from '@frontmcp/enclave';
+
+const enclave = new Enclave({
+  adapter: 'worker_threads',
+  workerPoolConfig: {
+    minWorkers: 2,
+    maxWorkers: 8,
+    memoryLimitPerWorker: 256 * 1024 * 1024, // 256MB
+  },
+});
+```
+
+### Worker Pool Features
+
+- **Pool management** - Auto-scaling with min/max workers
+- **Memory monitoring** - Workers recycled when exceeding limits
+- **Hard halt** - Force terminate via `worker.terminate()`
+- **Rate limiting** - Message flood protection
+- **Dual-layer sandbox** - Worker thread + VM context isolation
+
+### Worker Pool Presets
+
+| Setting | STRICT | SECURE | STANDARD | PERMISSIVE |
+|---------|--------|--------|----------|------------|
+| maxWorkers | 4 | 8 | 16 | 32 |
+| memoryLimitPerWorker | 64MB | 128MB | 256MB | 512MB |
+| maxExecutionsPerWorker | 100 | 500 | 1,000 | 5,000 |
+| maxQueueSize | 20 | 50 | 100 | 500 |
+| maxMessagesPerSecond | 100 | 500 | 1,000 | 5,000 |
+
+### Worker Pool Configuration
+
+<ParamField path="workerPoolConfig.minWorkers" type="number" default="2">
+  Minimum warm workers to keep in the pool
+</ParamField>
+
+<ParamField path="workerPoolConfig.maxWorkers" type="number" default="os.cpus().length">
+  Maximum workers in the pool
+</ParamField>
+
+<ParamField path="workerPoolConfig.memoryLimitPerWorker" type="number" default="128MB">
+  Memory limit per worker (workers exceeding this are recycled)
+</ParamField>
+
+<ParamField path="workerPoolConfig.maxExecutionsPerWorker" type="number" default="1000">
+  Executions before a worker is recycled (prevents memory leaks)
+</ParamField>
+
+<ParamField path="workerPoolConfig.maxQueueSize" type="number" default="100">
+  Maximum pending executions in the queue
+</ParamField>
+
+<ParamField path="workerPoolConfig.maxMessagesPerSecond" type="number" default="1000">
+  Rate limit for messages from a single worker (prevents flooding)
+</ParamField>
+
+---
 
 ## Execution Results
 
@@ -377,6 +570,7 @@ const enclave = new Enclave({
 - **Code injection** - Blocked by AST validation
 - **Infinite loops** - Limited by `maxIterations`
 - **Resource exhaustion** - Limited by `timeout` and `maxToolCalls`
+- **I/O flood attacks** - Limited by `maxConsoleOutputBytes` and `maxConsoleCalls`
 - **Global access** - Blocked by AST validation and isolated context
 - **Prototype pollution** - Blocked by AST validation
 - **Information leakage** - Stack traces sanitized

@@ -2,6 +2,9 @@ import { JSAstValidator } from '../validator';
 import { Presets, PresetLevel } from '../presets';
 import { DisallowedIdentifierRule } from '../rules';
 
+// Disable pre-scanner for all AST rule tests - we're testing the AST rules specifically
+const disablePreScan = { preScan: { enabled: false } };
+
 /**
  * Advanced Security Test Suite
  *
@@ -20,7 +23,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         const FunctionConstructor = Constructor['constructor'];
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // NoGlobalAccessRule now catches .constructor property access
       expect(result.valid).toBe(false);
       expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
@@ -34,7 +37,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         const func = window[e];
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // NoGlobalAccessRule catches window access in strict mode
       expect(result.valid).toBe(false);
     });
@@ -47,7 +50,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         const fn = this[dangerous];
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // NoGlobalAccessRule catches this[...] access in strict mode
       expect(result.valid).toBe(false);
     });
@@ -61,6 +64,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
 
@@ -79,6 +83,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Object is in lockdown preset
@@ -96,6 +101,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Array is in lockdown preset
@@ -112,6 +118,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
 
@@ -128,6 +135,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
 
@@ -145,6 +153,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true, 'no-eval': true },
       });
 
@@ -160,6 +169,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'no-async': true, 'disallowed-identifier': true },
       });
       // async function will be blocked by no-async rule
@@ -174,7 +184,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         const attack = GeneratorFn('yield process.env');
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // Strict preset now catches .constructor access via NoGlobalAccessRule
       expect(result.valid).toBe(false);
       expect(result.issues.some((i) => i.code === 'NO_CONSTRUCTOR_ACCESS')).toBe(true);
@@ -193,6 +203,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Error is in lockdown preset
@@ -212,7 +223,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         }
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // Try-catch is legitimate, but stack access could leak info
       expect(result.valid).toBe(true);
     });
@@ -231,6 +242,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true, 'no-eval': true },
       });
 
@@ -251,6 +263,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: fetch is in lockdown preset
@@ -269,6 +282,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Symbol is in lockdown preset
@@ -287,6 +301,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Both Symbol and Array are in lockdown preset
@@ -315,6 +330,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Proxy is in lockdown preset
@@ -331,6 +347,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Both Reflect and Object are in lockdown preset
@@ -353,9 +370,10 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         redosPattern.test(input); // Causes exponential backtracking
       `;
 
-      const result = await guard.validate(maliciousCode);
-      // RegExp literal is fine, but the pattern is dangerous
-      expect(result.valid).toBe(true); // Static analysis can't detect ReDoS easily
+      const result = await guard.validate(maliciousCode, disablePreScan);
+      // NOW DETECTED: NoRegexLiteralRule in strict preset analyzes patterns for ReDoS
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((issue) => issue.code === 'REGEX_REDOS_VULNERABLE')).toBe(true);
     });
 
     it('should block RegExp constructor with dynamic patterns', async () => {
@@ -367,6 +385,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: RegExp is in lockdown preset
@@ -385,6 +404,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Array is in lockdown preset
@@ -402,6 +422,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: JSON is in lockdown preset
@@ -420,6 +441,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'forbidden-loop': true },
       });
 
@@ -438,6 +460,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Both Uint8Array and WebAssembly are in lockdown preset
@@ -460,6 +483,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // Import expressions cause parse errors in script mode (our default)
@@ -477,6 +501,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // Import.meta causes parse errors in script mode
@@ -495,6 +520,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Worker is in lockdown preset
@@ -511,6 +537,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: SharedWorker is in lockdown preset
@@ -534,6 +561,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
 
@@ -555,7 +583,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         if (amount < malicious) {} // Triggers valueOf
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       expect(result.valid).toBe(true); // Hard to detect statically
     });
   });
@@ -573,7 +601,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
         };
       `;
 
-      const result = await guard.validate(maliciousCode);
+      const result = await guard.validate(maliciousCode, disablePreScan);
       // Strict preset now catches this access via NoGlobalAccessRule
       expect(result.valid).toBe(false);
     });
@@ -591,6 +619,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(maliciousCode, {
+        ...disablePreScan,
         rules: { 'disallowed-identifier': true },
       });
       // NOW BLOCKED: Object is in lockdown preset
@@ -669,6 +698,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
       `;
 
       const result = await guard.validate(legitimateCode, {
+        ...disablePreScan,
         rules: {
           'no-eval': true,
           'disallowed-identifier': true,
@@ -707,6 +737,7 @@ describe('Advanced Security Tests - Bank-Level Protection', () => {
 
       for (const attack of attackAttempts) {
         const result = await guard.validate(`${attack}\ncallTool("test", {});`, {
+          ...disablePreScan,
           rules: {
             'no-eval': true,
             'disallowed-identifier': true,

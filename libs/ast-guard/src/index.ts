@@ -27,6 +27,7 @@ export type {
   TransformConfig,
   TransformMode,
   WhitelistedGlobals,
+  PreScanConfig,
 } from './interfaces';
 
 export { ValidationSeverity } from './interfaces';
@@ -57,6 +58,8 @@ export {
   NoCallTargetAssignmentRule,
   UnicodeSecurityRule,
   StaticCallTargetRule,
+  NoRegexLiteralRule,
+  NoRegexMethodsRule,
 } from './rules';
 
 // Rule options types
@@ -74,6 +77,8 @@ export type { ReservedPrefixOptions } from './rules/reserved-prefix.rule';
 export type { UnknownGlobalOptions } from './rules/unknown-global.rule';
 export type { NoUserDefinedFunctionsOptions } from './rules/no-user-functions.rule';
 export type { StaticCallTargetOptions } from './rules/static-call-target.rule';
+export type { NoRegexLiteralOptions } from './rules/no-regex-literal.rule';
+export type { NoRegexMethodsOptions } from './rules/no-regex-methods.rule';
 
 // Presets
 export {
@@ -113,3 +118,55 @@ export type {
   ConcatTransformConfig,
   ConcatTransformResult,
 } from './transforms';
+
+// Pre-Scanner (Layer 0 Defense)
+export {
+  PreScanner,
+  preScan,
+  isPreScanValid,
+  MANDATORY_LIMITS,
+  PRESCANNER_ERROR_CODES,
+  PreScannerError,
+  ReDoSError,
+  BiDiAttackError,
+  PreScannerErrors,
+  ScanState,
+  PRESCANNER_PRESETS,
+  AGENTSCRIPT_PRESCANNER_CONFIG,
+  STRICT_PRESCANNER_CONFIG,
+  SECURE_PRESCANNER_CONFIG,
+  STANDARD_PRESCANNER_CONFIG,
+  PERMISSIVE_PRESCANNER_CONFIG,
+  getPreScannerPreset,
+  createPreScannerConfig,
+  exceedsMandatoryLimit,
+  clampToMandatoryLimit,
+  // ReDoS analysis utilities
+  REDOS_PATTERNS,
+  REDOS_THRESHOLDS,
+  analyzeForReDoS,
+  calculateStarHeight,
+  // BiDi attack detection
+  BIDI_OVERRIDE_CHARS,
+  ALL_BIDI_CHARS,
+  INVISIBLE_CHARS,
+  ALL_INVISIBLE_CHARS,
+} from './pre-scanner';
+
+export type {
+  PreScannerOptions,
+  PreScannerConfig,
+  PartialPreScannerConfig,
+  PreScannerPresetLevel,
+  RegexMode,
+  RegexAnalysisLevel,
+  PreScannerErrorCode,
+  PreScannerErrorDetails,
+  PreScanIssueSeverity,
+  PreScanIssue,
+  DetectedRegex,
+  PreScanStats,
+  PreScanResult,
+  MandatoryLimitKey,
+  ReDoSAnalysisResult,
+} from './pre-scanner';

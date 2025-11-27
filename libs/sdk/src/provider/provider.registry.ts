@@ -473,13 +473,13 @@ export default class ProviderRegistry
   }
 
   // noinspection JSUnusedGlobalSymbols
-  addRegistry(type: RegistryKind, value: RegistryType) {
+  addRegistry<T extends RegistryKind>(type: T, value: RegistryType[T]) {
     let registry = this.registries.get(type);
     if (!registry) {
       this.registries.set(type, new Set());
       registry = this.registries.get(type);
     }
-    registry!.add(value);
+    registry!.add(value as any);
   }
 
   getRegistries<T extends RegistryKind>(type: T): RegistryType[T][] {
@@ -606,8 +606,10 @@ export default class ProviderRegistry
     this.instances.set(rec.provide, rec.value);
   }
 
-  async addDynamicProviders(dynamicProviders: ProviderRecord[]) {
-    return Promise.all(dynamicProviders.map((rec) => this.initiateOne(rec.provide, rec)));
+  async addDynamicProviders(dynamicProviders: ProviderType[]) {
+    // Normalize ProviderType[] to ProviderRecord[] before instantiation
+    const normalized = dynamicProviders.map((p) => normalizeProvider(p));
+    return Promise.all(normalized.map((rec) => this.initiateOne(rec.provide, rec)));
   }
 
   private getWithParents<T>(token: Token<T>): T {
