@@ -18,6 +18,7 @@ const port = parseInt(process.env['PORT'] ?? '3010', 10);
     anonymousScopes: ['read', 'write'],
     // Transport config: enable stateless HTTP for public access without session ID
     transport: {
+      enableStatefulHttp: false,
       enableStreamableHttp: true,
       enableStatelessHttp: true, // Enable stateless HTTP for anonymous requests
       requireSessionForStreamable: false, // Don't require session for streamable HTTP

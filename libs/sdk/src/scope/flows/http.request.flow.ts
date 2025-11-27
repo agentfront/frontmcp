@@ -15,8 +15,6 @@ import {
   intentSchema,
   normalizeEntryPrefix,
   normalizeScopeBase,
-  AuthOptions,
-  TransportConfigInput,
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
@@ -105,19 +103,9 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     const { request } = this.rawInput;
     this.logger.verbose('check request decision');
 
-    // Get transport config from auth options (with defaults)
-    const authOptions = this.scope.auth?.options as AuthOptions | undefined;
-    const transportConfig = (authOptions?.transport ?? {}) as Partial<TransportConfigInput>;
-
-    const decision = decideIntent(request, {
-      enableLegacySSE: transportConfig.enableLegacySSE ?? false,
-      enableSseListener: transportConfig.enableSseListener ?? true,
-      enableStatelessHttp: transportConfig.enableStatelessHttp ?? false,
-      enableStatefulHttp: transportConfig.enableStatefulHttp ?? false,
-      enableStreamableHttp: transportConfig.enableStreamableHttp ?? true,
-      requireSessionForStreamable: transportConfig.requireSessionForStreamable ?? true,
-      tolerateMissingAccept: true,
-    });
+    // Use transport config directly from auth (already parsed with defaults by Zod)
+    const transport = this.scope.auth.transport;
+    const decision = decideIntent(request, { ...transport, tolerateMissingAccept: true });
 
     const { verifyResult } = this.state.required;
     if (verifyResult.kind === 'authorized') {

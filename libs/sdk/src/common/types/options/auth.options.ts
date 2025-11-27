@@ -354,7 +354,7 @@ export const publicAuthOptionsSchema = z.object({
    * Transport protocol configuration
    * Controls which transports are enabled and their behavior
    */
-  transport: transportConfigSchema.optional(),
+  transport: transportConfigSchema.optional().default({}),
 });
 
 // ============================================
@@ -404,7 +404,7 @@ export const transparentAuthOptionsSchema = z.object({
    * Transport protocol configuration
    * Controls which transports are enabled and their behavior
    */
-  transport: transportConfigSchema.optional(),
+  transport: transportConfigSchema.optional().default({}),
 });
 
 // ============================================
@@ -485,7 +485,7 @@ export const orchestratedLocalSchema = z.object({
    * Transport protocol configuration
    * Controls which transports are enabled and their behavior
    */
-  transport: transportConfigSchema.optional(),
+  transport: transportConfigSchema.optional().default({}),
 });
 
 /**
@@ -566,7 +566,7 @@ export const orchestratedRemoteSchema = z.object({
    * Transport protocol configuration
    * Controls which transports are enabled and their behavior
    */
-  transport: transportConfigSchema.optional(),
+  transport: transportConfigSchema.optional().default({}),
 });
 
 // Combined orchestrated schema

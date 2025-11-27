@@ -1,5 +1,12 @@
 import { ServerRequest } from '../server.interface';
-import { AuthOptions, isPublicMode, isTransparentMode, isOrchestratedMode, isOrchestratedRemote } from '../../types';
+import {
+  AuthOptions,
+  TransportConfig,
+  isPublicMode,
+  isTransparentMode,
+  isOrchestratedMode,
+  isOrchestratedRemote,
+} from '../../types';
 import { urlToSafeId } from '../../utils';
 
 /**
@@ -67,6 +74,14 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   abstract validate(request: ServerRequest): Promise<void>;
 
   abstract get issuer(): string;
+
+  /**
+   * Get transport configuration with all defaults applied.
+   * After Zod parsing, transport is guaranteed to exist with defaults.
+   */
+  get transport(): TransportConfig {
+    return this.options.transport;
+  }
 }
 
 export { FrontMcpAuth as Auth };

@@ -126,7 +126,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    */
   @Stage('handlePublicMode')
   async handlePublicMode() {
-    const authOptions = this.scope.auth?.options as AuthOptions | undefined;
+    const authOptions = this.scope.auth?.options;
 
     // Skip if not public mode or if authorization header is present (authenticated public)
     if (!authOptions || !isPublicMode(authOptions)) {
@@ -138,9 +138,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check transport config for stateless mode
-    const transportConfig = authOptions.transport;
-    const enableStatelessHttp = transportConfig?.enableStatelessHttp ?? false;
+    // Use transport config directly (already parsed with defaults by Zod)
+    const { enableStatelessHttp } = authOptions.transport;
 
     // If stateless HTTP is enabled and no session header provided,
     // don't set a protocol - let decideIntent determine it based on request
@@ -215,7 +214,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Best-effort verification using locally known keys (gateway/local provider cache).
     let verify: Promise<VerifyResult>;
-    const authOptions = this.scope.auth.options as AuthOptions;
+    const authOptions = this.scope.auth.options;
 
     // Transparent mode uses remote provider's keys, all other modes use local keys
     if (isTransparentMode(authOptions)) {

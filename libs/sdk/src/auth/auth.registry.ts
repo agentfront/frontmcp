@@ -222,12 +222,8 @@ export class AuthRegistry
       }
     }
 
-    // Fallback (should never reach here) - create public mode
-    const defaultOptions: PublicAuthOptions = {
-      mode: 'public',
-      sessionTtl: 3600,
-      anonymousScopes: ['anonymous'],
-    };
+    // Fallback (should never reach here) - create public mode with defaults
+    const defaultOptions = parseAuthOptions({ mode: 'public' }) as PublicAuthOptions;
     return new LocalPrimaryAuth(scope, providers, defaultOptions);
   }
 

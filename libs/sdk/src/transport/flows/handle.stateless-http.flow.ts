@@ -90,7 +90,6 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
   async handleRequest() {
     const transportService = (this.scope as Scope).transportService;
     const { request, response } = this.rawInput;
-    // Use state directly for optional fields (token can be undefined)
     const { token, isAuthenticated, requestType } = this.state;
 
     // Get or create the stateless transport
@@ -101,12 +100,15 @@ export default class HandleStatelessHttpFlow extends FlowBase<typeof name> {
         ? await transportService.getOrCreateAuthenticatedStatelessTransport('stateless-http', token, response)
         : await transportService.getOrCreateAnonymousStatelessTransport('stateless-http', response);
 
+    // For stateless mode, inject the well-known session ID
+    // This satisfies the MCP SDK's session header requirement while keeping requests stateless
+    if (!request.headers['mcp-session-id']) {
+      request.headers['mcp-session-id'] = '__stateless__';
+    }
+
     if (requestType === 'initialize') {
-      // For stateless mode, initialize just returns success
-      // The transport is shared, so we don't need session-specific setup
       await transport.initialize(request, response);
     } else {
-      // Handle message requests
       await transport.handleRequest(request, response);
     }
 
