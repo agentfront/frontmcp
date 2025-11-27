@@ -192,27 +192,27 @@ const toolIndex = new VectoriaDB<ToolDocument>({
 
 ### Complete Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `modelName` | string | `'Xenova/all-MiniLM-L6-v2'` | Embedding model to use |
-| `cacheDir` | string | `'./.cache/transformers'` | Model cache directory |
-| `dimensions` | number | Auto-detected | Vector dimensions |
-| `defaultSimilarityThreshold` | number | `0.3` | Minimum similarity score |
-| `defaultTopK` | number | `10` | Default results limit |
-| `useHNSW` | boolean | `false` | Enable HNSW index |
-| `maxDocuments` | number | `100000` | Max documents (DoS protection) |
-| `maxDocumentSize` | number | `1000000` | Max document size in chars |
-| `maxBatchSize` | number | `1000` | Max batch operation size |
-| `verboseErrors` | boolean | `true` | Enable detailed errors |
+| Option                       | Type    | Default                     | Description                    |
+| ---------------------------- | ------- | --------------------------- | ------------------------------ |
+| `modelName`                  | string  | `'Xenova/all-MiniLM-L6-v2'` | Embedding model to use         |
+| `cacheDir`                   | string  | `'./.cache/transformers'`   | Model cache directory          |
+| `dimensions`                 | number  | Auto-detected               | Vector dimensions              |
+| `defaultSimilarityThreshold` | number  | `0.3`                       | Minimum similarity score       |
+| `defaultTopK`                | number  | `10`                        | Default results limit          |
+| `useHNSW`                    | boolean | `false`                     | Enable HNSW index              |
+| `maxDocuments`               | number  | `100000`                    | Max documents (DoS protection) |
+| `maxDocumentSize`            | number  | `1000000`                   | Max document size in chars     |
+| `maxBatchSize`               | number  | `1000`                      | Max batch operation size       |
+| `verboseErrors`              | boolean | `true`                      | Enable detailed errors         |
 
 ### HNSW Configuration
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `M` | 16 | Connections per node in layer > 0 (higher = better recall) |
-| `M0` | 32 | Connections for layer 0 (typically M * 2) |
-| `efConstruction` | 200 | Candidate list size during construction |
-| `efSearch` | 50 | Candidate list size during search |
+| Option           | Default | Description                                                |
+| ---------------- | ------- | ---------------------------------------------------------- |
+| `M`              | 16      | Connections per node in layer > 0 (higher = better recall) |
+| `M0`             | 32      | Connections for layer 0 (typically M \* 2)                 |
+| `efConstruction` | 200     | Candidate list size during construction                    |
+| `efSearch`       | 50      | Candidate list size during search                          |
 
 ---
 
@@ -246,13 +246,13 @@ const results = db.search('authentication', { topK: 5 });
 
 ### When to Use TF-IDF vs ML Embeddings
 
-| Feature | TFIDFVectoria | VectoriaDB |
-|---------|---------------|------------|
-| Dependencies | Zero | transformers.js (~22MB model) |
-| Initialization | Synchronous | Async (model download) |
-| Semantic understanding | Keyword-based | Full semantic |
-| Best for | Small corpora (under 10K docs) | Any size |
-| Reindex required | Yes, after changes | No |
+| Feature                | TFIDFVectoria                  | VectoriaDB                    |
+| ---------------------- | ------------------------------ | ----------------------------- |
+| Dependencies           | Zero                           | transformers.js (~22MB model) |
+| Initialization         | Synchronous                    | Async (model download)        |
+| Semantic understanding | Keyword-based                  | Full semantic                 |
+| Best for               | Small corpora (under 10K docs) | Any size                      |
+| Reindex required       | Yes, after changes             | No                            |
 
 ---
 
@@ -311,17 +311,17 @@ All errors extend `VectoriaError` and ship with machine-readable `code` values s
 
 ### Error Types
 
-| Error | Code | Description |
-|-------|------|-------------|
-| `VectoriaNotInitializedError` | `NOT_INITIALIZED` | Call `initialize()` first |
-| `DocumentValidationError` | `DOCUMENT_VALIDATION_ERROR` | Invalid document data |
-| `DocumentNotFoundError` | `DOCUMENT_NOT_FOUND` | Document ID doesn't exist |
-| `DocumentExistsError` | `DOCUMENT_EXISTS` | Document ID already exists |
-| `DuplicateDocumentError` | `DUPLICATE_DOCUMENT` | Duplicate in batch |
-| `QueryValidationError` | `QUERY_VALIDATION_ERROR` | Invalid search query |
-| `EmbeddingError` | `EMBEDDING_ERROR` | Model embedding failed |
-| `StorageError` | `STORAGE_ERROR` | Storage operation failed |
-| `ConfigurationError` | `CONFIGURATION_ERROR` | Invalid config |
+| Error                         | Code                        | Description                |
+| ----------------------------- | --------------------------- | -------------------------- |
+| `VectoriaNotInitializedError` | `NOT_INITIALIZED`           | Call `initialize()` first  |
+| `DocumentValidationError`     | `DOCUMENT_VALIDATION_ERROR` | Invalid document data      |
+| `DocumentNotFoundError`       | `DOCUMENT_NOT_FOUND`        | Document ID doesn't exist  |
+| `DocumentExistsError`         | `DOCUMENT_EXISTS`           | Document ID already exists |
+| `DuplicateDocumentError`      | `DUPLICATE_DOCUMENT`        | Duplicate in batch         |
+| `QueryValidationError`        | `QUERY_VALIDATION_ERROR`    | Invalid search query       |
+| `EmbeddingError`              | `EMBEDDING_ERROR`           | Model embedding failed     |
+| `StorageError`                | `STORAGE_ERROR`             | Storage operation failed   |
+| `ConfigurationError`          | `CONFIGURATION_ERROR`       | Invalid config             |
 
 ```ts
 import {

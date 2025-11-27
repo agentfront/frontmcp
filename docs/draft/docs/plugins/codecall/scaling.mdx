@@ -13,15 +13,15 @@ This guide covers everything you need to deploy CodeCall in production: performa
 
 ### Latency Breakdown
 
-| Stage | Typical Time | Notes |
-|-------|-------------|-------|
-| AST Parsing | 1-5ms | Scales with code size |
-| AST Validation | 2-10ms | Depends on rule count |
-| Code Transformation | 1-3ms | One-time per script |
-| AI Scoring Gate | ~1ms | Rule-based (cached) |
-| VM Execution | Variable | Depends on script complexity |
-| Tool Calls | Variable | Network/database bound |
-| Output Sanitization | 1-5ms | Scales with output size |
+| Stage               | Typical Time | Notes                        |
+| ------------------- | ------------ | ---------------------------- |
+| AST Parsing         | 1-5ms        | Scales with code size        |
+| AST Validation      | 2-10ms       | Depends on rule count        |
+| Code Transformation | 1-3ms        | One-time per script          |
+| AI Scoring Gate     | ~1ms         | Rule-based (cached)          |
+| VM Execution        | Variable     | Depends on script complexity |
+| Tool Calls          | Variable     | Network/database bound       |
+| Output Sanitization | 1-5ms        | Scales with output size      |
 
 **Total overhead** (excluding tool calls): ~10-25ms for typical scripts.
 
@@ -29,24 +29,24 @@ This guide covers everything you need to deploy CodeCall in production: performa
 
 When using Worker Pool adapter for OS-level isolation, latency changes slightly:
 
-| Metric | Standard VM | Worker Pool (4 workers) |
-|--------|-------------|-------------------------|
-| Cold start | ~5ms | ~50ms (pool warm-up) |
-| Warm execution | ~1ms | ~3ms (message passing) |
-| Concurrent capacity | 1 | 4 (parallel isolation) |
-| Memory per execution | Shared | Isolated per worker |
+| Metric               | Standard VM | Worker Pool (4 workers) |
+| -------------------- | ----------- | ----------------------- |
+| Cold start           | ~5ms        | ~50ms (pool warm-up)    |
+| Warm execution       | ~1ms        | ~3ms (message passing)  |
+| Concurrent capacity  | 1           | 4 (parallel isolation)  |
+| Memory per execution | Shared      | Isolated per worker     |
 
 Worker Pool adds ~2-3ms latency per execution due to message passing overhead, but provides OS-level isolation and hard halt capability.
 
 ### Throughput
 
-| Configuration | Requests/sec | Notes |
-|---------------|-------------|-------|
-| Single instance, TF-IDF | ~500 | Bottleneck: VM isolation |
-| Single instance, Embeddings | ~200 | Bottleneck: Model inference |
-| Single instance, Worker Pool (4 workers) | ~800 | Parallel isolation |
-| Multi-instance (4 pods) | ~1,500+ | Near-linear scaling |
-| Multi-instance + Worker Pool | ~3,000+ | Best isolation + throughput |
+| Configuration                            | Requests/sec | Notes                       |
+| ---------------------------------------- | ------------ | --------------------------- |
+| Single instance, TF-IDF                  | ~500         | Bottleneck: VM isolation    |
+| Single instance, Embeddings              | ~200         | Bottleneck: Model inference |
+| Single instance, Worker Pool (4 workers) | ~800         | Parallel isolation          |
+| Multi-instance (4 pods)                  | ~1,500+      | Near-linear scaling         |
+| Multi-instance + Worker Pool             | ~3,000+      | Best isolation + throughput |
 
 <Note>
   Throughput depends heavily on script complexity and tool call latency. These numbers assume simple scripts with 1-3 tool calls.
@@ -54,12 +54,12 @@ Worker Pool adds ~2-3ms latency per execution due to message passing overhead, b
 
 ### Worker Pool Scaling Guidelines
 
-| Workload | minWorkers | maxWorkers | memoryLimit | Use Case |
-|----------|------------|------------|-------------|----------|
-| Low volume | 1 | 2 | 128MB | &lt;10 req/min |
-| Medium volume | 2 | 4 | 256MB | 10-100 req/min |
-| High volume | 4 | 8 | 256MB | 100-500 req/min |
-| Burst traffic | 2 | 16 | 128MB | Spiky workloads |
+| Workload      | minWorkers | maxWorkers | memoryLimit | Use Case        |
+| ------------- | ---------- | ---------- | ----------- | --------------- |
+| Low volume    | 1          | 2          | 128MB       | &lt;10 req/min  |
+| Medium volume | 2          | 4          | 256MB       | 10-100 req/min  |
+| High volume   | 4          | 8          | 256MB       | 100-500 req/min |
+| Burst traffic | 2          | 16         | 128MB       | Spiky workloads |
 
 ```ts
 // Worker Pool for production
@@ -279,11 +279,11 @@ spec:
 
 ### Resource Recommendations
 
-| Workload | CPU | Memory | Instances |
-|----------|-----|--------|-----------|
-| Light (&lt;100 req/min) | 0.5 core | 512MB | 1-2 |
-| Medium (100-500 req/min) | 1 core | 1GB | 2-4 |
-| Heavy (500+ req/min) | 2 cores | 2GB | 4+ |
+| Workload                 | CPU      | Memory | Instances |
+| ------------------------ | -------- | ------ | --------- |
+| Light (&lt;100 req/min)  | 0.5 core | 512MB  | 1-2       |
+| Medium (100-500 req/min) | 1 core   | 1GB    | 2-4       |
+| Heavy (500+ req/min)     | 2 cores  | 2GB    | 4+        |
 
 <Warning>
   Embedding strategy requires additional memory (~200MB) for the transformer model. Account for this in resource limits.
@@ -372,12 +372,12 @@ class CodeCallHealthTool extends ToolContext {
 
 ### Alerting Recommendations
 
-| Metric | Warning | Critical |
-|--------|---------|----------|
-| Execute p99 latency | > 2s | > 5s |
-| Error rate | > 5% | > 15% |
-| Timeout rate | > 1% | > 5% |
-| Security blocks | Any | High volume |
+| Metric              | Warning | Critical    |
+| ------------------- | ------- | ----------- |
+| Execute p99 latency | > 2s    | > 5s        |
+| Error rate          | > 5%    | > 15%       |
+| Timeout rate        | > 1%    | > 5%        |
+| Security blocks     | Any     | High volume |
 
 ---
 
@@ -387,19 +387,19 @@ class CodeCallHealthTool extends ToolContext {
 
 CodeCall dramatically reduces token usage:
 
-| Scenario | Without CodeCall | With CodeCall | Savings |
-|----------|-----------------|---------------|---------|
-| 100 tools in context | ~25,000 tokens | ~3,000 tokens | **88%** |
-| Multi-tool workflow (5 calls) | ~50,000 tokens | ~5,000 tokens | **90%** |
-| Complex filtering | ~100,000 tokens | ~8,000 tokens | **92%** |
+| Scenario                      | Without CodeCall | With CodeCall | Savings |
+| ----------------------------- | ---------------- | ------------- | ------- |
+| 100 tools in context          | ~25,000 tokens   | ~3,000 tokens | **88%** |
+| Multi-tool workflow (5 calls) | ~50,000 tokens   | ~5,000 tokens | **90%** |
+| Complex filtering             | ~100,000 tokens  | ~8,000 tokens | **92%** |
 
 ### Compute Costs
 
-| Factor | Impact | Optimization |
-|--------|--------|--------------|
-| VM isolation | ~10ms overhead | Use `codecall:invoke` for simple calls |
-| Embedding inference | ~50ms/query | Use TF-IDF for fewer than 100 tools |
-| Tool calls | Dominant cost | Optimize underlying tools |
+| Factor              | Impact         | Optimization                           |
+| ------------------- | -------------- | -------------------------------------- |
+| VM isolation        | ~10ms overhead | Use `codecall:invoke` for simple calls |
+| Embedding inference | ~50ms/query    | Use TF-IDF for fewer than 100 tools    |
+| Tool calls          | Dominant cost  | Optimize underlying tools              |
 
 ### Cost vs. Performance Tradeoffs
 
@@ -485,13 +485,13 @@ CodeCall provides comprehensive audit logging for compliance and security monito
 
 ### What Gets Logged
 
-| Event | Data Captured | Purpose |
-|-------|---------------|---------|
-| Script execution start | executionId, scriptHash, timestamp | Track execution lifecycle |
-| Tool calls | toolName, args (sanitized), duration, result | Audit trail of actions |
-| Security events | blocked construct, rule triggered | Security monitoring |
-| Scoring gate results | riskLevel, signals, score | Risk assessment audit |
-| Script completion | status, duration, toolCallCount | Performance tracking |
+| Event                  | Data Captured                                | Purpose                   |
+| ---------------------- | -------------------------------------------- | ------------------------- |
+| Script execution start | executionId, scriptHash, timestamp           | Track execution lifecycle |
+| Tool calls             | toolName, args (sanitized), duration, result | Audit trail of actions    |
+| Security events        | blocked construct, rule triggered            | Security monitoring       |
+| Scoring gate results   | riskLevel, signals, score                    | Risk assessment audit     |
+| Script completion      | status, duration, toolCallCount              | Performance tracking      |
 
 ### Enabling Audit Logging
 
@@ -587,6 +587,7 @@ interface AuditEvent {
       },
     }
     ```
+
   </Accordion>
 
   <Accordion title="Database">
@@ -674,12 +675,12 @@ CodeCallPlugin.init({
 
 ### Isolation Strategies
 
-| Strategy | Isolation Level | Cost | Use Case |
-|----------|-----------------|------|----------|
-| Shared pool | Low | $ | Dev/staging |
-| Tenant-specific limits | Medium | $$ | SaaS standard |
-| Separate worker pools | High | $$$ | Enterprise |
-| Dedicated instances | Maximum | $$$$ | Compliance-heavy |
+| Strategy               | Isolation Level | Cost | Use Case         |
+| ---------------------- | --------------- | ---- | ---------------- |
+| Shared pool            | Low             | $    | Dev/staging      |
+| Tenant-specific limits | Medium          | $$   | SaaS standard    |
+| Separate worker pools  | High            | $$$  | Enterprise       |
+| Dedicated instances    | Maximum         | $$$$ | Compliance-heavy |
 
 ### Per-Tenant Resource Quotas
 
@@ -742,6 +743,7 @@ audit: {
     2. Increase `vm.timeoutMs` if tools are slow
     3. Break complex scripts into smaller pieces
     4. Use `Promise.all()` for independent tool calls
+
   </Accordion>
 
   <Accordion title="Search returning irrelevant results">
@@ -757,6 +759,7 @@ audit: {
     2. Increase `similarityThreshold`
     3. Switch to embedding strategy for semantic matching
     4. Add more specific keywords to descriptions
+
   </Accordion>
 
   <Accordion title="High memory usage">
@@ -772,6 +775,7 @@ audit: {
     2. Increase memory limits
     3. Configure output sanitization limits
     4. Enable HNSW for large indexes
+
   </Accordion>
 
   <Accordion title="Validation errors for valid code">
@@ -787,6 +791,7 @@ audit: {
     2. Avoid `__ag_` and `__safe_` prefixes
     3. Use ASCII identifiers
     4. Review AST Guard rules
+
   </Accordion>
 </AccordionGroup>
 
@@ -797,11 +802,13 @@ audit: {
 ### Gradual Rollout
 
 1. **Phase 1:** Deploy with `mode: 'metadata_driven'`
+
    - All tools visible normally
    - Mark select tools for CodeCall
    - Monitor for issues
 
 2. **Phase 2:** Switch to `mode: 'codecall_opt_in'`
+
    - Tools opt into CodeCall
    - Both access methods work
    - Measure token savings

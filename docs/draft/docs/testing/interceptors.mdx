@@ -13,6 +13,7 @@ The MCP interceptor system allows you to mock tool responses, modify requests, a
 ## When to Use Mocking
 
 Use MCP-level mocking when you want to:
+
 - Skip expensive tool operations in tests
 - Simulate error conditions
 - Test client behavior without server dependencies
@@ -58,13 +59,13 @@ test('mock tool response', async ({ mcp }) => {
 
 ### Mock Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `method` | `string` | MCP method to match (e.g., `'tools/call'`) |
-| `params` | `object` | Parameters to match (partial match) |
-| `response` | `object` | JSON-RPC response to return |
-| `times` | `number` | Number of times to use this mock (default: unlimited) |
-| `delay` | `number` | Delay in ms before responding |
+| Option     | Type     | Description                                           |
+| ---------- | -------- | ----------------------------------------------------- |
+| `method`   | `string` | MCP method to match (e.g., `'tools/call'`)            |
+| `params`   | `object` | Parameters to match (partial match)                   |
+| `response` | `object` | JSON-RPC response to return                           |
+| `times`    | `number` | Number of times to use this mock (default: unlimited) |
+| `delay`    | `number` | Delay in ms before responding                         |
 
 ---
 
@@ -223,12 +224,12 @@ test('fail specific requests', async ({ mcp }) => {
 
 ### Interceptor Actions
 
-| Action | Description |
-|--------|-------------|
-| `passthrough` | Continue to server normally |
-| `modify` | Modify the request before sending |
-| `mock` | Return a mock response without calling server |
-| `error` | Throw an error |
+| Action        | Description                                   |
+| ------------- | --------------------------------------------- |
+| `passthrough` | Continue to server normally                   |
+| `modify`      | Modify the request before sending             |
+| `mock`        | Return a mock response without calling server |
+| `error`       | Throw an error                                |
 
 ---
 
@@ -417,12 +418,14 @@ mockResponse.errors.unauthorized();
 ## Best Practices
 
 **Do:**
+
 - Mock expensive operations (external APIs, database calls)
 - Use `times: 1` to test retry logic
 - Clear mocks between tests if needed
 - Use convenience methods for simple cases
 
 **Don't:**
+
 - Mock everything - some tests should hit real code
 - Forget to remove interceptors after tests
 - Use mocking to hide bugs in your code

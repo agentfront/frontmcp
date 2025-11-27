@@ -19,6 +19,7 @@ You built an MCP server. It started with 10 tools. Clean. Simple. Your AI agent 
 Then you connected your REST API. 47 endpoints became 47 tools. You added billing, user management, and analytics. Now you're at 150+ tools.
 
 And suddenly:
+
 - Your context window fills with schemas before the first query
 - Token costs explode—you're paying to list tools the agent won't use
 - The model picks the wrong tool or misses the right one entirely
@@ -39,19 +40,20 @@ Let's do the math on a real scenario.
 You have 100 tools. Each tool definition averages 200 tokens (name, description, input schema). That's **20,000 tokens** just to list your tools—before the agent does anything.
 
 Now the agent needs to:
+
 1. Find users whose first name starts with "me"
 2. Who logged in within the past 10 days
 3. Return the top 10
 
 Without filtering on the server, here's what happens:
 
-| Step | Action | Tokens |
-|------|--------|--------|
-| 1 | List 100 tools | 20,000 |
-| 2 | Call `users:list` (returns 1000 users) | 50,000+ |
-| 3 | Model filters in context | 10,000 |
-| 4 | Model returns top 10 | 500 |
-| **Total** | | **~80,000 tokens** |
+| Step      | Action                                 | Tokens             |
+| --------- | -------------------------------------- | ------------------ |
+| 1         | List 100 tools                         | 20,000             |
+| 2         | Call `users:list` (returns 1000 users) | 50,000+            |
+| 3         | Model filters in context               | 10,000             |
+| 4         | Model returns top 10                   | 500                |
+| **Total** |                                        | **~80,000 tokens** |
 
 At \$0.015 per 1K input tokens (GPT-4 pricing), that's **\$1.20 for one query.**
 
@@ -70,6 +72,7 @@ GET /users?firstName_startsWith=me&lastLogin_gt=10d&limit=10
 ```
 
 But now you need:
+
 - Query parameter validation
 - Database query building
 - Pagination handling
@@ -88,6 +91,7 @@ You're not building an AI tool anymore. You're building a query language. And to
 Anthropic's insight was simple: **let the model write code.**
 
 Instead of exposing 100 tools, expose a meta-API:
+
 - **Search** for relevant tools
 - **Describe** their schemas
 - **Execute** JavaScript that orchestrates them
@@ -109,13 +113,13 @@ return filtered.slice(0, 10);
 
 The filtering happens **on your server**, not in the LLM context. The model only sees 10 results.
 
-| Step | Action | Tokens |
-|------|--------|--------|
-| 1 | List 4 meta-tools | 2,000 |
-| 2 | Search for "users" | 500 |
-| 3 | Describe users:list | 500 |
-| 4 | Execute script (returns 10 users) | 1,000 |
-| **Total** | | **~4,000 tokens** |
+| Step      | Action                            | Tokens            |
+| --------- | --------------------------------- | ----------------- |
+| 1         | List 4 meta-tools                 | 2,000             |
+| 2         | Search for "users"                | 500               |
+| 3         | Describe users:list               | 500               |
+| 4         | Execute script (returns 10 users) | 1,000             |
+| **Total** |                                   | **~4,000 tokens** |
 
 That's **95% fewer tokens.** For the same result.
 
@@ -125,11 +129,11 @@ That's **95% fewer tokens.** For the same result.
 
 Anthropic recently published ["Advanced Tool Use"](https://www.anthropic.com/engineering/advanced-tool-use) introducing three beta features that validate exactly what CodeCall does:
 
-| Anthropic Feature | What It Does | CodeCall Equivalent |
-|-------------------|--------------|---------------------|
-| **Tool Search Tool** | Dynamic discovery instead of loading all tools | `codecall:search` with VectoriaDB |
-| **Programmatic Tool Calling** | Execute code that orchestrates tools in a sandbox | `codecall:execute` with Enclave |
-| **Tool Use Examples** | Provide concrete usage patterns | Schema + examples via `codecall:describe` |
+| Anthropic Feature             | What It Does                                      | CodeCall Equivalent                       |
+| ----------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| **Tool Search Tool**          | Dynamic discovery instead of loading all tools    | `codecall:search` with VectoriaDB         |
+| **Programmatic Tool Calling** | Execute code that orchestrates tools in a sandbox | `codecall:execute` with Enclave           |
+| **Tool Use Examples**         | Provide concrete usage patterns                   | Schema + examples via `codecall:describe` |
 
 Their results? **85% reduction in token usage** with Tool Search. **37% fewer tokens** with Programmatic Tool Calling. Accuracy improvements from 72% to 90%.
 
@@ -151,6 +155,7 @@ Their results? **85% reduction in token usage** with Tool Search. **37% fewer to
 </CardGroup>
 
 **If you're building production systems, you need:**
+
 - Self-hosted infrastructure
 - Any LLM compatibility
 - Auditable security
@@ -185,12 +190,12 @@ That's CodeCall.
 
 CodeCall collapses your entire toolset into **4 meta-tools**:
 
-| Meta-Tool | Purpose |
-|-----------|---------|
-| `codecall:search` | Find tools by natural language query |
-| `codecall:describe` | Get schemas for selected tools |
-| `codecall:execute` | Run JavaScript that orchestrates tools |
-| `codecall:invoke` | Direct single-tool calls (optional) |
+| Meta-Tool           | Purpose                                |
+| ------------------- | -------------------------------------- |
+| `codecall:search`   | Find tools by natural language query   |
+| `codecall:describe` | Get schemas for selected tools         |
+| `codecall:execute`  | Run JavaScript that orchestrates tools |
+| `codecall:invoke`   | Direct single-tool calls (optional)    |
 
 <img
   className="blog-full-image"
@@ -283,6 +288,7 @@ After pre-scanning, [AST Guard](/docs/guides/ast-guard) parses the JavaScript in
 ### Layer 2: Code Transformation
 
 Code is rewritten for safe execution:
+
 - Wraps in `async function __ag_main()` for top-level await
 - Transforms `callTool` → `__safe_callTool` for tracking
 - Adds iteration limits to all loops
@@ -334,6 +340,7 @@ The **AI Scoring Gate** detects semantic attack patterns that syntactic validati
 ### Layer 5: Self-Reference Guard
 
 Scripts **cannot** call CodeCall tools from within scripts. This prevents:
+
 - Recursive execution attacks
 - Sandbox escape via nested calls
 - Resource multiplication
@@ -346,6 +353,7 @@ await callTool('codecall:execute', { script: '...' }); // ❌ BLOCKED
 ### Layer 6: Output Sanitization
 
 All results are cleaned before returning:
+
 - Stack traces removed
 - File paths scrubbed
 - Circular references handled
@@ -471,12 +479,14 @@ This composability is why FrontMCP exists: build production MCP servers without 
 </CardGroup>
 
 **Before CodeCall:**
+
 - Endless REST endpoint development
 - Context window overflow
 - Model confusion with large tool lists
 - High token costs for simple operations
 
 **After CodeCall:**
+
 - Let the model write the query logic
 - Minimal context usage
 - Clean 4-tool interface
@@ -512,6 +522,7 @@ Anthropic was right: the future isn't bigger context windows or smarter models p
 But that future shouldn't be locked to one provider, one model, one cloud.
 
 **CodeCall makes code execution for MCP:**
+
 - Open source and auditable
 - Self-hosted in your VPC
 - Compatible with any LLM
@@ -560,4 +571,4 @@ Your MCP server has 100 tools. They don't have to break your agent anymore.
 
 ---
 
-*CodeCall is part of FrontMCP, the open-source framework for building production MCP servers. [Star us on GitHub](https://github.com/agentfront/frontmcp) to follow development.*
+_CodeCall is part of FrontMCP, the open-source framework for building production MCP servers. [Star us on GitHub](https://github.com/agentfront/frontmcp) to follow development._

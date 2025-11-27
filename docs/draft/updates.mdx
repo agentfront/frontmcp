@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-26" tags={["Releases"]}>
+<Update label="draft" description="2025-11-27" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -29,6 +29,18 @@ mode: 'center'
 
     🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
 
+    🧪 **@frontmcp/testing** – Author Jest-based end-to-end suites with fixture injection, HTTP mocking, request interceptors, and custom MCP matchers while the runner boots your server automatically via `test.use()`.
+
+    🗃️ **Demo Showcase server** – Boot the new `apps/demo-showcase` notes app to exercise tools, resources, prompts, and OpenAPI adapters in one place, complete with sample `apps/demo-showcase/e2e` suites you can copy into your own repo.
+
+    🧰 **Layer 0 pre-scanner** – AgentScript now runs through a pre-parser `ast-guard` scan that blocks ReDoS payloads, Trojan Source characters, deep nesting, and oversize inputs before the AST is even built.
+
+    🧠 **AI Scoring Gate** – A semantic scoring stage reviews every CodeCall plan for exfiltration patterns, bulk destructive actions, and sensitive field access, halting risky scripts before Enclave executes them.
+
+    🧵 **Worker Pool adapter** – Opt into the new worker-pool runtime to execute CodeCall plans inside OS-isolated threads with queue backpressure, strict memory caps, and graceful restarts.
+
+    🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
+
     **Fixes**
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
@@ -36,6 +48,8 @@ mode: 'center'
     🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
 
     **Docs**
+
+    🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
 

@@ -57,18 +57,19 @@ Search for tools by natural language query using semantic embeddings.
   }
   ```
 
-  ```json Filter by App
-  {
-    "tool": "codecall:search",
-    "input": {
-    "query": "list all invoices",
-    "topK": 10,
-    "filter": {
-    "appIds": ["billing", "payments"]
-  }
-  }
-  }
-  ```
+```json Filter by App
+{
+  "tool": "codecall:search",
+  "input": {
+  "query": "list all invoices",
+  "topK": 10,
+  "filter": {
+  "appIds": ["billing", "payments"]
+}
+}
+}
+```
+
 </CodeGroup>
 
 ### Response Example
@@ -103,10 +104,10 @@ Search for tools by natural language query using semantic embeddings.
 
 CodeCall supports two embedding strategies:
 
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| `tfidf` | TF-IDF text matching (default) | Fast, no model loading, works offline |
-| `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model |
+| Strategy    | Description                        | Best For                              |
+| ----------- | ---------------------------------- | ------------------------------------- |
+| `tfidf`     | TF-IDF text matching (default)     | Fast, no model loading, works offline |
+| `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model      |
 
 ```ts
 CodeCallPlugin.init({
@@ -172,64 +173,65 @@ Get detailed schemas and documentation for specific tools.
   }
   ```
 
-  ```json Response
-  {
-    "tools": [
-  {
-    "name": "users:list",
-    "appId": "user-service",
-    "description": "List users with optional filtering and pagination",
-    "inputSchema": {
-    "type": "object",
-    "properties": {
-    "status": {
-    "type": "string",
-    "enum": ["active", "inactive", "pending"],
-    "description": "Filter by user status"
-  },
-    "role": {
-    "type": "string",
-    "enum": ["admin", "user", "guest"],
-    "description": "Filter by role"
-  },
-    "limit": {
-    "type": "number",
-    "minimum": 1,
-    "maximum": 100,
-    "default": 20,
-    "description": "Maximum results per page"
-  },
-    "offset": {
-    "type": "number",
-    "minimum": 0,
-    "default": 0,
-    "description": "Pagination offset"
-  }
-  }
-  },
-    "outputSchema": {
-    "type": "object",
-    "properties": {
-    "users": {
-    "type": "array",
-    "items": {"$ref": "#/definitions/User"}
-  },
-    "total": {"type": "number"},
-    "hasMore": {"type": "boolean"}
-  }
-  },
-    "annotations": {
-    "readOnlyHint": true
-  },
-    "usageExample": {
-    "description": "List active users with pagination",
-    "code": "const result = await callTool('users:list', { status: 'active', limit: 50 });\nreturn result.users;"
-  }
-  }
-    ],
-    "notFound": []
-  }
-  ```
+```json Response
+{
+  "tools": [
+{
+  "name": "users:list",
+  "appId": "user-service",
+  "description": "List users with optional filtering and pagination",
+  "inputSchema": {
+  "type": "object",
+  "properties": {
+  "status": {
+  "type": "string",
+  "enum": ["active", "inactive", "pending"],
+  "description": "Filter by user status"
+},
+  "role": {
+  "type": "string",
+  "enum": ["admin", "user", "guest"],
+  "description": "Filter by role"
+},
+  "limit": {
+  "type": "number",
+  "minimum": 1,
+  "maximum": 100,
+  "default": 20,
+  "description": "Maximum results per page"
+},
+  "offset": {
+  "type": "number",
+  "minimum": 0,
+  "default": 0,
+  "description": "Pagination offset"
+}
+}
+},
+  "outputSchema": {
+  "type": "object",
+  "properties": {
+  "users": {
+  "type": "array",
+  "items": {"$ref": "#/definitions/User"}
+},
+  "total": {"type": "number"},
+  "hasMore": {"type": "boolean"}
+}
+},
+  "annotations": {
+  "readOnlyHint": true
+},
+  "usageExample": {
+  "description": "List active users with pagination",
+  "code": "const result = await callTool('users:list', { status: 'active', limit: 50 });\nreturn result.users;"
+}
+}
+  ],
+  "notFound": []
+}
+```
+
 </CodeGroup>
 
 ### Security Note
@@ -261,6 +263,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
 ### Response Schema
 
 **Success:**
+
 ```json
 {
   "status": "ok",
@@ -350,15 +353,16 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
   }
   ```
 
-  ```json Response
-  {
-    "status": "ok",
-    "result": {
-    "adminCount": 3,
-    "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
-  }
-  }
-  ```
+```json Response
+{
+  "status": "ok",
+  "result": {
+  "adminCount": 3,
+  "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
+}
+}
+```
+
 </CodeGroup>
 
 ### AgentScript API
@@ -387,9 +391,9 @@ if (result.success) {
 
 **Options:**
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `throwOnError` | `boolean` | `true` | Throw on error or return result object |
+| Option         | Type      | Default | Description                            |
+| -------------- | --------- | ------- | -------------------------------------- |
+| `throwOnError` | `boolean` | `true`  | Throw on error or return result object |
 
 #### getTool(name)
 
@@ -429,7 +433,7 @@ console.error('Validation failed');
   response.
 </Note>
 
-#### __safe_parallel(fns, options?)
+#### \_\_safe_parallel(fns, options?)
 
 Execute multiple async operations in parallel with controlled concurrency.
 
@@ -447,16 +451,16 @@ return users;  // Array of results in same order as input
 
 **Options:**
 
-| Option | Type | Default | Max | Description |
-|--------|------|---------|-----|-------------|
-| `maxConcurrency` | `number` | 10 | 20 | Max concurrent operations |
+| Option           | Type     | Default | Max | Description               |
+| ---------------- | -------- | ------- | --- | ------------------------- |
+| `maxConcurrency` | `number` | 10      | 20  | Max concurrent operations |
 
 **Limits:**
 
-| Limit | Value | Error |
-|-------|-------|-------|
-| Max array size | 100 | `Cannot execute more than 100 operations in parallel` |
-| Max concurrency | 20 | Silently clamped |
+| Limit           | Value | Error                                                 |
+| --------------- | ----- | ----------------------------------------------------- |
+| Max array size  | 100   | `Cannot execute more than 100 operations in parallel` |
+| Max concurrency | 20    | Silently clamped                                      |
 
 **Error Handling:**
 
@@ -512,6 +516,7 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 ### Response Schema
 
 **Success:**
+
 ```json
 {
   "status": "ok",
@@ -520,6 +525,7 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 ```
 
 **Error:**
+
 ```json
 {
   "status": "error",
@@ -543,28 +549,29 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
   }
   ```
 
-  ```json Response
-  {
-    "status": "ok",
-    "result": {
-    "id": "user-123",
-    "email": "alice@example.com",
-    "name": "Alice Smith",
-    "role": "admin",
-    "status": "active"
-  }
-  }
-  ```
+```json Response
+{
+  "status": "ok",
+  "result": {
+  "id": "user-123",
+  "email": "alice@example.com",
+  "name": "Alice Smith",
+  "role": "admin",
+  "status": "active"
+}
+}
+```
+
 </CodeGroup>
 
 ### When to Use Invoke vs Execute
 
-| Use `codecall:invoke` | Use `codecall:execute` |
-|-----------------------|------------------------|
-| Single tool call | Multiple tool calls |
-| No data transformation needed | Filter/join/transform results |
-| Latency-sensitive (no VM overhead) | Complex orchestration logic |
-| Simple CRUD operations | Conditional workflows |
+| Use `codecall:invoke`              | Use `codecall:execute`        |
+| ---------------------------------- | ----------------------------- |
+| Single tool call                   | Multiple tool calls           |
+| No data transformation needed      | Filter/join/transform results |
+| Latency-sensitive (no VM overhead) | Complex orchestration logic   |
+| Simple CRUD operations             | Conditional workflows         |
 
 ---
 
@@ -572,33 +579,33 @@ Direct tool invocation without JavaScript execution. Useful for simple single-to
 
 ### Script Execution Errors
 
-| Code | Status | Description | Recovery |
-|------|--------|-------------|----------|
-| `SYNTAX_ERROR` | `syntax_error` | JavaScript syntax error | Fix syntax at indicated location |
-| `VALIDATION_ERROR` | `illegal_access` | AST validation failed | Remove blocked construct |
-| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:* tool | Use regular tools only |
-| `TOOL_NOT_FOUND` | `tool_error` | Tool doesn't exist | Check tool name spelling |
-| `ACCESS_DENIED` | `tool_error` | Tool not in allowedTools | Add to allowlist |
-| `EXECUTION_ERROR` | `runtime_error` | Runtime error in script | Debug script logic |
-| `TIMEOUT` | `timeout` | Exceeded time limit | Optimize or increase timeout |
-| `TOOL_EXECUTION_ERROR` | `tool_error` | Tool threw an error | Check tool input |
+| Code                     | Status           | Description                    | Recovery                         |
+| ------------------------ | ---------------- | ------------------------------ | -------------------------------- |
+| `SYNTAX_ERROR`           | `syntax_error`   | JavaScript syntax error        | Fix syntax at indicated location |
+| `VALIDATION_ERROR`       | `illegal_access` | AST validation failed          | Remove blocked construct         |
+| `SELF_REFERENCE_BLOCKED` | `illegal_access` | Tried to call codecall:\* tool | Use regular tools only           |
+| `TOOL_NOT_FOUND`         | `tool_error`     | Tool doesn't exist             | Check tool name spelling         |
+| `ACCESS_DENIED`          | `tool_error`     | Tool not in allowedTools       | Add to allowlist                 |
+| `EXECUTION_ERROR`        | `runtime_error`  | Runtime error in script        | Debug script logic               |
+| `TIMEOUT`                | `timeout`        | Exceeded time limit            | Optimize or increase timeout     |
+| `TOOL_EXECUTION_ERROR`   | `tool_error`     | Tool threw an error            | Check tool input                 |
 
 ### Worker Pool Errors (when adapter='worker_threads')
 
-| Error Class | Code | Description | Recovery |
-|-------------|------|-------------|----------|
-| `WorkerTimeoutError` | `WORKER_TIMEOUT` | Execution exceeded watchdog timeout | Reduce script complexity |
-| `WorkerMemoryError` | `WORKER_MEMORY_EXCEEDED` | Worker exceeded memory limit | Reduce data size or increase limit |
-| `WorkerCrashedError` | `WORKER_CRASHED` | Worker process crashed unexpectedly | Check for infinite recursion |
-| `WorkerPoolDisposedError` | `POOL_DISPOSED` | Pool was shut down during execution | Restart the server |
-| `QueueFullError` | `QUEUE_FULL` | Execution queue at capacity | Wait or scale up workers |
-| `QueueTimeoutError` | `QUEUE_TIMEOUT` | Waited too long in queue | Scale up workers |
-| `ExecutionAbortedError` | `EXECUTION_ABORTED` | Execution was cancelled | N/A (intentional) |
-| `MessageFloodError` | `MESSAGE_FLOOD` | Rate limit exceeded | Reduce callTool frequency |
-| `MessageValidationError` | `MESSAGE_INVALID` | Malformed message from worker | Report as bug |
-| `MessageSizeError` | `MESSAGE_TOO_LARGE` | Message exceeded size limit | Reduce result size |
-| `WorkerStartupError` | `WORKER_STARTUP_FAILED` | Worker failed to initialize | Check system resources |
-| `TooManyPendingCallsError` | `TOO_MANY_PENDING_CALLS` | Too many concurrent tool calls | Use sequential calls |
+| Error Class                | Code                     | Description                         | Recovery                           |
+| -------------------------- | ------------------------ | ----------------------------------- | ---------------------------------- |
+| `WorkerTimeoutError`       | `WORKER_TIMEOUT`         | Execution exceeded watchdog timeout | Reduce script complexity           |
+| `WorkerMemoryError`        | `WORKER_MEMORY_EXCEEDED` | Worker exceeded memory limit        | Reduce data size or increase limit |
+| `WorkerCrashedError`       | `WORKER_CRASHED`         | Worker process crashed unexpectedly | Check for infinite recursion       |
+| `WorkerPoolDisposedError`  | `POOL_DISPOSED`          | Pool was shut down during execution | Restart the server                 |
+| `QueueFullError`           | `QUEUE_FULL`             | Execution queue at capacity         | Wait or scale up workers           |
+| `QueueTimeoutError`        | `QUEUE_TIMEOUT`          | Waited too long in queue            | Scale up workers                   |
+| `ExecutionAbortedError`    | `EXECUTION_ABORTED`      | Execution was cancelled             | N/A (intentional)                  |
+| `MessageFloodError`        | `MESSAGE_FLOOD`          | Rate limit exceeded                 | Reduce callTool frequency          |
+| `MessageValidationError`   | `MESSAGE_INVALID`        | Malformed message from worker       | Report as bug                      |
+| `MessageSizeError`         | `MESSAGE_TOO_LARGE`      | Message exceeded size limit         | Reduce result size                 |
+| `WorkerStartupError`       | `WORKER_STARTUP_FAILED`  | Worker failed to initialize         | Check system resources             |
+| `TooManyPendingCallsError` | `TOO_MANY_PENDING_CALLS` | Too many concurrent tool calls      | Use sequential calls               |
 
 ---
 
@@ -726,6 +733,7 @@ for (const user of users) {
     const page = items.slice(0, 100);
     for (const item of page) { ... }
     ```
+
   </Accordion>
 
   <Accordion title="Maximum tool call limit exceeded">
@@ -741,6 +749,7 @@ for (const user of users) {
     // Good: batch fetch
     const users = await callTool('users:getBatch', { ids });
     ```
+
   </Accordion>
 
   <Accordion title="Script execution timed out">
@@ -754,6 +763,7 @@ for (const user of users) {
       vm: { preset: 'balanced', timeoutMs: 8000 }
     });
     ```
+
   </Accordion>
 
   <Accordion title="Identifier 'X' is not allowed">
@@ -770,6 +780,7 @@ for (const user of users) {
     // Use callTool for external operations
     await callTool('code:run', { script: 'code' });
     ```
+
   </Accordion>
 </AccordionGroup>
 

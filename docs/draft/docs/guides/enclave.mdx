@@ -108,17 +108,17 @@ const customEnclave = new Enclave({
 
 ### Security Level Comparison
 
-| Setting | STRICT | SECURE | STANDARD | PERMISSIVE |
-|---------|--------|--------|----------|------------|
-| timeout | 5s | 15s | 30s | 60s |
-| maxIterations | 1,000 | 5,000 | 10,000 | 100,000 |
-| maxToolCalls | 10 | 50 | 100 | 1,000 |
-| maxConsoleCalls | 100 | 500 | 1,000 | 10,000 |
-| maxConsoleOutputBytes | 64KB | 256KB | 1MB | 10MB |
-| sanitizeStackTraces | YES | YES | NO | NO |
-| blockTimingAPIs | YES | NO | NO | NO |
-| allowUnboundedLoops | NO | NO | YES | YES |
-| unicodeSecurityCheck | YES | YES | NO | NO |
+| Setting               | STRICT | SECURE | STANDARD | PERMISSIVE |
+| --------------------- | ------ | ------ | -------- | ---------- |
+| timeout               | 5s     | 15s    | 30s      | 60s        |
+| maxIterations         | 1,000  | 5,000  | 10,000   | 100,000    |
+| maxToolCalls          | 10     | 50     | 100      | 1,000      |
+| maxConsoleCalls       | 100    | 500    | 1,000    | 10,000     |
+| maxConsoleOutputBytes | 64KB   | 256KB  | 1MB      | 10MB       |
+| sanitizeStackTraces   | YES    | YES    | NO       | NO         |
+| blockTimingAPIs       | YES    | NO     | NO       | NO         |
+| allowUnboundedLoops   | NO     | NO     | YES      | YES        |
+| unicodeSecurityCheck  | YES    | YES    | NO       | NO         |
 
 <Warning>
   Use `STRICT` for any untrusted code, including AI-generated scripts from external sources or user-submitted scripts.
@@ -352,27 +352,27 @@ const enclaveWithApi = new Enclave({
 
 ### Scorer Types
 
-| Type | Latency | Dependencies | Detection |
-|------|---------|--------------|-----------|
-| `disabled` | 0ms | None | None |
-| `rule-based` | ~1ms | None | Good |
-| `local-llm` | ~5-10ms | Model download | Better |
-| `external-api` | ~100ms | Network | Best |
+| Type           | Latency | Dependencies   | Detection |
+| -------------- | ------- | -------------- | --------- |
+| `disabled`     | 0ms     | None           | None      |
+| `rule-based`   | ~1ms    | None           | Good      |
+| `local-llm`    | ~5-10ms | Model download | Better    |
+| `external-api` | ~100ms  | Network        | Best      |
 
 ### Detection Rules
 
 The rule-based scorer detects these patterns:
 
-| Rule | Score | Description |
-|------|-------|-------------|
-| `SENSITIVE_FIELD` | 35 | Queries password/token/secret fields |
-| `EXCESSIVE_LIMIT` | 25 | limit > 10,000 |
-| `WILDCARD_QUERY` | 20 | query="*" or filter={} |
-| `LOOP_TOOL_CALL` | 25 | callTool inside for/for-of loop |
-| `EXFIL_PATTERN` | 50 | list→send or query→export sequence |
-| `EXTREME_VALUE` | 30 | Numeric arg > 1,000,000 |
-| `DYNAMIC_TOOL` | 20 | Variable tool name (not static string) |
-| `BULK_OPERATION` | 15 | Tool name contains bulk/batch/all |
+| Rule              | Score | Description                            |
+| ----------------- | ----- | -------------------------------------- |
+| `SENSITIVE_FIELD` | 35    | Queries password/token/secret fields   |
+| `EXCESSIVE_LIMIT` | 25    | limit > 10,000                         |
+| `WILDCARD_QUERY`  | 20    | query="\*" or filter={}                |
+| `LOOP_TOOL_CALL`  | 25    | callTool inside for/for-of loop        |
+| `EXFIL_PATTERN`   | 50    | list→send or query→export sequence     |
+| `EXTREME_VALUE`   | 30    | Numeric arg > 1,000,000                |
+| `DYNAMIC_TOOL`    | 20    | Variable tool name (not static string) |
+| `BULK_OPERATION`  | 15    | Tool name contains bulk/batch/all      |
 
 ### Caching
 
@@ -420,13 +420,13 @@ const enclave = new Enclave({
 
 ### Worker Pool Presets
 
-| Setting | STRICT | SECURE | STANDARD | PERMISSIVE |
-|---------|--------|--------|----------|------------|
-| maxWorkers | 4 | 8 | 16 | 32 |
-| memoryLimitPerWorker | 64MB | 128MB | 256MB | 512MB |
-| maxExecutionsPerWorker | 100 | 500 | 1,000 | 5,000 |
-| maxQueueSize | 20 | 50 | 100 | 500 |
-| maxMessagesPerSecond | 100 | 500 | 1,000 | 5,000 |
+| Setting                | STRICT | SECURE | STANDARD | PERMISSIVE |
+| ---------------------- | ------ | ------ | -------- | ---------- |
+| maxWorkers             | 4      | 8      | 16       | 32         |
+| memoryLimitPerWorker   | 64MB   | 128MB  | 256MB    | 512MB      |
+| maxExecutionsPerWorker | 100    | 500    | 1,000    | 5,000      |
+| maxQueueSize           | 20     | 50     | 100      | 500        |
+| maxMessagesPerSecond   | 100    | 500    | 1,000    | 5,000      |
 
 ### Worker Pool Configuration
 

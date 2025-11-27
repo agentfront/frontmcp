@@ -62,7 +62,6 @@ graph TD
     class Input,L0,L1,L2,L3,L4,L5,Result terminal;
 ```
 
-
 ---
 
 ## Layer 0: Pre-Scanner (Defense-in-Depth)
@@ -82,13 +81,13 @@ Traditional security scanners operate on the AST (Abstract Syntax Tree), which m
 
 These limits are enforced regardless of configuration:
 
-| Limit | Value | Purpose |
-|-------|-------|---------|
-| Max Input Size | 100 MB (absolute) / 50 KB (AgentScript preset) | Prevents memory exhaustion |
-| Max Nesting Depth | 200 levels | Prevents stack overflow |
-| Max Line Length | 100,000 chars | Handles minified code safely |
-| Max Regex Length | 1,000 chars | Prevents ReDoS |
-| Max Regex Count | 50 | Limits ReDoS attack surface |
+| Limit             | Value                                          | Purpose                      |
+| ----------------- | ---------------------------------------------- | ---------------------------- |
+| Max Input Size    | 100 MB (absolute) / 50 KB (AgentScript preset) | Prevents memory exhaustion   |
+| Max Nesting Depth | 200 levels                                     | Prevents stack overflow      |
+| Max Line Length   | 100,000 chars                                  | Handles minified code safely |
+| Max Regex Length  | 1,000 chars                                    | Prevents ReDoS               |
+| Max Regex Count   | 50                                             | Limits ReDoS attack surface  |
 
 ### Pre-Scanner Attacks Blocked
 
@@ -101,6 +100,7 @@ These limits are enforced regardless of configuration:
     - `(a+){2,}` - Star in repetition
 
     **Why:** These patterns cause exponential backtracking that can hang the parser or runtime for hours.
+
   </Accordion>
 
   <Accordion title="BiDi/Trojan Source Attacks" icon="eye-slash">
@@ -110,6 +110,7 @@ These limits are enforced regardless of configuration:
     - U+2069 (Pop Directional Isolate)
 
     **Why:** Makes code appear different from how it executes (CVE-2021-42574).
+
   </Accordion>
 
   <Accordion title="Parser Stack Overflow" icon="layer-group">
@@ -118,6 +119,7 @@ These limits are enforced regardless of configuration:
     - Deeply nested braces: `{{{{{{{{{}}}}}}}}}`
 
     **Why:** Recursive descent parsers can overflow their stack on deep nesting.
+
   </Accordion>
 
   <Accordion title="Input Size DoS" icon="file-arrow-up">
@@ -126,6 +128,7 @@ These limits are enforced regardless of configuration:
     - Inputs > configured maxInputSize
 
     **Why:** Large inputs can exhaust memory before validation completes.
+
   </Accordion>
 
   <Accordion title="Null Byte Injection" icon="ban">
@@ -133,6 +136,7 @@ These limits are enforced regardless of configuration:
     - `\x00` characters anywhere in input
 
     **Why:** Often indicates binary data injection or attack payloads.
+
   </Accordion>
 </AccordionGroup>
 
@@ -167,6 +171,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - `setInterval`, `setImmediate` - Async execution escape
 
     **Why:** These allow arbitrary code injection that bypasses AST validation.
+
   </Accordion>
 
   <Accordion title="Global/System Access" icon="globe">
@@ -178,6 +183,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - `this` - Context leakage
 
     **Why:** Prevents sandbox escape and system access.
+
   </Accordion>
 
   <Accordion title="Prototype Pollution" icon="virus">
@@ -187,6 +193,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - `Object.prototype.polluted = true` - Global prototype pollution
 
     **Why:** Prototype pollution can corrupt the entire runtime.
+
   </Accordion>
 
   <Accordion title="Unicode/Trojan Source Attacks" icon="eye-slash">
@@ -197,6 +204,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - Invisible formatting characters
 
     **Why:** Makes code appear different from how it executes.
+
   </Accordion>
 
   <Accordion title="Resource Exhaustion" icon="infinity">
@@ -207,6 +215,7 @@ CodeCall uses the **AgentScript preset** which provides the strictest pre-scanni
     - Recursive function definitions
 
     **Why:** Can freeze the server or exhaust memory.
+
   </Accordion>
 </AccordionGroup>
 
@@ -277,12 +286,12 @@ After AST validation passes, code is transformed for safe execution:
 
 ### Transformations Applied
 
-| Original | Transformed | Purpose |
-|----------|-------------|---------|
-| Top-level code | `async function __ag_main() { ... }` | Enable top-level await |
-| `callTool(...)` | `__safe_callTool(...)` | Proxy through Enclave |
-| `for (...)` | Iteration-limited version | Enforce maxIterations |
-| `console.log(...)` | `__safe_console.log(...)` | Capture for logging |
+| Original           | Transformed                          | Purpose                |
+| ------------------ | ------------------------------------ | ---------------------- |
+| Top-level code     | `async function __ag_main() { ... }` | Enable top-level await |
+| `callTool(...)`    | `__safe_callTool(...)`               | Proxy through Enclave  |
+| `for (...)`        | Iteration-limited version            | Enforce maxIterations  |
+| `console.log(...)` | `__safe_console.log(...)`            | Capture for logging    |
 
 ### Example
 
@@ -336,26 +345,26 @@ The Scoring Gate uses **feature extraction** and **rule-based analysis** to assi
 
 ### Detection Rules (8 Built-in)
 
-| Rule ID | Score | Trigger |
-|---------|-------|---------|
-| `SENSITIVE_FIELD` | +35 | Access to password, token, secret, apiKey, SSN, etc. |
-| `EXCESSIVE_LIMIT` | +25 | Limit values > 10,000 |
-| `WILDCARD_QUERY` | +20 | Query patterns like `*` or `SELECT *` |
-| `LOOP_TOOL_CALL` | +25 | Tool calls inside loops (potential fan-out) |
-| `EXFIL_PATTERN` | +50 | Fetch→Send sequence (list data, then webhook/email) |
-| `EXTREME_VALUE` | +30 | Numeric values > 1,000,000 |
-| `DYNAMIC_TOOL` | +20 | Tool name from variable (not string literal) |
-| `BULK_OPERATION` | +15 | Tool names with bulk/batch/mass/all keywords |
+| Rule ID           | Score | Trigger                                              |
+| ----------------- | ----- | ---------------------------------------------------- |
+| `SENSITIVE_FIELD` | +35   | Access to password, token, secret, apiKey, SSN, etc. |
+| `EXCESSIVE_LIMIT` | +25   | Limit values > 10,000                                |
+| `WILDCARD_QUERY`  | +20   | Query patterns like `*` or `SELECT *`                |
+| `LOOP_TOOL_CALL`  | +25   | Tool calls inside loops (potential fan-out)          |
+| `EXFIL_PATTERN`   | +50   | Fetch→Send sequence (list data, then webhook/email)  |
+| `EXTREME_VALUE`   | +30   | Numeric values > 1,000,000                           |
+| `DYNAMIC_TOOL`    | +20   | Tool name from variable (not string literal)         |
+| `BULK_OPERATION`  | +15   | Tool names with bulk/batch/mass/all keywords         |
 
 ### Risk Levels
 
-| Total Score | Risk Level | Default Action |
-|-------------|------------|----------------|
-| 0-19 | `none` | Allow |
-| 20-39 | `low` | Allow |
-| 40-69 | `medium` | **Warn** (configurable) |
-| 70-89 | `high` | **Block** (configurable) |
-| 90-100 | `critical` | **Block** |
+| Total Score | Risk Level | Default Action           |
+| ----------- | ---------- | ------------------------ |
+| 0-19        | `none`     | Allow                    |
+| 20-39       | `low`      | Allow                    |
+| 40-69       | `medium`   | **Warn** (configurable)  |
+| 70-89       | `high`     | **Block** (configurable) |
+| 90-100      | `critical` | **Block**                |
 
 ### Example: Exfiltration Detection
 
@@ -378,11 +387,11 @@ await callTool('webhooks:send', { data: users });
 
 The Scoring Gate supports pluggable scorers for different deployment scenarios:
 
-| Mode | Latency | Description |
-|------|---------|-------------|
-| `disabled` | ~0ms | Pass-through, no scoring (for trusted environments) |
-| `rule-based` | ~1ms | Zero-dependency TypeScript rules (recommended) |
-| `external-api` | ~100ms | External scoring API for advanced ML models |
+| Mode           | Latency | Description                                         |
+| -------------- | ------- | --------------------------------------------------- |
+| `disabled`     | ~0ms    | Pass-through, no scoring (for trusted environments) |
+| `rule-based`   | ~1ms    | Zero-dependency TypeScript rules (recommended)      |
+| `external-api` | ~100ms  | External scoring API for advanced ML models         |
 
 ### Configuration
 
@@ -406,10 +415,10 @@ const enclave = createEnclave({
 
 ### Fail-Open vs Fail-Closed
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `failOpen: true` | Allow execution if scorer fails | **Production default** - availability over security |
-| `failOpen: false` | Block execution if scorer fails | High-security environments |
+| Mode              | Behavior                        | Use Case                                            |
+| ----------------- | ------------------------------- | --------------------------------------------------- |
+| `failOpen: true`  | Allow execution if scorer fails | **Production default** - availability over security |
+| `failOpen: false` | Block execution if scorer fails | High-security environments                          |
 
 ### Scoring Result
 
@@ -533,12 +542,12 @@ const scorer = new RuleBasedScorer({
 
 #### Cache Configuration by Security Level
 
-| Level | TTL | Max Entries | Eviction |
-|-------|-----|-------------|----------|
-| STRICT | 30s | 100 | Aggressive |
-| SECURE | 60s | 500 | Normal |
-| STANDARD | 300s | 1,000 | Lazy |
-| PERMISSIVE | 600s | 5,000 | Lazy |
+| Level      | TTL  | Max Entries | Eviction   |
+| ---------- | ---- | ----------- | ---------- |
+| STRICT     | 30s  | 100         | Aggressive |
+| SECURE     | 60s  | 500         | Normal     |
+| STANDARD   | 300s | 1,000       | Lazy       |
+| PERMISSIVE | 600s | 5,000       | Lazy       |
 
 ---
 
@@ -565,13 +574,13 @@ const scorer = new RuleBasedScorer({
 
 ### Resource Limits
 
-| Limit | Default | Purpose |
-|-------|---------|---------|
-| `timeoutMs` | 3,500ms | Maximum execution time |
-| `maxIterations` | 5,000 | Maximum loop iterations |
-| `maxToolCalls` | 100 | Maximum tool invocations |
-| `maxConsoleOutputBytes` | 64KB | Maximum console output (I/O flood protection) |
-| `maxConsoleCalls` | 100 | Maximum console calls (I/O flood protection) |
+| Limit                   | Default | Purpose                                       |
+| ----------------------- | ------- | --------------------------------------------- |
+| `timeoutMs`             | 3,500ms | Maximum execution time                        |
+| `maxIterations`         | 5,000   | Maximum loop iterations                       |
+| `maxToolCalls`          | 100     | Maximum tool invocations                      |
+| `maxConsoleOutputBytes` | 64KB    | Maximum console output (I/O flood protection) |
+| `maxConsoleCalls`       | 100     | Maximum console calls (I/O flood protection)  |
 
 ```ts
 CodeCallPlugin.init({
@@ -584,12 +593,12 @@ CodeCallPlugin.init({
 
 ### VM Presets
 
-| Preset | Timeout | Iterations | Tool Calls | Console Output | Console Calls | Use Case |
-|--------|---------|------------|------------|----------------|---------------|----------|
-| `locked_down` | 2s | 2,000 | 10 | 32KB | 50 | Ultra-sensitive data |
-| `secure` | 3.5s | 5,000 | 100 | 64KB | 100 | **Production default** |
-| `balanced` | 5s | 10,000 | 200 | 256KB | 500 | Complex workflows |
-| `experimental` | 10s | 20,000 | 500 | 1MB | 1000 | Development only |
+| Preset         | Timeout | Iterations | Tool Calls | Console Output | Console Calls | Use Case               |
+| -------------- | ------- | ---------- | ---------- | -------------- | ------------- | ---------------------- |
+| `locked_down`  | 2s      | 2,000      | 10         | 32KB           | 50            | Ultra-sensitive data   |
+| `secure`       | 3.5s    | 5,000      | 100        | 64KB           | 100           | **Production default** |
+| `balanced`     | 5s      | 10,000     | 200        | 256KB          | 500           | Complex workflows      |
+| `experimental` | 10s     | 20,000     | 500        | 1MB            | 1000          | Development only       |
 
 ### Security Levels vs VM Presets
 
@@ -601,24 +610,24 @@ The Enclave library uses **Security Levels** (`STRICT`, `SECURE`, `STANDARD`, `P
 
 **Mapping:**
 
-| VM Preset | Enclave Security Level | Description |
-|-----------|------------------------|-------------|
-| `locked_down` | `STRICT` | Maximum security, minimal capabilities |
-| `secure` | `SECURE` | Production-safe with reasonable limits |
-| `balanced` | `STANDARD` | More flexibility for complex scripts |
-| `experimental` | `PERMISSIVE` | Development/testing only |
+| VM Preset      | Enclave Security Level | Description                            |
+| -------------- | ---------------------- | -------------------------------------- |
+| `locked_down`  | `STRICT`               | Maximum security, minimal capabilities |
+| `secure`       | `SECURE`               | Production-safe with reasonable limits |
+| `balanced`     | `STANDARD`             | More flexibility for complex scripts   |
+| `experimental` | `PERMISSIVE`           | Development/testing only               |
 
 **Enclave Security Level Defaults:**
 
-| Config | STRICT | SECURE | STANDARD | PERMISSIVE |
-|--------|--------|--------|----------|------------|
-| timeout | 2,000ms | 3,500ms | 5,000ms | 10,000ms |
-| maxIterations | 2,000 | 5,000 | 10,000 | 20,000 |
-| maxToolCalls | 10 | 100 | 200 | 500 |
-| maxConsoleOutputBytes | 32KB | 64KB | 256KB | 1MB |
-| maxConsoleCalls | 50 | 100 | 500 | 1,000 |
-| maxSanitizeDepth | 5 | 10 | 15 | 20 |
-| maxSanitizeProperties | 500 | 1,000 | 5,000 | 10,000 |
+| Config                | STRICT  | SECURE  | STANDARD | PERMISSIVE |
+| --------------------- | ------- | ------- | -------- | ---------- |
+| timeout               | 2,000ms | 3,500ms | 5,000ms  | 10,000ms   |
+| maxIterations         | 2,000   | 5,000   | 10,000   | 20,000     |
+| maxToolCalls          | 10      | 100     | 200      | 500        |
+| maxConsoleOutputBytes | 32KB    | 64KB    | 256KB    | 1MB        |
+| maxConsoleCalls       | 50      | 100     | 500      | 1,000      |
+| maxSanitizeDepth      | 5       | 10      | 15       | 20         |
+| maxSanitizeProperties | 500     | 1,000   | 5,000    | 10,000     |
 
 **When configuring CodeCall, use VM Presets:**
 
@@ -688,42 +697,42 @@ graph TD
 
 #### When to Use Worker Pool
 
-| Scenario | Recommendation |
-|----------|----------------|
-| Trusted internal scripts | Standard VM (lower overhead) |
-| Multi-tenant execution | Worker Pool (OS isolation) |
-| Untrusted AI-generated code | Worker Pool (hard halt) |
-| Memory-sensitive workloads | Worker Pool (per-worker limits) |
+| Scenario                    | Recommendation                  |
+| --------------------------- | ------------------------------- |
+| Trusted internal scripts    | Standard VM (lower overhead)    |
+| Multi-tenant execution      | Worker Pool (OS isolation)      |
+| Untrusted AI-generated code | Worker Pool (hard halt)         |
+| Memory-sensitive workloads  | Worker Pool (per-worker limits) |
 
 #### Worker Pool Security Features
 
-| Feature | Protection |
-|---------|------------|
-| `worker.terminate()` | Hard halt runaway scripts (VM timeout bypass) |
-| `--max-old-space-size` | Per-worker memory limits |
-| JSON-only serialization | Prevents structured clone gadget attacks |
-| Dangerous global removal | parentPort, workerData inaccessible |
-| Rate limiting | Message flood protection |
-| Safe deserialize | Prototype pollution prevention |
+| Feature                  | Protection                                    |
+| ------------------------ | --------------------------------------------- |
+| `worker.terminate()`     | Hard halt runaway scripts (VM timeout bypass) |
+| `--max-old-space-size`   | Per-worker memory limits                      |
+| JSON-only serialization  | Prevents structured clone gadget attacks      |
+| Dangerous global removal | parentPort, workerData inaccessible           |
+| Rate limiting            | Message flood protection                      |
+| Safe deserialize         | Prototype pollution prevention                |
 
 #### Worker Pool Configuration
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `minWorkers` | 2 | Minimum warm workers |
-| `maxWorkers` | CPU count | Maximum concurrent workers |
-| `memoryLimitPerWorker` | 128MB | Per-worker memory limit |
-| `maxMessagesPerSecond` | 1000 | Rate limit per worker |
-| `maxExecutionsPerWorker` | 1000 | Recycle after N executions |
+| Option                   | Default   | Description                |
+| ------------------------ | --------- | -------------------------- |
+| `minWorkers`             | 2         | Minimum warm workers       |
+| `maxWorkers`             | CPU count | Maximum concurrent workers |
+| `memoryLimitPerWorker`   | 128MB     | Per-worker memory limit    |
+| `maxMessagesPerSecond`   | 1000      | Rate limit per worker      |
+| `maxExecutionsPerWorker` | 1000      | Recycle after N executions |
 
 #### Worker Pool Presets
 
-| Level | minWorkers | maxWorkers | memoryLimit | messagesPerSec |
-|-------|------------|------------|-------------|----------------|
-| STRICT | 2 | 4 | 64MB | 100 |
-| SECURE | 2 | 8 | 128MB | 500 |
-| STANDARD | 2 | 16 | 256MB | 1000 |
-| PERMISSIVE | 4 | 32 | 512MB | 5000 |
+| Level      | minWorkers | maxWorkers | memoryLimit | messagesPerSec |
+| ---------- | ---------- | ---------- | ----------- | -------------- |
+| STRICT     | 2          | 4          | 64MB        | 100            |
+| SECURE     | 2          | 8          | 128MB       | 500            |
+| STANDARD   | 2          | 16         | 256MB       | 1000           |
+| PERMISSIVE | 4          | 32         | 512MB       | 5000           |
 
 ### Custom Globals Validation
 
@@ -731,13 +740,13 @@ When providing custom globals to scripts via the `globals` config option, Enclav
 
 #### Validation Rules
 
-| Rule | Limit | Blocked |
-|------|-------|---------|
-| No functions | - | Functions cannot be injected |
-| No getters/setters | - | Property traps blocked |
-| No symbols | - | Symbol-keyed properties stripped |
-| No dangerous keys | - | `__proto__`, `constructor`, `prototype` |
-| Max nesting | 10 levels | Deep objects rejected |
+| Rule               | Limit     | Blocked                                 |
+| ------------------ | --------- | --------------------------------------- |
+| No functions       | -         | Functions cannot be injected            |
+| No getters/setters | -         | Property traps blocked                  |
+| No symbols         | -         | Symbol-keyed properties stripped        |
+| No dangerous keys  | -         | `__proto__`, `constructor`, `prototype` |
+| Max nesting        | 10 levels | Deep objects rejected                   |
 
 #### Blocked Function Patterns
 
@@ -854,11 +863,11 @@ Beyond the Self-Reference Guard, CodeCall provides a comprehensive **Tool Access
 
 ### Access Modes
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `whitelist` | Only explicitly allowed tools can be called | High-security, known toolset |
+| Mode        | Behavior                                    | Use Case                        |
+| ----------- | ------------------------------------------- | ------------------------------- |
+| `whitelist` | Only explicitly allowed tools can be called | High-security, known toolset    |
 | `blacklist` | All tools allowed except explicitly blocked | Flexible with some restrictions |
-| `dynamic` | Custom evaluator function decides per-call | Complex authorization logic |
+| `dynamic`   | Custom evaluator function decides per-call  | Complex authorization logic     |
 
 ### Default Blacklist
 
@@ -890,6 +899,7 @@ CodeCallPlugin.init({
 ```
 
 **Supported patterns:**
+
 - `*` - Matches any characters within a segment
 - `?` - Matches a single character
 - `prefix:*` - Matches all tools in a namespace
@@ -962,24 +972,24 @@ All outputs are sanitized before returning to the client through two mechanisms:
 
 ### Value Sanitization Rules
 
-| Rule | Default | Purpose |
-|------|---------|---------|
-| `maxDepth` | 20 | Prevent deeply nested objects |
-| `maxProperties` | 10,000 | Limit total object keys |
-| `maxStringLength` | 10,000 | Truncate oversized strings |
-| `maxArrayLength` | 1,000 | Truncate large arrays |
+| Rule              | Default | Purpose                       |
+| ----------------- | ------- | ----------------------------- |
+| `maxDepth`        | 20      | Prevent deeply nested objects |
+| `maxProperties`   | 10,000  | Limit total object keys       |
+| `maxStringLength` | 10,000  | Truncate oversized strings    |
+| `maxArrayLength`  | 1,000   | Truncate large arrays         |
 
 ### What Gets Stripped
 
 Value sanitization removes potentially dangerous content:
 
-| Stripped | Reason |
-|----------|--------|
-| Functions | Prevents code injection |
-| Symbols | Prevents prototype manipulation |
-| `__proto__` keys | Prevents prototype pollution |
-| `constructor` keys | Prevents constructor tampering |
-| Getters/Setters | Prevents trap execution |
+| Stripped           | Reason                          |
+| ------------------ | ------------------------------- |
+| Functions          | Prevents code injection         |
+| Symbols            | Prevents prototype manipulation |
+| `__proto__` keys   | Prevents prototype pollution    |
+| `constructor` keys | Prevents constructor tampering  |
+| Getters/Setters    | Prevents trap execution         |
 
 ### Type Handling
 
@@ -1019,31 +1029,31 @@ return obj;
 
 **File System Paths Redacted:**
 
-| Category | Examples |
-|----------|----------|
-| Unix home | `/Users/john/`, `/home/deploy/` |
-| System paths | `/var/log/`, `/etc/`, `/tmp/` |
-| App paths | `/app/`, `/srv/`, `/opt/` |
-| Windows | `C:\Users\`, `D:\Projects\`, UNC paths |
+| Category     | Examples                               |
+| ------------ | -------------------------------------- |
+| Unix home    | `/Users/john/`, `/home/deploy/`        |
+| System paths | `/var/log/`, `/etc/`, `/tmp/`          |
+| App paths    | `/app/`, `/srv/`, `/opt/`              |
+| Windows      | `C:\Users\`, `D:\Projects\`, UNC paths |
 
 **Package Manager Paths Redacted:**
 
-| Manager | Patterns |
-|---------|----------|
-| npm | `node_modules/`, `.npm/` |
-| yarn | `.yarn/`, `yarn-cache/` |
-| pnpm | `.pnpm/`, `pnpm-store/` |
-| workspace | `packages/`, `libs/` |
+| Manager   | Patterns                 |
+| --------- | ------------------------ |
+| npm       | `node_modules/`, `.npm/` |
+| yarn      | `.yarn/`, `yarn-cache/`  |
+| pnpm      | `.pnpm/`, `pnpm-store/`  |
+| workspace | `packages/`, `libs/`     |
 
 **Cloud/Container Paths Redacted:**
 
-| Environment | Patterns |
-|-------------|----------|
-| Docker | `/docker/`, container IDs |
-| Kubernetes | `/var/run/secrets/`, pod names |
-| AWS | Lambda paths, ECS task IDs |
-| GCP | Cloud Run paths, function IDs |
-| Azure | Functions paths, container IDs |
+| Environment | Patterns                       |
+| ----------- | ------------------------------ |
+| Docker      | `/docker/`, container IDs      |
+| Kubernetes  | `/var/run/secrets/`, pod names |
+| AWS         | Lambda paths, ECS task IDs     |
+| GCP         | Cloud Run paths, function IDs  |
+| Azure       | Functions paths, container IDs |
 
 **CI/CD Paths Redacted:**
 
@@ -1097,19 +1107,19 @@ password=xxx       → password=[REDACTED]
 
 CodeCall categorizes all errors for safe exposure:
 
-| Category | Code | Exposed To Client | Contains |
-|----------|------|-------------------|----------|
-| Syntax | `SYNTAX_ERROR` | Message + location | Line/column of error |
-| Validation | `VALIDATION_ERROR` | Rule that failed | Blocked construct |
-| Timeout | `TIMEOUT` | Duration | - |
-| Self-Reference | `SELF_REFERENCE_BLOCKED` | Tool name | - |
-| Tool Not Found | `TOOL_NOT_FOUND` | Tool name | - |
-| Tool Error | `TOOL_ERROR` | Sanitized message | - |
-| Runtime | `RUNTIME_ERROR` | Sanitized message | - |
-| Worker Timeout | `WORKER_TIMEOUT` | Duration | Worker terminated |
-| Worker Memory | `WORKER_MEMORY_EXCEEDED` | Memory usage | Worker recycled |
-| Message Flood | `MESSAGE_FLOOD_ERROR` | Rate limit | Worker terminated |
-| Queue Full | `QUEUE_FULL_ERROR` | Queue size | Request rejected |
+| Category       | Code                     | Exposed To Client  | Contains             |
+| -------------- | ------------------------ | ------------------ | -------------------- |
+| Syntax         | `SYNTAX_ERROR`           | Message + location | Line/column of error |
+| Validation     | `VALIDATION_ERROR`       | Rule that failed   | Blocked construct    |
+| Timeout        | `TIMEOUT`                | Duration           | -                    |
+| Self-Reference | `SELF_REFERENCE_BLOCKED` | Tool name          | -                    |
+| Tool Not Found | `TOOL_NOT_FOUND`         | Tool name          | -                    |
+| Tool Error     | `TOOL_ERROR`             | Sanitized message  | -                    |
+| Runtime        | `RUNTIME_ERROR`          | Sanitized message  | -                    |
+| Worker Timeout | `WORKER_TIMEOUT`         | Duration           | Worker terminated    |
+| Worker Memory  | `WORKER_MEMORY_EXCEEDED` | Memory usage       | Worker recycled      |
+| Message Flood  | `MESSAGE_FLOOD_ERROR`    | Rate limit         | Worker terminated    |
+| Queue Full     | `QUEUE_FULL_ERROR`       | Queue size         | Request rejected     |
 
 ```json
 // Example error response
@@ -1215,13 +1225,13 @@ Before deploying CodeCall to production:
   CodeCall is not a silver bullet. Defense-in-depth means combining CodeCall with other security measures.
 </Warning>
 
-| Threat | Mitigation |
-|--------|------------|
-| **Tool abuse** | Use `enabledInCodeCall: false` on sensitive tools |
-| **Algorithmic complexity** | Scripts can run O(n²) within limits - monitor performance |
-| **Memory exhaustion** | Large arrays/objects within timeout - set reasonable limits |
-| **Tool side effects** | Tool calls have real effects - use read-only tools where possible |
-| **Business logic bugs** | Script logic errors are not security issues |
+| Threat                     | Mitigation                                                        |
+| -------------------------- | ----------------------------------------------------------------- |
+| **Tool abuse**             | Use `enabledInCodeCall: false` on sensitive tools                 |
+| **Algorithmic complexity** | Scripts can run O(n²) within limits - monitor performance         |
+| **Memory exhaustion**      | Large arrays/objects within timeout - set reasonable limits       |
+| **Tool side effects**      | Tool calls have real effects - use read-only tools where possible |
+| **Business logic bugs**    | Script logic errors are not security issues                       |
 
 ---
 
