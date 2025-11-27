@@ -98,6 +98,13 @@ export class TestServer {
    * Start an Nx project as test server
    */
   static async startNx(project: string, options: Partial<TestServerOptions> = {}): Promise<TestServer> {
+    // Validate project name contains only safe characters to prevent shell injection
+    if (!/^[\w-]+$/.test(project)) {
+      throw new Error(
+        `Invalid project name: ${project}. Must contain only alphanumeric, underscore, and hyphen characters.`,
+      );
+    }
+
     const port = options.port ?? (await findAvailablePort());
 
     const serverOptions: TestServerOptions = {
@@ -117,7 +124,7 @@ export class TestServer {
    */
   static connect(baseUrl: string): TestServer {
     const url = new URL(baseUrl);
-    const port = parseInt(url.port, 10) || 80;
+    const port = parseInt(url.port, 10) || (url.protocol === 'https:' ? 443 : 80);
 
     const server = new TestServer(
       {
@@ -155,23 +162,22 @@ export class TestServer {
       // Wait for process to exit
       const exitPromise = new Promise<void>((resolve) => {
         if (this.process) {
-          this.process.on('exit', () => resolve());
+          this.process.once('exit', () => resolve());
         } else {
           resolve();
         }
       });
 
-      // Force kill after timeout
-      const timeoutPromise = new Promise<void>((resolve) => {
-        setTimeout(() => {
-          if (this.process) {
-            this.process.kill('SIGKILL');
-          }
-          resolve();
-        }, 5000);
-      });
+      // Force kill after timeout (but still wait for actual exit)
+      const killTimeout = setTimeout(() => {
+        if (this.process) {
+          this.log('Force killing server after timeout...');
+          this.process.kill('SIGKILL');
+        }
+      }, 5000);
 
-      await Promise.race([exitPromise, timeoutPromise]);
+      await exitPromise;
+      clearTimeout(killTimeout);
       this.process = null;
       this.log('Server stopped');
     }

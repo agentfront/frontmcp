@@ -22,6 +22,7 @@ export class ConnectionError extends TestClientError {
   constructor(message: string, public readonly cause?: Error) {
     super(message);
     this.name = 'ConnectionError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -32,6 +33,7 @@ export class TimeoutError extends TestClientError {
   constructor(message: string, public readonly timeoutMs: number) {
     super(message);
     this.name = 'TimeoutError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -42,6 +44,7 @@ export class McpProtocolError extends TestClientError {
   constructor(message: string, public readonly code: number, public readonly data?: unknown) {
     super(message);
     this.name = 'McpProtocolError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -52,6 +55,7 @@ export class ServerStartError extends TestClientError {
   constructor(message: string, public readonly cause?: Error) {
     super(message);
     this.name = 'ServerStartError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -62,5 +66,6 @@ export class AssertionError extends TestClientError {
   constructor(message: string) {
     super(message);
     this.name = 'AssertionError';
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }

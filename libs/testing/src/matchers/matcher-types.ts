@@ -211,7 +211,7 @@ export interface McpMatchers<R = unknown> {
 // ═══════════════════════════════════════════════════════════════════
 
 /* eslint-disable @typescript-eslint/no-namespace */
-/* eslint-disable @typescript-eslint/no-empty-interface */
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 declare global {
   namespace jest {
     // Extend expect matchers
@@ -225,7 +225,7 @@ declare global {
   }
 }
 /* eslint-enable @typescript-eslint/no-namespace */
-/* eslint-enable @typescript-eslint/no-empty-interface */
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 // This export is needed to make this a module
 export {};
