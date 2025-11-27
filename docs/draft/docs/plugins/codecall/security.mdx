@@ -341,11 +341,11 @@ The Scoring Gate uses **feature extraction** and **rule-based analysis** to assi
 | `SENSITIVE_FIELD` | +35 | Access to password, token, secret, apiKey, SSN, etc. |
 | `EXCESSIVE_LIMIT` | +25 | Limit values > 10,000 |
 | `WILDCARD_QUERY` | +20 | Query patterns like `*` or `SELECT *` |
-| `LOOP_TOOL_CALL` | +25-35 | Tool calls inside loops (potential fan-out) |
-| `EXFIL_PATTERN` | +40 | Fetch→Send sequence (list data, then webhook/email) |
+| `LOOP_TOOL_CALL` | +25 | Tool calls inside loops (potential fan-out) |
+| `EXFIL_PATTERN` | +50 | Fetch→Send sequence (list data, then webhook/email) |
 | `EXTREME_VALUE` | +30 | Numeric values > 1,000,000 |
-| `DYNAMIC_TOOL` | +25 | Tool name from variable (not string literal) |
-| `BULK_OPERATION` | +20 | Tool names with bulk/batch/mass/all keywords |
+| `DYNAMIC_TOOL` | +20 | Tool name from variable (not string literal) |
+| `BULK_OPERATION` | +15 | Tool names with bulk/batch/mass/all keywords |
 
 ### Risk Levels
 
@@ -370,8 +370,8 @@ await callTool('webhooks:send', { data: users });
 // Score breakdown:
 // - SENSITIVE_FIELD: +35 (password, apiKey)
 // - EXCESSIVE_LIMIT: +25 (100000 > 10000)
-// - EXFIL_PATTERN: +40 (list → send)
-// Total: 100 → BLOCKED (critical risk)
+// - EXFIL_PATTERN: +50 (list → send)
+// Total: 110 → BLOCKED (critical risk)
 ```
 
 ### Scorer Modes
