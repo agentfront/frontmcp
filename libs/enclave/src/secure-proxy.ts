@@ -257,6 +257,10 @@ export interface SecureProxyOptions {
   /**
    * Whether to allow Function.prototype.bind/call/apply
    * Default: true (allows them for array methods like .map, .filter)
+   *
+   * @reserved Reserved for future use. Currently not implemented - bind/call/apply
+   * are always allowed to support array methods. Set FUNCTION_BLOCKED_PROPERTIES
+   * to add these if needed for stricter security.
    */
   allowFunctionBinding?: boolean;
 
@@ -290,14 +294,39 @@ const proxyCache = new WeakMap<object, Map<string, object>>();
 const proxySet = new WeakSet<object>();
 
 /**
- * Generate a cache key from SecureProxyLevelConfig
- * This allows different configs to create different proxies for the same target
+ * Generate a cache key from all SecureProxyOptions that affect proxy behavior
+ * This ensures different options create different proxies for the same target
+ *
+ * NOTE: onBlocked callback is intentionally excluded from cache key.
+ * Having different callbacks for the same blocking configuration is unusual,
+ * and including function identity would effectively disable caching.
+ * If you need different callbacks, use different additionalBlocked values.
  */
-function getConfigCacheKey(config?: SecureProxyLevelConfig): string {
-  if (!config) return 'default';
-  return `${config.blockConstructor ? 'C' : 'c'}${config.blockPrototype ? 'P' : 'p'}${
-    config.blockLegacyAccessors ? 'L' : 'l'
-  }`;
+function getFullCacheKey(options: SecureProxyOptions): string {
+  const parts: string[] = [];
+
+  // Level config signature
+  if (options.levelConfig) {
+    const cfg = options.levelConfig;
+    parts.push(
+      `L:${cfg.blockConstructor ? 'C' : 'c'}${cfg.blockPrototype ? 'P' : 'p'}${cfg.blockLegacyAccessors ? 'L' : 'l'}`,
+    );
+  } else {
+    parts.push('L:default');
+  }
+
+  // Additional blocked properties (sorted for consistent keys)
+  if (options.additionalBlocked && options.additionalBlocked.length > 0) {
+    parts.push(`B:${[...options.additionalBlocked].sort().join(',')}`);
+  }
+
+  // Max depth (only include if non-default)
+  const effectiveMaxDepth = options.maxDepth ?? options.levelConfig?.proxyMaxDepth ?? 10;
+  if (effectiveMaxDepth !== 10) {
+    parts.push(`D:${effectiveMaxDepth}`);
+  }
+
+  return parts.join('|') || 'default';
 }
 
 /**
@@ -377,8 +406,8 @@ export function createSecureProxy<T extends object>(target: T, options: SecurePr
     return target;
   }
 
-  // Generate cache key based on config
-  const cacheKey = getConfigCacheKey(options.levelConfig);
+  // Generate cache key based on all options that affect proxy behavior
+  const cacheKey = getFullCacheKey(options);
 
   // Check if already proxied with this config
   const targetCache = proxyCache.get(target);
