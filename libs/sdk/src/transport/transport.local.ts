@@ -47,7 +47,8 @@ export class LocalTransporter implements Transporter {
     try {
       await this.adapter.handleRequest(req, res);
     } catch (err) {
-      console.error('MCP POST error:', err);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error('MCP POST error:', err instanceof Error ? err.message : 'Unknown error');
       res.status(500).json(rpcError('Internal error'));
     }
   }
@@ -61,7 +62,8 @@ export class LocalTransporter implements Transporter {
       await this.adapter.ready;
       return this.adapter.initialize(req, res);
     } catch (err) {
-      console.error('MCP POST error:', err);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error('MCP POST error:', err instanceof Error ? err.message : 'Unknown error');
       res.status(500).json(rpcError('Internal error'));
     }
   }

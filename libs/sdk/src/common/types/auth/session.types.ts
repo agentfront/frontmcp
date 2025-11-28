@@ -45,6 +45,8 @@ export type SessionIdPayload = {
   iat: number;
   /* The protocol used in existing transport - optional for stateless mode */
   protocol?: HttpRequestIntent;
+  /* True if session was created in public mode (anonymous access) */
+  isPublic?: boolean;
 };
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
@@ -52,6 +54,7 @@ export const sessionIdPayloadSchema = z.object({
   uuid: z.string().uuid(),
   iat: z.number(),
   protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
+  isPublic: z.boolean().optional(),
 } satisfies RawZodShape<SessionIdPayload>);
 
 export interface Authorization {

@@ -21,7 +21,8 @@ import 'reflect-metadata';
 import { z } from 'zod';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
 import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
-import { parseSessionHeader } from '../session/utils/session-id.utils';
+import { parseSessionHeader, encryptJson, decryptPublicSession } from '../session/utils/session-id.utils';
+import { getMachineId } from '../authorization';
 
 const inputSchema = httpRequestInputSchema;
 
@@ -143,39 +144,59 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // If stateless HTTP is enabled and no session header provided,
     // don't set a protocol - let decideIntent determine it based on request
-    const hasSessionHeader = !!this.state.sessionIdHeader;
+    const sessionIdHeader = this.state.sessionIdHeader;
+    const hasSessionHeader = !!sessionIdHeader;
     const shouldSetProtocol = hasSessionHeader || !enableStatelessHttp;
 
     // Determine protocol from session header or default to streamable-http
     const protocol = shouldSetProtocol ? this.state.sessionProtocol ?? 'streamable-http' : undefined;
+    const machineId = getMachineId();
+
+    // Check if we have an existing public session to reuse (encrypted format with isPublic: true)
+    if (sessionIdHeader) {
+      const existingPayload = decryptPublicSession(sessionIdHeader);
+      if (existingPayload && existingPayload.nodeId === machineId) {
+        // Reuse existing public session
+        const user = { sub: `anon:${existingPayload.iat * 1000}`, iss: 'public', name: 'Anonymous' };
+
+        this.respond({
+          kind: 'authorized',
+          authorization: {
+            token: '',
+            user,
+            session: { id: sessionIdHeader, payload: existingPayload },
+          },
+        });
+        return;
+      }
+    }
+
+    // No existing public session - create a new one
     const now = Date.now();
 
     // Public mode without token - create anonymous authorization WITH stateful session
     // Session is required for transport layer to function correctly
     const user = { sub: `anon:${now}`, iss: 'public', name: 'Anonymous' };
     const uuid = crypto.randomUUID();
-    const sessionId = `pub:${now}:${uuid.slice(0, 8)}`;
 
     // Create a valid session payload matching the SessionIdPayload schema
-    const anonymousSession = {
-      id: sessionId,
-      payload: {
-        uuid,
-        nodeId: 'public-node',
-        authSig: 'public', // No auth signature for public mode
-        iat: Math.floor(now / 1000),
-        // Only set protocol if we should (stateful mode or session header present)
-        // If undefined, decideIntent will determine the protocol based on request
-        protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http' | undefined,
-      },
+    const payload = {
+      uuid,
+      nodeId: machineId,
+      authSig: 'public',
+      iat: Math.floor(now / 1000),
+      protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http' | undefined,
+      isPublic: true,
     };
+
+    const sessionId = encryptJson(payload);
 
     this.respond({
       kind: 'authorized',
       authorization: {
         token: '',
         user,
-        session: anonymousSession,
+        session: { id: sessionId, payload },
       },
     });
   }

@@ -153,6 +153,14 @@ export class McpTestClient {
       requestCount: 1,
     };
 
+    // Send initialized notification per MCP protocol
+    // This notification MUST be sent after receiving initialize response
+    // before the client can make any other requests
+    await this.transport.notify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
+
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
 
     return this.initResult;

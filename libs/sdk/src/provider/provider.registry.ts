@@ -181,7 +181,8 @@ export default class ProviderRegistry
         await this.initiateOne(token, rec);
       } catch (e: any) {
         const msg = e?.message ?? e;
-        console.error(`Failed instantiating`, e);
+        // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+        console.error(`Failed instantiating:`, msg);
         throw new Error(`Failed constructing ${tokenName(token)}: ${msg}`);
       }
     }
@@ -414,7 +415,8 @@ export default class ProviderRegistry
       }
     } catch (e: any) {
       const msg = e?.message ?? e;
-      console.error(`Failed constructing`, e);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error(`Failed constructing:`, msg);
       throw new Error(`Failed constructing (scoped) ${tokenName(token)}: ${msg}`);
     }
   }

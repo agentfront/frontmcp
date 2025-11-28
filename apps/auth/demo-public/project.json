@@ -26,6 +26,14 @@
       "options": {
         "passWithNoTests": true
       }
+    },
+    "test:e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node ../../../libs/cli/dist/src/cli.js test --runInBand",
+        "cwd": "apps/auth/demo-public"
+      },
+      "dependsOn": ["^build"]
     }
   }
 }

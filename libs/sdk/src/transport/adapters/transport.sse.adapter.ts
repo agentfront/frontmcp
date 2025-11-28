@@ -19,7 +19,8 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
       sessionId: sessionId,
     });
     transport.onerror = (error) => {
-      console.error('SSE error:', error);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error('SSE error:', error instanceof Error ? error.message : 'Unknown error');
     };
     transport.onclose = this.destroy.bind(this);
     return transport;

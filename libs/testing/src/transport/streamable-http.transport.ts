@@ -203,8 +203,14 @@ export class StreamableHttpTransport implements McpTransport {
             result: undefined,
           };
         } else if (contentType.includes('text/event-stream')) {
-          // Parse SSE response - extract data from event stream
-          jsonResponse = this.parseSSEResponse(text, message.id);
+          // Parse SSE response - extract data and session ID from event stream
+          const { response: sseResponse, sseSessionId } = this.parseSSEResponseWithSession(text, message.id);
+          jsonResponse = sseResponse;
+          // Store session ID from SSE id field (format: sessionId:messageId)
+          if (sseSessionId && !this.sessionId) {
+            this.sessionId = sseSessionId;
+            this.log('Session ID from SSE:', this.sessionId);
+          }
         } else {
           jsonResponse = JSON.parse(text) as JsonRpcResponse;
         }
@@ -436,37 +442,53 @@ export class StreamableHttpTransport implements McpTransport {
   }
 
   /**
-   * Parse SSE (Server-Sent Events) response format
+   * Parse SSE (Server-Sent Events) response format with session ID extraction
    * SSE format is:
    * event: message
-   * id: xxx
+   * id: sessionId:messageId
    * data: {"jsonrpc":"2.0",...}
    *
-   * Multi-line data is supported per SSE spec - each line prefixed with "data: "
-   * gets concatenated with newlines.
+   * The id field contains the session ID followed by a colon and the message ID.
    *
    * @param text - The raw SSE response text
    * @param requestId - The original request ID
-   * @returns Parsed JSON-RPC response
+   * @returns Object with parsed JSON-RPC response and session ID (if found)
    */
-  private parseSSEResponse(text: string, requestId: string | number | undefined): JsonRpcResponse {
+  private parseSSEResponseWithSession(
+    text: string,
+    requestId: string | number | undefined,
+  ): { response: JsonRpcResponse; sseSessionId?: string } {
     const lines = text.split('\n');
     const dataLines: string[] = [];
+    let sseSessionId: string | undefined;
 
-    // Collect all data lines - SSE spec concatenates multi-line data with newlines
+    // Collect all data lines and extract session ID from id: field
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         dataLines.push(line.slice(6)); // Remove 'data: ' prefix
       } else if (line === 'data:') {
         // Empty data line represents a newline in the data
         dataLines.push('');
+      } else if (line.startsWith('id: ')) {
+        // Extract session ID from id field (format: sessionId:messageId)
+        const idValue = line.slice(4);
+        const colonIndex = idValue.lastIndexOf(':');
+        if (colonIndex > 0) {
+          sseSessionId = idValue.substring(0, colonIndex);
+        } else {
+          // No colon, use the whole id as session ID
+          sseSessionId = idValue;
+        }
       }
     }
 
     if (dataLines.length > 0) {
       const jsonData = dataLines.join('\n');
       try {
-        return JSON.parse(jsonData) as JsonRpcResponse;
+        return {
+          response: JSON.parse(jsonData) as JsonRpcResponse,
+          sseSessionId,
+        };
       } catch {
         this.log('Failed to parse SSE data as JSON:', jsonData);
       }
@@ -474,13 +496,16 @@ export class StreamableHttpTransport implements McpTransport {
 
     // Fallback: return error response
     return {
-      jsonrpc: '2.0',
-      id: requestId ?? null,
-      error: {
-        code: -32700,
-        message: 'Failed to parse SSE response',
-        data: text,
+      response: {
+        jsonrpc: '2.0',
+        id: requestId ?? null,
+        error: {
+          code: -32700,
+          message: 'Failed to parse SSE response',
+          data: text,
+        },
       },
+      sseSessionId,
     };
   }
 }

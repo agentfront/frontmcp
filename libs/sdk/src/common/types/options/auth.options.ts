@@ -750,21 +750,21 @@ export function parseAuthOptions(input: AuthOptionsInput): AuthOptions {
 /**
  * Check if options are public mode
  */
-export function isPublicMode(options: AuthOptions): options is PublicAuthOptions {
+export function isPublicMode(options: AuthOptions | AuthOptionsInput): options is PublicAuthOptions {
   return options.mode === 'public';
 }
 
 /**
  * Check if options are transparent mode
  */
-export function isTransparentMode(options: AuthOptions): options is TransparentAuthOptions {
+export function isTransparentMode(options: AuthOptions | AuthOptionsInput): options is TransparentAuthOptions {
   return options.mode === 'transparent';
 }
 
 /**
  * Check if options are orchestrated mode
  */
-export function isOrchestratedMode(options: AuthOptions): options is OrchestratedAuthOptions {
+export function isOrchestratedMode(options: AuthOptions | AuthOptionsInput): options is OrchestratedAuthOptions {
   return options.mode === 'orchestrated';
 }
 
