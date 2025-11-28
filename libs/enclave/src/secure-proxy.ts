@@ -79,7 +79,13 @@ export type BlockedPropertyCategory = keyof typeof BLOCKED_PROPERTY_CATEGORIES;
  * @returns Set of property names to block
  */
 export function getBlockedPropertiesForLevel(level: SecurityLevel): Set<string> {
-  const blocked = new Set<string>(BLOCKED_PROPERTY_CATEGORIES.PROTOTYPE);
+  const blocked = new Set<string>();
+
+  // PERMISSIVE: No prototype blocking (handled by explicit config)
+  // All other levels: Block core prototype manipulation
+  if (level !== 'PERMISSIVE') {
+    BLOCKED_PROPERTY_CATEGORIES.PROTOTYPE.forEach((p) => blocked.add(p));
+  }
 
   switch (level) {
     case 'STRICT':
@@ -89,12 +95,12 @@ export function getBlockedPropertiesForLevel(level: SecurityLevel): Set<string> 
       BLOCKED_PROPERTY_CATEGORIES.TIMING.forEach((p) => blocked.add(p));
       break;
     case 'SECURE':
-      // Block iterator helpers (new Node.js 24 APIs)
+      // Block iterator helpers (potential sandbox escape vectors)
       BLOCKED_PROPERTY_CATEGORIES.ITERATOR_HELPERS.forEach((p) => blocked.add(p));
       break;
     case 'STANDARD':
     case 'PERMISSIVE':
-      // Only core prototype manipulation blocked (handled by config)
+      // Handled above
       break;
   }
 
@@ -169,7 +175,7 @@ export function createSafeReflect(securityLevel: SecurityLevel): typeof Reflect 
     return undefined;
   }
 
-  const dangerousMethods = new Set<string>(['construct', 'setPrototypeOf']);
+  const dangerousMethods = new Set<string>(['setPrototypeOf']);
 
   // SECURE: Block additional methods
   if (securityLevel === 'SECURE') {
@@ -189,8 +195,12 @@ export function createSafeReflect(securityLevel: SecurityLevel): typeof Reflect 
       if (typeof value === 'function' && prop === 'construct') {
         return function (ctorTarget: unknown, args: unknown[], newTarget?: unknown) {
           // Block Function, AsyncFunction, GeneratorFunction, AsyncGeneratorFunction constructors
+          // Intentional empty functions to obtain constructor references
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
           const AsyncFunction = async function () {}.constructor;
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
           const GeneratorFunction = function* () {}.constructor;
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
           const AsyncGeneratorFunction = async function* () {}.constructor;
 
           if (
@@ -272,6 +282,12 @@ export interface SecureProxyOptions {
  * This allows the same object to be proxied with different blocking configs.
  */
 const proxyCache = new WeakMap<object, Map<string, object>>();
+
+/**
+ * WeakSet to track proxy objects (for isSecureProxy checks)
+ * This is separate from proxyCache because proxyCache keys are targets, not proxies.
+ */
+const proxySet = new WeakSet<object>();
 
 /**
  * Generate a cache key from SecureProxyLevelConfig
@@ -512,7 +528,8 @@ export function createSecureProxy<T extends object>(target: T, options: SecurePr
       },
 
       // Intercept function calls to proxy return values
-      apply(target: any, thisArg: unknown, argArray: unknown[]): unknown {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Proxy handler signature requires any for compatibility
+      apply(target: any, thisArg: any, argArray: any[]): any {
         // Call the original function
         const result = Reflect.apply(target, thisArg, argArray);
 
@@ -532,6 +549,9 @@ export function createSecureProxy<T extends object>(target: T, options: SecurePr
       proxyCache.set(obj, objCacheMap);
     }
     objCacheMap.set(cacheKey, proxy);
+
+    // Track the proxy in the WeakSet for isSecureProxy checks
+    proxySet.add(proxy);
 
     return proxy;
   }
@@ -599,17 +619,20 @@ export function isSecureProxy(obj: unknown): boolean {
   if (obj === null || typeof obj !== 'object') {
     return false;
   }
-  return proxyCache.has(obj as object);
+  return proxySet.has(obj as object);
 }
 
 /**
  * Clear the proxy cache
  *
- * Call this when you want to release memory or create fresh proxies
+ * @deprecated This function is a no-op. WeakMap and WeakSet entries are automatically
+ * garbage collected when their target objects become unreachable. There is no need
+ * to manually clear the cache.
+ *
+ * @throws {Error} Always throws to inform callers that this operation is not supported
  */
 export function clearProxyCache(): void {
-  // WeakMap doesn't have a clear method, so we create a new one
-  // The old one will be garbage collected when no references remain
-  // Since proxyCache is a module-level const, we can't reassign it
-  // Instead, individual entries will be GC'd as their targets are GC'd
+  throw new Error(
+    'clearProxyCache is not supported. WeakMap/WeakSet entries are automatically garbage collected when target objects become unreachable.',
+  );
 }

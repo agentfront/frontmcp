@@ -103,7 +103,7 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     'import',
     'importScripts',
 
-    // Node.js 24+ dangerous APIs (sandbox escape vectors)
+    // Dangerous JavaScript APIs (potential sandbox escape vectors)
     'Iterator',
     'AsyncIterator',
     'ShadowRealm',

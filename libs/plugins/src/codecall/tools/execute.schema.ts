@@ -1,6 +1,9 @@
 // file: libs/plugins/src/codecall/tools/execute.schema.ts
 import { z } from 'zod';
 
+/** Minimum script length - at least a simple callTool invocation */
+const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;
+
 export const executeToolDescription = `Execute AgentScript code to orchestrate multiple tool calls safely.
 
 AgentScript is a restricted JavaScript subset designed for AI agent orchestration. It allows chaining tool calls, transforming data, and implementing logic without sandbox escape risks.
@@ -96,7 +99,7 @@ return results.sort((a, b) => b.totalAmount - a.totalAmount);
 export const executeToolInputSchema = z.object({
   script: z
     .string()
-    .min('return callTool("a",{})'.length)
+    .min(MIN_EXECUTE_SCRIPT_LENGTH)
     .max(100 * 1024) // 100 KB
     .describe(
       'JavaScript code to execute in the sandbox. Must return a value (implicitly or via explicit return). Use callTool(name, input) to invoke tools.',

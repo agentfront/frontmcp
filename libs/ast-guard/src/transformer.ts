@@ -68,6 +68,7 @@ const JS_KEYWORDS = new Set([
  * @param pattern The pattern node to collect identifiers from
  * @param identifiers Set to add collected identifier names to
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- acorn doesn't export specific pattern node types
 function collectPatternIdentifiers(pattern: any, identifiers: Set<string>): void {
   if (!pattern) return;
 

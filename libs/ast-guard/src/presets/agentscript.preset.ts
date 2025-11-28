@@ -306,7 +306,7 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'SharedArrayBuffer',
     'importScripts',
 
-    // Node.js 24+ dangerous APIs (sandbox escape vectors)
+    // Dangerous JavaScript APIs (potential sandbox escape vectors)
     'ShadowRealm', // Escape via isolated execution
     'Iterator', // Iterator helpers can access prototype chain
     'AsyncIterator', // Async iterator helpers can access prototype chain

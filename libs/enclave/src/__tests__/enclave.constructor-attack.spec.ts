@@ -327,11 +327,6 @@ describe('Enclave Constructor Attack Prevention', () => {
 
       const result = await enclave.run(code);
 
-      // Debug: log error if failed
-      if (!result.success) {
-        console.log('Error:', result.error);
-      }
-
       expect(result.success).toBe(true);
       expect(result.value).toBe('Alice');
 

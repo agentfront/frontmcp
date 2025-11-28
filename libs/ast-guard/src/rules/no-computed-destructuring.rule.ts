@@ -113,6 +113,7 @@ export class NoComputedDestructuringRule implements ValidationRule {
   /**
    * Generate a human-readable description of the computed key
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- acorn doesn't export specific node types
   private describeKey(key: any): string {
     if (!key) return '(unknown)';
 
