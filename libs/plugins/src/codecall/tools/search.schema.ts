@@ -1,98 +1,67 @@
 // file: libs/plugins/src/codecall/tools/search.schema.ts
 import { z } from 'zod';
 
-export const searchToolDescription = `Search for tools that match your current task requirements. Use this to discover what tools are available before calling them.
+export const searchToolDescription = `Find tools by splitting user request into atomic actions.
 
-WORKFLOW GUIDELINES:
-1. FIRST TIME SEARCH: When starting a new task, search for relevant tools using a descriptive query
-2. AVOID RE-SEARCHING: Do NOT search for tools you have already discovered in this conversation
-3. USE excludeToolNames: When searching again, ALWAYS include tool names you've already fetched to avoid redundant results
-4. NARROW YOUR SCOPE: Use appIds to search within specific apps (e.g., ["user", "billing"]) when you know the domain
-5. HANDLE WARNINGS: Check the warnings array - if excluded tools don't exist, you may have made an assumption error
+DECOMPOSE: "delete users and send email" → queries: ["delete user", "send email"]
+DECOMPOSE: "get order and refund" → queries: ["get order", "calculate refund"]
 
-SEARCH STRATEGY:
-- Start broad, then narrow down with filters
-- Use specific, action-oriented queries (e.g., "get user profile", "list invoices")
-- Track tool names you discover and exclude them in subsequent searches
-- Only re-search if you need different functionality or the describe tool failed for a specific tool
+AVOID RE-SEARCHING: Use excludeToolNames for already-discovered tools.
+RE-SEARCH WHEN: describe fails (typo?) OR execute returns tool_not_found.
 
-EXAMPLE FLOW:
-1. Search: "get user information" → Get results
-2. Describe: Check schemas for found tools
-3. Later search: "update user settings" with excludeToolNames: ["users:getById", "users:list"] → Get NEW tools only
+INPUT:
+- queries: string[] (required) - atomic action phrases, max 10
+- appIds?: string[] - filter by app
+- excludeToolNames?: string[] - skip known tools
+- topK?: number (default 5) - results per query
+- minRelevanceScore?: number (default 0.3) - minimum match threshold
 
-The search returns tools sorted by relevance with scores. Higher scores mean better matches to your query.`;
+OUTPUT: Flat deduplicated tool list. relevanceScore: 0.5+=good, 0.7+=strong match.
+
+FLOW: search → describe → execute/invoke`;
 
 export const searchToolInputSchema = z.object({
-  query: z
-    .string()
-    .min(2)
-    .max(2048)
-    .describe(
-      'Natural language description of what tools you need. Be specific about the functionality you are looking for.',
-    ),
-  appIds: z
-    .array(z.string())
+  queries: z
+    .array(z.string().min(2).max(256))
+    .min(1)
     .max(10)
-    .optional()
-    .default([])
-    .describe(
-      'Optional array of app IDs to search within. If not provided, searches across all apps. Use this to narrow down results to specific domains (e.g., ["user", "billing"]).',
-    ),
-  excludeToolNames: z
-    .array(z.string())
-    .max(50)
-    .optional()
-    .default([])
-    .describe(
-      'Array of tool names you have ALREADY fetched or described in this conversation. These tools will be excluded from search results to avoid redundant lookups. IMPORTANT: Only include tools you have actually searched for or described before - do not guess or assume tool names.',
-    ),
-  topK: z
+    .describe('Atomic action queries. Split complex requests into simple actions.'),
+  appIds: z.array(z.string()).max(10).optional().describe('Filter by app IDs'),
+  excludeToolNames: z.array(z.string()).max(50).optional().describe('Skip already-known tool names'),
+  topK: z.number().int().positive().max(50).optional().default(5).describe('Results per query (default 5)'),
+  minRelevanceScore: z
     .number()
-    .int()
-    .positive()
-    .max(50)
+    .min(0)
+    .max(1)
     .optional()
-    .default(8)
-    .describe('Maximum number of matching tools to return. Defaults to 8. Maximum value is 50.'),
+    .default(0.3)
+    .describe('Minimum relevance threshold (default 0.3)'),
 });
 
 export type SearchToolInput = z.infer<typeof searchToolInputSchema>;
 
 export const searchToolOutputSchema = z.object({
-  results: z
+  tools: z
     .array(
       z.object({
-        name: z.string().describe('The unique name of the tool (e.g., "users:list", "billing:getInvoice")'),
-        appId: z.string().describe('The app ID this tool belongs to'),
-        description: z.string().describe('Brief description of what this tool does'),
-        relevanceScore: z
-          .number()
-          .min(0)
-          .max(1)
-          .describe('Relevance score between 0 and 1, where 1 is most relevant to your query'),
+        name: z.string().describe('Tool name (e.g., "users:list")'),
+        appId: z.string().optional().describe('App ID'),
+        description: z.string().describe('What this tool does'),
+        relevanceScore: z.number().min(0).max(1).describe('Match score (0-1)'),
+        matchedQueries: z.array(z.string()).describe('Which queries matched this tool'),
       }),
     )
-    .describe('Array of matching tools, sorted by relevance (most relevant first)'),
+    .describe('Deduplicated tools sorted by relevance'),
   warnings: z
     .array(
       z.object({
-        type: z.enum(['excluded_tool_not_found', 'no_results', 'partial_results']).describe('Type of warning'),
-        message: z.string().describe('Human-readable warning message'),
-        affectedTools: z
-          .array(z.string())
-          .optional()
-          .describe('Tool names affected by this warning (for excluded_tool_not_found warnings)'),
+        type: z.enum(['excluded_tool_not_found', 'no_results', 'low_relevance']).describe('Warning type'),
+        message: z.string().describe('Warning message'),
+        affectedTools: z.array(z.string()).optional().describe('Affected tool names'),
       }),
     )
-    .describe(
-      'Warnings about the search operation. Check this for: 1) Excluded tools that do not exist in the index, 2) Empty results, 3) Partial results due to filtering',
-    ),
-  totalAvailableTools: z
-    .number()
-    .int()
-    .nonnegative()
-    .describe('Total number of tools available in the search scope (before excluding and limiting to topK)'),
+    .describe('Search warnings'),
+  totalAvailableTools: z.number().int().nonnegative().describe('Total tools in index'),
 });
 
 export type SearchToolOutput = z.infer<typeof searchToolOutputSchema>;

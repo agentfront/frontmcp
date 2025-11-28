@@ -4,97 +4,27 @@ import { z } from 'zod';
 /** Minimum script length - at least a simple callTool invocation */
 const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;
 
-export const executeToolDescription = `Execute AgentScript code to orchestrate multiple tool calls safely.
+export const executeToolDescription = `Execute AgentScript (safe JS subset) for multi-tool orchestration.
 
-AgentScript is a restricted JavaScript subset designed for AI agent orchestration. It allows chaining tool calls, transforming data, and implementing logic without sandbox escape risks.
+API: await callTool(name, args, opts?)
+- Default: throws on error
+- Safe mode: { throwOnError: false } → returns { success, data?, error? }
 
-## callTool API
-\`await callTool(toolName: string, args: object, options?: { throwOnError?: boolean }): Promise<T | Result<T>>\`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| toolName | string | required | Tool identifier (e.g., 'users:list') |
-| args | object | required | Tool arguments as key-value pairs |
-| options.throwOnError | boolean | true | When false, returns \`{ success, data, error }\` instead of throwing |
-
-## Result-Based Error Handling (Recommended)
-\`\`\`javascript
-// Safe pattern - no try/catch needed
-const result = await callTool('users:get', { id: '123' }, { throwOnError: false });
-if (!result.success) {
-  return { failed: true, reason: result.error.code };
-}
-return result.data;
-\`\`\`
-
-## Error Codes
-| Code | Description |
-|------|-------------|
-| NOT_FOUND | Tool not found in registry |
-| VALIDATION | Input validation failed |
-| EXECUTION | Tool execution error |
-| TIMEOUT | Tool execution timed out |
-| ACCESS_DENIED | Tool access not permitted |
-
-## Security Restrictions
-- **Cannot call codecall:* tools** - Self-reference is blocked
-- **Errors are sanitized** - No stack traces or internal details exposed
-
-## Allowed Features
-| Feature | Example |
-|---------|---------|
-| for, for...of loops | for (const x of items) { } |
-| Arrow functions | items.map(x => x.id) |
-| Array methods | map, filter, reduce, find, sort |
-| Math methods | Math.max(), Math.round() |
-| JSON methods | JSON.parse(), JSON.stringify() |
-| Control flow | if/else, ternary ? : |
-| Destructuring | const { id, name } = user |
-| Spread | [...items, newItem] |
-| Template literals | \`Hello \${name}\` |
-
-## Blocked Features
-| Feature | Reason |
-|---------|--------|
-| while, do...while | Unbounded loops |
-| function declarations | No recursion |
-| eval, Function | Code execution |
-| process, require | System access |
-| fetch, XMLHttpRequest | Network access |
-| setTimeout | Timing attacks |
-| window, globalThis | Global access |
-
-## Example: Data Aggregation
-\`\`\`javascript
-const users = await callTool('users:list', { role: 'admin', active: true });
-
+EXAMPLE:
+const users = await callTool('users:list', { active: true });
 const results = [];
-for (const user of users.items) {
-  const orders = await callTool('orders:list', { userId: user.id });
-  const total = orders.items.reduce((sum, o) => sum + o.amount, 0);
-  results.push({
-    userId: user.id,
-    name: user.name,
-    orderCount: orders.items.length,
-    totalAmount: Math.round(total * 100) / 100
-  });
+for (const u of users.items) {
+  const orders = await callTool('orders:list', { userId: u.id });
+  results.push({ id: u.id, total: orders.items.reduce((s,o) => s + o.amount, 0) });
 }
+return results;
 
-return results.sort((a, b) => b.totalAmount - a.totalAmount);
-\`\`\`
+ALLOWED: for, for-of, arrow fn, map/filter/reduce/find, Math.*, JSON.*, if/else, destructuring, spread, template literals
+BLOCKED: while, do-while, function decl, eval, require, fetch, setTimeout, process, globalThis
 
-## Limits
-- Max 10,000 iterations per loop
-- 30 second execution timeout (configurable)
-- Max 100 tool calls per execution
-
-## Result Statuses
-- ok: Script executed successfully
-- syntax_error: JavaScript syntax error
-- illegal_access: Used forbidden API (eval, process, etc.)
-- runtime_error: Script threw an error
-- tool_error: A tool call failed
-- timeout: Script exceeded time limit`;
+ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED
+STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
+LIMITS: 10K iter/loop, 30s timeout, 100 calls max`;
 
 export const executeToolInputSchema = z.object({
   script: z
@@ -109,12 +39,6 @@ export const executeToolInputSchema = z.object({
     .optional()
     .describe(
       'Optional whitelist of tool names that can be called from this script. If not provided, all indexed tools are available. Example: ["users:list", "billing:getInvoice"]',
-    ),
-  context: z
-    .record(z.unknown())
-    .optional()
-    .describe(
-      'Optional read-only context object available to the script as `codecallContext`. Use this to pass tenant IDs, user info, or other runtime data.',
     ),
 });
 

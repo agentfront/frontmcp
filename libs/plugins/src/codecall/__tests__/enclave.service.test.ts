@@ -28,7 +28,6 @@ describe('EnclaveService', () => {
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },
       }),
-      codecallContext: Object.freeze({ userId: 'test-user', tenantId: 'test-tenant' }),
       console: undefined,
       mcpLog: jest.fn(),
       mcpNotify: jest.fn(),
@@ -696,6 +695,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50, // Low threshold for testing
         },
       });
@@ -728,6 +728,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
           allowComposites: false,
         },
@@ -755,6 +756,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
           allowComposites: true,
         },
@@ -787,6 +789,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
         },
       });

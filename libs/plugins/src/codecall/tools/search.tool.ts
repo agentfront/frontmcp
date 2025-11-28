@@ -9,6 +9,15 @@ import {
 } from './search.schema';
 import { ToolSearchService } from '../services';
 
+/** Internal type for tracking tool matches across queries */
+interface ToolMatch {
+  name: string;
+  appId: string | undefined;
+  description: string;
+  relevanceScore: number;
+  matchedQueries: string[];
+}
+
 @Tool({
   name: 'codecall:search',
   cache: {
@@ -25,9 +34,8 @@ import { ToolSearchService } from '../services';
 })
 export default class SearchTool extends ToolContext {
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
-    const { query, appIds, excludeToolNames = [], topK = 8 } = input;
+    const { queries, appIds, excludeToolNames = [], topK = 5, minRelevanceScore = 0.3 } = input;
 
-    // Inject the ToolSearchService via DI
     const searchService = this.get(ToolSearchService);
     const warnings: SearchToolOutput['warnings'] = [];
 
@@ -37,40 +45,69 @@ export default class SearchTool extends ToolContext {
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
         type: 'excluded_tool_not_found',
-        message: `The following excluded tools were not found in the tool index: ${nonExistentExcludedTools.join(
-          ', ',
-        )}. You may have assumed these tool names incorrectly. Only exclude tools you have actually discovered through search.`,
+        message: `Excluded tools not found: ${nonExistentExcludedTools.join(', ')}`,
         affectedTools: nonExistentExcludedTools,
       });
     }
 
-    // Perform the search
-    const searchResults = await searchService.search(query, {
-      topK,
-      appIds,
-      excludeToolNames,
-    });
+    // Track tools across all queries for deduplication
+    const toolMap = new Map<string, ToolMatch>();
 
-    // Convert search results to output format (already in correct format from ToolSearch interface)
-    const results: SearchToolOutput['results'] = searchResults.map((result) => ({
-      name: result.toolName,
-      appId: result.appId || 'unknown',
-      description: result.description,
-      relevanceScore: result.relevanceScore,
-    }));
+    // Search for each query and merge results
+    for (const query of queries) {
+      const searchResults = await searchService.search(query, {
+        topK,
+        appIds,
+        excludeToolNames,
+      });
+
+      for (const result of searchResults) {
+        // Filter by minRelevanceScore
+        if (result.relevanceScore < minRelevanceScore) {
+          continue;
+        }
+
+        const existing = toolMap.get(result.toolName);
+        if (existing) {
+          // Tool already found - add query to matchedQueries, keep highest score
+          existing.matchedQueries.push(query);
+          existing.relevanceScore = Math.max(existing.relevanceScore, result.relevanceScore);
+        } else {
+          // New tool
+          toolMap.set(result.toolName, {
+            name: result.toolName,
+            appId: result.appId,
+            description: result.description,
+            relevanceScore: result.relevanceScore,
+            matchedQueries: [query],
+          });
+        }
+      }
+    }
+
+    // Convert to output format, sorted by relevance
+    const tools: SearchToolOutput['tools'] = Array.from(toolMap.values())
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .map((tool) => ({
+        name: tool.name,
+        appId: tool.appId,
+        description: tool.description,
+        relevanceScore: tool.relevanceScore,
+        matchedQueries: tool.matchedQueries,
+      }));
 
     // Add warning if no results found
-    if (results.length === 0) {
+    if (tools.length === 0) {
       warnings.push({
         type: 'no_results',
-        message: `No tools found matching query "${query}"${
-          appIds ? ` in apps: ${appIds.join(', ')}` : ''
-        }. Try a broader query or remove app filters.`,
+        message: `No tools found for queries: ${queries.join(', ')}${
+          appIds?.length ? ` in apps: ${appIds.join(', ')}` : ''
+        }`,
       });
     }
 
     return {
-      results,
+      tools,
       warnings,
       totalAvailableTools: searchService.getTotalCount(),
     };

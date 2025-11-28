@@ -1,5 +1,6 @@
 // file: libs/plugins/src/codecall/tools/invoke.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodError } from 'zod';
 import {
@@ -9,9 +10,44 @@ import {
   invokeToolOutputSchema,
   invokeToolDescription,
 } from './invoke.schema';
-import { isBlockedSelfReference } from '../security/self-reference-guard';
-import { createToolCallError, TOOL_CALL_ERROR_CODES } from '../errors/tool-call.errors';
+import { isBlockedSelfReference } from '../security';
+import { createToolCallError, TOOL_CALL_ERROR_CODES } from '../errors';
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+
+/**
+ * Extract the actual result from a CallToolResult.
+ * MCP returns results wrapped in content array format.
+ */
+function extractResultFromCallToolResult(mcpResult: CallToolResult): unknown {
+  // MCP CallToolResult has { content: [...], isError?: boolean }
+  if (mcpResult.isError) {
+    // If it's an error, extract the error message from content
+    const errorContent = mcpResult.content?.[0];
+    if (errorContent && 'text' in errorContent) {
+      throw new Error(errorContent.text);
+    }
+    throw new Error('Tool execution failed');
+  }
+
+  // For successful results, try to extract the actual data
+  const content = mcpResult.content;
+  if (!content || content.length === 0) {
+    return undefined;
+  }
+
+  // If there's a single text content, try to parse as JSON
+  if (content.length === 1 && content[0].type === 'text') {
+    try {
+      return JSON.parse(content[0].text);
+    } catch {
+      return content[0].text;
+    }
+  }
+
+  // Return the raw content for complex results
+  return content;
+}
 
 /**
  * InvokeTool allows direct tool invocation without running JavaScript code.
@@ -87,19 +123,42 @@ export default class InvokeTool extends ToolContext {
     }
 
     // ============================================================
-    // Execute the tool through the normal FrontMCP pipeline
-    // This ensures all middleware (auth, PII, rate limiting) applies
+    // Execute the tool through the proper flow system
+    // This ensures hooks, validation, quota, and all middleware run
     // ============================================================
     try {
-      // Create a tool context with the current auth info
-      const toolContext = tool.create(
-        toolInput as any,
-        {
-          authInfo: this.authInfo,
-        } as any,
-      );
+      // Build MCP-compatible CallToolRequest
+      const request = {
+        method: 'tools/call' as const,
+        params: {
+          name: toolName,
+          arguments: toolInput,
+        },
+      };
 
-      const result = await toolContext.execute(toolInput as any);
+      // Build context with auth info
+      const ctx = {
+        authInfo: this.authInfo,
+      };
+
+      // Execute through the flow system - this runs all stages:
+      // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore
+      // EXECUTE: validateInput → execute → validateOutput
+      // FINALIZE: releaseSemaphore → releaseQuota → finalize
+      const mcpResult = await this.scope.runFlow('tools:call-tool', { request, ctx });
+
+      if (!mcpResult) {
+        return {
+          status: 'error',
+          error: {
+            type: 'execution_error',
+            message: `Tool "${toolName}" execution failed: Flow returned no result`,
+          },
+        };
+      }
+
+      // Extract the actual result from MCP CallToolResult format
+      const result = extractResultFromCallToolResult(mcpResult);
 
       return {
         status: 'success',

@@ -1,53 +1,16 @@
 // file: libs/plugins/src/codecall/tools/invoke.schema.ts
 import { z } from 'zod';
 
-export const invokeToolDescription = `Directly invoke a single tool without running JavaScript code. Use this for simple, one-and-done actions.
+export const invokeToolDescription = `Call ONE tool directly. Same as callTool() but without VM overhead.
 
-WHEN TO USE:
-- You need to call exactly ONE tool with specific parameters
-- The task is straightforward and doesn't require orchestration, filtering, or data transformation
-- You want lower latency than codecall:execute (no VM overhead)
+USE invoke: single tool, no transformation
+USE execute: multiple tools, loops, filtering, joining
 
-WHEN NOT TO USE:
-- You need to call multiple tools in sequence
-- You need to filter, transform, or join data from tool results
-- You need conditional logic or loops
-- → In these cases, use codecall:execute instead
+INPUT: tool (string), input (object matching tool schema)
+OUTPUT: { status: "success", result } | { status: "error", error: { type, message } }
+ERRORS: tool_not_found (→ re-search) | validation_error | execution_error | permission_denied
 
-HOW IT WORKS:
-1. You provide the tool name and input parameters
-2. CodeCall validates the input against the tool's schema
-3. The tool is called directly through the normal FrontMCP pipeline (PII plugins, auth, rate limiting, logging all apply)
-4. The result is returned immediately
-
-WORKFLOW:
-1. codecall:search → Find the tool you need
-2. codecall:describe → Check its input schema
-3. codecall:invoke → Call it directly with validated parameters
-
-EXAMPLE:
-{
-  "tool": "users:getById",
-  "input": { "id": "user_123" }
-}
-
-Returns:
-{
-  "status": "success",
-  "result": { "id": "user_123", "name": "John", "email": "john@example.com" }
-}
-
-ERROR HANDLING:
-- tool_not_found: The tool name doesn't exist (typo or wrong app)
-- validation_error: Input doesn't match the tool's schema
-- execution_error: The tool failed during execution
-- permission_denied: You don't have access to this tool
-
-SECURITY:
-- Same security guarantees as normal tool calls
-- PII plugins see and can filter inputs/outputs
-- Auth plugins enforce permissions
-- No code execution or VM sandbox (that's codecall:execute)`;
+FLOW: search → describe → invoke`;
 
 export const invokeToolInputSchema = z.object({
   tool: z

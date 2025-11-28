@@ -40,6 +40,8 @@ describe('CodeCallConfigProvider', () => {
         embedding: {
           strategy: 'ml',
           modelName: 'custom/model',
+          cacheDir: './.cache/transformers',
+          useHNSW: false,
         },
       });
 
@@ -78,6 +80,8 @@ describe('CodeCallConfigProvider', () => {
         },
         embedding: {
           strategy: 'ml',
+          modelName: 'Xenova/all-MiniLM-L6-v2',
+          cacheDir: './.cache/transformers',
           useHNSW: true,
         },
       });
@@ -194,6 +198,7 @@ describe('CodeCallConfigProvider', () => {
         embedding: {
           strategy: 'ml',
           modelName: 'custom/model',
+          cacheDir: './.cache/transformers',
           useHNSW: true,
         },
         directCalls: {
@@ -219,8 +224,9 @@ describe('CodeCallConfigProvider', () => {
     });
 
     it('should get deeply nested values', () => {
-      expect(provider.get('directCalls.enabled')).toBe(true);
-      expect(provider.get('directCalls.allowedTools')).toEqual(['tool1', 'tool2']);
+      const directCalls = provider.get('directCalls');
+      expect(directCalls?.enabled).toBe(true);
+      expect(directCalls?.allowedTools).toEqual(['tool1', 'tool2']);
     });
 
     it('should check if path exists with has()', () => {

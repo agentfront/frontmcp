@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   CodeCallExecuteResult,
   executeToolOutputSchema,
@@ -38,7 +39,45 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
     return TOOL_CALL_ERROR_CODES.TIMEOUT;
   }
 
+  if (error.name === 'ToolNotFoundError' || error.message?.includes('not found')) {
+    return TOOL_CALL_ERROR_CODES.NOT_FOUND;
+  }
+
   return TOOL_CALL_ERROR_CODES.EXECUTION;
+}
+
+/**
+ * Extract the actual result from a CallToolResult.
+ * MCP returns results wrapped in content array format.
+ */
+function extractResultFromCallToolResult(mcpResult: CallToolResult): unknown {
+  // MCP CallToolResult has { content: [...], isError?: boolean }
+  if (mcpResult.isError) {
+    // If it's an error, extract the error message from content
+    const errorContent = mcpResult.content?.[0];
+    if (errorContent && 'text' in errorContent) {
+      throw new Error(errorContent.text);
+    }
+    throw new Error('Tool execution failed');
+  }
+
+  // For successful results, try to extract the actual data
+  const content = mcpResult.content;
+  if (!content || content.length === 0) {
+    return undefined;
+  }
+
+  // If there's a single text content, try to parse as JSON
+  if (content.length === 1 && content[0].type === 'text') {
+    try {
+      return JSON.parse(content[0].text);
+    } catch {
+      return content[0].text;
+    }
+  }
+
+  // Return the raw content for complex results
+  return content;
 }
 
 @Tool({
@@ -57,7 +96,7 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
 })
 export default class ExecuteTool extends ToolContext {
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
-    const { script, allowedTools, context } = input;
+    const { script, allowedTools } = input;
 
     // Set up the VM environment with tool integration
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
@@ -88,31 +127,40 @@ export default class ExecuteTool extends ToolContext {
         }
 
         // ============================================================
-        // Tool execution with result-based error handling
-        // All errors from here are sanitized before exposure
+        // Tool execution through the proper flow system
+        // This ensures hooks, validation, quota, and all middleware run
         // ============================================================
         try {
-          // Find the tool in the registry
-          const tools = this.scope.tools.getTools(true);
-          const tool = tools.find((t) => t.name === name || t.fullName === name);
+          // Build MCP-compatible CallToolRequest
+          const request = {
+            method: 'tools/call' as const,
+            params: {
+              name,
+              arguments: toolInput as Record<string, unknown>,
+            },
+          };
 
-          if (!tool) {
-            const error = createToolCallError(TOOL_CALL_ERROR_CODES.NOT_FOUND, name);
+          // Build context with auth info
+          const ctx = {
+            authInfo: this.authInfo,
+          };
+
+          // Execute through the flow system - this runs all stages:
+          // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore
+          // EXECUTE: validateInput → execute → validateOutput
+          // FINALIZE: releaseSemaphore → releaseQuota → finalize
+          const mcpResult = await this.scope.runFlow('tools:call-tool', { request, ctx });
+
+          if (!mcpResult) {
+            const error = createToolCallError(TOOL_CALL_ERROR_CODES.EXECUTION, name, 'Flow returned no result');
             if (throwOnError) {
               throw error;
             }
             return { success: false, error };
           }
 
-          // Create a tool context and execute
-          const toolContext = tool.create(
-            toolInput as any,
-            {
-              authInfo: this.authInfo,
-            } as any,
-          );
-
-          const result = await toolContext.execute(toolInput as any);
+          // Extract the actual result from MCP CallToolResult format
+          const result = extractResultFromCallToolResult(mcpResult);
 
           // Success path
           if (throwOnError) {
@@ -155,8 +203,6 @@ export default class ExecuteTool extends ToolContext {
           return undefined;
         }
       },
-
-      codecallContext: Object.freeze(context || {}),
 
       console: this.tryGet(CodeCallConfig)?.get('resolvedVm.allowConsole') ? console : undefined,
 
