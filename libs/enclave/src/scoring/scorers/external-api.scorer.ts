@@ -166,7 +166,7 @@ export class ExternalApiScorer extends BaseScorer {
  * Error thrown when external API scoring fails
  */
 export class ExternalApiScorerError extends Error {
-  readonly cause?: Error;
+  override readonly cause?: Error;
 
   constructor(message: string, cause?: Error) {
     super(message);
