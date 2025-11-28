@@ -352,12 +352,102 @@ const enclaveWithApi = new Enclave({
 
 ### Scorer Types
 
-| Type           | Latency | Dependencies   | Detection |
-| -------------- | ------- | -------------- | --------- |
-| `disabled`     | 0ms     | None           | None      |
-| `rule-based`   | ~1ms    | None           | Good      |
-| `local-llm`    | ~5-10ms | Model download | Better    |
-| `external-api` | ~100ms  | Network        | Best      |
+| Type           | Latency          | Dependencies                | Detection                   |
+| -------------- | ---------------- | --------------------------- | --------------------------- |
+| `disabled`     | 0ms              | None                        | None                        |
+| `rule-based`   | ~1ms             | None                        | Good                        |
+| `local-llm`    | ~5-10ms (cached) | `@huggingface/transformers` | Better                      |
+| `external-api` | ~100ms           | Network                     | Best                        |
+| `progressive`  | ~1ms + optional  | Local model or external API | Fast triage + ML escalation |
+
+### Local LLM scoring (offline)
+
+<Info>
+  Local scoring uses `@huggingface/transformers` (now bundled with FrontMCP) and stores models in `.cache/transformers`
+  by default. The first execution downloads the model weights, so keep the cache directory persistent in CI/CD.
+</Info>
+
+```ts
+const enclave = new Enclave({
+  scoringGate: {
+    scorer: 'local-llm',
+    localLlm: {
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      cacheDir: './.cache/transformers',
+      mode: 'classification',
+      fallbackToRules: true,
+    },
+  },
+});
+```
+
+- **`mode`**: `classification` scores text directly, while `similarity` compares against a malicious-pattern index.
+- **`fallbackToRules`** (default `true`): automatically reverts to rule-based scoring if the model fails to load.
+- **`cacheDir`**: point to a shared volume so repeated executions do not redownload weights.
+
+#### Similarity mode with VectoriaDB
+
+```ts
+const enclave = new Enclave({
+  scoringGate: {
+    scorer: 'local-llm',
+    localLlm: {
+      modelId: 'Xenova/codebert-base',
+      mode: 'similarity',
+      vectoriaConfig: {
+        indexPath: './security-index.json',
+        threshold: 0.82,
+      },
+    },
+  },
+});
+```
+
+When `mode: 'similarity'`, the scorer creates embeddings locally and looks them up in your VectoriaDB index.
+Raise or lower `threshold` to tune how sensitive the match should be for your environment.
+
+<Tip>
+  Prewarm local models during deploys (`npx frontmcp doctor --prewarm-scorer`) so production traffic never
+  experiences the initial download latency.
+</Tip>
+
+### Progressive scoring strategy
+
+Progressive scoring runs the rule-based scanner first, then escalates to ML analysis only when the fast pass detects
+suspicious patterns. Configure it through the `scoring` property (takes precedence over `scorer`).
+
+```ts
+const enclave = new Enclave({
+  scoringGate: {
+    scoring: {
+      strategy: 'progressive',
+      fast: { type: 'rule-based' },
+      detailed: {
+        type: 'local-llm',
+        localLlm: {
+          modelId: 'Xenova/all-MiniLM-L6-v2',
+          cacheDir: './.cache/transformers',
+        },
+      },
+      escalationThreshold: 35,  // Escalate when the fast score >= 35
+      combination: 'max',       // Combine fast/detailed scores (replace|max|avg)
+    },
+    blockThreshold: 70,
+    warnThreshold: 40,
+  },
+});
+```
+
+- **`escalationThreshold`** controls how suspicious a script must be before the detailed scorer runs.
+- **`detailed.type`** can point to `local-llm` _or_ `external-api`, so you can mix on-device and hosted analysis.
+- **`combination`** decides how to merge the two scores: keep the detailed value (`replace`), take the higher score (`max`),
+  or average them (`avg`).
+- **`failOpen`** still applies globally—set it to `false` if you want to block whenever either scorer fails.
+
+<Note>
+  Use progressive scoring when you want near-zero latency for safe scripts, but still need heavyweight analysis for the rare
+  high-risk plans that slip past rule-based heuristics.
+</Note>
 
 ### Detection Rules
 

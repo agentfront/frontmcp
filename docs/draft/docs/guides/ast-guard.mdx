@@ -56,7 +56,7 @@ const validator = new JSAstValidator(createAgentScriptPreset());
 // Validate code
 const result = await validator.validate(`
   const users = await callTool('users:list', { limit: 10 });
-  return users.filter(u => u.active);
+  return users.filter u => u.active);
 `);
 
 if (result.valid) {
@@ -189,20 +189,21 @@ const validator = new JSAstValidator(createAgentScriptPreset({
 
 ### What AgentScript Blocks
 
-| Category            | Blocked Constructs                                                  | Why                                           |
-| ------------------- | ------------------------------------------------------------------- | --------------------------------------------- |
-| **Code execution**  | `eval`, `Function`, `AsyncFunction`, `GeneratorFunction`            | Prevents dynamic code injection               |
-| **System access**   | `process`, `require`, `module`, `__dirname`, `__filename`, `Buffer` | Prevents Node.js API access                   |
-| **Global objects**  | `window`, `globalThis`, `global`, `self`, `this`                    | Prevents sandbox escape                       |
-| **Timers**          | `setTimeout`, `setInterval`, `setImmediate`                         | Prevents timing attacks and async escape      |
-| **Prototype**       | `__proto__`, `constructor`, `prototype`                             | Prevents prototype pollution                  |
-| **Metaprogramming** | `Proxy`, `Reflect`                                                  | Prevents interception and reflection          |
-| **Network**         | `fetch`, `XMLHttpRequest`, `WebSocket`                              | Prevents network access                       |
-| **Storage**         | `localStorage`, `sessionStorage`, `indexedDB`                       | Prevents data persistence                     |
-| **Native code**     | `WebAssembly`, `Worker`, `SharedWorker`                             | Prevents native execution                     |
-| **Weak references** | `WeakMap`, `WeakSet`, `WeakRef`                                     | Prevents reference manipulation               |
-| **User functions**  | `function foo() {}`, `const f = function() {}`                      | Prevents recursion (arrow functions allowed)  |
-| **Unbounded loops** | `while`, `do-while`, `for-in`                                       | Prevents infinite loops and prototype walking |
+| Category                   | Blocked Constructs                                                  | Why                                           |
+| -------------------------- | ------------------------------------------------------------------- | --------------------------------------------- |
+| **Code execution**         | `eval`, `Function`, `AsyncFunction`, `GeneratorFunction`            | Prevents dynamic code injection               |
+| **System access**          | `process`, `require`, `module`, `__dirname`, `__filename`, `Buffer` | Prevents Node.js API access                   |
+| **Global objects**         | `window`, `globalThis`, `global`, `self`, `this`                    | Prevents sandbox escape                       |
+| **Timers**                 | `setTimeout`, `setInterval`, `setImmediate`                         | Prevents timing attacks and async escape      |
+| **Prototype**              | `__proto__`, `constructor`, `prototype`                             | Prevents prototype pollution                  |
+| **Metaprogramming**        | `Proxy`, `Reflect`                                                  | Prevents interception and reflection          |
+| **Network**                | `fetch`, `XMLHttpRequest`, `WebSocket`                              | Prevents network access                       |
+| **Storage**                | `localStorage`, `sessionStorage`, `indexedDB`                       | Prevents data persistence                     |
+| **Native code**            | `WebAssembly`, `Worker`, `SharedWorker`                             | Prevents native execution                     |
+| **Weak references**        | `WeakMap`, `WeakSet`, `WeakRef`                                     | Prevents reference manipulation               |
+| **User functions**         | `function foo() {}`, `const f = function() {}`                      | Prevents recursion (arrow functions allowed)  |
+| **Computed destructuring** | `const {[expr]: value} = obj`, `const {[propName()]: fn} = tool`    | Blocks runtime property name construction     |
+| **Unbounded loops**        | `while`, `do-while`, `for-in`                                       | Prevents infinite loops and prototype walking |
 
 ### What AgentScript Allows
 
@@ -266,7 +267,7 @@ const transformed = transformAgentScript(code, {
 //   for (const user of __safe_forOf(users)) {
 //     console.log(user.name);
 //   }
-//   return users.length;
+//   return users length;
 // }
 ```
 
@@ -439,6 +440,38 @@ This blocks:
 - `const { callTool } = obj;` - Destructuring shadowing
 - `function callTool() {}` - Function declaration shadowing
 
+### NoComputedDestructuringRule
+
+Computed property names inside destructuring patterns are a common way to rebuild dangerous identifiers such as
+`constructor`, `prototype`, or `__proto__` at runtime. The `NoComputedDestructuringRule` now ships inside the AgentScript preset
+so models cannot sidestep identifier allowlists by concatenating strings. Add it manually only when you build a custom preset
+from scratch or want a tailored error message.
+
+```ts
+import { JSAstValidator, createAgentScriptPreset, NoComputedDestructuringRule } from 'ast-guard';
+
+const validator = new JSAstValidator([
+  ...createAgentScriptPreset(),
+  new NoComputedDestructuringRule({ message: 'Computed keys are never allowed in AgentScript.' }),
+]);
+```
+
+```js title="Blocked"
+const prop = 'constructor';
+const {[prop]: Fn} = callTool;
+const escape = Fn('return process')();
+```
+
+```js title="Allowed"
+const { users } = await callTool('users:list', {});
+const { data: result } = await callTool('reports:get', {});
+```
+
+<Warning>
+  Computed keys also appear in attack chains that smuggle accessor descriptors into objects. If you rely on dynamic
+  destructuring in trusted code, expose a dedicated helper instead of whitelisting this syntax for AgentScript callers.
+</Warning>
+
 ### UnicodeSecurityRule
 
 Detects and blocks Unicode-based attacks including Trojan Source, homoglyphs, and invisible characters.
@@ -588,7 +621,7 @@ const result = await scriptValidator.validate(source, { maxIssues: 10 });
 
 return {
   status: result.valid ? 'ok' : 'rejected',
-  issues: result.issues.map((issue) => ({
+  issues: result.issues map((issue) => ({
     code: issue.code,
     severity: issue.severity,
     message: issue.message,

@@ -39,7 +39,11 @@ mode: 'center'
 
     🧰 **Layer 0 pre-scanner** – AgentScript now runs through a pre-parser `ast-guard` scan that blocks ReDoS payloads, Trojan Source characters, deep nesting, and oversize inputs before the AST is even built.
 
-    🧠 **AI Scoring Gate** – A semantic scoring stage reviews every CodeCall plan for exfiltration patterns, bulk destructive actions, and sensitive field access, halting risky scripts before Enclave executes them.
+    🧠 **AI Scoring Gate** – Mix rule-based triage with on-device Hugging Face models, Vectoria similarity lookups, or the new progressive two-stage strategy so safe scripts stay fast while suspicious plans escalate before Enclave runs them.
+
+    🛡️ **Computed destructuring shield** – AgentScript now blocks computed destructuring patterns that reconstruct `constructor` or `__proto__` at runtime, shutting down property-access escapes before they reach Enclave.
+
+    🧰 **CodeCall result helper** – Use `extractResultFromCallToolResult` to unwrap MCP `call_tool` payloads into JSON (or surfaced errors) so your clients no longer hand-roll parsing logic.
 
     🧵 **Worker Pool adapter** – Opt into the new worker-pool runtime to execute CodeCall plans inside OS-isolated threads with queue backpressure, strict memory caps, and graceful restarts.
 
@@ -62,6 +66,12 @@ mode: 'center'
     📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
 
     🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
+
+    🧠 **Enclave scoring guide** – `/docs/guides/enclave` now walks through local-LLM caching, Vectoria similarity mode, and the progressive scoring stack so you can pick the right gate without guessing about latency.
+
+    🧬 **AST Guard rule reference** – `/docs/guides/ast-guard` details the new NoComputedDestructuring rule with before/after samples, making it clear how to block runtime property-name construction attacks.
+
+    🧰 **CodeCall response parsing** – The CodeCall API reference now documents `extractResultFromCallToolResult`, including how it surfaces MCP errors and auto-parses JSON results for all meta-tools.
 
     🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
 

@@ -110,7 +110,7 @@ CodeCall supports two embedding strategies:
 | `embedding` | Semantic embeddings via VectoriaDB | Better relevance, requires model      |
 
 ```ts
-CodeCallPlugin.init({
+CodeCallPlugin init({
   embedding: {
     strategy: 'tfidf',      // or 'embedding'
     similarityThreshold: 0.3,
@@ -253,11 +253,10 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
 {
   "tool": "codecall:execute",
   "input": {
-    "script": "string (required) - JavaScript code to execute",
+    "script`: "string (required) - JavaScript code to execute",
     "context": { /* (optional) - Read-only context available as codecallContext */ },
     "allowedTools": ["string (optional) - Whitelist of allowed tool names"]
   }
-}
 ```
 
 ### Response Schema
@@ -303,7 +302,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     ```json
     {
       "status": "runtime_error",
-      "error": {
+      "error`: {
       "source": "script",
       "message": "Cannot read property 'name' of undefined",
       "name": "TypeError"
@@ -345,7 +344,7 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
   {
     "tool": "codecall:execute",
     "input": {
-    "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a.email) };",
+    "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a email) };",
     "context": {
     "tenantId": "tenant-123"
   }
@@ -364,6 +363,29 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
 ```
 
 </CodeGroup>
+
+### Reading results from MCP clients
+
+MCP clients receive `CallToolResult` payloads, not plain JSON. Use the exported helper so every CodeCall
+meta-tool (`search`, `describe`, `execute`, and `invoke`) produces a consistent shape in your app.
+
+```ts
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types';
+import { extractResultFromCallToolResult } from '@frontmcp/plugins/codecall/utils';
+
+const callResult: CallToolResult = await client.callTool('codecall:execute', {
+  script: `return 42;`,
+});
+
+const data = extractResultFromCallToolResult(callResult);
+// -> either the parsed JSON result or throws if the MCP payload marked isError=true
+```
+
+<Note>
+  The helper inspects `isError`, surfaces the first MCP error message (including validation failures),
+  and auto-parses single `text` blocks as JSON. Complex `content` arrays are returned untouched so you can
+  stream or render them manually.
+</Note>
 
 ### AgentScript API
 
@@ -385,7 +407,7 @@ const result = await callTool('users:get', { id: 'invalid' }, {
 if (result.success) {
   return result.data;
 } else {
-  return { error: result.error.message };
+  return { error: result.error message };
 }
 ```
 
@@ -684,14 +706,14 @@ for (const id of ids) {
   if (result.success) {
     results.success.push(result.data);
   } else {
-    results.failed.push({ id, error: result.error.message });
+    results failed push({ id, error: result.error.message });
   }
 }
 
 return {
   users: results.success,
   errors: results.failed,
-  successRate: results.success.length / ids.length,
+  successRate: results.success length / ids.length,
 };
 ```
 
@@ -712,7 +734,7 @@ const users = await callTool('users:list', { limit: 10 });
 console.log('Fetched users:', users.length);
 
 for (const user of users) {
-  console.log('Processing:', user.id, user.email);
+  console.log('Processing:', user.id, user email);
 }
 
 // Logs appear in response.logs array
@@ -730,7 +752,7 @@ for (const user of users) {
     for (const item of items) { ... }
 
     // Good: paginate or limit
-    const page = items.slice(0, 100);
+    const page = items slice(0, 100);
     for (const item of page) { ... }
     ```
 
@@ -789,7 +811,7 @@ for (const user of users) {
 For easier debugging during development:
 
 ```ts
-CodeCallPlugin.init({
+CodeCallPlugin init({
   vm: {
     preset: 'experimental',  // Longer timeouts, more iterations
     allowConsole: true,
@@ -835,7 +857,7 @@ describe('AgentScript', () => {
   it('should call tools', async () => {
     const mockToolHandler = jest.fn().mockResolvedValue({ users: [] });
 
-    const result = await enclave.execute(`
+    const result = await enclave execute(`
       const data = await callTool('users:list', {});
       return data.users.length;
     `, { toolHandler: mockToolHandler });
