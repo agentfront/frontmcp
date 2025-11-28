@@ -525,4 +525,66 @@ describe('SearchTool', () => {
       expect(result.totalAvailableTools).toBe(0);
     });
   });
+
+  describe('Input Schema Validation', () => {
+    // Note: The SDK's Tool decorator handles input validation at runtime.
+    // These tests validate the schema directly since the mock bypasses the decorator.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { searchToolInputSchema } = require('../tools/search.schema');
+
+    it('should reject query string below minimum length', () => {
+      const result = searchToolInputSchema.safeParse({
+        queries: ['a'], // min length is 2
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject query string exceeding maximum length', () => {
+      const tooLongQuery = 'a'.repeat(257); // max length is 256
+      const result = searchToolInputSchema.safeParse({
+        queries: [tooLongQuery],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject empty queries array', () => {
+      const result = searchToolInputSchema.safeParse({
+        queries: [], // min array length is 1
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject queries array exceeding maximum length', () => {
+      const elevenQueries = Array.from({ length: 11 }, (_, i) => `query ${i}`); // max is 10
+      const result = searchToolInputSchema.safeParse({
+        queries: elevenQueries,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject minRelevanceScore below valid range', () => {
+      const result = searchToolInputSchema.safeParse({
+        queries: ['find users'],
+        minRelevanceScore: -0.1, // min is 0
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject minRelevanceScore above valid range', () => {
+      const result = searchToolInputSchema.safeParse({
+        queries: ['find users'],
+        minRelevanceScore: 1.5, // max is 1
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept valid input', () => {
+      const result = searchToolInputSchema.safeParse({
+        queries: ['find users', 'list orders'],
+        minRelevanceScore: 0.5,
+        topK: 10,
+      });
+      expect(result.success).toBe(true);
+    });
+  });
 });
