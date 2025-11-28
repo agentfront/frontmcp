@@ -10,22 +10,24 @@ The enclave package provides a hardened execution environment for running LLM-ge
 
 ## Bank-Grade Security
 
-| Metric         | Value                                           |
-| -------------- | ----------------------------------------------- |
-| Security Tests | 400+ tests, 100% pass rate                      |
-| Attack Vectors | 72+ blocked                                     |
-| CVE Protection | 100% (vm2, isolated-vm, node-vm exploits)       |
-| Defense Layers | 4 (AST validation, transformation, runtime, VM) |
+| Metric         | Value                                                                  |
+| -------------- | ---------------------------------------------------------------------- |
+| Security Tests | 516+ tests, 100% pass rate                                             |
+| Attack Vectors | 81+ blocked                                                            |
+| CVE Protection | 100% (vm2, isolated-vm, node-vm exploits)                              |
+| Defense Layers | 6 (Pre-Scanner, AST, Transform, Scoring, VM/Worker Pool, Sanitization) |
 
 For the full security audit report, see [SECURITY-AUDIT.md](./SECURITY-AUDIT.md).
 
 ## Features
 
-- **Defense-in-Depth**: 4 layers of security (AST validation → transformation → runtime guards → VM sandbox)
+- **Defense-in-Depth**: 6 layers of security (Pre-Scanner → AST → transformation → AI Scoring → VM/Worker Pool → output sanitization)
+- **Worker Pool Adapter** (NEW): Optional OS-level memory isolation via worker threads with hard halt capability
 - **Safe Tool Calls**: Secure `callTool()` execution with iteration and call limits
 - **Reference Sidecar**: Handle large data without embedding it in the script
 - **Configurable Security Levels**: From STRICT to PERMISSIVE based on trust level
 - **Resource Limits**: Timeout, iteration limits, and tool call limits
+- **AI Scoring Gate**: Semantic analysis detects exfiltration patterns and sensitive data access
 - **Zero Dependencies on Vulnerable Packages**: Uses Node.js native `vm` module
 
 ## Installation
@@ -118,6 +120,83 @@ const enclave = new Enclave({
   },
 });
 ```
+
+## Worker Pool Adapter (Optional)
+
+For environments requiring **OS-level memory isolation**, enable the Worker Pool Adapter. This provides a dual-layer sandbox with hard halt capability:
+
+```typescript
+import { Enclave } from '@frontmcp/enclave';
+
+const enclave = new Enclave({
+  adapter: 'worker_threads', // Enable Worker Pool
+  workerPoolConfig: {
+    minWorkers: 2,
+    maxWorkers: 8,
+    memoryLimitPerWorker: 256 * 1024 * 1024, // 256MB
+  },
+  toolHandler: async (name, args) => {
+    /* ... */
+  },
+});
+```
+
+### When to Use Worker Pool
+
+| Scenario                    | Recommendation                  |
+| --------------------------- | ------------------------------- |
+| Trusted internal scripts    | Standard VM (lower overhead)    |
+| Multi-tenant execution      | Worker Pool (OS isolation)      |
+| Untrusted AI-generated code | Worker Pool (hard halt)         |
+| Memory-sensitive workloads  | Worker Pool (per-worker limits) |
+
+### Worker Pool Presets
+
+| Level      | minWorkers | maxWorkers | memoryLimit | messagesPerSec |
+| ---------- | ---------- | ---------- | ----------- | -------------- |
+| STRICT     | 2          | 4          | 64MB        | 100            |
+| SECURE     | 2          | 8          | 128MB       | 500            |
+| STANDARD   | 2          | 16         | 256MB       | 1000           |
+| PERMISSIVE | 4          | 32         | 512MB       | 5000           |
+
+### Worker Pool Configuration Options
+
+| Option                   | Default   | Description                     |
+| ------------------------ | --------- | ------------------------------- |
+| `minWorkers`             | 2         | Minimum warm workers            |
+| `maxWorkers`             | CPU count | Maximum concurrent workers      |
+| `memoryLimitPerWorker`   | 128MB     | Per-worker memory limit         |
+| `maxMessagesPerSecond`   | 1000      | Rate limit per worker           |
+| `maxExecutionsPerWorker` | 1000      | Recycle after N executions      |
+| `maxQueueSize`           | 100       | Maximum pending executions      |
+| `idleTimeoutMs`          | 30000     | Time before idle worker release |
+
+### Dual-Layer Sandbox
+
+When using Worker Pool, code runs in a **dual-layer sandbox**:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Worker Thread (OS-level isolation)              │
+│  ┌─────────────────────────────────────────────┐│
+│  │  VM Context (prototype isolation)           ││
+│  │  - Whitelist-only globals                   ││
+│  │  - __safe_* runtime functions               ││
+│  └─────────────────────────────────────────────┘│
+│  - parentPort removed from globals              │
+│  - JSON-only message serialization              │
+│  - Hard halt via worker.terminate()             │
+└─────────────────────────────────────────────────┘
+```
+
+### Security Features
+
+- **`worker.terminate()`**: Hard halt runaway scripts when VM timeout fails
+- **`--max-old-space-size`**: Per-worker memory limits enforced by V8
+- **JSON-only serialization**: Prevents structured clone gadget attacks
+- **Dangerous global removal**: parentPort, workerData inaccessible in worker
+- **Rate limiting**: Message flood protection per worker
+- **Safe deserialize**: Prototype pollution prevention via JSON-only parsing
 
 ## Reference Sidecar
 
@@ -267,6 +346,15 @@ interface ExecutionResult<T> {
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
+│  Layer 0: Pre-Scanner (ast-guard)                           │
+│  ├── Blocks ReDoS patterns                                  │
+│  ├── Blocks BiDi/Trojan source attacks                      │
+│  ├── Input size limits                                      │
+│  └── Nesting depth limits                                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
 │  Layer 1: AST Validation (ast-guard)                        │
 │  ├── NoEvalRule - Blocks eval(), Function()                 │
 │  ├── NoGlobalAccessRule - Blocks dangerous globals          │
@@ -285,20 +373,32 @@ interface ExecutionResult<T> {
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 3: Runtime Wrappers                                  │
-│  ├── __safe_callTool - Enforces maxToolCalls                │
-│  ├── __safe_forOf - Enforces maxIterations                  │
-│  ├── __safe_for - Guards traditional for loops              │
-│  └── Reference resolver - Handles sidecar references        │
+│  Layer 3: AI Scoring Gate                                   │
+│  ├── Semantic security analysis via AST features            │
+│  ├── Exfiltration pattern detection                         │
+│  ├── Sensitive field access tracking                        │
+│  └── Risk scoring (0-100) with thresholds                   │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 4: VM Sandbox (Node.js vm module)                    │
-│  ├── Isolated execution context                             │
-│  ├── Controlled global access                               │
-│  ├── No process, require, fs access                         │
+│  Layer 4: Runtime Sandbox                                   │
+│  ├── Standard: Node.js vm (prototype isolation)             │
+│  ├── Optional: Worker Pool (OS-level isolation)             │
+│  │   ├── Dual-layer: worker thread + VM context             │
+│  │   ├── Hard halt via worker.terminate()                   │
+│  │   └── Per-worker memory limits                           │
+│  ├── __safe_callTool - Enforces maxToolCalls                │
+│  ├── __safe_forOf - Enforces maxIterations                  │
 │  └── Timeout enforcement                                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 5: Output Sanitization                               │
+│  ├── Removes stack traces                                   │
+│  ├── Sanitizes file paths                                   │
+│  └── Truncates oversized outputs                            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼

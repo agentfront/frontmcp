@@ -11,11 +11,17 @@ export function createMcpHandlers(options: McpHandlerOptions) {
   return [
     initializeRequestHandler(options),
     initializedNotificationHandler(options),
-    listToolsRequestHandler(options),
-    callToolRequestHandler(options),
-    listResourcesRequestHandler(options),
-    listResourceTemplatesRequestHandler(options),
-    readResourceRequestHandler(options),
+
+    ...(options.serverOptions?.capabilities?.tools
+      ? [listToolsRequestHandler(options), callToolRequestHandler(options)]
+      : []),
+    ...(options.serverOptions?.capabilities?.resources
+      ? [
+          listResourcesRequestHandler(options),
+          listResourceTemplatesRequestHandler(options),
+          readResourceRequestHandler(options),
+        ]
+      : []),
   ];
 }
 

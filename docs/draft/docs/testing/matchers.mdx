@@ -24,6 +24,7 @@ expect(tools).not.toContainTool('unknown-tool');
 ```
 
 **Error message example:**
+
 ```
 Expected tools to contain "create-note", but got: [list-notes, delete-note]
 ```
@@ -58,16 +59,16 @@ expect(result).toBeError(-32602); // Invalid params
 
 **Common MCP Error Codes:**
 
-| Code | Name | Description |
-|------|------|-------------|
-| `-32700` | Parse error | Invalid JSON |
-| `-32600` | Invalid request | Invalid JSON-RPC |
-| `-32601` | Method not found | Unknown method |
-| `-32602` | Invalid params | Invalid parameters |
-| `-32603` | Internal error | Server error |
-| `-32001` | Unauthorized | Authentication required |
-| `-32002` | Resource not found | Resource doesn't exist |
-| `-32800` | Request cancelled | Request was cancelled |
+| Code     | Name               | Description             |
+| -------- | ------------------ | ----------------------- |
+| `-32700` | Parse error        | Invalid JSON            |
+| `-32600` | Invalid request    | Invalid JSON-RPC        |
+| `-32601` | Method not found   | Unknown method          |
+| `-32602` | Invalid params     | Invalid parameters      |
+| `-32603` | Internal error     | Server error            |
+| `-32001` | Unauthorized       | Authentication required |
+| `-32002` | Resource not found | Resource doesn't exist  |
+| `-32800` | Request cancelled  | Request was cancelled   |
 
 ---
 
@@ -293,11 +294,13 @@ expect(result).toBeError('invalid'); // Wrong argument type
 ## Best Practices
 
 **Do:**
+
 - Use specific matchers for clearer error messages
 - Combine matchers for comprehensive validation
 - Use error code constants instead of magic numbers
 
 **Don't:**
+
 - Check internal implementation details
 - Use generic `.toBe(true)` when specific matchers exist
 - Ignore error codes in failure tests

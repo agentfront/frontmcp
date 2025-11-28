@@ -4,6 +4,9 @@ import { FlowHooksOf } from './common';
 export { FrontMcpInstance } from './front-mcp';
 export * from './common';
 
+// Tool change events for subscription
+export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
+
 export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');

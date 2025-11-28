@@ -44,16 +44,16 @@ Configure fixtures for a test file.
 test.use(options: TestOptions): void
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `server` | `string` | — | Path to server entry file (required) |
-| `port` | `number` | Auto | Port to run server on |
-| `transport` | `'sse' \| 'streamable-http'` | `'streamable-http'` | Transport protocol |
-| `auth` | `AuthOptions` | — | Authentication configuration |
-| `logLevel` | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'` | Server log level |
-| `env` | `Record<string, string>` | — | Environment variables |
-| `startupTimeout` | `number` | `30000` | Startup timeout in ms |
-| `baseUrl` | `string` | — | Connect to existing server |
+| Option           | Type                                     | Default             | Description                          |
+| ---------------- | ---------------------------------------- | ------------------- | ------------------------------------ |
+| `server`         | `string`                                 | —                   | Path to server entry file (required) |
+| `port`           | `number`                                 | Auto                | Port to run server on                |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                   |
+| `auth`           | `AuthOptions`                            | —                   | Authentication configuration         |
+| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                     |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables                |
+| `startupTimeout` | `number`                                 | `30000`             | Startup timeout in ms                |
+| `baseUrl`        | `string`                                 | —                   | Connect to existing server           |
 
 ---
 
@@ -81,10 +81,10 @@ Call a tool with arguments.
 mcp.tools.call(name: string, args: Record<string, unknown>): Promise<ToolResult>
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `string` | Tool name |
-| `args` | `Record<string, unknown>` | Tool arguments |
+| Parameter | Type                      | Description    |
+| --------- | ------------------------- | -------------- |
+| `name`    | `string`                  | Tool name      |
+| `args`    | `Record<string, unknown>` | Tool arguments |
 
 **Returns:** `ToolResult` with methods:
 
@@ -866,16 +866,16 @@ expect(response).toHaveErrorCode(code: number): void
 
 Common MCP error codes for use in tests.
 
-| Code | Name | Description |
-|------|------|-------------|
-| `-32700` | Parse error | Invalid JSON |
-| `-32600` | Invalid request | Invalid JSON-RPC structure |
-| `-32601` | Method not found | Unknown method |
-| `-32602` | Invalid params | Invalid parameters |
-| `-32603` | Internal error | Server error |
-| `-32001` | Unauthorized | Authentication required |
-| `-32002` | Resource not found | Resource doesn't exist |
-| `-32800` | Request cancelled | Request was cancelled |
+| Code     | Name               | Description                |
+| -------- | ------------------ | -------------------------- |
+| `-32700` | Parse error        | Invalid JSON               |
+| `-32600` | Invalid request    | Invalid JSON-RPC structure |
+| `-32601` | Method not found   | Unknown method             |
+| `-32602` | Invalid params     | Invalid parameters         |
+| `-32603` | Internal error     | Server error               |
+| `-32001` | Unauthorized       | Authentication required    |
+| `-32002` | Resource not found | Resource doesn't exist     |
+| `-32800` | Request cancelled  | Request was cancelled      |
 
 ---
 

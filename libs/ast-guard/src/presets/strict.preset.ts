@@ -8,6 +8,8 @@ import {
   NoEvalRule,
   NoAsyncRule,
   NoGlobalAccessRule,
+  NoRegexLiteralRule,
+  NoRegexMethodsRule,
 } from '../rules';
 import { PresetOptions } from './types';
 
@@ -244,6 +246,23 @@ export function createStrictPreset(options: PresetOptions = {}): ValidationRule[
       }),
     );
   }
+
+  // Analyze regex literals for ReDoS vulnerabilities (strict analysis)
+  rules.push(
+    new NoRegexLiteralRule({
+      blockAll: false,
+      analyzePatterns: true,
+      analysisLevel: 'catastrophic',
+      maxPatternLength: 100, // Stricter limit for strict preset
+    }),
+  );
+
+  // Block regex methods with dynamic arguments
+  rules.push(
+    new NoRegexMethodsRule({
+      allowStringArguments: true, // Allow safe string arguments
+    }),
+  );
 
   return rules;
 }

@@ -1,5 +1,6 @@
 ---
 title: AST Validation with ast-guard
+sidebarTitle: Ast Guard
 slug: guides/ast-guard
 description: Bank-grade JavaScript AST validation with extensible rules, presets, and the AgentScript language for safe LLM code execution.
 icon: shield-check
@@ -8,14 +9,14 @@ icon: shield-check
 ast-guard is FrontMCP's AST validation library for JavaScript. It inspects user-provided or LLM-generated code before execution, blocking dangerous constructs and enforcing API usage policies. ast-guard powers Enclave's first security layer and can be used standalone for any JavaScript validation needs.
 
 <CardGroup cols={3}>
-  <Card title="12 Built-in Rules" icon="shield">
-    Block eval, dangerous globals, prototype manipulation, unbounded loops, and more with battle-tested validation rules.
+  <Card title="16 Built-in Rules" icon="shield">
+    Block eval, dangerous globals, prototype manipulation, unbounded loops, ReDoS, and more with battle-tested validation rules.
+  </Card>
+  <Card title="Pre-Scanner Defense" icon="radar">
+    Layer 0 security that runs BEFORE parsing - catches DoS attacks that could crash the parser itself.
   </Card>
   <Card title="AgentScript Preset" icon="robot">
     Purpose-built preset for LLM-generated orchestration code with whitelist-only globals and strict control flow.
-  </Card>
-  <Card title="Code Transformation" icon="arrows-rotate">
-    Transform validated code for safe execution with loop limits, proxied functions, and main wrapper.
   </Card>
 </CardGroup>
 
@@ -68,6 +69,79 @@ if (result.valid) {
 <Tip>
   Instantiate `JSAstValidator` once and reuse it. This keeps presets, custom rules, and caches consistent across requests.
 </Tip>
+
+---
+
+## Pre-Scanner (Layer 0 Defense)
+
+The pre-scanner runs BEFORE the JavaScript parser (acorn) to catch DoS attacks that could crash or hang the parser itself. It enforces mandatory security limits that cannot be disabled.
+
+```ts
+import { PreScanner, createPreScannerConfig } from 'ast-guard';
+
+// Create pre-scanner with AgentScript config (strictest)
+const scanner = new PreScanner(createPreScannerConfig('agentscript'));
+
+const result = scanner.scan(userCode);
+if (!result.valid) {
+  console.log('Pre-scan failed:', result.issues);
+  // Don't even attempt to parse - could DoS the parser
+}
+```
+
+### Mandatory Limits (Cannot Be Exceeded)
+
+These limits protect against parser crashes and cannot be overridden:
+
+| Limit                       | Maximum       | Purpose                             |
+| --------------------------- | ------------- | ----------------------------------- |
+| `ABSOLUTE_MAX_INPUT_SIZE`   | 100MB         | Prevents memory exhaustion          |
+| `ABSOLUTE_MAX_NESTING`      | 200 levels    | Prevents parser stack overflow      |
+| `ABSOLUTE_MAX_LINE_LENGTH`  | 100,000 chars | Prevents minified/obfuscated DoS    |
+| `ABSOLUTE_MAX_LINES`        | 1,000,000     | Prevents extremely long files       |
+| `ABSOLUTE_MAX_STRING`       | 5MB           | Prevents huge embedded strings      |
+| `ABSOLUTE_MAX_REGEX_LENGTH` | 1,000 chars   | Prevents ReDoS via complex patterns |
+
+### Pre-Scanner Preset Comparison
+
+| Config              | AgentScript | STRICT    | SECURE    | STANDARD  | PERMISSIVE |
+| ------------------- | ----------- | --------- | --------- | --------- | ---------- |
+| maxInputSize        | 100KB       | 500KB     | 1MB       | 5MB       | 10MB       |
+| maxLineLength       | 2,000       | 5,000     | 8,000     | 10,000    | 50,000     |
+| maxLines            | 1,000       | 2,000     | 5,000     | 10,000    | 100,000    |
+| maxNestingDepth     | 20          | 30        | 40        | 50        | 100        |
+| regexMode           | `block`     | `analyze` | `analyze` | `analyze` | `allow`    |
+| blockBidiPatterns   | YES         | YES       | YES       | NO        | NO         |
+| blockInvisibleChars | YES         | YES       | NO        | NO        | NO         |
+
+### Regex Handling Modes
+
+The pre-scanner supports three regex handling modes:
+
+- **`block`** - Block ALL regex literals (AgentScript default, maximum security)
+- **`analyze`** - Allow but analyze for ReDoS patterns (Strict/Secure/Standard)
+- **`allow`** - Allow all regex without analysis (Permissive only)
+
+```ts
+import { createPreScannerConfig, analyzeForReDoS } from 'ast-guard';
+
+// Analyze a pattern for ReDoS vulnerabilities
+const result = analyzeForReDoS('(a+)+', 'catastrophic');
+// { vulnerable: true, score: 90, vulnerabilityType: 'nested_quantifier' }
+```
+
+### ReDoS Detection Patterns
+
+The pre-scanner detects these dangerous regex patterns:
+
+| Pattern                 | Score | Example      | Risk                     |
+| ----------------------- | ----- | ------------ | ------------------------ | ------------------------ |
+| Nested quantifier       | 90    | `(a+)+`      | Exponential backtracking |
+| Star in repetition      | 85    | `(a+){2,}`   | Exponential backtracking |
+| Repetition in star      | 85    | `(a{2,})+`   | Exponential backtracking |
+| Overlapping alternation | 80    | `(a          | ab)+`                    | Exponential backtracking |
+| Greedy backtracking     | 75    | `(.*a)+`     | Polynomial backtracking  |
+| Multiple greedy         | 70    | `.*foo.*bar` | Polynomial backtracking  |
 
 ---
 
@@ -386,6 +460,64 @@ const rule = new UnicodeSecurityRule({
 <Warning>
   Trojan Source attacks (CVE-2021-42574) use Unicode bidirectional control characters to make code appear different than it actually executes. Always enable `blockBidi: true` for untrusted code.
 </Warning>
+
+### StaticCallTargetRule
+
+Enforces static string literals for call targets, preventing dynamic tool name injection.
+
+```ts
+import { StaticCallTargetRule } from 'ast-guard';
+
+const rule = new StaticCallTargetRule({
+  targetFunctions: ['callTool', '__safe_callTool'], // Functions to validate
+  argumentPosition: 0,                              // Which argument must be static (0-indexed)
+  allowedToolNames: ['users:list', 'billing:*'],    // Optional whitelist (supports RegExp)
+});
+```
+
+This blocks:
+
+- `callTool(toolName, args);` - Variable reference
+- `callTool("tool" + suffix, args);` - Concatenation
+- `callTool(\`tool\_${id}\`, args);` - Template with expressions
+- `callTool(cond ? "a" : "b", args);` - Ternary expression
+
+### NoRegexLiteralRule
+
+Blocks or analyzes regex literals for ReDoS vulnerabilities.
+
+```ts
+import { NoRegexLiteralRule } from 'ast-guard';
+
+// Block all regex (AgentScript preset)
+new NoRegexLiteralRule({ blockAll: true });
+
+// Analyze patterns for ReDoS (Strict/Secure preset)
+new NoRegexLiteralRule({
+  analyzePatterns: true,
+  analysisLevel: 'catastrophic',  // or 'polynomial'
+  blockThreshold: 80,             // Score to block (default: 80)
+  warnThreshold: 50,              // Score to warn (default: 50)
+  maxPatternLength: 200,          // Max regex length
+  allowedPatterns: ['^[a-z]+$'],  // Whitelisted patterns
+});
+```
+
+### NoRegexMethodsRule
+
+Blocks regex method calls to provide defense-in-depth against ReDoS.
+
+```ts
+import { NoRegexMethodsRule } from 'ast-guard';
+
+const rule = new NoRegexMethodsRule({
+  blockedStringMethods: ['match', 'matchAll', 'search', 'replace', 'replaceAll', 'split'],
+  blockedRegexMethods: ['test', 'exec'],
+  allowStringArguments: true,  // Allow "hello".split(",") - string, not regex
+});
+```
+
+Even if regex literals are blocked, attackers could construct regex through other means. This rule blocks the execution paths.
 
 ## Mix in fine-grained rules
 

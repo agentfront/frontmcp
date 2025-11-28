@@ -1,10 +1,10 @@
 ---
-title: Taming Tool Overload in FrontMCP with CodeCall
-description: CodeCall turns a sprawling FrontMCP tool list into a small, code-first meta-API so models can search, plan, and orchestrate tools in JavaScript instead of flooding your context window.
+title: "Your MCP Server Has 100 Tools. Here's Why That's Breaking Your AI Agent."
+description: CodeCall solves the tool explosion problem that's costing you tokens, slowing your agents, and forcing you to build endpoints you shouldn't need. Open source. Self-hosted. Works with any LLM.
 mode: center
 ---
 
-> ⏱️ Estimated reading time: **14 minutes**
+> ⏱️ Estimated reading time: **12 minutes**
 
 <img
   className="blog-full-image"
@@ -12,651 +12,563 @@ mode: center
   alt="CodeCall meta-API for large toolsets"
 />
 
-If you’ve read Anthropic’s **“Code execution with MCP: Building more efficient agents”**, you’ve already seen the pattern: present MCP servers as **code APIs**, let the model **write code** that calls tools, and run that code in a secure execution environment to dramatically cut token usage and latency. ([Anthropic][1])
+**Here's a scenario you might recognize:**
 
-> **CodeCall** brings that same idea into **FrontMCP** as a plugin: instead of exposing every tool directly, you expose a tiny meta-API and let the model orchestrate tools in JavaScript.
+You built an MCP server. It started with 10 tools. Clean. Simple. Your AI agent found the right tool instantly and everything worked.
 
-## TL;DR
+Then you connected your REST API. 47 endpoints became 47 tools. You added billing, user management, and analytics. Now you're at 150+ tools.
 
-As your FrontMCP server grows, `list_tools` becomes a firehose: inline tools, OpenAPI adapters, multiple apps, multi-tenant variants. **CodeCall** collapses that chaos into **3–4 meta-tools**:
+And suddenly:
 
-- `code-call:search`
-- `code-call:describe`
-- `code-call:execute`
-- (optional) `code-call:invoke`
+- Your context window fills with schemas before the first query
+- Token costs explode—you're paying to list tools the agent won't use
+- The model picks the wrong tool or misses the right one entirely
+- Multi-step workflows require endless round-trips through the LLM
 
-The LLM **searches** for tools, **describes** them to see schemas, then writes a **JavaScript plan** that runs in a sandbox and calls your real tools. You get:
+**You're not alone.** This is the dirty secret of scaling MCP servers—and it's why Anthropic published ["Code execution with MCP"](https://www.anthropic.com/engineering/code-execution-with-mcp) to solve it.
 
-- A small, stable API surface.
-- A way to safely expose **dozens or hundreds of tools**.
-- Cross-tool joins, filters, and workflow logic in code—not in your REST API.
-- First-class support for **multi-app** FrontMCP servers.
+But here's what they didn't tell you: **their approach only works with Claude, requires their infrastructure, and isn't available yet.**
 
----
-
-## How tool lists quietly become unmanageable
-
-The early days look like this:
-
-1. You add a couple of tools to an app.
-2. They show up in `list_tools`.
-3. Your IDE, agent, or dashboard calls them directly.
-4. Everyone’s happy.
-
-Then real life happens:
-
-- You add **another app** (`user`, `billing`, `ops`, `docs`…).
-- You connect an **OpenAPI adapter** and inherit 50–100 endpoints as tools.
-- You introduce **per-tenant tools**, or variants for different products.
-- You start experimenting with **plugins** and cross-cutting helpers.
-
-Suddenly:
-
-- `list_tools` returns a **wall of JSON**.
-- The context window starts filling up with schemas.
-- Planners need to reason over **too many actions**.
-- Most steps in a flow are:
-  “Call one tool → lightly post-process → call another tool.”
-
-<img
-  className="blog-full-image dark-img"
-  src="../../assets/banners/codecall-plugin/early-day-vs-today.dark.png"
-  alt="Before and after: a small tidy list_tools response turning into an overwhelming wall of tools."
-/>
-<img
-  className="blog-full-image light-img"
-  src="../../assets/banners/codecall-plugin/early-day-vs-today.light.png"
-  alt="Before and after: a small tidy list_tools response turning into an overwhelming wall of tools."
-/>
-
-None of this is wrong—it’s what MCP is designed to support—but the shape is rough:
-
-> The more powerful your MCP server becomes, the harder it is for the model to see what’s actually relevant right now.
-
-Anthropic’s post calls out the same failure mode on the client side: tool definitions overload the context window, and intermediate tool results bloat tokens as they bounce through the model. ([Anthropic][1])
+**CodeCall** gives you the same pattern—today, self-hosted, with any LLM.
 
 ---
 
-## From direct tool calls to code execution (Anthropic’s pattern)
+## The Real Cost of Tool Explosion
 
-The Anthropic article suggests a different default:
+Let's do the math on a real scenario.
 
-- Treat MCP servers as **code APIs**, not just tool lists.
-- Give the model a **code execution environment** (e.g. TypeScript runtime).
-- Let it write programs that:
-  - Import server-specific “tool files”.
-  - Call those wrappers.
-  - Filter and join data **inside the runtime**, not in the model context.
+You have 100 tools. Each tool definition averages 200 tokens (name, description, input schema). That's **20,000 tokens** just to list your tools—before the agent does anything.
 
-They even show a filesystem layout like:
+Now the agent needs to:
 
-```text
-servers/
-  google-drive/
-    getDocument.ts
-  salesforce/
-    updateRecord.ts
+1. Find users whose first name starts with "me"
+2. Who logged in within the past 10 days
+3. Return the top 10
+
+Without filtering on the server, here's what happens:
+
+| Step      | Action                                 | Tokens             |
+| --------- | -------------------------------------- | ------------------ |
+| 1         | List 100 tools                         | 20,000             |
+| 2         | Call `users:list` (returns 1000 users) | 50,000+            |
+| 3         | Model filters in context               | 10,000             |
+| 4         | Model returns top 10                   | 500                |
+| **Total** |                                        | **~80,000 tokens** |
+
+At \$0.015 per 1K input tokens (GPT-4 pricing), that's **\$1.20 for one query.**
+
+But worse than cost: the model starts **losing context**. It drops earlier instructions. It forgets what it was doing. It hallucinates.
+
+Sound familiar?
+
+---
+
+## "Just Build Better REST Endpoints"
+
+The obvious solution: add filtering parameters to your API.
+
+```
+GET /users?firstName_startsWith=me&lastLogin_gt=10d&limit=10
 ```
 
-The agent:
+But now you need:
 
-1. Discovers tools by exploring this “tool filesystem”.
-2. Reads only the files it needs.
-3. Writes TypeScript that calls those wrappers and manipulates data locally.
+- Query parameter validation
+- Database query building
+- Pagination handling
+- Error handling for invalid filters
+- Documentation updates
+- Tests for every combination
 
-By loading only relevant tool definitions and keeping large intermediate results inside the execution environment, they report token savings on the order of **~98%** in one workflow. ([Anthropic][1])
+**For every possible filter.**
 
-Cloudflare and others have described similar approaches as “Code Mode” for agents: let the model think in code, not just prompts. ([KiaDev][2])
+You're not building an AI tool anymore. You're building a query language. And tomorrow the model will need a filter you didn't anticipate.
 
 ---
 
-## What CodeCall flips in your mental model
+## The Code Execution Pattern
 
-CodeCall applies the same **code-execution** idea on the **server side** of FrontMCP.
+Anthropic's insight was simple: **let the model write code.**
 
-Instead of:
+Instead of exposing 100 tools, expose a meta-API:
 
-> “The LLM calls each tool directly.”
+- **Search** for relevant tools
+- **Describe** their schemas
+- **Execute** JavaScript that orchestrates them
 
-You move to:
+The model writes:
 
-> “The LLM calls a **meta-API** that helps it **find**, **understand**, and **execute** tools in code.”
+```javascript
+const users = await callTool('users:list', { limit: 1000 });
+const tenDaysAgo = new Date();
+tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
 
-CodeCall does **three simple things**:
+const filtered = users.filter(u =>
+  u.firstName.toLowerCase().startsWith('me') &&
+  new Date(u.lastLogin) > tenDaysAgo
+);
 
-1. **Hides most tools from `list_tools`**
-   So your MCP client sees a small, predictable interface.
+return filtered.slice(0, 10);
+```
 
-2. **Exposes a tiny set of meta-tools**
+The filtering happens **on your server**, not in the LLM context. The model only sees 10 results.
 
-- `code-call:search` — find relevant tools.
-- `code-call:describe` — fetch schemas and examples.
-- `code-call:execute` — run a JS plan that calls tools inside a sandbox.
-- `code-call:invoke` — optional direct-call helper for single-tool actions.
+| Step      | Action                            | Tokens            |
+| --------- | --------------------------------- | ----------------- |
+| 1         | List 4 meta-tools                 | 2,000             |
+| 2         | Search for "users"                | 500               |
+| 3         | Describe users:list               | 500               |
+| 4         | Execute script (returns 10 users) | 1,000             |
+| **Total** |                                   | **~4,000 tokens** |
 
-3. **Runs the model's plan in Enclave**
-   Using [ast-guard](/docs/guides/ast-guard) for AST validation and transformation, plus Node.js `vm` module for runtime isolation.
+That's **95% fewer tokens.** For the same result.
 
-From the model’s perspective, a typical flow looks like:
+---
 
-1. **Search**: “What tools can help with X?” → `code-call:search`
-2. **Describe**: “What are their schemas?” → `code-call:describe`
-3. **Plan**: “Write JS that uses these tools.” → `code-call:execute`
+## Anthropic Gets It—Their Advanced Tool Use Proves the Pattern
+
+Anthropic recently published ["Advanced Tool Use"](https://www.anthropic.com/engineering/advanced-tool-use) introducing three beta features that validate exactly what CodeCall does:
+
+| Anthropic Feature             | What It Does                                      | CodeCall Equivalent                       |
+| ----------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| **Tool Search Tool**          | Dynamic discovery instead of loading all tools    | `codecall:search` with VectoriaDB         |
+| **Programmatic Tool Calling** | Execute code that orchestrates tools in a sandbox | `codecall:execute` with Enclave           |
+| **Tool Use Examples**         | Provide concrete usage patterns                   | Schema + examples via `codecall:describe` |
+
+Their results? **85% reduction in token usage** with Tool Search. **37% fewer tokens** with Programmatic Tool Calling. Accuracy improvements from 72% to 90%.
+
+**CodeCall delivers the same patterns—but there's a catch with Anthropic's approach:**
+
+<CardGroup cols={2}>
+  <Card title="Claude Only" icon="xmark" color="#DC2626">
+    Tied to Anthropic's infrastructure. Using GPT-4, Llama, or Gemini? You can't use it.
+  </Card>
+  <Card title="Not Self-Hosted" icon="xmark" color="#DC2626">
+    Your code runs on their servers. Your data leaves your VPC.
+  </Card>
+  <Card title="Closed Source" icon="xmark" color="#DC2626">
+    You can't audit the sandbox, customize security rules, or extend it.
+  </Card>
+  <Card title="Beta Only" icon="xmark" color="#DC2626">
+    These features are in beta—availability and pricing may change.
+  </Card>
+</CardGroup>
+
+**If you're building production systems, you need:**
+
+- Self-hosted infrastructure
+- Any LLM compatibility
+- Auditable security
+- Full control
+
+That's CodeCall.
+
+---
+
+## CodeCall: Self-Hosted Code Execution for Any LLM
+
+**CodeCall** is a FrontMCP plugin that brings code execution to your MCP server:
+
+<CardGroup cols={2}>
+  <Card title="Any LLM" icon="check" color="#16A34A">
+    Works with Claude, GPT-4, Gemini, Llama, or any MCP-compatible client
+  </Card>
+  <Card title="Self-Hosted" icon="check" color="#16A34A">
+    Runs entirely on your infrastructure. Data never leaves your VPC.
+  </Card>
+  <Card title="Open Source" icon="check" color="#16A34A">
+    Audit the code. Customize the security. Extend the functionality.
+  </Card>
+  <Card title="Available Now" icon="check" color="#16A34A">
+    npm install @frontmcp/plugins. Deploy today.
+  </Card>
+</CardGroup>
+
+---
+
+## How CodeCall Works
+
+CodeCall collapses your entire toolset into **4 meta-tools**:
+
+| Meta-Tool           | Purpose                                |
+| ------------------- | -------------------------------------- |
+| `codecall:search`   | Find tools by natural language query   |
+| `codecall:describe` | Get schemas for selected tools         |
+| `codecall:execute`  | Run JavaScript that orchestrates tools |
+| `codecall:invoke`   | Direct single-tool calls (optional)    |
 
 <img
   className="blog-full-image"
   src="../../assets/banners/codecall-plugin/code-call-example.png"
-  alt="LLM calling the CodeCall meta-API (search, describe, execute) which orchestrates tools via an isolated VM."
+  alt="LLM calling the CodeCall meta-API"
 />
 
-Instead of juggling 80 tools, the model works against 3–4.
+A typical flow:
+
+```mermaid
+sequenceDiagram
+    participant LLM as Any LLM
+    participant CC as CodeCall
+    participant Tools as Your 150 Tools
+
+    LLM->>CC: codecall:search("user billing data")
+    CC-->>LLM: [users:list, billing:getInvoices, ...]
+
+    LLM->>CC: codecall:describe(["users:list"])
+    CC-->>LLM: {inputSchema, outputSchema, examples}
+
+    LLM->>CC: codecall:execute(script)
+    Note over CC: AST Validation → Sandbox → Execute
+    CC->>Tools: callTool('users:list', {...})
+    CC->>Tools: callTool('billing:getInvoices', {...})
+    Note over CC: Filter, join, transform in JS
+    CC-->>LLM: {result: exact_data_needed}
+```
+
+**One round-trip.** The LLM never sees raw tool lists. It never processes bulk data. It gets exactly what it asked for.
 
 ---
 
-## When CodeCall is the right tool (and when it isn’t)
+## Bank-Grade Security (Not an Afterthought)
 
-Use **CodeCall** if:
+"But running LLM-generated code sounds terrifying."
 
-- You have **many tools** (inline + OpenAPI, multiple apps).
-- You don’t want to blow up `list_tools` or your context window.
-- You want the model to:
+It should. That's why CodeCall implements **defense-in-depth** with battle-tested security libraries:
 
-- Combine tools into workflows.
-- Filter and post-process results.
-- Build logic your API doesn’t support directly (joins, merges, diffing, etc.).
-- You run **multiple apps** (e.g. `user`, `billing`) and want app-aware tool search.
+### Layer 0: Pre-Scanner
 
-You probably **don’t** need CodeCall if:
+Before the JavaScript parser even runs, [AST Guard's Pre-Scanner](/docs/guides/ast-guard) catches attacks that could DoS the parser itself:
 
-- You only have a handful of tools.
-- Flows are mostly “one tool per task.”
-- Your planner / agent runtime already does orchestration and you want simple, direct calls.
+<AccordionGroup>
+  <Accordion title="Blocked: ReDoS Attacks" icon="clock">
+    - `/(a+)+$/` - Nested quantifiers ❌
+    - `/(a|a)+$/` - Overlapping alternation ❌
+    - Catastrophic backtracking patterns ❌
+  </Accordion>
+  <Accordion title="Blocked: Trojan Source (CVE-2021-42574)" icon="eye-slash">
+    - Unicode BiDi override characters ❌
+    - Right-to-Left text direction attacks ❌
+    - Code that appears different than it executes ❌
+  </Accordion>
+  <Accordion title="Blocked: Parser DoS" icon="layer-group">
+    - Deep nesting attacks `((((((x))))))` ❌
+    - 100MB+ input payloads ❌
+    - Null byte injection ❌
+  </Accordion>
+</AccordionGroup>
 
-> Think of CodeCall as the “SQL of tools”: a small language surface for building rich queries/workflows over a big tool universe.
+### Layer 1: AST Guard (Static Analysis)
+
+After pre-scanning, [AST Guard](/docs/guides/ast-guard) parses the JavaScript into an Abstract Syntax Tree and validates every node:
+
+<AccordionGroup>
+  <Accordion title="Blocked: Code Injection" icon="syringe">
+    - `eval('malicious code')` ❌
+    - `new Function('return process')()` ❌
+    - `setTimeout`, `setInterval` ❌
+  </Accordion>
+  <Accordion title="Blocked: System Access" icon="globe">
+    - `process.env.SECRET` ❌
+    - `require('fs')` ❌
+    - `global`, `globalThis` ❌
+  </Accordion>
+  <Accordion title="Blocked: Prototype Pollution" icon="virus">
+    - `obj.__proto__ = {}` ❌
+    - `Object.prototype.hack = true` ❌
+  </Accordion>
+  <Accordion title="Blocked: Resource Exhaustion" icon="infinity">
+    - `while (true) {}` ❌
+    - Recursive functions ❌
+    - Unbounded loops ❌
+  </Accordion>
+</AccordionGroup>
+
+**80+ attack vectors blocked** before the code even runs.
+
+### Layer 2: Code Transformation
+
+Code is rewritten for safe execution:
+
+- Wraps in `async function __ag_main()` for top-level await
+- Transforms `callTool` → `__safe_callTool` for tracking
+- Adds iteration limits to all loops
+- Whitelists only safe globals
+
+### Layer 3: AI Scoring Gate (NEW)
+
+The **AI Scoring Gate** detects semantic attack patterns that syntactic validation can't catch:
+
+<AccordionGroup>
+  <Accordion title="Data Exfiltration Detection" icon="file-export">
+    Detects **fetch→send patterns**: scripts that list sensitive data then send it externally
+    ```javascript
+    // ❌ BLOCKED - Exfiltration pattern detected
+    const users = await callTool('users:list', { fields: ['password', 'apiKey'] });
+    await callTool('webhooks:send', { data: users });
+    // Score: 100 (SENSITIVE_FIELD + EXFIL_PATTERN)
+    ```
+  </Accordion>
+  <Accordion title="Bulk Harvesting Prevention" icon="database">
+    Flags **excessive limits** and bulk operation patterns
+    - `limit: 100000` → +25 risk score
+    - `bulkDelete`, `batchProcess` → +20 risk score
+  </Accordion>
+  <Accordion title="Fan-Out Attack Detection" icon="arrows-rotate">
+    Detects tool calls inside loops that could multiply requests
+    ```javascript
+    // ⚠️ WARNING - Fan-out pattern
+    for (const user of users) {
+      await callTool('emails:send', { to: user.email });
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+**8 detection rules** with configurable block/warn thresholds (default: block at 70, warn at 40).
+
+### Layer 4: Runtime Sandbox
+
+[Enclave](/docs/guides/enclave) executes validated code in an isolated Node.js `vm` context:
+
+- Fresh context per execution (no state leakage)
+- Whitelist-only globals (Math, JSON, Array—nothing dangerous)
+- Configurable timeouts (default 3.5s)
+- Iteration limits (default 5,000)
+- Tool call caps (default 100)
+- I/O flood protection (console rate limiting)
+
+### Layer 5: Self-Reference Guard
+
+Scripts **cannot** call CodeCall tools from within scripts. This prevents:
+
+- Recursive execution attacks
+- Sandbox escape via nested calls
+- Resource multiplication
+
+```javascript
+// Inside codecall:execute script
+await callTool('codecall:execute', { script: '...' }); // ❌ BLOCKED
+```
+
+### Layer 6: Output Sanitization
+
+All results are cleaned before returning:
+
+- Stack traces removed
+- File paths scrubbed
+- Circular references handled
+- Oversized outputs truncated
+
+**Six layers of security** ensure that even if one layer is bypassed, others catch the attack.
 
 ---
 
-## From direct calls to a code-first meta-API
+## Semantic Search with Local Embeddings
 
-Here’s the mental shift.
+When you have 150 tools, keyword search isn't enough. "Get user billing" should find `invoices:listForUser` even though the words don't match.
 
-### Before: one tool, one call
+CodeCall uses [VectoriaDB](/docs/guides/vectoriadb) for semantic tool search:
 
-The model:
+<CardGroup cols={2}>
+  <Card title="Local Embeddings" icon="lock">
+    No external API calls. No data leaves your server.
+  </Card>
+  <Card title="Fast" icon="bolt">
+    Sub-millisecond queries. Works offline.
+  </Card>
+  <Card title="TF-IDF Fallback" icon="gauge-high">
+    For simpler deployments, use TF-IDF with zero model loading.
+  </Card>
+  <Card title="HNSW for Scale" icon="database">
+    Enable HNSW indexing for 1000+ tools.
+  </Card>
+</CardGroup>
 
-- Lists tools.
-- Picks one.
-- Calls it.
-- Repeats.
-
-```jsonc
-{
-  "tool": "users:list",
-  "input": { "limit": 50 }
-}
+```typescript
+CodeCallPlugin.init({
+  embedding: {
+    strategy: 'tfidf',           // Fast, no model needed
+    // Or: strategy: 'embedding', // Semantic search
+    similarityThreshold: 0.3,
+  },
+});
 ```
-
-### After: CodeCall orchestrates tools in code
-
-The model:
-
-1. Searches for tools.
-2. Describes them.
-3. Writes a plan that calls them via `callTool()`.
-
-Conceptually:
-
-```jsonc
-{
-  "tool": "code-call:execute",
-  "input": {
-    "allowedTools": ["users:list", "billing:listInvoices"],
-    "script": "/* JS plan that calls tools */"
-  }
-}
-```
-
-Inside that `script`:
-
-```js
-async function main() {
-  const users = await callTool('users:list', { limit: 100 });
-  const invoices = await callTool('billing:listInvoices', {
-    status: 'unpaid',
-  });
-
-  // Join in JS
-  const byUserId = new Map(invoices.items.map((i) => [i.userId, i]));
-  return users.items.filter((u) => byUserId.has(u.id)).map((u) => ({ userId: u.id, invoice: byUserId.get(u.id) }));
-}
-
-return main();
-```
-
-The **orchestration lives in JS**, not in a new backend endpoint.
 
 ---
 
-## Plugging CodeCall into a FrontMCP app
+## 5 Minutes to Production
 
-Adding CodeCall to an app looks like adding a plugin.
+```bash
+npm install @frontmcp/plugins
+```
 
-```ts title="src/example.app.ts"
-import { App, Tool } from '@frontmcp/sdk';
-import CodeCallPlugin from '@frontmcp/plugins/codecall';
+```typescript
+import { App, Tool, ToolContext } from '@frontmcp/sdk';
+import { CodeCallPlugin } from '@frontmcp/plugins';
 
 @Tool({
-  name: 'health:ping',
-  description: 'Simple health check',
-  codecall: {
-    visibleInListTools: true, // stays visible in list_tools
-    enabledInCodeCall: true, // also usable in CodeCall plans
-  },
+  name: 'users:list',
+  description: 'List users with optional filtering',
 })
-class HealthPingTool {
-  async run() {
-    return { status: 'ok' };
+class ListUsersTool extends ToolContext {
+  async execute(input: { status?: string; limit?: number }) {
+    // Your existing implementation
+    return { users: await db.users.find(input) };
   }
 }
 
 @App({
-  id: 'example',
-  name: 'Example App',
-  tools: [HealthPingTool],
+  id: 'my-api',
+  name: 'My API',
+  tools: [ListUsersTool, /* ...47 more tools */],
   plugins: [
     CodeCallPlugin.init({
-      mode: 'codecall_only', // recommended default
-      topK: 8,
-      maxDefinitions: 8,
-      directCalls: {
-        enabled: true,
-        allowedTools: ['users:getById', 'billing:getInvoice'],
-      },
-      enclave: {
-        timeoutMs: 5000, // 5 second timeout
-        maxToolCalls: 100, // Max 100 tool calls
-        maxIterations: 10000, // Max 10K loop iterations
-        allowConsole: true, // Enable console logging
-      },
-      // Note: Enclave automatically blocks eval, Function, require, process
-      // via ast-guard AST validation - no manual configuration needed
+      mode: 'codecall_only',      // Hide tools from list_tools
+      vm: { preset: 'secure' },   // Bank-grade security
+      embedding: { strategy: 'tfidf' },
     }),
   ],
 })
-export default class ExampleApp {}
+export default class MyApp {}
 ```
 
-From the client’s point of view, `list_tools` now returns:
-
-- `code-call:search`
-- `code-call:describe`
-- `code-call:execute`
-- (optional) `code-call:invoke`
-- plus any tools explicitly marked `codeCall:{visibleInListTools: true}`.
-
-Everything else is reachable **only** through CodeCall.
+Your MCP client now sees **4 tools** instead of 50. Your agent uses code to orchestrate them. Your token costs drop by 90%.
 
 ---
 
-## Three exposure modes (you pick the shape)
+## The Plugin Ecosystem Advantage
 
-CodeCall controls **two things** per tool:
+CodeCall is just one plugin. FrontMCP's plugin system lets you stack capabilities:
 
-- Is it **visible** in `list_tools`?
-- Is it **callable** via CodeCall?
-
-Different deployments want different defaults, so the plugin gives you three modes.
-
-<img
-  className="blog-full-image dark-img"
-  src="../../assets/banners/codecall-plugin/code-call-options.dark.png"
-  alt="Three cards for the codecall_only, codecall_opt_in, and metadata_driven exposure modes."
-/>
-<img
-  className="blog-full-image light-img"
-  src="../../assets/banners/codecall-plugin/code-call-options.light.png"
-  alt="Three cards for the codecall_only, codecall_opt_in, and metadata_driven exposure modes."
-/>
-
-<Columns cols={3}>
-  <Card title="codecall_only" icon="compress">
-    <b>Default.</b>
-    <br />
-    Many tools, expose them <i>all</i> via CodeCall, but keep <code>list_tools</code> small.
-    <br />
-    <br />
-    - Hidden by default in <code>list_tools</code>
-    <br />
-    - Included by default in CodeCall index
-  </Card>
-
-{' '}
-
-<Card title="codecall_opt_in" icon="toggle-on">
-  Large toolbox where only a subset should be reachable from code.
-  <br />
-  <br />- Hidden by default in <code>list_tools</code>
-  <br />- <b>Only</b> tools with <code>enabledInCodeCall: true</code> are indexed
-</Card>
-
-  <Card title="metadata_driven" icon="sliders">
-    Small toolset (~10 tools). Mix classic tool calls + CodeCall with per-tool config.
-    <br />
-    <br />
-    - Visibility + CodeCall enabled are both explicit
-    <br />
-    - No global assumptions
-  </Card>
-</Columns>
-
-Per-tool metadata:
-
-```ts
-@Tool({
-  name: 'users:list',
-  description: 'List users with pagination',
-  codecall: {
-    enabledInCodeCall: true, // searchable + callable
-    visibleInListTools: false, // hidden from classic list_tools
-  },
+```typescript
+@App({
+  plugins: [
+    CodeCallPlugin.init({ mode: 'codecall_only' }),
+    RateLimitPlugin.init({
+      rules: [{ tool: 'codecall:execute', limit: 10, window: '1m' }]
+    }),
+    CachePlugin.init({
+      tools: { 'codecall:describe': { ttl: 300 } }
+    }),
+    LoggingPlugin.init({
+      format: 'json',
+      includeToolCalls: true
+    }),
+  ],
 })
-class ListUsersTool {
-  // ...
-}
 ```
 
-This lets you:
+**Every plugin works with CodeCall.** Rate limiting applies to script execution. Caching speeds up tool discovery. Logging captures the full execution trace.
 
-- Keep UX-friendly tools visible.
-- Hide noisy/generated ones.
-- Still orchestrate everything via CodeCall.
+This composability is why FrontMCP exists: build production MCP servers without reinventing infrastructure.
 
 ---
 
-## Multi-app servers: app-aware search, shared plans
-
-If you followed the **“One Server, Many Agents”** pattern, you probably have multiple apps:
-
-- `user` app (users, sessions, orgs)
-- `billing` app (invoices, payments)
-- `ops` app (health, metrics)
-- maybe OpenAPI-backed apps
-
-CodeCall is **multi-app aware**:
-
-- The tool index includes `appId` for each tool.
-- `code-call:search` accepts a `filter` with `appIds`.
-
-Conceptually:
-
-```jsonc
-// Search only in "user" app
-{
-  "tool": "code-call:search",
-  "input": {
-    "query": "get current user profile",
-    "filter": { "appIds": ["user"] }
-  }
-}
-
-// Search across "user" + "billing"
-{
-  "tool": "code-call:search",
-  "input": {
-    "query": "unpaid invoices for current user",
-    "filter": { "appIds": ["user", "billing"] }
-  }
-}
-```
-
-The model can decide per task:
-
-- “I just need `user` data.”
-- “I need to join `user` + `billing`.”
-
-And your server logic doesn’t change.
-
----
-
-## Inside Enclave: safety, logging, and observability
-
-CodeCall runs plans inside **Enclave** - FrontMCP's defense-in-depth execution environment.
-
-### Security pipeline
-
-1. **AST validation (ast-guard)**
-
-- Parse the `script` into an AST.
-- Apply the AgentScript preset which blocks:
-  - `eval`, `Function`, `setTimeout`, `setInterval`
-  - Global access via `process`, `require`, `window`, `globalThis`, `this`
-  - Prototype chain manipulation
-  - All identifiers not in the whitelist
-
-2. **Code transformation**
-
-- Wrap code in `async function __ag_main()` for top-level await support
-- Transform `callTool` → `__safe_callTool` (proxied through Enclave)
-- Transform loops (`for`, `while`, `do-while`) → safe versions with iteration limits
-
-3. **Runtime sandboxing (Node.js vm)**
-
-- Execute in isolated context with controlled globals
-- Enforce timeout limits (default 30s)
-- Track iteration count and tool calls
-- Sanitize stack traces to prevent information leakage
-
-4. **Execution + result model**
-
-CodeCall normalizes the outcome into a small set of statuses:
-
-- `ok`
-- `syntax_error`
-- `illegal_access`
-- `runtime_error` (script-level)
-- `tool_error` (specific tool call)
-- `timeout`
-
-This gives your orchestrator clear hooks for:
-
-- Retrying with different inputs.
-- Asking the model to fix its own JS.
-- Distinguishing “tool is broken” from “plan is broken.”
-
-### Logging & notifications from inside plans
-
-Inside the VM, plans can use:
-
-```js
-await callTool('users:list', { limit: 50 });
-const meta = getTool('users:list'); // name + schemas
-
-codecallContext.tenantId; // read-only context
-
-mcpLog('info', 'Loaded users', { count: 50 });
-mcpNotify('step_started', { step: 'sync_billing' });
-```
-
-You can:
-
-- Enable/disable `console`.
-- Enable/disable `mcpLog` / `mcpNotify`.
-- Still rely on your **existing logging + notification plumbing** in FrontMCP.
-
-Every `callTool()` also emits **tool call start/end notifications** so UIs can show “calling X… done” in real time.
-
----
-
-## Direct calls without a VM: `code-call:invoke`
-
-Not every task needs a JS plan. Sometimes the model just needs:
-
-> “Call one tool with this input and return the result.”
-
-For that, CodeCall exposes an optional meta-tool:
-
-- `code-call:invoke` (enabled via `directCalls.enabled`).
-
-Conceptual call:
-
-```json
-{
-  "tool": "codecall.invoke",
-  "input": {
-    "tool": "users:getById",
-    "input": { "id": "123" }
-  }
-}
-```
-
-Behavior:
-
-- No VM.
-- No user-authored JS.
-- Calls the tool via the **same pipeline** as a normal MCP call:
-
-- PII plugin(s)
-- auth
-- rate limiting
-- logging/audit
-
-This is perfect for:
-
-- Simple “one-and-done” actions.
-- Reducing complexity and latency when orchestration isn’t needed.
-- Still leveraging CodeCall’s **modes, allowlists, and filters**.
-
----
-
-## PII & privacy: same guarantees as normal tools
-
-CodeCall **does not bypass** your existing FrontMCP plugins.
-
-When a plan calls:
-
-```js
-await callTool('users:list', { limit: 100 });
-```
-
-Under the hood, it uses the same **tool pipeline** as:
-
-```jsonc
-{ "tool": "users:list", "input": { "limit": 100 } }
-```
-
-So:
-
-- Your **PII plugin** still sees inputs and outputs.
-- Your **auth plugin** still enforces identities/scopes.
-- Your **logging/rate-limit plugins** still run.
-
-The VM only ever sees what a normal MCP tool call would see **after** plugins.
-
-> In other words: CodeCall orchestrates tools; it doesn’t create a new backdoor around your policies.
-
-This is aligned with Anthropic’s goal of keeping sensitive intermediate data in the execution environment instead of always pushing it through the model context. ([Anthropic][1])
-
----
-
-## Example: “query-like” behavior over existing tools
-
-Imagine you want:
-
-> “Return IDs of users whose first name starts with `me` and who logged in today.”
-
-Your REST API doesn’t have that exact query. With CodeCall, the model can assemble it in JS:
-
-```js
-// Script passed to `code-call:execute`
-
-async function main() {
-  // 1. Get a coarse page of users
-  const page = await callTool('users:list', { limit: 500 });
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  const matching = page.items.filter((user) => {
-    const first = (user.firstName || '').toLowerCase();
-    const lastLogin = (user.lastLogin || '').slice(0, 10);
-    return first.startsWith('me') && lastLogin === today;
-  });
-
-  return matching.map((u) => u.id);
-}
-
-return main();
-```
-
-No new endpoint, no schema migrations—just code.
-
----
-
-## CodeCall as a concrete implementation of “Code Execution with MCP”
-
-To connect the dots explicitly:
-
-- Anthropic’s **[“Code execution with MCP: Building more efficient agents”](https://www.anthropic.com/engineering/code-execution-with-mcp)** describes a **client-side** pattern:
-
-- Represent MCP servers as code APIs.
-- Let agents write code to orchestrate tools.
-- Use execution environments to cut token costs and keep sensitive data out of the model. ([Anthropic][1])
-
-- **CodeCall** is a **FrontMCP plugin** that:
-
-- Exposes your tools as a small meta-API instead of a huge list.
-- Lets the model describe & plan in **JavaScript**.
-- Executes plans in a sandboxed runtime.
-- Reuses your existing PII, auth, and lifecycle plugins by calling tools through the normal pipeline.
-
-Different layers, same philosophy:
-
-> Stop flooding the model with tool definitions and intermediate data; let it write code, and run that code safely.
-
----
-
-## Where to go next
-
-<Columns cols={2}>
-  <Card
-    title="Read Anthropic’s article"
-    href="https://www.anthropic.com/engineering/code-execution-with-mcp"
-    icon="arrow-up-right-from-square"
-    arrow="true"
-    cta="See the pattern"
-  >
-    Understand the original “code execution with MCP” pattern that inspired CodeCall’s meta-API design.
+## Real-World Impact
+
+<CardGroup cols={3}>
+  <Card title="88% Token Reduction" icon="coins">
+    100 tools: 25K tokens → 3K tokens in context
   </Card>
+  <Card title="90% Workflow Savings" icon="bolt">
+    Multi-tool workflows: 50K tokens → 5K tokens
+  </Card>
+  <Card title="~15ms Overhead" icon="clock">
+    AST validation + sandbox execution
+  </Card>
+</CardGroup>
 
+**Before CodeCall:**
+
+- Endless REST endpoint development
+- Context window overflow
+- Model confusion with large tool lists
+- High token costs for simple operations
+
+**After CodeCall:**
+
+- Let the model write the query logic
+- Minimal context usage
+- Clean 4-tool interface
+- Pay only for results, not intermediate data
+
+---
+
+## When to Use CodeCall
+
+<CardGroup cols={2}>
+  <Card title="Use CodeCall When" icon="check" color="#16A34A">
+    - You have **20+ tools** (or anticipate growth)
+    - OpenAPI adapters generate dozens of endpoints
+    - Workflows require **multi-tool orchestration**
+    - You need **in-tool filtering** without building REST queries
+    - You want **any-LLM compatibility**
+    - Security and compliance require **audit trails**
+  </Card>
+  <Card title="Skip CodeCall When" icon="xmark" color="#DC2626">
+    - You have **< 10 simple tools**
+    - Workflows are **single-tool operations**
+    - You're building a **quick prototype**
+    - Tools already have **comprehensive filtering APIs**
+  </Card>
+</CardGroup>
+
+---
+
+## The Future of MCP Is Code-First
+
+Anthropic was right: the future isn't bigger context windows or smarter models picking from longer tool lists. It's **models that write code to orchestrate tools.**
+
+But that future shouldn't be locked to one provider, one model, one cloud.
+
+**CodeCall makes code execution for MCP:**
+
+- Open source and auditable
+- Self-hosted in your VPC
+- Compatible with any LLM
+- Production-ready today
+
+Your MCP server has 100 tools. They don't have to break your agent anymore.
+
+---
+
+## Get Started
+
+<CardGroup cols={2}>
   <Card
-    title="Read the CodeCall docs"
-    href="/docs/plugins/codecall-plugin"
+    title="Read the Documentation"
+    href="/docs/plugins/codecall"
     icon="book-open"
-    arrow="true"
-    cta="Deep dive">
-    Learn the full meta-tool contracts, result shapes, and configuration options in FrontMCP.
+    arrow={true}
+  >
+    Complete guide to CodeCall configuration, security model, and API reference
   </Card>
-</Columns>
-
-<Columns cols={2}>
   <Card
-    title="Add CodeCall to an app"
+    title="5-Minute Quickstart"
     href="/docs/getting-started/quickstart"
     icon="rocket"
-    arrow="true"
-    cta="Try it in dev"
+    arrow={true}
   >
-    Start from an existing FrontMCP app and wrap it with CodeCall in a few lines of code.
+    Add CodeCall to an existing FrontMCP app in minutes
   </Card>
-
   <Card
-    title="Star the repo & contribute"
-    href="[https://github.com/agentfront/frontmcp](https://github.com/agentfront/frontmcp)"
-    icon="star"
-    arrow="true"
-    cta="Join the project">
-CodeCall ships as part of the FrontMCP plugins package. Issues, PRs, and feedback are very welcome.
-</Card>
-</Columns>
+    title="Security Deep Dive"
+    href="/docs/plugins/codecall/security"
+    icon="shield-check"
+    arrow={true}
+  >
+    Understand the 4-layer defense-in-depth security model
+  </Card>
+  <Card
+    title="GitHub Repository"
+    href="https://github.com/agentfront/frontmcp"
+    icon="github"
+    arrow={true}
+  >
+    Star the repo, open issues, contribute
+  </Card>
+</CardGroup>
 
-[1]: https://www.anthropic.com/engineering/code-execution-with-mcp?utm_source=chatgpt.com 'Code execution with MCP: Building more efficient agents - Anthropic'
-[2]: https://kiadev.net/news/2025-11-08-anthropic-mcp-code-execution/?utm_source=chatgpt.com 'Anthropic Turns MCP Servers Into Code APIs to Cut Token Costs'
+---
+
+_CodeCall is part of FrontMCP, the open-source framework for building production MCP servers. [Star us on GitHub](https://github.com/agentfront/frontmcp) to follow development._

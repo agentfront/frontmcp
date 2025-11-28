@@ -168,14 +168,37 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     try {
       const resolved = this.state.required.resolvedTools;
 
-      const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => ({
-        name: finalName,
-        title: tool.metadata.name,
-        description: tool.metadata.description,
-        annotations: tool.metadata.annotations,
-        inputSchema:
-          (tool.metadata as any).rawInputSchema ?? (zodToJsonSchema(z.object(tool.metadata.inputSchema) as any) as any),
-      }));
+      const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
+        // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
+        let inputSchema: any;
+        if (tool.rawInputSchema) {
+          // Already converted to JSON Schema
+          inputSchema = tool.rawInputSchema;
+        } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
+          // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
+          // Convert to JSON Schema
+          try {
+            // as any used here to prevent hard ts-check on tool input that is redundant
+            // and just slow down the build process. types here are unnecessary.
+            // eslint-disable-next-line
+            inputSchema = zodToJsonSchema(z.object(tool.inputSchema) as any) as any;
+          } catch (e) {
+            this.logger.warn(`Failed to convert inputSchema for tool ${finalName}:`, e);
+            inputSchema = { type: 'object', properties: {} };
+          }
+        } else {
+          // No schema defined - use empty object schema
+          inputSchema = { type: 'object', properties: {} };
+        }
+
+        return {
+          name: finalName,
+          title: tool.metadata.name,
+          description: tool.metadata.description,
+          annotations: tool.metadata.annotations,
+          inputSchema,
+        };
+      });
 
       const preview = this.sample(tools.map((t) => t.name)).join(', ');
       const extra = tools.length > 5 ? `, +${tools.length - 5} more` : '';

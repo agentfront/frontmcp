@@ -122,7 +122,7 @@
               },
               {
                 "group": "Plugins",
-                "pages": ["docs/plugins/cache-plugin"]
+                "pages": ["docs/plugins/cache-plugin", "docs/plugins/codecall-plugin"]
               },
               {
                 "group": "Guides",

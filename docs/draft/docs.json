@@ -120,7 +120,21 @@
               },
               {
                 "group": "Plugins",
-                "pages": ["docs/plugins/overview", "docs/plugins/cache-plugin", "docs/plugins/codecall-plugin"]
+                "pages": [
+                  "docs/plugins/overview",
+                  "docs/plugins/cache-plugin",
+                  {
+                    "group": "CodeCall",
+                    "icon": "code",
+                    "pages": [
+                      "docs/plugins/codecall/overview",
+                      "docs/plugins/codecall/security",
+                      "docs/plugins/codecall/api-reference",
+                      "docs/plugins/codecall/configuration",
+                      "docs/plugins/codecall/scaling"
+                    ]
+                  }
+                ]
               },
               {
                 "group": "Testing",
@@ -141,7 +155,10 @@
                   "docs/guides/create-plugin",
                   "docs/guides/add-openapi-adapter",
                   "docs/guides/caching-and-cache-miss",
-                  "docs/guides/customize-flow-stages"
+                  "docs/guides/customize-flow-stages",
+                  "docs/guides/ast-guard",
+                  "docs/guides/enclave",
+                  "docs/guides/vectoriadb"
                 ]
               },
               {

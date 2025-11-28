@@ -10,6 +10,7 @@ import {
 } from './interfaces';
 import { ParseError, InvalidSourceError, ConfigurationError } from './errors';
 import { transformAst, generateCode } from './transformer';
+import { PreScanner, PreScannerError, type PreScannerPresetLevel, type PartialPreScannerConfig } from './pre-scanner';
 
 /**
  * Main AST validator class
@@ -81,6 +82,64 @@ export class JSAstValidator {
     const issues: ValidationIssue[] = [];
     let ast: acorn.Node | undefined;
     let parseError: Error | undefined;
+    let preScanError: Error | undefined;
+    let preScanStats: ValidationResult['preScanStats'] | undefined;
+
+    // Run pre-scanner (Layer 0) if enabled
+    const preScanEnabled = config.preScan?.enabled !== false;
+    if (preScanEnabled) {
+      const preset = (config.preScan?.preset ?? 'standard') as PreScannerPresetLevel;
+      const preScanConfig = config.preScan?.config as PartialPreScannerConfig | undefined;
+
+      const preScanner = new PreScanner({
+        preset,
+        config: preScanConfig,
+      });
+
+      const preScanResult = preScanner.scan(source);
+
+      // Store stats
+      preScanStats = {
+        inputSize: preScanResult.stats.inputSize,
+        lineCount: preScanResult.stats.lineCount,
+        maxNestingDepthFound: preScanResult.stats.maxNestingDepthFound,
+        regexCount: preScanResult.stats.regexCount,
+        scanDurationMs: preScanResult.stats.scanDurationMs,
+      };
+
+      // Add pre-scanner issues to validation issues
+      for (const issue of preScanResult.issues) {
+        issues.push({
+          code: issue.code,
+          severity:
+            issue.severity === 'error'
+              ? ValidationSeverity.ERROR
+              : issue.severity === 'warning'
+              ? ValidationSeverity.WARNING
+              : ValidationSeverity.INFO,
+          message: issue.message,
+          location: issue.line !== undefined ? { line: issue.line, column: issue.column ?? 0 } : undefined,
+          data: issue.data,
+        });
+      }
+
+      // If pre-scan failed, return early (don't attempt to parse)
+      if (!preScanResult.success) {
+        preScanError = new PreScannerError(
+          preScanResult.fatalIssue?.message ?? 'Pre-scan failed',
+          (preScanResult.fatalIssue?.code as any) ?? 'PRESCANNER_UNKNOWN',
+          { position: preScanResult.fatalIssue?.position, line: preScanResult.fatalIssue?.line },
+        );
+
+        return {
+          valid: false,
+          issues,
+          preScanError,
+          preScanStats,
+          rulesExecuted: 0,
+        };
+      }
+    }
 
     // Parse the source code
     try {
@@ -107,6 +166,7 @@ export class JSAstValidator {
         valid: false,
         issues,
         parseError,
+        preScanStats,
         rulesExecuted: 0,
       };
     }
@@ -185,6 +245,7 @@ export class JSAstValidator {
       ast,
       rulesExecuted: enabledRules.length,
       transformedCode,
+      preScanStats,
     };
   }
 

@@ -8,14 +8,48 @@ import {
   executeToolInputSchema,
   ExecuteToolInput,
 } from './execute.schema';
-import { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import EnclaveService from '../services/enclave.service';
+import CodeCallConfig from '../providers/code-call.config';
+import { assertNotSelfReference } from '../security/self-reference-guard';
+import {
+  createToolCallError,
+  TOOL_CALL_ERROR_CODES,
+  ToolCallResult,
+  CallToolOptions,
+  ToolCallErrorCode,
+} from '../errors/tool-call.errors';
+
+/**
+ * Determine the error code from an error object.
+ * Used to categorize errors for sanitized reporting.
+ */
+function getErrorCode(error: unknown): ToolCallErrorCode {
+  if (!(error instanceof Error)) {
+    return TOOL_CALL_ERROR_CODES.EXECUTION;
+  }
+
+  // Check for specific error types
+  if (error.name === 'ZodError' || error.message?.includes('validation')) {
+    return TOOL_CALL_ERROR_CODES.VALIDATION;
+  }
+
+  if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
+    return TOOL_CALL_ERROR_CODES.TIMEOUT;
+  }
+
+  return TOOL_CALL_ERROR_CODES.EXECUTION;
+}
 
 @Tool({
   name: 'codecall:execute',
   cache: {
     ttl: 0, // No caching - each execution is unique
     slideWindow: false,
+  },
+  codecall: {
+    enabledInCodeCall: false,
+    visibleInListTools: true,
   },
   description: executeToolDescription,
   inputSchema: executeToolInputSchema,
@@ -29,19 +63,45 @@ export default class ExecuteTool extends ToolContext {
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
 
     const environment: CodeCallVmEnvironment = {
-      callTool: async <TInput, TResult>(name: string, toolInput: TInput): Promise<TResult> => {
-        // Check if tool is allowed
+      callTool: async <TInput, TResult>(
+        name: string,
+        toolInput: TInput,
+        options?: CallToolOptions,
+      ): Promise<TResult | ToolCallResult<TResult>> => {
+        const throwOnError = options?.throwOnError !== false; // Default: true
+
+        // ============================================================
+        // SECURITY LAYER 1: Self-reference blocking (FIRST CHECK)
+        // This MUST be the first check - no exceptions, no try/catch
+        // ============================================================
+        assertNotSelfReference(name);
+
+        // ============================================================
+        // SECURITY LAYER 2: Whitelist check (if configured)
+        // ============================================================
         if (allowedToolSet && !allowedToolSet.has(name)) {
-          throw new Error(`Tool "${name}" is not in the allowedTools list`);
+          const error = createToolCallError(TOOL_CALL_ERROR_CODES.ACCESS_DENIED, name);
+          if (throwOnError) {
+            throw error;
+          }
+          return { success: false, error };
         }
 
+        // ============================================================
+        // Tool execution with result-based error handling
+        // All errors from here are sanitized before exposure
+        // ============================================================
         try {
           // Find the tool in the registry
           const tools = this.scope.tools.getTools(true);
           const tool = tools.find((t) => t.name === name || t.fullName === name);
 
           if (!tool) {
-            throw new Error(`Tool "${name}" not found`);
+            const error = createToolCallError(TOOL_CALL_ERROR_CODES.NOT_FOUND, name);
+            if (throwOnError) {
+              throw error;
+            }
+            return { success: false, error };
           }
 
           // Create a tool context and execute
@@ -53,15 +113,28 @@ export default class ExecuteTool extends ToolContext {
           );
 
           const result = await toolContext.execute(toolInput as any);
-          return result as TResult;
-        } catch (error: any) {
-          // Re-throw with tool context
-          const toolError = new Error(error.message || 'Tool call failed');
-          (toolError as any).toolName = name;
-          (toolError as any).toolInput = toolInput;
-          (toolError as any).code = error.code;
-          (toolError as any).details = error.details;
-          throw toolError;
+
+          // Success path
+          if (throwOnError) {
+            return result as TResult;
+          }
+          return { success: true, data: result as TResult };
+        } catch (error: unknown) {
+          // ============================================================
+          // Error sanitization - NEVER expose internal details
+          // ============================================================
+
+          // Determine error code from the error type
+          const errorCode = getErrorCode(error);
+          const rawMessage = error instanceof Error ? error.message : undefined;
+
+          const sanitizedError = createToolCallError(errorCode, name, rawMessage);
+
+          if (throwOnError) {
+            // Throw sanitized error (no stack trace, no internal details)
+            throw sanitizedError;
+          }
+          return { success: false, error: sanitizedError };
         }
       },
 
@@ -85,7 +158,7 @@ export default class ExecuteTool extends ToolContext {
 
       codecallContext: Object.freeze(context || {}),
 
-      console: this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any)?.allowConsole ? console : undefined,
+      console: this.tryGet(CodeCallConfig)?.get('resolvedVm.allowConsole') ? console : undefined,
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
@@ -98,9 +171,9 @@ export default class ExecuteTool extends ToolContext {
       },
     };
 
-    // Get the enclave service and execute
-    const enclaveService = this.get<EnclaveService>('codecall:enclave' as any);
-    const vmOptions = this.get<ResolvedCodeCallVmOptions>('codecall:vm-options' as any);
+    // Get the enclave service and config
+    const enclaveService = this.get(EnclaveService);
+    const config = this.get(CodeCallConfig);
 
     try {
       const executionResult = await enclaveService.execute(script, environment);
@@ -110,7 +183,7 @@ export default class ExecuteTool extends ToolContext {
         return {
           status: 'timeout',
           error: {
-            message: `Script execution timed out after ${vmOptions?.timeoutMs || 30000}ms`,
+            message: `Script execution timed out after ${config.get('resolvedVm.timeoutMs')}ms`,
           },
         };
       }
@@ -162,14 +235,20 @@ export default class ExecuteTool extends ToolContext {
         result: executionResult.result,
         logs: executionResult.logs.length > 0 ? executionResult.logs : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // Type-safe error handling
+      const errorName = error instanceof Error ? error.name : 'Error';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const errorLoc = (error as { loc?: { line: number; column: number } }).loc;
+
       // Check for syntax errors
-      if (error.name === 'SyntaxError' || error.message?.includes('syntax')) {
+      if (errorName === 'SyntaxError' || errorMessage?.includes('syntax')) {
         return {
           status: 'syntax_error',
           error: {
-            message: error.message || 'Syntax error in script',
-            location: error.loc ? { line: error.loc.line, column: error.loc.column } : undefined,
+            message: errorMessage || 'Syntax error in script',
+            location: errorLoc ? { line: errorLoc.line, column: errorLoc.column } : undefined,
           },
         };
       }
@@ -179,9 +258,9 @@ export default class ExecuteTool extends ToolContext {
         status: 'runtime_error',
         error: {
           source: 'script',
-          message: error.message || 'An unexpected error occurred during script execution',
-          name: error.name || 'Error',
-          stack: error.stack,
+          message: errorMessage || 'An unexpected error occurred during script execution',
+          name: errorName,
+          stack: errorStack,
         },
       };
     }

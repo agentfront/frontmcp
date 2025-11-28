@@ -5047,14 +5047,14 @@ acorn-jsx@^5.0.0, acorn-jsx@^5.3.2:
   resolved "https://registry.yarnpkg.com/acorn-jsx/-/acorn-jsx-5.3.2.tgz#7ed5bb55908b3b2f1bc55c6af1653bada7f07937"
   integrity sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==
 
-acorn-walk@^8.1.1, acorn-walk@^8.3.4:
+acorn-walk@8.3.4, acorn-walk@^8.1.1:
   version "8.3.4"
   resolved "https://registry.yarnpkg.com/acorn-walk/-/acorn-walk-8.3.4.tgz#794dd169c3977edf4ba4ea47583587c5866236b7"
   integrity sha512-ueEepnujpqee2o5aIYnvHU6C0A42MNdsIDeqy5BydrkuC5R1ZuUFnm27EeFJGoEHJQgn3uleRvmTXaJgfXbt4g==
   dependencies:
     acorn "^8.11.0"
 
-acorn@^8.0.0, acorn@^8.11.0, acorn@^8.11.2, acorn@^8.14.0, acorn@^8.15.0, acorn@^8.4.1, acorn@^8.5.0, acorn@^8.9.0:
+acorn@8.15.0, acorn@^8.0.0, acorn@^8.11.0, acorn@^8.11.2, acorn@^8.15.0, acorn@^8.4.1, acorn@^8.5.0, acorn@^8.9.0:
   version "8.15.0"
   resolved "https://registry.yarnpkg.com/acorn/-/acorn-8.15.0.tgz#a360898bc415edaac46c8241f6383975b930b816"
   integrity sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==
@@ -5319,7 +5319,7 @@ ast-types@^0.13.4:
   dependencies:
     tslib "^2.0.1"
 
-astring@^1.8.0, astring@^1.8.1, astring@^1.9.0:
+astring@1.9.0, astring@^1.8.0, astring@^1.8.1:
   version "1.9.0"
   resolved "https://registry.yarnpkg.com/astring/-/astring-1.9.0.tgz#cc73e6062a7eb03e7d19c22d8b0b3451fd9bfeef"
   integrity sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg==
