@@ -1,13 +1,14 @@
 // file: libs/plugins/src/codecall/tools/invoke.schema.ts
 import { z } from 'zod';
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
-export const invokeToolDescription = `Call ONE tool directly. Same as callTool() but without VM overhead.
+export const invokeToolDescription = `Call ONE tool directly. Returns standard MCP CallToolResult.
 
 USE invoke: single tool, no transformation
 USE execute: multiple tools, loops, filtering, joining
 
 INPUT: tool (string), input (object matching tool schema)
-OUTPUT: { status: "success", result } | { status: "error", error: { type, message } }
+OUTPUT: MCP CallToolResult (same as standard tool call)
 ERRORS: tool_not_found (→ re-search) | validation_error | execution_error | permission_denied
 
 FLOW: search → describe → invoke`;
@@ -27,21 +28,7 @@ export const invokeToolInputSchema = z.object({
 
 export type InvokeToolInput = z.infer<typeof invokeToolInputSchema>;
 
-export const invokeToolOutputSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('success'),
-    result: z.unknown().describe('The tool execution result'),
-  }),
-  z.object({
-    status: z.literal('error'),
-    error: z.object({
-      type: z
-        .enum(['tool_not_found', 'validation_error', 'execution_error', 'permission_denied'])
-        .describe('Type of error that occurred'),
-      message: z.string().describe('Human-readable error message'),
-      details: z.unknown().optional().describe('Additional error details if available'),
-    }),
-  }),
-]);
+// Use standard MCP CallToolResult schema - returns same format as direct tool call
+export const invokeToolOutputSchema = CallToolResultSchema;
 
 export type InvokeToolOutput = z.infer<typeof invokeToolOutputSchema>;

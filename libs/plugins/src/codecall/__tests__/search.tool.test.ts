@@ -11,7 +11,9 @@ jest.mock('@frontmcp/sdk', () => ({
     private services = new Map<unknown, unknown>();
     scope = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-    constructor(_args?: any) {}
+    constructor(_args?: any) {
+      // Intentionally empty - mock constructor
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get(token: any): any {
       return this.services.get(token);
@@ -238,6 +240,281 @@ describe('SearchTool', () => {
       });
 
       expect(result.tools[0].appId).toBeUndefined();
+    });
+  });
+
+  describe('Input Edge Cases', () => {
+    it('should handle single query with minimum length (2 chars)', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'go:run', appId: 'go', description: 'Run Go', relevanceScore: 0.8 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['go'],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('go', expect.any(Object));
+      expect(result.tools).toHaveLength(1);
+    });
+
+    it('should handle query at maximum length (256 chars)', async () => {
+      const maxQuery = 'a'.repeat(256);
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: [maxQuery],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith(maxQuery, expect.any(Object));
+    });
+
+    it('should handle maximum number of queries (10)', async () => {
+      const tenQueries = Array.from({ length: 10 }, (_, i) => `query ${i}`);
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: tenQueries,
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledTimes(10);
+    });
+
+    it('should handle minRelevanceScore at boundary 0', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.001 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['list'],
+        minRelevanceScore: 0,
+      });
+
+      // Score 0.001 should pass when minRelevanceScore is 0
+      expect(result.tools).toHaveLength(1);
+    });
+
+    it('should handle minRelevanceScore at boundary 1', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.99 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['list'],
+        minRelevanceScore: 1,
+      });
+
+      // Score 0.99 should NOT pass when minRelevanceScore is 1
+      expect(result.tools).toHaveLength(0);
+    });
+
+    it('should handle topK at boundary 1', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.9 },
+      ]);
+
+      await tool.execute({
+        queries: ['list'],
+        topK: 1,
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('list', expect.objectContaining({ topK: 1 }));
+    });
+
+    it('should handle topK at boundary 50', async () => {
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['list'],
+        topK: 50,
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('list', expect.objectContaining({ topK: 50 }));
+    });
+
+    it('should handle queries with unicode characters', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.8 },
+      ]);
+
+      await tool.execute({
+        queries: ['ユーザー検索', 'búsqueda de usuario', '🔍 find'],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('ユーザー検索', expect.any(Object));
+      expect(mockSearchService.search).toHaveBeenCalledWith('búsqueda de usuario', expect.any(Object));
+      expect(mockSearchService.search).toHaveBeenCalledWith('🔍 find', expect.any(Object));
+    });
+
+    it('should handle queries with special characters', async () => {
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['list-users', 'get_user', 'user.find'],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('list-users', expect.any(Object));
+      expect(mockSearchService.search).toHaveBeenCalledWith('get_user', expect.any(Object));
+      expect(mockSearchService.search).toHaveBeenCalledWith('user.find', expect.any(Object));
+    });
+
+    it('should handle queries with newlines and tabs', async () => {
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['find\nusers', 'get\tusers'],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('find\nusers', expect.any(Object));
+      expect(mockSearchService.search).toHaveBeenCalledWith('get\tusers', expect.any(Object));
+    });
+
+    it('should handle empty excludeToolNames array', async () => {
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['find users'],
+        excludeToolNames: [],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith(
+        'find users',
+        expect.objectContaining({ excludeToolNames: [] }),
+      );
+    });
+
+    it('should handle empty appIds array', async () => {
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['find users'],
+        appIds: [],
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith('find users', expect.objectContaining({ appIds: [] }));
+    });
+
+    it('should handle maximum excludeToolNames (50)', async () => {
+      const fiftyToolNames = Array.from({ length: 50 }, (_, i) => `tool:name${i}`);
+      mockSearchService.search.mockResolvedValue([]);
+      mockSearchService.hasTool.mockReturnValue(true);
+
+      await tool.execute({
+        queries: ['find users'],
+        excludeToolNames: fiftyToolNames,
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith(
+        'find users',
+        expect.objectContaining({ excludeToolNames: fiftyToolNames }),
+      );
+    });
+
+    it('should handle maximum appIds (10)', async () => {
+      const tenAppIds = Array.from({ length: 10 }, (_, i) => `app${i}`);
+      mockSearchService.search.mockResolvedValue([]);
+
+      await tool.execute({
+        queries: ['find users'],
+        appIds: tenAppIds,
+      });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith(
+        'find users',
+        expect.objectContaining({ appIds: tenAppIds }),
+      );
+    });
+  });
+
+  describe('Result Edge Cases', () => {
+    it('should handle all queries returning same tools', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.9 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['list users', 'get users', 'find users'],
+      });
+
+      // Should deduplicate - only one tool
+      expect(result.tools).toHaveLength(1);
+      // Should have all matched queries
+      expect(result.tools[0].matchedQueries).toContain('list users');
+      expect(result.tools[0].matchedQueries).toContain('get users');
+      expect(result.tools[0].matchedQueries).toContain('find users');
+    });
+
+    it('should handle very high number of results', async () => {
+      const manyTools = Array.from({ length: 100 }, (_, i) => ({
+        toolName: `tool:name${i}`,
+        appId: `app${i % 10}`,
+        description: `Tool ${i}`,
+        relevanceScore: 0.9 - i * 0.001,
+      }));
+      mockSearchService.search.mockResolvedValue(manyTools);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['find tools'],
+      });
+
+      // All tools above minRelevanceScore should be returned
+      expect(result.tools.length).toBeGreaterThan(0);
+      // Should be sorted by relevance
+      for (let i = 1; i < result.tools.length; i++) {
+        expect(result.tools[i - 1].relevanceScore).toBeGreaterThanOrEqual(result.tools[i].relevanceScore);
+      }
+    });
+
+    it('should handle search service returning empty description', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: '', relevanceScore: 0.9 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['list users'],
+      });
+
+      expect(result.tools[0].description).toBe('');
+    });
+
+    it('should handle identical relevance scores', async () => {
+      mockSearchService.search.mockResolvedValue([
+        { toolName: 'users:list', appId: 'users', description: 'List users', relevanceScore: 0.9 },
+        { toolName: 'users:get', appId: 'users', description: 'Get users', relevanceScore: 0.9 },
+        { toolName: 'users:find', appId: 'users', description: 'Find users', relevanceScore: 0.9 },
+      ]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['users'],
+      });
+
+      expect(result.tools).toHaveLength(3);
+      // All should have same score
+      expect(result.tools[0].relevanceScore).toBe(0.9);
+      expect(result.tools[1].relevanceScore).toBe(0.9);
+      expect(result.tools[2].relevanceScore).toBe(0.9);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle search service throwing error', async () => {
+      mockSearchService.search.mockRejectedValue(new Error('Search service unavailable'));
+
+      await expect(
+        tool.execute({
+          queries: ['find users'],
+        }),
+      ).rejects.toThrow('Search service unavailable');
+    });
+
+    it('should handle getTotalCount returning 0', async () => {
+      mockSearchService.getTotalCount.mockReturnValue(0);
+      mockSearchService.search.mockResolvedValue([]);
+
+      const result: SearchToolOutput = await tool.execute({
+        queries: ['find users'],
+      });
+
+      expect(result.totalAvailableTools).toBe(0);
     });
   });
 });

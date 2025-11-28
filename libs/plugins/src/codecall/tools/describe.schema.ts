@@ -44,8 +44,14 @@ export const describeToolOutputSchema = z.object({
         name: z.string().describe('Tool name to be used in callTool() within codecall:execute scripts'),
         appId: z.string().describe('The app ID this tool belongs to'),
         description: z.string().describe('Detailed description of what this tool does'),
-        inputSchema: z.any().describe('JSON Schema object describing the tool input parameters'),
-        outputSchema: z.any().describe('JSON Schema object describing the tool output structure'),
+        inputSchema: z
+          .record(z.unknown())
+          .nullable()
+          .describe('JSON Schema object describing the tool input parameters'),
+        outputSchema: z
+          .record(z.unknown())
+          .nullable()
+          .describe('JSON Schema object describing the tool output structure'),
         annotations: ToolAnnotationsSchema.optional().describe('MCP tool annotations (metadata)'),
         usageExample: z
           .object({

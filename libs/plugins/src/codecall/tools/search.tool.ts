@@ -52,6 +52,7 @@ export default class SearchTool extends ToolContext {
 
     // Track tools across all queries for deduplication
     const toolMap = new Map<string, ToolMatch>();
+    let lowRelevanceCount = 0;
 
     // Search for each query and merge results
     for (const query of queries) {
@@ -64,6 +65,7 @@ export default class SearchTool extends ToolContext {
       for (const result of searchResults) {
         // Filter by minRelevanceScore
         if (result.relevanceScore < minRelevanceScore) {
+          lowRelevanceCount++;
           continue;
         }
 
@@ -103,6 +105,14 @@ export default class SearchTool extends ToolContext {
         message: `No tools found for queries: ${queries.join(', ')}${
           appIds?.length ? ` in apps: ${appIds.join(', ')}` : ''
         }`,
+      });
+    }
+
+    // Add warning if results were filtered due to low relevance
+    if (lowRelevanceCount > 0 && tools.length > 0) {
+      warnings.push({
+        type: 'low_relevance',
+        message: `${lowRelevanceCount} result(s) filtered due to relevance below ${minRelevanceScore}`,
       });
     }
 
