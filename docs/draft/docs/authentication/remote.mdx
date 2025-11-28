@@ -13,11 +13,13 @@ FrontMCP supports two approaches for integrating external identity providers:
     Pass-through tokens from the IdP. FrontMCP validates but doesn't issue tokens.
 
     **Best for:** Single IdP, existing auth infrastructure
+
   </Card>
   <Card title="Orchestrated Remote" icon="sitemap">
     FrontMCP acts as OAuth server, proxying user authentication to upstream IdP.
 
     **Best for:** Multi-provider, progressive auth, federated scenarios
+
   </Card>
 </CardGroup>
 
@@ -43,14 +45,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `remote.provider` | `string` | Required | Base URL of the identity provider |
-| `remote.jwksUri` | `string` | Auto-discovered | Custom JWKS endpoint |
-| `remote.jwks` | `JSONWebKeySet` | - | Inline JWKS for offline verification |
-| `expectedAudience` | `string \| string[]` | Issuer URL | Required audience claim value(s) |
-| `requiredScopes` | `string[]` | `[]` | Scopes that must be present in token |
-| `allowAnonymous` | `boolean` | `false` | Allow requests without tokens |
+| Option             | Type                 | Default         | Description                          |
+| ------------------ | -------------------- | --------------- | ------------------------------------ |
+| `remote.provider`  | `string`             | Required        | Base URL of the identity provider    |
+| `remote.jwksUri`   | `string`             | Auto-discovered | Custom JWKS endpoint                 |
+| `remote.jwks`      | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
+| `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present in token |
+| `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
 
 ### Provider Examples
 
@@ -166,15 +168,15 @@ export class Server {}
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `remote.provider` | `string` | Required | Upstream IdP base URL |
-| `remote.clientId` | `string` | Required | OAuth client ID |
-| `remote.clientSecret` | `string` | - | OAuth client secret (confidential clients) |
-| `remote.scopes` | `string[]` | `['openid']` | Scopes to request from IdP |
-| `remote.dcrEnabled` | `boolean` | `false` | Use Dynamic Client Registration |
-| `consent` | `boolean` | `false` | Show consent UI after IdP login |
-| `sessionMode` | `'stateful' \| 'stateless'` | `'stateful'` | Session management strategy |
+| Option                | Type                        | Default      | Description                                |
+| --------------------- | --------------------------- | ------------ | ------------------------------------------ |
+| `remote.provider`     | `string`                    | Required     | Upstream IdP base URL                      |
+| `remote.clientId`     | `string`                    | Required     | OAuth client ID                            |
+| `remote.clientSecret` | `string`                    | -            | OAuth client secret (confidential clients) |
+| `remote.scopes`       | `string[]`                  | `['openid']` | Scopes to request from IdP                 |
+| `remote.dcrEnabled`   | `boolean`                   | `false`      | Use Dynamic Client Registration            |
+| `consent`             | `boolean`                   | `false`      | Show consent UI after IdP login            |
+| `sessionMode`         | `'stateful' \| 'stateless'` | `'stateful'` | Session management strategy                |
 
 ### When to Use Orchestrated Remote
 

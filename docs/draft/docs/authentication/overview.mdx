@@ -17,27 +17,30 @@ FrontMCP supports three authentication modes, each designed for different deploy
     No authentication required. Anonymous sessions are auto-generated for all requests.
 
     **Best for:** Development, testing, public APIs
+
   </Card>
   <Card title="Transparent Mode" icon="arrow-right-arrow-left">
     Pass-through tokens from external identity providers. FrontMCP validates tokens against upstream JWKS.
 
     **Best for:** Existing Auth0, Okta, Azure AD integrations
+
   </Card>
   <Card title="Orchestrated Mode" icon="sitemap">
     Full OAuth 2.1 authorization server. Can be self-contained (local) or proxy to upstream IdP (remote).
 
     **Best for:** Multi-app scenarios, federated auth, progressive authorization
+
   </Card>
 </CardGroup>
 
 ## Quick Mode Selection
 
-| Scenario | Recommended Mode | Why |
-|----------|-----------------|-----|
-| Local development | `public` | No setup required |
-| Existing IdP (Auth0, Okta) | `transparent` | Direct token pass-through |
-| Multi-provider federation | `orchestrated` (remote) | Unified session, multiple IdPs |
-| Self-contained auth | `orchestrated` (local) | Full control, built-in OAuth server |
+| Scenario                   | Recommended Mode        | Why                                 |
+| -------------------------- | ----------------------- | ----------------------------------- |
+| Local development          | `public`                | No setup required                   |
+| Existing IdP (Auth0, Okta) | `transparent`           | Direct token pass-through           |
+| Multi-provider federation  | `orchestrated` (remote) | Unified session, multiple IdPs      |
+| Self-contained auth        | `orchestrated` (local)  | Full control, built-in OAuth server |
 
 ## Configuration Levels
 
@@ -59,6 +62,7 @@ Authentication can be configured at two levels:
     })
     export class Server {}
     ```
+
   </Tab>
   <Tab title="App Level">
     Each app defines its own auth provider (required when `splitByApp: true`):
@@ -82,6 +86,7 @@ Authentication can be configured at two levels:
     })
     export class Server {}
     ```
+
   </Tab>
 </Tabs>
 
@@ -102,10 +107,10 @@ FrontMCP's orchestrated mode is fully OAuth 2.1 compliant:
 
 Sessions determine how tokens are stored and managed:
 
-| Session Mode | Token Storage | Refresh | Multi-Instance |
-|-------------|---------------|---------|----------------|
-| **Stateful** | Server-side (Redis/memory) | Silent refresh | Requires shared storage |
-| **Stateless** | Embedded in JWT | Client must re-auth | Works anywhere |
+| Session Mode  | Token Storage              | Refresh             | Multi-Instance          |
+| ------------- | -------------------------- | ------------------- | ----------------------- |
+| **Stateful**  | Server-side (Redis/memory) | Silent refresh      | Requires shared storage |
+| **Stateless** | Embedded in JWT            | Client must re-auth | Works anywhere          |
 
 <Tip>
   Use **stateful** sessions when working with short-lived upstream tokens. You'll get automatic refresh without client round-trips.
@@ -127,11 +132,11 @@ auth: {
 
 FrontMCP exposes standard OAuth discovery endpoints:
 
-| Endpoint | Description |
-|----------|-------------|
+| Endpoint                                  | Description                                        |
+| ----------------------------------------- | -------------------------------------------------- |
 | `/.well-known/oauth-authorization-server` | OAuth 2.0 Authorization Server Metadata (RFC 8414) |
-| `/.well-known/jwks.json` | JSON Web Key Set for token verification (RFC 7517) |
-| `/.well-known/oauth-protected-resource` | Protected Resource Metadata |
+| `/.well-known/jwks.json`                  | JSON Web Key Set for token verification (RFC 7517) |
+| `/.well-known/oauth-protected-resource`   | Protected Resource Metadata                        |
 
 ## Next Steps
 

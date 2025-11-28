@@ -54,6 +54,7 @@ sequenceDiagram
 ```
 
 The proxy maintains:
+
 - **Client registration** with pre-provisioned credentials
 - **JWKS** for signing FrontMCP tokens
 - **Session state** linking upstream tokens to local sessions
@@ -86,14 +87,14 @@ export class Server {}
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `remote.provider` | `string` | Required | Upstream IdP base URL |
-| `remote.clientId` | `string` | Required | Pre-registered client ID |
-| `remote.clientSecret` | `string` | - | Client secret (confidential clients) |
-| `remote.scopes` | `string[]` | `['openid']` | Scopes to request from IdP |
-| `consent` | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration |
-| `sessionMode` | `'stateful' \| 'stateless'` | `'stateful'` | Session strategy |
+| Option                | Type                        | Default              | Description                          |
+| --------------------- | --------------------------- | -------------------- | ------------------------------------ |
+| `remote.provider`     | `string`                    | Required             | Upstream IdP base URL                |
+| `remote.clientId`     | `string`                    | Required             | Pre-registered client ID             |
+| `remote.clientSecret` | `string`                    | -                    | Client secret (confidential clients) |
+| `remote.scopes`       | `string[]`                  | `['openid']`         | Scopes to request from IdP           |
+| `consent`             | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration             |
+| `sessionMode`         | `'stateful' \| 'stateless'` | `'stateful'`         | Session strategy                     |
 
 ---
 
@@ -263,15 +264,15 @@ export class Server {}
 
 ## Proxy vs Direct Comparison
 
-| Aspect | OAuth Proxy | Direct (Transparent) |
-|--------|-------------|---------------------|
-| Token Issuer | FrontMCP | Upstream IdP |
-| JWKS | FrontMCP-managed | IdP-managed |
-| Session Control | Full | Pass-through |
-| Custom Claims | Yes | No |
-| Consent UI | Optional | No |
-| DCR Required | No | Yes (or pre-registered) |
-| Complexity | Higher | Lower |
+| Aspect          | OAuth Proxy      | Direct (Transparent)    |
+| --------------- | ---------------- | ----------------------- |
+| Token Issuer    | FrontMCP         | Upstream IdP            |
+| JWKS            | FrontMCP-managed | IdP-managed             |
+| Session Control | Full             | Pass-through            |
+| Custom Claims   | Yes              | No                      |
+| Consent UI      | Optional         | No                      |
+| DCR Required    | No               | Yes (or pre-registered) |
+| Complexity      | Higher           | Lower                   |
 
 ---
 
