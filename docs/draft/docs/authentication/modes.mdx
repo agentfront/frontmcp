@@ -29,15 +29,15 @@ graph TB
 
 ## Mode Comparison
 
-| Feature | Public | Transparent | Orchestrated |
-|---------|--------|-------------|--------------|
-| Token Required | No | Yes (external) | Yes (FrontMCP-issued) |
-| User Identity | Anonymous | From upstream IdP | From login or upstream |
-| JWKS Source | Self-generated | Upstream IdP | Self-generated |
-| Session Management | Minimal | Pass-through | Full control |
-| Multi-provider | No | Single provider | Multiple providers |
-| Progressive Auth | No | No | Yes |
-| Consent UI | No | No | Optional |
+| Feature            | Public         | Transparent       | Orchestrated           |
+| ------------------ | -------------- | ----------------- | ---------------------- |
+| Token Required     | No             | Yes (external)    | Yes (FrontMCP-issued)  |
+| User Identity      | Anonymous      | From upstream IdP | From login or upstream |
+| JWKS Source        | Self-generated | Upstream IdP      | Self-generated         |
+| Session Management | Minimal        | Pass-through      | Full control           |
+| Multi-provider     | No             | Single provider   | Multiple providers     |
+| Progressive Auth   | No             | No                | Yes                    |
+| Consent UI         | No             | No                | Optional               |
 
 ---
 
@@ -67,13 +67,13 @@ sequenceDiagram
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `sessionTtl` | `number` | `3600` | Session lifetime in seconds |
-| `anonymousScopes` | `string[]` | `['anonymous']` | Scopes assigned to anonymous sessions |
-| `publicAccess.tools` | `string[] \| 'all'` | `'all'` | Tools accessible without auth |
-| `publicAccess.prompts` | `string[] \| 'all'` | `'all'` | Prompts accessible without auth |
-| `publicAccess.rateLimit` | `number` | `60` | Rate limit per IP per minute |
+| Option                   | Type                | Default         | Description                           |
+| ------------------------ | ------------------- | --------------- | ------------------------------------- |
+| `sessionTtl`             | `number`            | `3600`          | Session lifetime in seconds           |
+| `anonymousScopes`        | `string[]`          | `['anonymous']` | Scopes assigned to anonymous sessions |
+| `publicAccess.tools`     | `string[] \| 'all'` | `'all'`         | Tools accessible without auth         |
+| `publicAccess.prompts`   | `string[] \| 'all'` | `'all'`         | Prompts accessible without auth       |
+| `publicAccess.rateLimit` | `number`            | `60`            | Rate limit per IP per minute          |
 
 ### Use Cases
 
@@ -132,14 +132,14 @@ sequenceDiagram
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `remote.provider` | `string` | Required | Base URL of the IdP |
-| `remote.jwksUri` | `string` | Auto-discovered | Custom JWKS endpoint |
-| `remote.jwks` | `JSONWebKeySet` | - | Inline JWKS for offline verification |
-| `expectedAudience` | `string \| string[]` | Issuer URL | Required audience claim value(s) |
-| `requiredScopes` | `string[]` | `[]` | Scopes that must be present |
-| `allowAnonymous` | `boolean` | `false` | Allow requests without tokens |
+| Option             | Type                 | Default         | Description                          |
+| ------------------ | -------------------- | --------------- | ------------------------------------ |
+| `remote.provider`  | `string`             | Required        | Base URL of the IdP                  |
+| `remote.jwksUri`   | `string`             | Auto-discovered | Custom JWKS endpoint                 |
+| `remote.jwks`      | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
+| `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present          |
+| `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
 
 ### Provider Examples
 
@@ -276,14 +276,14 @@ sequenceDiagram
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `type` | `'local' \| 'remote'` | Required | Self-contained or upstream proxy |
-| `consent` | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration |
-| `sessionMode` | `'stateful' \| 'stateless'` | `'stateful'` | Token storage strategy |
-| `tokenStorage.type` | `'memory' \| 'redis'` | `'memory'` | Storage backend |
-| `allowDefaultPublic` | `boolean` | `false` | Allow unauthenticated requests |
-| `incrementalAuth` | `IncrementalAuthConfig` | `{ enabled: true }` | Progressive authorization |
+| Option               | Type                        | Default              | Description                      |
+| -------------------- | --------------------------- | -------------------- | -------------------------------- |
+| `type`               | `'local' \| 'remote'`       | Required             | Self-contained or upstream proxy |
+| `consent`            | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration         |
+| `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Token storage strategy           |
+| `tokenStorage.type`  | `'memory' \| 'redis'`       | `'memory'`           | Storage backend                  |
+| `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated requests   |
+| `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization        |
 
 ### Consent Configuration
 
@@ -314,14 +314,14 @@ incrementalAuth: {
 
 Orchestrated mode exposes standard OAuth endpoints:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/oauth/authorize` | GET | Start authorization flow |
-| `/oauth/token` | POST | Exchange code for tokens |
-| `/oauth/register` | POST | Dynamic Client Registration |
-| `/oauth/userinfo` | GET | User profile information |
-| `/.well-known/oauth-authorization-server` | GET | Server metadata |
-| `/.well-known/jwks.json` | GET | Public signing keys |
+| Endpoint                                  | Method | Description                 |
+| ----------------------------------------- | ------ | --------------------------- |
+| `/oauth/authorize`                        | GET    | Start authorization flow    |
+| `/oauth/token`                            | POST   | Exchange code for tokens    |
+| `/oauth/register`                         | POST   | Dynamic Client Registration |
+| `/oauth/userinfo`                         | GET    | User profile information    |
+| `/.well-known/oauth-authorization-server` | GET    | Server metadata             |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys         |
 
 ### Use Cases
 
@@ -369,14 +369,14 @@ graph TD
 
 ## Security Comparison
 
-| Security Aspect | Public | Transparent | Orchestrated |
-|-----------------|--------|-------------|--------------|
-| Token Verification | None | Against upstream JWKS | Against local JWKS |
-| PKCE Support | N/A | Depends on IdP | Always S256 |
-| Refresh Token Rotation | N/A | Depends on IdP | Always rotated |
-| Key Management | Auto-generated | Upstream-managed | Self-managed |
-| Consent UI | No | No | Optional |
-| Session Revocation | N/A | N/A | Supported |
+| Security Aspect        | Public         | Transparent           | Orchestrated       |
+| ---------------------- | -------------- | --------------------- | ------------------ |
+| Token Verification     | None           | Against upstream JWKS | Against local JWKS |
+| PKCE Support           | N/A            | Depends on IdP        | Always S256        |
+| Refresh Token Rotation | N/A            | Depends on IdP        | Always rotated     |
+| Key Management         | Auto-generated | Upstream-managed      | Self-managed       |
+| Consent UI             | No             | No                    | Optional           |
+| Session Revocation     | N/A            | N/A                   | Supported          |
 
 ---
 
