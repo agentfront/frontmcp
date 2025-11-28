@@ -44,7 +44,7 @@ const UnauthorizedSchema = z
     kind: z.literal('unauthorized'),
     prmMetadataHeader: z.string().describe('Path to protected resource metadata'),
   })
-  .describe("401 Unauthorized with 'WWW-Authenticate' header for requesting authentication'");
+  .describe("401 Unauthorized with 'WWW-Authenticate' header for requesting authentication");
 
 const AuthorizedSchema = z
   .object({
@@ -96,9 +96,11 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const sessionIdQuery = request.query['sessionId'] as string | undefined;
 
     const sessionIdHeader = sessionIdRawHeader ?? sessionIdQuery ?? undefined;
+    // Use sessionIdRawHeader (not sessionIdHeader) to distinguish header vs query param
+    // sessionIdHeader is the merged value, but we need to know the source for protocol selection
     const sessionProtocol = httpTransportHeader
       ? 'http'
-      : sessionIdHeader
+      : sessionIdRawHeader
       ? 'streamable-http'
       : sessionIdQuery
       ? 'sse'
