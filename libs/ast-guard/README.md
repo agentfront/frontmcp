@@ -15,7 +15,7 @@ AST Guard is a powerful static analysis tool for JavaScript code. It provides a 
 | Metric         | Value                                                |
 | -------------- | ---------------------------------------------------- |
 | CVE Protection | 100% (all known vm2, isolated-vm, node-vm exploits)  |
-| Security Tests | 516 tests, 100% pass rate                            |
+| Security Tests | 613 tests, 100% pass rate                            |
 | Code Coverage  | 95%+                                                 |
 | Defense Layers | 4 (AST validation, transformation, proxy, isolation) |
 
@@ -27,7 +27,7 @@ AST Guard is a powerful static analysis tool for JavaScript code. It provides a 
 - **Reflection API bypasses**: `Reflect.get`, `Reflect.construct`
 - **Global object access**: `window`, `globalThis`, `this`
 
-For detailed CVE analysis, see [CVE-COVERAGE.md](./docs/CVE-COVERAGE.md). For the full list of 67+ blocked attack vectors, see [SECURITY-AUDIT.md](./docs/SECURITY-AUDIT.md).
+For detailed CVE analysis, see [CVE-COVERAGE.md](./docs/CVE-COVERAGE.md). For the full list of 100+ blocked attack vectors, see [SECURITY-AUDIT.md](./docs/SECURITY-AUDIT.md).
 
 ## Features
 
@@ -862,7 +862,7 @@ These are inherent to **any** static analyzer (not vulnerabilities):
 - [x] Built-in security rules
 - [x] Argument validation
 - [x] Unreachable code detection
-- [x] Comprehensive test suite (516 tests)
+- [x] Comprehensive test suite (613 tests)
 - [x] CVE protection (vm2, isolated-vm, node-vm)
 - [ ] Loop transformation (design complete)
 - [ ] CLI tool

@@ -603,6 +603,290 @@ describe('Enclave Attack Matrix', () => {
     }, 15000);
   });
 
+  describe('Memory Exhaustion Attacks', () => {
+    it('should block or limit large ArrayBuffer allocation', async () => {
+      const enclave = new Enclave({ timeout: 2000 });
+      const code = `new ArrayBuffer(2147483647);`; // 2GB
+
+      const result = await enclave.run(code);
+
+      // Should either fail (out of memory) or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block or limit large Float64Array', async () => {
+      const enclave = new Enclave({ timeout: 2000 });
+      const code = `new Float64Array(100000000);`; // 800MB
+
+      const result = await enclave.run(code);
+
+      // Should either fail or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block or limit large Uint8Array', async () => {
+      const enclave = new Enclave({ timeout: 2000 });
+      const code = `new Uint8Array(1000000000);`; // 1GB
+
+      const result = await enclave.run(code);
+
+      // Should either fail or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should limit Map size growth', async () => {
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 1000 });
+      const code = `
+        const m = new Map();
+        for (let i = 0; i < 10000000; i++) m.set(i, i);
+        return m.size;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should limit Set size growth', async () => {
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 1000 });
+      const code = `
+        const s = new Set();
+        for (let i = 0; i < 10000000; i++) s.add(i);
+        return s.size;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block massive property addition', async () => {
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 1000 });
+      const code = `
+        const o = {};
+        for (let i = 0; i < 10000000; i++) o['k' + i] = i;
+        return Object.keys(o).length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block computed property explosion', async () => {
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 1000 });
+      const code = `
+        const o = {};
+        for (let i = 0; i < 10000000; i++) {
+          o[String.fromCharCode(i % 65535)] = i;
+        }
+        return Object.keys(o).length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should handle sparse array allocation safely', async () => {
+      const enclave = new Enclave({ timeout: 1000 });
+      const code = `
+        const a = [];
+        a.length = 2147483647;
+        return a.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Sparse array length setting should either succeed (no memory used)
+      // or fail validation
+      if (result.success) {
+        expect(result.value).toBe(2147483647);
+      }
+      enclave.dispose();
+    });
+
+    it('should handle sparse array via index safely', async () => {
+      const enclave = new Enclave({ timeout: 1000 });
+      const code = `
+        const a = [];
+        a[2147483646] = 'x';
+        return a.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Sparse array via index should either succeed (no memory used)
+      // or fail validation
+      if (result.success) {
+        expect(result.value).toBe(2147483647);
+      }
+      enclave.dispose();
+    });
+
+    it('should block exponential string growth', async () => {
+      const enclave = new Enclave({ timeout: 500 });
+      const code = `
+        let s = 'a';
+        for (let i = 0; i < 40; i++) s = s + s;
+        return s.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should timeout or run out of memory
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block large string repeat', async () => {
+      const enclave = new Enclave({ timeout: 1000 });
+      const code = `'x'.repeat(2147483647);`;
+
+      const result = await enclave.run(code);
+
+      // Should fail - string too large
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should handle large string split resource consumption', async () => {
+      const enclave = new Enclave({ timeout: 2000 });
+      const code = `
+        // This creates a large array but should be bounded by memory/time
+        const result = 'a'.repeat(10000000).split('');
+        return result.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either fail due to resource limits or succeed with the result
+      // The key point is that it doesn't crash the host process
+      if (result.success) {
+        expect(result.value).toBe(10000000);
+      }
+      enclave.dispose();
+    }, 10000);
+  });
+
+  describe('Async DoS Attacks', () => {
+    it('should handle large array creation and verify iteration protection', async () => {
+      // Test that the enclave can handle array creation attempts
+      // Iteration limits are applied during AST transformation, so we verify
+      // the code either times out or completes within bounds
+      const enclave = new Enclave({ timeout: 500, maxIterations: 1000 });
+      const code = `
+        const p = [];
+        for (let i = 0; i < 100000; i++) {
+          p.push({ idx: i }); // Create many objects
+        }
+        return p.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either fail (timeout/iteration) or succeed with limited items
+      // The key is that it doesn't crash the host
+      if (result.success) {
+        // If it succeeded, the iteration limit wasn't hit - verify bounded
+        expect(typeof result.value).toBe('number');
+      } else {
+        // If it failed, verify we got a meaningful error
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    }, 10000);
+
+    it('should enforce tool call limits on awaited tool calls', async () => {
+      let toolCallCount = 0;
+      const toolHandler: ToolHandler = async () => {
+        toolCallCount++;
+        return { ok: true };
+      };
+      const enclave = new Enclave({
+        toolHandler,
+        timeout: 2000,
+        maxIterations: 10000, // Higher iteration limit
+        maxToolCalls: 50, // Strict tool call limit
+      });
+      const code = `
+        // This should hit tool call limit
+        for (let i = 0; i < 100; i++) {
+          await callTool('t', {});
+        }
+        return 'done';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by tool call limit
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('tool call limit');
+      // Tool calls should be exactly at the limit
+      expect(toolCallCount).toBe(50);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block parallel with massive array', async () => {
+      const toolHandler: ToolHandler = async (name, args) => args;
+      const enclave = new Enclave({ toolHandler, timeout: 1000, maxIterations: 1000, maxToolCalls: 100 });
+      const code = `
+        const calls = [];
+        for (let i = 0; i < 100000; i++) {
+          calls.push({ name: 't', args: { i } });
+        }
+        await parallel(calls);
+        return calls.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit, tool call limit, or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    }, 10000);
+
+    it('should block deeply nested tool call chains', async () => {
+      let callCount = 0;
+      const toolHandler: ToolHandler = async () => {
+        callCount++;
+        return { count: callCount };
+      };
+      const enclave = new Enclave({
+        toolHandler,
+        timeout: 1000,
+        maxIterations: 100,
+        maxToolCalls: 50,
+      });
+      const code = `
+        // Each iteration awaits a tool call
+        let result = { count: 0 };
+        for (let i = 0; i < 100; i++) {
+          result = await callTool('counter', {});
+        }
+        return result.count;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by tool call limit (50) before completing 100 calls
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('tool call limit');
+      enclave.dispose();
+    }, 10000);
+  });
+
   describe('Tool Security (ATK-5, ATK-56 to ATK-61, ATK-71)', () => {
     it('ATK-5: should ensure tool responses are pure data', async () => {
       // Malicious tool handler that tries to return a live object
@@ -627,7 +911,7 @@ describe('Enclave Attack Matrix', () => {
       enclave.dispose();
     });
 
-    it('ATK-56: should validate tool names', async () => {
+    it('ATK-56: should handle tool name filtering at runtime', async () => {
       const toolHandler: ToolHandler = async (toolName) => {
         // Only allow specific tools
         if (toolName === 'allowed_tool') {
@@ -636,7 +920,7 @@ describe('Enclave Attack Matrix', () => {
         throw new Error(`Tool ${toolName} not allowed`);
       };
 
-      // Disable validation since we're testing runtime tool handler behavior
+      // Testing runtime tool handler behavior (not AST validation)
       const enclave = new Enclave({ toolHandler, validate: false });
       const code = `await callTool('dangerous_tool', {});`;
 

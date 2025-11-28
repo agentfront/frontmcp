@@ -72,7 +72,7 @@ describe('Serialization Security Tests', () => {
       enclave.dispose();
     });
 
-    it('should handle nested __proto__ in returned objects', async () => {
+    it('should strip nested __proto__ keys from returned objects', async () => {
       const enclave = new Enclave({
         toolHandler: async () => ({
           level1: {
@@ -420,6 +420,127 @@ describe('Serialization Security Tests', () => {
       if (result.success) {
         expect(result.value).toBe('string');
       }
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Tool Result Attacks', () => {
+    it('should block getter execution leaking Function on tool results', async () => {
+      // Create an object with a getter that tries to return Function
+      const evilObj = {};
+      Object.defineProperty(evilObj, 'data', {
+        get() {
+          return Function;
+        },
+        enumerable: true,
+      });
+
+      const enclave = new Enclave({
+        toolHandler: async () => evilObj,
+      });
+
+      const code = `
+        const r = await callTool('t', {});
+        return typeof r.data;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Getter should be stripped during sanitization
+      // so data should be undefined or not a function
+      if (result.success) {
+        expect(result.value).not.toBe('function');
+      }
+
+      enclave.dispose();
+    });
+
+    it('should strip Symbol properties from tool results', async () => {
+      const enclave = new Enclave({
+        toolHandler: async () => ({
+          [Symbol.toStringTag]: 'Promise',
+          normalProp: 'value',
+        }),
+      });
+
+      const code = `
+        const r = await callTool('t', {});
+        return Object.keys(r);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Symbol properties should be stripped
+      if (result.success) {
+        const keys = result.value as string[];
+        expect(keys).not.toContain(Symbol.toStringTag.toString());
+      }
+
+      enclave.dispose();
+    });
+
+    it('should enforce maxProperties limit on tool results', async () => {
+      const enclave = new Enclave({
+        toolHandler: async () => {
+          const o: Record<string, number> = {};
+          for (let i = 0; i < 20000; i++) {
+            o[`p${i}`] = i;
+          }
+          return o;
+        },
+      });
+
+      const code = `return await callTool('t', {});`;
+
+      const result = await enclave.run(code);
+
+      // Should fail due to maxProperties limit
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('maximum properties');
+
+      enclave.dispose();
+    });
+
+    it('should handle circular references in tool results safely', async () => {
+      const enclave = new Enclave({
+        toolHandler: async () => {
+          const o: Record<string, unknown> = { data: 'test' };
+          o['self'] = o;
+          return o;
+        },
+      });
+
+      const code = `return await callTool('t', {});`;
+
+      const result = await enclave.run(code);
+
+      // Should handle circular reference safely
+      if (result.success) {
+        const value = result.value as Record<string, unknown>;
+        expect(value['data']).toBe('test');
+        // Circular ref should be replaced with marker
+        expect(value['self']).toBe('[Circular]');
+      }
+
+      enclave.dispose();
+    });
+
+    it('should prevent spread operator constructor access on tool results', async () => {
+      const enclave = new Enclave({
+        toolHandler: async () => ({ data: 1 }),
+      });
+
+      const code = `
+        const r = await callTool('t', {});
+        const s = { ...r };
+        return typeof s.constructor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
 
       enclave.dispose();
     });

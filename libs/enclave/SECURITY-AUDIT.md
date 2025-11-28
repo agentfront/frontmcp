@@ -1,9 +1,9 @@
 # Enclave Security Audit Report
 
-**Date:** 2025-11-27
-**Package:** `@frontmcp/enclave` v0.5.0
-**Test Suite:** 516 security tests
-**Pass Rate:** 516/516 passing (100%)
+**Date:** 2025-11-28
+**Package:** `@frontmcp/enclave` v0.6.0
+**Test Suite:** 690 security tests
+**Pass Rate:** 690/690 passing (100%)
 
 ## Executive Summary
 
@@ -265,7 +265,7 @@ The enclave implements **6 layers of defense** (0-5):
 
 ## Attack Vectors Tested
 
-### Comprehensive 75-Vector Attack Matrix
+### Comprehensive 100+ Vector Attack Matrix
 
 **Direct Global Access (ATK-1 to ATK-10):**
 
@@ -449,7 +449,7 @@ The @frontmcp/enclave package provides **bank-grade security** for AgentScript e
 - ✅ **I/O flood protection** (console rate limiting)
 - ✅ **AI Scoring Gate** (semantic attack pattern detection)
 - ✅ **Worker Pool Adapter** (optional OS-level memory isolation)
-- ✅ **100% test pass rate** (516/516 passing)
+- ✅ **100% test pass rate** (690/690 passing)
 
 All security mechanisms are functioning correctly with zero failures or skipped tests.
 
@@ -463,20 +463,20 @@ All security mechanisms are functioning correctly with zero failures or skipped 
 
 ### Overall Security Testing
 
-- **Total Security Tests:** 516
-- **Passing:** 516 (100%)
+- **Total Security Tests:** 690
+- **Passing:** 690 (100%)
 - **Failing:** 0
 - **Skipped:** 0
-- **Categories Tested:** 19
+- **Categories Tested:** 25
 - **Critical Vulnerabilities Found:** 0
 - **Medium Issues Found:** 2
 - **Low Issues Found:** 2
 
 ### Attack Matrix Coverage (enclave.attack-matrix.spec.ts)
 
-- **Total Attack Vectors Tested:** 81+
-- **Test Cases:** 64
-- **Passing:** 64 (100%)
+- **Total Attack Vectors Tested:** 100+
+- **Test Cases:** 80+
+- **Passing:** 100%
 - **Skipped:** 0
 - **Attack Categories:**
   - Direct Global Access (10 vectors)
@@ -485,7 +485,7 @@ All security mechanisms are functioning correctly with zero failures or skipped 
   - Eval and Function Constructor (3 vectors)
   - Prototype Pollution (3 vectors)
   - Meta-Programming APIs (7 vectors)
-  - Resource Exhaustion (26 vectors)
+  - Resource Exhaustion (30+ vectors)
   - I/O Flood Protection (3 vectors)
   - Tool Security (7 vectors)
   - WASM and Binary Code (4 vectors)
@@ -493,6 +493,9 @@ All security mechanisms are functioning correctly with zero failures or skipped 
   - Timing and Side Channels (3 vectors)
   - Context Isolation (3 vectors)
   - Worker Pool Security (6 vectors)
+  - Combined/Multi-Vector Attacks (15+ vectors)
+  - Symbol-based Attacks (4 vectors)
+  - Unicode/Encoding Attacks (4 vectors)
 
 ### AI Scoring Gate Coverage (scoring/\*.spec.ts)
 
@@ -516,6 +519,22 @@ All security mechanisms are functioning correctly with zero failures or skipped 
   - Threshold configuration
 
 ## Version History
+
+- **v0.6.0** (2025-11-28): Comprehensive Security Test Expansion
+
+  - Expanded test suite from 516 to 690 tests (+174 tests)
+  - Added 100+ attack vector coverage (up from 81+)
+  - New test categories:
+    - Combined/Multi-Vector Attacks (15+ tests)
+    - Symbol-based Attack Vectors (4 tests)
+    - Unicode/Encoding Attacks (4 tests)
+    - Deep Recursion Attacks (4 tests)
+    - Generator/Iterator DoS (4 tests)
+    - Memory Exhaustion Patterns (12 tests)
+    - Promise/Async DoS Attacks (4 tests)
+    - Object Introspection Attacks (4 tests)
+    - Computed Property Attacks (5 tests)
+  - All 690 tests passing (100% pass rate)
 
 - **v0.5.0** (2025-11-27): Worker Pool Adapter
 

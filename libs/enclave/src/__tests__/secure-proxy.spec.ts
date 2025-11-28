@@ -335,6 +335,50 @@ describe('SecureProxy', () => {
     });
   });
 
+  describe('Proxy Invariant Attacks', () => {
+    it('should handle non-configurable property access correctly', () => {
+      // JavaScript proxy invariants require returning the actual value for
+      // non-configurable, non-writable properties
+      const obj = {};
+      Object.defineProperty(obj, 'frozen', {
+        value: 42,
+        configurable: false,
+        writable: false,
+      });
+
+      const proxy = createSecureProxy(obj);
+
+      // Non-configurable frozen property should be accessible
+      expect((proxy as any).frozen).toBe(42);
+    });
+
+    it('should block constructor via bound functions', () => {
+      const arr = [1, 2, 3];
+      const proxy = createSecureProxy(arr);
+
+      // Get map method from proxied array
+      const map = proxy.map;
+
+      // Even the extracted method should have constructor blocked
+      expect((map as any).constructor).toBeUndefined();
+    });
+
+    it('should handle deep proxy recursion safely', () => {
+      // Create deeply nested object
+      const deep = { a: { b: { c: { d: { e: { value: 42 } } } } } };
+      const proxy = createSecureProxy(deep);
+
+      // Should be able to access deep properties
+      expect(proxy.a.b.c.d.e.value).toBe(42);
+
+      // Constructor should be blocked at all levels
+      expect((proxy as any).constructor).toBeUndefined();
+      expect((proxy.a as any).constructor).toBeUndefined();
+      expect((proxy.a.b as any).constructor).toBeUndefined();
+      expect((proxy.a.b.c as any).constructor).toBeUndefined();
+    });
+  });
+
   describe('onBlocked Callback', () => {
     it('should call onBlocked when dangerous property is accessed', () => {
       const blocked: Array<{ target: unknown; property: string }> = [];

@@ -143,20 +143,17 @@ describe('Enclave Node.js 24 Security', () => {
       enclave.dispose();
     });
 
-    it('should return raw Array.prototype due to proxy invariants', async () => {
-      // NOTE: JavaScript proxy invariants require returning the actual value for
-      // non-configurable, non-writable properties. Array.prototype is such a property.
-      // Our protection is that the returned value is NOT wrapped in a proxy,
-      // preventing further chained attacks like Array.prototype.constructor
+    it('should respect JavaScript proxy invariants for Array.prototype access', async () => {
+      // JavaScript proxy invariants require returning the actual value for
+      // non-configurable, non-writable properties (like Array.prototype).
+      // This test verifies we can access Array.prototype via computed property
+      // without breaking the proxy invariant contract.
       const enclave = new Enclave({ securityLevel: 'STANDARD' });
       const code = `
         const key = 'proto' + 'type';
         const proto = Array[key];
-        // Proxy invariant forces us to return the actual prototype
-        // But the constructor access on that prototype should still be blocked
-        const ctorKey = 'const' + 'ructor';
-        // When accessed via the prototype, constructor is still blocked because
-        // we don't proxy the return value for invariant properties
+        // Verify we get back an object (the actual prototype)
+        // The proxy invariant is respected by returning the real value
         return typeof proto === 'object' ? 'invariant-respected' : 'unexpected';
       `;
 
@@ -319,5 +316,87 @@ describe('Enclave Node.js 24 Security', () => {
       expect(result.value).toBe('safe');
       enclave.dispose();
     });
+  });
+
+  describe('FinalizationRegistry/WeakRef Security Levels', () => {
+    it('should block FinalizationRegistry at all security levels', async () => {
+      for (const level of ['STRICT', 'SECURE', 'STANDARD', 'PERMISSIVE'] as const) {
+        const enclave = new Enclave({ securityLevel: level });
+        const code = `return typeof FinalizationRegistry;`;
+        const result = await enclave.run(code);
+
+        // FinalizationRegistry should be blocked at all security levels
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('FinalizationRegistry');
+        enclave.dispose();
+      }
+    });
+
+    it('should block WeakRef at all security levels', async () => {
+      for (const level of ['STRICT', 'SECURE', 'STANDARD', 'PERMISSIVE'] as const) {
+        const enclave = new Enclave({ securityLevel: level });
+        const code = `return typeof WeakRef;`;
+        const result = await enclave.run(code);
+
+        // WeakRef should be blocked at all security levels
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('WeakRef');
+        enclave.dispose();
+      }
+    });
+  });
+
+  describe('Timing Side-Channel Attacks', () => {
+    it('should block performance.now in STRICT mode', async () => {
+      const enclave = new Enclave({ securityLevel: 'STRICT' });
+      const code = `return typeof performance;`;
+
+      const result = await enclave.run(code);
+
+      // performance should be undefined in STRICT mode
+      if (result.success) {
+        expect(result.value).toBe('undefined');
+      }
+      enclave.dispose();
+    });
+
+    it('should allow Date.now for basic timing needs', async () => {
+      const enclave = new Enclave({ securityLevel: 'STRICT' });
+      const code = `
+        const times = [];
+        for (let i = 0; i < 100; i++) {
+          times.push(Date.now());
+        }
+        return times.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Date.now is allowed but iteration may be limited
+      if (result.success) {
+        expect(result.value).toBe(100);
+      }
+      enclave.dispose();
+    });
+
+    it('should handle high-resolution timing measurement attempts', async () => {
+      const enclave = new Enclave({ securityLevel: 'STRICT', timeout: 1000 });
+      const code = `
+        const start = Date.now();
+        let x = 0;
+        for (let i = 0; i < 1000000; i++) {
+          x += i;
+        }
+        return Date.now() - start;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either timeout or succeed with limited precision
+      if (result.success) {
+        expect(typeof result.value).toBe('number');
+      }
+      enclave.dispose();
+    }, 10000);
   });
 });

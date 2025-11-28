@@ -196,45 +196,40 @@ describe('Constructor Obfuscation Attack Vectors', () => {
       enclave.dispose();
     });
 
-    it('Vector 12: Object.getPrototypeOf is blocked by AST validation', async () => {
+    it('Vector 12: Object.getPrototypeOf blocked by AST validation', async () => {
       const enclave = new Enclave();
       // Object.getPrototypeOf is blocked by NO_META_PROGRAMMING rule at AST level
-      // This is the primary defense - even before runtime proxies
       const code = `
-        // This would trigger AST validation error
-        // Object.getPrototypeOf(Math);
-        return 'blocked';
+        const proto = Object.getPrototypeOf(Math);
+        return 'escaped';
       `;
       const result = await enclave.run(code);
-      expect(result.success).toBe(true);
-      expect(result.value).toBe('blocked');
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toMatch(/getPrototypeOf|META_PROGRAMMING/i);
       enclave.dispose();
     });
 
-    it('Vector 13: Reflect blocked by AST validation in AgentScript preset', async () => {
+    it('Vector 13: Reflect.get blocked by AST validation', async () => {
       // The AgentScript preset blocks 'Reflect' at AST validation level
-      // This is the primary defense - even before runtime proxies
       const enclave = new Enclave({ securityLevel: 'SECURE' });
       const code = `
-        // Reflect is blocked by DisallowedIdentifierRule
-        return 'blocked';
+        return Reflect.get({a: 1}, 'a');
       `;
       const result = await enclave.run(code);
-      expect(result.success).toBe(true);
-      expect(result.value).toBe('blocked');
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('Reflect');
       enclave.dispose();
     });
 
-    it('Vector 14: Reflect blocked by AST validation in all modes', async () => {
+    it('Vector 14: Reflect.getPrototypeOf blocked by AST validation', async () => {
       // All security levels use the AgentScript preset which blocks Reflect
       const enclave = new Enclave({ securityLevel: 'STRICT' });
       const code = `
-        // This code doesn't use Reflect since it's blocked at AST level
-        return 'blocked';
+        return Reflect.getPrototypeOf({});
       `;
       const result = await enclave.run(code);
-      expect(result.success).toBe(true);
-      expect(result.value).toBe('blocked');
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('Reflect');
       enclave.dispose();
     });
   });
@@ -361,16 +356,16 @@ describe('Constructor Obfuscation Attack Vectors', () => {
   });
 
   describe('Category H: Reflection Attacks', () => {
-    it('Vector 23: should block RegExp attacks (blocked by AST validation)', async () => {
-      // RegExp is blocked in most presets by AST validation
+    it('Vector 23: RegExp literals blocked by AST validation', async () => {
+      // RegExp literals are blocked by NoRegexLiteralRule in AgentScript preset
       const enclave = new Enclave();
       const code = `
-        // This uses a regex literal - blocked by NoRegexLiteralRule
-        return 'blocked';
+        const r = /test/;
+        return 'escaped';
       `;
       const result = await enclave.run(code);
-      expect(result.success).toBe(true);
-      expect(result.value).toBe('blocked');
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toMatch(/regex|REGEX/i);
       enclave.dispose();
     });
 
@@ -395,17 +390,17 @@ describe('Constructor Obfuscation Attack Vectors', () => {
   });
 
   describe('Category I: Function Prototype Attacks', () => {
-    it('Vector 25: async functions blocked by AST validation', async () => {
+    it('Vector 25: user-defined function declarations blocked by AST', async () => {
       const enclave = new Enclave();
-      // async functions are blocked by NoAsyncRule in AgentScript preset
+      // User-defined function declarations are blocked to prevent prototype manipulation
+      // Arrow functions are allowed for callbacks, but named function declarations are not
       const code = `
-        // Arrow functions are allowed for array methods
-        const arr = [1, 2, 3].map(x => x * 2);
-        return arr.length === 3 ? 'blocked' : 'escaped';
+        function myFunc() { return 1; }
+        return 'escaped';
       `;
       const result = await enclave.run(code);
-      expect(result.success).toBe(true);
-      expect(result.value).toBe('blocked');
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toMatch(/function/i);
       enclave.dispose();
     });
   });
@@ -479,31 +474,31 @@ describe('Constructor Obfuscation Attack Vectors', () => {
     it('should have tested all 29 documented attack vectors', () => {
       // This test documents all attack vectors for coverage tracking
       const attackVectors = [
-        'Vector 1: String concatenation',
-        'Vector 2: Template literal building',
-        'Vector 3: Array.join',
-        'Vector 4: String.fromCharCode',
-        'Vector 5: Reverse string',
-        'Vector 6: Base64 decode',
-        'Vector 7: Hex escape',
-        'Vector 8: Unicode escape',
-        'Vector 9: Computed destructuring',
-        'Vector 10: __proto__ access',
-        'Vector 11: __proto__ + concat',
-        'Vector 12: Object.getPrototypeOf',
-        'Vector 13: Reflect.get',
-        'Vector 14: Reflect.getPrototypeOf',
-        'Vector 15: toString coercion',
-        'Vector 16: Symbol.toPrimitive',
-        'Vector 17: String.replace',
-        'Vector 18: decodeURIComponent',
-        'Vector 19: Optional chaining',
-        'Vector 20: Comma operator',
+        'Vector 1: String concatenation on Array',
+        'Vector 2: Template literal building on Object',
+        'Vector 3: Array.join on Math',
+        'Vector 4: String.fromCharCode on JSON',
+        'Vector 5: Reverse string on String',
+        'Vector 6: Base64 decode on custom global',
+        'Vector 7: Hex escape on Number',
+        'Vector 8: Unicode escape on Date',
+        'Vector 9: Computed destructuring (AST blocked)',
+        'Vector 10: __proto__ access via string building',
+        'Vector 11: __proto__ + concat constructor',
+        'Vector 12: Object.getPrototypeOf (AST blocked)',
+        'Vector 13: Reflect.get (AST blocked)',
+        'Vector 14: Reflect.getPrototypeOf (AST blocked)',
+        'Vector 15: toString coercion attack',
+        'Vector 16: Symbol.toPrimitive coercion',
+        'Vector 17: String split/join manipulation',
+        'Vector 18: decodeURIComponent attack',
+        'Vector 19: Optional chaining attack',
+        'Vector 20: Comma operator attack',
         'Vector 21: Nested template literal',
-        'Vector 22: Slice extraction',
-        'Vector 23: RegExp.source',
-        'Vector 24: Object.getOwnPropertyNames',
-        'Vector 25: Async function prototype',
+        'Vector 22: Slice extraction attack',
+        'Vector 23: RegExp literals (AST blocked)',
+        'Vector 24: Constructor access on tool results',
+        'Vector 25: User-defined function declarations (AST blocked)',
         'Vector 26: Promise.constructor via callTool',
         'Vector 27: Chained Promise constructor',
         'Vector 28: await callTool functionality',
