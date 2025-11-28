@@ -1,5 +1,5 @@
 // server/transport/transport.registry.ts
-import {createHash} from 'crypto';
+import { createHash } from 'crypto';
 import {
   TransportBus,
   Transporter,
@@ -9,12 +9,13 @@ import {
   TransportType,
   TransportTypeBucket,
 } from './transport.types';
-import {RemoteTransporter} from './transport.remote';
-import {LocalTransporter} from './transport.local';
-import {ServerResponse} from '../common';
-import {Scope} from '../scope';
+import { RemoteTransporter } from './transport.remote';
+import { LocalTransporter } from './transport.local';
+import { ServerResponse } from '../common';
+import { Scope } from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
+import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 
 export class TransportService {
   readonly ready: Promise<void>;
@@ -32,15 +33,10 @@ export class TransportService {
     }
 
     this.ready = this.initialize();
-
   }
 
-
   private async initialize() {
-    await this.scope.registryFlows(
-      HandleStreamableHttpFlow,
-      HandleSseFlow,
-    );
+    await this.scope.registryFlows(HandleStreamableHttpFlow, HandleSseFlow, HandleStatelessHttpFlow);
   }
 
   async destroy() {
@@ -112,6 +108,64 @@ export class TransportService {
     throw new Error('Invalid session: cannot destroy non-existent transporter.');
   }
 
+  /**
+   * Get or create a shared singleton transport for anonymous stateless requests.
+   * All anonymous requests share the same transport instance.
+   */
+  async getOrCreateAnonymousStatelessTransport(type: TransportType, res: ServerResponse): Promise<Transporter> {
+    const key = this.keyOf(type, '__anonymous__', '__stateless__');
+    const existing = this.lookupLocal(key);
+    if (existing) return existing;
+
+    // Create shared transport for all anonymous requests
+    const transporter = new LocalTransporter(this.scope, key, res, () => {
+      this.evictLocal(key);
+      if (this.distributed && this.bus) {
+        this.bus.revoke(key).catch(() => void 0);
+      }
+    });
+
+    await transporter.ready();
+    this.insertLocal(key, transporter);
+
+    if (this.distributed && this.bus) {
+      await this.bus.advertise(key);
+    }
+
+    return transporter;
+  }
+
+  /**
+   * Get or create a singleton transport for authenticated stateless requests.
+   * Each unique token gets its own singleton transport.
+   */
+  async getOrCreateAuthenticatedStatelessTransport(
+    type: TransportType,
+    token: string,
+    res: ServerResponse,
+  ): Promise<Transporter> {
+    const key = this.keyOf(type, token, '__stateless__');
+    const existing = this.lookupLocal(key);
+    if (existing) return existing;
+
+    // Create singleton transport for this token
+    const transporter = new LocalTransporter(this.scope, key, res, () => {
+      this.evictLocal(key);
+      if (this.distributed && this.bus) {
+        this.bus.revoke(key).catch(() => void 0);
+      }
+    });
+
+    await transporter.ready();
+    this.insertLocal(key, transporter);
+
+    if (this.distributed && this.bus) {
+      await this.bus.advertise(key);
+    }
+
+    return transporter;
+  }
+
   /* --------------------------------- internals -------------------------------- */
 
   private sha256(value: string): string {
@@ -145,7 +199,6 @@ export class TransportService {
     }
     return bucket;
   }
-
 
   private lookupLocal(key: TransportKey): Transporter | undefined {
     const typeBucket = this.byType.get(key.type);

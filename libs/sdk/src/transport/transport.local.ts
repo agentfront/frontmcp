@@ -29,6 +29,9 @@ export class LocalTransporter implements Transporter {
         this.adapter = new TransportSSEAdapter(scope, key, onDispose ?? defaultOnDispose, res);
         break;
       case 'streamable-http':
+      case 'stateless-http':
+        // Both streamable-http and stateless-http use the same underlying adapter
+        // The difference is in how the transport is managed (singleton vs per-session)
         this.adapter = new TransportStreamableHttpAdapter(scope, key, onDispose ?? defaultOnDispose, res);
         break;
       default:
@@ -44,7 +47,8 @@ export class LocalTransporter implements Transporter {
     try {
       await this.adapter.handleRequest(req, res);
     } catch (err) {
-      console.error('MCP POST error:', err);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error('MCP POST error:', err instanceof Error ? err.message : 'Unknown error');
       res.status(500).json(rpcError('Internal error'));
     }
   }
@@ -58,7 +62,8 @@ export class LocalTransporter implements Transporter {
       await this.adapter.ready;
       return this.adapter.initialize(req, res);
     } catch (err) {
-      console.error('MCP POST error:', err);
+      // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+      console.error('MCP POST error:', err instanceof Error ? err.message : 'Unknown error');
       res.status(500).json(rpcError('Internal error'));
     }
   }

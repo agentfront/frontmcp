@@ -152,6 +152,7 @@ describe('Plugin Utils', () => {
 
         const plugin = {
           provide: PLUGIN_TOKEN,
+          inject: () => [] as const,
           useFactory: factoryFn,
           name: 'FactoryPlugin',
           description: 'A factory plugin',
@@ -192,6 +193,7 @@ describe('Plugin Utils', () => {
 
         const plugin = {
           provide: PLUGIN_TOKEN,
+          inject: () => [] as const,
           useFactory: factoryFn,
           name: 'FactoryPlugin',
         };
@@ -207,6 +209,7 @@ describe('Plugin Utils', () => {
 
         const plugin = {
           provide: PLUGIN_TOKEN,
+          inject: () => [] as const,
           useFactory: 'not a function' as any,
           name: 'FactoryPlugin',
         };
@@ -362,6 +365,7 @@ describe('Plugin Utils', () => {
 
         const record = normalizePlugin({
           provide: PLUGIN_TOKEN,
+          inject: () => [] as const,
           useFactory: () => ({ name: 'test' }),
           name: 'FactoryPlugin',
         });

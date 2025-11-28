@@ -11,6 +11,7 @@ import {
   LoggingOptions,
   loggingOptionsSchema,
   RawZodShape,
+  AuthOptionsInput,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -61,7 +62,7 @@ export const frontMcpBaseSchema = z.object({
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
   splitByApp?: false;
-  auth?: AuthOptions;
+  auth?: AuthOptionsInput;
 }
 
 const frontMcpMultiAppSchema = frontMcpBaseSchema.extend({

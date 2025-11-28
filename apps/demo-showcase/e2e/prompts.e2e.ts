@@ -4,15 +4,17 @@ import { notesStore } from '../src/apps/notes/data/store';
 /**
  * E2E Tests for Demo Showcase Prompts
  *
- * Note: These tests require a running FrontMCP server with proper OAuth configuration.
- * Currently skipped pending local auth implementation (see enhance-authentication PR).
+ * These tests use public mode - no authentication required.
+ * Server runs with `auth: { mode: 'public' }` which creates
+ * stateful sessions with short TTL, suitable for CI/CD pipelines.
  */
 test.use({
   server: './src/main.ts',
   port: 3012,
+  publicMode: true, // Skip authentication - server is in public mode
 });
 
-test.describe.skip('Prompts', () => {
+test.describe('Prompts', () => {
   test.beforeEach(() => {
     notesStore.clear();
   });

@@ -96,8 +96,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
                 return writeHttpResponse(response, e.output as any);
             }
           }
-          // eslint-disable-next-line no-console
-          console.error(e);
+          // Skip console.error due to Node.js 24 util.inspect bug with Zod validation errors
+          // The error will be returned to the client as a 500 response
           return writeHttpResponse(response, {
             kind: 'text',
             status: 500,
@@ -162,8 +162,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           metas.push(h.metadata);
         } catch (e) {
+          // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
           // eslint-disable-next-line no-console
-          console.warn('[flow] Ignoring injected hook that failed to materialize:', e);
+          console.warn(
+            '[flow] Ignoring injected hook that failed to materialize:',
+            e instanceof Error ? e.message : 'Unknown error',
+          );
         }
       }
 

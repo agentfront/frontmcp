@@ -76,6 +76,12 @@ export interface McpTestClientConfig {
   transport?: TestTransportType;
   /** Authentication configuration */
   auth?: TestAuthConfig;
+  /**
+   * Enable public mode - skip authentication entirely.
+   * When true, no Authorization header is sent and anonymous token is not requested.
+   * Use this for testing public/unauthenticated endpoints in CI/CD pipelines.
+   */
+  publicMode?: boolean;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Enable debug logging (default: false) */

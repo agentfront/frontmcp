@@ -18,7 +18,7 @@ import {
   PromptRegistryInterface,
 } from '../interfaces';
 import { FlowName, ScopeMetadata } from '../metadata';
-import { normalizeEntryPrefix, normalizeScopeBase } from '../../auth/path.utils';
+import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;

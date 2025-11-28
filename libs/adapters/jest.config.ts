@@ -7,7 +7,7 @@ export default {
       '@swc/jest',
       {
         jsc: {
-          target: 'es2017',
+          target: 'es2022',
           parser: {
             syntax: 'typescript',
             decorators: true,

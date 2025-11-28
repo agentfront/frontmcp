@@ -53,6 +53,8 @@ export {
 
 // Theme configuration and types
 export {
+  // Utility types
+  type DeepPartial,
   // Color types
   type ColorScale,
   type SemanticColors,

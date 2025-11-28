@@ -7,3 +7,5 @@ export * from './tool.fixtures';
 export * from './hook.fixtures';
 export * from './provider.fixtures';
 export * from './resource.fixtures';
+export * from './flow.fixtures';
+export * from './oauth.fixtures';

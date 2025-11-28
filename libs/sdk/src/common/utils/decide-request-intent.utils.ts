@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import {ServerRequest} from "../interfaces";
+import { ServerRequest } from '../interfaces';
 
 /* --------------------------------- Schemas --------------------------------- */
 
@@ -31,12 +31,7 @@ export const decisionSchema = z.object({
     .optional(),
 });
 
-export type HttpRequestIntent =
-  | 'legacy-sse'
-  | 'sse'
-  | 'streamable-http'
-  | 'stateful-http'
-  | 'stateless-http';
+export type HttpRequestIntent = 'legacy-sse' | 'sse' | 'streamable-http' | 'stateful-http' | 'stateless-http';
 
 export type Intent = HttpRequestIntent | 'unknown';
 
@@ -110,8 +105,7 @@ const h = (req: ServerRequest, name: string) =>
 
 const wantsSSE = (accept?: string) => (accept ?? '').toLowerCase().includes('text/event-stream');
 const wantsJSON = (accept?: string) => (accept ?? '').toLowerCase().includes('application/json');
-const isInitialize = (body: unknown) =>
-  !!body && typeof body === 'object' && (body as any).method === 'initialize';
+const isInitialize = (body: unknown) => !!body && typeof body === 'object' && (body as any).method === 'initialize';
 
 // Robust path extractor (supports absolute/relative)
 function pathOf(req: ServerRequest): string {
@@ -156,16 +150,16 @@ function computeBitmap(req: ServerRequest, cfg: Config) {
     method === 'POST' && postToMessage
       ? CH_POST_MESSAGE
       : method === 'GET' && acceptSSE
-        ? CH_GET_SSE
-        : method === 'POST' && init && acceptSSE
-          ? CH_POST_INIT_SSE
-          : method === 'POST' && init && acceptJSON
-            ? CH_POST_INIT_JSON
-            : method === 'POST' && !init && acceptSSE
-              ? CH_POST_SSE
-              : method === 'POST' && !init && acceptJSON
-                ? CH_POST_JSON
-                : CH_OTHER;
+      ? CH_GET_SSE
+      : method === 'POST' && init && acceptSSE
+      ? CH_POST_INIT_SSE
+      : method === 'POST' && init && acceptJSON
+      ? CH_POST_INIT_JSON
+      : method === 'POST' && !init && acceptSSE
+      ? CH_POST_SSE
+      : method === 'POST' && !init && acceptJSON
+      ? CH_POST_JSON
+      : CH_OTHER;
 
   let flags = 0;
   if (sessionId) flags |= B_HAS_SESSION;
@@ -240,6 +234,12 @@ const RULES: Rule[] = [
   },
 
   // D) Initialize (POST → SSE)
+  // D1) Stateless initialize (no session, stateless enabled) - must come before streamable rules
+  {
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
+    match: CH_POST_INIT_SSE | B_STATELESS_EN /* no session */,
+    outcome: { intent: 'stateless-http', reason: 'Stateless initialize (no session).' },
+  },
   {
     care: CH_MASK | B_STREAMABLE_EN,
     match: CH_POST_INIT_SSE /* streamable disabled */,
@@ -256,6 +256,12 @@ const RULES: Rule[] = [
   },
 
   // E) Initialize (POST → JSON)
+  // E1) Stateless initialize JSON (no session, stateless enabled) - must come before stateful rules
+  {
+    care: CH_MASK | B_HAS_SESSION | B_STATELESS_EN,
+    match: CH_POST_INIT_JSON | B_STATELESS_EN /* no session */,
+    outcome: { intent: 'stateless-http', reason: 'Stateless initialize JSON (no session).' },
+  },
   {
     care: CH_MASK | B_STREAMABLE_EN,
     match: CH_POST_INIT_JSON /* streamable disabled */,

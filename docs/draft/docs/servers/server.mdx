@@ -108,6 +108,41 @@ http: {
 
 ---
 
+## Transport controls
+
+Every authentication mode (public, transparent, orchestrated) accepts an `auth.transport` block so you can explicitly enable the MCP transports that match your deployment surface. Tightening or relaxing these switches lets you keep production locked down while leaving demos and tests convenient.
+
+| Option                        | Default | When to enable                                                  | Notes                                                                                                                                             |
+| ----------------------------- | ------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enableStreamableHttp`        | `true`  | Modern MCP clients (Claude Desktop, Cursor, Rendezvous)         | Primary transport that streams JSON-RPC over HTTP; turn it off only when debugging pure JSON flows.                                               |
+| `enableStatefulHttp`          | `false` | Local previews, OAuth consent screens, Jest suites              | Adds a JSON-only endpoint so requests resolve without an SSE stream—handy for `@frontmcp/testing`, health checks, and the auth demos.             |
+| `enableStatelessHttp`         | `false` | Public mode or CI agents that cannot run `initialize`           | Creates singleton transports (shared for anonymous traffic, per-token for authenticated users) so requests can skip the initialization handshake. |
+| `enableSseListener`           | `true`  | Manual SSE subscribers or dashboards                            | Controls the `GET /message` endpoint. Disable to reduce long-lived sockets when everything uses Streamable HTTP.                                  |
+| `enableLegacySSE`             | `false` | Supporting pre-Streamable clients temporarily                   | Keeps the legacy HTTP + SSE combo alive—plan to remove once all clients upgrade.                                                                  |
+| `requireSessionForStreamable` | `true`  | Public demos or scripted tests that cannot persist a session ID | Set to `false` to let Streamable HTTP requests bootstrap themselves (the auth demo projects use this).                                            |
+
+<Tip>
+Leave `enableStatelessHttp` off in production unless you fully trust the client surface. Stateless transports reuse process-wide connections, which is perfect for CI but can bypass fine-grained session teardown.
+</Tip>
+
+```ts
+@FrontMcp({
+  auth: {
+    mode: 'public',
+    transport: {
+      enableStreamableHttp: true,
+      enableStatefulHttp: true,      // JSON fallback for previews
+      enableStatelessHttp: false,    // keep anonymous traffic scoped to explicit sessions
+      requireSessionForStreamable: false,
+    },
+  },
+});
+```
+
+You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
+
+---
+
 ## Sessions & Transport IDs
 
 ```ts

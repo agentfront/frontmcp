@@ -94,9 +94,11 @@ async function createTestFixtures(): Promise<TestFixtures> {
   await initializeSharedResources();
 
   // Create MCP client for this test
+  // Pass publicMode if configured to skip authentication
   const clientInstance = await McpTestClient.create({
     baseUrl: serverInstance!.info.baseUrl,
     transport: currentConfig.transport ?? 'streamable-http',
+    publicMode: currentConfig.publicMode,
   }).buildAndConnect();
 
   // Build fixtures

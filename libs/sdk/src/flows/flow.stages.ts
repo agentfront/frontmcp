@@ -1,4 +1,5 @@
-import {HookMetadata, FrontMcpFlowHookTokens} from '../common';
+import { HookMetadata, FrontMcpFlowHookTokens } from '../common';
+import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
 
 export type StageEntry<C> = {
   method: (ctx: C) => Promise<void>;
@@ -28,22 +29,31 @@ export function resolveStageKey(type: HookMetadata['type'], stage: string) {
   return type === 'will'
     ? `will${cap(stage)}`
     : type === 'did'
-      ? `did${cap(stage)}`
-      : type === 'around'
-        ? `around${cap(stage)}`
-        : stage;
+    ? `did${cap(stage)}`
+    : type === 'around'
+    ? `around${cap(stage)}`
+    : stage;
 }
 
 export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
   const cached = CACHE.get(FlowClass as any);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
-  const metas = (Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, FlowClass) ?? []) as HookMetadata[];
+  // Get existing metadata (from legacy decorators)
+  const existingMetas = (Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, FlowClass) ?? []) as HookMetadata[];
+
+  // Resolve any pending TC39 decorator hooks
+  const tc39Metas = resolvePendingTC39HooksForClass(FlowClass);
+
+  // Combine both sources
+  const metas = [...existingMetas, ...tc39Metas];
 
   const sorted = metas
-    .map((m, i) => ({m, i}))
+    .map((m, i) => ({ m, i }))
     .sort((a, b) => (a.m.priority ?? 0) - (b.m.priority ?? 0) || a.i - b.i)
-    .map(x => x.m);
+    .map((x) => x.m);
 
   const table: StageMap<C> = {};
   let order = 0;
@@ -57,16 +67,13 @@ export function collectFlowHookMap<C>(FlowClass: any): StageMap<C> {
       method: async (ctx: any) => {
         const target = m.static ? (FlowClass as any) : ctx;
         const impl =
-          typeof (m as any).method === 'function'
-            ? (m as any).method
-            : target?.[m.method as keyof typeof target];
+          typeof (m as any).method === 'function' ? (m as any).method : target?.[m.method as keyof typeof target];
 
         if (typeof impl !== 'function') return;
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {
-          };
+          const next = async () => {};
           return m.static ? impl.call(FlowClass, ctx, next) : impl.call(ctx, ctx, next);
         } else {
           return m.static ? impl.call(FlowClass, ctx) : impl.call(ctx, ctx);
@@ -91,9 +98,9 @@ export function mergeHookMetasIntoStageMap<C>(
   let order = orderStart;
 
   const sorted = metas
-    .map((m, i) => ({m, i}))
+    .map((m, i) => ({ m, i }))
     .sort((a, b) => (a.m.priority ?? 0) - (b.m.priority ?? 0) || a.i - b.i)
-    .map(x => x.m);
+    .map((x) => x.m);
 
   for (const m of sorted) {
     const resolved = resolveStageKey(m.type, m.stage);
@@ -116,8 +123,7 @@ export function mergeHookMetasIntoStageMap<C>(
         if (m.filter && !(await m.filter(ctx))) return;
 
         if (m.type === 'around') {
-          const next = async () => {
-          };
+          const next = async () => {};
           return m.static ? impl.call(target, ctx, next) : impl.call(target, ctx, next);
         } else {
           return m.static ? impl.call(target, ctx) : impl.call(target, ctx);

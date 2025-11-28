@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-27" tags={["Releases"]}>
+<Update label="draft" description="2025-11-28" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -18,6 +18,10 @@ mode: 'center'
     **Features**
 
     🎨 **Platform-aware UI library** – Build HTML-only consent, troubleshooting, and widget-rich flows with the new `@frontmcp/ui` package, complete with Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
+
+    📡 **Transport-aware auth** – Flip the new `auth.transport` switches per app to enable streamable, stateful, or stateless HTTP plus SSE listeners, so production stays locked down while demos and CI can bypass the `initialize` handshake.
+
+    🔐 **Authentication reference servers** – Boot `pnpm nx serve demo-public`, `demo-orchestrated-auth`, or `demo-transparent-auth` to see each mode with consent flows, anonymous scopes, and transport presets before wiring your own app.
 
     🛰️ **Prompt & resource discovery** – Servers now answer `prompts/list`, `prompts/get`, `resources/list`, and `resources/templates/list` with owner-aware names and `list_changed` notifications, so clients can build live pickers without guessing metadata.
 
@@ -60,6 +64,10 @@ mode: 'center'
     🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
 
     🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
+
+    🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
+
+    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
 
     **Performance**
 
