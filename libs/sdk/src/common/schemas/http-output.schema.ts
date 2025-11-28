@@ -252,7 +252,10 @@ export type HttpOutput = z.infer<typeof httpOutputSchema>;
  * Convenience factories
  */
 export const httpRespond = {
-  json: <T extends Record<string, any>>(body: T, extra: Partial<z.infer<typeof HttpJsonSchema>> = {}): z.infer<typeof HttpJsonSchema> => {
+  json: <T extends Record<string, any>>(
+    body: T,
+    extra: Partial<z.infer<typeof HttpJsonSchema>> = {},
+  ): z.infer<typeof HttpJsonSchema> => {
     return { kind: 'json', status: 200, body, contentType: 'application/json; charset=utf-8', ...extra };
   },
 
@@ -294,7 +297,7 @@ export const httpRespond = {
     id: randomUUID(),
   }),
 
-  rpcError: (message: string, requestId?: RequestId | null):z.infer<typeof HttpJsonSchema> => ({
+  rpcError: (message: string, requestId?: RequestId | null): z.infer<typeof HttpJsonSchema> => ({
     kind: 'json',
     status: 400,
     contentType: 'application/json; charset=utf-8',
@@ -323,5 +326,11 @@ export const httpRespond = {
   },
   consumed(): z.infer<typeof HttpConsumedSchema> {
     return { kind: 'consumed' };
+  },
+  empty(status: 204 | 304 = 204, headers?: Record<string, string>): z.infer<typeof HttpEmptySchema> {
+    return { kind: 'empty', status, headers };
+  },
+  noContent(headers?: Record<string, string>): z.infer<typeof HttpEmptySchema> {
+    return { kind: 'empty', status: 204, headers };
   },
 };

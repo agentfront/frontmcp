@@ -19,6 +19,7 @@ import {
 } from '../interfaces';
 import { FlowName, ScopeMetadata } from '../metadata';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
+import type { NotificationService } from '../../notification';
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, ScopeMetadata> {
   abstract readonly id: string;
@@ -47,6 +48,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, ScopeInterface, 
   abstract get resources(): ResourceRegistryInterface;
 
   abstract get prompts(): PromptRegistryInterface;
+
+  abstract get notifications(): NotificationService;
 
   abstract registryFlows(...flows: FlowType[]): Promise<void>;
 

@@ -1,13 +1,12 @@
 // auth/session/transport-session.types.ts
 
 import { z } from 'zod';
-import { HttpRequestIntent } from '../../common';
 
 /**
  * Transport protocol types supported by MCP
- * Maps directly to HttpRequestIntent from decide-request-intent
+ * These are the actual transport protocols for sessions (excludes 'delete-session' action)
  */
-export type TransportProtocol = HttpRequestIntent;
+export type TransportProtocol = 'legacy-sse' | 'sse' | 'streamable-http' | 'stateful-http' | 'stateless-http';
 
 /**
  * Session storage mode for distributed systems

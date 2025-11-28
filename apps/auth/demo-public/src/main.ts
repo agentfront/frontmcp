@@ -19,6 +19,8 @@ const port = parseInt(process.env['PORT'] ?? '3003', 10);
       enableStreamableHttp: true,
       enableStatelessHttp: false,
       requireSessionForStreamable: false,
+      enableLegacySSE: true, // Enable legacy SSE endpoint (/sse)
+      enableSseListener: true, // Enable SSE listener for modern SSE with session
     },
   },
 })

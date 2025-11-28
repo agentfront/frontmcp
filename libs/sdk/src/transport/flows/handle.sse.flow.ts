@@ -75,9 +75,11 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     const requestPath = normalizeEntryPrefix(request.path);
     const prefix = normalizeEntryPrefix(scope.entryPath);
     const scopePath = normalizeScopeBase(scope.routeBase);
-    if (requestPath === `${prefix}${scopePath}`) {
+    const basePath = `${prefix}${scopePath}`;
+
+    if (requestPath === `${basePath}/sse`) {
       this.state.set('requestType', 'initialize');
-    } else if (requestPath === `${prefix}${scopePath}/message`) {
+    } else if (requestPath === `${basePath}/message`) {
       this.state.set('requestType', 'message');
     }
   }

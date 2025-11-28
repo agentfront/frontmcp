@@ -47,12 +47,20 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   connectServer() {
     const { info } = this.scope.metadata;
 
+    // Check if completions capability should be enabled (when prompts or resources are present)
+    const hasPrompts = this.scope.prompts.hasAny();
+    const hasResources = this.scope.resources.hasAny();
+    const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
+
     const serverOptions = {
       instructions: '',
       capabilities: {
         ...this.scope.tools.getCapabilities(),
         ...this.scope.resources.getCapabilities(),
         ...this.scope.prompts.getCapabilities(),
+        ...completionsCapability,
+        // MCP logging protocol support - allows clients to set log level via logging/setLevel
+        logging: {},
       },
       serverInfo: info,
     };
@@ -65,6 +73,10 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
     for (const handler of handlers) {
       this.server.setRequestHandler(handler.requestSchema, handler.handler as any);
     }
+
+    // Register server with notification service for server→client notifications
+    this.scope.notifications.registerServer(this.key.sessionId, this.server);
+
     return this.server.connect(this.transport);
   }
 
@@ -74,6 +86,9 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
 
   async destroy(reason?: string): Promise<void> {
     console.log('destroying transporter, reason:', reason);
+
+    // Unregister server from notification service
+    this.scope.notifications.unregisterServer(this.key.sessionId);
 
     try {
       // if(!this.transport.closed){

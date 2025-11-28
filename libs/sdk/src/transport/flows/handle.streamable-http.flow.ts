@@ -18,7 +18,7 @@ import { createSessionId } from '../../auth/session/utils/session-id.utils';
 
 export const plan = {
   pre: ['parseInput', 'router'],
-  execute: ['onInitialize', 'onMessage', 'onElicitResult'],
+  execute: ['onInitialize', 'onMessage', 'onElicitResult', 'onSseListener'],
   post: [],
   finalize: ['cleanup'],
 } as const satisfies FlowPlan<string>;
@@ -26,7 +26,7 @@ export const plan = {
 export const stateSchema = z.object({
   token: z.string(),
   session: sessionIdSchema,
-  requestType: z.enum(['initialize', 'message', 'elicitResult']).optional(),
+  requestType: z.enum(['initialize', 'message', 'elicitResult', 'sseListener']).optional(),
 });
 
 const name = 'handle:streamable-http' as const;
@@ -70,6 +70,15 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   @Stage('router')
   async router() {
     const { request } = this.rawInput;
+
+    // GET requests are SSE listener streams - no body expected
+    // Per MCP spec, clients can open SSE stream with GET + Accept: text/event-stream
+    if (request.method.toUpperCase() === 'GET') {
+      this.state.set('requestType', 'sseListener');
+      return;
+    }
+
+    // POST requests have MCP JSON-RPC body
     const body = request.body as { method?: string } | undefined;
     const method = body?.method;
 
@@ -120,5 +129,26 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       return;
     }
     await transport.handleRequest(request, response);
+  }
+
+  @Stage('onSseListener', {
+    filter: ({ state: { requestType } }) => requestType === 'sseListener',
+  })
+  async onSseListener() {
+    const transportService = (this.scope as Scope).transportService;
+
+    const { request, response } = this.rawInput;
+    const { token, session } = this.state.required;
+
+    // Get existing transport for this session - SSE listener requires existing session
+    const transport = await transportService.getTransporter('streamable-http', token, session.id);
+    if (!transport) {
+      this.respond(httpRespond.notFound('Session not found'));
+      return;
+    }
+
+    // Forward GET request to transport (opens SSE stream for server→client notifications)
+    await transport.handleRequest(request, response);
+    this.handled();
   }
 }
