@@ -14,7 +14,7 @@
   },
   "private": true,
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@modelcontextprotocol/sdk": "1.22.0",
     "axios": "^1.6.0",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",
