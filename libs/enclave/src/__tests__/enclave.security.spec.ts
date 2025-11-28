@@ -655,6 +655,451 @@ describe('Enclave Security Tests', () => {
 
       enclave.dispose();
     });
+
+    it('should block Symbol.iterator pollution for constructor access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const arr = [];
+        arr[Symbol.iterator] = function() { return this.constructor; };
+        for (const x of arr) {}
+        return 'escaped';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - Symbol access blocked or constructor blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block Symbol.species access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const s = Array[Symbol.species];
+        return typeof s;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail validation - Symbol access is blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block Symbol.toStringTag manipulation', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const obj = {};
+        obj[Symbol.toStringTag] = 'Function';
+        return Object.prototype.toString.call(obj);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail validation - Symbol access is blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block Symbol.for global registry', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const s = Symbol.for('test');
+        return typeof s;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail validation - Symbol.for is blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Computed Property Attacks', () => {
+    it('should block computed property in object literal with constructor', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const key = 'con' + 'structor';
+        const o = { [key]: 'Function' };
+        return o.constructor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access is blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block computed getter property for constructor access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const key = 'con' + 'structor';
+        const o = { get [key]() { return Function; } };
+        return o.constructor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked at AST level
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block computed setter property for prototype manipulation', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const key = '__pro' + 'to__';
+        const o = { set [key](v) { this._proto = v; } };
+        o.__proto__ = { evil: true };
+        return 'escaped';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - __proto__ access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block spread with computed properties containing constructor', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const key = 'con' + 'structor';
+        const m = { [key]: 'pwned' };
+        const o = { ...m };
+        return typeof o.constructor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block Object.keys constructor extraction attack', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const s = { constructor: 1 };
+        const k = Object.keys(s)[0];
+        const o = {};
+        o[k] = 'pwned';
+        return typeof o.constructor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Unicode/Encoding Attacks', () => {
+    it('should block Unicode Bidi homograph attack', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const k = '\\u202E' + 'rotcurtsnoc';
+        return Array[k];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either fail validation or return undefined (blocked)
+      if (result.success) {
+        expect(result.value).toBeUndefined();
+      }
+
+      enclave.dispose();
+    });
+
+    it('should block Unicode confusable characters', async () => {
+      const enclave = new Enclave();
+      // Using Cyrillic 'о' which looks like Latin 'o'
+      const code = `
+        const k = 'c\\u043Fnstructor';
+        return Array[k];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should not provide constructor access
+      if (result.success) {
+        expect(result.value).toBeUndefined();
+      }
+
+      enclave.dispose();
+    });
+
+    it('should block combining diacritical marks attack', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const k = 'constructor\\u0300';
+        return Array[k];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should not provide constructor access (key doesn't match)
+      if (result.success) {
+        expect(result.value).toBeUndefined();
+      }
+
+      enclave.dispose();
+    });
+
+    it('should block zero-width characters attack', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const k = 'con\\u200Bstructor'; // Zero-width space
+        return Array[k];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should not provide constructor access (key doesn't match)
+      if (result.success) {
+        expect(result.value).toBeUndefined();
+      }
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Object Introspection Attacks', () => {
+    it('should block Object.keys property extraction for constructor via runtime proxy', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const k = Object.keys({ constructor: 1 })[0];
+        // SecureProxy blocks constructor access at runtime, returning undefined
+        return Array[k] === undefined ? 'blocked' : 'accessible';
+      `;
+
+      const result = await enclave.run(code);
+
+      // SecureProxy blocks constructor access at runtime
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('blocked');
+
+      enclave.dispose();
+    });
+
+    it('should block Object.entries property extraction via runtime proxy', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const e = Object.entries({ constructor: 1 })[0];
+        // SecureProxy blocks constructor access at runtime
+        return Array[e[0]] === undefined ? 'blocked' : 'accessible';
+      `;
+
+      const result = await enclave.run(code);
+
+      // SecureProxy blocks constructor access at runtime
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('blocked');
+
+      enclave.dispose();
+    });
+
+    it('should block Object.getOwnPropertyNames extraction via runtime proxy', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const n = Object.getOwnPropertyNames({ constructor: 1 })[0];
+        // SecureProxy blocks constructor access at runtime
+        return Array[n] === undefined ? 'blocked' : 'accessible';
+      `;
+
+      const result = await enclave.run(code);
+
+      // SecureProxy blocks constructor access at runtime
+      expect(result.success).toBe(true);
+      expect(result.value).toBe('blocked');
+
+      enclave.dispose();
+    });
+
+    it('should block Reflect.ownKeys extraction', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const k = Reflect.ownKeys({ constructor: 1 })[0];
+        return Array[k];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - Reflect blocked at AST level
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Function Parameter Escaping', () => {
+    it('should block global access via function parameter', async () => {
+      const enclave = new Enclave();
+      const code = `
+        (function(g) { const e = g.eval; })(globalThis);
+        return 'escaped';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - globalThis and eval blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block constructor via callback this binding', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const r = Array.from([1], function() { return this.constructor; });
+        return typeof r[0];
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block default parameter constructor access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const fn = (x = (()=>{}).constructor) => x;
+        return typeof fn();
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Promise/Thenable Attacks', () => {
+    it('should block constructor access via Promise executor', async () => {
+      const enclave = new Enclave();
+      const code = `
+        let capturedCtor;
+        new Promise((resolve, reject) => {
+          capturedCtor = resolve.constructor;
+        });
+        return typeof capturedCtor;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block thenable handler constructor access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const thenable = {
+          then: (resolve) => { const c = resolve.constructor; return c; }
+        };
+        await Promise.resolve(thenable);
+        return 'escaped';
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - constructor access blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block Promise race/all timing manipulation', async () => {
+      const enclave = new Enclave({ timeout: 1000 });
+      const code = `
+        const delays = [];
+        for (let i = 0; i < 1000; i++) {
+          delays.push(new Promise(r => r(i)));
+        }
+        const result = await Promise.race(delays);
+        return result;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either succeed with first value or timeout
+      if (result.success) {
+        expect(result.value).toBe(0);
+      }
+
+      enclave.dispose();
+    });
+  });
+
+  describe('Global Access Attacks', () => {
+    it('should block globalThis via exception stack', async () => {
+      const enclave = new Enclave();
+      const code = `
+        try { throw new Error(); }
+        catch(e) { return typeof e.stack; }
+      `;
+
+      const result = await enclave.run(code);
+
+      // Stack should be string (safe) or blocked entirely
+      if (result.success) {
+        expect(result.value).toBe('string');
+      }
+
+      enclave.dispose();
+    });
+
+    it('should block indirect eval global access', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const indirect = (0, eval);
+        return indirect('1+1');
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - eval blocked
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    });
+
+    it('should block this binding to global in sloppy mode', async () => {
+      const enclave = new Enclave();
+      const code = `
+        const fn = function() { return this; };
+        return typeof fn();
+      `;
+
+      const result = await enclave.run(code);
+
+      // In strict mode, this is undefined
+      if (result.success) {
+        expect(result.value).toBe('undefined');
+      }
+
+      enclave.dispose();
+    });
   });
 
   describe('Error Information Leakage Prevention', () => {

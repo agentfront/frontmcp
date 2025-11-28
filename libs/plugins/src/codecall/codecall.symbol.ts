@@ -74,8 +74,6 @@ export interface CodeCallVmEnvironment {
       }
     | undefined;
 
-  codecallContext: Readonly<Record<string, unknown>>;
-
   console?: Console;
 
   mcpLog?: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;

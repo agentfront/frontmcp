@@ -185,7 +185,10 @@ describe('Combined Attack Scenarios - Red Team', () => {
 
       expect(result.success).toBe(false);
       if (!result.success && result.error) {
-        // Should fail due to Proxy blocking, constructor blocking, or timeout
+        // Multiple error codes are acceptable because this combined attack could be blocked by:
+        // - VALIDATION_ERROR: AST validation blocks Proxy, Error.prepareStackTrace, or constructor
+        // - DISALLOWED_IDENTIFIER: Proxy identifier is blocked
+        // - TIMEOUT: If attack somehow bypasses AST checks, loop causes timeout
         expect(result.error.code).toMatch(/VALIDATION_ERROR|TIMEOUT|DISALLOWED_IDENTIFIER/);
       }
 
@@ -556,7 +559,75 @@ describe('Combined Attack Scenarios - Red Team', () => {
     });
   });
 
-  describe('Scenario 7: Ultimate Integration - Everything Everywhere All at Once', () => {
+  describe('Scenario 7: Error-based DoS Attacks', () => {
+    /**
+     * Attack: Use error creation/handling to cause DoS
+     * Defense: Limit error message sizes and error creation rates
+     */
+    it('ATK-COMBO-ERROR-01: should handle error message size bomb', async () => {
+      const enclave = new Enclave({ timeout: 1000 });
+
+      const code = `
+        throw new Error('x'.repeat(10000000));
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - either timeout or memory limit
+      expect(result.success).toBe(false);
+      // Error message should be truncated or limited
+      if (result.error?.message) {
+        // Large error messages should be handled gracefully
+        expect(result.error.message.length).toBeLessThan(100000);
+      }
+
+      enclave.dispose();
+    });
+
+    it('ATK-COMBO-ERROR-02: should handle object creation storm via for-of iteration limit', async () => {
+      // for-of loops apply iteration limits; for loops use a different mechanism
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 100 });
+
+      // Use for-of to trigger iteration limit checking
+      const code = `
+        const objs = [];
+        const indices = Array.from({ length: 100000 }, (_, i) => i);
+        for (const i of indices) {
+          objs.push({ message: 'error' + i, stack: 'stack' + i });
+        }
+        return objs.length;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit on for-of
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('iteration limit');
+
+      enclave.dispose();
+    }, 10000);
+
+    it('ATK-COMBO-ERROR-03: should handle nested error cause chains', async () => {
+      const enclave = new Enclave({ timeout: 1000, maxIterations: 1000 });
+
+      const code = `
+        let e = new Error('root');
+        for (let i = 0; i < 10000; i++) {
+          e = new Error('wrap', { cause: e });
+        }
+        throw e;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should be stopped by iteration limit or timeout
+      expect(result.success).toBe(false);
+
+      enclave.dispose();
+    }, 10000);
+  });
+
+  describe('Scenario 8: Ultimate Integration - Everything Everywhere All at Once', () => {
     /**
      * The ultimate red team test: throw everything at the enclave
      * This simulates a sophisticated attacker with full knowledge of defenses

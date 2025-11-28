@@ -101,8 +101,13 @@ export class WorkerPoolAdapter implements SandboxAdapter {
         await Promise.all(spawnPromises);
       } catch (error) {
         // Clean up any workers that were created before the failure
-        const terminatePromises = Array.from(this.slots.values()).map((slot) => slot.terminate(false).catch(() => {}));
-        await Promise.allSettled(terminatePromises);
+        await Promise.all(
+          Array.from(this.slots.values()).map((slot) =>
+            slot.terminate(false).catch(() => {
+              /* empty */
+            }),
+          ),
+        );
         this.slots.clear();
         throw error;
       }
@@ -360,9 +365,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       // Pending tool calls for this execution
       const pendingToolCalls = new Map<string, boolean>();
 
-      // Forward declarations for cleanup function
-      let messageHandler: (msg: WorkerToMainMessage) => Promise<void>;
-      let errorHandler: (error: Error) => void;
+      // Declare watchdogId before cleanup to avoid TDZ confusion
       let watchdogId: ReturnType<typeof setTimeout>;
 
       // Cleanup function to remove handlers
@@ -373,7 +376,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       };
 
       // Message handler
-      messageHandler = async (msg: WorkerToMainMessage) => {
+      const messageHandler: (msg: WorkerToMainMessage) => Promise<void> = async (msg: WorkerToMainMessage) => {
         try {
           // Rate limiting
           this.rateLimiter.checkLimit(slot.id);
@@ -397,7 +400,7 @@ export class WorkerPoolAdapter implements SandboxAdapter {
       };
 
       // Handle slot error
-      errorHandler = (error: Error) => {
+      const errorHandler: (error: Error) => void = (error: Error) => {
         cleanup();
         reject(error);
       };

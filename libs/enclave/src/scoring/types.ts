@@ -14,8 +14,17 @@
  * - `rule-based`: Pure TypeScript rules, zero dependencies (~1ms latency)
  * - `local-llm`: On-device LLM scoring (~5-10ms latency, model download required)
  * - `external-api`: External API-based scoring (~100ms latency, best detection)
+ * - `progressive`: Fast rule-based check, escalate to ML if suspicious
  */
-export type ScorerType = 'disabled' | 'rule-based' | 'local-llm' | 'external-api';
+export type ScorerType = 'disabled' | 'rule-based' | 'local-llm' | 'external-api' | 'progressive';
+
+/**
+ * Scoring strategy types
+ *
+ * - `single`: Use a single scorer (legacy behavior)
+ * - `progressive`: Fast check first, escalate to detailed if suspicious
+ */
+export type ScoringStrategy = 'single' | 'progressive';
 
 /**
  * Risk level classification
@@ -332,33 +341,71 @@ export interface ScoringGateResult {
 }
 
 /**
+ * Configuration for VectoriaDB-based similarity scoring
+ */
+export interface VectoriaConfigForScoring {
+  /**
+   * Path to pre-built index with malicious patterns
+   */
+  indexPath?: string;
+
+  /**
+   * Similarity threshold (0-1) for considering a match
+   * @default 0.85
+   */
+  threshold?: number;
+}
+
+/**
  * Configuration for local LLM scorer
  */
 export interface LocalLlmConfig {
   /**
-   * Model identifier
-   * @example 'qwen2.5-coder-0.5b'
+   * Model identifier from HuggingFace
+   * @example 'Xenova/codebert-base', 'Xenova/all-MiniLM-L6-v2'
    */
-  modelId: 'qwen2.5-coder-0.5b' | 'phi-3-mini' | 'llama-3.2-1b' | string;
+  modelId: 'Xenova/codebert-base' | 'Xenova/all-MiniLM-L6-v2' | string;
 
   /**
-   * Model quantization level
-   * - int4: Smallest size, fastest, slightly lower quality
-   * - int8: Medium size and speed
-   * - fp16: Best quality, largest size
+   * Scoring mode
+   * - classification: Use text classification model for direct scoring
+   * - similarity: Use embeddings + VectoriaDB for similarity-based scoring
+   * @default 'classification'
    */
-  quantization: 'int4' | 'int8' | 'fp16';
+  mode?: 'classification' | 'similarity';
 
   /**
-   * Maximum tokens for generation
-   * @default 256
+   * Model cache directory
+   * @default '~/.frontmcp/models'
    */
-  maxTokens?: number;
+  cacheDir?: string;
 
   /**
-   * Model download directory (defaults to ~/.frontmcp/models)
+   * Configuration for similarity mode (VectoriaDB)
+   * Required when mode='similarity'
+   */
+  vectoriaConfig?: VectoriaConfigForScoring;
+
+  /**
+   * Whether to fall back to rule-based scorer on model errors
+   * @default true
+   */
+  fallbackToRules?: boolean;
+
+  /**
+   * @deprecated Use cacheDir instead
    */
   modelDir?: string;
+
+  /**
+   * @deprecated Not used in new implementation
+   */
+  quantization?: 'int4' | 'int8' | 'fp16';
+
+  /**
+   * @deprecated Not used in new implementation
+   */
+  maxTokens?: number;
 }
 
 /**
@@ -395,6 +442,60 @@ export interface ExternalApiConfig {
 }
 
 /**
+ * Configuration for progressive scoring strategy
+ *
+ * Fast rule-based check first, escalate to detailed ML scoring
+ * if the initial score exceeds the escalation threshold.
+ */
+export interface ProgressiveScoringConfig {
+  /**
+   * Strategy type identifier
+   */
+  strategy: 'progressive';
+
+  /**
+   * Fast initial scorer configuration (always rule-based)
+   */
+  fast: {
+    type: 'rule-based';
+    customRules?: Record<string, number>;
+  };
+
+  /**
+   * Detailed follow-up scorer configuration
+   */
+  detailed: {
+    type: 'local-llm' | 'external-api';
+    localLlm?: LocalLlmConfig;
+    externalApi?: ExternalApiConfig;
+  };
+
+  /**
+   * Score threshold to trigger detailed scoring
+   * If fast scorer returns >= this value, detailed scorer runs
+   * @default 30
+   */
+  escalationThreshold?: number;
+
+  /**
+   * How to combine fast and detailed scores
+   * - 'replace': Use detailed score only
+   * - 'max': Use higher of the two scores
+   * - 'avg': Average of both scores
+   * @default 'max'
+   */
+  combination?: 'replace' | 'max' | 'avg';
+}
+
+/**
+ * Default values for progressive scoring
+ */
+export const DEFAULT_PROGRESSIVE_CONFIG = {
+  escalationThreshold: 30,
+  combination: 'max' as const,
+};
+
+/**
  * Configuration for scoring cache
  */
 export interface ScoringCacheConfig {
@@ -419,13 +520,41 @@ export interface ScoringCacheConfig {
 
 /**
  * Configuration for the scoring gate
+ *
+ * Supports two configuration styles:
+ * 1. Legacy single-scorer mode: Use `scorer` property
+ * 2. Progressive mode: Use `scoring` property with ProgressiveScoringConfig
+ *
+ * @example
+ * // Legacy single-scorer mode
+ * { scorer: 'rule-based', blockThreshold: 70 }
+ *
+ * @example
+ * // Progressive mode
+ * {
+ *   scoring: {
+ *     strategy: 'progressive',
+ *     fast: { type: 'rule-based' },
+ *     detailed: { type: 'local-llm', localLlm: { modelId: 'Xenova/codebert-base' } },
+ *     escalationThreshold: 30
+ *   },
+ *   blockThreshold: 70
+ * }
  */
 export interface ScoringGateConfig {
   /**
-   * Scorer mode to use
+   * Scorer mode to use (legacy single-scorer mode)
+   * Mutually exclusive with `scoring` property
    * @default 'disabled'
    */
-  scorer: ScorerType;
+  scorer?: ScorerType;
+
+  /**
+   * Progressive scoring configuration (new mode)
+   * Mutually exclusive with `scorer` property
+   * Takes precedence over `scorer` if both are provided
+   */
+  scoring?: ProgressiveScoringConfig;
 
   /**
    * Score threshold for blocking execution (0-100)
@@ -498,6 +627,117 @@ export const DEFAULT_SCORING_CONFIG: Required<
     maxEntries: 1000,
   },
 };
+
+/**
+ * Normalized internal configuration used by ScoringGate
+ * This is the result of normalizing ScoringGateConfig
+ */
+export interface NormalizedScoringConfig {
+  /**
+   * The effective scorer type
+   */
+  scorerType: ScorerType;
+
+  /**
+   * Progressive config if using progressive strategy
+   */
+  progressiveConfig?: ProgressiveScoringConfig;
+
+  /**
+   * Block threshold
+   */
+  blockThreshold: number;
+
+  /**
+   * Warn threshold
+   */
+  warnThreshold: number;
+
+  /**
+   * Fail-open behavior
+   */
+  failOpen: boolean;
+
+  /**
+   * Verbose logging
+   */
+  verbose: boolean;
+
+  /**
+   * Cache configuration
+   */
+  cache: Required<ScoringCacheConfig>;
+
+  /**
+   * Local LLM configuration (from direct config or progressive)
+   */
+  localLlm?: LocalLlmConfig;
+
+  /**
+   * External API configuration (from direct config or progressive)
+   */
+  externalApi?: ExternalApiConfig;
+
+  /**
+   * Custom rules for rule-based scorer
+   */
+  customRules?: Record<string, number>;
+}
+
+/**
+ * Normalize a ScoringGateConfig to NormalizedScoringConfig
+ *
+ * Handles both legacy single-scorer mode and new progressive mode,
+ * producing a consistent internal representation.
+ *
+ * @param config - User-provided configuration
+ * @returns Normalized configuration for internal use
+ */
+export function normalizeScoringConfig(config: ScoringGateConfig): NormalizedScoringConfig {
+  // Determine scorer type: progressive config takes precedence
+  let scorerType: ScorerType;
+  let progressiveConfig: ProgressiveScoringConfig | undefined;
+  let localLlm = config.localLlm;
+  let externalApi = config.externalApi;
+  let customRules = config.customRules;
+
+  if (config.scoring) {
+    // New progressive mode
+    scorerType = 'progressive';
+    progressiveConfig = config.scoring;
+
+    // Extract nested configs from progressive
+    if (progressiveConfig.detailed.localLlm) {
+      localLlm = progressiveConfig.detailed.localLlm;
+    }
+    if (progressiveConfig.detailed.externalApi) {
+      externalApi = progressiveConfig.detailed.externalApi;
+    }
+    if (progressiveConfig.fast.customRules) {
+      customRules = { ...customRules, ...progressiveConfig.fast.customRules };
+    }
+  } else {
+    // Legacy single-scorer mode
+    scorerType = config.scorer ?? 'disabled';
+  }
+
+  return {
+    scorerType,
+    progressiveConfig,
+    blockThreshold: config.blockThreshold ?? DEFAULT_SCORING_CONFIG.blockThreshold,
+    warnThreshold: config.warnThreshold ?? DEFAULT_SCORING_CONFIG.warnThreshold,
+    failOpen: config.failOpen ?? DEFAULT_SCORING_CONFIG.failOpen,
+    verbose: config.verbose ?? DEFAULT_SCORING_CONFIG.verbose,
+    cache: {
+      enabled: config.cache?.enabled ?? DEFAULT_SCORING_CONFIG.cache.enabled,
+      ttlMs: config.cache?.ttlMs ?? DEFAULT_SCORING_CONFIG.cache.ttlMs,
+      maxEntries: config.cache?.maxEntries ?? DEFAULT_SCORING_CONFIG.cache.maxEntries,
+    },
+    localLlm,
+    externalApi,
+    customRules,
+  };
+}
 
 /**
  * Thresholds for various detection rules

@@ -103,6 +103,13 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     'import',
     'importScripts',
 
+    // Dangerous JavaScript APIs (potential sandbox escape vectors)
+    'Iterator',
+    'AsyncIterator',
+    'ShadowRealm',
+    'WeakRef',
+    'FinalizationRegistry',
+
     ...(options.additionalDisallowedIdentifiers || []),
   ];
   rules.push(new DisallowedIdentifierRule({ disallowed: disallowedIdentifiers }));

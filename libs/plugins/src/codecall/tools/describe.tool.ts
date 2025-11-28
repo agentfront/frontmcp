@@ -77,8 +77,8 @@ export default class DescribeTool extends ToolContext {
         name: tool.name,
         appId,
         description: tool.metadata?.description || `Tool: ${tool.name}`,
-        inputSchema: inputSchema || {},
-        outputSchema: outputSchema || null,
+        inputSchema: (inputSchema as Record<string, unknown>) || null,
+        outputSchema: (outputSchema as Record<string, unknown>) || null,
         annotations: tool.metadata?.annotations,
         usageExample,
       });

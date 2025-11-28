@@ -459,10 +459,11 @@ describe('AgentScript Transformer', () => {
       expect(output).toContain('__safe_data');
     });
 
-    it('should handle destructuring', () => {
+    it('should handle destructuring - object pattern', () => {
       const input = `
         const { items, total } = await callTool('getData', {});
         const [first, ...rest] = items;
+        return { items, total, first };
       `;
 
       const output = transformAgentScript(input, {
@@ -471,8 +472,247 @@ describe('AgentScript Transformer', () => {
         transformLoops: false,
       });
 
+      // callTool should be transformed (it's a global)
       expect(output).toContain('__safe_callTool');
-      expect(output).toContain('__safe_items'); // Reference to items
+
+      // Destructured variables should NOT be transformed (they are local declarations)
+      expect(output).not.toContain('__safe_items');
+      expect(output).not.toContain('__safe_total');
+      expect(output).not.toContain('__safe_first');
+      expect(output).not.toContain('__safe_rest');
+
+      // References to destructured variables should be preserved
+      expect(output).toContain('= items'); // Reference in array destructuring RHS
+    });
+
+    it('should handle destructuring - with defaults', () => {
+      const input = `
+        const { name = 'default', age = 18 } = user;
+        return name + age;
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: false,
+      });
+
+      // Destructured variables should NOT be transformed
+      expect(output).not.toContain('__safe_name');
+      expect(output).not.toContain('__safe_age');
+
+      // user is not declared locally, so it should be transformed
+      expect(output).toContain('__safe_user');
+    });
+
+    it('should handle destructuring - with aliases', () => {
+      const input = `
+        const { data: result, count: total } = await callTool('getData', {});
+        return result + total;
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: false,
+      });
+
+      // The aliases (result, total) are the local bindings, not data/count
+      expect(output).not.toContain('__safe_result');
+      expect(output).not.toContain('__safe_total');
+
+      // callTool should be transformed
+      expect(output).toContain('__safe_callTool');
+    });
+
+    it('should handle destructuring - nested', () => {
+      const input = `
+        const { user: { name, email }, meta: { timestamp } } = await callTool('getData', {});
+        return name + email + timestamp;
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: false,
+      });
+
+      // Nested destructured variables should NOT be transformed
+      expect(output).not.toContain('__safe_name');
+      expect(output).not.toContain('__safe_email');
+      expect(output).not.toContain('__safe_timestamp');
+    });
+
+    it('should handle destructuring - rest patterns', () => {
+      const input = `
+        const { first, ...remaining } = await callTool('getData', {});
+        const [head, ...tail] = items;
+        return { first, remaining, head, tail };
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: false,
+      });
+
+      // Rest pattern variables should NOT be transformed
+      expect(output).not.toContain('__safe_first');
+      expect(output).not.toContain('__safe_remaining');
+      expect(output).not.toContain('__safe_head');
+      expect(output).not.toContain('__safe_tail');
+
+      // items is not declared, should be transformed
+      expect(output).toContain('__safe_items');
+    });
+
+    it('should handle destructuring - function parameters', () => {
+      const input = `
+        const fn = ({ name, age }) => name + age;
+        const fn2 = ([first, second]) => first + second;
+        return fn({ name: 'test', age: 20 });
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: false,
+      });
+
+      // Destructured function parameters should NOT be transformed
+      expect(output).not.toContain('__safe_name');
+      expect(output).not.toContain('__safe_age');
+      expect(output).not.toContain('__safe_first');
+      expect(output).not.toContain('__safe_second');
+    });
+
+    it('should handle destructuring - for-of loop', () => {
+      const input = `
+        const data = await callTool('getData', {});
+        for (const { id, name } of data.items) {
+          console.log(id, name);
+        }
+      `;
+
+      const output = transformAgentScript(input, {
+        wrapInMain: false,
+        transformCallTool: true,
+        transformLoops: true,
+      });
+
+      // Loop destructured variables should NOT be transformed
+      expect(output).not.toContain('__safe_id');
+      expect(output).not.toContain('__safe_name');
+
+      // data should NOT be transformed (locally declared)
+      expect(output).not.toContain('__safe_data');
+    });
+
+    describe('Security - Destructuring Attack Vectors', () => {
+      it('should safely handle constructor destructuring from callTool', () => {
+        // Attack vector: Try to extract constructor from callTool function
+        const input = `
+          const { constructor } = callTool;
+          const fn = constructor('return this')();
+        `;
+
+        const output = transformAgentScript(input, {
+          wrapInMain: false,
+          transformCallTool: true,
+          transformLoops: false,
+        });
+
+        // callTool should be transformed to __safe_callTool
+        expect(output).toContain('__safe_callTool');
+
+        // 'constructor' as a destructured variable is a local binding, not transformed
+        // But this is safe because:
+        // 1. The RHS (__safe_callTool) is the safe wrapper function
+        // 2. Even if someone gets constructor from it, they get Function.prototype.constructor
+        //    which cannot escape the sandbox if the sandbox is properly configured
+        expect(output).not.toContain('__safe_constructor');
+
+        // The key security is that callTool is transformed, so the attack
+        // extracts constructor from the SAFE wrapper, not any dangerous global
+      });
+
+      it('should safely handle prototype destructuring', () => {
+        const input = `
+          const { prototype } = Object;
+          const { __proto__ } = {};
+        `;
+
+        const output = transformAgentScript(input, {
+          wrapInMain: false,
+          transformCallTool: true,
+          transformLoops: false,
+        });
+
+        // Object is whitelisted and should NOT be transformed
+        expect(output).toContain('Object');
+        expect(output).not.toContain('__safe_Object');
+
+        // 'prototype' and '__proto__' as destructured variables are local bindings
+        // This is safe because we're just extracting a reference, not executing code
+      });
+
+      it('should safely handle Function constructor attempt via destructuring', () => {
+        const input = `
+          const { constructor: Func } = (function(){});
+          const evil = Func('return process')();
+        `;
+
+        const output = transformAgentScript(input, {
+          wrapInMain: false,
+          transformCallTool: true,
+          transformLoops: false,
+        });
+
+        // Func is a local binding (alias for constructor), should NOT be transformed
+        expect(output).not.toContain('__safe_Func');
+
+        // The function expression is transformed
+        // Note: This attack would be blocked by NoUserDefinedFunctionsRule in AgentScript preset
+      });
+
+      it('should transform unbound global references in destructuring RHS', () => {
+        const input = `
+          const { env } = process;
+          const { constructor } = globalThis;
+        `;
+
+        const output = transformAgentScript(input, {
+          wrapInMain: false,
+          transformCallTool: true,
+          transformLoops: false,
+        });
+
+        // process and globalThis are NOT in whitelist, should be transformed
+        expect(output).toContain('__safe_process');
+        expect(output).toContain('__safe_globalThis');
+
+        // The destructured variables are local, not transformed
+        expect(output).not.toContain('__safe_env');
+      });
+
+      it('should handle nested constructor extraction attempt', () => {
+        const input = `
+          const { constructor: { constructor: Func } } = callTool;
+          const result = Func('return 1+1')();
+        `;
+
+        const output = transformAgentScript(input, {
+          wrapInMain: false,
+          transformCallTool: true,
+          transformLoops: false,
+        });
+
+        // callTool should be transformed
+        expect(output).toContain('__safe_callTool');
+
+        // Func is a deeply nested local binding
+        expect(output).not.toContain('__safe_Func');
+      });
     });
   });
 });

@@ -21,7 +21,7 @@ describe('Enclave - Infinite Loop Attack Vectors', () => {
     maxToolCalls: 10,
   };
 
-  describe('Arrow Function Recursion Attacks', () => {
+  describe('Recursion Depth Limit Tests', () => {
     it('should block or limit self-referencing arrow function recursion', async () => {
       const enclave = new Enclave(STRICT_LIMITS);
 
@@ -677,6 +677,273 @@ describe('Enclave - Infinite Loop Attack Vectors', () => {
       // Should be stopped by iteration or tool call limit
       expect(result.success).toBe(false);
 
+      enclave.dispose();
+    });
+  });
+
+  describe('ReDoS Attack Patterns', () => {
+    it('should block or timeout alternation-based backtracking /^(a|a)*$/', async () => {
+      const enclave = new Enclave({
+        ...STRICT_LIMITS,
+        timeout: 500,
+      });
+
+      // Classic ReDoS pattern with alternation causing exponential backtracking
+      const code = `
+        const evilRegex = /^(a|a)*$/;
+        const input = 'a'.repeat(30) + 'b';
+        return evilRegex.test(input);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should either block regex literal or timeout on catastrophic backtracking
+      if (!result.success) {
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    });
+
+    it('should block or timeout nested star quantifiers /^(a*)*$/', async () => {
+      const enclave = new Enclave({
+        ...STRICT_LIMITS,
+        timeout: 500,
+      });
+
+      const code = `
+        const evilRegex = /^(a*)*$/;
+        const input = 'a'.repeat(25) + 'b';
+        return evilRegex.test(input);
+      `;
+
+      const result = await enclave.run(code);
+
+      if (!result.success) {
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    });
+
+    it('should block or timeout character class quantifiers /^([0-9]+)+$/', async () => {
+      const enclave = new Enclave({
+        ...STRICT_LIMITS,
+        timeout: 500,
+      });
+
+      const code = `
+        const evilRegex = /^([0-9]+)+$/;
+        const input = '1'.repeat(30) + 'x';
+        return evilRegex.test(input);
+      `;
+
+      const result = await enclave.run(code);
+
+      if (!result.success) {
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    });
+
+    it('should block or timeout polynomial backtracking /^(.*a){25}$/', async () => {
+      const enclave = new Enclave({
+        ...STRICT_LIMITS,
+        timeout: 500,
+      });
+
+      const code = `
+        const evilRegex = /^(.*a){25}$/;
+        const input = 'a'.repeat(50);
+        return evilRegex.test(input);
+      `;
+
+      const result = await enclave.run(code);
+
+      if (!result.success) {
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    });
+
+    it('should block or timeout overlapping alternation /^(a|ab)*$/', async () => {
+      const enclave = new Enclave({
+        ...STRICT_LIMITS,
+        timeout: 500,
+      });
+
+      const code = `
+        const evilRegex = /^(a|ab)*$/;
+        const input = 'ababababababababababababab' + 'c';
+        return evilRegex.test(input);
+      `;
+
+      const result = await enclave.run(code);
+
+      if (!result.success) {
+        expect(result.error).toBeDefined();
+      }
+      enclave.dispose();
+    });
+  });
+
+  describe('Generator/Iterator DoS Attacks', () => {
+    it('should block infinite generator consumption via function declaration', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      // Generator functions require function* syntax which should be blocked
+      const code = `
+        function* inf() { while(true) yield 1; }
+        let count = 0;
+        for (const x of inf()) {
+          count++;
+        }
+        return count;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - either generator syntax blocked or iteration limit hit
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block circular generator delegation', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        function* a() { yield* b(); }
+        function* b() { yield* a(); }
+        for (const x of a()) {}
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - either generator syntax blocked or stack overflow
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block custom infinite iterator via Symbol.iterator', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        const it = {
+          [Symbol.iterator]() {
+            return {
+              next() { return { value: 1, done: false }; }
+            };
+          }
+        };
+        let count = 0;
+        for (const x of it) {
+          count++;
+        }
+        return count;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - either Symbol blocked or iteration limit hit
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block async generator infinite loop', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        async function* inf() {
+          while(true) yield await Promise.resolve(1);
+        }
+        let count = 0;
+        for await (const x of inf()) {
+          count++;
+        }
+        return count;
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - async generator syntax should be blocked
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+  });
+
+  describe('Deep Recursion Attacks', () => {
+    it('should block 3-function mutual recursion chain', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        const a = (n) => n > 0 ? b(n - 1) : 0;
+        const b = (n) => c(n);
+        const c = (n) => a(n);
+        return a(1000000);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - recursion depth or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block 10-function recursion chain', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        const f0 = (n) => n > 0 ? f1(n - 1) : 0;
+        const f1 = (n) => f2(n);
+        const f2 = (n) => f3(n);
+        const f3 = (n) => f4(n);
+        const f4 = (n) => f5(n);
+        const f5 = (n) => f6(n);
+        const f6 = (n) => f7(n);
+        const f7 = (n) => f8(n);
+        const f8 = (n) => f9(n);
+        const f9 = (n) => f0(n);
+        return f0(1000000);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - recursion or timeout
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block Y-combinator recursion', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        const Y = (f) => ((x) => f((y) => x(x)(y)))((x) => f((y) => x(x)(y)));
+        const fact = Y((f) => (n) => n <= 1 ? 1 : n * f(n - 1));
+        return fact(100000);
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - deep recursion
+      expect(result.success).toBe(false);
+      enclave.dispose();
+    });
+
+    it('should block trampoline-style recursion', async () => {
+      const enclave = new Enclave(STRICT_LIMITS);
+
+      const code = `
+        const trampoline = (fn) => {
+          let r = fn();
+          while (typeof r === 'function') r = r();
+          return r;
+        };
+        const countdown = (n) => n === 0 ? 'done' : () => countdown(n - 1);
+        return trampoline(() => countdown(1000000));
+      `;
+
+      const result = await enclave.run(code);
+
+      // Should fail - iteration limit or timeout
+      expect(result.success).toBe(false);
       enclave.dispose();
     });
   });

@@ -13,23 +13,22 @@
 import type { Scorer } from './scorer.interface';
 import { FeatureExtractor } from './feature-extractor';
 import { ScoringCache } from './cache';
-import { DisabledScorer, RuleBasedScorer, ExternalApiScorer } from './scorers';
-import type { ScoringGateConfig, ScoringGateResult, ScorerType, ExtractedFeatures } from './types';
-import { DEFAULT_SCORING_CONFIG } from './types';
+import { DisabledScorer, RuleBasedScorer, ExternalApiScorer, ProgressiveScorer, LocalLlmScorer } from './scorers';
+import type {
+  ScoringGateConfig,
+  ScoringGateResult,
+  ScorerType,
+  ExtractedFeatures,
+  NormalizedScoringConfig,
+} from './types';
+import { DEFAULT_SCORING_CONFIG, normalizeScoringConfig } from './types';
 
 /**
  * Scoring Gate - orchestrates the AI scoring system
  */
 export class ScoringGate {
   private readonly extractor: FeatureExtractor;
-  private readonly config: Required<
-    Pick<ScoringGateConfig, 'scorer' | 'blockThreshold' | 'warnThreshold' | 'failOpen' | 'verbose'>
-  > & {
-    cache: { enabled: boolean; ttlMs: number; maxEntries: number };
-    localLlm?: ScoringGateConfig['localLlm'];
-    externalApi?: ScoringGateConfig['externalApi'];
-    customRules?: Record<string, number>;
-  };
+  private readonly config: NormalizedScoringConfig;
   private scorer: Scorer | null = null;
   private cache: ScoringCache | null = null;
   private initialized = false;
@@ -37,25 +36,11 @@ export class ScoringGate {
   constructor(config: ScoringGateConfig) {
     this.extractor = new FeatureExtractor();
 
-    // Merge with defaults
-    this.config = {
-      scorer: config.scorer,
-      blockThreshold: config.blockThreshold ?? DEFAULT_SCORING_CONFIG.blockThreshold,
-      warnThreshold: config.warnThreshold ?? DEFAULT_SCORING_CONFIG.warnThreshold,
-      failOpen: config.failOpen ?? DEFAULT_SCORING_CONFIG.failOpen,
-      verbose: config.verbose ?? DEFAULT_SCORING_CONFIG.verbose,
-      cache: {
-        enabled: config.cache?.enabled ?? DEFAULT_SCORING_CONFIG.cache.enabled,
-        ttlMs: config.cache?.ttlMs ?? DEFAULT_SCORING_CONFIG.cache.ttlMs,
-        maxEntries: config.cache?.maxEntries ?? DEFAULT_SCORING_CONFIG.cache.maxEntries,
-      },
-      localLlm: config.localLlm,
-      externalApi: config.externalApi,
-      customRules: config.customRules,
-    };
+    // Normalize configuration (handles both legacy and new progressive mode)
+    this.config = normalizeScoringConfig(config);
 
     // Initialize cache if enabled
-    if (this.config.cache.enabled && this.config.scorer !== 'disabled') {
+    if (this.config.cache.enabled && this.config.scorerType !== 'disabled') {
       this.cache = new ScoringCache(this.config.cache);
     }
   }
@@ -84,7 +69,7 @@ export class ScoringGate {
    * Create the appropriate scorer based on configuration
    */
   private createScorer(): Scorer {
-    switch (this.config.scorer) {
+    switch (this.config.scorerType) {
       case 'disabled':
         return new DisabledScorer();
 
@@ -92,11 +77,13 @@ export class ScoringGate {
         return new RuleBasedScorer(this.config.customRules);
 
       case 'local-llm':
-        // For now, fall back to rule-based until local LLM is implemented
-        if (this.config.verbose) {
-          console.warn('[ScoringGate] local-llm scorer not yet implemented, using rule-based');
+        if (!this.config.localLlm) {
+          if (this.config.verbose) {
+            console.warn('[ScoringGate] local-llm scorer requires localLlm config, using rule-based fallback');
+          }
+          return new RuleBasedScorer(this.config.customRules);
         }
-        return new RuleBasedScorer(this.config.customRules);
+        return new LocalLlmScorer(this.config.localLlm);
 
       case 'external-api':
         if (!this.config.externalApi) {
@@ -104,8 +91,14 @@ export class ScoringGate {
         }
         return new ExternalApiScorer(this.config.externalApi);
 
+      case 'progressive':
+        if (!this.config.progressiveConfig) {
+          throw new ScoringGateError('progressive scorer requires scoring configuration');
+        }
+        return new ProgressiveScorer(this.config.progressiveConfig);
+
       default:
-        throw new ScoringGateError(`Unknown scorer type: ${this.config.scorer}`);
+        throw new ScoringGateError(`Unknown scorer type: ${this.config.scorerType}`);
     }
   }
 
@@ -119,7 +112,7 @@ export class ScoringGate {
     const startTime = performance.now();
 
     // Disabled mode - always allow
-    if (this.config.scorer === 'disabled') {
+    if (this.config.scorerType === 'disabled') {
       return {
         allowed: true,
         reason: 'Scoring disabled',
@@ -233,7 +226,7 @@ export class ScoringGate {
    * Get the current scorer type
    */
   getScorerType(): ScorerType {
-    return this.config.scorer;
+    return this.config.scorerType;
   }
 
   /**

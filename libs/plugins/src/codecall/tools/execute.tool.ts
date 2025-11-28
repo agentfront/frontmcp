@@ -19,6 +19,7 @@ import {
   CallToolOptions,
   ToolCallErrorCode,
 } from '../errors/tool-call.errors';
+import { extractResultFromCallToolResult } from '../utils';
 
 /**
  * Determine the error code from an error object.
@@ -36,6 +37,10 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
 
   if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
     return TOOL_CALL_ERROR_CODES.TIMEOUT;
+  }
+
+  if (error.name === 'ToolNotFoundError' || error.message?.includes('not found')) {
+    return TOOL_CALL_ERROR_CODES.NOT_FOUND;
   }
 
   return TOOL_CALL_ERROR_CODES.EXECUTION;
@@ -57,7 +62,7 @@ function getErrorCode(error: unknown): ToolCallErrorCode {
 })
 export default class ExecuteTool extends ToolContext {
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
-    const { script, allowedTools, context } = input;
+    const { script, allowedTools } = input;
 
     // Set up the VM environment with tool integration
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
@@ -88,31 +93,40 @@ export default class ExecuteTool extends ToolContext {
         }
 
         // ============================================================
-        // Tool execution with result-based error handling
-        // All errors from here are sanitized before exposure
+        // Tool execution through the proper flow system
+        // This ensures hooks, validation, quota, and all middleware run
         // ============================================================
         try {
-          // Find the tool in the registry
-          const tools = this.scope.tools.getTools(true);
-          const tool = tools.find((t) => t.name === name || t.fullName === name);
+          // Build MCP-compatible CallToolRequest
+          const request = {
+            method: 'tools/call' as const,
+            params: {
+              name,
+              arguments: toolInput as Record<string, unknown>,
+            },
+          };
 
-          if (!tool) {
-            const error = createToolCallError(TOOL_CALL_ERROR_CODES.NOT_FOUND, name);
+          // Build context with auth info
+          const ctx = {
+            authInfo: this.authInfo,
+          };
+
+          // Execute through the flow system - this runs all stages:
+          // PRE: parseInput → findTool → createToolCallContext → acquireQuota → acquireSemaphore
+          // EXECUTE: validateInput → execute → validateOutput
+          // FINALIZE: releaseSemaphore → releaseQuota → finalize
+          const mcpResult = await this.scope.runFlow('tools:call-tool', { request, ctx });
+
+          if (!mcpResult) {
+            const error = createToolCallError(TOOL_CALL_ERROR_CODES.EXECUTION, name, 'Flow returned no result');
             if (throwOnError) {
               throw error;
             }
             return { success: false, error };
           }
 
-          // Create a tool context and execute
-          const toolContext = tool.create(
-            toolInput as any,
-            {
-              authInfo: this.authInfo,
-            } as any,
-          );
-
-          const result = await toolContext.execute(toolInput as any);
+          // Extract the actual result from MCP CallToolResult format
+          const result = extractResultFromCallToolResult(mcpResult);
 
           // Success path
           if (throwOnError) {
@@ -155,8 +169,6 @@ export default class ExecuteTool extends ToolContext {
           return undefined;
         }
       },
-
-      codecallContext: Object.freeze(context || {}),
 
       console: this.tryGet(CodeCallConfig)?.get('resolvedVm.allowConsole') ? console : undefined,
 

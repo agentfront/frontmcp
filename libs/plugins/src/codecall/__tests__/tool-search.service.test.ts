@@ -458,6 +458,9 @@ describe('ToolSearchService', () => {
         {
           embeddingOptions: {
             strategy: 'tfidf',
+            modelName: 'Xenova/all-MiniLM-L6-v2',
+            cacheDir: './.cache/transformers',
+            useHNSW: false,
           },
         },
         scope,

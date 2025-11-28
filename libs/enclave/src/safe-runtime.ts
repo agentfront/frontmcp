@@ -7,11 +7,12 @@
  * @packageDocumentation
  */
 
-import type { ExecutionContext, ToolHandler } from './types';
+import type { ExecutionContext, SecureProxyLevelConfig, ToolHandler } from './types';
 import { sanitizeValue } from './value-sanitizer';
 import { ReferenceSidecar } from './sidecar/reference-sidecar';
 import { ReferenceResolver, ResolutionLimitError } from './sidecar/reference-resolver';
 import { ReferenceConfig, isReferenceId } from './sidecar/reference-config';
+import { createSecureProxy, wrapGlobalsWithSecureProxy, SecureProxyOptions } from './secure-proxy';
 
 /**
  * Options for safe runtime creation
@@ -28,6 +29,12 @@ export interface SafeRuntimeOptions {
    * Required when sidecar is provided
    */
   referenceConfig?: ReferenceConfig;
+
+  /**
+   * Secure proxy configuration from security level
+   * Controls which properties are blocked by the proxy
+   */
+  secureProxyConfig?: SecureProxyLevelConfig;
 }
 
 /**
@@ -41,7 +48,11 @@ export function createSafeRuntime(context: ExecutionContext, options?: SafeRunti
   const { config, stats } = context;
   const sidecar = options?.sidecar;
   const referenceConfig = options?.referenceConfig;
+  const secureProxyConfig = options?.secureProxyConfig;
   const resolver = sidecar && referenceConfig ? new ReferenceResolver(sidecar, referenceConfig) : undefined;
+
+  // Build proxy options from config for consistent usage
+  const proxyOptions: SecureProxyOptions = secureProxyConfig ? { levelConfig: secureProxyConfig } : {};
 
   /**
    * Safe callTool implementation
@@ -440,32 +451,58 @@ export function createSafeRuntime(context: ExecutionContext, options?: SafeRunti
   }
 
   // Prepare custom globals with __safe_ prefix
+  // Wrap all custom globals with secure proxies to block constructor access
   const customGlobalsWithPrefix: Record<string, unknown> = {};
   if (config.globals) {
-    for (const [key, value] of Object.entries(config.globals)) {
+    const wrappedCustomGlobals = wrapGlobalsWithSecureProxy(config.globals, proxyOptions);
+    for (const [key, value] of Object.entries(wrappedCustomGlobals)) {
       customGlobalsWithPrefix[`__safe_${key}`] = value;
     }
   }
 
-  // Return safe runtime object
-  return {
-    __safe_callTool,
-    __safe_forOf,
-    __safe_for,
-    __safe_while,
-    __safe_doWhile,
-    __safe_concat,
-    __safe_template,
-    __safe_parallel,
+  // Create secure proxies for standard library objects
+  // This blocks access to dangerous properties like 'constructor', '__proto__'
+  // even when accessed via computed property names like obj['const'+'ructor']
+  const secureStdLib = wrapGlobalsWithSecureProxy(
+    {
+      Math,
+      JSON,
+      Array,
+      Object,
+      String,
+      Number,
+      Date,
+    },
+    proxyOptions,
+  );
 
-    // Whitelisted safe globals (passed through)
-    Math: Math,
-    JSON: JSON,
-    Array: Array,
-    Object: Object,
-    String: String,
-    Number: Number,
-    Date: Date,
+  // Wrap the safe runtime functions themselves with secure proxies
+  // This prevents attacks like: callTool['const'+'ructor']
+  const safeCallToolProxy = createSecureProxy(__safe_callTool, proxyOptions);
+  const safeForOfProxy = createSecureProxy(__safe_forOf, proxyOptions);
+  const safeForProxy = createSecureProxy(__safe_for, proxyOptions);
+  const safeWhileProxy = createSecureProxy(__safe_while, proxyOptions);
+  const safeDoWhileProxy = createSecureProxy(__safe_doWhile, proxyOptions);
+  const safeConcatProxy = createSecureProxy(__safe_concat, proxyOptions);
+  const safeTemplateProxy = createSecureProxy(__safe_template, proxyOptions);
+  const safeParallelProxy = createSecureProxy(__safe_parallel, proxyOptions);
+
+  // Return safe runtime object with all values protected by secure proxies
+  return {
+    // Safe runtime functions (proxied to block constructor access)
+    __safe_callTool: safeCallToolProxy,
+    __safe_forOf: safeForOfProxy,
+    __safe_for: safeForProxy,
+    __safe_while: safeWhileProxy,
+    __safe_doWhile: safeDoWhileProxy,
+    __safe_concat: safeConcatProxy,
+    __safe_template: safeTemplateProxy,
+    __safe_parallel: safeParallelProxy,
+
+    // Whitelisted safe globals (proxied to block constructor access)
+    ...secureStdLib,
+
+    // Primitives don't need proxying
     NaN: NaN,
     Infinity: Infinity,
     undefined: undefined,
@@ -474,7 +511,7 @@ export function createSafeRuntime(context: ExecutionContext, options?: SafeRunti
     parseInt: parseInt,
     parseFloat: parseFloat,
 
-    // Custom globals (with __safe_ prefix for transformed code)
+    // Custom globals (with __safe_ prefix, already proxied)
     ...customGlobalsWithPrefix,
   };
 }

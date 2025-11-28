@@ -24,6 +24,45 @@
 export type SecurityLevel = 'STRICT' | 'SECURE' | 'STANDARD' | 'PERMISSIVE';
 
 /**
+ * Secure proxy configuration per security level
+ *
+ * Controls which dangerous properties are blocked at runtime via JavaScript Proxies.
+ * This provides defense-in-depth against computed property access attacks that
+ * bypass static AST analysis.
+ */
+export interface SecureProxyLevelConfig {
+  /**
+   * Whether to block 'constructor' property access
+   * Prevents: obj['const' + 'ructor'] attacks for code execution
+   * @default true (blocks constructor for security)
+   *
+   * Set to false in PERMISSIVE mode for development/debugging
+   */
+  blockConstructor: boolean;
+
+  /**
+   * Whether to block prototype access (__proto__, prototype)
+   * Prevents: prototype chain manipulation attacks
+   * @default true (always recommended to keep true)
+   */
+  blockPrototype: boolean;
+
+  /**
+   * Whether to block legacy getter/setter methods
+   * Blocks: __defineGetter__, __defineSetter__, __lookupGetter__, __lookupSetter__
+   * @default true
+   */
+  blockLegacyAccessors: boolean;
+
+  /**
+   * Maximum depth for recursive proxying
+   * Limits how deep nested objects are wrapped in secure proxies
+   * @default 10
+   */
+  proxyMaxDepth: number;
+}
+
+/**
  * Security level configuration presets
  *
  * Each level adjusts:
@@ -96,6 +135,12 @@ export interface SecurityLevelConfig {
    * Prevents I/O flood attacks via excessive console calls
    */
   maxConsoleCalls: number;
+
+  /**
+   * Secure proxy configuration for runtime property access protection
+   * Controls which dangerous properties are blocked via JavaScript Proxies
+   */
+  secureProxy: SecureProxyLevelConfig;
 }
 
 /**
@@ -133,6 +178,12 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowFunctionsInGlobals: false,
     maxConsoleOutputBytes: 64 * 1024, // 64KB - prevent I/O flood attacks
     maxConsoleCalls: 100,
+    secureProxy: {
+      blockConstructor: true,
+      blockPrototype: true,
+      blockLegacyAccessors: true,
+      proxyMaxDepth: 5,
+    },
   },
 
   /**
@@ -165,6 +216,12 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowFunctionsInGlobals: false,
     maxConsoleOutputBytes: 256 * 1024, // 256KB
     maxConsoleCalls: 500,
+    secureProxy: {
+      blockConstructor: true,
+      blockPrototype: true,
+      blockLegacyAccessors: true,
+      proxyMaxDepth: 10,
+    },
   },
 
   /**
@@ -196,6 +253,12 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowFunctionsInGlobals: false,
     maxConsoleOutputBytes: 1024 * 1024, // 1MB
     maxConsoleCalls: 1000,
+    secureProxy: {
+      blockConstructor: true,
+      blockPrototype: true,
+      blockLegacyAccessors: true,
+      proxyMaxDepth: 15,
+    },
   },
 
   /**
@@ -229,6 +292,12 @@ export const SECURITY_LEVEL_CONFIGS: Record<SecurityLevel, SecurityLevelConfig> 
     allowFunctionsInGlobals: true,
     maxConsoleOutputBytes: 10 * 1024 * 1024, // 10MB
     maxConsoleCalls: 10000,
+    secureProxy: {
+      blockConstructor: false, // Allow constructor access for development/debugging
+      blockPrototype: true, // Still block prototype for safety
+      blockLegacyAccessors: true,
+      proxyMaxDepth: 20,
+    },
   },
 };
 
@@ -513,6 +582,11 @@ export interface ExecutionContext {
    * Reference configuration for sidecar
    */
   referenceConfig?: ReferenceConfig;
+
+  /**
+   * Secure proxy configuration for runtime property blocking
+   */
+  secureProxyConfig?: SecureProxyLevelConfig;
 }
 
 /**
@@ -746,6 +820,23 @@ export interface CreateEnclaveOptions extends EnclaveConfig {
    * ```
    */
   workerPoolConfig?: Partial<WorkerPoolConfig>;
+
+  /**
+   * Secure proxy configuration override
+   *
+   * Override individual secure proxy settings from the security level preset.
+   * If not provided, uses the security level defaults.
+   *
+   * @example
+   * ```typescript
+   * // Use STRICT but allow constructor access for debugging
+   * const enclave = new Enclave({
+   *   securityLevel: 'STRICT',
+   *   secureProxyConfig: { blockConstructor: false },
+   * });
+   * ```
+   */
+  secureProxyConfig?: Partial<SecureProxyLevelConfig>;
 }
 
 // Re-export scoring types for convenience
