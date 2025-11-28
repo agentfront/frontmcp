@@ -112,6 +112,14 @@ describe('SearchTool', () => {
 
       expect(result.tools).toHaveLength(1);
       expect(result.tools[0].name).toBe('users:list');
+
+      // Verify low_relevance warning is emitted
+      expect(result.warnings).toContainEqual(
+        expect.objectContaining({
+          type: 'low_relevance',
+          message: expect.stringContaining('1 result(s) filtered'),
+        }),
+      );
     });
 
     it('should use custom minRelevanceScore', async () => {

@@ -90,7 +90,7 @@ function createMockEnclaveService(executeResult?: Partial<EnclaveExecutionResult
       result: { data: 'test' },
       logs: [],
       timedOut: false,
-      stats: { executionTimeMs: 10, iterations: 0, toolCalls: 0 },
+      stats: { duration: 10, toolCallCount: 0, iterationCount: 0 },
       ...executeResult,
     }),
   };
