@@ -118,17 +118,19 @@ export default class HookRegistry
 
     // Keep raw records grouped by class (if needed elsewhere)
     const cls = rec.metadata.target;
-    const recs = this.recordsByCls.get(cls) ?? [];
-    recs.push(rec);
-    this.recordsByCls.set(cls, recs);
+    if (cls) {
+      const recs = this.recordsByCls.get(cls) ?? [];
+      recs.push(rec);
+      this.recordsByCls.set(cls, recs);
+    }
 
     // Build fast indexes of *instances*, sorted by priority
     const entry = this.instances.get(token)!;
     const { flow, stage, target } = rec.metadata;
 
-    if (embedded) {
+    if (embedded && target) {
       this.indexByClass(target.constructor ?? target, entry);
-    } else {
+    } else if (!embedded) {
       this.indexByFlowStage(flow, String(stage), entry);
       this.indexByFlow(flow, entry);
     }

@@ -1,6 +1,6 @@
 // auth/flows/well-known.oauth-authorization-server.flow.ts
 import 'reflect-metadata';
-import {z} from 'zod';
+import { z } from 'zod';
 import {
   HttpRedirectSchema,
   httpRespond,
@@ -10,13 +10,14 @@ import {
   FlowRunOptions,
   ScopeEntry,
   ServerRequest,
-  StageHookOf, httpInputSchema, FlowPlan,
+  StageHookOf,
+  httpInputSchema,
+  FlowPlan,
+  getRequestBaseUrl,
+  makeWellKnownPaths,
 } from '../../common';
-import {getRequestBaseUrl, makeWellKnownPaths} from '../path.utils';
-
 
 const inputSchema = httpInputSchema;
-
 
 // ===== Result =====
 const AuthServerMetadataSchema = z.object({
@@ -56,7 +57,6 @@ export const wellKnownAsStateSchema = z.object({
   isOrchestrated: z.boolean(),
 });
 
-
 const wellKnownAsPlan = {
   pre: ['parseInput'],
   execute: ['collectData'],
@@ -69,7 +69,7 @@ type WellKnownAsFlowOptions = FlowRunOptions<
   typeof inputSchema,
   typeof outputSchema,
   typeof wellKnownAsStateSchema
->
+>;
 
 declare global {
   interface ExtendFlows {
@@ -79,7 +79,6 @@ declare global {
 
 const name = 'well-known.oauth-authorization-server' as const;
 const Stage = StageHookOf(name);
-
 
 @Flow({
   name,
@@ -98,22 +97,24 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
 
   @Stage('parseInput')
   async parseInput() {
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
     if (!request) throw new Error('Request is undefined');
 
     const baseUrl = getRequestBaseUrl(request, this.scope.entryPath);
-    this.state.set(wellKnownAsStateSchema.parse({
-      baseUrl,
-      scopesSupported: [],
-      tokenEndpointAuthMethods: [],
-      dcrEnabled: false, //scope.oauth.dcrEnabled,
-      isOrchestrated: !this.scope.metadata.auth, // scope.orchestrated,
-    }));
+    this.state.set(
+      wellKnownAsStateSchema.parse({
+        baseUrl,
+        scopesSupported: [],
+        tokenEndpointAuthMethods: [],
+        dcrEnabled: false, //scope.oauth.dcrEnabled,
+        isOrchestrated: !this.scope.metadata.auth, // scope.orchestrated,
+      }),
+    );
   }
 
   @Stage('collectData')
   async collectData() {
-    const {baseUrl, scopesSupported, tokenEndpointAuthMethods, dcrEnabled, isOrchestrated} = this.state.required;
+    const { baseUrl, scopesSupported, tokenEndpointAuthMethods, dcrEnabled, isOrchestrated } = this.state.required;
     // Orchestrated => gateway is the AS
     if (isOrchestrated) {
       const baseIssuer = `${baseUrl}`;

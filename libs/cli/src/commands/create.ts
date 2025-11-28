@@ -40,7 +40,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
   const pkgPath = path.join(cwd, 'package.json');
   const existing = await readJSON<Record<string, any>>(pkgPath);
 
-  const frontmcpLibRange = `^${selfVersion}`;
+  const frontmcpLibRange = `~${selfVersion}`;
 
   const base = {
     name: nameOverride ?? pkgNameFromCwd(cwd),
@@ -53,6 +53,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
       build: 'frontmcp build',
       inspect: 'frontmcp inspector',
       doctor: 'frontmcp doctor',
+      'test:e2e': 'jest --config jest.e2e.config.ts --runInBand',
     },
     engines: {
       node: '>=22',
@@ -67,6 +68,10 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     },
     devDependencies: {
       frontmcp: selfVersion,
+      '@frontmcp/testing': frontmcpLibRange,
+      '@swc/core': '^1.11.29',
+      '@swc/jest': '^0.2.37',
+      jest: '^29.7.0',
       tsx: '^4.20.6',
       '@types/node': '^24.0.0',
       typescript: '^5.5.3',
@@ -92,6 +97,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     build: existing.scripts?.build ?? base.scripts.build,
     inspect: existing.scripts?.inspect ?? base.scripts.inspect,
     doctor: existing.scripts?.doctor ?? base.scripts.doctor,
+    'test:e2e': existing.scripts?.['test:e2e'] ?? base.scripts['test:e2e'],
   };
 
   merged.engines = {
@@ -175,6 +181,72 @@ export default class AddTool extends ToolContext {
 }
 `;
 
+const TEMPLATE_E2E_TEST_TS = `
+import { test, expect } from '@frontmcp/testing';
+
+test.describe('Server E2E', () => {
+  test.use({
+    server: './src/main.ts',
+    port: 3100,
+  });
+
+  test('should connect and initialize', async ({ mcp }) => {
+    expect(mcp.isConnected()).toBe(true);
+    expect(mcp.serverInfo.name).toBeDefined();
+  });
+
+  test('should list tools', async ({ mcp }) => {
+    const tools = await mcp.tools.list();
+    expect(tools.length).toBeGreaterThanOrEqual(0);
+  });
+
+  test('should call add tool', async ({ mcp }) => {
+    const result = await mcp.tools.call('add', { a: 2, b: 3 });
+    expect(result).toBeSuccessful();
+  });
+});
+`;
+
+const TEMPLATE_JEST_E2E_CONFIG = `
+/* eslint-disable */
+export default {
+  displayName: 'e2e',
+  testEnvironment: 'node',
+  testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
+  testTimeout: 60000,
+  setupFilesAfterEnv: ['@frontmcp/testing/setup'],
+  transform: {
+    '^.+\\\\.[tj]s$': [
+      '@swc/jest',
+      {
+        jsc: {
+          target: 'es2022',
+          parser: {
+            syntax: 'typescript',
+            decorators: true,
+            dynamicImport: true,
+          },
+          transform: {
+            decoratorMetadata: true,
+            legacyDecorator: true,
+          },
+          keepClassNames: true,
+          externalHelpers: true,
+          loose: true,
+        },
+        module: {
+          type: 'es6',
+        },
+        sourceMaps: true,
+        swcrc: false,
+      },
+    ],
+  },
+  moduleFileExtensions: ['ts', 'js', 'html'],
+  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
+};
+`;
+
 export async function runCreate(projectArg?: string): Promise<void> {
   if (!projectArg) {
     console.error(c('red', 'Error: project name is required.\n'));
@@ -224,10 +296,15 @@ export async function runCreate(projectArg?: string): Promise<void> {
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'calc.app.ts'), TEMPLATE_CALC_APP_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'src', 'tools', 'add.tool.ts'), TEMPLATE_ADD_TOOL_TS);
 
+  // E2E scaffolding
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.test.ts'), TEMPLATE_E2E_TEST_TS);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
+
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);
   console.log('  2) npm install');
-  console.log('  3) npm run dev     ', c('gray', '# tsx watcher + async tsc type-check'));
-  console.log('  4) npm run inspect ', c('gray', '# launch MCP Inspector'));
-  console.log('  5) npm run build   ', c('gray', '# compile with tsc via frontmcp build'));
+  console.log('  3) npm run dev      ', c('gray', '# tsx watcher + async tsc type-check'));
+  console.log('  4) npm run inspect  ', c('gray', '# launch MCP Inspector'));
+  console.log('  5) npm run build    ', c('gray', '# compile with tsc via frontmcp build'));
+  console.log('  6) npm run test:e2e ', c('gray', '# run E2E tests'));
 }

@@ -78,6 +78,16 @@ export class McpTestClientBuilder {
   }
 
   /**
+   * Enable public mode - skip authentication entirely.
+   * When true, no Authorization header is sent and anonymous token is not requested.
+   * Use this for testing public/unauthenticated endpoints in CI/CD pipelines.
+   */
+  withPublicMode(enabled = true): this {
+    this.config.publicMode = enabled;
+    return this;
+  }
+
+  /**
    * Set the MCP protocol version to request
    */
   withProtocolVersion(version: string): this {

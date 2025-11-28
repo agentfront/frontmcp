@@ -40,29 +40,72 @@ export function encryptJson(obj: unknown): string {
   return `${b64urlEncode(iv)}.${b64urlEncode(tag)}.${b64urlEncode(ct)}`;
 }
 
-function decryptSessionId(sessionId: string, sig: string): SessionIdPayload | null {
-  const key = getKey();
-  const [ivB64, tagB64, ctB64] = sessionId.split('.');
-  if (!ivB64 || !tagB64 || !ctB64) return null;
-  try {
-    const iv = b64urlDecode(ivB64);
-    const tag = b64urlDecode(tagB64);
-    const ct = b64urlDecode(ctB64);
-    const decipher = createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(tag);
-    const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
-    const dec = JSON.parse(pt.toString('utf8'));
-    if (
-      typeof dec.nodeId === 'string' &&
-      typeof dec.authSig === 'string' &&
-      typeof dec.uuid === 'string' &&
-      typeof dec.iat === 'number' &&
-      dec.authSig === sig
-    ) {
-      return dec;
-    }
+/**
+ * Low-level decryption that returns the raw JSON payload or null.
+ * Handles all crypto/parsing failures by returning null.
+ */
+function decryptSessionJson(sessionId: string): unknown {
+  const parts = sessionId.split('.');
+  if (parts.length !== 3) return null;
 
-    throw new Error('Invalid session id');
+  const [ivB64, tagB64, ctB64] = parts;
+  if (!ivB64 || !tagB64 || !ctB64) return null;
+
+  const key = getKey();
+  const iv = b64urlDecode(ivB64);
+  const tag = b64urlDecode(tagB64);
+  const ct = b64urlDecode(ctB64);
+
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
+  return JSON.parse(pt.toString('utf8'));
+}
+
+function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {
+  if (typeof dec !== 'object' || dec === null) return false;
+  const d = dec as Record<string, unknown>;
+  return (
+    typeof d['nodeId'] === 'string' &&
+    typeof d['authSig'] === 'string' &&
+    typeof d['uuid'] === 'string' &&
+    typeof d['iat'] === 'number' &&
+    d['authSig'] === sig
+  );
+}
+
+function isValidPublicSessionPayload(dec: unknown): dec is SessionIdPayload {
+  if (typeof dec !== 'object' || dec === null) return false;
+  const d = dec as Record<string, unknown>;
+  return (
+    typeof d['nodeId'] === 'string' &&
+    d['authSig'] === 'public' &&
+    typeof d['uuid'] === 'string' &&
+    typeof d['iat'] === 'number' &&
+    d['isPublic'] === true
+  );
+}
+
+function decryptSessionId(sessionId: string, sig: string): SessionIdPayload | null {
+  const dec = safeDecrypt(sessionId);
+  return isValidSessionPayload(dec, sig) ? dec : null;
+}
+
+/**
+ * Decrypt a public session ID without signature verification.
+ * Public sessions use authSig: 'public' and isPublic: true
+ */
+export function decryptPublicSession(sessionId: string): SessionIdPayload | null {
+  const dec = safeDecrypt(sessionId);
+  return isValidPublicSessionPayload(dec) ? dec : null;
+}
+
+/**
+ * Safe wrapper around decryptSessionJson that catches crypto/parse errors.
+ */
+function safeDecrypt(sessionId: string): unknown {
+  try {
+    return decryptSessionJson(sessionId);
   } catch {
     return null;
   }
@@ -138,5 +181,3 @@ export function extractSessionFromCookie(cookie?: string): string | undefined {
   const m = cookie.match(/(^|;)\s*mcp_session_id\s*=\s*([^;]*)/);
   return m ? m[2] : undefined;
 }
-
-

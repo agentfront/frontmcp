@@ -2,22 +2,29 @@ import {
   FlowCtxOf,
   FlowInputOf,
   FlowName,
-  FlowStagesOf, FrontMcpLogger,
-  HookEntry, HookMetadata, HookRecord,
+  FlowStagesOf,
+  FrontMcpLogger,
+  HookEntry,
+  HookMetadata,
+  HookRecord,
   ProviderRegistryInterface,
-  ScopeEntry, Token
-} from "../common";
+  ScopeEntry,
+  Token,
+} from '../common';
 
-
-export class HookInstance<Name extends FlowName, In = FlowInputOf<Name>, Stage = FlowStagesOf<Name>, Ctx = FlowCtxOf<Name>>
-  extends HookEntry<In, Name, Stage, Ctx> {
+export class HookInstance<
+  Name extends FlowName,
+  In = FlowInputOf<Name>,
+  Stage = FlowStagesOf<Name>,
+  Ctx = FlowCtxOf<Name>,
+> extends HookEntry<In, Name, Stage, Ctx> {
   logger: FrontMcpLogger;
 
   constructor(scope: ScopeEntry, providers: ProviderRegistryInterface, record: HookRecord, token: Token) {
     super(scope, providers, record, token, record.metadata as HookMetadata<Name, Stage, Ctx>);
 
-    const {flow, method, stage} = this.metadata
-    this.logger = scope.logger.child(`${flow}:hook:${stage}(${method})`)
+    const { flow, method, stage } = this.metadata;
+    this.logger = scope.logger.child(`${flow}:hook:${stage}(${method})`);
   }
 
   protected initialize(): Promise<void> {
@@ -25,9 +32,12 @@ export class HookInstance<Name extends FlowName, In = FlowInputOf<Name>, Stage =
   }
 
   async run(input: In, ctx: Ctx): Promise<void> {
-    const {target, method} = this.metadata;
-    this.logger.verbose("start")
+    const { target, method } = this.metadata;
+    if (!target) {
+      throw new Error(`Hook target is not defined for method "${method}". This is a bug in hook configuration.`);
+    }
+    this.logger.verbose('start');
     await target[method](input, ctx);
-    this.logger.verbose("start")
+    this.logger.verbose('done');
   }
 }

@@ -3,15 +3,17 @@ import { test, expect, httpMock } from '@frontmcp/testing';
 /**
  * E2E Tests for OpenAPI Adapter
  *
- * Note: These tests require a running FrontMCP server with proper OAuth configuration.
- * Currently skipped pending local auth implementation (see enhance-authentication PR).
+ * These tests use public mode - no authentication required.
+ * Server runs with `auth: { mode: 'public' }` which creates
+ * stateful sessions with short TTL, suitable for CI/CD pipelines.
  */
 test.use({
   server: './src/main.ts',
   port: 3013,
+  publicMode: true, // Skip authentication - server is in public mode
 });
 
-test.describe.skip('OpenAPI Adapter', () => {
+test.describe('OpenAPI Adapter', () => {
   // TODO: OpenAPI adapter disabled due to SDK hook validation bug
   // Re-enable these tests once the SDK issue is fixed
   test.skip('lists tools from OpenAPI adapter', async ({ mcp }) => {

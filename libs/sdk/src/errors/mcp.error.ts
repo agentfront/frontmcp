@@ -358,6 +358,29 @@ export class InvalidHookFlowError extends InternalMcpError {
   }
 }
 
+/**
+ * Auth configuration error - thrown when auth configuration is invalid
+ * (e.g., transparent mode on parent with multiple child providers).
+ */
+export class AuthConfigurationError extends PublicMcpError {
+  readonly errors: string[];
+  readonly suggestion?: string;
+
+  constructor(message: string, options?: { errors?: string[]; suggestion?: string }) {
+    super(message, 'AUTH_CONFIGURATION_ERROR', 500);
+    this.errors = options?.errors ?? [message];
+    this.suggestion = options?.suggestion;
+  }
+
+  override getPublicMessage(): string {
+    let msg = this.message;
+    if (this.suggestion) {
+      msg += `\n\nTo fix this issue:\n${this.suggestion}`;
+    }
+    return msg;
+  }
+}
+
 // ============================================================================
 // Prompt Errors
 // ============================================================================

@@ -113,11 +113,17 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
 
   protected ensureAuthInfo(req: AuthenticatedServerRequest, transport: LocalTransportAdapter<T>) {
     const { token, user, session } = req[ServerRequestTokens.auth];
+
+    // Session should always exist now (created in session.verify for public mode)
+    // But add defensive fallback for safety in case session is undefined
+    const sessionId = session?.id ?? `fallback:${Date.now()}`;
+    const sessionPayload = session?.payload ?? { protocol: 'streamable-http' as const };
+
     req.auth = {
       token,
       user,
-      sessionId: session!.id,
-      sessionIdPayload: session!.payload,
+      sessionId,
+      sessionIdPayload: sessionPayload,
       scopes: [],
       clientId: user.sub ?? '',
       transport,

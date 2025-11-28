@@ -162,7 +162,7 @@ export class MessageSizeError extends WorkerPoolError {
  */
 export class WorkerStartupError extends WorkerPoolError {
   /** Original error that caused startup failure */
-  readonly cause?: Error;
+  override readonly cause?: Error;
 
   constructor(message: string, cause?: Error) {
     super(message);

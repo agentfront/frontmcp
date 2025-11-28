@@ -90,6 +90,7 @@ describe('PluginRegistry', () => {
       const registry = new PluginRegistry(providers, [
         {
           provide: PLUGIN_TOKEN,
+          inject: () => [] as const,
           useFactory: factoryFn,
           name: 'FactoryPlugin',
           description: 'A factory plugin',
@@ -396,6 +397,7 @@ describe('PluginRegistry', () => {
         new PluginRegistry(providers, [
           {
             provide: PLUGIN_TOKEN,
+            inject: () => [] as const,
             useFactory: 'not a function' as any,
             name: 'InvalidPlugin',
           },

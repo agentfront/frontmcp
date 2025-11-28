@@ -29,8 +29,8 @@ export class PromptEmitter {
         l(e);
       } catch (err) {
         // Log error but continue notifying other listeners
-        // Using console.error as this is a critical path that shouldn't fail silently
-        console.error('PromptEmitter listener error:', err);
+        // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
+        console.error('PromptEmitter listener error:', err instanceof Error ? err.message : 'Unknown error');
       }
     }
   }

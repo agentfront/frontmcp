@@ -1,7 +1,26 @@
 import { ServerRequest } from '../server.interface';
-import { AuthOptions } from '../../types';
+import {
+  AuthOptions,
+  TransportConfig,
+  isPublicMode,
+  isTransparentMode,
+  isOrchestratedMode,
+  isOrchestratedRemote,
+} from '../../types';
 import { urlToSafeId } from '../../utils';
 
+/**
+ * Convert URL to a safe provider ID (hostname with dots replaced)
+ * Matches the logic in auth-provider-detection.ts for consistency
+ */
+function urlToProviderId(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/\./g, '_');
+  } catch {
+    return url.replace(/[^a-zA-Z0-9]/g, '_');
+  }
+}
 
 /**
  * Base class for primary auth provider.
@@ -22,21 +41,47 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
 
   constructor(options: Options) {
     this.options = options;
-    if (options.type === 'local') {
-      this.id = options.id;
-    } else {
-      this.id = options.id ?? urlToSafeId(options.baseUrl);
+    this.id = this.deriveId(options);
+  }
+
+  /**
+   * Derive the provider ID from options.
+   * This logic MUST match deriveProviderId in auth-provider-detection.ts
+   * to ensure consistent provider IDs across the system.
+   */
+  private deriveId(options: AuthOptions): string {
+    if (isPublicMode(options)) {
+      return options.issuer ?? 'public';
     }
 
+    if (isTransparentMode(options)) {
+      return options.remote.id ?? urlToSafeId(options.remote.provider);
+    }
+
+    if (isOrchestratedMode(options)) {
+      if (isOrchestratedRemote(options)) {
+        return options.remote.id ?? urlToSafeId(options.remote.provider);
+      }
+      // Local orchestrated – match detection defaults
+      return options.local?.issuer ?? 'local';
+    }
+
+    return 'unknown';
   }
 
   abstract fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 
-  abstract validate(request: ServerRequest): Promise<void>
+  abstract validate(request: ServerRequest): Promise<void>;
 
-  abstract get issuer(): string
+  abstract get issuer(): string;
+
+  /**
+   * Get transport configuration with all defaults applied.
+   * After Zod parsing, transport is guaranteed to exist with defaults.
+   */
+  get transport(): TransportConfig {
+    return this.options.transport;
+  }
 }
 
-export {
-  FrontMcpAuth as Auth,
-};
+export { FrontMcpAuth as Auth };

@@ -3,14 +3,15 @@ import {
   LogTransportInterface,
   LogFn,
   LoggingConfigType,
-  LogLevel, LogLevelName,
+  LogLevel,
+  LogLevelName,
   LogRecord,
 } from '../../common';
 import { ConsoleLogTransportInstance } from './instance.console-logger';
 
 export type GetTransports = () => {
-  consoleTransport?: ConsoleLogTransportInstance,
-  transports: LogTransportInterface[]
+  consoleTransport?: ConsoleLogTransportInstance;
+  transports: LogTransportInterface[];
 };
 
 export class LoggerInstance extends FrontMcpLogger {
@@ -27,7 +28,6 @@ export class LoggerInstance extends FrontMcpLogger {
     const { transports, consoleTransport } = getTransports();
     this.transports = transports;
     this.consoleTransport = consoleTransport;
-
   }
 
   child(prefix: string): FrontMcpLogger {
@@ -51,8 +51,9 @@ export class LoggerInstance extends FrontMcpLogger {
         void t.log(rec);
       } catch (err) {
         // Never throw from logging
+        // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
         // eslint-disable-next-line no-console
-        console.error('[Logger] Transport error:', err);
+        console.error('[Logger] Transport error:', err instanceof Error ? err.message : 'Unknown error');
       }
     }
   }
@@ -78,14 +79,13 @@ export class LoggerInstance extends FrontMcpLogger {
   }
 
   private _getter(level: LogLevel): LogFn {
-    if (level < this.level || this.level === LogLevel.Off) return (() => void 0);
+    if (level < this.level || this.level === LogLevel.Off) return () => void 0;
     if (process.env['NODE_ENV'] === 'development' && this.config.enableConsole && this.consoleTransport) {
       return this.consoleTransport.bind(level, this.prefix);
     }
     const emit = this.emit.bind(this);
-    return function(...args: unknown[]) {
+    return function (...args: unknown[]) {
       emit(level, String(args[0]), Array.prototype.slice.call(args, 1));
     };
   }
-
 }

@@ -87,14 +87,21 @@ export class McpTestClient {
       baseUrl: config.baseUrl,
       transport: config.transport ?? 'streamable-http',
       auth: config.auth ?? {},
+      publicMode: config.publicMode ?? false,
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       debug: config.debug ?? false,
       protocolVersion: config.protocolVersion ?? DEFAULT_PROTOCOL_VERSION,
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
     };
 
-    // Parse auth state from config
-    if (config.auth?.token) {
+    // In public mode, user is always anonymous (no token authentication)
+    if (config.publicMode) {
+      this._authState = {
+        isAnonymous: true,
+        scopes: [],
+      };
+    } else if (config.auth?.token) {
+      // Parse auth state from config
       this._authState = {
         isAnonymous: false,
         token: config.auth.token,
@@ -145,6 +152,14 @@ export class McpTestClient {
       lastActivityAt: new Date(),
       requestCount: 1,
     };
+
+    // Send initialized notification per MCP protocol
+    // This notification MUST be sent after receiving initialize response
+    // before the client can make any other requests
+    await this.transport.notify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
 
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
 
@@ -789,6 +804,7 @@ export class McpTestClient {
           baseUrl: this.config.baseUrl,
           timeout: this.config.timeout,
           auth: this.config.auth,
+          publicMode: this.config.publicMode,
           debug: this.config.debug,
           interceptors: this._interceptors,
         });

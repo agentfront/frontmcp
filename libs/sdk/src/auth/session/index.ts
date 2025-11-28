@@ -1,5 +1,9 @@
-export { SessionService } from './session.service';
-export type { CreateSessionArgs } from './session.types';
-export { isSoonExpiringProvider } from './token.refresh';
+// Transport session architecture
+export * from './transport-session.types';
+export { TransportSessionManager, InMemorySessionStore } from './transport-session.manager';
 
-export { Session } from './record/session.base';
+// Authorization store for OAuth flows
+export * from './authorization.store';
+
+// Authorization vault for stateful sessions
+export * from './authorization-vault';
