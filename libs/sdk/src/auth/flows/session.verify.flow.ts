@@ -176,8 +176,15 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     // Public mode without token - create anonymous authorization WITH stateful session
     // Session is required for transport layer to function correctly
-    const user = { sub: `anon:${now}`, iss: 'public', name: 'Anonymous' };
+    // Use crypto.randomUUID() for unique anonymous user ID to avoid collision under concurrent requests
+    const user = { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
     const uuid = crypto.randomUUID();
+
+    // Validate protocol value before assignment to ensure type safety
+    const validProtocols = ['sse', 'legacy-sse', 'streamable-http', 'stateful-http', 'stateless-http'] as const;
+    type ValidProtocol = (typeof validProtocols)[number];
+    const validatedProtocol: ValidProtocol | undefined =
+      protocol && validProtocols.includes(protocol as ValidProtocol) ? (protocol as ValidProtocol) : undefined;
 
     // Create a valid session payload matching the SessionIdPayload schema
     const payload = {
@@ -185,7 +192,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       nodeId: machineId,
       authSig: 'public',
       iat: Math.floor(now / 1000),
-      protocol: protocol as 'sse' | 'legacy-sse' | 'streamable-http' | 'stateful-http' | 'stateless-http' | undefined,
+      protocol: validatedProtocol,
       isPublic: true,
     };
 
@@ -225,7 +232,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const token = this.state.required.token;
 
     if (!isJwt(token)) {
-      // Non-JWT tokens are passed through; user will be mostly empty (the best effort later).
+      // Non-JWT tokens are not supported - require JWT for verification
       this.respond({
         kind: 'unauthorized',
         prmMetadataHeader: this.state.required.prmMetadataHeader,
@@ -234,13 +241,23 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     }
 
     // Best-effort verification using locally known keys (gateway/local provider cache).
+    // Add defensive null check for this.scope.auth (consistent with line 130)
+    const auth = this.scope.auth;
+    if (!auth) {
+      this.respond({
+        kind: 'unauthorized',
+        prmMetadataHeader: this.state.required.prmMetadataHeader,
+      });
+      return;
+    }
+
     let verify: Promise<VerifyResult>;
-    const authOptions = this.scope.auth.options;
+    const authOptions = auth.options;
 
     // Transparent mode uses remote provider's keys, all other modes use local keys
     if (isTransparentMode(authOptions)) {
       const primary = authOptions as TransparentAuthOptions;
-      const issuer = this.scope.auth.issuer;
+      const issuer = auth.issuer;
       const providerRefs: ProviderVerifyRef[] = [
         {
           id: primary.remote.id ?? 'default',

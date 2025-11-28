@@ -15,11 +15,11 @@
       }
     },
     "serve": {
-      "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "build"
+        "buildTarget": "build",
+        "watch": true
       }
     },
     "test": {

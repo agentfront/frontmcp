@@ -17,6 +17,7 @@ export {
   GenericServerError,
   DependencyNotFoundError,
   InvalidHookFlowError,
+  AuthConfigurationError,
   PromptNotFoundError,
   PromptExecutionError,
   isPublicError,

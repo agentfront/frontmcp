@@ -29,7 +29,7 @@ import { tokenName } from '../utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';
-import { DependencyNotFoundError } from '../errors';
+import { DependencyNotFoundError, AuthConfigurationError } from '../errors';
 
 /**
  * Default auth options when none provided - public mode with all tools open
@@ -187,16 +187,16 @@ export class AuthRegistry
       }
 
       // Throw with first error (most important)
-      throw new Error(
-        `[AuthRegistry] Invalid auth configuration: ${validationErrors[0]}\n` +
-          `\nTo fix this issue:\n` +
+      throw new AuthConfigurationError(`Invalid auth configuration: ${validationErrors[0]}`, {
+        errors: validationErrors,
+        suggestion:
           `1. Change your parent auth mode from 'transparent' to 'orchestrated'\n` +
           `2. Example:\n` +
           `   auth: {\n` +
           `     mode: 'orchestrated',\n` +
           `     type: 'local', // or 'remote' with your provider config\n` +
-          `   }\n`,
-      );
+          `   }`,
+      });
     }
   }
 
@@ -253,7 +253,7 @@ export class AuthRegistry
 
       for (const d of deps) {
         if (!this.providers.get(d)) {
-          throw new Error(`AuthProvider ${tokenName(token)} depends on ${tokenName(d)}, which is not registered.`);
+          throw new DependencyNotFoundError('AuthRegistry', `${tokenName(d)} (required by ${tokenName(token)})`);
         }
         const graphEntry = this.graph.get(token);
         if (!graphEntry) {

@@ -103,7 +103,7 @@ async function main(): Promise<void> {
         showHelp();
         process.exitCode = 1;
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('\n' + c('red', err instanceof Error ? err.stack || err.message : String(err)));
     process.exit(1);
   }

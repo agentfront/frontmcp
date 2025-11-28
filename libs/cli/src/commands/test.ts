@@ -172,9 +172,10 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     }
   };
 
-  process.on('SIGINT', async () => {
-    await cleanup(jest);
-    process.exit(0);
+  process.on('SIGINT', () => {
+    cleanup(jest).finally(() => {
+      process.exit(0);
+    });
   });
 
   // Wait for Jest to complete

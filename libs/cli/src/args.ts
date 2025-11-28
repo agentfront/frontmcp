@@ -31,8 +31,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--runInBand' || a === '-i') out.runInBand = true;
     else if (a === '--watch' || a === '-w') out.watch = true;
     else if (a === '--verbose' || a === '-v') out.verbose = true;
-    else if (a === '--timeout' || a === '-t') out.timeout = parseInt(argv[++i], 10);
-    else out._.push(a);
+    else if (a === '--timeout' || a === '-t') {
+      const parsed = parseInt(argv[++i], 10);
+      out.timeout = Number.isNaN(parsed) ? undefined : parsed;
+    } else out._.push(a);
   }
   return out;
 }
