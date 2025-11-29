@@ -188,12 +188,17 @@ return { success: true, userName: user.name };
 
 ## Limits
 
-The runtime enforces these limits:
+The Enclave runtime enforces these limits (defaults vary by security level):
 
-- **Iteration limit**: 10,000 iterations per loop
-- **Execution timeout**: 30 seconds total
-- **Tool calls**: Limited by runtime configuration
-- **Memory**: Limited by sandbox configuration
+| Limit              | STRICT  | SECURE  | STANDARD | PERMISSIVE |
+| ------------------ | ------- | ------- | -------- | ---------- |
+| **Timeout**        | 2,000ms | 3,500ms | 5,000ms  | 10,000ms   |
+| **Max Iterations** | 2,000   | 5,000   | 10,000   | 20,000     |
+| **Max Tool Calls** | 10      | 100     | 200      | 500        |
+| **Console Output** | 32KB    | 64KB    | 256KB    | 1MB        |
+| **Console Calls**  | 50      | 100     | 500      | 1,000      |
+
+**Note:** Memory limits are enforced by the VM sandbox configuration. Use the `SECURE` preset for production workloads.
 
 ## Reserved Identifiers
 

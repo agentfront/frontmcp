@@ -28,14 +28,14 @@ export class Server {}
 
 ## Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `consent` | `ConsentConfig` | `{ enabled: false }` | Consent UI configuration |
-| `sessionMode` | `'stateful' \| 'stateless'` | `'stateful'` | Session management strategy |
-| `tokenStorage` | `object` | `{ type: 'memory' }` | Token storage backend |
-| `allowDefaultPublic` | `boolean` | `false` | Allow unauthenticated access |
-| `anonymousScopes` | `string[]` | `['anonymous']` | Scopes for anonymous sessions |
-| `incrementalAuth` | `IncrementalAuthConfig` | `{ enabled: true }` | Progressive authorization config |
+| Option               | Type                        | Default              | Description                      |
+| -------------------- | --------------------------- | -------------------- | -------------------------------- |
+| `consent`            | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration         |
+| `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Session management strategy      |
+| `tokenStorage`       | `object`                    | `{ type: 'memory' }` | Token storage backend            |
+| `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated access     |
+| `anonymousScopes`    | `string[]`                  | `['anonymous']`      | Scopes for anonymous sessions    |
+| `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization config |
 
 ---
 
@@ -43,14 +43,14 @@ export class Server {}
 
 Local mode exposes standard OAuth 2.1 endpoints:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/oauth/authorize` | GET | Start authorization flow |
-| `/oauth/token` | POST | Exchange code for tokens |
-| `/oauth/register` | POST | Dynamic Client Registration |
-| `/oauth/userinfo` | GET | Get user profile |
-| `/.well-known/oauth-authorization-server` | GET | Server metadata |
-| `/.well-known/jwks.json` | GET | Public signing keys |
+| Endpoint                                  | Method | Description                 |
+| ----------------------------------------- | ------ | --------------------------- |
+| `/oauth/authorize`                        | GET    | Start authorization flow    |
+| `/oauth/token`                            | POST   | Exchange code for tokens    |
+| `/oauth/register`                         | POST   | Dynamic Client Registration |
+| `/oauth/userinfo`                         | GET    | Get user profile            |
+| `/.well-known/oauth-authorization-server` | GET    | Server metadata             |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys         |
 
 ### Authorization Request
 

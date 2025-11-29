@@ -27,6 +27,7 @@ export type {
   SandboxAdapter,
   SecurityLevel,
   SecurityLevelConfig,
+  SecureProxyLevelConfig,
   ReferenceSidecarOptions,
   WorkerPoolConfig,
 } from './types';
@@ -84,6 +85,21 @@ export type {
 
 // Safe runtime utilities
 export { createSafeRuntime, serializeSafeRuntime, SafeRuntimeOptions } from './safe-runtime';
+
+// Secure Proxy - Runtime property access protection
+export {
+  createSecureProxy,
+  wrapGlobalsWithSecureProxy,
+  createSecureStandardLibrary,
+  isSecureProxy,
+  createSafeReflect,
+  buildBlockedPropertiesFromConfig,
+  getBlockedPropertiesForLevel,
+  BLOCKED_PROPERTY_CATEGORIES,
+  DEFAULT_SECURE_PROXY_CONFIG,
+  SecureProxyOptions,
+  BlockedPropertyCategory,
+} from './secure-proxy';
 
 // Reference Sidecar (pass-by-reference support)
 export {

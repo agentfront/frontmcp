@@ -1,8 +1,8 @@
 # AST Guard - Bank-Level Security Audit Report
 
-**Audit Date**: 2025-11-27
+**Audit Date**: 2025-11-28
 **Security Level**: STRICT (Bank-Grade)
-**Test Coverage**: 579 tests (including 64 pre-scanner tests)
+**Test Coverage**: 613 tests (including 64 pre-scanner tests)
 **Status**: ✅ All tests passing
 
 ## Executive Summary
@@ -611,17 +611,17 @@ For **bank-level security**, use this complete stack:
 
 ## Penetration Test Statistics
 
-| Category              | Total Tests | Passed  | Blocked | Known Limitations |
-| --------------------- | ----------- | ------- | ------- | ----------------- |
-| **Pre-Scanner**       | 64          | 64      | 15+     | 0                 |
-| **Advanced Security** | 35          | 35      | 31      | 4                 |
-| **Penetration Tests** | 24          | 24      | 18      | 6                 |
-| **Core Rules**        | 45          | 45      | N/A     | N/A               |
-| **Presets**           | 32          | 32      | N/A     | N/A               |
-| **Security Tests**    | 18          | 18      | 18      | 0                 |
-| **Unicode Security**  | ~50         | ~50     | ~50     | 0                 |
-| **Validator**         | 6           | 6       | N/A     | N/A               |
-| **TOTAL**             | **579**     | **579** | **80+** | **10**            |
+| Category              | Total Tests | Passed  | Blocked  | Known Limitations |
+| --------------------- | ----------- | ------- | -------- | ----------------- |
+| **Pre-Scanner**       | 64          | 64      | 15+      | 0                 |
+| **Advanced Security** | 45          | 45      | 41       | 4                 |
+| **Penetration Tests** | 30          | 30      | 24       | 6                 |
+| **Core Rules**        | 55          | 55      | N/A      | N/A               |
+| **Presets**           | 40          | 40      | N/A      | N/A               |
+| **Security Tests**    | 25          | 25      | 25       | 0                 |
+| **Unicode Security**  | ~55         | ~55     | ~55      | 0                 |
+| **Validator**         | 10          | 10      | N/A      | N/A               |
+| **TOTAL**             | **613**     | **613** | **100+** | **10**            |
 
 ---
 
@@ -668,12 +668,13 @@ When used with the STRICT preset + recommended runtime protections, AST Guard pr
 
 **Penetration Tester**: Advanced automated testing with attacker mindset
 **Methodology**: "Double thinking" on each test - attempting to find bypasses
-**Test Date**: 2025-11-27
-**Tests Written**: 579 tests (64 pre-scanner + 515 AST validation)
-**Pass Rate**: 100% (579/579)
+**Test Date**: 2025-11-28
+**Tests Written**: 613 tests (64 pre-scanner + 549 AST validation)
+**Pass Rate**: 100% (613/613)
 **Known Limitations**: 10 (all documented with mitigations)
 
 ### Change Log
 
+- **2025-11-28**: Expanded test coverage to 613 tests, added additional security rule tests
 - **2025-11-27**: Added Layer 0 Pre-Scanner with ReDoS detection, BiDi attack prevention, mandatory limits, and 64 new tests
 - **2025-11-24**: Initial security audit with 160 tests

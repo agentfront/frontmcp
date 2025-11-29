@@ -28,7 +28,6 @@ describe('EnclaveService', () => {
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },
       }),
-      codecallContext: Object.freeze({ userId: 'test-user', tenantId: 'test-tenant' }),
       console: undefined,
       mcpLog: jest.fn(),
       mcpNotify: jest.fn(),
@@ -696,6 +695,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50, // Low threshold for testing
         },
       });
@@ -728,6 +728,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
           allowComposites: false,
         },
@@ -755,6 +756,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
           allowComposites: true,
         },
@@ -787,6 +789,7 @@ describe('EnclaveService', () => {
         vm: { preset: 'secure' },
         sidecar: {
           enabled: true,
+          maxScriptLengthWhenDisabled: null,
           extractionThreshold: 50,
         },
       });
@@ -809,6 +812,1133 @@ describe('EnclaveService', () => {
       expect(result.success).toBe(true);
       expect(typeof result.result).toBe('string');
       expect((result.result as string).startsWith('__REF_')).toBe(true);
+    });
+  });
+
+  describe('Advanced Sandbox Escape Prevention', () => {
+    describe('Reflect-based attacks', () => {
+      it('should block Reflect.get access', async () => {
+        const result = await service.execute(
+          `
+          return Reflect.get({ a: 1 }, 'a');
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Reflect.construct', async () => {
+        const result = await service.execute(
+          `
+          const fn = Reflect.construct(Function, ['return process']);
+          return fn();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Reflect.apply', async () => {
+        const result = await service.execute(
+          `
+          const fn = (x) => x * 2;
+          return Reflect.apply(fn, null, [5]);
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Reflect.defineProperty', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          Reflect.defineProperty(obj, 'x', { value: 42 });
+          return obj.x;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Proxy-based attacks', () => {
+      it('should block Proxy constructor', async () => {
+        const result = await service.execute(
+          `
+          const handler = {
+            get: function(target, name) {
+              return 42;
+            }
+          };
+          const p = new Proxy({}, handler);
+          return p.anything;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Proxy.revocable', async () => {
+        const result = await service.execute(
+          `
+          const { proxy, revoke } = Proxy.revocable({}, {});
+          return proxy;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Symbol-based attacks', () => {
+      it('should block Symbol.for global registry', async () => {
+        const result = await service.execute(
+          `
+          const sym = Symbol.for('mySymbol');
+          return sym.toString();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block custom Symbol creation', async () => {
+        const result = await service.execute(
+          `
+          const sym = Symbol('custom');
+          return sym;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Symbol.iterator override', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          obj[Symbol.iterator] = function*() { yield 1; };
+          return [...obj];
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Prototype pollution attacks', () => {
+      it('should block __proto__ access', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          obj.__proto__.polluted = true;
+          return {}.polluted;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.prototype modification', async () => {
+        const result = await service.execute(
+          `
+          Object.prototype.malicious = function() { return 'hacked'; };
+          return {}.malicious();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Array.prototype modification', async () => {
+        const result = await service.execute(
+          `
+          Array.prototype.evil = function() { return 'hacked'; };
+          return [].evil();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.setPrototypeOf', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          Object.setPrototypeOf(obj, { malicious: true });
+          return obj.malicious;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.getPrototypeOf escape', async () => {
+        const result = await service.execute(
+          `
+          const proto = Object.getPrototypeOf({});
+          return proto.constructor;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Object descriptor attacks', () => {
+      it('should block Object.defineProperty', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          Object.defineProperty(obj, 'getter', {
+            get: function() { return process; }
+          });
+          return obj.getter;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.defineProperties', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          Object.defineProperties(obj, {
+            'evil': { value: 42, writable: true }
+          });
+          return obj.evil;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.getOwnPropertyDescriptor', async () => {
+        const result = await service.execute(
+          `
+          const desc = Object.getOwnPropertyDescriptor(Object, 'keys');
+          return desc.value;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Object.getOwnPropertyDescriptors', async () => {
+        const result = await service.execute(
+          `
+          const descs = Object.getOwnPropertyDescriptors(Array.prototype);
+          return descs;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Constructor chain attacks', () => {
+      it('should block constructor.constructor escape', async () => {
+        const result = await service.execute(
+          `
+          const fn = [].constructor.constructor('return process');
+          return fn();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block (()=>{}).constructor attack', async () => {
+        const result = await service.execute(
+          `
+          const fn = (() => {}).constructor('return globalThis');
+          return fn();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block async function constructor', async () => {
+        const result = await service.execute(
+          `
+          const AsyncFunction = (async () => {}).constructor;
+          const fn = new AsyncFunction('return await process');
+          return await fn();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block generator function constructor', async () => {
+        const result = await service.execute(
+          `
+          const GeneratorFunction = (function*(){}).constructor;
+          const gen = new GeneratorFunction('yield process');
+          return gen().next().value;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Legacy dangerous features', () => {
+      it('should block arguments.callee', async () => {
+        const result = await service.execute(
+          `
+          function test() {
+            return arguments.callee;
+          }
+          return test();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block function declarations', async () => {
+        const result = await service.execute(
+          `
+          function malicious() {
+            return 'should not work';
+          }
+          return malicious();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block with statement', async () => {
+        const result = await service.execute(
+          `
+          with({ x: 1 }) {
+            return x;
+          }
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Indirect eval attacks', () => {
+      it('should block indirect eval via (0, eval)', async () => {
+        const result = await service.execute(
+          `
+          const indirectEval = (0, eval);
+          return indirectEval('1 + 1');
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block eval aliasing', async () => {
+        const result = await service.execute(
+          `
+          const e = eval;
+          return e('42');
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block setTimeout with string', async () => {
+        const result = await service.execute(
+          `
+          setTimeout('return process', 0);
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block setInterval with string', async () => {
+        const result = await service.execute(
+          `
+          setInterval('return process', 0);
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Module/Import attacks', () => {
+      it('should block dynamic import', async () => {
+        const result = await service.execute(
+          `
+          const mod = await import('fs');
+          return mod;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block require alias', async () => {
+        const result = await service.execute(
+          `
+          const r = require;
+          return r('fs');
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Global object access attacks', () => {
+      it('should block globalThis access', async () => {
+        const result = await service.execute(
+          `
+          return globalThis.constructor;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block window access (browser global)', async () => {
+        const result = await service.execute(
+          `
+          return window.document;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block self access', async () => {
+        const result = await service.execute(
+          `
+          return self.constructor;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should not leak dangerous Node.js globals through this at top level', async () => {
+        const result = await service.execute(
+          `
+          return this;
+          `,
+          mockEnvironment,
+        );
+
+        // The sandbox may return its own "this" context which is fine
+        // The important thing is it doesn't expose dangerous Node.js globals
+        if (result.success && result.result != null) {
+          const value = result.result as Record<string, unknown>;
+          // Critical: no access to Node.js process
+          expect(value['process']).toBeUndefined();
+          // Critical: no access to require
+          expect(value['require']).toBeUndefined();
+          // Critical: no access to Buffer
+          expect(value['Buffer']).toBeUndefined();
+          // Critical: no access to __dirname/__filename
+          expect(value['__dirname']).toBeUndefined();
+          expect(value['__filename']).toBeUndefined();
+          // Critical: no access to module/exports
+          expect(value['module']).toBeUndefined();
+          expect(value['exports']).toBeUndefined();
+        }
+      });
+    });
+
+    describe('Type coercion attacks', () => {
+      it('should handle toString attack', async () => {
+        const result = await service.execute(
+          `
+          const obj = {
+            toString: function() {
+              return process.env.SECRET;
+            }
+          };
+          return "" + obj;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should handle valueOf attack', async () => {
+        const result = await service.execute(
+          `
+          const obj = {
+            valueOf: function() {
+              return process;
+            }
+          };
+          return obj + 1;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should handle Symbol.toPrimitive attack', async () => {
+        const result = await service.execute(
+          `
+          const obj = {
+            [Symbol.toPrimitive](hint) {
+              return process;
+            }
+          };
+          return +obj;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Error object exploitation', () => {
+      it('should block Error stack access', async () => {
+        const result = await service.execute(
+          `
+          try {
+            throw new Error('test');
+          } catch (e) {
+            return e.stack;
+          }
+          `,
+          mockEnvironment,
+        );
+
+        // Should either be blocked or return sanitized stack
+        expect(result.success === false || !String(result.result).includes('/Users/')).toBe(true);
+      });
+
+      it('should block prepareStackTrace override', async () => {
+        const result = await service.execute(
+          `
+          Error.prepareStackTrace = (err, stack) => {
+            return stack.map(s => s.getFileName());
+          };
+          try {
+            throw new Error();
+          } catch (e) {
+            return e.stack;
+          }
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('Async/Promise attacks', () => {
+      it('should block while loops disguised with async', async () => {
+        const result = await service.execute(
+          `
+          async function infiniteLoop() {
+            while(true) {
+              await new Promise(r => setTimeout(r, 0));
+            }
+          }
+          return infiniteLoop();
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block do-while loops', async () => {
+        const result = await service.execute(
+          `
+          let i = 0;
+          do {
+            i++;
+          } while (i < 10);
+          return i;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block Promise constructor abuse', async () => {
+        const result = await service.execute(
+          `
+          const p = new Promise((resolve) => {
+            resolve(process);
+          });
+          return await p;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    describe('WeakMap/WeakSet attacks', () => {
+      it('should block WeakMap usage', async () => {
+        const result = await service.execute(
+          `
+          const wm = new WeakMap();
+          const key = {};
+          wm.set(key, 'secret');
+          return wm.get(key);
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+
+      it('should block WeakSet usage', async () => {
+        const result = await service.execute(
+          `
+          const ws = new WeakSet();
+          const obj = {};
+          ws.add(obj);
+          return ws.has(obj);
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+      });
+    });
+  });
+
+  describe('Concurrency and Isolation', () => {
+    describe('Concurrent Execution', () => {
+      it('should handle multiple concurrent executions', async () => {
+        const promises = Array.from({ length: 5 }, (_, i) => service.execute(`return ${i * 10};`, mockEnvironment));
+
+        const results = await Promise.all(promises);
+
+        results.forEach((result, i) => {
+          expect(result.success).toBe(true);
+          expect(result.result).toBe(i * 10);
+        });
+      });
+
+      it('should isolate state between concurrent executions', async () => {
+        // Each script sets a variable and returns it
+        // State should not leak between executions
+        const promises = [
+          service.execute('const x = 1; return x;', mockEnvironment),
+          service.execute('const x = 2; return x;', mockEnvironment),
+          service.execute('const x = 3; return x;', mockEnvironment),
+        ];
+
+        const results = await Promise.all(promises);
+
+        expect(results[0].result).toBe(1);
+        expect(results[1].result).toBe(2);
+        expect(results[2].result).toBe(3);
+      });
+
+      it('should handle concurrent tool calls', async () => {
+        let callCount = 0;
+        (mockEnvironment.callTool as jest.Mock).mockImplementation(async () => {
+          callCount++;
+          await new Promise((r) => setTimeout(r, 10)); // Simulate async work
+          return { count: callCount };
+        });
+
+        const promises = [
+          service.execute('return await callTool("test", {});', mockEnvironment),
+          service.execute('return await callTool("test", {});', mockEnvironment),
+          service.execute('return await callTool("test", {});', mockEnvironment),
+        ];
+
+        const results = await Promise.all(promises);
+
+        // All should succeed
+        results.forEach((result) => {
+          expect(result.success).toBe(true);
+        });
+        // All tool calls should have been made
+        expect(mockEnvironment.callTool).toHaveBeenCalledTimes(3);
+      });
+
+      it('should handle mixed success and failure in concurrent executions', async () => {
+        const promises = [
+          service.execute('return 42;', mockEnvironment),
+          service.execute('return undefinedVar;', mockEnvironment), // Will fail
+          service.execute('return "hello";', mockEnvironment),
+        ];
+
+        const results = await Promise.all(promises);
+
+        expect(results[0].success).toBe(true);
+        expect(results[0].result).toBe(42);
+
+        expect(results[1].success).toBe(false);
+        expect(results[1].error).toBeDefined();
+
+        expect(results[2].success).toBe(true);
+        expect(results[2].result).toBe('hello');
+      });
+    });
+
+    describe('Execution Isolation', () => {
+      it('should not share variables between executions', async () => {
+        // First execution sets a "global" looking variable
+        await service.execute('const sharedLooking = "first";', mockEnvironment);
+
+        // Second execution should not see it
+        const result = await service.execute(
+          `
+          if (typeof sharedLooking !== 'undefined') {
+            return 'leaked';
+          }
+          return 'isolated';
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(false); // sharedLooking is not defined
+      });
+
+      it('should not share modifications between executions', async () => {
+        // First execution tries to modify something
+        const env1 = { ...mockEnvironment };
+        await service.execute(
+          `
+          const arr = [1, 2, 3];
+          arr.push(4);
+          return arr;
+          `,
+          env1,
+        );
+
+        // Second execution should have clean state
+        const result = await service.execute(
+          `
+          const arr = [1, 2, 3];
+          return arr;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.result).toEqual([1, 2, 3]); // Not modified
+      });
+
+      it('should handle fresh environment per execution', async () => {
+        // Each execution has its own environment
+        const env1: CodeCallVmEnvironment = {
+          ...mockEnvironment,
+          callTool: jest.fn().mockResolvedValue('env1'),
+        };
+
+        const env2: CodeCallVmEnvironment = {
+          ...mockEnvironment,
+          callTool: jest.fn().mockResolvedValue('env2'),
+        };
+
+        const [result1, result2] = await Promise.all([
+          service.execute('return await callTool("test", {});', env1),
+          service.execute('return await callTool("test", {});', env2),
+        ]);
+
+        expect(result1.result).toBe('env1');
+        expect(result2.result).toBe('env2');
+      });
+    });
+
+    describe('Service Lifecycle', () => {
+      it('should handle service reuse for multiple executions', async () => {
+        // Execute multiple times with the same service instance
+        for (let i = 0; i < 10; i++) {
+          const result = await service.execute(`return ${i};`, mockEnvironment);
+          expect(result.success).toBe(true);
+          expect(result.result).toBe(i);
+        }
+      });
+
+      it('should maintain service consistency after errors', async () => {
+        // First: error execution
+        await service.execute('return undefinedVar;', mockEnvironment);
+
+        // Then: successful execution - service should still work
+        const result = await service.execute('return 42;', mockEnvironment);
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(42);
+      });
+
+      it('should create independent service instances', async () => {
+        const config = new CodeCallConfig({
+          vm: { preset: 'secure', timeoutMs: 5000 },
+        });
+
+        const service1 = new EnclaveService(config);
+        const service2 = new EnclaveService(config);
+
+        const [result1, result2] = await Promise.all([
+          service1.execute('return "service1";', mockEnvironment),
+          service2.execute('return "service2";', mockEnvironment),
+        ]);
+
+        expect(result1.result).toBe('service1');
+        expect(result2.result).toBe('service2');
+      });
+    });
+
+    describe('Resource Management', () => {
+      it('should handle many sequential executions', async () => {
+        const iterations = 50;
+        const results: boolean[] = [];
+
+        for (let i = 0; i < iterations; i++) {
+          const result = await service.execute(`return ${i};`, mockEnvironment);
+          results.push(result.success);
+        }
+
+        expect(results.every((r) => r === true)).toBe(true);
+      });
+
+      it('should handle rapid fire executions', async () => {
+        const promises = Array.from({ length: 20 }, (_, i) => service.execute(`return ${i};`, mockEnvironment));
+
+        const results = await Promise.all(promises);
+
+        // All should succeed
+        expect(results.filter((r) => r.success).length).toBe(20);
+      });
+
+      it('should cleanup properly after execution failure', async () => {
+        // Fail intentionally
+        await service.execute('return undefinedVar;', mockEnvironment);
+
+        // Should still work after failure
+        const successResult = await service.execute('return "ok";', mockEnvironment);
+        expect(successResult.success).toBe(true);
+        expect(successResult.result).toBe('ok');
+      });
+    });
+  });
+
+  describe('Performance', () => {
+    describe('Execution Time', () => {
+      it('should execute simple scripts quickly', async () => {
+        const start = Date.now();
+        await service.execute('return 42;', mockEnvironment);
+        const duration = Date.now() - start;
+
+        // Simple execution should be fast
+        expect(duration).toBeLessThan(100);
+      });
+
+      it('should execute moderate loops within timeout', async () => {
+        const start = Date.now();
+        const result = await service.execute(
+          `
+          const results = [];
+          for (let i = 0; i < 1000; i++) {
+            results.push(i * 2);
+          }
+          return results.length;
+          `,
+          mockEnvironment,
+        );
+        const duration = Date.now() - start;
+
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000);
+        expect(duration).toBeLessThan(1000); // Should complete well under 1 second
+      });
+
+      it('should handle large array operations efficiently', async () => {
+        const start = Date.now();
+        const result = await service.execute(
+          `
+          const arr = [];
+          for (let i = 0; i < 5000; i++) {
+            arr.push(i);
+          }
+          return arr.filter(x => x % 2 === 0).length;
+          `,
+          mockEnvironment,
+        );
+        const duration = Date.now() - start;
+
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(2500);
+        expect(duration).toBeLessThan(2000);
+      });
+    });
+
+    describe('Large Data Handling', () => {
+      it('should handle large string return values', async () => {
+        const result = await service.execute(
+          `
+          const parts = [];
+          for (let i = 0; i < 1000; i++) {
+            parts.push('x'.repeat(100));
+          }
+          return parts;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(true);
+        expect((result.result as string[]).length).toBe(1000);
+      });
+
+      it('should handle deeply nested objects', async () => {
+        const result = await service.execute(
+          `
+          const nested = { level: 0 };
+          let current = nested;
+          for (let i = 1; i < 50; i++) {
+            current.child = { level: i };
+            current = current.child;
+          }
+          return nested;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(true);
+        expect((result.result as { level: number }).level).toBe(0);
+      });
+
+      it('should handle large flat objects', async () => {
+        const result = await service.execute(
+          `
+          const obj = {};
+          for (let i = 0; i < 500; i++) {
+            obj['key' + i] = 'value' + i;
+          }
+          return Object.keys(obj).length;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(500);
+      });
+    });
+
+    describe('Iteration Limits', () => {
+      it('should handle moderate iteration counts', async () => {
+        const result = await service.execute(
+          `
+          let count = 0;
+          for (let i = 0; i < 5000; i++) {
+            count++;
+          }
+          return count;
+          `,
+          mockEnvironment,
+        );
+
+        // Should succeed for moderate iteration counts
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(5000);
+      });
+
+      it('should handle nested loops within limits', async () => {
+        const result = await service.execute(
+          `
+          let count = 0;
+          for (let i = 0; i < 50; i++) {
+            for (let j = 0; j < 50; j++) {
+              count++;
+            }
+          }
+          return count;
+          `,
+          mockEnvironment,
+        );
+
+        // 50 * 50 = 2500, should be fine
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(2500);
+      });
+
+      it('should allow multiple loops within overall limit', async () => {
+        const result = await service.execute(
+          `
+          let total = 0;
+          for (let i = 0; i < 1000; i++) total++;
+          for (let i = 0; i < 1000; i++) total++;
+          for (let i = 0; i < 1000; i++) total++;
+          return total;
+          `,
+          mockEnvironment,
+        );
+
+        // 3 * 1000 = 3000 should be within limits
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(3000);
+      });
+    });
+
+    describe('Memory Safety', () => {
+      it('should handle bounded array growth', async () => {
+        const result = await service.execute(
+          `
+          const arr = [];
+          for (let i = 0; i < 1000; i++) {
+            arr.push(new Array(10).fill(i));
+          }
+          return arr.length;
+          `,
+          mockEnvironment,
+        );
+
+        // Bounded growth should work
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000);
+      });
+
+      it('should handle string concatenation safely', async () => {
+        const result = await service.execute(
+          `
+          let str = '';
+          for (let i = 0; i < 1000; i++) {
+            str += 'x';
+          }
+          return str.length;
+          `,
+          mockEnvironment,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(1000);
+      });
+    });
+
+    describe('Script Parsing', () => {
+      it('should handle moderately complex scripts', async () => {
+        const complexScript = `
+          const data = [
+            { id: 1, name: 'Alice', scores: [85, 90, 92] },
+            { id: 2, name: 'Bob', scores: [78, 82, 88] },
+            { id: 3, name: 'Charlie', scores: [92, 95, 97] },
+          ];
+
+          const processed = data.map(person => ({
+            ...person,
+            average: person.scores.reduce((a, b) => a + b, 0) / person.scores.length,
+            max: Math.max(...person.scores),
+            min: Math.min(...person.scores),
+          }));
+
+          const topPerformer = processed.reduce((top, person) =>
+            person.average > top.average ? person : top
+          );
+
+          return {
+            processed: processed.length,
+            topPerformer: topPerformer.name,
+            averages: processed.map(p => Math.round(p.average)),
+          };
+        `;
+
+        const result = await service.execute(complexScript, mockEnvironment);
+
+        expect(result.success).toBe(true);
+        expect((result.result as { topPerformer: string }).topPerformer).toBe('Charlie');
+      });
+
+      it('should handle scripts with many variables', async () => {
+        const varDeclarations = Array.from({ length: 50 }, (_, i) => `const v${i} = ${i};`).join('\n');
+        const script = `${varDeclarations}\nreturn v0 + v49;`;
+
+        const result = await service.execute(script, mockEnvironment);
+
+        expect(result.success).toBe(true);
+        expect(result.result).toBe(49); // v0 (0) + v49 (49)
+      });
     });
   });
 });

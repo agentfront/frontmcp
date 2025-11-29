@@ -8,8 +8,9 @@
  */
 
 import * as vm from 'vm';
-import type { SandboxAdapter, ExecutionContext, ExecutionResult } from '../types';
+import type { SandboxAdapter, ExecutionContext, ExecutionResult, SecurityLevel } from '../types';
 import { createSafeRuntime } from '../safe-runtime';
+import { createSafeReflect } from '../secure-proxy';
 
 /**
  * Sensitive patterns to redact from stack traces
@@ -271,6 +272,67 @@ function createProtectedSandbox(sandbox: vm.Context): vm.Context {
 }
 
 /**
+ * Node.js 24 dangerous globals that should be removed per security level
+ * These globals can be used for various escape/attack vectors
+ */
+const NODEJS_24_DANGEROUS_GLOBALS: Record<SecurityLevel, string[]> = {
+  STRICT: [
+    'Iterator',
+    'AsyncIterator',
+    'ShadowRealm',
+    'WeakRef',
+    'FinalizationRegistry',
+    'Reflect',
+    'Proxy',
+    'performance',
+    'Temporal',
+  ],
+  SECURE: ['Iterator', 'AsyncIterator', 'ShadowRealm', 'WeakRef', 'FinalizationRegistry', 'Proxy'],
+  STANDARD: ['ShadowRealm', 'WeakRef', 'FinalizationRegistry'],
+  PERMISSIVE: ['ShadowRealm'],
+};
+
+/**
+ * Sanitize VM context by removing dangerous Node.js 24 globals
+ * Security: Prevents escape via new APIs like Iterator helpers, ShadowRealm, etc.
+ *
+ * @param context The VM context to sanitize
+ * @param securityLevel The security level to determine which globals to remove
+ */
+function sanitizeVmContext(context: vm.Context, securityLevel: SecurityLevel): void {
+  const globalsToRemove = NODEJS_24_DANGEROUS_GLOBALS[securityLevel];
+
+  for (const global of globalsToRemove) {
+    // Delete the global if it exists in the context
+    if (global in context) {
+      try {
+        delete context[global];
+      } catch {
+        // Some globals may be non-configurable, set to undefined instead
+        try {
+          context[global] = undefined;
+        } catch {
+          // Ignore if we can't modify it
+        }
+      }
+    }
+  }
+
+  // For security levels that allow Reflect, provide a safe version
+  if (securityLevel !== 'STRICT') {
+    const safeReflect = createSafeReflect(securityLevel);
+    if (safeReflect) {
+      Object.defineProperty(context, 'Reflect', {
+        value: safeReflect,
+        writable: false,
+        configurable: false,
+        enumerable: true,
+      });
+    }
+  }
+}
+
+/**
  * VM-based sandbox adapter
  *
  * Uses Node.js vm module to execute AgentScript code in an isolated context.
@@ -278,6 +340,11 @@ function createProtectedSandbox(sandbox: vm.Context): vm.Context {
  */
 export class VmAdapter implements SandboxAdapter {
   private context?: vm.Context;
+  private readonly securityLevel: SecurityLevel;
+
+  constructor(securityLevel: SecurityLevel = 'STANDARD') {
+    this.securityLevel = securityLevel;
+  }
 
   /**
    * Execute code in the VM sandbox
@@ -291,15 +358,20 @@ export class VmAdapter implements SandboxAdapter {
     const startTime = Date.now();
 
     try {
-      // Create safe runtime context with optional sidecar support
+      // Create safe runtime context with optional sidecar support and proxy config
       const safeRuntime = createSafeRuntime(executionContext, {
         sidecar: executionContext.sidecar,
         referenceConfig: executionContext.referenceConfig,
+        secureProxyConfig: executionContext.secureProxyConfig,
       });
 
       // Create sandbox context with safe globals only
       // IMPORTANT: Use empty object to get NEW isolated prototypes
       const baseSandbox = vm.createContext({});
+
+      // Sanitize the VM context by removing dangerous Node.js 24 globals
+      // Security: Prevents escape via Iterator helpers, ShadowRealm, etc.
+      sanitizeVmContext(baseSandbox, this.securityLevel);
 
       // Add safe runtime functions to the isolated context as non-writable, non-configurable
       // Security: Prevents runtime override attacks on __safe_* functions

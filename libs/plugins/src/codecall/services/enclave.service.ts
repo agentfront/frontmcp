@@ -123,8 +123,6 @@ export default class EnclaveService {
       globals: {
         // Provide getTool as a custom global
         getTool: environment.getTool,
-        // Provide codecallContext
-        codecallContext: environment.codecallContext,
         // Provide logging functions if available
         ...(environment.mcpLog
           ? {

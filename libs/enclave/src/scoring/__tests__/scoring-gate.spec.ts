@@ -296,7 +296,7 @@ describe('ScoringGate', () => {
 
       const config = gate.getConfig();
 
-      expect(config.scorer).toBe('rule-based');
+      expect(config.scorerType).toBe('rule-based');
       expect(config.blockThreshold).toBe(75);
       expect(config.warnThreshold).toBe(35);
       expect(config.failOpen).toBe(true); // default
