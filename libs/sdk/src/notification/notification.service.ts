@@ -1,20 +1,21 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListRootsResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListRootsResultSchema, type LoggingLevel, type Root } from '@modelcontextprotocol/sdk/types.js';
 import { FrontMcpLogger } from '../common';
 import type { Scope } from '../scope';
 
 /**
- * Root entry representing a file system root from the client.
+ * Re-export Root from MCP SDK for convenience.
  * Per MCP 2025-11-25 specification.
  */
-export interface Root {
-  /** The URI identifying the root. This *must* start with file:// for now. */
-  uri: string;
-  /** An optional name for the root. */
-  name?: string;
-}
+export type { Root };
+
+/**
+ * Alias for MCP SDK's LoggingLevel for backwards compatibility.
+ * @deprecated Use LoggingLevel from @modelcontextprotocol/sdk/types.js directly
+ */
+export type McpLoggingLevel = LoggingLevel;
 
 /**
  * Client capabilities from the initialize request.
@@ -30,15 +31,10 @@ export interface ClientCapabilities {
 }
 
 /**
- * MCP logging levels per RFC 5424 / MCP 2025-11-25 specification.
- * Ordered from most verbose (debug) to least verbose (emergency).
- */
-export type McpLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
-
-/**
  * MCP logging level priority (lower number = more verbose).
+ * Uses LoggingLevel from MCP SDK for type safety.
  */
-export const MCP_LOGGING_LEVEL_PRIORITY: Record<McpLoggingLevel, number> = {
+export const MCP_LOGGING_LEVEL_PRIORITY: Record<LoggingLevel, number> = {
   debug: 0,
   info: 1,
   notice: 2,

@@ -1,6 +1,5 @@
 import { SetLevelRequestSchema, SetLevelRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import type { McpLoggingLevel } from '../../notification';
 
 /**
  * Handler for the logging/setLevel MCP request.
@@ -21,7 +20,7 @@ export default function LoggingSetLevelRequestHandler({ scope }: McpHandlerOptio
       }
 
       // Set the log level for this session
-      const success = scope.notifications.setLogLevel(sessionId, level as McpLoggingLevel);
+      const success = scope.notifications.setLogLevel(sessionId, level);
 
       if (!success) {
         scope.logger.warn(`logging/setLevel: Failed to set log level for session ${sessionId.slice(0, 20)}...`);

@@ -4,7 +4,6 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../com
 import { z } from 'zod';
 import { SetLevelRequestSchema, EmptyResultSchema, LoggingLevelSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError, GenericServerError } from '../../errors';
-import type { McpLoggingLevel } from '../../notification';
 
 const inputSchema = z.object({
   request: SetLevelRequestSchema,
@@ -91,7 +90,7 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
     const { sessionId } = this.state.required;
 
     // Set the log level for this session via NotificationService
-    const success = this.scope.notifications.setLogLevel(sessionId, level as McpLoggingLevel);
+    const success = this.scope.notifications.setLogLevel(sessionId, level);
 
     if (success) {
       this.logger.info(`setLevel: session log level set to "${level}"`);
