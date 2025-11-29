@@ -7,7 +7,7 @@ import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({
   request: CompleteRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = CompleteResultSchema;
@@ -70,7 +70,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
-    let params: any;
+    let params: z.infer<typeof CompleteRequestSchema>['params'];
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
@@ -92,7 +92,10 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     }
 
     if (ref.type !== 'ref/prompt' && ref.type !== 'ref/resource') {
-      throw new InvalidInputError(`Invalid reference type: ${ref.type}. Expected "ref/prompt" or "ref/resource"`);
+      // Cast needed because TypeScript exhaustively checks ref.type, making it 'never' in this branch
+      throw new InvalidInputError(
+        `Invalid reference type: ${(ref as { type: string }).type}. Expected "ref/prompt" or "ref/resource"`,
+      );
     }
 
     // Validate argument structure

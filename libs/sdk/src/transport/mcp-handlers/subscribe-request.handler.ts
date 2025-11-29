@@ -1,5 +1,5 @@
 import { SubscribeRequestSchema, SubscribeRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
-import { McpHandler, McpHandlerOptions, McpRequestHandler } from './mcp-handlers.types';
+import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for the resources/subscribe MCP request.
@@ -9,10 +9,7 @@ import { McpHandler, McpHandlerOptions, McpRequestHandler } from './mcp-handlers
 export default function SubscribeRequestHandler({ scope }: McpHandlerOptions) {
   return {
     requestSchema: SubscribeRequestSchema,
-    handler: async (
-      request: SubscribeRequest,
-      ctx: McpRequestHandler<SubscribeRequest, never>,
-    ): Promise<EmptyResult> => {
+    handler: async (request: SubscribeRequest, ctx): Promise<EmptyResult> => {
       const { uri } = request.params;
 
       // Get session ID from auth context

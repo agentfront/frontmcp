@@ -55,7 +55,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   name = name;
 
   @Stage('parseInput')
-  async paseInput() {
+  async parseInput() {
     const { request } = this.rawInput;
 
     let { token, session } = request[ServerRequestTokens.auth] as Authorization;
@@ -129,6 +129,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       return;
     }
     await transport.handleRequest(request, response);
+    this.handled();
   }
 
   @Stage('onSseListener', {

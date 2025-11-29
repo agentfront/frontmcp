@@ -107,8 +107,13 @@ export class NotificationService {
   private readonly subscriptions = new Map<string, Set<string>>();
   /** Maps session ID to minimum log level for that session */
   private readonly logLevels = new Map<string, McpLoggingLevel>();
-  /** Set of terminated session IDs (for session invalidation on DELETE) */
+  /**
+   * Set of terminated session IDs (for session invalidation on DELETE).
+   * Uses LRU-style eviction to prevent unbounded memory growth.
+   */
   private readonly terminatedSessions = new Set<string>();
+  /** Maximum number of terminated sessions to track before eviction */
+  private static readonly MAX_TERMINATED_SESSIONS = 10000;
 
   constructor(private readonly scope: Scope) {
     this.logger = scope.logger.child('NotificationService');
@@ -138,9 +143,8 @@ export class NotificationService {
     this.unsubscribers.push(unsubTools);
 
     // Subscribe to prompt changes
-    // Note: PromptChangeEvent uses 'scope' instead of 'changeScope'
     const unsubPrompts = this.scope.prompts.subscribe({ immediate: false }, (event) => {
-      if (event.scope === 'global') {
+      if (event.changeScope === 'global') {
         this.broadcastNotification('notifications/prompts/list_changed');
       }
     });
@@ -216,6 +220,15 @@ export class NotificationService {
     const wasRegistered = this.unregisterServer(sessionId);
 
     // Add to terminated sessions set (even if not registered, to handle edge cases)
+    // Implement LRU-style eviction to prevent unbounded memory growth
+    if (this.terminatedSessions.size >= NotificationService.MAX_TERMINATED_SESSIONS) {
+      // Remove the oldest entry (first item in Set maintains insertion order)
+      const oldest = this.terminatedSessions.values().next().value;
+      if (oldest) {
+        this.terminatedSessions.delete(oldest);
+        this.logger.verbose(`Evicted oldest terminated session to make room: ${oldest.slice(0, 20)}...`);
+      }
+    }
     this.terminatedSessions.add(sessionId);
     this.logger.verbose(
       `Terminated session: ${sessionId.slice(0, 20)}... (total terminated: ${this.terminatedSessions.size})`,

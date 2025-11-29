@@ -1,5 +1,5 @@
 import { UnsubscribeRequestSchema, UnsubscribeRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
-import { McpHandler, McpHandlerOptions, McpRequestHandler } from './mcp-handlers.types';
+import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
 /**
  * Handler for the resources/unsubscribe MCP request.
@@ -9,10 +9,7 @@ import { McpHandler, McpHandlerOptions, McpRequestHandler } from './mcp-handlers
 export default function UnsubscribeRequestHandler({ scope }: McpHandlerOptions) {
   return {
     requestSchema: UnsubscribeRequestSchema,
-    handler: async (
-      request: UnsubscribeRequest,
-      ctx: McpRequestHandler<UnsubscribeRequest, never>,
-    ): Promise<EmptyResult> => {
+    handler: async (request: UnsubscribeRequest, ctx): Promise<EmptyResult> => {
       const { uri } = request.params;
 
       // Get session ID from auth context

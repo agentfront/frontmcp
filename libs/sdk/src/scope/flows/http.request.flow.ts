@@ -280,7 +280,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
     if (!sessionId || typeof sessionId !== 'string') {
       this.logger.warn('DELETE request without valid session ID');
-      this.respond(httpRespond.rpcError('Bad Request: No valid session ID provided', null));
+      this.respond(httpRespond.rpcError('No valid session ID provided'));
       return;
     }
 

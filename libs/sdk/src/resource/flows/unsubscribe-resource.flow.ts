@@ -7,7 +7,7 @@ import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({
   request: UnsubscribeRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = EmptyResultSchema;
@@ -56,8 +56,8 @@ export default class UnsubscribeResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
-    let params: any;
-    let ctx: any;
+    let params: z.infer<typeof UnsubscribeRequestSchema>['params'];
+    let ctx: unknown;
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
@@ -73,7 +73,7 @@ export default class UnsubscribeResourceFlow extends FlowBase<typeof name> {
     }
 
     // Get session ID from context - required for subscription tracking
-    const sessionId = ctx?.sessionId;
+    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
     if (!sessionId || typeof sessionId !== 'string') {
       this.logger.warn('parseInput: sessionId not found in context');
       throw new InvalidInputError('Session ID is required for resource unsubscriptions');

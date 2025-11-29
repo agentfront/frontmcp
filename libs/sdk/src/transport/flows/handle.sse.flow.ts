@@ -54,7 +54,7 @@ declare global {
 })
 export default class HandleSseFlow extends FlowBase<typeof name> {
   @Stage('parseInput')
-  async paseInput() {
+  async parseInput() {
     const { request } = this.rawInput;
 
     const authorization = request[ServerRequestTokens.auth] as Authorization;

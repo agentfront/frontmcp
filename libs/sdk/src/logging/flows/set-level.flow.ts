@@ -3,12 +3,12 @@
 import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../common';
 import { z } from 'zod';
 import { SetLevelRequestSchema, EmptyResultSchema, LoggingLevelSchema } from '@modelcontextprotocol/sdk/types.js';
-import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { InvalidMethodError, InvalidInputError, GenericServerError } from '../../errors';
 import type { McpLoggingLevel } from '../../notification';
 
 const inputSchema = z.object({
   request: SetLevelRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = EmptyResultSchema;
@@ -57,8 +57,8 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
-    let params: any;
-    let ctx: any;
+    let params: z.infer<typeof SetLevelRequestSchema>['params'];
+    let ctx: unknown;
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
@@ -74,7 +74,7 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
     }
 
     // Get session ID from context - required for logging level tracking
-    const sessionId = ctx?.sessionId;
+    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
     if (!sessionId || typeof sessionId !== 'string') {
       this.logger.warn('parseInput: sessionId not found in context');
       throw new InvalidInputError('Session ID is required for setting log level');
@@ -96,8 +96,9 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
     if (success) {
       this.logger.info(`setLevel: session log level set to "${level}"`);
     } else {
-      // This shouldn't happen if session is registered, but log it
+      // Per MCP spec, return Internal error (-32603) when operation fails
       this.logger.warn(`setLevel: failed to set log level for session (session not registered?)`);
+      throw new GenericServerError('Failed to set log level: session not registered');
     }
 
     this.logger.verbose('setLevel:done');
@@ -106,7 +107,7 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    // Per MCP spec, logging/setLevel returns an empty result
+    // Per MCP spec, logging/setLevel returns an empty result on success
     this.respond({});
     this.logger.verbose('finalize:done');
   }

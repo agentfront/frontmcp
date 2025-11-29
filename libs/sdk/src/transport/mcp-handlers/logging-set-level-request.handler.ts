@@ -1,5 +1,5 @@
 import { SetLevelRequestSchema, SetLevelRequest, EmptyResult } from '@modelcontextprotocol/sdk/types.js';
-import { McpHandler, McpHandlerOptions, McpRequestHandler } from './mcp-handlers.types';
+import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import type { McpLoggingLevel } from '../../notification';
 
 /**
@@ -10,7 +10,7 @@ import type { McpLoggingLevel } from '../../notification';
 export default function LoggingSetLevelRequestHandler({ scope }: McpHandlerOptions) {
   return {
     requestSchema: SetLevelRequestSchema,
-    handler: async (request: SetLevelRequest, ctx: McpRequestHandler<SetLevelRequest, never>): Promise<EmptyResult> => {
+    handler: async (request: SetLevelRequest, ctx): Promise<EmptyResult> => {
       const { level } = request.params;
 
       // Get session ID from auth context
