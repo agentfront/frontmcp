@@ -1,4 +1,7 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 import type { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
 
 /**
@@ -57,13 +60,13 @@ export function isReferenceObject(obj: any): obj is ReferenceObject {
 }
 
 /**
- * Convert OpenAPI schema to JSONSchema7
+ * Convert OpenAPI schema to JsonSchema
  * Note: OpenAPI 3.0 uses a subset of JSON Schema Draft 4
  * OpenAPI 3.1 uses JSON Schema Draft 2020-12
  */
-export function toJSONSchema7(schema: SchemaObject | ReferenceObject): JSONSchema7 {
+export function toJsonSchema(schema: SchemaObject | ReferenceObject): JsonSchema {
   if (isReferenceObject(schema)) {
-    return { $ref: schema.$ref } as JSONSchema7;
+    return { $ref: schema.$ref } as JsonSchema;
   }
 
   // Handle OpenAPI 3.0 boolean exclusiveMaximum/exclusiveMinimum
@@ -114,38 +117,38 @@ export function toJSONSchema7(schema: SchemaObject | ReferenceObject): JSONSchem
     result['minimum'] = minimum;
   }
 
-  // Recursively convert nested schemas to ensure all nested schemas are valid JSONSchema7
+  // Recursively convert nested schemas to ensure all nested schemas are valid JsonSchema
   if (result['properties'] && typeof result['properties'] === 'object') {
-    const props: Record<string, JSONSchema7> = {};
+    const props: Record<string, JsonSchema> = {};
     for (const [key, value] of Object.entries(result['properties'] as Record<string, SchemaObject | ReferenceObject>)) {
-      props[key] = toJSONSchema7(value);
+      props[key] = toJsonSchema(value);
     }
     result['properties'] = props;
   }
 
   if (result['items']) {
     if (Array.isArray(result['items'])) {
-      result['items'] = (result['items'] as (SchemaObject | ReferenceObject)[]).map(toJSONSchema7);
+      result['items'] = (result['items'] as (SchemaObject | ReferenceObject)[]).map(toJsonSchema);
     } else {
-      result['items'] = toJSONSchema7(result['items'] as SchemaObject | ReferenceObject);
+      result['items'] = toJsonSchema(result['items'] as SchemaObject | ReferenceObject);
     }
   }
 
   if (result['additionalProperties'] && typeof result['additionalProperties'] === 'object') {
-    result['additionalProperties'] = toJSONSchema7(result['additionalProperties'] as SchemaObject | ReferenceObject);
+    result['additionalProperties'] = toJsonSchema(result['additionalProperties'] as SchemaObject | ReferenceObject);
   }
 
   for (const key of ['allOf', 'anyOf', 'oneOf'] as const) {
     if (result[key] && Array.isArray(result[key])) {
-      result[key] = (result[key] as (SchemaObject | ReferenceObject)[]).map(toJSONSchema7);
+      result[key] = (result[key] as (SchemaObject | ReferenceObject)[]).map(toJsonSchema);
     }
   }
 
   if (result['not']) {
-    result['not'] = toJSONSchema7(result['not'] as SchemaObject | ReferenceObject);
+    result['not'] = toJsonSchema(result['not'] as SchemaObject | ReferenceObject);
   }
 
-  return result as JSONSchema7;
+  return result as JsonSchema;
 }
 
 /**
@@ -166,13 +169,13 @@ export interface McpOpenAPITool {
    * Combined input schema including all parameters
    * (path, query, header, cookie, body)
    */
-  inputSchema: JSONSchema7;
+  inputSchema: JsonSchema;
 
   /**
    * Output schema based on response definitions
    * Can be a union of multiple status codes
    */
-  outputSchema?: JSONSchema7;
+  outputSchema?: JsonSchema;
 
   /**
    * Mapping from input schema properties to actual request parameters

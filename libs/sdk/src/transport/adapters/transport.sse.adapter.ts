@@ -3,9 +3,8 @@ import { TypedElicitResult } from '../transport.types';
 import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { ZodObject } from 'node_modules/zod/v3/types.cjs';
+import { z, ZodType } from 'zod';
 import { rpcRequest } from '../transport.error';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ServerResponse } from '../../common';
 
 export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTransport> {
@@ -48,7 +47,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
     }
   }
 
-  async sendElicitRequest<T extends ZodObject<any>>(
+  async sendElicitRequest<T extends ZodType>(
     relatedRequestId: RequestId,
     message: string,
     requestedSchema: T,
@@ -57,7 +56,7 @@ export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTranspor
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: zodToJsonSchema(requestedSchema as any),
+        requestedSchema: z.toJSONSchema(requestedSchema),
       }),
     );
 

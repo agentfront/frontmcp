@@ -10,6 +10,11 @@ export const codeCallModeSchema = z
 
 export const codeCallVmPresetSchema = z.enum(['locked_down', 'secure', 'balanced', 'experimental']).default('secure');
 
+// Default values for VM options
+const DEFAULT_VM_OPTIONS = {
+  preset: 'secure' as const,
+};
+
 export const codeCallVmOptionsSchema = z
   .object({
     /**
@@ -54,7 +59,7 @@ export const codeCallVmOptionsSchema = z
      */
     allowConsole: z.boolean().optional(),
   })
-  .default({});
+  .default(() => DEFAULT_VM_OPTIONS);
 
 export const codeCallDirectCallsOptionsSchema = z.object({
   /**
@@ -72,20 +77,29 @@ export const codeCallDirectCallsOptionsSchema = z.object({
    * Note: Functions can't be validated by Zod at runtime, so this is any
    */
   filter: z
-    .function()
-    .args(
-      z.object({
-        name: z.string(),
-        appId: z.string().optional(),
-        source: z.string().optional(),
-        tags: z.array(z.string()).optional(),
-      }),
-    )
-    .returns(z.boolean())
+    .function({
+      input: z.tuple([
+        z.object({
+          name: z.string(),
+          appId: z.string().optional(),
+          source: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+      ]),
+      output: z.boolean(),
+    })
     .optional(),
 });
 
 export const embeddingStrategySchema = z.enum(['tfidf', 'ml']).default('tfidf');
+
+// Default values for embedding options
+const DEFAULT_EMBEDDING_OPTIONS = {
+  strategy: 'tfidf' as const,
+  modelName: 'Xenova/all-MiniLM-L6-v2',
+  cacheDir: './.cache/transformers',
+  useHNSW: false,
+};
 
 export const codeCallEmbeddingOptionsSchema = z
   .object({
@@ -116,7 +130,7 @@ export const codeCallEmbeddingOptionsSchema = z
      */
     useHNSW: z.boolean().default(false),
   })
-  .default({});
+  .default(() => DEFAULT_EMBEDDING_OPTIONS);
 
 export const codeCallSidecarOptionsSchema = z
   .object({
@@ -172,7 +186,10 @@ export const codeCallSidecarOptionsSchema = z
       .nullable()
       .default(64 * 1024),
   })
-  .default({});
+  .default(() => ({
+    enabled: false,
+    maxScriptLengthWhenDisabled: 64 * 1024,
+  }));
 
 // Inner schema without the outer .default() - used for extracting input type
 const codeCallPluginOptionsObjectSchema = z.object({
@@ -199,17 +216,18 @@ const codeCallPluginOptionsObjectSchema = z.object({
    * Note: Functions can't be validated by Zod at runtime
    */
   includeTools: z
-    .function()
-    .args(
-      z.object({
-        name: z.string(),
-        appId: z.string().optional(),
-        source: z.string().optional(),
-        description: z.string().optional(),
-        tags: z.array(z.string()).optional(),
-      }),
-    )
-    .returns(z.boolean())
+    .function({
+      input: z.tuple([
+        z.object({
+          name: z.string(),
+          appId: z.string().optional(),
+          source: z.string().optional(),
+          description: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+      ]),
+      output: z.boolean(),
+    })
     .optional(),
 
   /**
@@ -234,8 +252,21 @@ const codeCallPluginOptionsObjectSchema = z.object({
   sidecar: codeCallSidecarOptionsSchema,
 });
 
+// Default values for plugin options
+const DEFAULT_PLUGIN_OPTIONS = {
+  mode: 'codecall_only' as const,
+  topK: 8,
+  maxDefinitions: 8,
+  vm: DEFAULT_VM_OPTIONS,
+  embedding: DEFAULT_EMBEDDING_OPTIONS,
+  sidecar: {
+    enabled: false,
+    maxScriptLengthWhenDisabled: 64 * 1024,
+  },
+};
+
 // Full schema with default - used for parsing
-export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.default({});
+export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.default(() => DEFAULT_PLUGIN_OPTIONS);
 
 // ===== TypeScript Types =====
 

@@ -233,7 +233,7 @@ export const toolCallMessageSchema = z
     requestId: z.string().min(1).max(100).regex(ID_PATTERN),
     callId: z.string().min(1).max(100).regex(ID_PATTERN),
     toolName: z.string().min(1).max(256).regex(TOOL_NAME_PATTERN),
-    args: z.record(z.unknown()),
+    args: z.record(z.string(), z.unknown()),
   })
   .strict();
 

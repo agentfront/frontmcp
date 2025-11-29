@@ -17,16 +17,16 @@ export function parseListInput<T extends ZodType>(
   rawInput: unknown,
   schema: T,
   expectedMethod: string,
-): { cursor?: string; params: z.infer<T>['request']['params'] } {
+): { cursor?: string; params: Record<string, unknown> } {
   let method: string;
-  let params: z.infer<T>['request']['params'];
+  let params: Record<string, unknown>;
 
   try {
-    const inputData = schema.parse(rawInput);
+    const inputData = schema.parse(rawInput) as { request: { method: string; params: Record<string, unknown> } };
     method = inputData.request.method;
-    params = inputData.request.params;
+    params = inputData.request.params ?? {};
   } catch (e) {
-    throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.errors : undefined);
+    throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.issues : undefined);
   }
 
   if (method !== expectedMethod) {
@@ -34,7 +34,7 @@ export function parseListInput<T extends ZodType>(
   }
 
   return {
-    cursor: params?.cursor,
+    cursor: params?.['cursor'] as string | undefined,
     params,
   };
 }

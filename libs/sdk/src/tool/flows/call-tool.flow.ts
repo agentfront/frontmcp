@@ -96,7 +96,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       params = inputData.request.params;
       ctx = inputData.ctx;
     } catch (e) {
-      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'tools/call') {
@@ -290,7 +290,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.verbose('validateInput:done');
     } catch (err) {
       if (err instanceof z.ZodError) {
-        throw new InvalidInputError('Invalid tool input', err.errors);
+        throw new InvalidInputError('Invalid tool input', err.issues);
       }
 
       this.logger.error('validateInput: failed to parse input', err);

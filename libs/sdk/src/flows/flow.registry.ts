@@ -26,7 +26,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     return { tokens, defs, graph };
   }
 
-
   protected buildGraph() {
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
@@ -47,7 +46,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
 
   /** Instantiate adapters, run fetch/transform, and populate registries. */
   protected async initialize(): Promise<void> {
-
     const readyArr: Promise<void>[] = [];
     for (const token of this.tokens) {
       const instance = this.initializeOne(token);
@@ -65,7 +63,6 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     return instance;
   }
 
-
   async registryFlows(rawFlows: FlowType[]): Promise<void> {
     const readyArr: Promise<void>[] = [];
     for (const raw of rawFlows) {
@@ -79,12 +76,15 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     await Promise.all(readyArr);
   }
 
-
-  runFlow<Name extends FlowName>(name: Name, input: FlowInputOf<Name>, deps?: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
+  runFlow<Name extends FlowName>(
+    name: Name,
+    input: FlowInputOf<Name>,
+    deps?: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
     const flow = this.instances.get(name);
     if (!flow) {
       throw new Error(`Flow ${name} is not registered`);
     }
-    return flow.run(input, deps ?? new Map());
+    return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
   }
 }

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import {
   FrontMcpLogger,
+  LogLevel,
   LogTransportType,
   LogTransportInterface,
   LoggingConfigType,
@@ -21,8 +22,13 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
 
   constructor(globalProviders: ProviderRegistry) {
     const { logging } = globalProviders.get(FrontMcpConfig);
-    const { transports, ...config } = logging;
-    const list = transports ?? [];
+    const loggingConfig = logging ?? {
+      level: LogLevel.Info,
+      enableConsole: true,
+      transports: [] as LogTransportType[],
+    };
+    const { transports, ...config } = loggingConfig;
+    const list: LogTransportType[] = [...(transports ?? [])];
     if (config.enableConsole) {
       list.push(ConsoleLogTransportInstance);
     }
@@ -50,7 +56,6 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
     const defs = new Map<Token, LoggerRecord>();
     const graph = new Map<Token, Set<Token>>();
 
-
     for (const raw of list) {
       const rec = normalizeLogger(raw);
       const provide = rec.provide;
@@ -67,7 +72,6 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
   }
 
   protected async initialize(): Promise<void> {
-
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
       const deps = this.graph.get(token)!;
@@ -89,7 +93,6 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
   }
 
   protected bindLogger() {
-
     const consoleTransport = this.instances.get(ConsoleLogTransportInstance) as ConsoleLogTransportInstance;
     const transports = [...this.instances.values()];
     const getTransports: GetTransports = () => {
@@ -108,5 +111,4 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
       },
     });
   }
-
 }

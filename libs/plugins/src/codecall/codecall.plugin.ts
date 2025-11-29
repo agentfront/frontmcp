@@ -68,7 +68,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
             {
               embeddingOptions: parsedOptions.embedding,
               mode: parsedOptions.mode,
-              includeTools: parsedOptions.includeTools,
+              includeTools: parsedOptions['includeTools'],
             },
             scope,
           );

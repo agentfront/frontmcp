@@ -38,7 +38,6 @@
     "@frontmcp/enclave": "^0.4.0",
     "vectoriadb": "^1.0.0",
     "ast-guard": "^1.0.0",
-    "json-schema-to-zod-v3": "1.0.0",
     "piscina": "^4.7.0"
   }
 }

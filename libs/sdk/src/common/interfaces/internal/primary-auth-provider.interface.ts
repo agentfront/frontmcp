@@ -76,11 +76,23 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   abstract get issuer(): string;
 
   /**
+   * Default transport configuration when not specified
+   */
+  private static readonly DEFAULT_TRANSPORT: TransportConfig = {
+    enableLegacySSE: false,
+    enableSseListener: true,
+    enableStreamableHttp: true,
+    enableStatelessHttp: false,
+    enableStatefulHttp: false,
+    requireSessionForStreamable: true,
+  };
+
+  /**
    * Get transport configuration with all defaults applied.
-   * After Zod parsing, transport is guaranteed to exist with defaults.
+   * Returns default values when transport is not configured.
    */
   get transport(): TransportConfig {
-    return this.options.transport;
+    return this.options.transport ?? FrontMcpAuth.DEFAULT_TRANSPORT;
   }
 }
 

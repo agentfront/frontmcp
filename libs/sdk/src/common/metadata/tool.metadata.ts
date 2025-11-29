@@ -1,6 +1,9 @@
-import { z, ZodObject } from 'zod';
+import { z } from 'zod';
 import { RawZodShape } from '../types';
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 import {
   ImageContentSchema,
   AudioContentSchema,
@@ -113,10 +116,10 @@ export type ResourceLinkOutput = z.output<typeof ResourceLinkOutputSchema>;
  */
 type StructuredOutputType =
   | z.ZodRawShape
-  | z.ZodObject<any>
-  | z.ZodArray<any>
-  | z.ZodUnion<[ZodObject<any>, ...ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<any, any>;
+  | z.ZodObject
+  | z.ZodArray<z.ZodType>
+  | z.ZodUnion<[z.ZodObject, ...z.ZodObject[]]>
+  | z.ZodDiscriminatedUnion<z.ZodObject[]>;
 
 export type ToolSingleOutputType =
   | PrimitiveOutputType
@@ -162,7 +165,7 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * Zod schema describing the expected input payload for the tool.
    * Used for validation and for generating automatic docs/UX.
    */
-  rawInputSchema?: JSONSchema7;
+  rawInputSchema?: JsonSchema;
 
   /**
    * Zod schema describing the structure of the tool's successful output.
@@ -185,8 +188,6 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   hideFromDiscovery?: boolean;
 }
 
-
-
 /**
  * Runtime schema for ToolSingleOutputType:
  *  - literals ('string', 'image', ...)
@@ -197,28 +198,18 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
 const primitiveOutputLiteralSchema = z.enum(['string', 'number', 'date', 'boolean']);
 const specialOutputLiteralSchema = z.enum(['image', 'audio', 'resource', 'resource_link']);
 
-const outputLiteralSchema = z.union([
-  primitiveOutputLiteralSchema,
-  specialOutputLiteralSchema,
-]);
+const outputLiteralSchema = z.union([primitiveOutputLiteralSchema, specialOutputLiteralSchema]);
 
 // Any Zod schema instance (object, array, union, etc.)
 const zodSchemaInstanceSchema = z.instanceof(z.ZodType);
 
 // Raw shape: { field: z.string(), ... }
-const zodRawShapeSchema = z.record(zodSchemaInstanceSchema);
+const zodRawShapeSchema = z.record(z.string(), zodSchemaInstanceSchema);
 
-const toolSingleOutputSchema = z.union([
-  outputLiteralSchema,
-  zodSchemaInstanceSchema,
-  zodRawShapeSchema,
-]);
+const toolSingleOutputSchema = z.union([outputLiteralSchema, zodSchemaInstanceSchema, zodRawShapeSchema]);
 
 // ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[]
-const toolOutputSchema = z.union([
-  toolSingleOutputSchema,
-  z.array(toolSingleOutputSchema),
-]);
+const toolOutputSchema = z.union([toolSingleOutputSchema, z.array(toolSingleOutputSchema)]);
 export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),

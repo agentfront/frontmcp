@@ -25,7 +25,7 @@ const stateSchema = z.object({
   }),
   // z.any() used because AuthInfo is a complex external type from @modelcontextprotocol/sdk
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
-  params: z.record(z.string()).default({}), // URI template parameters
+  params: z.record(z.string(), z.string()).default({}), // URI template parameters
   // z.any() used because ResourceEntry is a complex abstract class type
   resource: z.any() as z.ZodType<ResourceEntry>,
   // z.any() used because ResourceContext is a complex abstract class type
@@ -81,7 +81,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       params = inputData.request.params;
       ctx = inputData.ctx;
     } catch (e) {
-      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'resources/read') {
