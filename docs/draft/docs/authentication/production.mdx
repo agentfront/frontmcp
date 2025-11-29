@@ -29,10 +29,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
       },
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Step>
 
   <Step title="Provide Persistent Signing Keys">
@@ -45,10 +42,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
       },
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Step>
 
   <Step title="Configure Token Lifetimes">
@@ -63,10 +57,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
       },
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Step>
 
   <Step title="Enable HTTPS">
@@ -82,10 +73,7 @@ Before deploying FrontMCP authentication to production, review this comprehensiv
       expectedAudience: 'https://api.yourservice.com',
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Step>
 </Steps>
 
@@ -178,21 +166,12 @@ IDP_EXPECTED_AUDIENCE=https://api.yourservice.com
 
 ## Token Lifetime Guidelines
 
-<<<<<<< HEAD
-| Environment | Access Token | Refresh Token | Rationale |
-|-------------|--------------|---------------|-----------|
-| Development | 1 hour | 7 days | Developer convenience |
-| Staging | 30 min | 7 days | Balance testing/security |
-| Production | 15 min | 7-30 days | Security with usability |
-| High Security | 5 min | 1 day | Minimize exposure window |
-=======
 | Environment   | Access Token | Refresh Token | Rationale                |
 | ------------- | ------------ | ------------- | ------------------------ |
 | Development   | 1 hour       | 7 days        | Developer convenience    |
 | Staging       | 30 min       | 7 days        | Balance testing/security |
 | Production    | 15 min       | 7-30 days     | Security with usability  |
 | High Security | 5 min        | 1 day         | Minimize exposure window |
->>>>>>> main
 
 <Tip>
   Shorter access tokens improve security but increase refresh frequency. Monitor your refresh token endpoint load.
@@ -258,15 +237,6 @@ tokenStorage: {
 
 ### Redis Data Stored
 
-<<<<<<< HEAD
-| Key Pattern | Data | TTL |
-|-------------|------|-----|
-| `{prefix}pending:{id}` | Pending authorization | 10 min |
-| `{prefix}code:{code}` | Authorization code | 60 sec |
-| `{prefix}refresh:{token}` | Refresh token | 7-30 days |
-| `{prefix}session:{id}` | Session data | Configurable |
-| `{prefix}vault:{session}` | Token vault | Session TTL |
-=======
 | Key Pattern               | Data                  | TTL          |
 | ------------------------- | --------------------- | ------------ |
 | `{prefix}pending:{id}`    | Pending authorization | 10 min       |
@@ -274,7 +244,6 @@ tokenStorage: {
 | `{prefix}refresh:{token}` | Refresh token         | 7-30 days    |
 | `{prefix}session:{id}`    | Session data          | Configurable |
 | `{prefix}vault:{session}` | Token vault           | Session TTL  |
->>>>>>> main
 
 ---
 
@@ -282,15 +251,6 @@ tokenStorage: {
 
 ### Key Metrics to Monitor
 
-<<<<<<< HEAD
-| Metric | Alert Threshold | Description |
-|--------|----------------|-------------|
-| Auth failures/min | > 100 | Possible brute force |
-| Token refresh rate | > 10x normal | Possible token theft |
-| JWKS fetch errors | Any | IdP connectivity issue |
-| Redis connection errors | Any | Storage unavailable |
-| Token issuance latency | > 500ms | Performance degradation |
-=======
 | Metric                  | Alert Threshold | Description             |
 | ----------------------- | --------------- | ----------------------- |
 | Auth failures/min       | > 100           | Possible brute force    |
@@ -298,7 +258,6 @@ tokenStorage: {
 | JWKS fetch errors       | Any             | IdP connectivity issue  |
 | Redis connection errors | Any             | Storage unavailable     |
 | Token issuance latency  | > 500ms         | Performance degradation |
->>>>>>> main
 
 ### Logging Configuration
 
@@ -330,10 +289,7 @@ export class Server {}
       signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Accordion>
 
   <Accordion title="Session not found errors across instances">
@@ -350,10 +306,7 @@ export class Server {}
       },
     }
     ```
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Accordion>
 
   <Accordion title="JWKS fetch fails intermittently">
@@ -363,10 +316,7 @@ export class Server {}
     - Increase JWKS cache TTL
     - Consider inline JWKS for critical IdPs
     - Add retry logic with exponential backoff
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Accordion>
 
   <Accordion title="High latency on token endpoint">
@@ -376,10 +326,7 @@ export class Server {}
     - Use Redis connection pooling
     - Pre-generate signing keys (don't generate on-demand)
     - Monitor Redis latency
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Accordion>
 </AccordionGroup>
 
@@ -441,10 +388,7 @@ location /oauth/token {
     <Warning>
       In-memory storage loses all sessions on restart. Users must re-authenticate.
     </Warning>
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Tab>
 
   <Tab title="Multi-Instance">
@@ -464,10 +408,7 @@ location /oauth/token {
     ```
 
     All instances must share the same Redis and signing keys.
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Tab>
 
   <Tab title="Stateless">
@@ -482,10 +423,7 @@ location /oauth/token {
     ```
 
     Simpler architecture but larger tokens, no silent refresh.
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Tab>
 </Tabs>
 

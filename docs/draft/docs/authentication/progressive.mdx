@@ -109,10 +109,7 @@ The token vault stores per-app credentials and expands as users authorize more a
 
     **Vault:**
     - CRM: Authorized
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Card>
   <Card title="After Slack Auth" icon="2">
     Session Token: `user-123` (same)
@@ -120,10 +117,7 @@ The token vault stores per-app credentials and expands as users authorize more a
     **Vault:**
     - CRM: Authorized
     - Slack: Authorized
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Card>
   <Card title="After GitHub Auth" icon="3">
     Session Token: `user-123` (same)
@@ -132,10 +126,7 @@ The token vault stores per-app credentials and expands as users authorize more a
     - CRM: Authorized
     - Slack: Authorized
     - GitHub: Authorized
-<<<<<<< HEAD
-=======
 
->>>>>>> main
   </Card>
 </CardGroup>
 
@@ -281,17 +272,10 @@ export class Server {}
 
 Apps can be configured as standalone (direct access) or nested (under parent):
 
-<<<<<<< HEAD
-| Configuration | Direct Access | Federated Auth |
-|--------------|---------------|----------------|
-| `standalone: true` | `/slack/oauth/authorize` | Also in parent consent |
-| `standalone: false` (default) | N/A | Only via parent |
-=======
 | Configuration                 | Direct Access            | Federated Auth         |
 | ----------------------------- | ------------------------ | ---------------------- |
 | `standalone: true`            | `/slack/oauth/authorize` | Also in parent consent |
 | `standalone: false` (default) | N/A                      | Only via parent        |
->>>>>>> main
 
 ```typescript
 @App({
