@@ -439,6 +439,36 @@ This blocks:
 - `const { callTool } = obj;` - Destructuring shadowing
 - `function callTool() {}` - Function declaration shadowing
 
+### NoComputedDestructuringRule
+
+Blocks computed property names in destructuring patterns so attackers can't reconstruct dangerous identifiers (`constructor`, `__proto__`, `prototype`) at runtime.
+
+```ts
+import { NoComputedDestructuringRule } from 'ast-guard';
+
+const rule = new NoComputedDestructuringRule({
+  message: 'Use static property names when destructuring tool responses.',
+});
+```
+
+```js
+// ❌ Blocked - recombines "constructor" to reach Function constructor
+const prefix = 'con';
+const {[prefix + 'structor']: ctor} = someToolResult;
+const escape = ctor('return process')();
+```
+
+```js
+// ✅ Allowed - uses explicit property names
+const { metadata, data } = await callTool('reports:get', {});
+```
+
+<Warning>
+  Computed destructuring can bypass identifier allowlists because the dangerous property name is assembled at runtime.
+  Pair this rule with <Code>ReservedPrefixRule</Code> and <Code>NoCallTargetAssignmentRule</Code> for layered protection
+  against runtime property attacks.
+</Warning>
+
 ### UnicodeSecurityRule
 
 Detects and blocks Unicode-based attacks including Trojan Source, homoglyphs, and invisible characters.
@@ -479,7 +509,7 @@ This blocks:
 
 - `callTool(toolName, args);` - Variable reference
 - `callTool("tool" + suffix, args);` - Concatenation
-- `callTool(\`tool\_${id}\`, args);` - Template with expressions
+- `callTool(`tool\_${id}`, args);` - Template with expressions
 - `callTool(cond ? "a" : "b", args);` - Ternary expression
 
 ### NoRegexLiteralRule
@@ -588,7 +618,7 @@ const result = await scriptValidator.validate(source, { maxIssues: 10 });
 
 return {
   status: result.valid ? 'ok' : 'rejected',
-  issues: result.issues.map((issue) => ({
+  issues: result.issues map((issue) => ({
     code: issue.code,
     severity: issue.severity,
     message: issue.message,
@@ -605,7 +635,7 @@ return {
 - `validator.getStats(result, durationMs)` produces telemetry-friendly counters.
 
 ```ts
-const result = await scriptValidator.validate(source, { stopOnFirstError: true });
+const result = await scriptValidator validate(source, { stopOnFirstError: true });
 const stats = scriptValidator.getStats(result, durationMs);
 this.logger.info({ stats }, 'AST validation completed');
 ```

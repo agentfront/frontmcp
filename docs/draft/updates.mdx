@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-28" tags={["Releases"]}>
+<Update label="draft" description="2025-11-29" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -29,7 +29,9 @@ mode: 'center'
 
     🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure.
 
-    🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with the new AST validator, mix in presets or custom rules, and block risky scripts before they reach a tool; new identifier, call-target, and sidecar rules ship out of the box.
+    🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with the new AST validator, mix in presets or custom rules, and block risky scripts before they reach a tool; new identifier, call-target, computed-destructuring, and sidecar rules ship out of the box.
+
+    🧱 **Computed destructuring guard** – AgentScript now blocks computed property names in destructuring so attackers can't reassemble `constructor`, `prototype`, or `__proto__` to reach Function constructors.
 
     🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
 
@@ -39,7 +41,9 @@ mode: 'center'
 
     🧰 **Layer 0 pre-scanner** – AgentScript now runs through a pre-parser `ast-guard` scan that blocks ReDoS payloads, Trojan Source characters, deep nesting, and oversize inputs before the AST is even built.
 
-    🧠 **AI Scoring Gate** – A semantic scoring stage reviews every CodeCall plan for exfiltration patterns, bulk destructive actions, and sensitive field access, halting risky scripts before Enclave executes them.
+    🧠 **AI Scoring Gate** – Chain the fast heuristics with the new progressive escalation path so benign scripts clear in ~1ms while suspicious plans re-run through local LLM or external scorers before Enclave executes them.
+
+    🧬 **On-device scoring** – The `local-llm` backend downloads transformers.js models once, caches them on disk, and optionally pairs with VectoriaDB similarity mode so sensitive scripts never leave your VPC.
 
     🧵 **Worker Pool adapter** – Opt into the new worker-pool runtime to execute CodeCall plans inside OS-isolated threads with queue backpressure, strict memory caps, and graceful restarts.
 
@@ -66,6 +70,10 @@ mode: 'center'
     🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
 
     🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
+
+    🧠 **Enclave scoring guide** – Expanded `/docs/guides/enclave` with local-LLM and progressive configuration recipes plus cache tips for Hugging Face models so teams can enable semantic reviews entirely on-premises.
+
+    🛡️ **AST Guard updates** – `/docs/guides/ast-guard` now spells out the NoComputedDestructuring rule with attack walkthroughs so you can explain the new protections to security reviewers.
 
     🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
 
