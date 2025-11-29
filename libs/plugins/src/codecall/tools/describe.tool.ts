@@ -19,8 +19,8 @@ import {
   getFilterProperties,
   generatePaginationExample,
   generateFilterExample,
-} from '../utils/describe.utils';
-import { isBlockedSelfReference } from '../security/self-reference-guard';
+} from '../utils';
+import { isBlockedSelfReference } from '../security';
 
 @Tool({
   name: 'codecall:describe',

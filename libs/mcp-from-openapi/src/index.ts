@@ -7,14 +7,7 @@ export { Validator } from './validator';
 export { SecurityResolver, createSecurityContext } from './security-resolver';
 
 // Error exports
-export {
-  OpenAPIToolError,
-  LoadError,
-  ParseError,
-  ValidationError,
-  GenerationError,
-  SchemaError,
-} from './errors';
+export { OpenAPIToolError, LoadError, ParseError, ValidationError, GenerationError, SchemaError } from './errors';
 
 // Type exports
 export type {
@@ -78,4 +71,4 @@ export type {
 } from './security-resolver';
 
 // Utility exports
-export { isReferenceObject, toJSONSchema7 } from './types';
+export { isReferenceObject, toJsonSchema } from './types';
