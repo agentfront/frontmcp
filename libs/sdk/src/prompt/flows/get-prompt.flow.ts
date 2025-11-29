@@ -23,7 +23,7 @@ const outputSchema = GetPromptResultSchema;
 const stateSchema = z.object({
   input: z.object({
     name: z.string().min(1),
-    arguments: z.record(z.string()).optional(),
+    arguments: z.record(z.string(), z.string()).optional(),
   }),
   // Prompt owner ID for hook filtering during execution
   promptOwnerId: z.string().optional(),
@@ -32,7 +32,7 @@ const stateSchema = z.object({
   // z.any() used because PromptEntry is a complex abstract class type
   prompt: z.any() as z.ZodType<PromptEntry>,
   // Cached parsed arguments to avoid parsing twice (once in createPromptContext, once in execute)
-  parsedArgs: z.record(z.string()).optional(),
+  parsedArgs: z.record(z.string(), z.string()).optional(),
   // z.any() used because PromptContext is a complex abstract class type
   promptContext: z.any() as z.ZodType<PromptContext>,
   // z.any() used because prompt output type varies by prompt implementation
@@ -84,7 +84,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       params = inputData.request.params;
       ctx = inputData.ctx;
     } catch (e) {
-      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'prompts/get') {

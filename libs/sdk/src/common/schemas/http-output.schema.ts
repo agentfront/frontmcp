@@ -32,7 +32,9 @@ export const HttpStatus = z.number().int().min(100).max(599);
 export const HttpRedirectStatus = zNumUnion(REDIRECTS);
 export const HttpEmptyStatus = zNumUnion(NO_BODY_STATUSES);
 
-export const HttpHeaders = z.record(z.union([z.string(), z.union([z.string(), z.array(z.string())])])).default({});
+export const HttpHeaders = z
+  .record(z.string(), z.union([z.string(), z.union([z.string(), z.array(z.string())])]))
+  .default({});
 
 export const HttpCookieSchema = z.object({
   name: z.string().min(1),

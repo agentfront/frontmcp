@@ -11,7 +11,7 @@ import { CrmStore } from '../data/store';
   outputSchema: {
     stats: z.object({
       total: z.number(),
-      byType: z.record(z.number()),
+      byType: z.record(z.string(), z.number()),
     }),
   },
 })

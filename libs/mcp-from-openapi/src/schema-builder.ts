@@ -1,4 +1,7 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 
 /**
  * Helper class for building and manipulating JSON schemas
@@ -7,7 +10,7 @@ export class SchemaBuilder {
   /**
    * Merge multiple schemas into one
    */
-  static merge(schemas: JSONSchema7[]): JSONSchema7 {
+  static merge(schemas: JsonSchema[]): JsonSchema {
     if (schemas.length === 0) {
       return { type: 'object' };
     }
@@ -16,7 +19,7 @@ export class SchemaBuilder {
       return schemas[0];
     }
 
-    const merged: JSONSchema7 = {
+    const merged: JsonSchema = {
       type: 'object',
       properties: {},
       required: [],
@@ -47,7 +50,7 @@ export class SchemaBuilder {
   /**
    * Create a union schema (oneOf)
    */
-  static union(schemas: JSONSchema7[]): JSONSchema7 {
+  static union(schemas: JsonSchema[]): JsonSchema {
     if (schemas.length === 0) {
       return {};
     }
@@ -64,14 +67,14 @@ export class SchemaBuilder {
   /**
    * Deep clone a schema
    */
-  static clone(schema: JSONSchema7): JSONSchema7 {
+  static clone(schema: JsonSchema): JsonSchema {
     return JSON.parse(JSON.stringify(schema));
   }
 
   /**
    * Remove $ref from schema (assumes already dereferenced)
    */
-  static removeRefs(schema: JSONSchema7): JSONSchema7 {
+  static removeRefs(schema: JsonSchema): JsonSchema {
     const cloned = this.clone(schema);
     this.removeRefsRecursive(cloned);
     return cloned;
@@ -97,7 +100,7 @@ export class SchemaBuilder {
   /**
    * Add description to schema
    */
-  static withDescription(schema: JSONSchema7, description: string): JSONSchema7 {
+  static withDescription(schema: JsonSchema, description: string): JsonSchema {
     return {
       ...schema,
       description,
@@ -107,7 +110,7 @@ export class SchemaBuilder {
   /**
    * Add example to schema
    */
-  static withExample(schema: JSONSchema7, example: any): JSONSchema7 {
+  static withExample(schema: JsonSchema, example: any): JsonSchema {
     const existingExamples = Array.isArray(schema.examples) ? schema.examples : [];
     return {
       ...schema,
@@ -118,7 +121,7 @@ export class SchemaBuilder {
   /**
    * Add default value to schema
    */
-  static withDefault(schema: JSONSchema7, defaultValue: any): JSONSchema7 {
+  static withDefault(schema: JsonSchema, defaultValue: any): JsonSchema {
     return {
       ...schema,
       default: defaultValue,
@@ -128,7 +131,7 @@ export class SchemaBuilder {
   /**
    * Add format to schema
    */
-  static withFormat(schema: JSONSchema7, format: string): JSONSchema7 {
+  static withFormat(schema: JsonSchema, format: string): JsonSchema {
     return {
       ...schema,
       format,
@@ -138,7 +141,7 @@ export class SchemaBuilder {
   /**
    * Add pattern to schema
    */
-  static withPattern(schema: JSONSchema7, pattern: string): JSONSchema7 {
+  static withPattern(schema: JsonSchema, pattern: string): JsonSchema {
     return {
       ...schema,
       pattern,
@@ -148,7 +151,7 @@ export class SchemaBuilder {
   /**
    * Add enum to schema
    */
-  static withEnum(schema: JSONSchema7, values: any[]): JSONSchema7 {
+  static withEnum(schema: JsonSchema, values: any[]): JsonSchema {
     return {
       ...schema,
       enum: values,
@@ -158,12 +161,7 @@ export class SchemaBuilder {
   /**
    * Add minimum/maximum constraints
    */
-  static withRange(
-    schema: JSONSchema7,
-    min?: number,
-    max?: number,
-    options: { exclusive?: boolean } = {}
-  ): JSONSchema7 {
+  static withRange(schema: JsonSchema, min?: number, max?: number, options: { exclusive?: boolean } = {}): JsonSchema {
     const result = { ...schema };
 
     if (min !== undefined) {
@@ -188,7 +186,7 @@ export class SchemaBuilder {
   /**
    * Add minLength/maxLength constraints
    */
-  static withLength(schema: JSONSchema7, minLength?: number, maxLength?: number): JSONSchema7 {
+  static withLength(schema: JsonSchema, minLength?: number, maxLength?: number): JsonSchema {
     const result = { ...schema };
 
     if (minLength !== undefined) {
@@ -205,10 +203,7 @@ export class SchemaBuilder {
   /**
    * Create object schema
    */
-  static object(
-    properties: Record<string, JSONSchema7>,
-    required?: string[]
-  ): JSONSchema7 {
+  static object(properties: Record<string, JsonSchema>, required?: string[]): JsonSchema {
     return {
       type: 'object',
       properties,
@@ -220,11 +215,14 @@ export class SchemaBuilder {
   /**
    * Create array schema
    */
-  static array(items: JSONSchema7, constraints?: {
-    minItems?: number;
-    maxItems?: number;
-    uniqueItems?: boolean;
-  }): JSONSchema7 {
+  static array(
+    items: JsonSchema,
+    constraints?: {
+      minItems?: number;
+      maxItems?: number;
+      uniqueItems?: boolean;
+    },
+  ): JsonSchema {
     return {
       type: 'array',
       items,
@@ -241,7 +239,7 @@ export class SchemaBuilder {
     pattern?: string;
     format?: string;
     enum?: string[];
-  }): JSONSchema7 {
+  }): JsonSchema {
     return {
       type: 'string',
       ...constraints,
@@ -257,7 +255,7 @@ export class SchemaBuilder {
     exclusiveMinimum?: number;
     exclusiveMaximum?: number;
     multipleOf?: number;
-  }): JSONSchema7 {
+  }): JsonSchema {
     return {
       type: 'number',
       ...constraints,
@@ -273,7 +271,7 @@ export class SchemaBuilder {
     exclusiveMinimum?: number;
     exclusiveMaximum?: number;
     multipleOf?: number;
-  }): JSONSchema7 {
+  }): JsonSchema {
     return {
       type: 'integer',
       ...constraints,
@@ -283,7 +281,7 @@ export class SchemaBuilder {
   /**
    * Create boolean schema
    */
-  static boolean(): JSONSchema7 {
+  static boolean(): JsonSchema {
     return {
       type: 'boolean',
     };
@@ -292,7 +290,7 @@ export class SchemaBuilder {
   /**
    * Create null schema
    */
-  static null(): JSONSchema7 {
+  static null(): JsonSchema {
     return {
       type: 'null',
     };
@@ -301,33 +299,33 @@ export class SchemaBuilder {
   /**
    * Flatten nested oneOf/anyOf/allOf schemas
    */
-  static flatten(schema: JSONSchema7, maxDepth = 10): JSONSchema7 {
+  static flatten(schema: JsonSchema, maxDepth = 10): JsonSchema {
     if (maxDepth <= 0) return schema;
 
     const cloned = this.clone(schema);
 
     if (cloned.oneOf) {
       const flattened = cloned.oneOf.flatMap((s) => {
-        const sub = this.flatten(s as JSONSchema7, maxDepth - 1);
+        const sub = this.flatten(s as JsonSchema, maxDepth - 1);
         return sub.oneOf ? sub.oneOf : [sub];
       });
-      cloned.oneOf = flattened as JSONSchema7[];
+      cloned.oneOf = flattened as JsonSchema[];
     }
 
     if (cloned.anyOf) {
       const flattened = cloned.anyOf.flatMap((s) => {
-        const sub = this.flatten(s as JSONSchema7, maxDepth - 1);
+        const sub = this.flatten(s as JsonSchema, maxDepth - 1);
         return sub.anyOf ? sub.anyOf : [sub];
       });
-      cloned.anyOf = flattened as JSONSchema7[];
+      cloned.anyOf = flattened as JsonSchema[];
     }
 
     if (cloned.allOf) {
       const flattened = cloned.allOf.flatMap((s) => {
-        const sub = this.flatten(s as JSONSchema7, maxDepth - 1);
+        const sub = this.flatten(s as JsonSchema, maxDepth - 1);
         return sub.allOf ? sub.allOf : [sub];
       });
-      cloned.allOf = flattened as JSONSchema7[];
+      cloned.allOf = flattened as JsonSchema[];
     }
 
     return cloned;
@@ -336,7 +334,7 @@ export class SchemaBuilder {
   /**
    * Simplify schema by removing unnecessary fields
    */
-  static simplify(schema: JSONSchema7): JSONSchema7 {
+  static simplify(schema: JsonSchema): JsonSchema {
     const cloned = this.clone(schema);
 
     // Remove empty arrays/objects

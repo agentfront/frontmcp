@@ -6,7 +6,7 @@ import { InMemoryEventStore } from '../transport.event-store';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
-import { ZodObject } from 'zod';
+import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
 import { createMcpHandlers } from '../mcp-handlers';
@@ -36,7 +36,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
 
   abstract initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
 
-  abstract sendElicitRequest<T extends ZodObject<any>>(
+  abstract sendElicitRequest<T extends ZodType>(
     relatedRequestId: RequestId,
     message: string,
     requestedSchema: T,

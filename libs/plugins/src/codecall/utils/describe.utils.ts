@@ -1,6 +1,9 @@
 // file: libs/plugins/src/codecall/utils/describe.utils.ts
 
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 
 /**
  * Tool example for describe output
@@ -17,7 +20,7 @@ export interface ToolUsageExample {
  * Input: { type: 'object', properties: { id: { type: 'string' }, limit: { type: 'number' } }, required: ['id'] }
  * Output: "(id: string, limit?: number) => unknown"
  */
-export function jsonSchemaToSignature(toolName: string, inputSchema?: JSONSchema7, outputSchema?: JSONSchema7): string {
+export function jsonSchemaToSignature(toolName: string, inputSchema?: JsonSchema, outputSchema?: JsonSchema): string {
   const inputPart = schemaToTypeString(inputSchema, 'input');
   const outputPart = schemaToTypeString(outputSchema, 'output');
 
@@ -27,7 +30,7 @@ export function jsonSchemaToSignature(toolName: string, inputSchema?: JSONSchema
 /**
  * Convert JSON Schema to a TypeScript-like type string.
  */
-function schemaToTypeString(schema: JSONSchema7 | undefined | null, context: 'input' | 'output'): string {
+function schemaToTypeString(schema: JsonSchema | undefined | null, context: 'input' | 'output'): string {
   if (!schema) {
     return context === 'input' ? '{}' : 'unknown';
   }
@@ -57,7 +60,7 @@ function schemaToTypeString(schema: JSONSchema7 | undefined | null, context: 'in
 /**
  * Get a simple type string for a schema.
  */
-function getTypeString(schema: JSONSchema7): string {
+function getTypeString(schema: JsonSchema): string {
   if (schema.enum) {
     return schema.enum.map((v) => JSON.stringify(v)).join(' | ');
   }
@@ -79,7 +82,7 @@ function getTypeString(schema: JSONSchema7): string {
         return 'null';
       case 'array':
         if (schema.items && typeof schema.items !== 'boolean') {
-          return `${getTypeString(schema.items as JSONSchema7)}[]`;
+          return `${getTypeString(schema.items as JsonSchema)}[]`;
         }
         return 'unknown[]';
       case 'object':
@@ -96,7 +99,7 @@ function getTypeString(schema: JSONSchema7): string {
     // We've confirmed at least one is truthy, so use non-null assertion
     const options = (schema.oneOf ?? schema.anyOf)!;
     return options
-      .filter((s): s is JSONSchema7 => typeof s !== 'boolean')
+      .filter((s): s is JsonSchema => typeof s !== 'boolean')
       .map((s) => getTypeString(s))
       .join(' | ');
   }
@@ -108,7 +111,7 @@ function getTypeString(schema: JSONSchema7): string {
  * Generate a natural language summary of a schema.
  */
 export function jsonSchemaToNaturalLanguage(
-  schema: JSONSchema7 | undefined | null,
+  schema: JsonSchema | undefined | null,
   direction: 'input' | 'output',
 ): string {
   if (!schema) {
@@ -149,7 +152,7 @@ export function jsonSchemaToNaturalLanguage(
 /**
  * Generate a basic usage example for a tool.
  */
-export function generateBasicExample(toolName: string, inputSchema?: JSONSchema7): ToolUsageExample {
+export function generateBasicExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
   const params = generateSampleParams(inputSchema);
   const paramsStr = params ? JSON.stringify(params, null, 2) : '{}';
 
@@ -163,7 +166,7 @@ return result;`,
 /**
  * Generate sample parameters from a schema.
  */
-function generateSampleParams(schema?: JSONSchema7): Record<string, unknown> | null {
+function generateSampleParams(schema?: JsonSchema): Record<string, unknown> | null {
   if (!schema || schema.type !== 'object' || !schema.properties) {
     return null;
   }
@@ -186,7 +189,7 @@ function generateSampleParams(schema?: JSONSchema7): Record<string, unknown> | n
 /**
  * Generate a sample value for a schema property.
  */
-function getSampleValue(schema: JSONSchema7, key: string): unknown {
+function getSampleValue(schema: JsonSchema, key: string): unknown {
   if (schema.default !== undefined) {
     return schema.default;
   }
@@ -234,7 +237,7 @@ function getSampleValue(schema: JSONSchema7, key: string): unknown {
 /**
  * Check if a schema has pagination parameters.
  */
-export function hasPaginationParams(schema?: JSONSchema7): boolean {
+export function hasPaginationParams(schema?: JsonSchema): boolean {
   if (!schema || schema.type !== 'object' || !schema.properties) {
     return false;
   }
@@ -246,7 +249,7 @@ export function hasPaginationParams(schema?: JSONSchema7): boolean {
 /**
  * Check if a schema has filter-like parameters.
  */
-export function hasFilterParams(schema?: JSONSchema7): boolean {
+export function hasFilterParams(schema?: JsonSchema): boolean {
   if (!schema || schema.type !== 'object' || !schema.properties) {
     return false;
   }
@@ -266,7 +269,7 @@ export function hasFilterParams(schema?: JSONSchema7): boolean {
 /**
  * Get filter-like property names from a schema.
  */
-export function getFilterProperties(schema?: JSONSchema7): string[] {
+export function getFilterProperties(schema?: JsonSchema): string[] {
   if (!schema || schema.type !== 'object' || !schema.properties) {
     return [];
   }

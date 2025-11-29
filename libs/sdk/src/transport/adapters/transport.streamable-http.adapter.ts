@@ -3,26 +3,24 @@ import { TypedElicitResult } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ZodObject } from 'zod';
+import { z, ZodType } from 'zod';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 
 export class TransportStreamableHttpAdapter extends LocalTransportAdapter<StreamableHTTPServerTransport> {
-
   override createTransport(sessionId: string, response: ServerResponse): StreamableHTTPServerTransport {
-      return new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => {
-          return sessionId
-        },
-        onsessionclosed: () => {
-          // this.destroy();
-        },
-        onsessioninitialized: (sessionId) => {
-          console.log(`session initialized: ${sessionId.slice(0, 40)}`);
-        },
-        eventStore: this.eventStore,
-      })
+    return new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => {
+        return sessionId;
+      },
+      onsessionclosed: () => {
+        // this.destroy();
+      },
+      onsessioninitialized: (sessionId) => {
+        console.log(`session initialized: ${sessionId.slice(0, 40)}`);
+      },
+      eventStore: this.eventStore,
+    });
   }
 
   initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
@@ -49,7 +47,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
     }
   }
 
-  async sendElicitRequest<T extends ZodObject<any>>(
+  async sendElicitRequest<T extends ZodType>(
     relatedRequestId: RequestId,
     message: string,
     requestedSchema: T,
@@ -57,7 +55,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: zodToJsonSchema(requestedSchema as any),
+        requestedSchema: z.toJSONSchema(requestedSchema),
       }),
       { relatedRequestId },
     );
@@ -75,5 +73,4 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
       };
     });
   }
-
 }

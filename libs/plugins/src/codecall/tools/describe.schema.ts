@@ -45,11 +45,11 @@ export const describeToolOutputSchema = z.object({
         appId: z.string().describe('The app ID this tool belongs to'),
         description: z.string().describe('Detailed description of what this tool does'),
         inputSchema: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .nullable()
           .describe('JSON Schema object describing the tool input parameters'),
         outputSchema: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .nullable()
           .describe('JSON Schema object describing the tool output structure'),
         annotations: ToolAnnotationsSchema.optional().describe('MCP tool annotations (metadata)'),

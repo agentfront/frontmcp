@@ -319,13 +319,13 @@ export const encryptedBlobSchema = z.object({
   tag: z.string(),
   data: z.string(),
   exp: z.number().optional(),
-  meta: z.record(z.unknown()).optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const storedSessionSchema = z.object({
   session: transportSessionSchema,
   authorizationId: z.string(),
-  tokens: z.record(encryptedBlobSchema).optional(),
+  tokens: z.record(z.string(), encryptedBlobSchema).optional(),
   createdAt: z.number(),
   lastAccessedAt: z.number(),
 });

@@ -1,4 +1,7 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 import type {
   ParameterMapper,
   ParameterObject,
@@ -11,7 +14,7 @@ import type {
   SecurityParameterInfo,
   SecuritySchemeObject,
 } from './types';
-import { toJSONSchema7, isReferenceObject } from './types';
+import { toJsonSchema, isReferenceObject } from './types';
 
 /**
  * Resolves parameters and handles naming conflicts
@@ -28,11 +31,7 @@ export class ParameterResolver {
   /**
    * Default conflict resolver: prefix with location
    */
-  private defaultConflictResolver(
-    paramName: string,
-    location: ParameterLocation,
-    index: number
-  ): string {
+  private defaultConflictResolver(paramName: string, location: ParameterLocation, index: number): string {
     const locationPrefix = {
       path: 'path',
       query: 'query',
@@ -51,15 +50,12 @@ export class ParameterResolver {
     operation: any,
     pathParameters?: ParameterObject[],
     securityRequirements?: SecurityRequirement[],
-    includeSecurityInInput?: boolean
+    includeSecurityInInput?: boolean,
   ): {
-    inputSchema: JSONSchema7;
+    inputSchema: JsonSchema;
     mapper: ParameterMapper[];
   } {
-    const allParameters: ParameterObject[] = [
-      ...(pathParameters ?? []),
-      ...(operation.parameters ?? []),
-    ];
+    const allParameters: ParameterObject[] = [...(pathParameters ?? []), ...(operation.parameters ?? [])];
 
     const requestBody = operation.requestBody as RequestBodyObject | undefined;
 
@@ -71,7 +67,7 @@ export class ParameterResolver {
       const info: ParameterInfo = {
         name: param.name,
         location: param.in as ParameterLocation,
-        required: param.required ?? (param.in === 'path'),
+        required: param.required ?? param.in === 'path',
         schema: param.schema ?? { type: 'string' },
         description: param.description,
         style: param.style,
@@ -92,17 +88,12 @@ export class ParameterResolver {
       const mediaType = requestBody.content[contentType];
 
       if (mediaType?.schema) {
-        this.extractBodyParameters(
-          mediaType.schema,
-          parametersByName,
-          requestBody.required ?? false,
-          contentType
-        );
+        this.extractBodyParameters(mediaType.schema, parametersByName, requestBody.required ?? false, contentType);
       }
     }
 
     // Resolve conflicts and build schema + mapper
-    const properties: Record<string, JSONSchema7> = {};
+    const properties: Record<string, JsonSchema> = {};
     const required: string[] = [];
     const mapper: ParameterMapper[] = [];
 
@@ -129,11 +120,7 @@ export class ParameterResolver {
       } else {
         // Conflict - need to resolve
         params.forEach((param, index) => {
-          const inputKey = this.namingStrategy.conflictResolver(
-            originalName,
-            param.location,
-            index
-          );
+          const inputKey = this.namingStrategy.conflictResolver(originalName, param.location, index);
 
           properties[inputKey] = this.buildParameterSchema(param);
           if (param.required) {
@@ -160,11 +147,11 @@ export class ParameterResolver {
         properties,
         required,
         mapper,
-        includeSecurityInInput ?? false
+        includeSecurityInInput ?? false,
       );
     }
 
-    const inputSchema: JSONSchema7 = {
+    const inputSchema: JsonSchema = {
       type: 'object',
       properties,
       ...(required.length > 0 && { required }),
@@ -182,12 +169,12 @@ export class ParameterResolver {
     parametersByName: Map<string, ParameterInfo[]>,
     required: boolean,
     contentType: string,
-    prefix = ''
+    prefix = '',
   ): void {
     if (!schema || typeof schema !== 'object') return;
 
-    // Convert to JSONSchema7 for processing
-    const jsonSchema = toJSONSchema7(schema);
+    // Convert to JsonSchema for processing
+    const jsonSchema = toJsonSchema(schema);
 
     // Handle object schemas
     if (jsonSchema.type === 'object' && jsonSchema.properties) {
@@ -202,7 +189,7 @@ export class ParameterResolver {
             name: fullName,
             location: 'body',
             required: isRequired,
-            schema: propSchema as JSONSchema7,
+            schema: propSchema as JsonSchema,
             description: (propSchema as any).description,
             serialization: {
               contentType,
@@ -238,8 +225,8 @@ export class ParameterResolver {
   /**
    * Build JSON Schema for a parameter
    */
-  private buildParameterSchema(param: ParameterInfo): JSONSchema7 {
-    const schema: JSONSchema7 = toJSONSchema7(param.schema as any);
+  private buildParameterSchema(param: ParameterInfo): JsonSchema {
+    const schema: JsonSchema = toJsonSchema(param.schema as any);
 
     if (param.description) {
       schema.description = param.description;
@@ -291,10 +278,10 @@ export class ParameterResolver {
    */
   private processSecurityRequirements(
     securityRequirements: SecurityRequirement[],
-    properties: Record<string, JSONSchema7>,
+    properties: Record<string, JsonSchema>,
     required: string[],
     mapper: ParameterMapper[],
-    includeInInput: boolean
+    includeInInput: boolean,
   ): void {
     for (const secReq of securityRequirements) {
       const { scheme, type, name: apiKeyName, in: apiKeyIn, scopes } = secReq;
@@ -311,7 +298,7 @@ export class ParameterResolver {
       let headerKey: string;
       let paramLocation: ParameterLocation;
       let description: string;
-      let schema: JSONSchema7;
+      let schema: JsonSchema;
 
       if (type === 'http') {
         // HTTP auth (bearer, basic, etc.)
@@ -391,7 +378,7 @@ interface ParameterInfo {
   name: string;
   location: ParameterLocation;
   required: boolean;
-  schema: SchemaObject | ReferenceObject | JSONSchema7;
+  schema: SchemaObject | ReferenceObject | JsonSchema;
   description?: string;
   style?: string;
   explode?: boolean;

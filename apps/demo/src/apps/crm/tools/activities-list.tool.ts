@@ -17,7 +17,7 @@ import { CrmStore, Activity } from '../data/store';
         userId: z.string(),
         type: z.enum(['login', 'logout', 'page_view', 'action', 'error']),
         description: z.string(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
         timestamp: z.string(),
       }),
     ),

@@ -1,6 +1,9 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 import type { ResponseObject, GenerateOptions, ResponsesObject } from './types';
-import { isReferenceObject, toJSONSchema7 } from './types';
+import { isReferenceObject, toJsonSchema } from './types';
 
 /**
  * Builds output schemas from OpenAPI response definitions
@@ -17,7 +20,7 @@ export class ResponseBuilder {
   /**
    * Build output schema from responses
    */
-  build(responses?: ResponsesObject): JSONSchema7 | undefined {
+  build(responses?: ResponsesObject): JsonSchema | undefined {
     if (!responses || Object.keys(responses).length === 0) {
       return undefined;
     }
@@ -93,7 +96,7 @@ export class ResponseBuilder {
           type: 'null',
           description: response.description,
           'x-status-code': statusCode,
-        } as JSONSchema7,
+        } as JsonSchema,
       };
     }
 
@@ -104,8 +107,8 @@ export class ResponseBuilder {
       return null;
     }
 
-    const schema: JSONSchema7 & { 'x-status-code'?: number } = {
-      ...toJSONSchema7(mediaType.schema),
+    const schema: JsonSchema & { 'x-status-code'?: number } = {
+      ...toJsonSchema(mediaType.schema),
       'x-status-code': statusCode,
     };
 
@@ -170,5 +173,5 @@ export class ResponseBuilder {
  */
 interface ResponseSchema {
   statusCode: number;
-  schema: JSONSchema7;
+  schema: JsonSchema;
 }

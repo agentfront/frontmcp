@@ -3,7 +3,6 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from
 import 'reflect-metadata';
 import { z } from 'zod';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({
@@ -80,7 +79,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       method = inputData.request.method;
       params = inputData.request.params;
     } catch (e) {
-      throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'tools/list') {
@@ -180,8 +179,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           try {
             // as any used here to prevent hard ts-check on tool input that is redundant
             // and just slow down the build process. types here are unnecessary.
-            // eslint-disable-next-line
-            inputSchema = zodToJsonSchema(z.object(tool.inputSchema) as any) as any;
+            inputSchema = z.toJSONSchema(z.object(tool.inputSchema));
           } catch (e) {
             this.logger.warn(`Failed to convert inputSchema for tool ${finalName}:`, e);
             inputSchema = { type: 'object', properties: {} };

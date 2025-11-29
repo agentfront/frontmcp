@@ -54,7 +54,7 @@ export const TableColumnSchema = z
     /** Current sort direction */
     sortDirection: TableSortDirectionSchema.optional(),
     /** Custom cell renderer (function - cannot validate, accepts any) */
-    render: z.function().args(z.any(), z.any(), z.number()).returns(z.string()).optional(),
+    render: z.function({ input: z.tuple([z.any(), z.any(), z.number()]), output: z.string() }).optional(),
     /** Additional header CSS classes */
     headerClass: z.string().optional(),
     /** Additional cell CSS classes */

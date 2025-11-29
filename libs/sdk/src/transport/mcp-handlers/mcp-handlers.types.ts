@@ -1,4 +1,4 @@
-import { z, ZodTypeAny, ZodObject, ZodLiteral } from 'zod';
+import { z, ZodType, ZodObject, ZodLiteral } from 'zod';
 import { Notification, Request, Result } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerOptions } from '@modelcontextprotocol/sdk/server/index.js';
@@ -21,13 +21,13 @@ type Flatten<T> = T extends Primitive
       [K in keyof T]: Flatten<T[K]>;
     }
   : T;
-type Infer<Schema extends ZodTypeAny> = Flatten<z.infer<Schema>>;
+type Infer<Schema extends ZodType> = Flatten<z.infer<Schema>>;
 
 export interface McpHandler<
   HandlerRequest extends Request = Request,
   HandlerResult extends Result = Result,
-  In extends ZodObject<{ method: ZodLiteral<string> }> = ZodObject<{ method: ZodLiteral<string> }>,
-  Out extends ZodObject<any> = ZodObject<any>,
+  In extends ZodObject = ZodObject,
+  Out extends ZodObject = ZodObject,
   HandlerNotification extends Notification = Notification,
 > {
   when?: (request: Infer<In>) => boolean;

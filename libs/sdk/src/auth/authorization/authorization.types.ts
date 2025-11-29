@@ -224,13 +224,13 @@ export const authUserSchema = z.object({
 export const authorizedToolSchema = z.object({
   executionPath: z.tuple([z.string(), z.string()]),
   scopes: z.array(z.string()).optional(),
-  details: z.record(z.unknown()).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const authorizedPromptSchema = z.object({
   executionPath: z.tuple([z.string(), z.string()]),
   scopes: z.array(z.string()).optional(),
-  details: z.record(z.unknown()).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const authModeSchema = z.enum(['public', 'transparent', 'orchestrated']);
@@ -320,7 +320,7 @@ export const appAuthorizationRecordSchema = z.object({
  * Zod schema for ProgressiveAuthState
  */
 export const progressiveAuthStateSchema = z.object({
-  apps: z.record(appAuthorizationRecordSchema),
+  apps: z.record(z.string(), appAuthorizationRecordSchema),
   initiallyAuthorized: z.array(z.string()),
   initiallySkipped: z.array(z.string()),
 });
