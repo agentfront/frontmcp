@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { tool } from '@frontmcp/sdk';
-import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 import type { OpenApiAdapterOptions } from './openapi.types';
 import type { JSONSchema } from 'zod/v4/core';
