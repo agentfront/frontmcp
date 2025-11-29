@@ -69,8 +69,10 @@ export default class EnclaveService {
   private readonly sidecarOptions: CodeCallSidecarOptions;
 
   constructor(config: CodeCallConfig) {
-    this.vmOptions = config.get('resolvedVm');
-    this.sidecarOptions = config.get('sidecar');
+    // Use getAll() to avoid deep type instantiation with DottedPath<T>
+    const all = config.getAll();
+    this.vmOptions = all.resolvedVm;
+    this.sidecarOptions = all.sidecar;
   }
 
   /**

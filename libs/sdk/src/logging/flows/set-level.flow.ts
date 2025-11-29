@@ -64,7 +64,7 @@ export default class SetLevelFlow extends FlowBase<typeof name> {
       params = inputData.request.params;
       ctx = inputData.ctx;
     } catch (e) {
-      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'logging/setLevel') {

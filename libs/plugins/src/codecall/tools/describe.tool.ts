@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/tools/describe.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import type { JSONSchema } from 'zod/v4/core';
+import { toJSONSchema } from 'zod/v4';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
@@ -106,8 +107,8 @@ export default class DescribeTool extends ToolContext {
     // Check if it's a Zod schema
     if (schema instanceof ZodType) {
       try {
-        // Use Zod v4's built-in JSON Schema conversion
-        return z.toJSONSchema(schema) as JsonSchema;
+        // Use Zod v4's toJSONSchema conversion
+        return toJSONSchema(schema);
       } catch {
         // If conversion fails, return null
         return null;
@@ -122,8 +123,8 @@ export default class DescribeTool extends ToolContext {
       // If the first value is a ZodType, treat the whole thing as a raw shape
       if (firstValue instanceof ZodType) {
         try {
-          // Wrap in z.object and convert using Zod v4's built-in conversion
-          return z.toJSONSchema(z.object(obj as Record<string, ZodType>)) as JsonSchema;
+          // Wrap in z.object and convert using Zod v4's toJSONSchema
+          return toJSONSchema(z.object(obj as Record<string, ZodType>) as any) as JsonSchema;
         } catch {
           return null;
         }

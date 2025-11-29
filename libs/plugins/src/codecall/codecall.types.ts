@@ -2,6 +2,48 @@
 
 import { z } from 'zod';
 
+// ===== Filter Function Types =====
+
+/**
+ * Tool info passed to the directCalls filter function
+ */
+export interface DirectCallsFilterToolInfo {
+  name: string;
+  appId?: string;
+  source?: string;
+  tags?: string[];
+}
+
+/**
+ * Tool info passed to the includeTools filter function
+ */
+export interface IncludeToolsFilterToolInfo {
+  name: string;
+  appId?: string;
+  source?: string;
+  description?: string;
+  tags?: string[];
+}
+
+/**
+ * Function type for directCalls filter
+ */
+export type DirectCallsFilterFn = (tool: DirectCallsFilterToolInfo) => boolean;
+
+/**
+ * Function type for includeTools filter
+ */
+export type IncludeToolsFilterFn = (tool: IncludeToolsFilterToolInfo) => boolean;
+
+// Helper schemas for filter functions with runtime validation
+const directCallsFilterSchema = z.custom<DirectCallsFilterFn>((val) => typeof val === 'function', {
+  message: 'filter must be a function with signature (tool: DirectCallsFilterToolInfo) => boolean',
+});
+
+const includeToolsFilterSchema = z.custom<IncludeToolsFilterFn>((val) => typeof val === 'function', {
+  message: 'includeTools must be a function with signature (tool: IncludeToolsFilterToolInfo) => boolean',
+});
+
 // ===== Zod Schemas with Defaults =====
 
 export const codeCallModeSchema = z
@@ -73,22 +115,10 @@ export const codeCallDirectCallsOptionsSchema = z.object({
   allowedTools: z.array(z.string()).optional(),
 
   /**
-   * Optional advanced filter.
-   * Note: Functions can't be validated by Zod at runtime, so this is any
+   * Optional advanced filter function.
+   * Signature: (tool: DirectCallsFilterToolInfo) => boolean
    */
-  filter: z
-    .function({
-      input: z.tuple([
-        z.object({
-          name: z.string(),
-          appId: z.string().optional(),
-          source: z.string().optional(),
-          tags: z.array(z.string()).optional(),
-        }),
-      ]),
-      output: z.boolean(),
-    })
-    .optional(),
+  filter: directCallsFilterSchema.optional(),
 });
 
 export const embeddingStrategySchema = z.enum(['tfidf', 'ml']).default('tfidf');
@@ -212,23 +242,10 @@ const codeCallPluginOptionsObjectSchema = z.object({
   maxDefinitions: z.number().positive().default(8),
 
   /**
-   * Optional filter function for including tools
-   * Note: Functions can't be validated by Zod at runtime
+   * Optional filter function for including tools.
+   * Signature: (tool: IncludeToolsFilterToolInfo) => boolean
    */
-  includeTools: z
-    .function({
-      input: z.tuple([
-        z.object({
-          name: z.string(),
-          appId: z.string().optional(),
-          source: z.string().optional(),
-          description: z.string().optional(),
-          tags: z.array(z.string()).optional(),
-        }),
-      ]),
-      output: z.boolean(),
-    })
-    .optional(),
+  includeTools: includeToolsFilterSchema.optional(),
 
   /**
    * Direct calls configuration

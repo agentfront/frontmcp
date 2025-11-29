@@ -3,7 +3,8 @@ import { TypedElicitResult } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { z, ZodType } from 'zod';
+import { ZodType } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 
@@ -55,7 +56,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: z.toJSONSchema(requestedSchema),
+        requestedSchema: toJSONSchema(requestedSchema as any),
       }),
       { relatedRequestId },
     );

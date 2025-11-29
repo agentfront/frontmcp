@@ -116,10 +116,10 @@ export type ResourceLinkOutput = z.output<typeof ResourceLinkOutputSchema>;
  */
 type StructuredOutputType =
   | z.ZodRawShape
-  | z.ZodObject
+  | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
-  | z.ZodUnion<[z.ZodObject, ...z.ZodObject[]]>
-  | z.ZodDiscriminatedUnion<z.ZodObject[]>;
+  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<z.ZodObject<any>[]>;
 
 export type ToolSingleOutputType =
   | PrimitiveOutputType

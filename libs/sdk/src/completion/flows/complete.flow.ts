@@ -76,7 +76,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       method = inputData.request.method;
       params = inputData.request.params;
     } catch (e) {
-      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'completion/complete') {

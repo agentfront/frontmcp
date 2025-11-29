@@ -170,7 +170,7 @@ export default class ExecuteTool extends ToolContext {
         }
       },
 
-      console: this.tryGet(CodeCallConfig)?.get('resolvedVm.allowConsole') ? console : undefined,
+      console: this.tryGet(CodeCallConfig)?.getAll().resolvedVm?.allowConsole ? console : undefined,
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
@@ -195,7 +195,7 @@ export default class ExecuteTool extends ToolContext {
         return {
           status: 'timeout',
           error: {
-            message: `Script execution timed out after ${config.get('resolvedVm.timeoutMs')}ms`,
+            message: `Script execution timed out after ${config.getAll().resolvedVm.timeoutMs}ms`,
           },
         };
       }
