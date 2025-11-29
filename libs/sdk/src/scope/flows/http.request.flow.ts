@@ -274,9 +274,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
   })
   async handleDeleteSession() {
     const { request } = this.rawInput;
-    const sessionId =
-      request[ServerRequestTokens.sessionId] ??
-      Object.entries(request.headers).find(([k]) => k.toLowerCase() === 'mcp-session-id')?.[1];
+    // Headers are normalized to lowercase by the adapter
+    const sessionId = request[ServerRequestTokens.sessionId] ?? request.headers['mcp-session-id'];
 
     if (!sessionId || typeof sessionId !== 'string') {
       this.logger.warn('DELETE request without valid session ID');

@@ -58,12 +58,10 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
 
-    let { token, session } = request[ServerRequestTokens.auth] as Authorization;
-
-    if (!session) {
-      session = createSessionId('streamable-http', token);
-      request[ServerRequestTokens.auth].session = session;
-    }
+    const authorization = request[ServerRequestTokens.auth] as Authorization;
+    const { token } = authorization;
+    // Get session from authorization or create new one - stored only in state, not mutated on request
+    const session = authorization.session ?? createSessionId('streamable-http', token);
     this.state.set(stateSchema.parse({ token, session }));
   }
 

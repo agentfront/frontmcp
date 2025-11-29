@@ -59,12 +59,8 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
 
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
-    let { session } = authorization;
-
-    if (!session) {
-      session = createSessionId('legacy-sse', token);
-      request[ServerRequestTokens.auth].session = session;
-    }
+    // Get session from authorization or create new one - stored only in state, not mutated on request
+    const session = authorization.session ?? createSessionId('legacy-sse', token);
     this.state.set(stateSchema.parse({ token, session }));
   }
 
