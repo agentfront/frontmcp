@@ -293,7 +293,7 @@ const enclave = new Enclave({
   },
 });
 
-const result = await enclave.run(`
+const result = await enclave run(`
   const doc = await callTool('documents:get', { id: 'doc-123' });
   // doc.content is a reference token, resolved on access
   return { wordCount: doc.content.split(' ').length };
@@ -350,14 +350,68 @@ const enclaveWithApi = new Enclave({
 });
 ```
 
+Set <Code>scoringGate.scorer</Code> when you want a single scoring backend, or provide <Code>scoringGate.scoring</Code> to enable the new progressive strategy. Progressive configs automatically override <Code>scorer</Code> when both are present.
+
+### Local LLM scoring (on-device)
+
+`local-llm` loads a Hugging Face transformers.js pipeline so you can review scripts entirely on your infrastructure. Classification mode inspects the extracted features directly, while similarity mode pairs embeddings with VectoriaDB to compare against known-malicious patterns.
+
+```ts
+const enclaveWithLocal = new Enclave({
+  scoringGate: {
+    scorer: 'local-llm',
+    localLlm: {
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      cacheDir: './.cache/transformers',
+      mode: 'classification',
+      fallbackToRules: true,
+    },
+    blockThreshold: 70,
+  },
+});
+```
+
+<Note>
+  The first run downloads ~22 MB of model weights into <Code>cacheDir</Code>. Subsequent executions reuse the local cache so disconnected environments (VMs, CI) stay fast.
+</Note>
+
+<Tip>Switch <Code>mode</Code> to <Code>'similarity'</Code> and provide <Code>vectoriaConfig</Code> when you want to score scripts against a curated VectoriaDB index of risky patterns.</Tip>
+
+### Progressive scoring (fast + detailed)
+
+Progressive mode chains the rule-based heuristics with a second, higher-latency scorer only when needed. This keeps benign scripts under a few milliseconds while escalating suspicious ones to a local LLM or remote API.
+
+```ts
+const enclaveProgressive = new Enclave({
+  scoringGate: {
+    scoring: {
+      strategy: 'progressive',
+      fast: { type: 'rule-based' },
+      detailed: {
+        type: 'local-llm',
+        localLlm: { modelId: 'Xenova/codebert-base', cacheDir: './.cache/transformers' },
+      },
+      escalationThreshold: 30,
+      combination: 'max', // replace | max | avg
+    },
+    warnThreshold: 35,
+    blockThreshold: 70,
+    cache: { enabled: true, ttlMs: 300000 },
+  },
+});
+```
+
+Set <Code>escalationThreshold</Code> to control when the detailed scorer runs and <Code>combination</Code> to decide whether its score replaces, averages, or only bumps the fast score. If the detailed scorer cannot initialize, Enclave automatically falls back to the fast result and logs a warning.
+
 ### Scorer Types
 
-| Type           | Latency | Dependencies   | Detection |
-| -------------- | ------- | -------------- | --------- |
-| `disabled`     | 0ms     | None           | None      |
-| `rule-based`   | ~1ms    | None           | Good      |
-| `local-llm`    | ~5-10ms | Model download | Better    |
-| `external-api` | ~100ms  | Network        | Best      |
+| Type           | Latency  | Dependencies    | Detection |
+| -------------- | -------- | --------------- | --------- |
+| `disabled`     | 0ms      | None            | None      |
+| `rule-based`   | ~1ms     | None            | Good      |
+| `local-llm`    | ~5-10ms  | transformers.js | Better    |
+| `external-api` | ~100ms   | Network         | Best      |
+| `progressive`  | ~5-100ms | Rule-based + ML | Adaptive  |
 
 ### Detection Rules
 
@@ -550,7 +604,7 @@ const enclave = new Enclave({
     }
 
     // Execute with your pipeline (auth, logging, etc.)
-    return tool.execute(args);
+    return tool execute(args);
   },
 });
 ```
