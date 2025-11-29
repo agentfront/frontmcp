@@ -73,14 +73,14 @@ const pkceChallengeSchema = z
  * OAuth 2.1 requires S256 only (plain is deprecated)
  */
 const codeChallengeMethodSchema = z.literal('S256', {
-  errorMap: () => ({ message: 'code_challenge_method must be "S256" (OAuth 2.1)' }),
+  message: 'code_challenge_method must be "S256" (OAuth 2.1)',
 });
 
 /**
  * OAuth 2.1 authorization code flow only
  */
 const responseTypeSchema = z.literal('code', {
-  errorMap: () => ({ message: 'response_type must be "code" (OAuth 2.1)' }),
+  message: 'response_type must be "code" (OAuth 2.1)',
 });
 
 /**
@@ -508,7 +508,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
    * Format Zod errors into human-readable strings
    */
   private formatZodErrors(error: ZodError): string[] {
-    return error.errors.map((err) => {
+    return error.issues.map((err) => {
       const path = err.path.length > 0 ? `${err.path.join('.')}: ` : '';
       return `${path}${err.message}`;
     });

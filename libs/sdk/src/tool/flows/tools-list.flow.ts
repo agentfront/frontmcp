@@ -80,7 +80,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       method = inputData.request.method;
       params = inputData.request.params;
     } catch (e) {
-      throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.errors : undefined);
+      throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.issues : undefined);
     }
 
     if (method !== 'tools/list') {

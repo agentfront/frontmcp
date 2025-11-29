@@ -20,7 +20,7 @@ export const invokeToolInputSchema = z.object({
       'The name of the tool to invoke (e.g., "users:getById", "billing:getInvoice"). Must be a tool you discovered via codecall:search.',
     ),
   input: z
-    .record(z.unknown())
+    .record(z.string(), z.unknown())
     .describe(
       "The input parameters for the tool. Structure must match the tool's input schema (check codecall:describe for schema details).",
     ),

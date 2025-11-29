@@ -141,7 +141,7 @@ export const InputOptionsSchema = z
     /** HTMX attributes */
     htmx: FormHtmxSchema,
     /** Data attributes */
-    data: z.record(z.string()).optional(),
+    data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
     iconBefore: z.string().optional(),
     /** Icon after input (HTML string) */
@@ -209,7 +209,7 @@ export const SelectOptionsSchema = z
     /** HTMX attributes */
     htmx: FormHtmxSchema,
     /** Data attributes */
-    data: z.record(z.string()).optional(),
+    data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
     iconBefore: z.string().optional(),
     /** Icon after input (HTML string) */
@@ -271,7 +271,7 @@ export const TextareaOptionsSchema = z
     /** HTMX attributes */
     htmx: FormHtmxSchema,
     /** Data attributes */
-    data: z.record(z.string()).optional(),
+    data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
     iconBefore: z.string().optional(),
     /** Icon after input (HTML string) */

@@ -55,9 +55,9 @@ export const frontMcpBaseSchema = z.object({
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
-  http: httpOptionsSchema.optional().default({}),
-  session: sessionOptionsSchema.optional().default({}),
-  logging: loggingOptionsSchema.optional().default({}),
+  http: httpOptionsSchema.optional(),
+  session: sessionOptionsSchema.optional(),
+  logging: loggingOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {

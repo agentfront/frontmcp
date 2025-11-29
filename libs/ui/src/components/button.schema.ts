@@ -115,7 +115,7 @@ export const ButtonOptionsSchema = z
     /** HTMX attributes */
     htmx: ButtonHtmxSchema,
     /** Data attributes */
-    data: z.record(z.string()).optional(),
+    data: z.record(z.string(), z.string()).optional(),
     /** ARIA label */
     ariaLabel: z.string().optional(),
   })

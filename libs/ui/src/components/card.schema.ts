@@ -92,7 +92,7 @@ export const CardOptionsSchema = z
     /** HTMX attributes */
     htmx: CardHtmxSchema,
     /** Data attributes */
-    data: z.record(z.string()).optional(),
+    data: z.record(z.string(), z.string()).optional(),
     /** Clickable card (adds hover effects) */
     clickable: z.boolean().optional(),
     /** Click handler URL */

@@ -54,12 +54,12 @@ export type ValidationResult<T> = { success: true; data: T } | { success: false;
 /**
  * Extract the path of the first invalid field from a Zod error
  */
-function getFirstInvalidPath(error: { errors: Array<{ path: (string | number)[] }> }): string {
-  const firstError = error.errors[0];
+function getFirstInvalidPath(error: { issues: Array<{ path: PropertyKey[] }> }): string {
+  const firstError = error.issues[0];
   if (!firstError || firstError.path.length === 0) {
     return 'options';
   }
-  return firstError.path.join('.');
+  return firstError.path.map(String).join('.');
 }
 
 /**

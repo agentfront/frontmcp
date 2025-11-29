@@ -32,7 +32,9 @@ export const HttpStatus = z.number().int().min(100).max(599);
 export const HttpRedirectStatus = zNumUnion(REDIRECTS);
 export const HttpEmptyStatus = zNumUnion(NO_BODY_STATUSES);
 
-export const HttpHeaders = z.record(z.union([z.string(), z.union([z.string(), z.array(z.string())])])).default({});
+export const HttpHeaders = z
+  .record(z.string(), z.union([z.string(), z.union([z.string(), z.array(z.string())])]))
+  .default({});
 
 export const HttpCookieSchema = z.object({
   name: z.string().min(1),
@@ -252,7 +254,10 @@ export type HttpOutput = z.infer<typeof httpOutputSchema>;
  * Convenience factories
  */
 export const httpRespond = {
-  json: <T extends Record<string, any>>(body: T, extra: Partial<z.infer<typeof HttpJsonSchema>> = {}): z.infer<typeof HttpJsonSchema> => {
+  json: <T extends Record<string, any>>(
+    body: T,
+    extra: Partial<z.infer<typeof HttpJsonSchema>> = {},
+  ): z.infer<typeof HttpJsonSchema> => {
     return { kind: 'json', status: 200, body, contentType: 'application/json; charset=utf-8', ...extra };
   },
 
@@ -294,7 +299,7 @@ export const httpRespond = {
     id: randomUUID(),
   }),
 
-  rpcError: (message: string, requestId?: RequestId | null):z.infer<typeof HttpJsonSchema> => ({
+  rpcError: (message: string, requestId?: RequestId | null): z.infer<typeof HttpJsonSchema> => ({
     kind: 'json',
     status: 400,
     contentType: 'application/json; charset=utf-8',

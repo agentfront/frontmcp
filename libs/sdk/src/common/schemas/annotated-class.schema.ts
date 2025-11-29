@@ -26,44 +26,92 @@ export const annotatedFrontMcpAppSchema = z.custom<Type>(
 
 export const annotatedFrontMcpProvidersSchema = z.custom<Type>(
   (v): v is Type => {
-    return (
-      (typeof v === 'function' && Reflect.hasMetadata(FrontMcpProviderTokens.type, v)) ||
-      (v['useValue'] && Reflect.hasMetadata(FrontMcpProviderTokens.type, v.useValue.constructor)) ||
-      (v['useFactory'] && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success)
-    );
+    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpProviderTokens.type, v)) {
+      return true;
+    }
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      const useValue = obj['useValue'];
+      if (useValue && typeof useValue === 'object' && useValue !== null) {
+        const ctor = (useValue as Record<string, unknown>)['constructor'];
+        if (ctor && Reflect.hasMetadata(FrontMcpProviderTokens.type, ctor as object)) {
+          return true;
+        }
+      }
+      if (obj['useFactory'] && frontMcpProviderMetadataSchema.passthrough().safeParse(v).success) {
+        return true;
+      }
+    }
+    return false;
   },
   { message: 'providers items must be annotated with @Provider() | @FrontMcpProvider().' },
 );
 
 export const annotatedFrontMcpAuthProvidersSchema = z.custom<Type>(
   (v): v is Type => {
-    return (
-      (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, v)) ||
-      (v['useValue'] && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, v.useValue.constructor)) ||
-      (v['useFactory'] && frontMcpAuthProviderMetadataSchema.passthrough().safeParse(v).success)
-    );
+    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, v)) {
+      return true;
+    }
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      const useValue = obj['useValue'];
+      if (useValue && typeof useValue === 'object' && useValue !== null) {
+        const ctor = (useValue as Record<string, unknown>)['constructor'];
+        if (ctor && Reflect.hasMetadata(FrontMcpAuthProviderTokens.type, ctor as object)) {
+          return true;
+        }
+      }
+      if (obj['useFactory'] && frontMcpAuthProviderMetadataSchema.passthrough().safeParse(v).success) {
+        return true;
+      }
+    }
+    return false;
   },
   { message: 'auth providers items must be annotated with @AuthProvider() | @FrontMcpAuthProvider().' },
 );
 
 export const annotatedFrontMcpPluginsSchema = z.custom<Type>(
   (v): v is Type => {
-    return (
-      (typeof v === 'function' && Reflect.hasMetadata(FrontMcpPluginTokens.type, v)) ||
-      (v['useValue'] && Reflect.hasMetadata(FrontMcpPluginTokens.type, v.useValue.constructor)) ||
-      (v['useFactory'] && frontMcpPluginMetadataSchema.passthrough().safeParse(v).success)
-    );
+    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpPluginTokens.type, v)) {
+      return true;
+    }
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      const useValue = obj['useValue'];
+      if (useValue && typeof useValue === 'object' && useValue !== null) {
+        const ctor = (useValue as Record<string, unknown>)['constructor'];
+        if (ctor && Reflect.hasMetadata(FrontMcpPluginTokens.type, ctor as object)) {
+          return true;
+        }
+      }
+      if (obj['useFactory'] && frontMcpPluginMetadataSchema.passthrough().safeParse(v).success) {
+        return true;
+      }
+    }
+    return false;
   },
   { message: 'plugins items must be annotated with @Plugin() | @FrontMcpPlugin().' },
 );
 
 export const annotatedFrontMcpAdaptersSchema = z.custom<Type>(
   (v): v is Type => {
-    return (
-      (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAdapterTokens.type, v)) ||
-      (v['useValue'] && Reflect.hasMetadata(FrontMcpAdapterTokens.type, v.useValue.constructor)) ||
-      (v['useFactory'] && frontMcpAdapterMetadataSchema.passthrough().safeParse(v).success)
-    );
+    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpAdapterTokens.type, v)) {
+      return true;
+    }
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      const useValue = obj['useValue'];
+      if (useValue && typeof useValue === 'object' && useValue !== null) {
+        const ctor = (useValue as Record<string, unknown>)['constructor'];
+        if (ctor && Reflect.hasMetadata(FrontMcpAdapterTokens.type, ctor as object)) {
+          return true;
+        }
+      }
+      if (obj['useFactory'] && frontMcpAdapterMetadataSchema.passthrough().safeParse(v).success) {
+        return true;
+      }
+    }
+    return false;
   },
   { message: 'adapters items must be annotated with @Adapter() | @FrontMcpAdapter().' },
 );

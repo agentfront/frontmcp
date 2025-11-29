@@ -3,7 +3,10 @@ import { tool } from '@frontmcp/sdk';
 import { convertJsonSchemaToZod } from 'json-schema-to-zod-v3';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 import type { OpenApiAdapterOptions } from './openapi.types';
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 import { buildRequest, applyAdditionalHeaders, parseResponse } from './openapi.utils';
 import { resolveToolSecurity } from './openapi.security';
 
@@ -14,10 +17,7 @@ import { resolveToolSecurity } from './openapi.security';
  * @param options - Adapter options
  * @returns FrontMCP tool
  */
-export function createOpenApiTool(
-  openapiTool: McpOpenAPITool,
-  options: OpenApiAdapterOptions
-) {
+export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiAdapterOptions) {
   // Convert JSON Schema to Zod schema for input validation
   const inputSchema = getZodSchemaFromJsonSchema(openapiTool.inputSchema, openapiTool.name);
 
@@ -32,12 +32,7 @@ export function createOpenApiTool(
     const security = await resolveToolSecurity(openapiTool, ctx.authInfo, options);
 
     // 2. Build request from mapper
-    const { url, headers, body: requestBody } = buildRequest(
-      openapiTool,
-      input,
-      security,
-      options.baseUrl
-    );
+    const { url, headers, body: requestBody } = buildRequest(openapiTool, input, security, options.baseUrl);
 
     // 3. Apply additional headers
     applyAdditionalHeaders(headers, options.additionalHeaders);
@@ -80,10 +75,7 @@ export function createOpenApiTool(
  * @param toolName - Tool name for error reporting
  * @returns Zod schema
  */
-function getZodSchemaFromJsonSchema(
-  jsonSchema: JSONSchema7,
-  toolName: string
-): z.ZodObject<z.ZodRawShape> {
+function getZodSchemaFromJsonSchema(jsonSchema: JsonSchema, toolName: string): z.ZodObject {
   if (typeof jsonSchema !== 'object' || jsonSchema === null) {
     return z.object({}).passthrough();
   }
@@ -93,7 +85,7 @@ function getZodSchemaFromJsonSchema(
     if (typeof zodSchema?.parse !== 'function') {
       throw new Error('Conversion did not produce a valid Zod schema.');
     }
-    return zodSchema as z.ZodObject<z.ZodRawShape>;
+    return zodSchema as unknown as z.ZodObject;
   } catch (err: unknown) {
     console.error(`Failed to generate Zod schema for '${toolName}':`, err);
     return z.object({}).passthrough();

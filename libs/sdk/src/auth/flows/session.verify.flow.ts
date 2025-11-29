@@ -141,8 +141,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Use transport config directly (already parsed with defaults by Zod)
-    const { enableStatelessHttp } = authOptions.transport;
+    // Use transport config - handle optional since we removed .default({})
+    const enableStatelessHttp = authOptions.transport?.enableStatelessHttp ?? false;
 
     // If stateless HTTP is enabled and no session header provided,
     // don't set a protocol - let decideIntent determine it based on request

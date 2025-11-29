@@ -1,9 +1,9 @@
-import {Token, Type} from './base.interface';
-import {FlowMetadata, FlowName} from '../metadata';
-import {z} from 'zod';
-import {HookEntry, ScopeEntry} from '../entries';
-import {FlowState, FlowStateOf} from './internal/flow.utils';
-import {FrontMcpLogger} from "./logger.interface";
+import { Token, Type } from './base.interface';
+import { FlowMetadata, FlowName } from '../metadata';
+import { z } from 'zod';
+import { HookEntry, ScopeEntry } from '../entries';
+import { FlowState, FlowStateOf } from './internal/flow.utils';
+import { FrontMcpLogger } from './logger.interface';
 
 export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
 export type FlowOutputOf<N extends FlowName> = z.infer<ExtendFlows[N]['output']>;
@@ -11,7 +11,6 @@ export type FlowPlanOf<N extends FlowName> = ExtendFlows[N]['plan'];
 export type FlowCtxOf<N extends FlowName> = ExtendFlows[N]['ctx'];
 export type FlowStagesOf<N extends FlowName> = ExtendFlows[N]['stage'];
 export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeStage'];
-
 
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
 
@@ -33,15 +32,13 @@ export class FlowControl extends Error {
   }
 
   static fail(error: Error): never {
-    throw new FlowControl('fail', {error: error.message});
+    throw new FlowControl('fail', { error: error.message });
   }
 
   static abort(reason: string): never {
     throw new FlowControl('abort', reason);
   }
-
 }
-
 
 // 1) The actual abstract class (value)
 export abstract class FlowBase<N extends FlowName = FlowName> {
@@ -66,7 +63,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   }
 
   respond(output: FlowOutputOf<N>) {
-    throw FlowControl.respond((this.metadata.outputSchema as z.ZodObject<any>).parse(output));
+    throw FlowControl.respond((this.metadata.outputSchema as z.ZodObject).parse(output));
   }
 
   fail(error: Error) {
@@ -84,9 +81,6 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   protected handled() {
     throw FlowControl.handled();
   }
-
 }
 
-export type FlowType<Provide = FlowBase<any>> =
-  | Type<Provide>
-
+export type FlowType<Provide = FlowBase<any>> = Type<Provide>;

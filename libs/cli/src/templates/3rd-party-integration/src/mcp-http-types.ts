@@ -1,17 +1,17 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * Shared output wrapper: all HTTP tools must return { status, headers, body }.
  */
 
 export const HttpStatusSchema = z.number().int().min(100).max(599);
-export const HttpHeadersSchema = z.record(z.string());
+export const HttpHeadersSchema = z.record(z.string(), z.string());
 
 export const makeHttpOutputSchema = <TBody extends z.ZodTypeAny>(bodySchema: TBody) =>
   z.object({
     status: HttpStatusSchema,
     headers: HttpHeadersSchema.optional(),
-    body: bodySchema
+    body: bodySchema,
   });
 
 export type HttpOutput<TBody> = {
@@ -29,20 +29,20 @@ export const AuthContextSchema = z.object({
     .object({
       accessToken: z.string(),
       idToken: z.string().optional(),
-      claims: z.record(z.any()).optional()
+      claims: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
   bearer: z
     .object({
-      token: z.string()
+      token: z.string(),
     })
     .optional(),
   apiKey: z
     .object({
       name: z.string().optional(),
-      value: z.string()
+      value: z.string(),
     })
-    .optional()
+    .optional(),
 });
 
 export type AuthContext = z.infer<typeof AuthContextSchema>;
@@ -51,13 +51,14 @@ export const ExecuteContextSchema = z.object({
   baseUrl: z.string().url(),
   auth: AuthContextSchema,
   fetch: z
-    .function()
-    .args(z.string(), z.any())
-    .returns(z.promise(z.any()))
+    .function({
+      input: z.tuple([z.string(), z.any()]),
+      output: z.promise(z.any()),
+    })
     .optional(),
   requestId: z.string().optional(),
   timeoutMs: z.number().int().positive().optional(),
-  logDebug: z.boolean().optional()
+  logDebug: z.boolean().optional(),
 });
 
 export type ExecuteContext = z.infer<typeof ExecuteContextSchema>;
@@ -66,7 +67,4 @@ export type ExecuteContext = z.infer<typeof ExecuteContextSchema>;
  * Generic execute signature for TS tools.
  */
 
-export type ToolExecute<I, B> = (args: {
-  input: I;
-  ctx: ExecuteContext;
-}) => Promise<HttpOutput<B>>;
+export type ToolExecute<I, B> = (args: { input: I; ctx: ExecuteContext }) => Promise<HttpOutput<B>>;

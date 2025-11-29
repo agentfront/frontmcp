@@ -72,7 +72,7 @@ export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool 
  */
 // ---------- zod helpers ----------
 type __Shape = z.ZodRawShape;
-type __AsZodObj<T> = T extends z.ZodObject<infer S> ? z.ZodObject<S> : T extends z.ZodRawShape ? z.ZodObject<T> : never;
+type __AsZodObj<T> = T extends z.ZodObject ? T : T extends z.ZodRawShape ? z.ZodObject<T> : never;
 
 export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.infer<__AsZodObj<I>> : never;
 
@@ -82,7 +82,7 @@ export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.infer<__
  * Helper to infer the return type from any Zod schema,
  * including ZodRawShape.
  */
-type __InferZod<S> = S extends z.ZodTypeAny ? z.infer<S> : S extends z.ZodRawShape ? z.infer<z.ZodObject<S>> : never;
+type __InferZod<S> = S extends z.ZodType ? z.infer<S> : S extends z.ZodRawShape ? z.infer<z.ZodObject<S>> : never;
 
 /**
  * Infers the *output type* from a *single schema definition*
@@ -109,7 +109,7 @@ type __InferFromSingleSchema<S> =
     ? Date
     : // Handle all Zod schemas (primitives, objects, arrays, etc.)
     // This will correctly infer z.ZodString to string, etc.
-    S extends z.ZodTypeAny | z.ZodRawShape
+    S extends z.ZodType | z.ZodRawShape
     ? __InferZod<S>
     : // Fallback for unknown/unrecognized schema
       any;
@@ -148,10 +148,10 @@ type __ResourceOutputType = 'resource';
 type __ResourceLinkOutputType = 'resource_link';
 type __StructuredOutputType =
   | z.ZodRawShape
-  | z.ZodObject<any>
-  | z.ZodArray<any>
-  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<any, any>;
+  | z.ZodObject
+  | z.ZodArray<z.ZodType>
+  | z.ZodUnion<[z.ZodObject, ...z.ZodObject[]]>
+  | z.ZodDiscriminatedUnion<z.ZodObject[]>;
 
 type __ToolSingleOutputType =
   | __PrimitiveOutputType

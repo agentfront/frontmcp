@@ -1,8 +1,10 @@
 // file: libs/plugins/src/codecall/tools/describe.tool.ts
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
+import { z, ZodType } from 'zod';
 import {
   DescribeToolInput,
   describeToolInputSchema,
@@ -65,7 +67,7 @@ export default class DescribeTool extends ToolContext {
       const appId = this.extractAppId(tool);
 
       // Get input schema (already JSON Schema)
-      const inputSchema = tool.rawInputSchema as JSONSchema7 | undefined;
+      const inputSchema = tool.rawInputSchema as JsonSchema | undefined;
 
       // Get output schema - convert from Zod if needed
       const outputSchema = this.toJsonSchema(tool.outputSchema);
@@ -94,19 +96,18 @@ export default class DescribeTool extends ToolContext {
    * Convert a schema to JSON Schema format.
    * Handles Zod schemas, raw shapes, and already-JSON-Schema objects.
    *
-   * NOTE: We use `as any` casts to prevent TypeScript from deeply resolving
-   * zodToJsonSchema types, which causes memory exhaustion in ts-fork during build.
+   * Uses Zod v4's built-in z.toJSONSchema() for conversion.
    */
-  private toJsonSchema(schema: unknown): JSONSchema7 | null {
+  private toJsonSchema(schema: unknown): JsonSchema | null {
     if (!schema) {
       return null;
     }
 
     // Check if it's a Zod schema
-    if (schema instanceof z.ZodType) {
+    if (schema instanceof ZodType) {
       try {
-        // Cast to any to prevent deep type inference that exhausts memory
-        return zodToJsonSchema(schema as any) as any;
+        // Use Zod v4's built-in JSON Schema conversion
+        return z.toJSONSchema(schema) as JsonSchema;
       } catch {
         // If conversion fails, return null
         return null;
@@ -119,10 +120,10 @@ export default class DescribeTool extends ToolContext {
       const firstValue = Object.values(obj)[0];
 
       // If the first value is a ZodType, treat the whole thing as a raw shape
-      if (firstValue instanceof z.ZodType) {
+      if (firstValue instanceof ZodType) {
         try {
-          // Cast to any to prevent deep type inference that exhausts memory
-          return zodToJsonSchema(z.object(obj as any) as any) as any;
+          // Wrap in z.object and convert using Zod v4's built-in conversion
+          return z.toJSONSchema(z.object(obj as Record<string, ZodType>)) as JsonSchema;
         } catch {
           return null;
         }
@@ -130,7 +131,7 @@ export default class DescribeTool extends ToolContext {
 
       // Already a JSON Schema object
       if ('type' in obj || 'properties' in obj || '$schema' in obj) {
-        return schema as JSONSchema7;
+        return schema as JsonSchema;
       }
     }
 
@@ -182,7 +183,7 @@ export default class DescribeTool extends ToolContext {
   /**
    * Generate an appropriate usage example based on schema patterns.
    */
-  private generateExample(toolName: string, inputSchema?: JSONSchema7): { description: string; code: string } {
+  private generateExample(toolName: string, inputSchema?: JsonSchema): { description: string; code: string } {
     // Check for pagination pattern
     if (hasPaginationParams(inputSchema)) {
       return generatePaginationExample(toolName);

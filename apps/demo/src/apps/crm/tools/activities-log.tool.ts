@@ -9,7 +9,7 @@ import { CrmStore } from '../data/store';
     userId: z.string().describe('The user ID who performed the activity'),
     type: z.enum(['login', 'logout', 'page_view', 'action', 'error']).describe('The type of activity'),
     description: z.string().describe('Description of the activity'),
-    metadata: z.record(z.unknown()).optional().describe('Additional metadata about the activity'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata about the activity'),
   },
   outputSchema: {
     activity: z.object({
@@ -17,7 +17,7 @@ import { CrmStore } from '../data/store';
       userId: z.string(),
       type: z.enum(['login', 'logout', 'page_view', 'action', 'error']),
       description: z.string(),
-      metadata: z.record(z.unknown()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
       timestamp: z.string(),
     }),
     success: z.boolean(),

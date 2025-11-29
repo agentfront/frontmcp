@@ -1,6 +1,6 @@
 import { AuthenticatedServerRequest } from '../server/server.types';
 import { ElicitResult } from '@modelcontextprotocol/sdk/types.js';
-import { ZodObject } from 'zod';
+import { ZodType } from 'zod';
 import { Infer } from '../utils/types.utils';
 import { ServerResponse } from '../common';
 
@@ -71,4 +71,4 @@ export type TransportTokenBucket = Map<string, Transporter>; // sessionHash -> T
 export type TransportTypeBucket = Map<string, TransportTokenBucket>; // tokenHash   -> TokenBucket
 export type TransportRegistryBucket = Map<TransportType, TransportTypeBucket>; // tokenHash   -> TokenBucket
 
-export type TypedElicitResult<T extends ZodObject<any>> = { action: ElicitResult['action']; content: Infer<T> };
+export type TypedElicitResult<T extends ZodType> = { action: ElicitResult['action']; content: Infer<T> };
