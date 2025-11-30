@@ -22,7 +22,6 @@
     "skipDefaultLibCheck": true,
     "paths": {
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
-      "@frontmcp/enclave": ["libs/enclave/src/index.ts"],
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],

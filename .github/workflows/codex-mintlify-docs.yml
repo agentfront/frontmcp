@@ -113,8 +113,8 @@ jobs:
           # --- Mintlify Documentation Server ---
           # Provides access to Mintlify documentation best practices
           [mcp_servers.mintlify_docs]
+          type = "http"
           url = "https://mintlify.com/docs/mcp"
-          # Read-only access to Mintlify documentation
           http_headers = { "X-MCP-Readonly" = "true" }
           startup_timeout_sec = 30
           tool_timeout_sec = 60
