@@ -51,9 +51,9 @@ Search for tools by natural language query using semantic embeddings.
   {
     "tool": "codecall:search",
     "input": {
-    "query": "get user profile information",
-    "topK": 5
-  }
+      "query": "get user profile information",
+      "topK": 5
+    }
   }
   ```
 
@@ -61,12 +61,12 @@ Search for tools by natural language query using semantic embeddings.
 {
   "tool": "codecall:search",
   "input": {
-  "query": "list all invoices",
-  "topK": 10,
-  "filter": {
-  "appIds": ["billing", "payments"]
-}
-}
+    "query": "list all invoices",
+    "topK": 10,
+    "filter": {
+      "appIds": ["billing", "payments"]
+    }
+  }
 }
 ```
 
@@ -151,15 +151,21 @@ Get detailed schemas and documentation for specific tools.
         "idempotentHint": "boolean (optional)",
         "openWorldHint": "boolean (optional)"
       },
-      "usageExample": {
-        "description": "string - Example description",
-        "code": "string - Example AgentScript code"
-      }
+      "usageExamples": [
+        {
+          "description": "string - Example description",
+          "code": "string - Example AgentScript code"
+        }
+      ]
     }
   ],
   "notFound": ["string (optional) - Tool names that weren't found"]
 }
 ```
+
+<Note>
+`usageExamples` returns up to 5 examples per tool. User-provided examples from the `@Tool` decorator take priority, with smart-generated examples filling remaining slots based on tool intent (create, list, get, update, delete, search).
+</Note>
 
 ### Example
 
@@ -168,66 +174,74 @@ Get detailed schemas and documentation for specific tools.
   {
     "tool": "codecall:describe",
     "input": {
-    "toolNames": ["users:list", "users:getById"]
-  }
+      "toolNames": ["users:list", "users:getById"]
+    }
   }
   ```
 
 ```json Response
 {
-  "tools": [
-{
-  "name": "users:list",
-  "appId": "user-service",
-  "description": "List users with optional filtering and pagination",
-  "inputSchema": {
-  "type": "object",
-  "properties": {
-  "status": {
-  "type": "string",
-  "enum": ["active", "inactive", "pending"],
-  "description": "Filter by user status"
-},
-  "role": {
-  "type": "string",
-  "enum": ["admin", "user", "guest"],
-  "description": "Filter by role"
-},
-  "limit": {
-  "type": "number",
-  "minimum": 1,
-  "maximum": 100,
-  "default": 20,
-  "description": "Maximum results per page"
-},
-  "offset": {
-  "type": "number",
-  "minimum": 0,
-  "default": 0,
-  "description": "Pagination offset"
-}
-}
-},
-  "outputSchema": {
-  "type": "object",
-  "properties": {
-  "users": {
-  "type": "array",
-  "items": {"$ref": "#/definitions/User"}
-},
-  "total": {"type": "number"},
-  "hasMore": {"type": "boolean"}
-}
-},
-  "annotations": {
-  "readOnlyHint": true
-},
-  "usageExample": {
-  "description": "List active users with pagination",
-  "code": "const result = await callTool('users:list', { status: 'active', limit: 50 });\nreturn result.users;"
-}
-}
-  ],
+  "tools": [{
+    "name": "users:list",
+    "appId": "user-service",
+    "description": "List users with optional filtering and pagination",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "pending"],
+          "description": "Filter by user status"
+        },
+        "role": {
+        "type": "string",
+        "enum": ["admin", "user", "guest"],
+        "description": "Filter by role"
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "description": "Maximum results per page"
+        },
+        "offset": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Pagination offset"
+        }
+      }
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/User"}
+        },
+        "total": {"type": "number"},
+        "hasMore": {"type": "boolean"}
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "usageExamples": [
+      {
+        "description": "List active users with pagination",
+        "code": "const result = await callTool('users:list', {\n  status: 'active',\n  limit: 50\n});\nreturn result.users;"
+      },
+      {
+        "description": "List admin users",
+        "code": "const result = await callTool('users:list', {\n  role: 'admin'\n});\nreturn result.users;"
+      },
+      {
+        "description": "List all users",
+        "code": "const result = await callTool('users:list', {});\nreturn result;"
+      }
+    ]
+  }],
   "notFound": []
 }
 ```
@@ -280,9 +294,9 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "syntax_error",
       "error": {
-      "message": "Unexpected token at line 5",
-      "location": {"line": 5, "column": 12}
-    }
+        "message": "Unexpected token at line 5",
+        "location": {"line": 5, "column": 12}
+      }
     }
     ```
   </Accordion>
@@ -292,9 +306,9 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "illegal_access",
       "error": {
-      "kind": "IllegalBuiltinAccess",
-      "message": "Identifier 'eval' is not allowed in AgentScript"
-    }
+        "kind": "IllegalBuiltinAccess",
+        "message": "Identifier 'eval' is not allowed in AgentScript"
+      }
     }
     ```
   </Accordion>
@@ -304,10 +318,10 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "runtime_error",
       "error": {
-      "source": "script",
-      "message": "Cannot read property 'name' of undefined",
-      "name": "TypeError"
-    }
+        "source": "script",
+        "message": "Cannot read property 'name' of undefined",
+        "name": "TypeError"
+      }
     }
     ```
   </Accordion>
@@ -317,11 +331,11 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "tool_error",
       "error": {
-      "source": "tool",
-      "toolName": "users:list",
-      "message": "Rate limit exceeded",
-      "code": "RATE_LIMIT"
-    }
+        "source": "tool",
+        "toolName": "users:list",
+        "message": "Rate limit exceeded",
+        "code": "RATE_LIMIT"
+      }
     }
     ```
   </Accordion>
@@ -331,8 +345,8 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
     {
       "status": "timeout",
       "error": {
-      "message": "Script execution timed out after 3500ms"
-    }
+        "message": "Script execution timed out after 3500ms"
+      }
     }
     ```
   </Accordion>
@@ -345,11 +359,8 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
   {
     "tool": "codecall:execute",
     "input": {
-    "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a.email) };",
-    "context": {
-    "tenantId": "tenant-123"
-  }
-  }
+      "script": "const users = await callTool('users:list', { status: 'active' });\nconst admins = users.users.filter(u => u.role === 'admin');\nreturn { adminCount: admins.length, admins: admins.map(a => a.email) };"
+    }
   }
   ```
 
@@ -357,9 +368,9 @@ Execute a JavaScript (AgentScript) plan that orchestrates multiple tools.
 {
   "status": "ok",
   "result": {
-  "adminCount": 3,
-  "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
-}
+    "adminCount": 3,
+    "admins": ["alice@example.com", "bob@example.com", "charlie@example.com"]
+  }
 }
 ```
 

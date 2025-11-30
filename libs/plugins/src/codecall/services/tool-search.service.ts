@@ -599,6 +599,27 @@ export class ToolSearchService implements ToolSearch {
       }
     }
 
+    // Add example descriptions and input values to searchable text
+    // Examples help users find tools by use-case descriptions
+    const examples = tool.metadata?.examples;
+    if (examples && Array.isArray(examples)) {
+      for (const ex of examples) {
+        // Add example description (2x weight for relevance)
+        if (ex.description) {
+          parts.push(ex.description, ex.description);
+        }
+        // Add example input keys and string values
+        if (ex.input && typeof ex.input === 'object') {
+          for (const [key, value] of Object.entries(ex.input as Record<string, unknown>)) {
+            parts.push(key);
+            if (typeof value === 'string') {
+              parts.push(value);
+            }
+          }
+        }
+      }
+    }
+
     return parts.join(' ');
   }
 

@@ -546,6 +546,103 @@ describe('ToolSearchService', () => {
     });
   });
 
+  describe('Example indexing', () => {
+    it('should index tool examples in search', async () => {
+      const tools = [
+        {
+          name: 'users:create',
+          fullName: 'users:create',
+          metadata: {
+            name: 'users:create',
+            description: 'Create a new user',
+            examples: [
+              {
+                description: 'Create an admin user with elevated permissions',
+                input: { email: 'admin@company.com', role: 'administrator' },
+              },
+              {
+                description: 'Create a regular member',
+                input: { email: 'member@example.org', role: 'member' },
+              },
+            ],
+          },
+        } as any,
+        {
+          name: 'billing:invoice',
+          fullName: 'billing:invoice',
+          metadata: {
+            name: 'billing:invoice',
+            description: 'Get invoice details',
+          },
+        } as any,
+      ];
+
+      const { scope } = createMockScope(tools);
+      const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Searching for "admin" should find users:create because it's in the example
+      const results = await service.search('admin');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].toolName).toBe('users:create');
+
+      service.dispose();
+    });
+
+    it('should index example input values in search', async () => {
+      const tools = [
+        {
+          name: 'users:create',
+          fullName: 'users:create',
+          metadata: {
+            name: 'users:create',
+            description: 'Create a new user',
+            examples: [
+              {
+                description: 'Example usage',
+                input: { email: 'specialized-term@unique.com', role: 'operator' },
+              },
+            ],
+          },
+        } as any,
+      ];
+
+      const { scope } = createMockScope(tools);
+      const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Searching for a unique term from input value should find the tool
+      const results = await service.search('specialized-term');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].toolName).toBe('users:create');
+
+      service.dispose();
+    });
+
+    it('should not fail when examples is undefined', async () => {
+      const tools = [
+        {
+          name: 'users:list',
+          fullName: 'users:list',
+          metadata: {
+            name: 'users:list',
+            description: 'List all users',
+            // No examples field
+          },
+        } as any,
+      ];
+
+      const { scope } = createMockScope(tools);
+      const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(service.getTotalCount()).toBe(1);
+      expect(service.hasTool('users:list')).toBe(true);
+
+      service.dispose();
+    });
+  });
+
   describe('Synonym expansion', () => {
     describe('with TF-IDF strategy', () => {
       it('should enable synonym expansion by default', async () => {

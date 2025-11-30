@@ -203,9 +203,10 @@ export const codeCallEmbeddingOptionsSchema = z
      */
     synonymExpansion: z
       .union([z.literal(false), synonymExpansionConfigSchema])
+      .optional()
       .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 }),
   })
-  .default(() => DEFAULT_EMBEDDING_OPTIONS);
+  .default(DEFAULT_EMBEDDING_OPTIONS);
 
 export const codeCallSidecarOptionsSchema = z
   .object({
