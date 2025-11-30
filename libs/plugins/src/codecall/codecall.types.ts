@@ -123,12 +123,46 @@ export const codeCallDirectCallsOptionsSchema = z.object({
 
 export const embeddingStrategySchema = z.enum(['tfidf', 'ml']).default('tfidf');
 
+// Synonym expansion configuration schema
+export const synonymExpansionConfigSchema = z
+  .object({
+    /**
+     * Enable/disable synonym expansion for TF-IDF search.
+     * When enabled, queries are expanded with synonyms to improve relevance.
+     * For example, "add user" will also match tools containing "create user".
+     * @default true
+     */
+    enabled: z.boolean().default(true),
+
+    /**
+     * Additional synonym groups beyond the defaults.
+     * Each group is an array of related terms that should be treated as equivalent.
+     * @example [['customer', 'client', 'buyer'], ['order', 'purchase', 'transaction']]
+     */
+    additionalSynonyms: z.array(z.array(z.string())).optional(),
+
+    /**
+     * Replace default synonyms entirely with additionalSynonyms.
+     * @default false
+     */
+    replaceDefaults: z.boolean().default(false),
+
+    /**
+     * Maximum number of synonym expansions per term.
+     * Prevents query explosion for terms with many synonyms.
+     * @default 5
+     */
+    maxExpansionsPerTerm: z.number().positive().default(5),
+  })
+  .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 });
+
 // Default values for embedding options
 const DEFAULT_EMBEDDING_OPTIONS = {
   strategy: 'tfidf' as const,
   modelName: 'Xenova/all-MiniLM-L6-v2',
   cacheDir: './.cache/transformers',
   useHNSW: false,
+  synonymExpansion: { enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 },
 };
 
 export const codeCallEmbeddingOptionsSchema = z
@@ -159,6 +193,17 @@ export const codeCallEmbeddingOptionsSchema = z
      * @default false
      */
     useHNSW: z.boolean().default(false),
+
+    /**
+     * Synonym expansion configuration for TF-IDF search.
+     * When enabled, queries like "add user" will match tools for "create user".
+     * Only applies when strategy is 'tfidf' (ML already handles semantic similarity).
+     * Set to false to disable, or provide a config object to customize.
+     * @default { enabled: true }
+     */
+    synonymExpansion: z
+      .union([z.literal(false), synonymExpansionConfigSchema])
+      .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 }),
   })
   .default(() => DEFAULT_EMBEDDING_OPTIONS);
 
@@ -293,6 +338,7 @@ export type CodeCallVmPreset = z.infer<typeof codeCallVmPresetSchema>;
 export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
 export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
+export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
 

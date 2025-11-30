@@ -545,4 +545,159 @@ describe('ToolSearchService', () => {
       service.dispose();
     });
   });
+
+  describe('Synonym expansion', () => {
+    describe('with TF-IDF strategy', () => {
+      it('should enable synonym expansion by default', async () => {
+        const tools = [
+          createMockTool('users:create', {
+            description: 'Create a new user in the CRM system',
+            appId: 'crm',
+          }),
+          createMockTool('users:list', {
+            description: 'List all users in the CRM',
+            appId: 'crm',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // "add user" should find "users:create" via synonym expansion (add -> create)
+        const results = await service.search('add user');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some((r) => r.toolName === 'users:create')).toBe(true);
+
+        service.dispose();
+      });
+
+      it('should match "add" to "create" via synonyms', async () => {
+        const tools = [
+          createMockTool('users:create', {
+            description: 'Create a new user in the system',
+            appId: 'users',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Search using synonym "add" instead of "create"
+        const results = await service.search('add');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].toolName).toBe('users:create');
+
+        service.dispose();
+      });
+
+      it('should match "remove" to "delete" via synonyms', async () => {
+        const tools = [
+          createMockTool('users:delete', {
+            description: 'Delete a user from the system',
+            appId: 'users',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Search using synonym "remove" instead of "delete"
+        const results = await service.search('remove user');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].toolName).toBe('users:delete');
+
+        service.dispose();
+      });
+
+      it('should match "fetch" to "get" via synonyms', async () => {
+        const tools = [
+          createMockTool('users:get', {
+            description: 'Get a user by ID',
+            appId: 'users',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService({ strategy: 'tfidf' }, scope);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const results = await service.search('fetch user');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].toolName).toBe('users:get');
+
+        service.dispose();
+      });
+
+      it('should be disabled when synonymExpansion is false', async () => {
+        const tools = [
+          createMockTool('users:create', {
+            description: 'Create a new user in the system',
+            appId: 'users',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService({ strategy: 'tfidf', synonymExpansion: false }, scope);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Without synonym expansion, "add" should not match "create"
+        const results = await service.search('add');
+
+        // Should find no results or very low relevance since "add" doesn't appear in the description
+        const createResults = results.filter((r) => r.toolName === 'users:create');
+        expect(createResults.length === 0 || createResults[0].relevanceScore < 0.1).toBe(true);
+
+        service.dispose();
+      });
+
+      it('should accept custom synonym groups', async () => {
+        const tools = [
+          createMockTool('orders:purchase', {
+            description: 'Purchase an item for a customer',
+            appId: 'orders',
+          }),
+        ];
+
+        const { scope } = createMockScope(tools);
+        const service = new ToolSearchService(
+          {
+            strategy: 'tfidf',
+            synonymExpansion: {
+              additionalSynonyms: [['buy', 'purchase', 'order']],
+            },
+          },
+          scope,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // "buy" should match "purchase" via custom synonym
+        const results = await service.search('buy item');
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].toolName).toBe('orders:purchase');
+
+        service.dispose();
+      });
+    });
+
+    describe('with ML strategy', () => {
+      it('should not use synonym expansion (ML handles semantic similarity)', async () => {
+        const { scope } = createMockScope([]);
+        const service = new ToolSearchService({ strategy: 'ml' }, scope);
+
+        // ML strategy should not have synonym expansion enabled
+        // (we can't easily test this without mocking internals, but we verify no errors occur)
+        expect(service.getStrategy()).toBe('ml');
+
+        service.dispose();
+      });
+    });
+  });
 });
