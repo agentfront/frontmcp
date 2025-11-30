@@ -69,7 +69,9 @@ export function transformConcatenation(ast: acorn.Node, config: ConcatTransformC
 
   let transformedCount = 0;
 
-  // Use ancestor walker to properly handle nested expressions
+  // Use simple walker. Because we mutate the node type to 'CallExpression'
+  // and move children to 'arguments', the walker will naturally
+  // continue traversing the children in their new location.
   walk.simple(ast as any, {
     BinaryExpression: (node: any) => {
       // Only transform addition operator
@@ -77,21 +79,32 @@ export function transformConcatenation(ast: acorn.Node, config: ConcatTransformC
         return;
       }
 
-      // Save the operands
-      const left = { ...node.left };
-      const right = { ...node.right };
+      // 1. Capture References
+      // CRITICAL: Do not use { ...node.left }. We must use the reference
+      // so that if the child is also transformed, this parent sees the result.
+      const left = node.left;
+      const right = node.right;
 
-      // Clear existing properties
-      Object.keys(node).forEach((k) => delete node[k]);
-
-      // Transform to CallExpression
+      // 2. Transform to CallExpression
+      // We mutate the type first so any subsequent traversal tools see the new structure
       node.type = 'CallExpression';
+
       node.callee = {
         type: 'Identifier',
         name: safeConcatName,
+        // We do not set loc/start/end on the identifier implies it's synthetic,
+        // which is usually fine.
       };
+
       node.arguments = [left, right];
       node.optional = false;
+
+      // 3. Clean up BinaryExpression specific properties
+      // CRITICAL: Do NOT delete all keys (Object.keys...).
+      // We must preserve 'loc', 'start', 'end', 'range' for Source Maps.
+      delete node.left;
+      delete node.right;
+      delete node.operator;
 
       transformedCount++;
     },
@@ -138,20 +151,28 @@ export function transformTemplateLiterals(ast: acorn.Node, config: ConcatTransfo
         })),
       };
 
-      // Save expressions
-      const expressions = [...node.expressions];
+      // 1. Capture References
+      // CRITICAL: Do not spread/copy. Use the reference array.
+      // However, since we are moving them into a new array structure
+      // for the arguments, we can reference the items directly.
+      const expressionRefs = node.expressions;
 
-      // Clear existing properties
-      Object.keys(node).forEach((k) => delete node[k]);
-
-      // Transform to CallExpression
+      // 2. Transform to CallExpression
       node.type = 'CallExpression';
+
       node.callee = {
         type: 'Identifier',
         name: safeFn,
       };
-      node.arguments = [quasisArray, ...expressions];
+
+      // The first argument is the array of strings, followed by the expressions
+      node.arguments = [quasisArray, ...expressionRefs];
       node.optional = false;
+
+      // 3. Clean up TemplateLiteral specific properties
+      // CRITICAL: Preserve location data
+      delete node.quasis;
+      delete node.expressions;
 
       transformedCount++;
     },
