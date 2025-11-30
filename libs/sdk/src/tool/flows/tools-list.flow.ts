@@ -1,5 +1,5 @@
 // tools/flows/list-tools.flow.ts
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
@@ -207,6 +207,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.info('parseTools: response sent');
       this.logger.verbose('parseTools:done');
     } catch (error) {
+      if (error instanceof FlowControl) throw error;
       this.logger.error('parseTools: failed to parse tools', error);
       throw error;
     }

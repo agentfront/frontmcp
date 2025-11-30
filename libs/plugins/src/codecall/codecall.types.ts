@@ -283,7 +283,7 @@ const DEFAULT_PLUGIN_OPTIONS = {
 };
 
 // Full schema with default - used for parsing
-export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.default(() => DEFAULT_PLUGIN_OPTIONS);
+export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.prefault(DEFAULT_PLUGIN_OPTIONS);
 
 // ===== TypeScript Types =====
 

@@ -11,14 +11,14 @@ import {
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import EnclaveService from '../services/enclave.service';
 import CodeCallConfig from '../providers/code-call.config';
-import { assertNotSelfReference } from '../security/self-reference-guard';
+import { assertNotSelfReference } from '../security';
 import {
   createToolCallError,
   TOOL_CALL_ERROR_CODES,
   ToolCallResult,
   CallToolOptions,
   ToolCallErrorCode,
-} from '../errors/tool-call.errors';
+} from '../errors';
 import { extractResultFromCallToolResult } from '../utils';
 
 /**
@@ -170,7 +170,7 @@ export default class ExecuteTool extends ToolContext {
         }
       },
 
-      console: this.tryGet(CodeCallConfig)?.getAll().resolvedVm?.allowConsole ? console : undefined,
+      console: this.get(CodeCallConfig).get('resolvedVm.allowConsole') ? console : undefined,
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
