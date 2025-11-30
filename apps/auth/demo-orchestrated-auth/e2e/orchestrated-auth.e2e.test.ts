@@ -12,7 +12,6 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Orchestrated Auth Mode E2E', () => {
   test.use({
     server: './src/main.ts',
-    port: 3105,
   });
 
   test.describe('Unauthenticated Access', () => {
@@ -139,10 +138,7 @@ test.describe('Orchestrated Auth Mode E2E', () => {
     });
   });
 
-  // TODO: Prompts registration for apps needs to be implemented
-  // The prompts capability is advertised but prompts/list returns "Method not found"
-  // This is a pre-existing issue to be fixed separately
-  test.describe.skip('Prompt Access', () => {
+  test.describe('Prompt Access', () => {
     test('should list prompts for authenticated user', async ({ server, auth }) => {
       const token = await auth.createToken({
         sub: 'user-123',

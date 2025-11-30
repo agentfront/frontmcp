@@ -11,7 +11,6 @@ import { test, expect } from '@frontmcp/testing';
 test.describe('Public Auth Mode E2E', () => {
   test.use({
     server: './src/main.ts',
-    port: 3103,
     publicMode: true,
   });
 
@@ -81,10 +80,7 @@ test.describe('Public Auth Mode E2E', () => {
     });
   });
 
-  // TODO: Prompts registration for apps needs to be implemented
-  // The prompts capability is advertised but prompts/list returns "Method not found"
-  // This is a pre-existing issue to be fixed separately
-  test.describe.skip('Prompt Access', () => {
+  test.describe('Prompt Access', () => {
     test('should list prompts without auth', async ({ mcp }) => {
       const prompts = await mcp.prompts.list();
 

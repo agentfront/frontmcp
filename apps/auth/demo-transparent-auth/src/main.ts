@@ -13,10 +13,10 @@ const port = parseInt(process.env['PORT'] ?? '3004', 10);
   auth: {
     mode: 'transparent',
     remote: {
-      provider: process.env['IDP_PROVIDER_URL'] || 'https://auth.example.com',
+      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
       dcrEnabled: false,
     },
-    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://api.example.com',
+    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
     requiredScopes: [],
     allowAnonymous: false,
     anonymousScopes: ['anonymous'],

@@ -22,7 +22,7 @@ import {
 export interface AgentScriptOptions {
   /**
    * List of allowed global identifiers (APIs available to agent code)
-   * Default: ['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date']
+   * Default: ['callTool', 'Math', 'JSON', 'Array', 'Object', 'String', 'Number', 'Date', 'undefined', 'NaN', 'Infinity']
    */
   allowedGlobals?: string[];
 
@@ -188,6 +188,12 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'String', // String methods
     'Number', // Number methods
     'Date', // Date operations
+
+    // FIX: Explicitly allow safe standard globals (previously blocked by strict unknown rule)
+    'undefined',
+    'NaN',
+    'Infinity',
+
     // Runtime-injected safe functions (created by transformer)
     '__safe_callTool', // Transformed callTool with limits
     '__safe_forOf', // Transformed for-of with iteration tracking
@@ -211,9 +217,8 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
   rules.push(
     new UnknownGlobalRule({
       allowedGlobals,
-      // FIX: Changed to false.
-      // Setting this to true allowed RegExp, Promise, Symbol, etc. to bypass security.
-      // We must explicitly whitelist what we want.
+      // Strictly disable standard globals to prevent access to RegExp, Promise, etc.
+      // We rely on the explicit list above for the few standard globals we actually want.
       allowStandardGlobals: false,
     }),
   );
