@@ -63,8 +63,8 @@ export interface StringExtractionResult {
  * const sidecar = new ReferenceSidecar(config);
  *
  * const result = extractLargeStrings(ast, {
- *   threshold: 64 * 1024, // 64KB
- *   onExtract: (value) => sidecar.store(value, 'extraction'),
+ * threshold: 64 * 1024, // 64KB
+ * onExtract: (value) => sidecar.store(value, 'extraction'),
  * });
  *
  * console.log(`Extracted ${result.extractedCount} strings (${result.extractedBytes} bytes)`);
@@ -75,12 +75,60 @@ export function extractLargeStrings(ast: acorn.Node, config: StringExtractionCon
   let extractedBytes = 0;
   const referenceIds: string[] = [];
 
-  walk.simple(ast as any, {
-    Literal: (node: any) => {
+  // Helper to check if a node is an Object Property or Method key
+  const isObjectKey = (node: any, parent: any) => {
+    if (!parent) return false;
+
+    // Check standard Object Property: { "key": val }
+    if (parent.type === 'Property' && parent.key === node && !parent.computed) {
+      return true;
+    }
+
+    // Check Class Method/Property: class X { "key"() {} }
+    if (
+      (parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') &&
+      parent.key === node &&
+      !parent.computed
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Helper to check if a node is an Import/Export source
+  const isModuleSource = (node: any, parent: any) => {
+    if (!parent) return false;
+
+    return (
+      (parent.type === 'ImportDeclaration' ||
+        parent.type === 'ExportNamedDeclaration' ||
+        parent.type === 'ExportAllDeclaration') &&
+      parent.source === node
+    );
+  };
+
+  // Use ancestor walker to check parent context
+  walk.ancestor(ast as any, {
+    Literal: (node: any, ancestors: any[]) => {
       // Only process string literals
       if (typeof node.value !== 'string') {
         return;
       }
+
+      // Get Parent to check context
+      // ancestors[last] is the node itself, ancestors[last-1] is the parent
+      const parent = ancestors.length > 1 ? ancestors[ancestors.length - 2] : null;
+
+      // SAFETY CHECKS:
+      // 1. Do not extract Object Keys ({ "key": val })
+      if (isObjectKey(node, parent)) return;
+
+      // 2. Do not extract Import/Export paths (import x from "path")
+      if (isModuleSource(node, parent)) return;
+
+      // 3. Do not extract "use strict" directives (usually handled by size threshold, but good to be safe)
+      // (Skipping explicit check here as 'use strict' is tiny and won't pass threshold)
 
       const value = node.value;
       const size = Buffer.byteLength(value, 'utf-8');
@@ -102,7 +150,7 @@ export function extractLargeStrings(ast: acorn.Node, config: StringExtractionCon
       extractedBytes += size;
     },
 
-    TemplateLiteral: (node: any) => {
+    TemplateLiteral: (node: any, ancestors: any[]) => {
       // Only extract fully static template literals (no expressions)
       if (node.expressions.length > 0) {
         return;
@@ -110,6 +158,16 @@ export function extractLargeStrings(ast: acorn.Node, config: StringExtractionCon
 
       // Should have exactly one quasi for a static template
       if (node.quasis.length !== 1) {
+        return;
+      }
+
+      // Get Parent
+      const parent = ancestors.length > 1 ? ancestors[ancestors.length - 2] : null;
+
+      // SAFETY CHECK:
+      // Do not transform Tagged Templates (gql`query...`)
+      // Transforming these to a Literal (gql"ref") creates a Syntax Error.
+      if (parent && parent.type === 'TaggedTemplateExpression' && parent.quasi === node) {
         return;
       }
 
@@ -131,10 +189,12 @@ export function extractLargeStrings(ast: acorn.Node, config: StringExtractionCon
       const refId = config.onExtract(value);
       referenceIds.push(refId);
 
-      // Convert TemplateLiteral to a simple Literal
-      // Clear existing properties
-      const type = node.type;
-      Object.keys(node).forEach((k) => delete node[k]);
+      // Transform TemplateLiteral to a simple Literal
+
+      // CRITICAL: Do NOT use Object.keys().forEach(delete).
+      // We must preserve 'loc', 'start', 'end' for source maps.
+      delete node.quasis;
+      delete node.expressions;
 
       // Set as Literal node
       node.type = 'Literal';
