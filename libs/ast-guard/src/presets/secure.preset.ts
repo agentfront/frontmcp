@@ -16,7 +16,7 @@ import { PresetOptions } from './types';
  * Creates a SECURE preset with high security but some flexibility
  *
  * Blocks:
- * - All eval-like constructs
+ * - All eval-like constructs (including constructor exploits)
  * - Most dangerous identifiers
  * - Infinite loops (allows bounded loops)
  * - Async functions (allows await if needed)
@@ -35,14 +35,14 @@ import { PresetOptions } from './types';
  *
  * // Secure with required API calls
  * const rules = createSecurePreset({
- *   requiredFunctions: ['callTool'],
- *   minFunctionCalls: 1,
- *   maxFunctionCalls: 10
+ * requiredFunctions: ['callTool'],
+ * minFunctionCalls: 1,
+ * maxFunctionCalls: 10
  * });
  *
  * // Secure but also allow while loops
  * const rules = createSecurePreset({
- *   allowedLoops: { allowWhile: true }
+ * allowedLoops: { allowWhile: true }
  * });
  * ```
  */
@@ -73,10 +73,27 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     // Prototype manipulation (critical)
     '__proto__',
     'prototype',
+    // CRITICAL FIX: Block constructor to prevent ({},constructor.constructor("..."))
+    'constructor',
+
+    // Scope Leakage
+    // CRITICAL FIX: Block arguments to prevent stack walking
+    'arguments',
+
+    // Global Access
+    // CRITICAL FIX: Block 'this' to prevent global object leakage
+    'this',
 
     // Reflection and metaprogramming (high risk)
     'Proxy',
     'Reflect',
+
+    // ReDoS Prevention
+    // CRITICAL FIX: Block RegExp constructor to prevent bypass of literal analysis
+    'RegExp',
+
+    // Symbol (prevents iterator spoofing / protocol poisoning)
+    'Symbol',
 
     // WebAssembly (native code execution)
     'WebAssembly',
@@ -97,9 +114,6 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     'indexedDB',
 
     // Import/dynamic loading
-    // Note: The 'import' keyword causes parse errors in script mode (default),
-    // so it's redundant here but kept for completeness. Only 'import()' (dynamic import)
-    // would parse in script mode, and it appears as a CallExpression, not an identifier.
     'import',
     'importScripts',
 
@@ -109,6 +123,8 @@ export function createSecurePreset(options: PresetOptions = {}): ValidationRule[
     'ShadowRealm',
     'WeakRef',
     'FinalizationRegistry',
+    'WeakMap',
+    'WeakSet',
 
     ...(options.additionalDisallowedIdentifiers || []),
   ];

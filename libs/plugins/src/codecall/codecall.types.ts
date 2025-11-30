@@ -340,8 +340,10 @@ export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
 export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
-export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
+
+export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
+export type CodeCallEmbeddingOptionsInput = z.input<typeof codeCallEmbeddingOptionsSchema>;
 
 /**
  * Resolved options type (after parsing with defaults applied).
