@@ -22,6 +22,9 @@ import CrmMcpApp from './apps/crm';
     requiredScopes: [],
     allowAnonymous: true, // Allow anonymous access for demo
     anonymousScopes: ['anonymous'],
+    transport: {
+      enableLegacySSE: true,
+    },
   },
 })
 export default class Server {}

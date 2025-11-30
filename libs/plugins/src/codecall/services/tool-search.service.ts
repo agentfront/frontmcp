@@ -13,18 +13,33 @@ import type {
   ToolSearchResult as SymbolToolSearchResult,
   ToolSearchOptions as SymbolToolSearchOptions,
 } from '../codecall.symbol';
+import { SynonymExpansionService, SynonymExpansionConfig } from './synonym-expansion.service';
 
 /**
- * Common stop words that should not receive extra weighting.
- * Moved to module level to avoid recreating the Set on every word check.
+ * Universal Intent Mapping & Query Normalization
+ * - This module defines the semantic knowledge base for the MCP tool search engine.
+ *   It is designed to bridge the gap between natural language user intents
+ *   (e.g., "fix," "chat," "buy") and technical tool definitions (e.g., "update," "post," "create").
+ * - Key Parts:
+ *   1. DEFAULT_SYNONYM_GROUPS: A domain-agnostic mapping of bidirectional synonyms covering
+ *      CRUD, DevOps, Financial, Social, and Lifecycle operations. This ensures that a
+ *      query for "Show me the bill" matches a tool named "get_invoice".
+ *   2. STOP_WORDS: A curated exclusion list strictly optimized for Command-Line/Chat
+ *      interfaces. Unlike standard NLP stop lists, this PRESERVES action verbs
+ *      ("find", "start", "make") as they are critical signals of user intent in a
+ *      tool-execution context.
  */
 const STOP_WORDS: ReadonlySet<string> = new Set([
+  // Articles & Determiners
   'the',
   'a',
   'an',
-  'and',
-  'or',
-  'but',
+  'this',
+  'that',
+  'these',
+  'those',
+
+  // Prepositions
   'in',
   'on',
   'at',
@@ -34,112 +49,154 @@ const STOP_WORDS: ReadonlySet<string> = new Set([
   'with',
   'by',
   'from',
-  'as',
-  'is',
-  'was',
-  'are',
-  'were',
-  'been',
-  'be',
-  'have',
-  'has',
-  'had',
-  'do',
-  'does',
-  'did',
-  'will',
-  'would',
-  'could',
-  'should',
-  'may',
-  'might',
-  'must',
-  'shall',
-  'can',
-  'this',
-  'that',
-  'these',
-  'those',
-  'then',
-  'than',
-  'when',
-  'where',
-  'which',
-  'while',
-  'what',
-  'who',
-  'whom',
-  'whose',
-  'why',
-  'how',
-  'all',
-  'each',
-  'every',
-  'both',
-  'few',
-  'more',
-  'most',
-  'other',
-  'some',
-  'such',
-  'only',
-  'same',
   'into',
   'over',
   'after',
   'before',
   'between',
   'under',
-  'again',
-  'once',
+  'about',
+  'against',
+  'during',
+  'through',
+
+  // Conjunctions
+  'and',
+  'or',
+  'but',
+  'nor',
+  'so',
+  'yet',
+  'as',
+  'than',
+  'if',
+  'because',
+  'while',
+  'when',
+  'where',
+  'unless',
+
+  // Pronouns (Subject/Object/Possessive)
+  'i',
+  'me',
+  'my',
+  'mine',
+  'myself',
+  'you',
+  'your',
+  'yours',
+  'yourself',
+  'he',
+  'him',
+  'his',
+  'himself',
+  'she',
+  'her',
+  'hers',
+  'herself',
+  'it',
+  'its',
+  'itself',
+  'we',
+  'us',
+  'our',
+  'ours',
+  'ourselves',
+  'they',
+  'them',
+  'their',
+  'theirs',
+  'themselves',
+  'who',
+  'whom',
+  'whose',
+  'which',
+  'what',
+
+  // Auxiliary/Linking Verbs (State of being is usually noise, Action is signal)
+  'is',
+  'was',
+  'are',
+  'were',
+  'been',
+  'be',
+  'being',
+  'have',
+  'has',
+  'had',
+  'having',
+  'do',
+  'does',
+  'did',
+  'doing', // "do" is usually auxiliary ("do you have..."). "run" or "execute" is better.
+  'will',
+  'would',
+  'shall',
+  'should',
+  'can',
+  'could',
+  'may',
+  'might',
+  'must',
+
+  // Quantifiers / Adverbs of degree
+  'all',
+  'any',
+  'both',
+  'each',
+  'few',
+  'more',
+  'most',
+  'other',
+  'some',
+  'such',
+  'no',
+  'nor',
+  'not',
+  'only',
+  'own',
+  'same',
+  'too',
+  'very',
+  'just',
+  'even',
+
+  // Conversational / Chat Fillers (Common in LLM prompts)
+  'please',
+  'pls',
+  'plz',
+  'thanks',
+  'thank',
+  'thx',
+  'hello',
+  'hi',
+  'hey',
+  'ok',
+  'okay',
+  'yes',
+  'no',
+  'actually',
+  'basically',
+  'literally',
+  'maybe',
+  'perhaps',
+  'now',
+  'then',
   'here',
   'there',
-  'about',
-  'also',
-  'just',
-  'like',
-  'very',
-  'even',
-  'back',
-  'well',
-  'come',
-  'make',
-  'know',
-  'take',
-  'see',
-  'look',
-  'give',
-  'find',
-  'tell',
-  'become',
-  'leave',
-  'feel',
-  'seem',
-  'want',
-  'show',
-  'mean',
-  'keep',
-  'let',
-  'begin',
-  'help',
-  'turn',
-  'start',
-  'need',
-  'work',
-  'part',
-  'place',
-  'case',
-  'week',
-  'point',
-  'fact',
-  'number',
-  'group',
-  'problem',
-  'optionally',
-  'optional',
-  'specific',
-]);
+  'again',
+  'once',
+  'back', // "back" can be tricky, but usually implies direction not action
 
+  // Meta/Structural words
+  'example',
+  'context',
+  'optionally',
+  'optional', // Users rarely search for "optional", they search for the thing itself.
+  'etc',
+  'ie',
+  'eg',
+]);
 /**
  * Metadata structure for tool documents in the vector database
  */
@@ -222,6 +279,17 @@ export interface ToolSearchServiceConfig {
    * Optional filter function for including tools in the search index
    */
   includeTools?: IncludeToolsFilter;
+
+  /**
+   * Synonym expansion configuration.
+   * When enabled, queries are expanded with synonyms to improve search relevance.
+   * For example, "add user" will also match tools containing "create user".
+   * Only applies when strategy is 'tfidf' (ML already handles semantic similarity).
+   *
+   * Set to false to disable, or provide a config object to customize.
+   * @default { enabled: true } when strategy is 'tfidf'
+   */
+  synonymExpansion?: false | (SynonymExpansionConfig & { enabled?: boolean });
 }
 
 /**
@@ -236,12 +304,13 @@ export class ToolSearchService implements ToolSearch {
   private initialized = false;
   private mlInitialized = false;
   private subscriptionRetries = 0;
-  private config: Required<Omit<ToolSearchServiceConfig, 'includeTools' | 'mode'>> & {
+  private config: Required<Omit<ToolSearchServiceConfig, 'includeTools' | 'mode' | 'synonymExpansion'>> & {
     mode: CodeCallMode;
     includeTools?: IncludeToolsFilter;
   };
   private scope: ScopeEntry;
   private unsubscribe?: () => void;
+  private synonymService: SynonymExpansionService | null = null;
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -250,6 +319,7 @@ export class ToolSearchService implements ToolSearch {
       modelName: 'Xenova/all-MiniLM-L6-v2',
       cacheDir: './.cache/transformers',
       useHNSW: false,
+      synonymExpansion: { enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 },
     };
     this.strategy = config.strategy || embeddingOptions.strategy || 'tfidf';
 
@@ -282,6 +352,17 @@ export class ToolSearchService implements ToolSearch {
         defaultTopK: this.config.defaultTopK,
         defaultSimilarityThreshold: this.config.defaultSimilarityThreshold,
       });
+    }
+
+    // Initialize synonym expansion for TF-IDF strategy (ML already handles semantic similarity)
+    if (config.synonymExpansion === false) {
+      this.synonymService = null;
+    } else if (this.strategy === 'tfidf') {
+      const synonymConfig = typeof config.synonymExpansion === 'object' ? config.synonymExpansion : {};
+      // Only enable if not explicitly disabled
+      if (synonymConfig.enabled !== false) {
+        this.synonymService = new SynonymExpansionService(synonymConfig);
+      }
     }
 
     // Defer subscription until scope.tools is available
@@ -518,6 +599,27 @@ export class ToolSearchService implements ToolSearch {
       }
     }
 
+    // Add example descriptions and input values to searchable text
+    // Examples help users find tools by use-case descriptions
+    const examples = tool.metadata?.examples;
+    if (examples && Array.isArray(examples)) {
+      for (const ex of examples) {
+        // Add example description (2x weight for relevance)
+        if (ex.description) {
+          parts.push(ex.description, ex.description);
+        }
+        // Add example input keys and string values
+        if (ex.input && typeof ex.input === 'object') {
+          for (const [key, value] of Object.entries(ex.input as Record<string, unknown>)) {
+            parts.push(key);
+            if (typeof value === 'string') {
+              parts.push(value);
+            }
+          }
+        }
+      }
+    }
+
     return parts.join(' ');
   }
 
@@ -570,8 +672,12 @@ export class ToolSearchService implements ToolSearch {
       return true;
     };
 
+    // Expand query with synonyms for TF-IDF strategy to improve relevance
+    // For example: "add user" -> "add create new insert make user account member profile"
+    const effectiveQuery = this.synonymService ? this.synonymService.expandQuery(query) : query;
+
     // Search using vectoriadb
-    const results = await this.vectorDB.search(query, {
+    const results = await this.vectorDB.search(effectiveQuery, {
       topK,
       threshold: minScore,
       filter,

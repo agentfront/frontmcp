@@ -98,15 +98,34 @@ function createMockEnclaveService(executeResult?: Partial<EnclaveExecutionResult
 
 // Helper to create mock CodeCallConfig
 function createMockConfig(overrides: Record<string, unknown> = {}) {
+  // Build nested structure from flat dot-notation overrides
+  const resolvedVmOverrides: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (key.startsWith('resolvedVm.')) {
+      const nestedKey = key.slice('resolvedVm.'.length);
+      resolvedVmOverrides[nestedKey] = value;
+    }
+  }
+
+  const defaults = {
+    resolvedVm: {
+      timeoutMs: 5000,
+      allowConsole: false,
+      ...((overrides['resolvedVm'] as Record<string, unknown>) || {}),
+      ...resolvedVmOverrides,
+    },
+    ...overrides,
+  };
   return {
     get: jest.fn((key: string) => {
-      const defaults: Record<string, unknown> = {
-        'resolvedVm.timeoutMs': 5000,
-        'resolvedVm.allowConsole': false,
+      const flatDefaults: Record<string, unknown> = {
+        'resolvedVm.timeoutMs': defaults.resolvedVm.timeoutMs,
+        'resolvedVm.allowConsole': defaults.resolvedVm.allowConsole,
         ...overrides,
       };
-      return defaults[key];
+      return flatDefaults[key];
     }),
+    getAll: jest.fn(() => defaults),
   };
 }
 
@@ -665,6 +684,9 @@ describe('ExecuteTool', () => {
       mockConfig.get.mockImplementation((key: string) => {
         if (key === 'resolvedVm.allowConsole') return true;
         return 5000;
+      });
+      mockConfig.getAll.mockReturnValue({
+        resolvedVm: { timeoutMs: 5000, allowConsole: true },
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

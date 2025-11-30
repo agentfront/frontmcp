@@ -2,6 +2,48 @@
 
 import { z } from 'zod';
 
+// ===== Filter Function Types =====
+
+/**
+ * Tool info passed to the directCalls filter function
+ */
+export interface DirectCallsFilterToolInfo {
+  name: string;
+  appId?: string;
+  source?: string;
+  tags?: string[];
+}
+
+/**
+ * Tool info passed to the includeTools filter function
+ */
+export interface IncludeToolsFilterToolInfo {
+  name: string;
+  appId?: string;
+  source?: string;
+  description?: string;
+  tags?: string[];
+}
+
+/**
+ * Function type for directCalls filter
+ */
+export type DirectCallsFilterFn = (tool: DirectCallsFilterToolInfo) => boolean;
+
+/**
+ * Function type for includeTools filter
+ */
+export type IncludeToolsFilterFn = (tool: IncludeToolsFilterToolInfo) => boolean;
+
+// Helper schemas for filter functions with runtime validation
+const directCallsFilterSchema = z.custom<DirectCallsFilterFn>((val) => typeof val === 'function', {
+  message: 'filter must be a function with signature (tool: DirectCallsFilterToolInfo) => boolean',
+});
+
+const includeToolsFilterSchema = z.custom<IncludeToolsFilterFn>((val) => typeof val === 'function', {
+  message: 'includeTools must be a function with signature (tool: IncludeToolsFilterToolInfo) => boolean',
+});
+
 // ===== Zod Schemas with Defaults =====
 
 export const codeCallModeSchema = z
@@ -73,25 +115,46 @@ export const codeCallDirectCallsOptionsSchema = z.object({
   allowedTools: z.array(z.string()).optional(),
 
   /**
-   * Optional advanced filter.
-   * Note: Functions can't be validated by Zod at runtime, so this is any
+   * Optional advanced filter function.
+   * Signature: (tool: DirectCallsFilterToolInfo) => boolean
    */
-  filter: z
-    .function({
-      input: z.tuple([
-        z.object({
-          name: z.string(),
-          appId: z.string().optional(),
-          source: z.string().optional(),
-          tags: z.array(z.string()).optional(),
-        }),
-      ]),
-      output: z.boolean(),
-    })
-    .optional(),
+  filter: directCallsFilterSchema.optional(),
 });
 
 export const embeddingStrategySchema = z.enum(['tfidf', 'ml']).default('tfidf');
+
+// Synonym expansion configuration schema
+export const synonymExpansionConfigSchema = z
+  .object({
+    /**
+     * Enable/disable synonym expansion for TF-IDF search.
+     * When enabled, queries are expanded with synonyms to improve relevance.
+     * For example, "add user" will also match tools containing "create user".
+     * @default true
+     */
+    enabled: z.boolean().default(true),
+
+    /**
+     * Additional synonym groups beyond the defaults.
+     * Each group is an array of related terms that should be treated as equivalent.
+     * @example [['customer', 'client', 'buyer'], ['order', 'purchase', 'transaction']]
+     */
+    additionalSynonyms: z.array(z.array(z.string())).optional(),
+
+    /**
+     * Replace default synonyms entirely with additionalSynonyms.
+     * @default false
+     */
+    replaceDefaults: z.boolean().default(false),
+
+    /**
+     * Maximum number of synonym expansions per term.
+     * Prevents query explosion for terms with many synonyms.
+     * @default 5
+     */
+    maxExpansionsPerTerm: z.number().positive().default(5),
+  })
+  .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 });
 
 // Default values for embedding options
 const DEFAULT_EMBEDDING_OPTIONS = {
@@ -99,6 +162,7 @@ const DEFAULT_EMBEDDING_OPTIONS = {
   modelName: 'Xenova/all-MiniLM-L6-v2',
   cacheDir: './.cache/transformers',
   useHNSW: false,
+  synonymExpansion: { enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 },
 };
 
 export const codeCallEmbeddingOptionsSchema = z
@@ -129,8 +193,20 @@ export const codeCallEmbeddingOptionsSchema = z
      * @default false
      */
     useHNSW: z.boolean().default(false),
+
+    /**
+     * Synonym expansion configuration for TF-IDF search.
+     * When enabled, queries like "add user" will match tools for "create user".
+     * Only applies when strategy is 'tfidf' (ML already handles semantic similarity).
+     * Set to false to disable, or provide a config object to customize.
+     * @default { enabled: true }
+     */
+    synonymExpansion: z
+      .union([z.literal(false), synonymExpansionConfigSchema])
+      .optional()
+      .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 }),
   })
-  .default(() => DEFAULT_EMBEDDING_OPTIONS);
+  .default(DEFAULT_EMBEDDING_OPTIONS);
 
 export const codeCallSidecarOptionsSchema = z
   .object({
@@ -212,23 +288,10 @@ const codeCallPluginOptionsObjectSchema = z.object({
   maxDefinitions: z.number().positive().default(8),
 
   /**
-   * Optional filter function for including tools
-   * Note: Functions can't be validated by Zod at runtime
+   * Optional filter function for including tools.
+   * Signature: (tool: IncludeToolsFilterToolInfo) => boolean
    */
-  includeTools: z
-    .function({
-      input: z.tuple([
-        z.object({
-          name: z.string(),
-          appId: z.string().optional(),
-          source: z.string().optional(),
-          description: z.string().optional(),
-          tags: z.array(z.string()).optional(),
-        }),
-      ]),
-      output: z.boolean(),
-    })
-    .optional(),
+  includeTools: includeToolsFilterSchema.optional(),
 
   /**
    * Direct calls configuration
@@ -266,7 +329,7 @@ const DEFAULT_PLUGIN_OPTIONS = {
 };
 
 // Full schema with default - used for parsing
-export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.default(() => DEFAULT_PLUGIN_OPTIONS);
+export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.prefault(DEFAULT_PLUGIN_OPTIONS);
 
 // ===== TypeScript Types =====
 
@@ -276,8 +339,11 @@ export type CodeCallVmPreset = z.infer<typeof codeCallVmPresetSchema>;
 export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
 export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
-export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
+export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
+
+export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
+export type CodeCallEmbeddingOptionsInput = z.input<typeof codeCallEmbeddingOptionsSchema>;
 
 /**
  * Resolved options type (after parsing with defaults applied).

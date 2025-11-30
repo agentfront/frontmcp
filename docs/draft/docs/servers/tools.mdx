@@ -246,6 +246,11 @@ execute() {
   description?: string,      // Optional: hint for the LLM
   inputSchema: ZodSchema,    // Required: Zod schema for input validation
   outputSchema?: ZodSchema,  // Optional: Zod schema for output validation
+  examples?: Array<{         // Optional: usage examples for discovery
+    description: string;     //   - what this example demonstrates
+    input: Record<string, unknown>; //   - example input parameters
+    output?: unknown;        //   - optional expected output
+  }>,
   title?: string,            // Optional: human-readable display name
   icons?: Icon[],            // Optional: UI icons
   tags?: string[],           // Optional: categorization tags
@@ -272,7 +277,78 @@ execute() {
 | `icons`             | Array of icons for visual representation in clients          |
 | `tags`              | Categorization for organization and filtering                |
 | `annotations`       | MCP-defined hints about tool behavior                        |
+| `examples`          | Usage examples for discovery and LLM understanding           |
 | `hideFromDiscovery` | When `true`, tool is callable but not listed in `tools/list` |
+
+---
+
+## Tool Examples
+
+Provide examples to improve discoverability and help LLMs understand how to use your tools effectively.
+
+<CodeGroup>
+```ts Class Style
+@Tool({
+  name: 'users:create',
+  description: 'Create a new user account',
+  inputSchema: {
+    email: z.string().email(),
+    role: z.enum(['admin', 'user']),
+  },
+  examples: [
+    {
+      description: 'Create an admin user',
+      input: { email: 'admin@example.com', role: 'admin' },
+    },
+    {
+      description: 'Create a regular user',
+      input: { email: 'user@example.com', role: 'user' },
+    },
+  ],
+})
+class CreateUserTool {
+  async execute({ email, role }) {
+    // Implementation
+  }
+}
+```
+
+```ts Function Style
+const CreateUserTool = tool({
+  name: 'users:create',
+  description: 'Create a new user account',
+  inputSchema: {
+    email: z.string().email(),
+    role: z.enum(['admin', 'user']),
+  },
+  examples: [
+    {
+      description: 'Create an admin user',
+      input: { email: 'admin@example.com', role: 'admin' },
+    },
+    {
+      description: 'Create a regular user',
+      input: { email: 'user@example.com', role: 'user' },
+    },
+  ],
+})(({ email, role }) => {
+  // Implementation
+});
+```
+</CodeGroup>
+
+<CardGroup cols={2}>
+  <Card title="CodeCall Discovery" icon="magnifying-glass">
+    Examples are indexed for semantic search with 2x weight, helping users find the right tools faster.
+  </Card>
+  <Card title="LLM Understanding" icon="brain">
+    The `codecall:describe` tool returns up to 5 examples per tool to help LLMs understand usage patterns.
+  </Card>
+</CardGroup>
+
+<Tip>
+If you don't provide examples, FrontMCP auto-generates smart examples based on tool intent (create, list, get, update, delete, search). User-provided examples always take priority.
+</Tip>
 
 ---
 

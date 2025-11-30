@@ -6,7 +6,7 @@ export type PromptChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 
 export type PromptChangeEvent = {
   kind: PromptChangeKind;
-  scope: 'global' | 'session';
+  changeScope: 'global' | 'session';
   sessionId?: string;
   relatedRequestId?: string;
   version: number;

@@ -5,7 +5,7 @@ import { ToolAnnotationsSchema } from '@modelcontextprotocol/sdk/types.js';
 export const describeToolDescription = `Get input/output schemas for tools from search results.
 
 INPUT: toolNames: string[] - tool names from search
-OUTPUT per tool: inputSchema (JSON Schema), outputSchema (JSON Schema), usageExample (callTool code)
+OUTPUT per tool: inputSchema (JSON Schema), outputSchema (JSON Schema), usageExamples (up to 5 callTool examples)
 
 IMPORTANT: If notFound array is non-empty → re-search with corrected queries.
 FLOW: search → describe → execute/invoke`;
@@ -53,16 +53,19 @@ export const describeToolOutputSchema = z.object({
           .nullable()
           .describe('JSON Schema object describing the tool output structure'),
         annotations: ToolAnnotationsSchema.optional().describe('MCP tool annotations (metadata)'),
-        usageExample: z
-          .object({
-            description: z.string().describe('Description of what this example demonstrates'),
-            code: z
-              .string()
-              .describe(
-                'JavaScript code example showing how to call this tool using callTool(). Format: const result = await callTool("tool:name", { ...params });',
-              ),
-          })
-          .describe('A practical example of how to use this tool in a codecall:execute script'),
+        usageExamples: z
+          .array(
+            z.object({
+              description: z.string().describe('Description of what this example demonstrates'),
+              code: z
+                .string()
+                .describe(
+                  'JavaScript code example showing how to call this tool using callTool(). Format: const result = await callTool("tool:name", { ...params });',
+                ),
+            }),
+          )
+          .max(5)
+          .describe('Up to 5 practical examples of how to use this tool in a codecall:execute script'),
       }),
     )
     .describe('Array of tool descriptions with schemas and usage examples'),

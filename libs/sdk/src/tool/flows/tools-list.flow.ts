@@ -1,7 +1,8 @@
 // tools/flows/list-tools.flow.ts
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ToolEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 
@@ -179,7 +180,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           try {
             // as any used here to prevent hard ts-check on tool input that is redundant
             // and just slow down the build process. types here are unnecessary.
-            inputSchema = z.toJSONSchema(z.object(tool.inputSchema));
+            inputSchema = toJSONSchema(z.object(tool.inputSchema));
           } catch (e) {
             this.logger.warn(`Failed to convert inputSchema for tool ${finalName}:`, e);
             inputSchema = { type: 'object', properties: {} };
@@ -206,6 +207,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.info('parseTools: response sent');
       this.logger.verbose('parseTools:done');
     } catch (error) {
+      if (error instanceof FlowControl) throw error;
       this.logger.error('parseTools: failed to parse tools', error);
       throw error;
     }

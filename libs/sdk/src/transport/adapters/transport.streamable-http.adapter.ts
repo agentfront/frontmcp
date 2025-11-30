@@ -1,23 +1,41 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { TypedElicitResult } from '../transport.types';
+import { TransportType, TypedElicitResult } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { z, ZodType } from 'zod';
+import { ZodType } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 
+/**
+ * Stateless HTTP requests must be able to send multiple initialize calls without
+ * tripping the MCP transport's "already initialized" guard. The upstream SDK
+ * treats any transport with a session ID generator as stateful, so we disable
+ * session generation entirely for stateless transports.
+ */
+export const resolveSessionIdGenerator = (
+  transportType: TransportType,
+  sessionId: string,
+): (() => string) | undefined => {
+  return transportType === 'stateless-http' ? undefined : () => sessionId;
+};
+
 export class TransportStreamableHttpAdapter extends LocalTransportAdapter<StreamableHTTPServerTransport> {
   override createTransport(sessionId: string, response: ServerResponse): StreamableHTTPServerTransport {
+    const sessionIdGenerator = resolveSessionIdGenerator(this.key.type, sessionId);
+
     return new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => {
-        return sessionId;
-      },
+      sessionIdGenerator,
       onsessionclosed: () => {
         // this.destroy();
       },
       onsessioninitialized: (sessionId) => {
-        console.log(`session initialized: ${sessionId.slice(0, 40)}`);
+        if (sessionId) {
+          console.log(`session initialized: ${sessionId.slice(0, 40)}`);
+        } else {
+          console.log(`stateless session initialized`);
+        }
       },
       eventStore: this.eventStore,
     });
@@ -55,7 +73,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
     await this.transport.send(
       rpcRequest(this.newRequestId, 'elicitation/create', {
         message,
-        requestedSchema: z.toJSONSchema(requestedSchema),
+        requestedSchema: toJSONSchema(requestedSchema as any),
       }),
       { relatedRequestId },
     );

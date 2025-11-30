@@ -301,31 +301,37 @@ FrontMCP][3])
 
 ### Servers
 
-`@FrontMcp({...})` defines **info**, **apps**, **http**, **logging**, **session**, and optional **auth**. Keep it
-minimal or scale up with providers and plugins. ([The FrontMCP Server - FrontMCP][5])
+The FrontMCP server is defined with a single decorator: `@FrontMcp({...})`. It configures **info**, **apps**, **http**,
+**logging**, **session**, and optional **auth**. Start minimal and scale up with providers and plugins.
+([The FrontMCP Server - FrontMCP][5])
 
 ### Apps
 
-Use `@App` to group **tools**, **resources**, **prompts**, plus **providers**, **adapters**, and **plugins**. With
-`splitByApp: true`, each app gets its own scope/base path and, if needed, its own auth surface. ([Apps - FrontMCP][6])
+Apps are the **organizational units** for capabilities. Each app groups related **tools**, **resources**, and **prompts**
+into a cohesive domain, along with **providers**, **adapters**, and **plugins**. With `splitByApp: true`, apps get
+isolated scopes and auth surfaces. ([Apps - FrontMCP][6])
 
 ### Tools
 
-Typed actions with schemas (class `@Tool` or inline `tool({...})(handler)`). Use the Zod‑field **shape** style for
-`inputSchema`. ([Tools - FrontMCP][4])
+Tools are **typed actions** that execute operations with side effects. They're the primary way to enable an AI model to
+interact with external systems—calling APIs, modifying data, performing calculations, or triggering workflows. Use the
+class `@Tool` decorator or inline `tool({...})(handler)` with Zod schemas. ([Tools - FrontMCP][4])
 
 ### Resources
 
-Readable data by URI or RFC6570 template (see `@Resource` / `@ResourceTemplate`). ([Resources - FrontMCP][7])
+Resources expose **readable data** to an AI model's context. Unlike tools that execute actions with side effects,
+resources are designed for read-only data retrieval—configuration files, user profiles, documents, or any content
+the model needs to reference. ([Resources - FrontMCP][7])
 
 ### Prompts
 
-Reusable templates returning MCP `GetPromptResult`, with typed arguments. ([Prompts - FrontMCP][8])
+Prompts provide **reusable message templates** for AI interactions. They return MCP `GetPromptResult` with typed
+arguments, enabling consistent conversation patterns. ([Prompts - FrontMCP][8])
 
 ### Providers / Adapters / Plugins
 
-Inject shared services, generate tools from OpenAPI, and add cross‑cutting behavior like caching and hooks. ([Add
-OpenAPI Adapter - FrontMCP][9])
+Inject shared services, generate tools from OpenAPI specs, and add cross‑cutting behavior like caching and hooks.
+([Add OpenAPI Adapter - FrontMCP][9])
 
 ---
 

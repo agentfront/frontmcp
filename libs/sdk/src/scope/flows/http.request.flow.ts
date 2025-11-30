@@ -28,7 +28,14 @@ const plan = {
     'checkAuthorization',
     'router',
   ],
-  execute: ['handleLegacySse', 'handleSse', 'handleStreamableHttp', 'handleStatefulHttp', 'handleStatelessHttp'],
+  execute: [
+    'handleLegacySse',
+    'handleSse',
+    'handleStreamableHttp',
+    'handleStatefulHttp',
+    'handleStatelessHttp',
+    'handleDeleteSession',
+  ],
   finalize: [
     // audit/metrics
     'audit',
@@ -80,7 +87,13 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     const requestPath = normalizeEntryPrefix(request.path);
     const prefix = normalizeEntryPrefix(scope.entryPath);
     const scopePath = normalizeScopeBase(scope.routeBase);
-    return requestPath === `${prefix}${scopePath}` || requestPath === `${prefix}${scopePath}/message`;
+    const basePath = `${prefix}${scopePath}`;
+
+    return (
+      requestPath === basePath || // Modern transports: /
+      requestPath === `${basePath}/sse` || // Legacy SSE: /sse
+      requestPath === `${basePath}/message` // Legacy SSE: /message
+    );
   }
 
   @Stage('checkAuthorization')
@@ -107,12 +120,36 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     const transport = this.scope.auth.transport;
     const decision = decideIntent(request, { ...transport, tolerateMissingAccept: true });
 
+    // Handle DELETE method immediately - it's for session termination
+    // regardless of what protocol the session was created with
+    if (request.method.toUpperCase() === 'DELETE') {
+      this.logger.verbose(`DELETE request, using decision intent: ${decision.intent}`);
+      if (decision.intent === 'unknown') {
+        // DELETE without session ID - forward to next middleware
+        // to allow custom DELETE handlers by developers
+        this.logger.verbose('DELETE with unknown intent, forwarding to next middleware');
+        this.next();
+        return;
+      }
+      this.state.set('intent', decision.intent);
+      return;
+    }
+
     const { verifyResult } = this.state.required;
     if (verifyResult.kind === 'authorized') {
       const { authorization } = verifyResult;
       request[ServerRequestTokens.auth] = authorization;
       if (authorization.session) {
-        request[ServerRequestTokens.sessionId] = authorization.session.id;
+        const sessionId = authorization.session.id;
+        request[ServerRequestTokens.sessionId] = sessionId;
+
+        // Check if the session has been terminated (via DELETE)
+        // Per MCP spec, requests to terminated sessions should return 404
+        if (this.scope.notifications.isSessionTerminated(sessionId)) {
+          this.logger.warn(`Request to terminated session: ${sessionId.slice(0, 20)}...`);
+          this.respond(httpRespond.notFound('Session not found'));
+          return;
+        }
 
         // Safely access payload.protocol with null check
         const protocol = authorization.session.payload?.protocol;
@@ -226,5 +263,41 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       this.respond(response);
     }
     this.handled();
+  }
+
+  @Stage('handleDeleteSession', {
+    filter: ({
+      state: {
+        required: { intent },
+      },
+    }) => intent === 'delete-session',
+  })
+  async handleDeleteSession() {
+    const { request } = this.rawInput;
+    // Headers are normalized to lowercase by the adapter
+    const sessionId = request[ServerRequestTokens.sessionId] ?? request.headers['mcp-session-id'];
+
+    if (!sessionId || typeof sessionId !== 'string') {
+      this.logger.warn('DELETE request without valid session ID');
+      this.respond(httpRespond.rpcError('No valid session ID provided'));
+      return;
+    }
+
+    this.logger.info(`DELETE session: ${sessionId}`);
+
+    // Terminate the session - this unregisters the server AND adds to terminated set
+    // This prevents future requests with this session ID from being accepted
+    const wasRegistered = this.scope.notifications.terminateSession(sessionId);
+
+    if (!wasRegistered) {
+      // Session not found - per MCP spec, return 404
+      // Note: We still added it to terminated set to prevent future use
+      this.logger.warn(`Session not found for DELETE: ${sessionId}`);
+      this.respond(httpRespond.notFound('Session not found'));
+      return;
+    }
+
+    this.logger.info(`Session terminated: ${sessionId}`);
+    this.respond(httpRespond.noContent());
   }
 }

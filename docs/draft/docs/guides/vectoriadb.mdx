@@ -114,6 +114,10 @@ export async function indexTools(toolRegistry: ToolRegistryInterface) {
 
 `addMany` validates every document, enforces `maxBatchSize`, and prevents duplicates. Use it after deployments or whenever your tool inventory changes.
 
+<Tip>
+When using the CodeCall plugin, tool examples are automatically indexed for semantic search. Example descriptions and input values receive 2x weight, so tools with relevant examples rank higher in search results. See the [Tools documentation](/servers/tools#tool-examples) for how to define examples.
+</Tip>
+
 ## Step 3: Run semantic search
 
 Query the index anywhere you can run async code (for example inside a custom MCP tool that recommends next actions):

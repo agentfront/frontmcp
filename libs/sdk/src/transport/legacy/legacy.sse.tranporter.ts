@@ -43,6 +43,8 @@ export class SSEServerTransport implements Transport {
   private _sseResponse?: ServerResponse;
   private _sessionId: string;
   private _options: SSEServerTransportOptions;
+  /** Incrementing event ID counter for SSE events (MCP 2025-11-25 spec compliance) */
+  private _eventIdCounter = 0;
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage, extra?: MessageExtraInfo) => void;
@@ -112,7 +114,9 @@ export class SSEServerTransport implements Transport {
     // Reconstruct the relative URL string (pathname + search + hash)
     const relativeUrlWithSession = endpointUrl.pathname + endpointUrl.search + endpointUrl.hash;
 
-    this.res.write(`event: endpoint\ndata: ${relativeUrlWithSession}\n\n`);
+    // Include event ID per MCP 2025-11-25 spec for client reconnection support
+    const eventId = ++this._eventIdCounter;
+    this.res.write(`id: ${eventId}\nevent: endpoint\ndata: ${relativeUrlWithSession}\n\n`);
 
     this._sseResponse = this.res;
     this.res.on('close', () => {
@@ -203,7 +207,9 @@ export class SSEServerTransport implements Transport {
       throw new Error('Not connected');
     }
 
-    this._sseResponse.write(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+    // Include event ID per MCP 2025-11-25 spec for client reconnection support
+    const eventId = ++this._eventIdCounter;
+    this._sseResponse.write(`id: ${eventId}\nevent: message\ndata: ${JSON.stringify(message)}\n\n`);
   }
 
   /**
@@ -213,5 +219,15 @@ export class SSEServerTransport implements Transport {
    */
   get sessionId(): string {
     return this._sessionId;
+  }
+
+  /**
+   * Returns the current event ID counter value.
+   *
+   * This is the ID that was used for the last sent event.
+   * Useful for testing and debugging reconnection scenarios.
+   */
+  get lastEventId(): number {
+    return this._eventIdCounter;
   }
 }

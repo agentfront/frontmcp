@@ -361,7 +361,7 @@ export default class PromptRegistry
     if (opts.immediate) {
       cb({
         kind: 'reset',
-        scope: 'global',
+        changeScope: 'global',
         version: this.version,
         snapshot: this.listAllInstances().filter(filter),
       });
@@ -371,7 +371,7 @@ export default class PromptRegistry
 
   private bump(kind: PromptChangeEvent['kind']) {
     const version = ++this.version;
-    this.emitter.emit({ kind, scope: 'global', version, snapshot: this.listAllInstances() });
+    this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
   }
 
   /* -------------------- Helpers -------------------- */

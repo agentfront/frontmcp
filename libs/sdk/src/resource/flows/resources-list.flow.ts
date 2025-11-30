@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/flows/resources-list.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, Resource } from '@modelcontextprotocol/sdk/types.js';
@@ -189,6 +189,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       this.logger.info('parseResources: response sent');
       this.logger.verbose('parseResources:done');
     } catch (error) {
+      if (error instanceof FlowControl) throw error;
       this.logger.error('parseResources: failed to parse resources', error);
       throw error;
     }

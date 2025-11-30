@@ -26,6 +26,9 @@ import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import { NotificationService } from '../notification';
+import SetLevelFlow from '../logging/flows/set-level.flow';
+import CompleteFlow from '../completion/flows/complete.flow';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -42,6 +45,7 @@ export class Scope extends ScopeEntry {
   private scopePrompts: PromptRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
+  notificationService: NotificationService;
   readonly entryPath: string;
   readonly routeBase: string;
   readonly orchestrated: boolean = false;
@@ -94,6 +98,13 @@ export class Scope extends ScopeEntry {
 
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     await this.scopePrompts.ready;
+
+    // Initialize notification service after all registries are ready
+    this.notificationService = new NotificationService(this);
+    await this.notificationService.initialize();
+
+    // Register logging and completion flows
+    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
@@ -164,6 +175,10 @@ export class Scope extends ScopeEntry {
 
   get prompts(): PromptRegistry {
     return this.scopePrompts;
+  }
+
+  get notifications(): NotificationService {
+    return this.notificationService;
   }
 
   registryFlows(...flows: FlowType[]) {

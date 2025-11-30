@@ -443,10 +443,12 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['users:get'] });
 
-      expect(result.tools[0].usageExample).toBeDefined();
-      expect(result.tools[0].usageExample.description).toBeDefined();
-      expect(result.tools[0].usageExample.code).toContain('callTool');
-      expect(result.tools[0].usageExample.code).toContain('users:get');
+      expect(result.tools[0].usageExamples).toBeDefined();
+      expect(result.tools[0].usageExamples).toBeInstanceOf(Array);
+      expect(result.tools[0].usageExamples.length).toBeGreaterThanOrEqual(1);
+      expect(result.tools[0].usageExamples[0].description).toBeDefined();
+      expect(result.tools[0].usageExamples[0].code).toContain('callTool');
+      expect(result.tools[0].usageExamples[0].code).toContain('users:get');
     });
 
     it('should generate pagination example for paginated schema', async () => {
@@ -467,11 +469,11 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['users:list'] });
 
-      expect(result.tools[0].usageExample).toBeDefined();
-      expect(result.tools[0].usageExample.code).toContain('users:list');
+      expect(result.tools[0].usageExamples).toBeDefined();
+      expect(result.tools[0].usageExamples[0].code).toContain('users:list');
     });
 
-    it('should generate filter example for filter schema', async () => {
+    it('should generate search example for search tools', async () => {
       const mockTools = [
         createMockTool({
           name: 'users:search',
@@ -488,8 +490,10 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['users:search'] });
 
-      expect(result.tools[0].usageExample).toBeDefined();
-      expect(result.tools[0].usageExample.code).toContain('users:search');
+      expect(result.tools[0].usageExamples).toBeDefined();
+      expect(result.tools[0].usageExamples[0].code).toContain('users:search');
+      // Intent detection should produce a search example
+      expect(result.tools[0].usageExamples[0].description).toContain('Search');
     });
 
     it('should generate example when no input schema', async () => {
@@ -503,8 +507,187 @@ describe('DescribeTool', () => {
       const tool = createDescribeTool(mockTools);
       const result = await tool.execute({ toolNames: ['health:check'] });
 
-      expect(result.tools[0].usageExample).toBeDefined();
-      expect(result.tools[0].usageExample.code).toContain('health:check');
+      expect(result.tools[0].usageExamples).toBeDefined();
+      expect(result.tools[0].usageExamples[0].code).toContain('health:check');
+    });
+
+    it('should generate create example for create tools', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          rawInputSchema: {
+            type: 'object',
+            properties: {
+              email: { type: 'string' },
+              name: { type: 'string' },
+              role: { type: 'string' },
+            },
+            required: ['email', 'name'],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      expect(result.tools[0].usageExamples).toBeDefined();
+      expect(result.tools[0].usageExamples[0].description).toContain('Create');
+      expect(result.tools[0].usageExamples[0].description).not.toContain('Filter');
+    });
+
+    it('should return at most 5 examples', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          metadata: {
+            examples: [
+              { description: 'Example 1', input: { email: 'a@a.com' } },
+              { description: 'Example 2', input: { email: 'b@b.com' } },
+              { description: 'Example 3', input: { email: 'c@c.com' } },
+              { description: 'Example 4', input: { email: 'd@d.com' } },
+              { description: 'Example 5', input: { email: 'e@e.com' } },
+              { description: 'Example 6', input: { email: 'f@f.com' } },
+              { description: 'Example 7', input: { email: 'g@g.com' } },
+            ],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      expect(result.tools[0].usageExamples.length).toBe(5);
+      expect(result.tools[0].usageExamples[0].description).toBe('Example 1');
+      expect(result.tools[0].usageExamples[4].description).toBe('Example 5');
+    });
+  });
+
+  describe('User-Provided Examples', () => {
+    it('should use user-provided examples when available', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          metadata: {
+            examples: [
+              {
+                description: 'Create an admin user',
+                input: { email: 'admin@example.com', name: 'Admin User', role: 'admin' },
+                output: { id: '123', success: true },
+              },
+            ],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      expect(result.tools[0].usageExamples[0].description).toBe('Create an admin user');
+      expect(result.tools[0].usageExamples[0].code).toContain('admin@example.com');
+      expect(result.tools[0].usageExamples[0].code).toContain('Admin User');
+    });
+
+    it('should include all user-provided examples plus smart-generated when < 5', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          metadata: {
+            examples: [
+              {
+                description: 'First example',
+                input: { email: 'first@example.com' },
+              },
+              {
+                description: 'Second example',
+                input: { email: 'second@example.com' },
+              },
+              {
+                description: 'Third example',
+                input: { email: 'third@example.com' },
+              },
+            ],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      // 3 user examples + 1 smart-generated = 4
+      expect(result.tools[0].usageExamples.length).toBe(4);
+      expect(result.tools[0].usageExamples[0].description).toBe('First example');
+      expect(result.tools[0].usageExamples[1].description).toBe('Second example');
+      expect(result.tools[0].usageExamples[2].description).toBe('Third example');
+      // Fourth is smart-generated
+      expect(result.tools[0].usageExamples[3].description).toContain('Create');
+    });
+
+    it('should fall back to smart generation when examples is empty array', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          metadata: {
+            examples: [],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      // Should use smart generation (detect create intent)
+      expect(result.tools[0].usageExamples[0].description).toContain('Create');
+    });
+
+    it('should fall back to smart generation when examples is not provided', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:delete',
+          rawInputSchema: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+            },
+            required: ['id'],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:delete'] });
+
+      // Should use smart generation (detect delete intent)
+      expect(result.tools[0].usageExamples[0].description).toContain('Delete');
+    });
+
+    it('should add smart-generated example when fewer than 5 user examples', async () => {
+      const mockTools = [
+        createMockTool({
+          name: 'users:create',
+          metadata: {
+            examples: [
+              {
+                description: 'User example 1',
+                input: { email: 'user1@example.com' },
+              },
+              {
+                description: 'User example 2',
+                input: { email: 'user2@example.com' },
+              },
+            ],
+          },
+        }),
+      ];
+
+      const tool = createDescribeTool(mockTools);
+      const result = await tool.execute({ toolNames: ['users:create'] });
+
+      // Should have 2 user examples + 1 smart-generated
+      expect(result.tools[0].usageExamples.length).toBe(3);
+      expect(result.tools[0].usageExamples[0].description).toBe('User example 1');
+      expect(result.tools[0].usageExamples[1].description).toBe('User example 2');
+      // Third should be smart-generated
+      expect(result.tools[0].usageExamples[2].description).toContain('Create');
     });
   });
 
@@ -532,7 +715,8 @@ describe('DescribeTool', () => {
       expect(toolInfo).toHaveProperty('inputSchema');
       expect(toolInfo).toHaveProperty('outputSchema');
       expect(toolInfo).toHaveProperty('annotations');
-      expect(toolInfo).toHaveProperty('usageExample');
+      expect(toolInfo).toHaveProperty('usageExamples');
+      expect(toolInfo.usageExamples).toBeInstanceOf(Array);
     });
 
     it('should use fallback description when not provided', async () => {

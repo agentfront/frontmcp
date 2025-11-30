@@ -72,7 +72,7 @@ export { FrontMcpTool, FrontMcpTool as Tool, frontMcpTool, frontMcpTool as tool 
  */
 // ---------- zod helpers ----------
 type __Shape = z.ZodRawShape;
-type __AsZodObj<T> = T extends z.ZodObject ? T : T extends z.ZodRawShape ? z.ZodObject<T> : never;
+type __AsZodObj<T> = T extends z.ZodObject<any> ? T : T extends z.ZodRawShape ? z.ZodObject<T> : never;
 
 export type ToolInputOf<Opt> = Opt extends { inputSchema: infer I } ? z.infer<__AsZodObj<I>> : never;
 
@@ -148,10 +148,10 @@ type __ResourceOutputType = 'resource';
 type __ResourceLinkOutputType = 'resource_link';
 type __StructuredOutputType =
   | z.ZodRawShape
-  | z.ZodObject
+  | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
-  | z.ZodUnion<[z.ZodObject, ...z.ZodObject[]]>
-  | z.ZodDiscriminatedUnion<z.ZodObject[]>;
+  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<z.ZodObject<any>[]>;
 
 type __ToolSingleOutputType =
   | __PrimitiveOutputType

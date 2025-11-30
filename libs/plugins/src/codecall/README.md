@@ -634,9 +634,9 @@ export type CodeCallDescribeResult = {
     description: string;
     inputSchema: unknown;
     outputSchema?: unknown | null;
-    examples?: {
-      input: unknown;
-      output?: unknown;
+    usageExamples: {
+      description: string;
+      code: string;
     }[];
   }[];
 };
@@ -647,6 +647,28 @@ Requirements:
 - Only describe tools that are currently in the CodeCall index.
 - Respect `maxDefinitions` + per-call override `max`.
 - Map internal schemas to JSON-schema-like objects in a stable format.
+- Return up to 5 `usageExamples` per tool (user-provided examples take priority, then smart-generated examples).
+
+### Example Indexing
+
+Tool examples are indexed for semantic search with enhanced weighting:
+
+- **Example descriptions**: 2x weight in the search index
+- **Example input values**: 2x weight (stringified JSON)
+- **Tool description**: 1x weight (baseline)
+
+This ensures tools with relevant examples rank higher in search results. Example generation uses smart intent detection based on tool name patterns:
+
+| Pattern          | Intent | Generated Example Style     |
+| ---------------- | ------ | --------------------------- |
+| `create`, `add`  | create | Creates a new entity        |
+| `list`, `all`    | list   | Lists entities with filters |
+| `get`, `fetch`   | get    | Gets entity by ID           |
+| `update`, `set`  | update | Updates entity fields       |
+| `delete`, `rm`   | delete | Deletes entity by ID        |
+| `search`, `find` | search | Searches with query         |
+
+User-provided examples (via `@Tool({ examples: [...] })`) always take priority over auto-generated ones.
 
 ---
 

@@ -28,14 +28,14 @@ export const searchToolInputSchema = z.object({
     .describe('Atomic action queries. Split complex requests into simple actions.'),
   appIds: z.array(z.string()).max(10).optional().describe('Filter by app IDs'),
   excludeToolNames: z.array(z.string()).max(50).optional().describe('Skip already-known tool names'),
-  topK: z.number().int().positive().max(50).optional().default(5).describe('Results per query (default 5)'),
+  topK: z.number().int().positive().max(50).optional().default(10).describe('Results per query (default 10)'),
   minRelevanceScore: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .default(0.3)
-    .describe('Minimum relevance threshold (default 0.3)'),
+    .default(0.1)
+    .describe('Minimum relevance threshold (default 0.1)'),
 });
 
 export type SearchToolInput = z.infer<typeof searchToolInputSchema>;

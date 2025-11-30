@@ -1,6 +1,6 @@
 // file: libs/sdk/src/prompt/flows/prompts-list.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, PromptEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, PromptEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
 import { ListPromptsRequestSchema, ListPromptsResultSchema, Prompt } from '@modelcontextprotocol/sdk/types.js';
@@ -182,6 +182,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       this.logger.info('parsePrompts: response sent');
       this.logger.verbose('parsePrompts:done');
     } catch (error) {
+      if (error instanceof FlowControl) throw error;
       this.logger.error('parsePrompts: failed to parse prompts', error);
       throw error;
     }

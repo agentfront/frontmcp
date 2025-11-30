@@ -14,6 +14,56 @@ export interface ToolUsageExample {
 }
 
 /**
+ * Detected intent of a tool based on its name and description.
+ */
+export type ToolIntent = 'create' | 'list' | 'get' | 'update' | 'delete' | 'search' | 'action' | 'unknown';
+
+/**
+ * Patterns for detecting tool intent from the action verb.
+ * These patterns use the same synonym groups as the search service.
+ */
+const INTENT_PATTERNS: Record<Exclude<ToolIntent, 'action' | 'unknown'>, RegExp> = {
+  create:
+    /^(create|add|new|insert|make|append|register|generate|produce|build|construct|provision|instantiate|define|compose|draft)/i,
+  delete: /^(delete|remove|destroy|drop|erase|clear|purge|discard|eliminate|unbind|unregister)/i,
+  get: /^(get|fetch|retrieve|read|obtain|load|pull|access|grab|receive)/i,
+  update:
+    /^(update|edit|modify|change|patch|set|alter|revise|adjust|amend|correct|fix|refresh|sync|upgrade|downgrade)/i,
+  list: /^(list|all|index|enumerate|show|display|view|browse|scan|inventory)/i,
+  search: /^(search|find|query|lookup|locate|discover|explore|seek|match|filter)/i,
+};
+
+/**
+ * Detect the intent of a tool from its name.
+ * Extracts the action verb from tool names like "users:create" or "orders:list".
+ */
+export function detectToolIntent(toolName: string, description?: string): ToolIntent {
+  // Extract action verb from tool name (e.g., "users:create" -> "create")
+  const parts = toolName.split(':');
+  const actionPart = parts.length > 1 ? parts[parts.length - 1] : toolName;
+
+  // Check each intent pattern
+  for (const [intent, pattern] of Object.entries(INTENT_PATTERNS) as [ToolIntent, RegExp][]) {
+    if (pattern.test(actionPart)) {
+      return intent;
+    }
+  }
+
+  // Fallback: check description for clues
+  if (description) {
+    const descLower = description.toLowerCase();
+    if (/creates?\s|adding\s|inserts?/i.test(descLower)) return 'create';
+    if (/deletes?\s|removes?\s|destroys?/i.test(descLower)) return 'delete';
+    if (/gets?\s|fetche?s?\s|retrieves?/i.test(descLower)) return 'get';
+    if (/updates?\s|modif(?:y|ies)\s|edits?/i.test(descLower)) return 'update';
+    if (/lists?\s|shows?\s|displays?/i.test(descLower)) return 'list';
+    if (/search(?:es)?\s|find(?:s)?\s|quer(?:y|ies)/i.test(descLower)) return 'search';
+  }
+
+  return 'unknown';
+}
+
+/**
  * Generate a TypeScript-like function signature from a JSON Schema.
  *
  * @example
@@ -311,4 +361,257 @@ export function generateFilterExample(toolName: string, filterProp: string): Too
     code: `const filtered = await callTool('${toolName}', { ${filterProp}: 'value' });
 return filtered.items || filtered;`,
   };
+}
+
+// ==========================================
+// Intent-Specific Example Generators
+// ==========================================
+
+/**
+ * Extract entity name from tool name (e.g., "users:create" -> "user")
+ */
+function extractEntityName(toolName: string): string {
+  const parts = toolName.split(':');
+  const entity = parts.length > 1 ? parts[0] : toolName;
+  // Singularize simple plurals
+  return entity.endsWith('s') && !entity.endsWith('ss') ? entity.slice(0, -1) : entity;
+}
+
+/**
+ * Generate a create example for a tool.
+ * Shows required parameters with contextual sample values.
+ */
+export function generateCreateExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+  const params = generateSampleParams(inputSchema);
+  const paramsStr = params ? JSON.stringify(params, null, 2) : '{ /* required fields */ }';
+
+  return {
+    description: `Create a new ${entity}`,
+    code: `const result = await callTool('${toolName}', ${paramsStr});
+return result;`,
+  };
+}
+
+/**
+ * Generate a get (retrieve single item) example for a tool.
+ */
+export function generateGetExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+  const idParam = findIdParameter(inputSchema);
+
+  if (idParam) {
+    return {
+      description: `Get ${entity} by ${idParam}`,
+      code: `const ${entity} = await callTool('${toolName}', { ${idParam}: 'abc123' });
+return ${entity};`,
+    };
+  }
+
+  // Fallback to basic example if no ID parameter found
+  const params = generateSampleParams(inputSchema);
+  const paramsStr = params ? JSON.stringify(params, null, 2) : '{}';
+
+  return {
+    description: `Get ${entity} details`,
+    code: `const ${entity} = await callTool('${toolName}', ${paramsStr});
+return ${entity};`,
+  };
+}
+
+/**
+ * Generate a list example for a tool.
+ */
+export function generateListExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+
+  return {
+    description: `List all ${entity}s`,
+    code: `const result = await callTool('${toolName}', {});
+return result.items || result;`,
+  };
+}
+
+/**
+ * Generate an update example for a tool.
+ */
+export function generateUpdateExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+  const idParam = findIdParameter(inputSchema);
+
+  // Generate sample update fields (excluding ID fields)
+  const updateFields = generateUpdateFields(inputSchema);
+  const fieldsStr = updateFields
+    ? JSON.stringify(updateFields, null, 2).replace(/\n/g, '\n  ')
+    : '{ /* fields to update */ }';
+
+  if (idParam) {
+    return {
+      description: `Update ${entity} by ${idParam}`,
+      code: `const updated = await callTool('${toolName}', {
+  ${idParam}: 'abc123',
+  ...${fieldsStr}
+});
+return updated;`,
+    };
+  }
+
+  return {
+    description: `Update ${entity}`,
+    code: `const updated = await callTool('${toolName}', ${fieldsStr});
+return updated;`,
+  };
+}
+
+/**
+ * Generate a delete example for a tool.
+ */
+export function generateDeleteExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+  const idParam = findIdParameter(inputSchema);
+
+  if (idParam) {
+    return {
+      description: `Delete ${entity} by ${idParam}`,
+      code: `const result = await callTool('${toolName}', { ${idParam}: 'abc123' });
+return result;`,
+    };
+  }
+
+  const params = generateSampleParams(inputSchema);
+  const paramsStr = params ? JSON.stringify(params, null, 2) : '{ /* identifier */ }';
+
+  return {
+    description: `Delete ${entity}`,
+    code: `const result = await callTool('${toolName}', ${paramsStr});
+return result;`,
+  };
+}
+
+/**
+ * Generate a search example for a tool.
+ */
+export function generateSearchExample(toolName: string, inputSchema?: JsonSchema): ToolUsageExample {
+  const entity = extractEntityName(toolName);
+  const queryParam = findQueryParameter(inputSchema);
+
+  if (queryParam) {
+    return {
+      description: `Search for ${entity}s`,
+      code: `const results = await callTool('${toolName}', { ${queryParam}: 'search term' });
+return results.items || results;`,
+    };
+  }
+
+  return {
+    description: `Search for ${entity}s`,
+    code: `const results = await callTool('${toolName}', { query: 'search term' });
+return results.items || results;`,
+  };
+}
+
+/**
+ * Find an ID-like parameter in the schema.
+ */
+function findIdParameter(schema?: JsonSchema): string | null {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return null;
+  }
+
+  const props = Object.keys(schema.properties);
+  const required = new Set(schema.required || []);
+
+  // Prioritize required ID fields
+  const idPatterns = ['id', 'Id', 'ID', '_id', 'uuid', 'key'];
+  for (const pattern of idPatterns) {
+    const found = props.find((p) => (p === pattern || p.endsWith(pattern)) && required.has(p));
+    if (found) return found;
+  }
+
+  // Fall back to any ID-like field
+  for (const pattern of idPatterns) {
+    const found = props.find((p) => p === pattern || p.endsWith(pattern));
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Find a query-like parameter in the schema.
+ */
+function findQueryParameter(schema?: JsonSchema): string | null {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return null;
+  }
+
+  const props = Object.keys(schema.properties);
+  const queryPatterns = ['query', 'search', 'q', 'term', 'keyword', 'filter'];
+
+  for (const pattern of queryPatterns) {
+    const found = props.find((p) => p.toLowerCase() === pattern || p.toLowerCase().includes(pattern));
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Generate sample update fields (excluding ID-like fields).
+ */
+function generateUpdateFields(schema?: JsonSchema): Record<string, unknown> | null {
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return null;
+  }
+
+  const fields: Record<string, unknown> = {};
+  const idPatterns = ['id', 'Id', 'ID', '_id', 'uuid', 'key'];
+
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    if (typeof propSchema === 'boolean') continue;
+
+    // Skip ID-like fields
+    const isIdField = idPatterns.some((p) => key === p || key.endsWith(p));
+    if (isIdField) continue;
+
+    // Include a few non-ID fields for the update example
+    if (Object.keys(fields).length < 2) {
+      fields[key] = getSampleValue(propSchema, key);
+    }
+  }
+
+  return Object.keys(fields).length > 0 ? fields : null;
+}
+
+/**
+ * Smart example generator that uses intent detection.
+ * This is the main entry point for generating examples.
+ */
+export function generateSmartExample(
+  toolName: string,
+  inputSchema?: JsonSchema,
+  description?: string,
+): ToolUsageExample {
+  const intent = detectToolIntent(toolName, description);
+
+  switch (intent) {
+    case 'create':
+      return generateCreateExample(toolName, inputSchema);
+    case 'get':
+      return generateGetExample(toolName, inputSchema);
+    case 'list':
+      // For list tools, still use pagination example if available
+      return hasPaginationParams(inputSchema)
+        ? generatePaginationExample(toolName)
+        : generateListExample(toolName, inputSchema);
+    case 'update':
+      return generateUpdateExample(toolName, inputSchema);
+    case 'delete':
+      return generateDeleteExample(toolName, inputSchema);
+    case 'search':
+      return generateSearchExample(toolName, inputSchema);
+    default:
+      // Fallback to basic example for unknown intents
+      return generateBasicExample(toolName, inputSchema);
+  }
 }

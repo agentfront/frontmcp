@@ -327,7 +327,7 @@ export class TestServer {
 /**
  * Find an available port
  */
-async function findAvailablePort(): Promise<number> {
+export async function findAvailablePort(): Promise<number> {
   // Use a simple approach: try to create a server on port 0 to get an available port
   const { createServer } = await import('net');
 

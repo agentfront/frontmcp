@@ -1,7 +1,7 @@
 // auth/session/utils/session-id.utils.ts
 import { randomUUID, createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { TinyTtlCache } from './tiny-ttl-cache';
-import { HttpRequestIntent, SessionIdPayload } from '../../../common';
+import { SessionIdPayload, TransportProtocolType } from '../../../common';
 import { getTokenSignatureFingerprint } from './auth-token.utils';
 
 // 5s TTL cache for decrypted headers
@@ -157,7 +157,7 @@ export function parseSessionHeader(
   // return { header, decoded, headerSse, isNew: true };
 }
 
-export function createSessionId(protocol: HttpRequestIntent, token: string) {
+export function createSessionId(protocol: TransportProtocolType, token: string) {
   const authSig = getTokenSignatureFingerprint(token);
   const payload: SessionIdPayload = {
     nodeId: MACHINE_ID,

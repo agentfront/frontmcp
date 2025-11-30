@@ -13,6 +13,7 @@ export const FrontMcpToolTokens = {
   tags: tokenFactory.meta('tags'),
   annotations: tokenFactory.meta('annotations'),
   hideFromDiscovery: tokenFactory.meta('hideFromDiscovery'),
+  examples: tokenFactory.meta('examples'),
   metadata: tokenFactory.meta('metadata'), // used in tool({}) construction
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
