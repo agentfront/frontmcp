@@ -114,26 +114,26 @@ export interface AgentScriptOptions {
  * ```javascript
  * // Get active admin users
  * const users = await callTool('users:list', {
- *   limit: 100,
- *   filter: { role: 'admin', active: true }
+ * limit: 100,
+ * filter: { role: 'admin', active: true }
  * });
  *
  * // Get unpaid invoices for each admin
  * const results = [];
  * for (const user of users.items) {
- *   const invoices = await callTool('billing:listInvoices', {
- *     userId: user.id,
- *     status: 'unpaid'
- *   });
+ * const invoices = await callTool('billing:listInvoices', {
+ * userId: user.id,
+ * status: 'unpaid'
+ * });
  *
- *   if (invoices.items.length > 0) {
- *     results.push({
- *       userId: user.id,
- *       userName: user.name,
- *       unpaidCount: invoices.items.length,
- *       totalAmount: invoices.items.reduce((sum, inv) => sum + inv.amount, 0)
- *     });
- *   }
+ * if (invoices.items.length > 0) {
+ * results.push({
+ * userId: user.id,
+ * userName: user.name,
+ * unpaidCount: invoices.items.length,
+ * totalAmount: invoices.items.reduce((sum, inv) => sum + inv.amount, 0)
+ * });
+ * }
  * }
  *
  * return results;
@@ -141,21 +141,21 @@ export interface AgentScriptOptions {
  *
  * **Security Model:**
  * 1. **Static Validation** (this preset):
- *    - Block dangerous globals (process, require, eval, etc.)
- *    - Block user-defined functions (no recursion)
- *    - Block unknown identifiers (whitelist-only)
- *    - Block reserved prefixes (__ag_, __safe_)
- *    - Allow only safe constructs
+ * - Block dangerous globals (process, require, eval, etc.)
+ * - Block user-defined functions (no recursion)
+ * - Block unknown identifiers (whitelist-only)
+ * - Block reserved prefixes (__ag_, __safe_)
+ * - Allow only safe constructs
  *
  * 2. **Transformation** (separate step):
- *    - Wrap code in `async function __ag_main() {}`
- *    - Transform `callTool` → `__safe_callTool`
- *    - Transform loops → `__safe_for`/`__safe_forOf`
+ * - Wrap code in `async function __ag_main() {}`
+ * - Transform `callTool` → `__safe_callTool`
+ * - Transform loops → `__safe_for`/`__safe_forOf`
  *
  * 3. **Runtime** (Enclave):
- *    - Execute in isolated sandbox (vm2/nodevm/wasm)
- *    - Provide only `__safe_*` globals
- *    - Enforce timeouts and resource limits
+ * - Execute in isolated sandbox (vm2/nodevm/wasm)
+ * - Provide only `__safe_*` globals
+ * - Enforce timeouts and resource limits
  *
  * @param options Configuration options for the preset
  * @returns Array of configured validation rules
@@ -169,9 +169,9 @@ export interface AgentScriptOptions {
  *
  * // Custom configuration
  * const rules = createAgentScriptPreset({
- *   allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON'],
- *   allowArrowFunctions: true,
- *   allowedLoops: { allowFor: true, allowForOf: true },
+ * allowedGlobals: ['callTool', 'getTool', 'Math', 'JSON'],
+ * allowArrowFunctions: true,
+ * allowedLoops: { allowFor: true, allowForOf: true },
  * });
  * ```
  */
@@ -211,7 +211,10 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
   rules.push(
     new UnknownGlobalRule({
       allowedGlobals,
-      allowStandardGlobals: true, // Allow NaN, Infinity, isNaN, etc.
+      // FIX: Changed to false.
+      // Setting this to true allowed RegExp, Promise, Symbol, etc. to bypass security.
+      // We must explicitly whitelist what we want.
+      allowStandardGlobals: false,
     }),
   );
 
@@ -249,6 +252,18 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'Function',
     'AsyncFunction',
     'GeneratorFunction',
+
+    // Block Arguments object (scope leakage)
+    'arguments',
+
+    // Block RegExp constructor (ReDoS bypass via new RegExp)
+    'RegExp',
+
+    // Block Promise (Async flooding/Task manipulation)
+    'Promise',
+
+    // Block Symbol (Iterator modification / Prototype poisoning)
+    'Symbol',
 
     // Prototype manipulation
     'constructor',
@@ -300,6 +315,10 @@ export function createAgentScriptPreset(options: AgentScriptOptions = {}): Valid
     'WeakSet',
     'WeakRef',
     'FinalizationRegistry',
+
+    // Memory Hazards
+    'Map',
+    'Set',
 
     // Additional dangerous globals
     'Atomics',
