@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-28" tags={["Releases"]}>
+<Update label="draft" description="2025-12-01" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -14,6 +14,8 @@ mode: 'center'
     **Breaking changes**
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
+
+    🧱 **Zod 4 + MCP 1.23** – The SDK, adapters, and plugins now target Zod v4 plus the MCP 1.23 server spec, so upgrade any custom schemas or middleware before pulling the new packages.
 
     **Features**
 
@@ -45,6 +47,16 @@ mode: 'center'
 
     🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
 
+    🧭 **Synonym-aware search** – CodeCall's TF-IDF strategy now expands queries with built-in and custom synonyms so terms like 'add', 'create', and 'insert' return the same tools without switching to embeddings.
+
+    📎 **Tool usage examples** – Add the new `examples` metadata to any `@Tool` and CodeCall plus the SDK surface copy-ready snippets through `codecall:describe` and discovery endpoints.
+
+    🗂️ **Resource subscriptions** – Servers can emit `notifications/resources/updated` and `list_changed`, letting clients subscribe via `resources/subscribe` instead of polling.
+
+    🧩 **Orchestrated demo apps** – `demo-orchestrated-auth` now bundles Notes and Tasks sample apps (tools, resources, prompts) so you can rehearse consent scopes against realistic workloads.
+
+    🖼️ **UI resource widgets** – `@frontmcp/ui/widgets` adds resource cards, lists, and preview helpers for code snippets or images, so consent screens and dashboards look native without bespoke HTML.
+
     **Fixes**
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
@@ -55,17 +67,19 @@ mode: 'center'
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
-    🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
+    🎨 **Platform-aware UI guide** – `/docs/guides/ui-library` now covers theming, HTMX, script caching, plus the new resource, list, and preview widgets so you can ship OpenAI App SDK surfaces without a SPA.
 
-    🛰️ **Discovery reference** – Added `/docs/servers/discovery` to explain `prompts/list`, `prompts/get`, and `resources/templates/list` responses plus the new `list_changed` notifications.
+    🛰️ **Discovery reference** – `/docs/servers/discovery` now covers `prompts/*`, `resources/templates/list`, and the new subscribe/`list_changed` notifications so dashboards stay current automatically.
 
     📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
 
     🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
 
-    🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
+    🧭 **CodeCall search docs** – `/docs/plugins/codecall/{configuration,api-reference,scaling}` adopt the `'ml'` strategy name and document the TF-IDF synonym expansion controls introduced this cycle.
 
-    🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
+    🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, CodeCall search defaults, and how to seed the new tool examples metadata for better discovery.
+
+    🔑 **Auth demo guide** – `/docs/authentication/demo-servers` now highlights every Nx sample, required env vars, and the Notes/Tasks apps that ship with the orchestrated demo so you can script progressive consent end-to-end.
 
     🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
 
