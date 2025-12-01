@@ -31,7 +31,7 @@ export default {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html', 'node'],
-  transformIgnorePatterns: ['node_modules/(?!(isolated-vm|jose)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(isolated-vm|jose|enclave-vm|ast-guard)/)'],
   moduleNameMapper: {
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
   },
