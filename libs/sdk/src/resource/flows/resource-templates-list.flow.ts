@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/flows/resource-templates-list.flow.ts
 
-import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
+import { Flow, FlowBase, FlowControl, FlowHooksOf, FlowPlan, FlowRunOptions, ResourceEntry } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
 import {
@@ -189,6 +189,7 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
       this.logger.info('parseTemplates: response sent');
       this.logger.verbose('parseTemplates:done');
     } catch (error) {
+      if (error instanceof FlowControl) throw error;
       this.logger.error('parseTemplates: failed to parse templates', error);
       throw error;
     }

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { RawZodShape } from '../common.types';
-import { HttpRequestIntent } from '../../utils';
+
+/**
+ * Transport protocol types (excludes non-transport intents like 'delete-session')
+ */
+export type TransportProtocolType = 'legacy-sse' | 'sse' | 'streamable-http' | 'stateful-http' | 'stateless-http';
 
 /**
  * Decoded JWT payload (if any) or empty object
@@ -44,7 +48,7 @@ export type SessionIdPayload = {
   /* The timestamp of the session creation */
   iat: number;
   /* The protocol used in existing transport - optional for stateless mode */
-  protocol?: HttpRequestIntent;
+  protocol?: TransportProtocolType;
   /* True if session was created in public mode (anonymous access) */
   isPublic?: boolean;
 };

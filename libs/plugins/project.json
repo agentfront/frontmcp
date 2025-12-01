@@ -4,7 +4,6 @@
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
-  "implicitDependencies": ["enclave"],
   "targets": {
     "build-tsc": {
       "executor": "@nx/js:tsc",

@@ -18,6 +18,26 @@ declare global {
   interface ExtendFrontMcpToolMetadata {}
 }
 
+/**
+ * Example input/output pair for a tool, used in documentation and describe output.
+ */
+export interface ToolExample {
+  /**
+   * Description of what this example demonstrates.
+   */
+  description: string;
+
+  /**
+   * Example input values for the tool.
+   */
+  input: Record<string, unknown>;
+
+  /**
+   * Optional expected output for the example.
+   */
+  output?: unknown;
+}
+
 export interface ToolAnnotations {
   [x: string]: unknown;
 
@@ -116,10 +136,10 @@ export type ResourceLinkOutput = z.output<typeof ResourceLinkOutputSchema>;
  */
 type StructuredOutputType =
   | z.ZodRawShape
-  | z.ZodObject
+  | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
-  | z.ZodUnion<[z.ZodObject, ...z.ZodObject[]]>
-  | z.ZodDiscriminatedUnion<z.ZodObject[]>;
+  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<z.ZodObject<any>[]>;
 
 export type ToolSingleOutputType =
   | PrimitiveOutputType
@@ -186,6 +206,13 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * Default: false
    */
   hideFromDiscovery?: boolean;
+
+  /**
+   * Optional usage examples for the tool.
+   * These are used by codecall:describe to provide accurate usage examples.
+   * If provided, these take precedence over auto-generated examples.
+   */
+  examples?: ToolExample[];
 }
 
 /**
@@ -210,6 +237,12 @@ const toolSingleOutputSchema = z.union([outputLiteralSchema, zodSchemaInstanceSc
 
 // ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[]
 const toolOutputSchema = z.union([toolSingleOutputSchema, z.array(toolSingleOutputSchema)]);
+const toolExampleSchema = z.object({
+  description: z.string(),
+  input: z.record(z.string(), z.unknown()),
+  output: z.unknown().optional(),
+});
+
 export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),
@@ -221,5 +254,6 @@ export const frontMcpToolMetadataSchema = z
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
+    examples: z.array(toolExampleSchema).optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

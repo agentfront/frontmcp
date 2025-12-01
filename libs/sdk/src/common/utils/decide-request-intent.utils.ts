@@ -9,6 +9,7 @@ export const intentSchema = z.union([
   z.literal('streamable-http'),
   z.literal('stateful-http'),
   z.literal('stateless-http'),
+  z.literal('delete-session'),
   z.literal('unknown'),
 ]);
 
@@ -31,7 +32,13 @@ export const decisionSchema = z.object({
     .optional(),
 });
 
-export type HttpRequestIntent = 'legacy-sse' | 'sse' | 'streamable-http' | 'stateful-http' | 'stateless-http';
+export type HttpRequestIntent =
+  | 'legacy-sse'
+  | 'sse'
+  | 'streamable-http'
+  | 'stateful-http'
+  | 'stateless-http'
+  | 'delete-session';
 
 export type Intent = HttpRequestIntent | 'unknown';
 
@@ -78,12 +85,13 @@ bit 10     LEGACY_EN                   (config: enableLegacySSE)
 // --- Channels ---------------------------------------------------------------
 
 const CH_OTHER = 0b000;
-const CH_GET_SSE = 0b001;
+const CH_GET_SSE = 0b001; // GET / + SSE (not handled, forward to next middleware)
 const CH_POST_INIT_JSON = 0b010;
 const CH_POST_INIT_SSE = 0b011;
 const CH_POST_JSON = 0b100;
 const CH_POST_SSE = 0b101;
-const CH_POST_MESSAGE = 0b110; // NEW: POST /message (legacy bridge)
+const CH_POST_MESSAGE = 0b110; // POST /message (legacy bridge)
+const CH_GET_SSE_PATH = 0b111; // GET /sse path (legacy SSE initialize)
 
 const CH_MASK = 0b00000111;
 
@@ -119,6 +127,11 @@ function pathOf(req: ServerRequest): string {
   }
 }
 
+// Check if path is the legacy SSE path (/sse)
+function isLegacySsePath(path: string): boolean {
+  return path === '/sse' || path.endsWith('/sse');
+}
+
 /** Optionally extract transportType from base64 JSON session id, if you embed it. */
 function tryDecodeTransportType(sessionId?: string): string | undefined {
   if (!sessionId) return;
@@ -144,13 +157,16 @@ function computeBitmap(req: ServerRequest, cfg: Config) {
   const acceptSSE = wantsSSE(accept);
   const acceptJSON = wantsJSON(accept) || (!accept && cfg.tolerateMissingAccept);
   const init = method === 'POST' && isInitialize(req.body);
-  const postToMessage = method === 'POST' && path === '/message';
+  const postToMessage = method === 'POST' && (path === '/message' || path.endsWith('/message'));
+  const getToSsePath = method === 'GET' && isLegacySsePath(path);
 
   const channel =
     method === 'POST' && postToMessage
       ? CH_POST_MESSAGE
+      : getToSsePath && acceptSSE
+      ? CH_GET_SSE_PATH // GET /sse → legacy SSE channel
       : method === 'GET' && acceptSSE
-      ? CH_GET_SSE
+      ? CH_GET_SSE // GET / + SSE → forward to next middleware (unknown)
       : method === 'POST' && init && acceptSSE
       ? CH_POST_INIT_SSE
       : method === 'POST' && init && acceptJSON
@@ -185,19 +201,46 @@ type Rule = {
 // --- Rules (merged semantics) -----------------------------------------------
 
 const RULES: Rule[] = [
-  // A) Legacy SSE (GET SSE without session) → requires legacy enabled
+  // A) Legacy SSE via GET /sse path (without session) → requires legacy enabled
   {
     care: CH_MASK | B_HAS_SESSION | B_LEGACY_EN,
-    match: CH_GET_SSE | B_LEGACY_EN, // HAS_SESSION must be 0; it's in 'care' but not in 'match'
-    outcome: { intent: 'legacy-sse', reason: 'GET SSE without Mcp-Session-Id → legacy SSE.' },
+    match: CH_GET_SSE_PATH | B_LEGACY_EN, // HAS_SESSION must be 0; it's in 'care' but not in 'match'
+    outcome: { intent: 'legacy-sse', reason: 'GET /sse without Mcp-Session-Id → legacy SSE.' },
   },
   {
     care: CH_MASK | B_HAS_SESSION | B_LEGACY_EN,
-    match: CH_GET_SSE /* legacy disabled; HAS_SESSION=0 */,
+    match: CH_GET_SSE_PATH /* legacy disabled; HAS_SESSION=0 */,
     outcome: {
       intent: 'unknown',
       reason: 'Legacy SSE disabled.',
       recommendation: { httpStatus: 405, message: 'Legacy SSE disabled' },
+    },
+  },
+
+  // A2) GET / + SSE (not /sse path) with session ID → SSE listener for streamable-http
+  // Per MCP 2025-11-25 spec, clients can open SSE stream via GET with session ID
+  {
+    care: CH_MASK | B_HAS_SESSION | B_SSE_LISTENER_EN | B_STREAMABLE_EN,
+    match: CH_GET_SSE | B_HAS_SESSION | B_SSE_LISTENER_EN | B_STREAMABLE_EN,
+    outcome: { intent: 'streamable-http', reason: 'GET / with session ID → SSE listener for streamable-http.' },
+  },
+  // A2b) GET / + SSE with session but listener/streamable disabled
+  {
+    care: CH_MASK | B_HAS_SESSION | B_SSE_LISTENER_EN,
+    match: CH_GET_SSE | B_HAS_SESSION /* listener disabled */,
+    outcome: {
+      intent: 'unknown',
+      reason: 'SSE listener disabled for GET / requests.',
+      recommendation: { httpStatus: 405, message: 'SSE listener disabled' },
+    },
+  },
+  // A2c) GET / + SSE without session → forward to next middleware
+  {
+    care: CH_MASK | B_HAS_SESSION,
+    match: CH_GET_SSE /* no session */,
+    outcome: {
+      intent: 'unknown',
+      reason: 'GET / with SSE requires session for MCP transport.',
     },
   },
 
@@ -217,10 +260,10 @@ const RULES: Rule[] = [
     },
   },
 
-  // C) Modern SSE (GET SSE with session) → requires SSE listener enabled
+  // C) Modern SSE (GET /sse with session) → requires SSE listener enabled
   {
     care: CH_MASK | B_SSE_LISTENER_EN | B_HAS_SESSION,
-    match: CH_GET_SSE | B_HAS_SESSION /* listener disabled */,
+    match: CH_GET_SSE_PATH | B_HAS_SESSION /* listener disabled */,
     outcome: {
       intent: 'unknown',
       reason: 'SSE listener disabled.',
@@ -229,8 +272,8 @@ const RULES: Rule[] = [
   },
   {
     care: CH_MASK | B_SSE_LISTENER_EN | B_HAS_SESSION,
-    match: CH_GET_SSE | B_SSE_LISTENER_EN | B_HAS_SESSION,
-    outcome: { intent: 'sse', reason: 'GET SSE with Mcp-Session-Id.' },
+    match: CH_GET_SSE_PATH | B_SSE_LISTENER_EN | B_HAS_SESSION,
+    outcome: { intent: 'sse', reason: 'GET /sse with Mcp-Session-Id.' },
   },
 
   // D) Initialize (POST → SSE)
@@ -353,10 +396,30 @@ const RULES: Rule[] = [
 
 export function decideIntent(req: ServerRequest, cfg: Config): Decision {
   const reasons: string[] = [];
+  const method = req.method.toUpperCase();
+
+  // Handle HTTP DELETE for session termination (MCP 2025-11-25 spec)
+  if (method === 'DELETE') {
+    const sessionId = h(req, 'mcp-session-id');
+    if (!sessionId) {
+      return {
+        intent: 'unknown',
+        reasons: ['DELETE requires Mcp-Session-Id header.'],
+        recommendation: { httpStatus: 400, message: 'Session ID required for DELETE' },
+        debug: { key: 0, channel: 0, flags: 0 },
+      };
+    }
+    return {
+      intent: 'delete-session',
+      reasons: ['DELETE with Mcp-Session-Id → session termination.'],
+      debug: { key: 0, channel: 0, flags: sessionId ? B_HAS_SESSION : 0 },
+    };
+  }
+
   const { key, channel, flags, init } = computeBitmap(req, cfg);
 
   // Optional strict Accept validation for POST (incl. /message)
-  if (req.method.toUpperCase() === 'POST') {
+  if (method === 'POST') {
     const accept = h(req, 'accept');
     const acceptsSSE = wantsSSE(accept);
     const acceptsJSON = wantsJSON(accept) || (!accept && cfg.tolerateMissingAccept);

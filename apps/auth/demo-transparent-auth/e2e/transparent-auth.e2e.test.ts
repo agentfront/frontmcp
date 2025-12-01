@@ -13,9 +13,7 @@
 import { TestServer } from '@frontmcp/testing';
 import { expect } from '@jest/globals';
 
-const PORT = 3104;
 const ENV = {
-  PORT: String(PORT),
   IDP_PROVIDER_URL: 'https://auth.example.com',
   IDP_EXPECTED_AUDIENCE: 'https://api.example.com',
 };
@@ -25,7 +23,6 @@ describe('Transparent Auth Mode E2E', () => {
 
   beforeAll(async () => {
     server = await TestServer.start({
-      port: PORT,
       command: 'npx tsx ./src/main.ts',
       env: ENV,
       startupTimeout: 30000,
@@ -41,7 +38,7 @@ describe('Transparent Auth Mode E2E', () => {
 
   describe('Unauthorized Access', () => {
     it('should return 401 for unauthorized requests', async () => {
-      const response = await fetch(`http://localhost:${PORT}/`, {
+      const response = await fetch(`${server!.info.baseUrl}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,7 +59,7 @@ describe('Transparent Auth Mode E2E', () => {
 
   describe('Protected Resource Metadata', () => {
     it('should expose protected resource metadata endpoint', async () => {
-      const response = await fetch(`http://localhost:${PORT}/.well-known/oauth-protected-resource`, {
+      const response = await fetch(`${server!.info.baseUrl}/.well-known/oauth-protected-resource`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         redirect: 'manual', // Disable automatic redirect following

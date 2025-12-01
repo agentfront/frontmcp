@@ -329,4 +329,10 @@ export const httpRespond = {
   consumed(): z.infer<typeof HttpConsumedSchema> {
     return { kind: 'consumed' };
   },
+  empty(status: 204 | 304 = 204, headers?: Record<string, string>): z.infer<typeof HttpEmptySchema> {
+    return { kind: 'empty', status, headers };
+  },
+  noContent(headers?: Record<string, string>): z.infer<typeof HttpEmptySchema> {
+    return { kind: 'empty', status: 204, headers };
+  },
 };

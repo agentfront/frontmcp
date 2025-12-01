@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from '@frontmcp/enclave';
+import { Enclave, type ExecutionResult, type ToolHandler, type ReferenceSidecarOptions } from 'enclave-vm';
 import type CodeCallConfig from '../providers/code-call.config';
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
@@ -32,7 +32,7 @@ export interface EnclaveExecutionResult {
 }
 
 /**
- * Service for executing AgentScript code using @frontmcp/enclave
+ * Service for executing AgentScript code using enclave-vm
  *
  * This service wraps the Enclave class and provides:
  * - Safe AgentScript execution with AST validation
@@ -69,8 +69,10 @@ export default class EnclaveService {
   private readonly sidecarOptions: CodeCallSidecarOptions;
 
   constructor(config: CodeCallConfig) {
-    this.vmOptions = config.get('resolvedVm');
-    this.sidecarOptions = config.get('sidecar');
+    // Use getAll() to avoid deep type instantiation with DottedPath<T>
+    const all = config.getAll();
+    this.vmOptions = all.resolvedVm;
+    this.sidecarOptions = all.sidecar;
   }
 
   /**

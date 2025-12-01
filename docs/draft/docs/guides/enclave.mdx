@@ -39,20 +39,20 @@ Enclave is available as a separate package:
 
 <CodeGroup>
 ```bash npm
-npm install @frontmcp/enclave
+npm install enclave-vm
 ```
 ```bash pnpm
-pnpm add @frontmcp/enclave
+pnpm add enclave-vm
 ```
 ```bash yarn
-yarn add @frontmcp/enclave
+yarn add enclave-vm
 ```
 </CodeGroup>
 
 ## Quick Start
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 
 // Create an enclave with a tool handler
 const enclave = new Enclave({
@@ -91,7 +91,7 @@ enclave.dispose();
 Enclave provides pre-configured security profiles that balance functionality against risk:
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 
 // Use STRICT for untrusted AI-generated code
 const strictEnclave = new Enclave({ securityLevel: 'STRICT' });
@@ -324,7 +324,7 @@ The Scoring Gate adds semantic security analysis that detects attack patterns be
 - **Sensitive data access** - Passwords, tokens, PII fields
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 
 // Rule-based scorer (~1ms latency, zero dependencies)
 const enclave = new Enclave({
@@ -398,7 +398,7 @@ const enclave = new Enclave({
 For OS-level memory isolation, use the worker threads adapter:
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 
 const enclave = new Enclave({
   adapter: 'worker_threads',
@@ -521,7 +521,7 @@ const result = await enclave.run(code);
 For simple cases, use the convenience function:
 
 ```ts
-import { runAgentScript } from '@frontmcp/enclave';
+import { runAgentScript } from 'enclave-vm';
 
 const result = await runAgentScript(`
   return Math.max(1, 2, 3);
@@ -537,7 +537,7 @@ console.log(result.value); // 3
 Integrate with your existing tool system:
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 import { ToolRegistry } from './tools';
 
 const enclave = new Enclave({
@@ -617,10 +617,10 @@ new Enclave({
   <Card title="CodeCall Plugin" icon="code" href="/docs/plugins/codecall-plugin">
     See Enclave in action with the CodeCall plugin
   </Card>
-  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/enclave">
+  <Card title="Source Code" icon="github" href="https://github.com/agentfront/enclave/tree/main/libs/enclave">
     View the Enclave source code
   </Card>
-  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/frontmcp/blob/main/libs/enclave/SECURITY-AUDIT.md">
+  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/enclave/blob/main/libs/enclave/SECURITY-AUDIT.md">
     Review the security audit documentation
   </Card>
 </CardGroup>

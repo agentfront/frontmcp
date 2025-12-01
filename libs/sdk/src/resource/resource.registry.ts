@@ -32,6 +32,8 @@ import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } 
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
 import ResourceTemplatesListFlow from './flows/resource-templates-list.flow';
+import SubscribeResourceFlow from './flows/subscribe-resource.flow';
+import UnsubscribeResourceFlow from './flows/unsubscribe-resource.flow';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
 export default class ResourceRegistry
@@ -153,7 +155,13 @@ export default class ResourceRegistry
 
     // Register resource flows with the scope
     const scope = this.providers.getActiveScope();
-    await scope.registryFlows(ReadResourceFlow, ResourcesListFlow, ResourceTemplatesListFlow);
+    await scope.registryFlows(
+      ReadResourceFlow,
+      ResourcesListFlow,
+      ResourceTemplatesListFlow,
+      SubscribeResourceFlow,
+      UnsubscribeResourceFlow,
+    );
   }
 
   /* -------------------- Adoption: reference child instances (no cloning) -------------------- */
@@ -500,8 +508,8 @@ export default class ResourceRegistry
     return this.hasAny()
       ? {
           resources: {
-            // Subscription support is deferred to a future implementation
-            subscribe: false,
+            // Subscription support per MCP 2025-11-25 spec
+            subscribe: true,
             // List change notifications are only supported when resources are registered
             listChanged: true,
           },

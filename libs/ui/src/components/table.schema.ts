@@ -53,8 +53,8 @@ export const TableColumnSchema = z
     sortable: z.boolean().optional(),
     /** Current sort direction */
     sortDirection: TableSortDirectionSchema.optional(),
-    /** Custom cell renderer (function - cannot validate, accepts any) */
-    render: z.function({ input: z.tuple([z.any(), z.any(), z.number()]), output: z.string() }).optional(),
+    /** Custom cell renderer (function - cannot validate at runtime) */
+    render: z.any().optional(),
     /** Additional header CSS classes */
     headerClass: z.string().optional(),
     /** Additional cell CSS classes */

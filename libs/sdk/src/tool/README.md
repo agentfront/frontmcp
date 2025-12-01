@@ -35,7 +35,8 @@ The invokeTool function orchestrates the entire lifecycle:
 - tool.record.ts
 
   - ToolRecord interface: canonical in-process representation of a tool.
-  - Includes id, name, description, zod input/output schemas, execute function, hooksByStage, optional tags.
+  - Includes id, name, description, zod input/output schemas, execute function, hooksByStage, optional tags, and optional examples.
+  - The `examples` array provides usage examples for discovery and LLM understanding (description, input, optional output).
 
 - tool.context.ts
 
@@ -103,6 +104,18 @@ export const SumTool: ToolRecord<In, Out> = {
   description: 'Adds a and b',
   inputSchema: Input,
   outputSchema: Output,
+  examples: [
+    {
+      description: 'Add two positive numbers',
+      input: { a: 5, b: 3 },
+      output: { sum: 8 },
+    },
+    {
+      description: 'Add negative numbers',
+      input: { a: -10, b: 7 },
+      output: { sum: -3 },
+    },
+  ],
   hooksByStage: {},
   async execute(input, ctx) {
     // Access providers via ctx.get(Token)

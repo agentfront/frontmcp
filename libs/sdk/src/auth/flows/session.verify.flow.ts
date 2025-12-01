@@ -141,17 +141,14 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Use transport config - handle optional since we removed .default({})
-    const enableStatelessHttp = authOptions.transport?.enableStatelessHttp ?? false;
-
-    // If stateless HTTP is enabled and no session header provided,
-    // don't set a protocol - let decideIntent determine it based on request
+    // For new sessions (no existing session header), don't pre-determine the protocol.
+    // Let the router stage in http.request.flow determine the intent from the request.
+    // This ensures GET /sse correctly routes to legacy-sse instead of defaulting to streamable-http.
     const sessionIdHeader = this.state.sessionIdHeader;
-    const hasSessionHeader = !!sessionIdHeader;
-    const shouldSetProtocol = hasSessionHeader || !enableStatelessHttp;
 
-    // Determine protocol from session header or default to streamable-http
-    const protocol = shouldSetProtocol ? this.state.sessionProtocol ?? 'streamable-http' : undefined;
+    // Only use protocol from session header if one was provided (existing session)
+    // For new sessions, protocol will be set by the transport handler after intent detection
+    const protocol = sessionIdHeader ? this.state.sessionProtocol : undefined;
     const machineId = getMachineId();
 
     // Check if we have an existing public session to reuse (encrypted format with isPublic: true)

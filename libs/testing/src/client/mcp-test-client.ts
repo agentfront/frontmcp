@@ -49,7 +49,7 @@ import { DefaultInterceptorChain, mockResponse } from '../interceptor';
 // ═══════════════════════════════════════════════════════════════════
 
 const DEFAULT_TIMEOUT = 30000;
-const DEFAULT_PROTOCOL_VERSION = '2024-11-05';
+const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
 const DEFAULT_CLIENT_INFO = {
   name: '@frontmcp/testing',
   version: '0.4.0',
@@ -752,7 +752,6 @@ export class McpTestClient {
     return this.request<InitializeResult>('initialize', {
       protocolVersion: this.config.protocolVersion,
       capabilities: {
-        roots: { listChanged: true },
         sampling: {},
       },
       clientInfo: this.config.clientInfo,

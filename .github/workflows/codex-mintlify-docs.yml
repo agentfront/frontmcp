@@ -66,6 +66,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .github/codex/mcp-context
+          CODEX_HOME="${RUNNER_TEMP}/codex-home"
+          mkdir -p "$CODEX_HOME"
 
           echo "Setting up Mintlify MCP context..."
 
@@ -103,8 +105,26 @@ jobs:
           - Include tags for filtering ("latest", "version X.Y")
           GUIDELINES
 
-          echo "✓ MCP context prepared"
+          cat > "$CODEX_HOME/config.toml" << 'EOF'
+          [features]
+          # Enable the Rust MCP client (needed for HTTP/OAuth MCP support)
+          rmcp_client = true
+
+          # --- Mintlify Documentation Server ---
+          # Provides access to Mintlify documentation best practices
+          [mcp_servers.mintlify_docs]
+          type = "http"
+          url = "https://mintlify.com/docs/mcp"
+          http_headers = { "X-MCP-Readonly" = "true" }
+          startup_timeout_sec = 30
+          tool_timeout_sec = 60
+          EOF
+
+          echo "✓ MCP context prepared and Codex home configured"
           echo "mcp_enabled=true" >> "$GITHUB_OUTPUT"
+          echo "codex_home=${CODEX_HOME}" >> "$GITHUB_OUTPUT"
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
 
       - name: Prepare diff context for Codex
         id: ctx
@@ -586,6 +606,7 @@ jobs:
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
+          codex-home: ${{ steps.mcp.outputs.codex_home }}
           prompt-file: .github/codex/prompts/update-docs.md
           output-file: ${{ env.CODEX_OUT }}
           model: "gpt-5.1-codex"

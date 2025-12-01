@@ -5,6 +5,7 @@ export default {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
   testTimeout: 60000,
+  maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],
   transform: {
     '^.+\\.[tj]s$': [

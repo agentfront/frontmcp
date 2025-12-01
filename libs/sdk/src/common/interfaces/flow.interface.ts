@@ -63,7 +63,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   }
 
   respond(output: FlowOutputOf<N>) {
-    throw FlowControl.respond((this.metadata.outputSchema as z.ZodObject).parse(output));
+    throw FlowControl.respond((this.metadata.outputSchema as z.ZodObject<any>).parse(output));
   }
 
   fail(error: Error) {

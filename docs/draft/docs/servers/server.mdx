@@ -43,7 +43,20 @@ Everything else is optional with sensible defaults.
     icons?: Icon[], // MCP Icon[]
   },
   apps: [/* App classes */],
+```
 
+**Info field descriptions:**
+
+| Field        | Description                                    |
+| ------------ | ---------------------------------------------- |
+| `name`       | Server name shown in MCP discovery             |
+| `version`    | Semantic version for clients to track          |
+| `title`      | Optional human-readable title                  |
+| `websiteUrl` | Link to documentation or homepage              |
+| `icons`      | MCP Icon array for visual branding             |
+
+```ts
+@FrontMcp({
   /** Optional */
   serve?: true,                 // default true (auto-boot)
   splitByApp?: false,           // app composition mode
@@ -101,6 +114,12 @@ http: {
 }
 ```
 
+| Field         | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `port`        | HTTP listening port (default: 3001)                        |
+| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery    |
+| `hostFactory` | Custom host implementation for advanced setups             |
+
 - **Port**: listening port for Streamable HTTP.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
 - **hostFactory**: advanced — provide/construct a custom host implementation.
@@ -152,6 +171,11 @@ session: {
 }
 ```
 
+| Field             | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `sessionMode`     | `'stateless'` (JWT) or `'stateful'` (server-side store)      |
+| `transportIdMode` | `'uuid'` (per-node) or `'jwt'` (signed, distributed)         |
+
 - **sessionMode** (default **`'stateless'`**):
 
 - `'stateless'` → session data is carried in a signed/encrypted JWT. Simple, client-portable; no token refresh of nested providers.
@@ -176,6 +200,13 @@ logging: {
   transports?: LogTransportType[]; // custom sinks via @FrontMcpLogTransport
 }
 ```
+
+| Field           | Description                                                    |
+| --------------- | -------------------------------------------------------------- |
+| `level`         | Minimum log level: Debug, Verbose, Info, Warn, Error, Off      |
+| `enableConsole` | Whether to output to stdout (default: true)                    |
+| `prefix`        | Optional prefix for all log messages                           |
+| `transports`    | Custom log transport implementations                           |
 
 Use custom log transports for shipping logs to external systems; console remains on by default.
 
@@ -256,5 +287,25 @@ auth: {
 - **Single app, default everything**: minimal sample above.
 - **Multiple apps, shared auth**: omit `splitByApp`, set server-level `auth`.
 - **Isolated apps with per-app auth**: set `splitByApp: true`, configure `auth` in each app.
+
+---
+
+## Best Practices
+
+**Do:**
+
+- Start with minimal config and add options as needed
+- Use `splitByApp: true` for multi-tenant deployments
+- Configure appropriate session mode for your token refresh needs
+- Set log level to `Info` or higher in production
+
+**Don't:**
+
+- Configure server-level `auth` when using `splitByApp: true`
+- Disable `serve` unless you're managing bootstrap manually
+- Use `stateless` session mode with short-lived upstream tokens
+- Leave `enableConsole: true` in containerized production (use transports)
+
+---
 
 Next up: learn how to structure **Apps**, **Tools**, **Resources**, and **Prompts** in the _Core Components_ section.
