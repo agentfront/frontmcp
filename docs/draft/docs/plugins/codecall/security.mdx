@@ -396,7 +396,7 @@ The Scoring Gate supports pluggable scorers for different deployment scenarios:
 ### Configuration
 
 ```ts
-import { createEnclave } from '@frontmcp/enclave';
+import { createEnclave } from 'enclave-vm';
 
 const enclave = createEnclave({
   scoringGate: {
@@ -515,7 +515,7 @@ Rules are evaluated in a specific order for efficiency:
 #### Extending with Custom Rules
 
 ```ts
-import { RuleBasedScorer, ScoringRule } from '@frontmcp/enclave';
+import { RuleBasedScorer, ScoringRule } from 'enclave-vm';
 
 const customRule: ScoringRule = {
   id: 'CUSTOM_PII_ACCESS',
@@ -645,7 +645,7 @@ CodeCallPlugin.init({
 For environments requiring **OS-level memory isolation**, enable the Worker Pool Adapter:
 
 ```ts
-import { Enclave } from '@frontmcp/enclave';
+import { Enclave } from 'enclave-vm';
 
 const enclave = new Enclave({
   adapter: 'worker_threads',  // Enable Worker Pool
@@ -1244,7 +1244,7 @@ Before deploying CodeCall to production:
   <Card title="Enclave" icon="lock" href="/docs/guides/enclave">
     Runtime sandbox configuration, sidecar storage, and advanced options
   </Card>
-  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/frontmcp/blob/main/libs/ast-guard/docs/SECURITY-AUDIT.md">
+  <Card title="Security Audit" icon="file-shield" href="https://github.com/agentfront/enclave/blob/main/libs/ast-guard/docs/SECURITY-AUDIT.md">
     Full list of 100+ blocked attack vectors including Layer 0 Pre-Scanner
   </Card>
   <Card title="Configuration" icon="gear" href="/docs/plugins/codecall/configuration">

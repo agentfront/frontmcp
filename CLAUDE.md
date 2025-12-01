@@ -18,10 +18,10 @@ Located in `/libs/*`:
 
 Located in `/libs/*`:
 
-- **ast-guard** (`libs/ast-guard`) - JavaScript AST security validation with extensible rules
 - **json-schema-to-zod-v3** (`libs/json-schema-to-zod-v3`) - JSON Schema to Zod converter
 - **mcp-from-openapi** (`libs/mcp-from-openapi`) - Generate MCP servers from OpenAPI specs
-- **vectoriadb** (`libs/vectoriadb`) - Lightweight in-memory vector database
+
+> **Note:** `ast-guard`, `vectoriadb`, and `enclave-vm` have been moved to the [enclave monorepo](https://github.com/agentfront/enclave).
 
 ### Demo Apps
 
@@ -83,23 +83,6 @@ export * from './errors';
 - **Scope**: Extensibility framework
 
 ### Helper/Independent Libraries
-
-#### ast-guard
-
-- **Type**: Helper library (independent, publishable)
-- **Purpose**: Bank-grade JavaScript validation using AST analysis
-- **Security Model**: Four-tier preset system (STRICT > SECURE > STANDARD > PERMISSIVE)
-- **Test Count**: 188 tests with 95.11% coverage
-- **Key Rules**: DisallowedIdentifier, NoEval, NoAsync, CallArgumentValidation, etc.
-- **Documentation**: SECURITY-AUDIT.md documents all 67 blocked attack vectors
-- **Usage**: Can be used by @frontmcp packages or independently
-
-#### vectoriadb
-
-- **Type**: Helper library (independent, publishable)
-- **Purpose**: Lightweight in-memory vector database for embeddings
-- **Use Case**: Semantic search, RAG systems, similarity matching
-- **Usage**: Can be used by @frontmcp packages or independently
 
 #### json-schema-to-zod-v3
 
