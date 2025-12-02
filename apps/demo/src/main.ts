@@ -3,10 +3,11 @@ import ExpenseMcpApp from './apps/expenses';
 import CalculatorMcpApp from './apps/calculator';
 import EmployeeTimeMcpApp from './apps/employee-time';
 import CrmMcpApp from './apps/crm';
+import WeatherMcpApp from './apps/weather';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [CrmMcpApp],
+  apps: [WeatherMcpApp],
   logging: { level: LogLevel.VERBOSE },
   http: {
     port: 3002,

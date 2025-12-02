@@ -8,6 +8,7 @@ import {
   ToolContext,
   ToolEntry,
   isOrchestratedMode,
+  SessionProvider,
 } from '../../common';
 import { z } from 'zod';
 import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -20,6 +21,8 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
 } from '../../errors';
+import { hasUIConfig } from '../ui';
+import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -353,7 +356,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { tool, rawOutput } = this.state;
+    const { tool, rawOutput, input } = this.state;
 
     if (!tool) {
       this.logger.error('finalize: tool not found in state');
@@ -379,8 +382,67 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new InvalidOutputError();
     }
 
+    const result = parseResult.data;
+
+    // If tool has UI config, render and add to _meta
+    if (hasUIConfig(tool.metadata)) {
+      try {
+        // Cast scope to Scope to access toolUI and notifications
+        const scope = this.scope as Scope;
+
+        // Get session info for platform detection
+        let sessionId: string | undefined;
+        let requestId: string | number = crypto.randomUUID();
+        try {
+          const session = this.get(SessionProvider);
+          sessionId = session.sessionId;
+          requestId = session.requestId ?? requestId;
+        } catch {
+          // Session not available, use defaults
+        }
+
+        // Get platform type from notification service
+        const platformType = sessionId ? scope.notifications.getPlatformType(sessionId) : 'openai';
+
+        // Render the UI and get platform-specific metadata
+        const uiResult = scope.toolUI.renderAndRegister({
+          toolName: tool.metadata.name,
+          requestId: String(requestId),
+          input: (input?.arguments ?? {}) as Record<string, unknown>,
+          output: rawOutput,
+          structuredContent: result.structuredContent,
+          uiConfig: tool.metadata.ui,
+          platformType,
+        });
+
+        // Merge UI metadata into result._meta
+        result._meta = {
+          ...result._meta,
+          ...uiResult.meta,
+        };
+
+        // When UI is rendered and we have structuredContent, clear the text content
+        // The widget will display the data, so we don't need JSON text in content[]
+        if (result.structuredContent !== undefined) {
+          result.content = [];
+        }
+
+        this.logger.verbose('finalize: UI metadata added', {
+          tool: tool.metadata.name,
+          uri: uiResult.uri,
+          platform: platformType,
+        });
+      } catch (error) {
+        // UI rendering failure should not fail the tool call
+        this.logger.warn('finalize: UI rendering failed', {
+          tool: tool.metadata.name,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     // Respond with the properly formatted MCP result
-    this.respond(parseResult.data);
+    this.respond(result);
     this.logger.verbose('finalize:done');
   }
 }

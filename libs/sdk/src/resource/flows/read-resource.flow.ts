@@ -11,6 +11,8 @@ import {
   InvalidOutputError,
   ResourceReadError,
 } from '../../errors';
+import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
+import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -35,6 +37,12 @@ const stateSchema = z.object({
   output: outputSchema,
   // Resource owner ID for hook filtering (stored in state instead of mutating rawInput)
   resourceOwnerId: z.string().optional(),
+  // Session ID for platform type detection
+  sessionId: z.string().optional(),
+  // Flag indicating this is a UI resource (ui:// scheme)
+  isUIResource: z.boolean().default(false),
+  // Pre-resolved UI resource result (if isUIResource is true)
+  uiResourceResult: outputSchema.optional(),
 });
 
 const plan = {
@@ -89,7 +97,14 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'resources/read');
     }
 
-    this.state.set({ input: params, authInfo: ctx.authInfo });
+    // Extract sessionId from context for platform type detection
+    const sessionId = (ctx as Record<string, unknown> | undefined)?.['sessionId'];
+
+    this.state.set({
+      input: params,
+      authInfo: ctx.authInfo,
+      sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+    });
     this.logger.verbose('parseInput:done');
   }
 
@@ -99,6 +114,36 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     const { uri } = this.state.required.input;
     this.logger.info(`findResource: looking for resource with URI "${uri}"`);
+
+    // Check for UI resource URIs (ui://...) first
+    if (isUIResourceUri(uri)) {
+      this.logger.info(`findResource: detected UI resource URI "${uri}"`);
+
+      // Get the ToolUIRegistry from the scope
+      const scope = this.scope as Scope;
+
+      // Get platform type from session for dynamic MIME type
+      const { sessionId } = this.state;
+      const platformType = sessionId ? scope.notifications.getPlatformType(sessionId) : undefined;
+
+      this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
+
+      const uiResult = handleUIResourceRead(uri, scope.toolUI, platformType);
+
+      if (uiResult.handled) {
+        if (uiResult.error) {
+          this.logger.warn(`findResource: UI resource error - ${uiResult.error}`);
+          throw new ResourceNotFoundError(uri);
+        }
+
+        // Store the UI resource result and mark as UI resource
+        this.state.set('isUIResource', true);
+        this.state.set('uiResourceResult', uiResult.result);
+        this.logger.info(`findResource: UI resource "${uri}" resolved from cache`);
+        this.logger.verbose('findResource:done');
+        return;
+      }
+    }
 
     // Try to find a resource that matches this URI
     // First try exact URI match, then template matching
@@ -124,6 +169,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   @Stage('createResourceContext')
   async createResourceContext() {
     this.logger.verbose('createResourceContext:start');
+
+    // Skip for UI resources - they're already resolved
+    if (this.state.isUIResource) {
+      this.logger.verbose('createResourceContext: skipping for UI resource');
+      return;
+    }
+
     const { ctx } = this.input;
     const { resource, input, params } = this.state.required;
 
@@ -149,6 +201,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   @Stage('execute')
   async execute() {
     this.logger.verbose('execute:start');
+
+    // Skip for UI resources - they're already resolved
+    if (this.state.isUIResource) {
+      this.logger.verbose('execute: skipping for UI resource');
+      return;
+    }
+
     const resourceContext = this.state.resourceContext;
     const { input, params } = this.state.required;
 
@@ -170,6 +229,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   @Stage('validateOutput')
   async validateOutput() {
     this.logger.verbose('validateOutput:start');
+
+    // Skip for UI resources - they're already resolved
+    if (this.state.isUIResource) {
+      this.logger.verbose('validateOutput: skipping for UI resource');
+      return;
+    }
+
     const { resourceContext } = this.state;
     if (!resourceContext) {
       this.logger.warn('validateOutput: resourceContext not found, skipping validation');
@@ -186,6 +252,21 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
+
+    // Handle UI resources - return the pre-resolved result
+    if (this.state.isUIResource) {
+      const { uiResourceResult, input } = this.state;
+
+      if (!uiResourceResult) {
+        this.logger.error('finalize: UI resource result not found in state');
+        throw new ResourceReadError(input?.uri || 'unknown', new Error('UI resource result not found'));
+      }
+
+      this.respond(uiResourceResult);
+      this.logger.verbose('finalize:done (UI resource)');
+      return;
+    }
+
     const { resource, rawOutput, input } = this.state;
 
     if (!resource) {

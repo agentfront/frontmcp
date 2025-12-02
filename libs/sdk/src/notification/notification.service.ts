@@ -31,6 +31,79 @@ export interface ClientCapabilities {
 }
 
 /**
+ * Client info from the MCP initialize request.
+ * Contains the name and version of the calling client.
+ */
+export interface ClientInfo {
+  /** Client application name (e.g., "claude-desktop", "chatgpt", "cursor") */
+  name: string;
+  /** Client version string */
+  version: string;
+}
+
+/**
+ * Known AI platform types that can be detected from client info.
+ */
+export type AIPlatformType =
+  | 'openai' // ChatGPT, OpenAI API clients
+  | 'claude' // Claude Desktop, Claude API clients
+  | 'gemini' // Google Gemini clients
+  | 'cursor' // Cursor IDE
+  | 'continue' // Continue.dev
+  | 'cody' // Sourcegraph Cody
+  | 'generic-mcp' // Generic MCP client
+  | 'unknown'; // Unknown client
+
+/**
+ * Detect the AI platform type from client info.
+ * Used to determine the appropriate response format for tool UI rendering.
+ */
+export function detectAIPlatform(clientInfo?: ClientInfo): AIPlatformType {
+  if (!clientInfo?.name) {
+    return 'unknown';
+  }
+
+  const clientName = clientInfo.name.toLowerCase();
+
+  // OpenAI/ChatGPT clients
+  if (clientName.includes('chatgpt') || clientName.includes('openai') || clientName.includes('gpt')) {
+    return 'openai';
+  }
+
+  // Claude clients
+  if (clientName.includes('claude') || clientName.includes('anthropic')) {
+    return 'claude';
+  }
+
+  // Google Gemini clients
+  if (clientName.includes('gemini') || clientName.includes('google') || clientName.includes('bard')) {
+    return 'gemini';
+  }
+
+  // Cursor IDE
+  if (clientName.includes('cursor')) {
+    return 'cursor';
+  }
+
+  // Continue.dev
+  if (clientName.includes('continue')) {
+    return 'continue';
+  }
+
+  // Sourcegraph Cody
+  if (clientName.includes('cody') || clientName.includes('sourcegraph')) {
+    return 'cody';
+  }
+
+  // Generic MCP client (fallback for known MCP implementations)
+  if (clientName.includes('mcp')) {
+    return 'generic-mcp';
+  }
+
+  return 'unknown';
+}
+
+/**
  * MCP logging level priority (lower number = more verbose).
  * Uses LoggingLevel from MCP SDK for type safety.
  */
@@ -67,6 +140,10 @@ export interface RegisteredServer {
   registeredAt: number;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
+  /** Client info (name/version) from the initialize request */
+  clientInfo?: ClientInfo;
+  /** Detected AI platform type based on client info */
+  platformType?: AIPlatformType;
   /** Cached roots from the client (invalidated on roots/list_changed) */
   cachedRoots?: Root[];
   /** Timestamp when roots were last fetched */
@@ -542,6 +619,53 @@ export class NotificationService {
    */
   getClientCapabilities(sessionId: string): ClientCapabilities | undefined {
     return this.servers.get(sessionId)?.clientCapabilities;
+  }
+
+  /**
+   * Set client info for a session and auto-detect the AI platform type.
+   * Called during initialization to store who the client is.
+   *
+   * @param sessionId - The session to configure
+   * @param clientInfo - The client's info (name/version) from the initialize request
+   * @returns true if the session was found and info was set
+   */
+  setClientInfo(sessionId: string, clientInfo: ClientInfo): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
+      this.logger.warn(`Cannot set client info for unregistered session: ${sessionId.slice(0, 20)}...`);
+      return false;
+    }
+
+    registered.clientInfo = clientInfo;
+    registered.platformType = detectAIPlatform(clientInfo);
+    this.logger.verbose(
+      `Set client info for session ${sessionId.slice(0, 20)}...: name=${clientInfo.name}, version=${
+        clientInfo.version
+      }, platform=${registered.platformType}`,
+    );
+    return true;
+  }
+
+  /**
+   * Get client info for a session.
+   *
+   * @param sessionId - The session to query
+   * @returns The client's info, or undefined if not set
+   */
+  getClientInfo(sessionId: string): ClientInfo | undefined {
+    return this.servers.get(sessionId)?.clientInfo;
+  }
+
+  /**
+   * Get the detected AI platform type for a session.
+   * This is auto-detected from client info during initialization.
+   *
+   * @param sessionId - The session to query
+   * @returns The detected platform type, or 'unknown' if not detected
+   */
+  getPlatformType(sessionId: string): AIPlatformType {
+    const session = this.servers.get(sessionId);
+    return session?.platformType ?? 'unknown';
   }
 
   /**

@@ -164,10 +164,46 @@ type __ToolSingleOutputType =
 // This is the final constraint for the `outputSchema` option
 type __OutputSchema = __ToolSingleOutputType | __ToolSingleOutputType[];
 
-export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
+import type { ToolUIConfig, TemplateContext, TemplateHelpers } from '../metadata/tool-ui.metadata';
+
+/**
+ * Base tool metadata options without UI field.
+ */
+type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
   I | z.ZodObject<I>, // inputSchema can be a raw shape or ZodObject
   O // outputSchema: any of the allowed forms
 >;
+
+/**
+ * Tool metadata options with properly typed UI template.
+ * The template function receives input/output types inferred from schemas.
+ */
+export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = __ToolMetadataBase<I, O> & {
+  /**
+   * UI template configuration for rendering interactive widgets.
+   */
+  ui?: {
+    /**
+     * Template builder function that receives typed input and output.
+     * @param ctx - Context with input, output, and helper functions
+     * @returns HTML string to render
+     */
+    template: (ctx: {
+      input: z.infer<z.ZodObject<I>>;
+      output: __InferFromSingleSchema<O>;
+      structuredContent?: unknown;
+      helpers: TemplateHelpers;
+    }) => string;
+    /** Content Security Policy for the sandboxed widget */
+    csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+    /** Whether the widget can invoke tools via the MCP bridge */
+    widgetAccessible?: boolean;
+    /** Preferred display mode: 'inline' | 'fullscreen' | 'pip' */
+    displayMode?: 'inline' | 'fullscreen' | 'pip';
+    /** Human-readable description of what the widget does */
+    widgetDescription?: string;
+  };
+};
 
 // ---------- ctor & reflection ----------
 type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);

@@ -10,6 +10,8 @@ import {
   ResourceLinkSchema,
   EmbeddedResourceSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { ToolUIConfig } from './tool-ui.metadata';
+import { ToolInputOf, ToolOutputOf } from '../decorators';
 
 declare global {
   /**
@@ -213,6 +215,8 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * If provided, these take precedence over auto-generated examples.
    */
   examples?: ToolExample[];
+
+  ui?: ToolUIConfig<ToolInputOf<InSchema>, ToolOutputOf<OutSchema>>;
 }
 
 /**
@@ -255,5 +259,6 @@ export const frontMcpToolMetadataSchema = z
     annotations: mcpToolAnnotationsSchema.optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
     examples: z.array(toolExampleSchema).optional(),
+    ui: z.looseObject({}).optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

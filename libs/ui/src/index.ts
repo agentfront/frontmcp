@@ -23,3 +23,9 @@ export * from './pages';
 
 // Widgets (OpenAI App SDK, progress, etc.)
 export * from './widgets';
+
+// MCP Bridge Runtime (Tool UI templates)
+export * from './runtime';
+
+// Tool Template Builder
+export * from './tool-template';

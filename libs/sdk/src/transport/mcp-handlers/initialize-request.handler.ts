@@ -20,16 +20,27 @@ export default function initializeRequestHandler({
     handler: async (request, ctx): Promise<InitializeResult> => {
       guardClientVersion(request.params.protocolVersion);
 
-      // Store client capabilities from the initialize request
+      // Store client capabilities and client info from the initialize request
       // The session ID is available in the auth info from the transport
       const sessionId = ctx.authInfo?.sessionId;
-      if (sessionId && request.params.capabilities) {
-        // Map MCP client capabilities to our ClientCapabilities interface
-        const clientCapabilities: ClientCapabilities = {
-          roots: request.params.capabilities.roots as ClientCapabilities['roots'],
-          sampling: request.params.capabilities.sampling as ClientCapabilities['sampling'],
-        };
-        scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
+      if (sessionId) {
+        // Store client capabilities if provided
+        if (request.params.capabilities) {
+          // Map MCP client capabilities to our ClientCapabilities interface
+          const clientCapabilities: ClientCapabilities = {
+            roots: request.params.capabilities.roots as ClientCapabilities['roots'],
+            sampling: request.params.capabilities.sampling as ClientCapabilities['sampling'],
+          };
+          scope.notifications.setClientCapabilities(sessionId, clientCapabilities);
+        }
+
+        // Store client info (name/version) for platform detection
+        if (request.params.clientInfo) {
+          scope.notifications.setClientInfo(sessionId, {
+            name: request.params.clientInfo.name,
+            version: request.params.clientInfo.version,
+          });
+        }
       }
 
       return {

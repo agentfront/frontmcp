@@ -516,6 +516,43 @@ export default class ResourceRegistry
         }
       : {};
   }
+
+  /**
+   * Dynamically register a resource or resource template at runtime.
+   *
+   * Used for system resources like the ui:// template that should be
+   * registered when tools with UI configs exist.
+   *
+   * @param resourceDef - Resource class, function, or template to register
+   */
+  registerDynamicResource(resourceDef: any): void {
+    const isTemplate = isResourceTemplate(resourceDef);
+    const rec = isTemplate ? normalizeResourceTemplate(resourceDef) : normalizeResource(resourceDef);
+    const token = rec.provide;
+
+    // Skip if already registered
+    if (this.tokens.has(token)) {
+      return;
+    }
+
+    // Add to registry structures
+    this.tokens.add(token);
+    this.defs.set(token, rec);
+    this.graph.set(token, new Set());
+
+    // Create instance
+    const ri = new ResourceInstance(rec, this.providers, this.owner);
+    this.instances.set(token as Token<ResourceInstance>, ri);
+
+    // Add to local rows with lineage
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, ri, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes and emit change event
+    this.reindex();
+    this.bump('reset');
+  }
 }
 
 /* -------------------- lineage utility -------------------- */

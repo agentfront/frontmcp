@@ -29,6 +29,7 @@ import PromptRegistry from '../prompt/prompt.registry';
 import { NotificationService } from '../notification';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
+import { ToolUIRegistry, ToolUIResourceTemplate, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -46,6 +47,7 @@ export class Scope extends ScopeEntry {
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
+  private toolUIRegistry: ToolUIRegistry;
   readonly entryPath: string;
   readonly routeBase: string;
   readonly orchestrated: boolean = false;
@@ -93,8 +95,20 @@ export class Scope extends ScopeEntry {
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
 
+    this.toolUIRegistry = new ToolUIRegistry();
+
     this.scopeResources = new ResourceRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeResources.ready;
+
+    // Register UI resource templates if any tools have UI configs
+    // This enables resource capabilities to be advertised when tools have UI
+    const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
+    if (toolsWithUI.length > 0) {
+      // Register both static widget template (for OpenAI discovery) and dynamic result template
+      this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
+      this.scopeResources.registerDynamicResource(ToolUIResourceTemplate);
+      this.logger.verbose(`Registered UI resource templates for ${toolsWithUI.length} tool(s) with UI configs`);
+    }
 
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     await this.scopePrompts.ready;
@@ -167,6 +181,10 @@ export class Scope extends ScopeEntry {
 
   get tools(): ToolRegistry {
     return this.scopeTools;
+  }
+
+  get toolUI(): ToolUIRegistry {
+    return this.toolUIRegistry;
   }
 
   get resources(): ResourceRegistry {
