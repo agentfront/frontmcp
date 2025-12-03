@@ -28,6 +28,10 @@ export function buildCSPDirectives(csp?: UIContentSecurityPolicy): string[] {
     return [...DEFAULT_CSP_DIRECTIVES];
   }
 
+  // Validate and sanitize domains before use
+  const validResourceDomains = sanitizeCSPDomains(csp.resourceDomains);
+  const validConnectDomains = sanitizeCSPDomains(csp.connectDomains);
+
   const directives: string[] = [
     "default-src 'none'",
     "script-src 'self' 'unsafe-inline'",
@@ -36,29 +40,29 @@ export function buildCSPDirectives(csp?: UIContentSecurityPolicy): string[] {
 
   // Image sources
   const imgSources = ["'self'", 'data:'];
-  if (csp.resourceDomains?.length) {
-    imgSources.push(...csp.resourceDomains);
+  if (validResourceDomains.length) {
+    imgSources.push(...validResourceDomains);
   }
   directives.push(`img-src ${imgSources.join(' ')}`);
 
   // Font sources
   const fontSources = ["'self'", 'data:'];
-  if (csp.resourceDomains?.length) {
-    fontSources.push(...csp.resourceDomains);
+  if (validResourceDomains.length) {
+    fontSources.push(...validResourceDomains);
   }
   directives.push(`font-src ${fontSources.join(' ')}`);
 
   // Connect sources (for fetch/XHR/WebSocket)
-  if (csp.connectDomains?.length) {
-    directives.push(`connect-src ${csp.connectDomains.join(' ')}`);
+  if (validConnectDomains.length) {
+    directives.push(`connect-src ${validConnectDomains.join(' ')}`);
   } else {
     directives.push("connect-src 'none'");
   }
 
   // Script sources (add resource domains if specified)
-  if (csp.resourceDomains?.length) {
-    directives[1] = `script-src 'self' 'unsafe-inline' ${csp.resourceDomains.join(' ')}`;
-    directives[2] = `style-src 'self' 'unsafe-inline' ${csp.resourceDomains.join(' ')}`;
+  if (validResourceDomains.length) {
+    directives[1] = `script-src 'self' 'unsafe-inline' ${validResourceDomains.join(' ')}`;
+    directives[2] = `style-src 'self' 'unsafe-inline' ${validResourceDomains.join(' ')}`;
   }
 
   return directives;
@@ -118,10 +122,11 @@ function escapeAttribute(str: string): string {
  * Domains should be valid URLs or wildcard patterns
  */
 export function validateCSPDomain(domain: string): boolean {
-  // Allow wildcard subdomains
+  // Allow wildcard subdomains (e.g., https://*.example.com, https://*.x.io)
   if (domain.startsWith('https://*.')) {
     const rest = domain.slice(10);
-    return /^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$/.test(rest);
+    // Allow single-char segments and multi-level domains
+    return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/.test(rest);
   }
 
   // Standard HTTPS URL

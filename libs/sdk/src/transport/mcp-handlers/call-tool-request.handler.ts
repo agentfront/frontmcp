@@ -1,4 +1,9 @@
-import { CallToolRequest, CallToolRequestSchema, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequest,
+  CallToolRequestSchema,
+  CallToolResult,
+  CallToolResultSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { formatMcpErrorResponse, InternalMcpError } from '../../errors';
 import { FlowControl } from '../../common';
@@ -20,15 +25,14 @@ export default function callToolRequestHandler({
         // FlowControl is a control flow mechanism, not an error - handle silently
         if (e instanceof FlowControl) {
           if (e.type === 'respond') {
-            // Validate output before casting
-            if (e.output && typeof e.output === 'object' && 'content' in e.output) {
-              return e.output as CallToolResult;
+            // Validate output using MCP schema
+            const parseResult = CallToolResultSchema.safeParse(e.output);
+            if (parseResult.success) {
+              return parseResult.data;
             }
             logger.error('FlowControl.respond has invalid output', {
               tool: toolName,
-              outputType: typeof e.output,
-              hasOutput: !!e.output,
-              outputKeys: e.output && typeof e.output === 'object' ? Object.keys(e.output) : [],
+              validationErrors: parseResult.error.issues,
             });
             return formatMcpErrorResponse(new InternalMcpError('FlowControl output is not a valid CallToolResult'));
           }

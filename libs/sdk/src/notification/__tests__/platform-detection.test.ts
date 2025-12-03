@@ -46,9 +46,11 @@ describe('detectAIPlatform', () => {
       { name: 'Gemini', expected: 'gemini' },
       { name: 'gemini-client', expected: 'gemini' },
       { name: 'Google AI', expected: 'gemini' },
-      { name: 'google-mcp', expected: 'gemini' },
+      { name: 'google-ai-client', expected: 'gemini' },
       { name: 'Bard', expected: 'gemini' },
       { name: 'bard-agent', expected: 'gemini' },
+      // Note: "google-mcp" is detected as 'generic-mcp' to avoid false positives
+      // like "google-drive-connector" being detected as gemini
     ];
 
     test.each(testCases)('should detect "$name" as gemini', ({ name, expected }) => {

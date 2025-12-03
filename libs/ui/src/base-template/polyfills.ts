@@ -85,7 +85,6 @@ export function renderMcpSessionPolyfill(mcpSession?: McpSession): string {
    * Enhanced callTool that uses HTTP fallback when MCP bridge is unavailable.
    * This wraps window.mcpBridge.callTool with HTTP fallback support.
    */
-  var originalCallTool = window.__frontmcp.callTool;
   window.__frontmcp.callTool = async function(toolName, args) {
     // If MCP bridge has callTool, use it
     if (window.mcpBridge && typeof window.mcpBridge.callTool === 'function') {
@@ -119,6 +118,10 @@ export function renderMcpSessionPolyfill(mcpSession?: McpSession): string {
         id: Date.now()
       })
     });
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+    }
 
     var result = await response.json();
     if (result.error) {
@@ -157,6 +160,10 @@ function escapeJs(str: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")
     .replace(/"/g, '\\"')
+    .replace(/`/g, '\\`')
     .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r');
+    .replace(/\r/g, '\\r')
+    .replace(/<\/script/gi, '<\\/script')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }

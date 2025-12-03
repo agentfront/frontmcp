@@ -122,7 +122,7 @@ export default class GetWeatherTool extends ToolContext<typeof inputSchema, type
     };
 
     const units = input.units || 'celsius';
-    let temperature = weatherData.temperature!;
+    let temperature = weatherData.temperature ?? 20;
 
     // Convert to Fahrenheit if requested
     if (units === 'fahrenheit') {
@@ -133,10 +133,10 @@ export default class GetWeatherTool extends ToolContext<typeof inputSchema, type
       location: input.location,
       temperature,
       units,
-      conditions: weatherData.conditions!,
-      humidity: weatherData.humidity!,
-      windSpeed: weatherData.windSpeed!,
-      icon: weatherData.icon!,
+      conditions: weatherData.conditions ?? 'partly cloudy',
+      humidity: weatherData.humidity ?? 50,
+      windSpeed: weatherData.windSpeed ?? 10,
+      icon: weatherData.icon ?? 'cloudy',
     };
   }
 }

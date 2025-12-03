@@ -525,7 +525,7 @@ export default class ResourceRegistry
    *
    * @param resourceDef - Resource class, function, or template to register
    */
-  registerDynamicResource(resourceDef: any): void {
+  registerDynamicResource(resourceDef: ResourceType): void {
     const isTemplate = isResourceTemplate(resourceDef);
     const rec = isTemplate ? normalizeResourceTemplate(resourceDef) : normalizeResource(resourceDef);
     const token = rec.provide;
@@ -538,7 +538,16 @@ export default class ResourceRegistry
     // Add to registry structures
     this.tokens.add(token);
     this.defs.set(token, rec);
-    this.graph.set(token, new Set());
+
+    // Build dependency graph (same pattern as buildGraph)
+    const deps = resourceDiscoveryDeps(rec);
+    const depSet = new Set<Token>();
+    for (const d of deps) {
+      // Validate against hierarchical providers; throws early if missing
+      this.providers.get(d);
+      depSet.add(d);
+    }
+    this.graph.set(token, depSet);
 
     // Create instance
     const ri = new ResourceInstance(rec, this.providers, this.owner);

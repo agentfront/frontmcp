@@ -19,6 +19,7 @@
  */
 
 import { resourceTemplate } from '../../common/decorators/resource.decorator';
+import { escapeHtml } from './template-helpers';
 
 /**
  * Static Widget Resource Template for OpenAI discovery.
@@ -45,7 +46,7 @@ export const StaticWidgetResourceTemplate = resourceTemplate({
 <html>
 <head><title>Widget Placeholder</title></head>
 <body>
-  <p>Widget for tool: ${params['toolName'] || 'unknown'}</p>
+  <p>Widget for tool: ${escapeHtml(String(params['toolName'] || 'unknown'))}</p>
   <p>This is a placeholder. The actual widget HTML is served from the ToolUIRegistry cache.</p>
 </body>
 </html>`,
@@ -90,9 +91,9 @@ export const ToolUIResourceTemplate = resourceTemplate({
     <h2>UI Resource Handler Error</h2>
     <p>This resource template's execute handler was called directly, which should not happen.</p>
     <p>UI resources should be intercepted by <code>ReadResourceFlow</code> and served from <code>ToolUIRegistry</code> cache.</p>
-    <p><strong>URI:</strong> <code>${uri}</code></p>
-    <p><strong>Tool:</strong> <code>${params['toolName'] || 'unknown'}</code></p>
-    <p><strong>Request ID:</strong> <code>${params['requestId'] || 'unknown'}</code></p>
+    <p><strong>URI:</strong> <code>${escapeHtml(String(uri))}</code></p>
+    <p><strong>Tool:</strong> <code>${escapeHtml(String(params['toolName'] || 'unknown'))}</code></p>
+    <p><strong>Request ID:</strong> <code>${escapeHtml(String(params['requestId'] || 'unknown'))}</code></p>
   </div>
 </body>
 </html>`,

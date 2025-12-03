@@ -1,4 +1,5 @@
 // tools/flows/call-tool.flow.ts
+import { randomUUID } from 'crypto';
 import {
   Flow,
   FlowBase,
@@ -392,7 +393,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // Get session info for platform detection from authInfo (already in state from parseInput)
         const { authInfo } = this.state;
         const sessionId = authInfo?.sessionId;
-        const requestId: string | number = crypto.randomUUID();
+        const requestId: string = randomUUID();
 
         // Get platform type: first check sessionIdPayload (detected from user-agent),
         // then fall back to notification service (detected from MCP clientInfo),

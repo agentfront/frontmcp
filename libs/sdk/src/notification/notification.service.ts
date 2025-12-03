@@ -63,7 +63,7 @@ function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry
 
   for (const mapping of mappings) {
     if (typeof mapping.pattern === 'string') {
-      // Exact string match (case-insensitive)
+      // Substring match (case-insensitive)
       if (lowerClientName.includes(mapping.pattern.toLowerCase())) {
         return mapping.platform;
       }
@@ -97,8 +97,13 @@ function defaultPlatformDetection(identifier: string): AIPlatformType {
     return 'claude';
   }
 
-  // Google Gemini clients
-  if (lowerIdentifier.includes('gemini') || lowerIdentifier.includes('google') || lowerIdentifier.includes('bard')) {
+  // Google Gemini clients (use specific patterns to prevent false positives like "google-drive-connector")
+  if (
+    lowerIdentifier.includes('gemini') ||
+    lowerIdentifier.includes('bard') ||
+    lowerIdentifier.includes('google-ai') ||
+    lowerIdentifier.includes('google ai')
+  ) {
     return 'gemini';
   }
 

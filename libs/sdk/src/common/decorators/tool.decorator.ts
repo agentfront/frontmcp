@@ -164,7 +164,7 @@ type __ToolSingleOutputType =
 // This is the final constraint for the `outputSchema` option
 type __OutputSchema = __ToolSingleOutputType | __ToolSingleOutputType[];
 
-import type { ToolUIConfig, TemplateContext, TemplateHelpers } from '../metadata/tool-ui.metadata';
+import type { TemplateHelpers } from '../metadata/tool-ui.metadata';
 
 /**
  * Base tool metadata options without UI field.

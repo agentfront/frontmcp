@@ -205,6 +205,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           // with authentication (public/authorized routes)
           this.logger.verbose(`[${this.requestId}] decision is unknown, continue to next http middleware`);
           this.next();
+          return; // Explicit return for clarity (this.next() throws FlowControl)
         }
 
         // register decision intent to state
@@ -218,6 +219,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           // continue to other middleware
           // without authentication (public routes)
           this.next();
+          return; // Explicit return for clarity (this.next() throws FlowControl)
         }
 
         this.logger.warn(`[${this.requestId}] decision is ${decision.intent}, but not authorized, respond with 401`);

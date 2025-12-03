@@ -58,6 +58,9 @@ export const MCP_BRIDGE_RUNTIME = `
     displayMode: 'inline'
   };
 
+  // Trusted origin for postMessage validation (set during ext-apps initialization)
+  var trustedOrigin = null;
+
   // Detect device capabilities
   var detectUserAgent = function() {
     var ua = navigator.userAgent || '';
@@ -349,6 +352,10 @@ export const MCP_BRIDGE_RUNTIME = `
         if (result && result.hostContext) {
           hostContext = Object.assign(hostContext, result.hostContext);
         }
+        // Store trusted origin for message validation
+        if (result && result.trustedOrigin) {
+          trustedOrigin = result.trustedOrigin;
+        }
         // Send initialized notification
         window.parent.postMessage({
           jsonrpc: '2.0',
@@ -363,6 +370,12 @@ export const MCP_BRIDGE_RUNTIME = `
   // ==================== Event Handling ====================
 
   window.addEventListener('message', function(event) {
+    // Validate origin for ext-apps environment to prevent spoofed messages
+    if (isExtApps && trustedOrigin && event.origin !== trustedOrigin) {
+      console.warn('MCP Bridge: Ignoring message from untrusted origin:', event.origin);
+      return;
+    }
+
     var data = event.data;
     if (!data || data.jsonrpc !== '2.0') return;
 

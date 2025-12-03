@@ -312,15 +312,24 @@ export function createSanitizer(
  * Does not modify the input.
  *
  * @param input - The input to check
+ * @param options - Optional configuration
+ * @param options.maxDepth - Maximum recursion depth (default: 10)
  * @returns Object with boolean `hasPII` and `fields` array of field paths
  */
-export function detectPII(input: Record<string, unknown>): {
+export function detectPII(
+  input: Record<string, unknown>,
+  options?: { maxDepth?: number },
+): {
   hasPII: boolean;
   fields: string[];
 } {
+  const maxDepth = options?.maxDepth ?? 10;
   const fields: string[] = [];
 
-  const check = (value: unknown, path: string[]): void => {
+  const check = (value: unknown, path: string[], depth: number): void => {
+    // Prevent stack overflow on deeply nested structures
+    if (depth > maxDepth) return;
+
     if (value === null || value === undefined) return;
 
     if (typeof value === 'string') {
@@ -331,18 +340,18 @@ export function detectPII(input: Record<string, unknown>): {
     }
 
     if (Array.isArray(value)) {
-      value.forEach((item, index) => check(item, [...path, String(index)]));
+      value.forEach((item, index) => check(item, [...path, String(index)], depth + 1));
       return;
     }
 
     if (typeof value === 'object') {
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        check(v, [...path, k]);
+        check(v, [...path, k], depth + 1);
       }
     }
   };
 
-  check(input, []);
+  check(input, [], 0);
 
   return {
     hasPII: fields.length > 0,

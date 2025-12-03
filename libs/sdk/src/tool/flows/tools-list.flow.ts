@@ -204,7 +204,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         // NOTE: Use static URI (like pizzaz example: ui://widget/tool-name.html), NOT template with {requestId}
         // OpenAI tries to fetch the outputTemplate URI directly at discovery time
         if (hasUIConfig(tool.metadata)) {
-          const uiConfig = tool.metadata.ui!;
+          const uiConfig = tool.metadata.ui;
+          if (!uiConfig) {
+            // This should never happen if hasUIConfig returned true
+            return item;
+          }
           const meta: Record<string, unknown> = {
             'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,
             'openai/resultCanProduceWidget': true,

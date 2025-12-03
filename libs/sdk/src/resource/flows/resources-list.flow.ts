@@ -173,8 +173,11 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)
         .map(({ finalName, resource }) => {
+          // Extract uri with type narrowing (guaranteed by filter above)
+          const uri = resource.uri as string;
+
           const item: ResponseResourceItem = {
-            uri: resource.uri!, // Guaranteed by filter above
+            uri,
             name: finalName,
             title: resource.metadata.title,
             description: resource.metadata.description,
@@ -186,7 +189,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
           // This is CRITICAL for ChatGPT to discover and render widgets
           if (resource.metadata.mimeType === 'text/html+skybridge') {
             item._meta = {
-              'openai/outputTemplate': resource.uri!,
+              'openai/outputTemplate': uri,
               'openai/resultCanProduceWidget': true,
               'openai/widgetAccessible': true,
             };
