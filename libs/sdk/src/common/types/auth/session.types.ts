@@ -7,6 +7,34 @@ import { RawZodShape } from '../common.types';
 export type TransportProtocolType = 'legacy-sse' | 'sse' | 'streamable-http' | 'stateful-http' | 'stateless-http';
 
 /**
+ * Known AI platform types that can be detected from client info.
+ * Used for platform-specific rendering and behavior customization.
+ */
+export type AIPlatformType =
+  | 'openai' // ChatGPT, OpenAI API clients
+  | 'claude' // Claude Desktop, Claude API clients
+  | 'gemini' // Google Gemini clients
+  | 'cursor' // Cursor IDE
+  | 'continue' // Continue.dev
+  | 'cody' // Sourcegraph Cody
+  | 'generic-mcp' // Generic MCP client
+  | 'unknown'; // Unknown client
+
+/**
+ * Zod schema for AIPlatformType validation
+ */
+export const aiPlatformTypeSchema = z.enum([
+  'openai',
+  'claude',
+  'gemini',
+  'cursor',
+  'continue',
+  'cody',
+  'generic-mcp',
+  'unknown',
+]);
+
+/**
  * Decoded JWT payload (if any) or empty object
  */
 export type UserClaim = {
@@ -51,6 +79,8 @@ export type SessionIdPayload = {
   protocol?: TransportProtocolType;
   /* True if session was created in public mode (anonymous access) */
   isPublic?: boolean;
+  /* The detected AI platform type from MCP initialize clientInfo */
+  platformType?: AIPlatformType;
 };
 export const sessionIdPayloadSchema = z.object({
   nodeId: z.string(),
@@ -59,6 +89,7 @@ export const sessionIdPayloadSchema = z.object({
   iat: z.number(),
   protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
   isPublic: z.boolean().optional(),
+  platformType: aiPlatformTypeSchema.optional(),
 } satisfies RawZodShape<SessionIdPayload>);
 
 export interface Authorization {

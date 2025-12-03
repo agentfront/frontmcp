@@ -1,8 +1,10 @@
 // auth/session/utils/session-id.utils.ts
 import { randomUUID, createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
 import { TinyTtlCache } from './tiny-ttl-cache';
-import { SessionIdPayload, TransportProtocolType } from '../../../common';
+import { SessionIdPayload, TransportProtocolType, AIPlatformType } from '../../../common';
 import { getTokenSignatureFingerprint } from './auth-token.utils';
+import { detectPlatformFromUserAgent } from '../../../notification/notification.service';
+import type { PlatformDetectionConfig } from '../../../common/types/options/session.options';
 
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
@@ -157,14 +159,33 @@ export function parseSessionHeader(
   // return { header, decoded, headerSse, isNew: true };
 }
 
-export function createSessionId(protocol: TransportProtocolType, token: string) {
+export interface CreateSessionOptions {
+  /** User-Agent header for pre-initialize platform detection */
+  userAgent?: string;
+  /** Platform detection configuration from scope */
+  platformDetectionConfig?: PlatformDetectionConfig;
+}
+
+export function createSessionId(protocol: TransportProtocolType, token: string, options?: CreateSessionOptions) {
   const authSig = getTokenSignatureFingerprint(token);
+
+  // Detect platform from user-agent if provided (before MCP initialize)
+  let platformType: AIPlatformType | undefined;
+  if (options?.userAgent) {
+    platformType = detectPlatformFromUserAgent(options.userAgent, options.platformDetectionConfig);
+    // Only set if we detected something meaningful
+    if (platformType === 'unknown') {
+      platformType = undefined;
+    }
+  }
+
   const payload: SessionIdPayload = {
     nodeId: MACHINE_ID,
     authSig,
     uuid: randomUUID(),
     iat: nowSec(),
     protocol,
+    platformType,
   };
   const id = encryptJson(payload);
   cache.set(id, payload);

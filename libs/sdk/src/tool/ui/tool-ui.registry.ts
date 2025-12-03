@@ -35,6 +35,8 @@ export interface CachedUI {
   };
   /** Expiration timestamp */
   expiresAt: number;
+  /** Creation timestamp for ordering */
+  createdAt: number;
 }
 
 /**
@@ -141,10 +143,12 @@ export class ToolUIRegistry {
     const uri = this.generateResourceUri(toolName, requestId);
 
     // 3. Cache the rendered HTML
+    const now = Date.now();
     this.cacheEntry(uri, {
       html,
       context: { toolName, input, output, structuredContent },
-      expiresAt: Date.now() + cacheTtl,
+      expiresAt: now + cacheTtl,
+      createdAt: now,
     });
 
     // 4. Build platform-specific metadata
@@ -220,14 +224,14 @@ export class ToolUIRegistry {
   getLatestForTool(toolName: string): CachedUI | undefined {
     const now = Date.now();
     let latestEntry: CachedUI | undefined;
-    let latestExpiry = 0;
+    let latestCreatedAt = 0;
 
     // Find the most recent non-expired entry for this tool
-    for (const [uri, entry] of this.cache) {
+    for (const [, entry] of this.cache) {
       if (entry.context.toolName === toolName && entry.expiresAt > now) {
-        // Keep the entry with the latest expiry (most recently created)
-        if (entry.expiresAt > latestExpiry) {
-          latestExpiry = entry.expiresAt;
+        // Keep the entry with the latest creation time (most recently created)
+        if (entry.createdAt > latestCreatedAt) {
+          latestCreatedAt = entry.createdAt;
           latestEntry = entry;
         }
       }

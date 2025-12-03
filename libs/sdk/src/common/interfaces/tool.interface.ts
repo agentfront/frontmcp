@@ -118,6 +118,13 @@ export abstract class ToolContext<
    * ```
    */
   get platform(): AIPlatformType {
+    // First check sessionIdPayload (detected from user-agent during session creation)
+    const payloadPlatform = this.authInfo.sessionIdPayload?.platformType;
+    if (payloadPlatform && payloadPlatform !== 'unknown') {
+      return payloadPlatform;
+    }
+
+    // Fall back to notification service (detected from MCP clientInfo during initialize)
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       return 'unknown';

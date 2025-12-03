@@ -4,12 +4,19 @@ import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { ListRootsResultSchema, type LoggingLevel, type Root } from '@modelcontextprotocol/sdk/types.js';
 import { FrontMcpLogger } from '../common';
 import type { Scope } from '../scope';
+import type { AIPlatformType } from '../common/types/auth/session.types';
+import type { PlatformDetectionConfig, PlatformMappingEntry } from '../common/types/options/session.options';
 
 /**
  * Re-export Root from MCP SDK for convenience.
  * Per MCP 2025-11-25 specification.
  */
 export type { Root };
+
+/**
+ * Re-export AIPlatformType from session types for backwards compatibility.
+ */
+export type { AIPlatformType } from '../common/types/auth/session.types';
 
 /**
  * Alias for MCP SDK's LoggingLevel for backwards compatibility.
@@ -42,65 +49,136 @@ export interface ClientInfo {
 }
 
 /**
- * Known AI platform types that can be detected from client info.
+ * Match client name against custom mapping patterns.
+ * @param clientName - The client name to match
+ * @param mappings - Array of custom mapping entries
+ * @returns The matched platform type, or undefined if no match
  */
-export type AIPlatformType =
-  | 'openai' // ChatGPT, OpenAI API clients
-  | 'claude' // Claude Desktop, Claude API clients
-  | 'gemini' // Google Gemini clients
-  | 'cursor' // Cursor IDE
-  | 'continue' // Continue.dev
-  | 'cody' // Sourcegraph Cody
-  | 'generic-mcp' // Generic MCP client
-  | 'unknown'; // Unknown client
-
-/**
- * Detect the AI platform type from client info.
- * Used to determine the appropriate response format for tool UI rendering.
- */
-export function detectAIPlatform(clientInfo?: ClientInfo): AIPlatformType {
-  if (!clientInfo?.name) {
-    return 'unknown';
+function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry[]): AIPlatformType | undefined {
+  if (!mappings || mappings.length === 0) {
+    return undefined;
   }
 
-  const clientName = clientInfo.name.toLowerCase();
+  const lowerClientName = clientName.toLowerCase();
 
-  // OpenAI/ChatGPT clients
-  if (clientName.includes('chatgpt') || clientName.includes('openai') || clientName.includes('gpt')) {
+  for (const mapping of mappings) {
+    if (typeof mapping.pattern === 'string') {
+      // Exact string match (case-insensitive)
+      if (lowerClientName.includes(mapping.pattern.toLowerCase())) {
+        return mapping.platform;
+      }
+    } else {
+      // RegExp match
+      if (mapping.pattern.test(clientName)) {
+        return mapping.platform;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Default keyword-based platform detection.
+ * Works with client names, user-agent strings, or any identifier.
+ * @param identifier - The identifier to detect (clientInfo.name, user-agent, etc.)
+ * @returns The detected platform type
+ */
+function defaultPlatformDetection(identifier: string): AIPlatformType {
+  const lowerIdentifier = identifier.toLowerCase();
+
+  // OpenAI/ChatGPT clients (includes user-agent like 'openai-mcp/1.0.0')
+  if (lowerIdentifier.includes('chatgpt') || lowerIdentifier.includes('openai') || lowerIdentifier.includes('gpt')) {
     return 'openai';
   }
 
   // Claude clients
-  if (clientName.includes('claude') || clientName.includes('anthropic')) {
+  if (lowerIdentifier.includes('claude') || lowerIdentifier.includes('anthropic')) {
     return 'claude';
   }
 
   // Google Gemini clients
-  if (clientName.includes('gemini') || clientName.includes('google') || clientName.includes('bard')) {
+  if (lowerIdentifier.includes('gemini') || lowerIdentifier.includes('google') || lowerIdentifier.includes('bard')) {
     return 'gemini';
   }
 
   // Cursor IDE
-  if (clientName.includes('cursor')) {
+  if (lowerIdentifier.includes('cursor')) {
     return 'cursor';
   }
 
   // Continue.dev
-  if (clientName.includes('continue')) {
+  if (lowerIdentifier.includes('continue')) {
     return 'continue';
   }
 
   // Sourcegraph Cody
-  if (clientName.includes('cody') || clientName.includes('sourcegraph')) {
+  if (lowerIdentifier.includes('cody') || lowerIdentifier.includes('sourcegraph')) {
     return 'cody';
   }
 
   // Generic MCP client (fallback for known MCP implementations)
-  if (clientName.includes('mcp')) {
+  if (lowerIdentifier.includes('mcp')) {
     return 'generic-mcp';
   }
 
   return 'unknown';
+}
+
+/**
+ * Detect platform from user-agent header.
+ * Called during session creation before MCP initialize.
+ *
+ * @param userAgent - The User-Agent header value
+ * @param config - Optional platform detection configuration
+ * @returns The detected platform type
+ */
+export function detectPlatformFromUserAgent(userAgent?: string, config?: PlatformDetectionConfig): AIPlatformType {
+  if (!userAgent) {
+    return 'unknown';
+  }
+
+  // Check custom mappings first
+  const customMatch = matchCustomMappings(userAgent, config?.mappings);
+  if (customMatch) {
+    return customMatch;
+  }
+
+  // If customOnly, don't use default detection
+  if (config?.customOnly) {
+    return 'unknown';
+  }
+
+  // Use default detection on user-agent
+  return defaultPlatformDetection(userAgent);
+}
+
+/**
+ * Detect the AI platform type from client info.
+ * Supports custom mappings that are checked before default detection.
+ *
+ * @param clientInfo - Client info from MCP initialize request
+ * @param config - Optional platform detection configuration with custom mappings
+ * @returns The detected platform type
+ */
+export function detectAIPlatform(clientInfo?: ClientInfo, config?: PlatformDetectionConfig): AIPlatformType {
+  if (!clientInfo?.name) {
+    return 'unknown';
+  }
+
+  // First, check custom mappings if provided
+  const customMatch = matchCustomMappings(clientInfo.name, config?.mappings);
+  if (customMatch) {
+    return customMatch;
+  }
+
+  // If customOnly is true, don't fall back to default detection
+  if (config?.customOnly) {
+    return 'unknown';
+  }
+
+  // Fall back to default keyword-based detection
+  return defaultPlatformDetection(clientInfo.name);
 }
 
 /**
@@ -624,26 +702,29 @@ export class NotificationService {
   /**
    * Set client info for a session and auto-detect the AI platform type.
    * Called during initialization to store who the client is.
+   * Uses the scope's platform detection configuration for custom mappings.
    *
    * @param sessionId - The session to configure
    * @param clientInfo - The client's info (name/version) from the initialize request
-   * @returns true if the session was found and info was set
+   * @returns The detected platform type, or undefined if the session was not found
    */
-  setClientInfo(sessionId: string, clientInfo: ClientInfo): boolean {
+  setClientInfo(sessionId: string, clientInfo: ClientInfo): AIPlatformType | undefined {
     const registered = this.servers.get(sessionId);
     if (!registered) {
       this.logger.warn(`Cannot set client info for unregistered session: ${sessionId.slice(0, 20)}...`);
-      return false;
+      return undefined;
     }
 
     registered.clientInfo = clientInfo;
-    registered.platformType = detectAIPlatform(clientInfo);
+    // Use platform detection config from scope if available
+    const platformDetectionConfig = this.scope.metadata?.session?.platformDetection;
+    registered.platformType = detectAIPlatform(clientInfo, platformDetectionConfig);
     this.logger.verbose(
       `Set client info for session ${sessionId.slice(0, 20)}...: name=${clientInfo.name}, version=${
         clientInfo.version
       }, platform=${registered.platformType}`,
     );
-    return true;
+    return registered.platformType;
   }
 
   /**

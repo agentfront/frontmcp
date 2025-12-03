@@ -122,9 +122,12 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       // Get the ToolUIRegistry from the scope
       const scope = this.scope as Scope;
 
-      // Get platform type from session for dynamic MIME type
-      const { sessionId } = this.state;
-      const platformType = sessionId ? scope.notifications.getPlatformType(sessionId) : undefined;
+      // Get platform type: first check sessionIdPayload (detected from user-agent),
+      // then fall back to notification service (detected from MCP clientInfo)
+      const { sessionId, authInfo } = this.state;
+      const platformType =
+        authInfo?.sessionIdPayload?.platformType ??
+        (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined);
 
       this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
 

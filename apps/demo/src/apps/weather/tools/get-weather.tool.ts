@@ -94,11 +94,12 @@ const iconMap: Record<string, string> = {
         subtitle: 'Current Weather',
         variant: 'elevated',
         size: 'md',
-        className: 'max-w-sm mx-auto',
+        className: 'p-4 max-w-sm mx-auto',
       });
     },
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
+    baseTemplate: 'weather-card-template',
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {

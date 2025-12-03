@@ -11,4 +11,5 @@ export {
   type ClientInfo,
   type AIPlatformType,
   detectAIPlatform,
+  detectPlatformFromUserAgent,
 } from './notification.service';

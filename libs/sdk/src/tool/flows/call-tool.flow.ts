@@ -8,7 +8,6 @@ import {
   ToolContext,
   ToolEntry,
   isOrchestratedMode,
-  SessionProvider,
 } from '../../common';
 import { z } from 'zod';
 import { CallToolRequestSchema, CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -390,19 +389,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // Cast scope to Scope to access toolUI and notifications
         const scope = this.scope as Scope;
 
-        // Get session info for platform detection
-        let sessionId: string | undefined;
-        let requestId: string | number = crypto.randomUUID();
-        try {
-          const session = this.get(SessionProvider);
-          sessionId = session.sessionId;
-          requestId = session.requestId ?? requestId;
-        } catch {
-          // Session not available, use defaults
-        }
+        // Get session info for platform detection from authInfo (already in state from parseInput)
+        const { authInfo } = this.state;
+        const sessionId = authInfo?.sessionId;
+        const requestId: string | number = crypto.randomUUID();
 
-        // Get platform type from notification service
-        const platformType = sessionId ? scope.notifications.getPlatformType(sessionId) : 'openai';
+        // Get platform type: first check sessionIdPayload (detected from user-agent),
+        // then fall back to notification service (detected from MCP clientInfo),
+        // finally default to 'openai'
+        const platformType =
+          authInfo?.sessionIdPayload?.platformType ??
+          (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
+          'openai';
 
         // Render the UI and get platform-specific metadata
         const uiResult = scope.toolUI.renderAndRegister({
@@ -440,6 +438,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         });
       }
     }
+
+    // Log the final result being sent
+    this.logger.info('finalize: sending response', {
+      tool: tool.metadata.name,
+      hasContent: Array.isArray(result.content) && result.content.length > 0,
+      contentLength: Array.isArray(result.content) ? result.content.length : 0,
+      hasStructuredContent: result.structuredContent !== undefined,
+      hasMeta: result._meta !== undefined,
+      metaKeys: result._meta ? Object.keys(result._meta) : [],
+      isError: result.isError,
+    });
 
     // Respond with the properly formatted MCP result
     this.respond(result);

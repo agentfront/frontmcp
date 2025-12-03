@@ -170,6 +170,8 @@ export interface HandleUIResourceOptions {
  * OpenAI injects structuredContent into window.openai.toolOutput AFTER the widget loads,
  * so we poll every 500ms until data is available.
  *
+ * The widget uses the same styling as @frontmcp/ui components to match the demo app.
+ *
  * @param toolName - The name of the tool
  * @returns HTML string with a dynamic widget that renders toolOutput
  */
@@ -180,26 +182,46 @@ function generatePlaceholderWidget(toolName: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${toolName} Widget</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#24292f',
+            secondary: '#57606a',
+            accent: '#0969da',
+            success: '#1a7f37',
+            warning: '#9a6700',
+            danger: '#cf222e',
+            info: '#0969da',
+            border: '#d0d7de',
+            divider: '#d8dee4',
+            'text-primary': '#24292f',
+            'text-secondary': '#57606a',
+          }
+        }
+      }
+    }
+  </script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; padding: 16px; background: #fff; }
-    .widget { max-width: 400px; margin: 0 auto; }
-    .loading { text-align: center; color: #666; padding: 20px; }
-    .loading::after { content: ''; display: inline-block; width: 16px; height: 16px; margin-left: 8px; border: 2px solid #ddd; border-top-color: #666; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loading::after {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      margin-left: 10px;
+      border: 2px solid #d0d7de;
+      border-top-color: #24292f;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .content { background: #f9f9f9; border-radius: 8px; padding: 16px; }
-    .error { color: #dc3545; background: #f8d7da; padding: 12px; border-radius: 4px; }
-    pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5; }
-    .key { color: #0550ae; }
-    .string { color: #0a3069; }
-    .number { color: #0550ae; }
-    .boolean { color: #cf222e; }
-    .null { color: #6e7781; }
   </style>
 </head>
-<body>
-  <div class="widget">
-    <div id="content" class="loading">Loading</div>
+<body class="bg-transparent font-sans">
+  <div id="widget" class="p-4 max-w-sm mx-auto">
+    <div id="content" class="loading text-center text-text-secondary py-10">Loading</div>
   </div>
   <script>
     (function() {
@@ -207,13 +229,110 @@ function generatePlaceholderWidget(toolName: string): string {
       var rendered = false;
       var intervalId = null;
 
+      var weatherIcons = {
+        'sunny': '☀️', 'clear': '☀️', 'sun': '☀️',
+        'cloudy': '☁️', 'clouds': '☁️', 'overcast': '☁️', 'partly cloudy': '⛅',
+        'rain': '🌧️', 'rainy': '🌧️', 'drizzle': '🌦️', 'showers': '🌧️',
+        'storm': '⛈️', 'thunderstorm': '⛈️', 'thunder': '⛈️',
+        'snow': '❄️', 'snowy': '❄️', 'blizzard': '🌨️',
+        'fog': '🌫️', 'foggy': '🌫️', 'mist': '🌫️', 'haze': '🌫️',
+        'wind': '💨', 'windy': '💨',
+        'default': '🌤️'
+      };
+
+      function getWeatherIcon(conditions, icon) {
+        if (icon && weatherIcons[icon]) return weatherIcons[icon];
+        if (!conditions) return weatherIcons.default;
+        var c = conditions.toLowerCase();
+        for (var key in weatherIcons) {
+          if (c.indexOf(key) !== -1) return weatherIcons[key];
+        }
+        return weatherIcons.default;
+      }
+
+      function getBadgeVariant(conditions) {
+        if (!conditions) return 'secondary';
+        var c = conditions.toLowerCase();
+        if (c.indexOf('sun') !== -1 || c.indexOf('clear') !== -1) return 'success';
+        if (c.indexOf('rain') !== -1) return 'info';
+        return 'secondary';
+      }
+
+      function isWeatherData(data) {
+        if (!data || typeof data !== 'object') return false;
+        return ('temperature' in data || 'temp' in data) &&
+               ('location' in data || 'city' in data || 'conditions' in data || 'weather' in data);
+      }
+
+      function escapeHtml(str) {
+        if (typeof str !== 'string') return String(str || '');
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function renderWeatherCard(data) {
+        var temp = data.temperature ?? data.temp ?? '--';
+        var unit = (data.units || data.unit || 'celsius').toLowerCase();
+        var tempSymbol = unit.indexOf('f') === 0 ? '°F' : '°C';
+        var location = data.location || data.city || 'Unknown';
+        var conditions = data.conditions || data.weather || data.description || '';
+        var humidity = data.humidity;
+        var windSpeed = data.windSpeed ?? data.wind_speed ?? data.wind;
+        var icon = getWeatherIcon(conditions, data.icon);
+        var badgeVariant = getBadgeVariant(conditions);
+
+        // Badge colors matching @frontmcp/ui
+        var badgeColors = {
+          success: 'bg-success/10 text-success',
+          info: 'bg-info/10 text-info',
+          secondary: 'bg-secondary/10 text-secondary'
+        };
+        var badgeClass = badgeColors[badgeVariant] || badgeColors.secondary;
+
+        // Build description list items
+        var details = [];
+        if (humidity !== undefined) {
+          details.push({ term: 'Humidity', description: humidity + '%' });
+        }
+        if (windSpeed !== undefined) {
+          details.push({ term: 'Wind Speed', description: windSpeed + ' km/h' });
+        }
+        details.push({ term: 'Units', description: unit.charAt(0).toUpperCase() + unit.slice(1) });
+
+        var detailsHtml = details.map(function(item) {
+          return '<div class="relative p-4 bg-gray-50 rounded-lg">' +
+            '<dt class="text-sm font-medium text-text-secondary">' + escapeHtml(item.term) + '</dt>' +
+            '<dd class="mt-1 text-sm text-text-primary font-medium">' + escapeHtml(item.description) + '</dd>' +
+          '</div>';
+        }).join('\\n');
+
+        // Card matching @frontmcp/ui card component with elevated variant
+        return '<div class="bg-white rounded-xl shadow-lg p-6 max-w-sm mx-auto">' +
+          '<div class="flex items-start justify-between mb-4">' +
+            '<div>' +
+              '<h3 class="text-lg font-semibold text-text-primary">' + escapeHtml(location) + '</h3>' +
+              '<p class="text-sm text-text-secondary mt-1">Current Weather</p>' +
+            '</div>' +
+          '</div>' +
+          '<div class="text-center py-6">' +
+            '<div class="text-6xl mb-2">' + icon + '</div>' +
+            '<div class="text-5xl font-light text-text-primary mb-2">' + Math.round(temp) + tempSymbol + '</div>' +
+            '<div class="flex justify-center">' +
+              '<span class="inline-flex items-center font-medium rounded-md ' + badgeClass + ' px-2.5 py-1 text-xs">' +
+                escapeHtml(conditions) +
+              '</span>' +
+            '</div>' +
+          '</div>' +
+          '<dl class="grid grid-cols-2 gap-4 mt-4">' + detailsHtml + '</dl>' +
+        '</div>';
+      }
+
       function formatJson(obj, indent) {
         indent = indent || 0;
         var spaces = '  '.repeat(indent);
-        if (obj === null) return '<span class="null">null</span>';
-        if (typeof obj === 'boolean') return '<span class="boolean">' + obj + '</span>';
-        if (typeof obj === 'number') return '<span class="number">' + obj + '</span>';
-        if (typeof obj === 'string') return '<span class="string">"' + obj.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '"</span>';
+        if (obj === null) return '<span class="text-gray-400">null</span>';
+        if (typeof obj === 'boolean') return '<span class="text-red-600">' + obj + '</span>';
+        if (typeof obj === 'number') return '<span class="text-blue-600">' + obj + '</span>';
+        if (typeof obj === 'string') return '<span class="text-green-700">"' + escapeHtml(obj) + '"</span>';
         if (Array.isArray(obj)) {
           if (obj.length === 0) return '[]';
           var items = obj.map(function(v) { return spaces + '  ' + formatJson(v, indent + 1); });
@@ -223,7 +342,7 @@ function generatePlaceholderWidget(toolName: string): string {
           var keys = Object.keys(obj);
           if (keys.length === 0) return '{}';
           var pairs = keys.map(function(k) {
-            return spaces + '  <span class="key">"' + k + '"</span>: ' + formatJson(obj[k], indent + 1);
+            return spaces + '  <span class="text-blue-800">"' + k + '"</span>: ' + formatJson(obj[k], indent + 1);
           });
           return '{\\n' + pairs.join(',\\n') + '\\n' + spaces + '}';
         }
@@ -238,16 +357,21 @@ function generatePlaceholderWidget(toolName: string): string {
           intervalId = null;
         }
         try {
-          container.className = 'content';
-          container.innerHTML = '<pre>' + formatJson(data, 0) + '</pre>';
+          container.className = '';
+          if (isWeatherData(data)) {
+            container.innerHTML = renderWeatherCard(data);
+          } else {
+            container.innerHTML = '<div class="bg-white rounded-xl shadow-lg p-6 border border-border">' +
+              '<pre class="whitespace-pre-wrap break-words text-xs leading-relaxed font-mono">' +
+              formatJson(data, 0) + '</pre></div>';
+          }
         } catch (e) {
-          container.className = 'error';
+          container.className = 'text-danger bg-danger/10 p-4 rounded-lg';
           container.textContent = 'Error rendering: ' + e.message;
         }
       }
 
       function checkForData() {
-        // Check window.openai.toolOutput
         if (window.openai && window.openai.toolOutput !== undefined && window.openai.toolOutput !== null) {
           renderOutput(window.openai.toolOutput);
           return true;
@@ -255,9 +379,7 @@ function generatePlaceholderWidget(toolName: string): string {
         return false;
       }
 
-      // Check immediately
       if (!checkForData()) {
-        // Start polling every 500ms
         intervalId = setInterval(function() {
           checkForData();
         }, 500);
@@ -323,12 +445,11 @@ export function handleUIResourceRead(
   // This is used by OpenAI at discovery time
   const widgetParsed = parseWidgetUri(uri);
   if (widgetParsed) {
-    // Look up the latest cached HTML for this tool
-    const cachedEntry = registry.getLatestForTool(widgetParsed.toolName);
-
-    // If no cached content, return a placeholder that reads from window.openai.toolOutput
-    // This allows OpenAI to discover the widget before the tool is called
-    const html = cachedEntry?.html ?? generatePlaceholderWidget(widgetParsed.toolName);
+    // ALWAYS return the dynamic placeholder widget for static URIs.
+    // OpenAI caches widget HTML from outputTemplate URI, so we must return
+    // a template that reads from window.openai.toolOutput at runtime.
+    // This ensures fresh structuredContent is rendered on each tool call.
+    const html = generatePlaceholderWidget(widgetParsed.toolName);
 
     return {
       handled: true,

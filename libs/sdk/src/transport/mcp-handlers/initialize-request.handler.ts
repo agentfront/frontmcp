@@ -35,11 +35,18 @@ export default function initializeRequestHandler({
         }
 
         // Store client info (name/version) for platform detection
+        // and update the session payload with the detected platform type
         if (request.params.clientInfo) {
-          scope.notifications.setClientInfo(sessionId, {
+          const detectedPlatform = scope.notifications.setClientInfo(sessionId, {
             name: request.params.clientInfo.name,
             version: request.params.clientInfo.version,
           });
+
+          // Update the session payload with the detected platform type
+          // This makes platformType available via ctx.authInfo.sessionIdPayload.platformType
+          if (detectedPlatform && ctx.authInfo?.sessionIdPayload) {
+            ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
+          }
         }
       }
 
