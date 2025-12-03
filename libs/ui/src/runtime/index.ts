@@ -7,7 +7,7 @@
  * @module @frontmcp/ui/runtime
  */
 
-// Types
+// Types (including UI types that were previously re-exported from SDK)
 export type {
   ProviderType,
   DisplayMode,
@@ -19,15 +19,13 @@ export type {
   OpenAIRuntime,
   OpenAIUserAgent,
   SafeAreaInsets,
-} from './types';
-
-// Re-export SDK types for convenience
-export type {
+  // UI template types (defined locally to avoid circular dependency with SDK)
   UIContentSecurityPolicy,
   TemplateContext,
   TemplateHelpers,
   TemplateBuilderFn,
   ToolUIConfig,
+  WidgetServingMode,
 } from './types';
 
 // MCP Bridge Runtime

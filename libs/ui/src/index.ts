@@ -29,3 +29,6 @@ export * from './runtime';
 
 // Tool Template Builder
 export * from './tool-template';
+
+// Base Template (for Tool UI widgets)
+export * from './base-template';

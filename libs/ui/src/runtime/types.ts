@@ -3,19 +3,125 @@
  *
  * Types for the MCP Bridge runtime that adapts to different host environments
  * (OpenAI Apps SDK, ext-apps, Claude, etc.).
+ *
+ * Note: UI-related types are defined locally to avoid circular dependency with @frontmcp/sdk.
+ * These are kept in sync with the SDK's tool-ui.metadata.ts definitions.
  */
 
-// Re-export UI types from SDK for convenience
-export type {
-  UIContentSecurityPolicy,
-  TemplateContext,
-  TemplateHelpers,
-  TemplateBuilderFn,
-  ToolUIConfig,
-} from '@frontmcp/sdk';
+// ============================================
+// Content Security Policy (mirrors SDK types)
+// ============================================
 
-// Import for local use
-import type { UIContentSecurityPolicy as UICSPType } from '@frontmcp/sdk';
+/**
+ * Content Security Policy for UI templates rendered in sandboxed iframes.
+ * Based on OpenAI Apps SDK and ext-apps (SEP-1865) specifications.
+ */
+export interface UIContentSecurityPolicy {
+  /**
+   * Origins allowed for fetch/XHR/WebSocket connections.
+   * Maps to CSP `connect-src` directive.
+   */
+  connectDomains?: string[];
+
+  /**
+   * Origins allowed for images, scripts, fonts, and styles.
+   * Maps to CSP `img-src`, `script-src`, `style-src`, `font-src` directives.
+   */
+  resourceDomains?: string[];
+}
+
+// ============================================
+// Template Context & Helpers (mirrors SDK types)
+// ============================================
+
+/**
+ * Helper functions available in template context.
+ */
+export interface TemplateHelpers {
+  /** Escape HTML special characters to prevent XSS. */
+  escapeHtml: (str: string) => string;
+
+  /** Format a date for display. */
+  formatDate: (date: Date | string, format?: string) => string;
+
+  /** Format a number as currency. */
+  formatCurrency: (amount: number, currency?: string) => string;
+
+  /** Generate a unique ID for DOM elements. */
+  uniqueId: (prefix?: string) => string;
+
+  /** Safely embed JSON data in HTML (escapes script-breaking characters). */
+  jsonEmbed: (data: unknown) => string;
+}
+
+/**
+ * Context passed to template builder functions.
+ */
+export interface TemplateContext<In, Out> {
+  /** The input arguments passed to the tool. */
+  input: In;
+
+  /** The raw output returned by the tool's execute method. */
+  output: Out;
+
+  /** The structured content parsed from the output (if outputSchema was provided). */
+  structuredContent?: unknown;
+
+  /** Helper functions for template rendering. */
+  helpers: TemplateHelpers;
+}
+
+/**
+ * Template builder function type.
+ */
+export type TemplateBuilderFn<In, Out> = (ctx: TemplateContext<In, Out>) => string;
+
+/**
+ * Widget serving mode determines how the widget HTML is delivered to the client.
+ */
+export type WidgetServingMode =
+  | 'inline' // HTML embedded directly in tool response _meta
+  | 'mcp-resource' // Via ui:// resource URI (MCP resources/read)
+  | 'direct-url' // HTTP endpoint on MCP server
+  | 'custom-url'; // Custom URL (CDN or external hosting)
+
+/**
+ * UI template configuration for tools.
+ */
+export interface ToolUIConfig<In = unknown, Out = unknown> {
+  /** Template builder function or static HTML string. */
+  template: TemplateBuilderFn<In, Out> | string;
+
+  /** Content Security Policy for the sandboxed widget. */
+  csp?: UIContentSecurityPolicy;
+
+  /** Whether the widget can invoke tools via the MCP bridge. */
+  widgetAccessible?: boolean;
+
+  /** Preferred display mode for the widget. */
+  displayMode?: 'inline' | 'fullscreen' | 'pip';
+
+  /** Human-readable description shown to users about what the widget does. */
+  widgetDescription?: string;
+
+  /** Status messages shown during tool invocation. */
+  invocationStatus?: {
+    invoking?: string;
+    invoked?: string;
+  };
+
+  /** How the widget HTML should be served to the client. */
+  servingMode?: WidgetServingMode;
+
+  /** Custom URL for widget serving when `servingMode: 'custom-url'`. */
+  customWidgetUrl?: string;
+
+  /** Path for direct URL serving when `servingMode: 'direct-url'`. */
+  directPath?: string;
+}
+
+// Local alias for use within this file
+type UICSPType = UIContentSecurityPolicy;
 
 /**
  * Provider identifier for the host environment

@@ -14,7 +14,7 @@ export { renderToolTemplate, hasUIConfig } from './render-template';
 export type { RenderTemplateOptions } from './render-template';
 
 // Platform adapters
-export { buildUIMeta, platformSupportsUI, platformSupportsResourceURI } from './platform-adapters';
+export { buildUIMeta } from './platform-adapters';
 export type { UIMetadata, BuildUIMetaOptions } from './platform-adapters';
 
 // Template helpers
@@ -27,10 +27,6 @@ export {
   createTemplateHelpers,
   resetIdCounter,
 } from './template-helpers';
-
-// Widget tokens
-export { WidgetTokenManager, generateWidgetSecret, createDefaultTokenManager } from './widget-token';
-export type { WidgetTokenPayload, GenerateWidgetTokenOptions, ValidateWidgetTokenResult } from './widget-token';
 
 // UI Resource Handler
 export {

@@ -99,7 +99,6 @@ const iconMap: Record<string, string> = {
     },
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
-    baseTemplate: 'weather-card-template',
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
