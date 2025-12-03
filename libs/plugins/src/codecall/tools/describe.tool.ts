@@ -29,6 +29,10 @@ import { isBlockedSelfReference } from '../security';
   description: describeToolDescription,
   inputSchema: describeToolInputSchema,
   outputSchema: describeToolOutputSchema,
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: true,
+  },
 })
 export default class DescribeTool extends ToolContext {
   async execute(input: DescribeToolInput): Promise<DescribeToolOutput> {

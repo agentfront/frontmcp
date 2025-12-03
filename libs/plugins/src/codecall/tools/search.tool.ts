@@ -31,6 +31,10 @@ interface ToolMatch {
   description: searchToolDescription,
   inputSchema: searchToolInputSchema,
   outputSchema: searchToolOutputSchema,
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: true,
+  },
 })
 export default class SearchTool extends ToolContext {
   async execute(input: SearchToolInput): Promise<SearchToolOutput> {
