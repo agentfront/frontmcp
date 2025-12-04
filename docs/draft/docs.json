@@ -63,7 +63,7 @@
   "navigation": {
     "dropdowns": [
       {
-        "dropdown": "FrontMCP",
+        "dropdown": "FrontMCP SDK",
         "icon": "book",
         "versions": [
           {
