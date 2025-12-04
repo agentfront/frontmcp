@@ -1,5 +1,5 @@
 /**
- * @file weather.e2e.spec.ts
+ * @file weather.e2e.ts
  * @description E2E tests for React Weather Tool UI
  *
  * Tests verify that the React component template is properly rendered

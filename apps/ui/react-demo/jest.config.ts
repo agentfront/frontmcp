@@ -1,7 +1,7 @@
 /* eslint-disable */
 export default {
   displayName: '@frontmcp/react-demo',
-  preset: '../../jest.preset.js',
+  preset: '../../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': [

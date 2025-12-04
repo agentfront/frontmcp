@@ -217,11 +217,15 @@ Creates an alert/banner element.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `variant` | `'info' \| 'success' \| 'warning' \| 'danger'` | `'info'` | Alert type |
-| `title` | `string` | - | Alert title |
+| `variant` | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style |
+| `title` | `string` | - | Alert heading |
+| `showIcon` | `boolean` | `true` | Show variant icon |
+| `icon` | `string` | - | Custom icon HTML |
 | `dismissible` | `boolean` | `false` | Show close button |
-| `icon` | `boolean` | `true` | Show type icon |
 | `className` | `string` | - | Additional CSS classes |
+| `id` | `string` | - | Alert ID |
+| `actions` | `string` | - | HTML for action buttons |
+| `onDismiss` | `HtmxOptions` | - | HTMX options for dismiss |
 
 ```typescript
 alert('Operation completed successfully', {
@@ -248,10 +252,11 @@ Creates a toast notification.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `variant` | `'info' \| 'success' \| 'warning' \| 'danger'` | `'info'` | Toast type |
-| `title` | `string` | - | Toast title |
-| `duration` | `number` | `5000` | Auto-dismiss (ms) |
-| `position` | `'top-right' \| 'top-left' \| 'bottom-right' \| 'bottom-left'` | `'top-right'` | Screen position |
+| `variant` | `AlertVariant` | `'info'` | Visual style |
+| `title` | `string` | - | Toast heading |
+| `duration` | `number` | `5000` | Auto-dismiss ms (0 = no auto-dismiss) |
+| `position` | `'top-right' \| 'top-left' \| 'bottom-right' \| 'bottom-left' \| 'top-center' \| 'bottom-center'` | `'top-right'` | Screen position |
+| `id` | `string` | auto-generated | Toast ID |
 | `dismissible` | `boolean` | `true` | Show close button |
 
 ### `toastContainer(position?)`

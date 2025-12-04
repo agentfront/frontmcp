@@ -128,14 +128,8 @@ test.describe('MDX Weather Tool UI', () => {
     expect(result).toBeSuccessful();
     expect(result).toHaveRenderedHtml();
 
-    // The MDX template uses --- which should render as <hr> or a separator
-    // Some MDX renderers may convert --- to <hr>, others to thematic breaks
-    // Check for either <hr> or the rendered separator class
-    const html = UIAssertions.assertRenderedUI(result);
-    // The template has --- which should create some separator element
-    // Accept either <hr> or any block-level element with separator styling
-    const hasSeparator = html.includes('<hr') || html.includes('border-') || html.includes('Powered by');
-    expect(hasSeparator).toBe(true);
+    // The MDX template uses --- which should render as <hr>
+    expect(result).toContainHtmlElement('hr');
   });
 
   test('complete UI validation suite', async ({ mcp }) => {

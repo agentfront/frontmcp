@@ -63,8 +63,8 @@ function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry
 
   for (const mapping of mappings) {
     if (typeof mapping.pattern === 'string') {
-      // Substring match (case-insensitive)
-      if (lowerClientName.includes(mapping.pattern.toLowerCase())) {
+      // Exact match (case-insensitive) - use RegExp for substring matching
+      if (lowerClientName === mapping.pattern.toLowerCase()) {
         return mapping.platform;
       }
     } else {

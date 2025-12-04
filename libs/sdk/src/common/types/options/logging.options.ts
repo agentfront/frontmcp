@@ -9,7 +9,7 @@ export enum LogLevel {
    * @deprecated use 'Verbose' instead
    */
   VERBOSE = 1,
-  Verbose = 1,
+  Verbose = VERBOSE,
   Info = 2,
   Warn = 3,
   Error = 4,
