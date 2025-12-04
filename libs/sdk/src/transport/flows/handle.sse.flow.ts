@@ -59,8 +59,15 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
 
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
+
     // Get session from authorization or create new one - stored only in state, not mutated on request
-    const session = authorization.session ?? createSessionId('legacy-sse', token);
+    // Pass user-agent for pre-initialize platform detection
+    const session =
+      authorization.session ??
+      createSessionId('legacy-sse', token, {
+        userAgent: request.headers?.['user-agent'] as string | undefined,
+        platformDetectionConfig: (this.scope as Scope).metadata?.session?.platformDetection,
+      });
     this.state.set(stateSchema.parse({ token, session }));
   }
 

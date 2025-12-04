@@ -10,9 +10,10 @@ import {
   httpRespond,
   ServerRequestTokens,
   Authorization,
+  FlowControl,
 } from '../../common';
 import { z } from 'zod';
-import { ElicitResultSchema, InitializeRequestSchema, RequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitResultSchema, RequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 
@@ -60,8 +61,15 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
+
     // Get session from authorization or create new one - stored only in state, not mutated on request
-    const session = authorization.session ?? createSessionId('streamable-http', token);
+    // Pass user-agent for pre-initialize platform detection
+    const session =
+      authorization.session ??
+      createSessionId('streamable-http', token, {
+        userAgent: request.headers?.['user-agent'] as string | undefined,
+        platformDetectionConfig: (this.scope as Scope).metadata?.session?.platformDetection,
+      });
     this.state.set(stateSchema.parse({ token, session }));
   }
 
@@ -118,6 +126,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   })
   async onMessage() {
     const transportService = (this.scope as Scope).transportService;
+    const logger = this.scopeLogger.child('handle:streamable-http:onMessage');
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
@@ -126,8 +135,23 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       this.respond(httpRespond.rpcError('session not initialized'));
       return;
     }
-    await transport.handleRequest(request, response);
-    this.handled();
+
+    try {
+      await transport.handleRequest(request, response);
+      this.handled();
+    } catch (error) {
+      // FlowControl is expected control flow, not an error
+      if (!(error instanceof FlowControl)) {
+        const body = request.body as Record<string, unknown> | undefined;
+        logger.error('handleRequest failed', {
+          error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
+          method: body?.['method'],
+          id: body?.['id'],
+          sessionId: session.id?.slice(0, 20),
+        });
+      }
+      throw error;
+    }
   }
 
   @Stage('onSseListener', {

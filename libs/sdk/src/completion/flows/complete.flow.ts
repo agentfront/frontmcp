@@ -4,6 +4,7 @@ import { Flow, FlowBase, FlowHooksOf, FlowPlan, FlowRunOptions } from '../../com
 import { z } from 'zod';
 import { CompleteRequestSchema, CompleteResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { hasUIConfig } from '../../tool/ui';
 
 const inputSchema = z.object({
   request: CompleteRequestSchema,
@@ -157,28 +158,41 @@ export default class CompleteFlow extends FlowBase<typeof name> {
         `complete: resource completion for URI "${uri}" argument "${argName}" with value "${argValue}"`,
       );
 
-      // Look up the resource template in the registry by URI
-      const resourceMatch = this.scope.resources.findResourceForUri(uri);
+      // Special handling for ui:// widget URIs - complete with tool names that have UI config
+      if (uri.startsWith('ui://widget/') && argName === 'toolName') {
+        const toolsWithUI = this.scope.tools.getTools().filter((t) => hasUIConfig(t.metadata));
+        const toolNames = toolsWithUI.map((t) => t.metadata.id ?? t.metadata.name);
 
-      if (resourceMatch) {
-        // Check if the resource instance has a completer for this argument
-        // Completion support is optional - resources can implement getArgumentCompleter to provide suggestions
-        const instance = resourceMatch.instance as any; // ResourceInstance may have completer method
-        if (typeof instance.getArgumentCompleter === 'function') {
-          const completer = instance.getArgumentCompleter(argName);
-          if (completer) {
-            try {
-              const result = await completer(argValue);
-              values = result.values || [];
-              total = result.total;
-              hasMore = result.hasMore;
-            } catch (e) {
-              this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
+        // Filter by prefix if value is provided
+        const prefix = argValue.toLowerCase();
+        values = toolNames.filter((name) => name.toLowerCase().startsWith(prefix));
+        total = values.length;
+
+        this.logger.debug(`complete: found ${values.length} tools with UI config matching "${argValue}"`);
+      } else {
+        // Look up the resource template in the registry by URI
+        const resourceMatch = this.scope.resources.findResourceForUri(uri);
+
+        if (resourceMatch) {
+          // Check if the resource instance has a completer for this argument
+          // Completion support is optional - resources can implement getArgumentCompleter to provide suggestions
+          const instance = resourceMatch.instance as any; // ResourceInstance may have completer method
+          if (typeof instance.getArgumentCompleter === 'function') {
+            const completer = instance.getArgumentCompleter(argName);
+            if (completer) {
+              try {
+                const result = await completer(argValue);
+                values = result.values || [];
+                total = result.total;
+                hasMore = result.hasMore;
+              } catch (e) {
+                this.logger.warn(`complete: completer failed for resource "${uri}" argument "${argName}": ${e}`);
+              }
             }
           }
+        } else {
+          this.logger.debug(`complete: resource "${uri}" not found`);
         }
-      } else {
-        this.logger.debug(`complete: resource "${uri}" not found`);
       }
     }
 

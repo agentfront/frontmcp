@@ -8,4 +8,8 @@ export {
   MCP_LOGGING_LEVEL_PRIORITY,
   type Root,
   type ClientCapabilities,
+  type ClientInfo,
+  type AIPlatformType,
+  detectAIPlatform,
+  detectPlatformFromUserAgent,
 } from './notification.service';

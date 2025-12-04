@@ -1,8 +1,36 @@
 import { RawZodShape } from '../common.types';
 import { z } from 'zod';
+import { AIPlatformType, aiPlatformTypeSchema } from '../auth/session.types';
 
 export type SessionMode = 'stateful' | 'stateless';
 export type TransportIdMode = 'uuid' | 'jwt';
+
+/**
+ * A single platform mapping entry for custom client-to-platform detection.
+ */
+export interface PlatformMappingEntry {
+  /** Pattern to match against clientInfo.name (string for exact match, RegExp for pattern) */
+  pattern: string | RegExp;
+  /** The platform type to assign when pattern matches */
+  platform: AIPlatformType;
+}
+
+/**
+ * Configuration for platform detection from MCP client info.
+ */
+export interface PlatformDetectionConfig {
+  /**
+   * Custom mappings to check before default detection.
+   * Mappings are evaluated in order; first match wins.
+   */
+  mappings?: PlatformMappingEntry[];
+  /**
+   * If true, skip default detection when no custom mapping matches.
+   * The platform will be 'unknown' instead of attempting keyword-based detection.
+   * @default false
+   */
+  customOnly?: boolean;
+}
 
 export type SessionOptions = {
   /**
@@ -45,7 +73,7 @@ export type SessionOptions = {
    *   - For distributed systems, verification is optimized by checking if the session is already
    *     verified by an existing live transport ID. This allows fast validation when multiple
    *     transports are connected to a shared queue (high-availability setup).
-   *   - If the JWT’s transport ID is not found on the current worker node, the system attempts
+   *   - If the JWT's transport ID is not found on the current worker node, the system attempts
    *     to connect to the corresponding remote transport in the distributed infrastructure.
    *
    * - When using `'uuid'`:
@@ -57,13 +85,39 @@ export type SessionOptions = {
    * @default 'uuid'
    */
   transportIdMode?: TransportIdMode | ((issuer: string) => Promise<TransportIdMode> | TransportIdMode);
+
+  /**
+   * Configuration for detecting the AI platform from MCP client info.
+   * Allows custom mappings to override or supplement the default keyword-based detection.
+   */
+  platformDetection?: PlatformDetectionConfig;
 };
 
+/**
+ * Zod schema for platform mapping entry.
+ * Note: RegExp cannot be validated by zod, so we use passthrough for pattern.
+ */
+export const platformMappingEntrySchema = z.object({
+  pattern: z.union([z.string(), z.instanceof(RegExp)]),
+  platform: aiPlatformTypeSchema,
+});
+
+/**
+ * Zod schema for platform detection configuration.
+ */
+export const platformDetectionConfigSchema = z.object({
+  mappings: z.array(platformMappingEntrySchema).optional(),
+  customOnly: z.boolean().optional().default(false),
+});
+
 export const sessionOptionsSchema = z.object({
-  sessionMode: z.union(
-    [z.literal('stateful'), z.literal('stateless'), z.function()],
-  ).optional().default('stateless'),
-  transportIdMode: z.union(
-    [z.literal('uuid'), z.literal('jwt'), z.function()],
-  ).optional().default('uuid'),
+  sessionMode: z
+    .union([z.literal('stateful'), z.literal('stateless'), z.function()])
+    .optional()
+    .default('stateless'),
+  transportIdMode: z
+    .union([z.literal('uuid'), z.literal('jwt'), z.function()])
+    .optional()
+    .default('uuid'),
+  platformDetection: platformDetectionConfigSchema.optional(),
 } satisfies RawZodShape<SessionOptions>);

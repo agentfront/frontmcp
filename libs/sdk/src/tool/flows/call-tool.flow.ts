@@ -1,4 +1,5 @@
 // tools/flows/call-tool.flow.ts
+import { randomUUID } from 'crypto';
 import {
   Flow,
   FlowBase,
@@ -20,6 +21,8 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
 } from '../../errors';
+import { hasUIConfig } from '../ui';
+import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -353,7 +356,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { tool, rawOutput } = this.state;
+    const { tool, rawOutput, input } = this.state;
 
     if (!tool) {
       this.logger.error('finalize: tool not found in state');
@@ -379,8 +382,77 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       throw new InvalidOutputError();
     }
 
+    const result = parseResult.data;
+
+    // If tool has UI config, render and add to _meta
+    if (hasUIConfig(tool.metadata)) {
+      try {
+        // Cast scope to Scope to access toolUI and notifications
+        const scope = this.scope as Scope;
+
+        // Get session info for platform detection from authInfo (already in state from parseInput)
+        const { authInfo } = this.state;
+        const sessionId = authInfo?.sessionId;
+        const requestId: string = randomUUID();
+
+        // Get platform type: first check sessionIdPayload (detected from user-agent),
+        // then fall back to notification service (detected from MCP clientInfo),
+        // finally default to 'openai'
+        const platformType =
+          authInfo?.sessionIdPayload?.platformType ??
+          (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
+          'openai';
+
+        // Render the UI and get platform-specific metadata
+        // Use async version to support React component templates via SSR
+        const uiResult = await scope.toolUI.renderAndRegisterAsync({
+          toolName: tool.metadata.name,
+          requestId,
+          input: (input?.arguments ?? {}) as Record<string, unknown>,
+          output: rawOutput,
+          structuredContent: result.structuredContent,
+          uiConfig: tool.metadata.ui,
+          platformType,
+        });
+
+        // Merge UI metadata into result._meta
+        result._meta = {
+          ...result._meta,
+          ...uiResult.meta,
+        };
+
+        // When UI is rendered, clear the text content since the widget will display the data
+        // The structuredContent remains as the actual tool output data
+        // The rendered HTML is available in _meta['ui/html'] for the widget to use
+        result.content = [];
+
+        this.logger.verbose('finalize: UI metadata added', {
+          tool: tool.metadata.name,
+          uri: uiResult.uri,
+          platform: platformType,
+        });
+      } catch (error) {
+        // UI rendering failure should not fail the tool call
+        this.logger.warn('finalize: UI rendering failed', {
+          tool: tool.metadata.name,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Log the final result being sent
+    this.logger.info('finalize: sending response', {
+      tool: tool.metadata.name,
+      hasContent: Array.isArray(result.content) && result.content.length > 0,
+      contentLength: Array.isArray(result.content) ? result.content.length : 0,
+      hasStructuredContent: result.structuredContent !== undefined,
+      hasMeta: result._meta !== undefined,
+      metaKeys: result._meta ? Object.keys(result._meta) : [],
+      isError: result.isError,
+    });
+
     // Respond with the properly formatted MCP result
-    this.respond(parseResult.data);
+    this.respond(result);
     this.logger.verbose('finalize:done');
   }
 }

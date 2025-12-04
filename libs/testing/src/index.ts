@@ -203,3 +203,9 @@ export type {
   HttpInterceptor,
   HttpMockManager,
 } from './http-mock';
+
+// ═══════════════════════════════════════════════════════════════════
+// UI TESTING
+// ═══════════════════════════════════════════════════════════════════
+
+export { uiMatchers, UIAssertions } from './ui';

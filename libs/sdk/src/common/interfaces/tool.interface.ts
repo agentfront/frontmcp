@@ -6,6 +6,7 @@ import { FlowControl } from './flow.interface';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
+import type { AIPlatformType, ClientInfo } from '../../notification';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -92,5 +93,64 @@ export abstract class ToolContext<
     // record validated output and surface the value via control flow
     this.output = value;
     FlowControl.respond<Out>(value);
+  }
+
+  // ============================================
+  // Platform Detection API
+  // ============================================
+
+  /**
+   * Get the detected AI platform type for the current session.
+   * This is auto-detected from the client info during MCP initialization.
+   *
+   * Use this to customize tool responses (e.g., UI format) based on the calling platform.
+   *
+   * @returns The detected platform type, or 'unknown' if not detected
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const platform = this.platform;
+   *   if (platform === 'openai') {
+   *     // Return OpenAI-specific response format
+   *   }
+   *   // ...
+   * }
+   * ```
+   */
+  get platform(): AIPlatformType {
+    // First check sessionIdPayload (detected from user-agent during session creation)
+    const payloadPlatform = this.authInfo.sessionIdPayload?.platformType;
+    if (payloadPlatform && payloadPlatform !== 'unknown') {
+      return payloadPlatform;
+    }
+
+    // Fall back to notification service (detected from MCP clientInfo during initialize)
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      return 'unknown';
+    }
+    return this.scope.notifications.getPlatformType(sessionId);
+  }
+
+  /**
+   * Get the client info (name and version) for the current session.
+   * This is captured from the MCP initialize request.
+   *
+   * @returns The client info, or undefined if not available
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const client = this.clientInfo;
+   *   console.log(`Called by: ${client?.name} v${client?.version}`);
+   *   // ...
+   * }
+   * ```
+   */
+  get clientInfo(): ClientInfo | undefined {
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      return undefined;
+    }
+    return this.scope.notifications.getClientInfo(sessionId);
   }
 }

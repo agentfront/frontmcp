@@ -1,0 +1,189 @@
+---
+title: Template Types
+sidebarTitle: Overview
+icon: code
+description: HTML, React, and MDX templates for tool widgets
+---
+
+# Template Types
+
+FrontMCP UI supports three template types for building tool widgets. Each type is **auto-detected** based on your template definition - no configuration needed.
+
+## Overview
+
+| Type | Best For | Features |
+|------|----------|----------|
+| **HTML** | Simple widgets, server-rendered | Lightweight, no dependencies |
+| **React** | Complex UIs, component reuse | Full React features, TypeScript |
+| **MDX** | Documentation, mixed content | Markdown + JSX, content-focused |
+
+## Auto-Detection
+
+The renderer automatically determines your template type:
+
+```typescript
+// HTML: Function returning string
+template: (ctx) => `<div>${ctx.output.name}</div>`
+
+// React: Imported component function
+template: MyReactComponent
+
+// MDX: String containing JSX tags
+template: `# Title\n<Card>{output.name}</Card>`
+```
+
+## Quick Comparison
+
+<CodeGroup>
+```typescript HTML Template
+ui: {
+  template: (ctx) => `
+    <div class="p-4 rounded-lg bg-white">
+      <h2>${ctx.helpers.escapeHtml(ctx.output.title)}</h2>
+      <p>${ctx.helpers.escapeHtml(ctx.output.body)}</p>
+    </div>
+  `,
+}
+```
+
+```tsx React Template
+import { WeatherWidget } from './widgets/weather';
+
+ui: {
+  template: WeatherWidget,
+}
+```
+
+```typescript MDX Template
+ui: {
+  template: `
+# Weather Report
+
+<WeatherCard
+  location={output.location}
+  temperature={output.temperature}
+/>
+
+**Conditions:** {output.conditions}
+  `,
+}
+```
+</CodeGroup>
+
+## Template Context
+
+All templates receive the same context object:
+
+```typescript
+interface TemplateContext<In, Out> {
+  // Tool input arguments
+  input: In;
+
+  // Tool output/result
+  output: Out;
+
+  // Parsed structured content (if outputSchema provided)
+  structuredContent?: unknown;
+
+  // Helper functions
+  helpers: {
+    escapeHtml: (str: string) => string;
+    formatDate: (date: Date | string, format?: string) => string;
+    formatCurrency: (amount: number, currency?: string) => string;
+    uniqueId: (prefix?: string) => string;
+    jsonEmbed: (data: unknown) => string;
+  };
+}
+```
+
+### Accessing Context
+
+<CodeGroup>
+```typescript HTML
+template: (ctx) => {
+  const { input, output, helpers } = ctx;
+  return `<p>${helpers.escapeHtml(output.message)}</p>`;
+}
+```
+
+```tsx React
+function MyWidget({ input, output, helpers }) {
+  return <p>{output.message}</p>;  // React escapes by default
+}
+```
+
+```mdx MDX
+{/* Variables available as: input, output, helpers */}
+# {output.title}
+
+Created: {helpers.formatDate(output.createdAt)}
+```
+</CodeGroup>
+
+## Choosing a Template Type
+
+<AccordionGroup>
+  <Accordion title="Use HTML when...">
+    - You need maximum performance
+    - Your widget is simple (no complex state)
+    - You want zero additional dependencies
+    - You're comfortable with string templating
+    - You need HTMX for server-driven updates
+  </Accordion>
+
+  <Accordion title="Use React when...">
+    - Your widget has complex interactivity
+    - You want TypeScript type safety
+    - You need client-side state management
+    - You're reusing existing React components
+    - You want component composition
+  </Accordion>
+
+  <Accordion title="Use MDX when...">
+    - Your content is primarily text/documentation
+    - You want Markdown formatting
+    - You're mixing prose with interactive components
+    - You want easy content editing
+    - Your team prefers Markdown
+  </Accordion>
+</AccordionGroup>
+
+## Rendering Process
+
+```
+Template → Renderer → HTML String → Platform Widget
+         ↑
+     Auto-detected
+```
+
+1. **Detection**: FrontMCP analyzes your template to determine type
+2. **Rendering**: The appropriate renderer processes your template
+3. **Output**: All templates produce HTML strings
+4. **Delivery**: HTML is sent to the platform (OpenAI, Claude, etc.)
+
+## Server-Side vs Client-Side
+
+By default, all templates render **server-side** (SSR):
+
+- HTML: String concatenation on server
+- React: `react-dom/server` renderToString
+- MDX: Compiled and rendered on server
+
+For client-side interactivity, see [Hydration](/docs/ui/advanced/hydration).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="HTML Templates" icon="file-code" href="/docs/ui/templates/html">
+    String-based templates with helpers
+  </Card>
+  <Card title="React Templates" icon="react" href="/docs/ui/templates/react">
+    Full React component support
+  </Card>
+  <Card title="MDX Templates" icon="markdown" href="/docs/ui/templates/mdx">
+    Markdown with embedded JSX
+  </Card>
+  <Card title="Custom Templates" icon="gear" href="/docs/ui/templates/custom">
+    Build your own template system
+  </Card>
+</CardGroup>

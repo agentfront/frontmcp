@@ -14,6 +14,7 @@ export const FrontMcpToolTokens = {
   annotations: tokenFactory.meta('annotations'),
   hideFromDiscovery: tokenFactory.meta('hideFromDiscovery'),
   examples: tokenFactory.meta('examples'),
+  ui: tokenFactory.meta('ui'), // UI template configuration
   metadata: tokenFactory.meta('metadata'), // used in tool({}) construction
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 

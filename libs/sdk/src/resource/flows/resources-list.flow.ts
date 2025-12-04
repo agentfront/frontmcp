@@ -172,14 +172,31 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
 
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)
-        .map(({ finalName, resource }) => ({
-          uri: resource.uri!, // Guaranteed by filter above
-          name: finalName,
-          title: resource.metadata.title,
-          description: resource.metadata.description,
-          mimeType: resource.metadata.mimeType,
-          icons: resource.metadata.icons,
-        }));
+        .map(({ finalName, resource }) => {
+          // Extract uri with type narrowing (guaranteed by filter above)
+          const uri = resource.uri as string;
+
+          const item: ResponseResourceItem = {
+            uri,
+            name: finalName,
+            title: resource.metadata.title,
+            description: resource.metadata.description,
+            mimeType: resource.metadata.mimeType,
+            icons: resource.metadata.icons,
+          };
+
+          // Add OpenAI-specific _meta for skybridge widget resources
+          // This is CRITICAL for ChatGPT to discover and render widgets
+          if (resource.metadata.mimeType === 'text/html+skybridge') {
+            item._meta = {
+              'openai/outputTemplate': uri,
+              'openai/resultCanProduceWidget': true,
+              'openai/widgetAccessible': true,
+            };
+          }
+
+          return item;
+        });
 
       const preview = this.sample(resources.map((r) => r.name)).join(', ');
       const extra = resources.length > 5 ? `, +${resources.length - 5} more` : '';

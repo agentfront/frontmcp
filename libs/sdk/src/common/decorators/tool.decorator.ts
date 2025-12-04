@@ -9,7 +9,9 @@ import {
   ResourceLinkOutputSchema,
   ToolInputType,
   ToolOutputType,
+  UIContentSecurityPolicy,
 } from '../metadata';
+import type { TemplateHelpers } from '../metadata/tool-ui.metadata';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
 
@@ -164,10 +166,60 @@ type __ToolSingleOutputType =
 // This is the final constraint for the `outputSchema` option
 type __OutputSchema = __ToolSingleOutputType | __ToolSingleOutputType[];
 
-export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
+/**
+ * Base tool metadata options without UI field.
+ */
+type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetadata<
   I | z.ZodObject<I>, // inputSchema can be a raw shape or ZodObject
   O // outputSchema: any of the allowed forms
 >;
+
+/**
+ * UI template type - accepts multiple formats.
+ * Uses `unknown` for context types to avoid breaking generic inference.
+ * Template functions receive input/output as `unknown` - cast if type safety needed.
+ */
+type __UITemplateType =
+  | ((ctx: { input: unknown; output: unknown; structuredContent?: unknown; helpers: TemplateHelpers }) => string)
+  | string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | ((props: any) => any); // React component signature
+
+export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = __ToolMetadataBase<I, O> & {
+  /**
+   * UI template configuration for rendering interactive widgets.
+   */
+  ui?: {
+    /**
+     * Template for rendering tool UI.
+     *
+     * Supports multiple formats (auto-detected by renderer):
+     * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
+     * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
+     * - React component: `MyWidget` - receives props with input/output/helpers
+     *
+     * @example HTML template builder
+     * ```typescript
+     * template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`
+     * ```
+     *
+     * @example React component
+     * ```typescript
+     * import { MyWidget } from './my-widget.tsx';
+     * template: MyWidget
+     * ```
+     */
+    template: __UITemplateType;
+    /** Content Security Policy for the sandboxed widget */
+    csp?: UIContentSecurityPolicy;
+    /** Whether the widget can invoke tools via the MCP bridge */
+    widgetAccessible?: boolean;
+    /** Preferred display mode: 'inline' | 'fullscreen' | 'pip' */
+    displayMode?: 'inline' | 'fullscreen' | 'pip';
+    /** Human-readable description of what the widget does */
+    widgetDescription?: string;
+  };
+};
 
 // ---------- ctor & reflection ----------
 type __Ctor = (new (...a: any[]) => any) | (abstract new (...a: any[]) => any);

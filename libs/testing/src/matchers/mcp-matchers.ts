@@ -20,6 +20,7 @@
 import type { MatcherFunction } from 'expect';
 import type { Tool, Resource, ResourceTemplate, Prompt } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResultWrapper, ResourceContentWrapper, PromptResultWrapper } from '../client/mcp-test-client.types';
+import { uiMatchers } from '../ui/ui-matchers';
 
 // ═══════════════════════════════════════════════════════════════════
 // HELPER TYPES
@@ -467,4 +468,7 @@ export const mcpMatchers = {
   toHaveResult,
   toHaveError,
   toHaveErrorCode,
+
+  // UI matchers (for testing tool UI responses)
+  ...uiMatchers,
 };

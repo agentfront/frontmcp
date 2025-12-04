@@ -7,6 +7,7 @@ export * from './auth-provider.metadata';
 export * from './adapter.metadata';
 export * from './plugin.metadata';
 export * from './tool.metadata';
+export * from './tool-ui.metadata';
 export * from './resource.metadata';
 export * from './prompt.metadata';
 export * from './logger.metadata';

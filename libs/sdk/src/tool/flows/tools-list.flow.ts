@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
+import { hasUIConfig } from '../ui';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -190,13 +191,42 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           inputSchema = { type: 'object', properties: {} };
         }
 
-        return {
+        const item: ResponseToolItem = {
           name: finalName,
           title: tool.metadata.name,
           description: tool.metadata.description,
           annotations: tool.metadata.annotations,
           inputSchema,
         };
+
+        // Add OpenAI _meta for tools with UI configuration
+        // This is CRITICAL for ChatGPT to discover widget-producing tools at listing time
+        // NOTE: Use static URI (like pizzaz example: ui://widget/tool-name.html), NOT template with {requestId}
+        // OpenAI tries to fetch the outputTemplate URI directly at discovery time
+        if (hasUIConfig(tool.metadata)) {
+          const uiConfig = tool.metadata.ui;
+          if (!uiConfig) {
+            // This should never happen if hasUIConfig returned true
+            return item;
+          }
+          const meta: Record<string, unknown> = {
+            'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,
+            'openai/resultCanProduceWidget': true,
+            'openai/widgetAccessible': uiConfig.widgetAccessible ?? false,
+          };
+
+          // Add invocation status if configured
+          if (uiConfig.invocationStatus?.invoking) {
+            meta['openai/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
+          }
+          if (uiConfig.invocationStatus?.invoked) {
+            meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
+          }
+
+          item._meta = meta;
+        }
+
+        return item;
       });
 
       const preview = this.sample(tools.map((t) => t.name)).join(', ');

@@ -17,6 +17,7 @@
   - [Custom Matchers](#custom-matchers)
 - [Testing Guide](#testing-guide)
   - [Tools](#testing-tools)
+  - [Tool UI](#testing-tool-ui)
   - [Resources](#testing-resources)
   - [Prompts](#testing-prompts)
   - [Authentication](#testing-authentication)
@@ -498,6 +499,37 @@ expect(response).toBeValidJsonRpc();
 expect(response).toHaveResult();
 expect(response).toHaveError();
 expect(response).toHaveErrorCode(-32601);
+
+// ═══════════════════════════════════════════════════════════════════
+// TOOL UI MATCHERS
+// ═══════════════════════════════════════════════════════════════════
+
+// Check if tool result has rendered HTML UI (not mdx-fallback)
+expect(result).toHaveRenderedHtml();
+
+// Check if HTML contains specific elements
+expect(result).toContainHtmlElement('div');
+expect(result).toContainHtmlElement('h1');
+
+// Check if tool output values appear in rendered HTML (data binding)
+expect(result).toContainBoundValue('London'); // String value
+expect(result).toContainBoundValue(25); // Number value
+
+// Check XSS safety (no script tags, event handlers, javascript: URIs)
+expect(result).toBeXssSafe();
+
+// Check for widget metadata in response
+expect(result).toHaveWidgetMetadata();
+
+// Check for specific CSS classes
+expect(result).toHaveCssClass('weather-card');
+
+// Check that raw content is NOT present (useful for fallback detection)
+expect(result).toNotContainRawContent('mdx-fallback');
+expect(result).toNotContainRawContent('<Alert'); // Custom components rendered
+
+// Check HTML structure is proper (not escaped text)
+expect(result).toHaveProperHtmlStructure();
 ```
 
 ---
@@ -557,6 +589,147 @@ test.describe('Tools', () => {
     expect(result).toBeError(-32601); // Method not found
   });
 });
+```
+
+### Testing Tool UI
+
+Tools with UI templates (React, MDX) render HTML in the response `_meta['ui/html']`. The testing library provides specialized matchers and assertions for validating rendered UI.
+
+```typescript
+import { test, expect, UIAssertions } from '@frontmcp/testing';
+import MyServer from './src/main';
+
+test.use({ server: MyServer });
+
+test.describe('Tool UI', () => {
+  test('renders weather UI with data binding', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'London' });
+
+    // Basic assertions
+    expect(result).toBeSuccessful();
+    expect(result).toHaveRenderedHtml(); // Has ui/html, not mdx-fallback
+    expect(result).toBeXssSafe(); // No script tags or event handlers
+    expect(result).toHaveWidgetMetadata(); // Has platform metadata
+
+    // Data binding - output values appear in rendered HTML
+    const output = result.json<WeatherOutput>();
+    expect(result).toContainBoundValue(output.location);
+    expect(result).toContainBoundValue(output.temperature);
+
+    // HTML structure
+    expect(result).toContainHtmlElement('div');
+    expect(result).toHaveProperHtmlStructure();
+  });
+
+  test('MDX components render correctly', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather_mdx', { location: 'Tokyo' });
+
+    expect(result).toHaveRenderedHtml();
+
+    // Custom MDX components should be rendered, not raw tags
+    expect(result).toNotContainRawContent('<Alert');
+    expect(result).toNotContainRawContent('<WeatherCard');
+    expect(result).toNotContainRawContent('mdx-fallback');
+
+    // Markdown should render as HTML
+    expect(result).toContainHtmlElement('h1'); // # Header
+    expect(result).toContainHtmlElement('li'); // - List item
+  });
+
+  test('handles XSS in user input', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', {
+      location: '<script>alert("xss")</script>',
+    });
+
+    expect(result).toBeSuccessful();
+    expect(result).toBeXssSafe();
+    expect(result).toNotContainRawContent('<script>');
+  });
+});
+```
+
+#### UIAssertions Helper
+
+For more control, use the `UIAssertions` helper class:
+
+```typescript
+import { UIAssertions } from '@frontmcp/testing';
+
+test('comprehensive UI validation', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather', { location: 'Paris' });
+
+  // assertValidUI runs multiple checks and returns the HTML
+  const html = UIAssertions.assertValidUI(result, ['location', 'temperature', 'conditions']);
+
+  // Additional assertions on extracted HTML
+  UIAssertions.assertContainsElement(html, 'div');
+  UIAssertions.assertNotContainsRaw(html, 'mdx-fallback');
+  UIAssertions.assertXssSafe(html);
+});
+
+test('data binding validation', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather', { location: 'Berlin' });
+
+  const html = UIAssertions.assertRenderedUI(result);
+  const output = result.json<WeatherOutput>();
+
+  // Verify all output fields are bound in the HTML
+  UIAssertions.assertDataBinding(html, output, ['location', 'temperature', 'conditions', 'humidity', 'windSpeed']);
+});
+```
+
+#### UIAssertions API
+
+```typescript
+const UIAssertions = {
+  /** Assert result has valid rendered HTML (not mdx-fallback) */
+  assertRenderedUI(result: ToolResultWrapper): string;
+
+  /** Assert HTML contains all expected bound values from output */
+  assertDataBinding(
+    html: string,
+    output: Record<string, unknown>,
+    keys: string[],
+  ): void;
+
+  /** Assert HTML is XSS safe */
+  assertXssSafe(html: string): void;
+
+  /** Assert HTML has proper structure (not escaped text) */
+  assertProperHtmlStructure(html: string): void;
+
+  /** Assert HTML contains a specific element */
+  assertContainsElement(html: string, tag: string): void;
+
+  /** Assert HTML has a specific CSS class */
+  assertHasCssClass(html: string, className: string): void;
+
+  /** Assert HTML does NOT contain specific raw content */
+  assertNotContainsRaw(html: string, content: string): void;
+
+  /** Assert result has widget metadata */
+  assertWidgetMetadata(result: ToolResultWrapper): void;
+
+  /** Run comprehensive validation and return HTML */
+  assertValidUI(
+    result: ToolResultWrapper,
+    boundKeys?: string[],
+  ): string;
+};
+```
+
+#### Tool Result json() for UI
+
+When a tool has UI enabled, `result.json()` automatically returns the `structuredContent` (typed output) instead of parsing text content:
+
+```typescript
+// Tool with UI: json() returns structuredContent
+const result = await mcp.tools.call('get_weather', { location: 'London' });
+const output = result.json<WeatherOutput>(); // Returns structuredContent
+
+// Tool without UI: json() parses text content as JSON
+const result = await mcp.tools.call('simple_tool', {});
+const output = result.json<SimpleOutput>(); // Parses content[0].text
 ```
 
 ### Testing Resources
