@@ -215,30 +215,30 @@ const articleTags = badgeGroup([
 
 ### `badge(text, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | `string` | Badge text (or aria-label for dots) |
-| `options` | `BadgeOptions` | Configuration options |
+| Parameter | Type           | Description                         |
+| --------- | -------------- | ----------------------------------- |
+| `text`    | `string`       | Badge text (or aria-label for dots) |
+| `options` | `BadgeOptions` | Configuration options               |
 
 ### BadgeOptions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `variant` | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info' \| 'outline'` | `'default'` | Visual style |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Badge size |
-| `pill` | `boolean` | `false` | Fully rounded (pill shape) |
-| `icon` | `string` | - | HTML for icon before text |
-| `dot` | `boolean` | `false` | Render as dot indicator |
-| `className` | `string` | - | Additional CSS classes |
-| `removable` | `boolean` | `false` | Show remove button |
-| `onRemove` | `object` | - | HTMX options for remove |
+| Option      | Type                                                                                                 | Default     | Description                |
+| ----------- | ---------------------------------------------------------------------------------------------------- | ----------- | -------------------------- |
+| `variant`   | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info' \| 'outline'` | `'default'` | Visual style               |
+| `size`      | `'sm' \| 'md' \| 'lg'`                                                                               | `'md'`      | Badge size                 |
+| `pill`      | `boolean`                                                                                            | `false`     | Fully rounded (pill shape) |
+| `icon`      | `string`                                                                                             | -           | HTML for icon before text  |
+| `dot`       | `boolean`                                                                                            | `false`     | Render as dot indicator    |
+| `className` | `string`                                                                                             | -           | Additional CSS classes     |
+| `removable` | `boolean`                                                                                            | `false`     | Show remove button         |
+| `onRemove`  | `object`                                                                                             | -           | HTMX options for remove    |
 
 ### `badgeGroup(badges, options?)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `gap` | `'sm' \| 'md' \| 'lg'` | `'sm'` | Space between badges |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                   | Default | Description            |
+| ----------- | ---------------------- | ------- | ---------------------- |
+| `gap`       | `'sm' \| 'md' \| 'lg'` | `'sm'`  | Space between badges   |
+| `className` | `string`               | -       | Additional CSS classes |
 
 ### Returns
 

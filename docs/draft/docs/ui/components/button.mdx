@@ -188,17 +188,17 @@ const loadBtn = button('Fetch Data', {
 
 ### HTMX Options
 
-| Option | Description |
-|--------|-------------|
-| `get` | HTTP GET request URL |
-| `post` | HTTP POST request URL |
-| `put` | HTTP PUT request URL |
-| `delete` | HTTP DELETE request URL |
-| `target` | CSS selector for response target |
-| `swap` | How to swap content |
-| `trigger` | Event that triggers request |
-| `confirm` | Confirmation dialog text |
-| `indicator` | Loading indicator selector |
+| Option      | Description                      |
+| ----------- | -------------------------------- |
+| `get`       | HTTP GET request URL             |
+| `post`      | HTTP POST request URL            |
+| `put`       | HTTP PUT request URL             |
+| `delete`    | HTTP DELETE request URL          |
+| `target`    | CSS selector for response target |
+| `swap`      | How to swap content              |
+| `trigger`   | Event that triggers request      |
+| `confirm`   | Confirmation dialog text         |
+| `indicator` | Loading indicator selector       |
 
 ## Button Groups
 
@@ -237,12 +237,12 @@ const spaced = buttonGroup([
 
 ### ButtonGroup Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `attached` | `boolean` | `false` | Join buttons with no gap |
-| `direction` | `'horizontal' \| 'vertical'` | `'horizontal'` | Layout direction |
-| `gap` | `'sm' \| 'md' \| 'lg'` | `'md'` | Space between buttons |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                         | Default        | Description              |
+| ----------- | ---------------------------- | -------------- | ------------------------ |
+| `attached`  | `boolean`                    | `false`        | Join buttons with no gap |
+| `direction` | `'horizontal' \| 'vertical'` | `'horizontal'` | Layout direction         |
+| `gap`       | `'sm' \| 'md' \| 'lg'`       | `'md'`         | Space between buttons    |
+| `className` | `string`                     | -              | Additional CSS classes   |
 
 ## Data Attributes
 
@@ -262,33 +262,33 @@ const html = button('Track Click', {
 
 ### `button(text, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | `string` | Button label (used as aria-label for icon-only) |
-| `options` | `ButtonOptions` | Configuration options |
+| Parameter | Type            | Description                                     |
+| --------- | --------------- | ----------------------------------------------- |
+| `text`    | `string`        | Button label (used as aria-label for icon-only) |
+| `options` | `ButtonOptions` | Configuration options                           |
 
 ### ButtonOptions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'success' \| 'link'` | `'primary'` | Visual style |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | `'md'` | Button size |
-| `type` | `'button' \| 'submit' \| 'reset'` | `'button'` | HTML button type |
-| `disabled` | `boolean` | `false` | Disable the button |
-| `loading` | `boolean` | `false` | Show loading spinner |
-| `fullWidth` | `boolean` | `false` | Full container width |
-| `iconBefore` | `string` | - | HTML for icon before text |
-| `iconAfter` | `string` | - | HTML for icon after text |
-| `iconOnly` | `boolean` | `false` | Hide text, show icon only |
-| `className` | `string` | - | Additional CSS classes |
-| `id` | `string` | - | Button ID |
-| `name` | `string` | - | Form field name |
-| `value` | `string` | - | Form field value |
-| `href` | `string` | - | Link URL (renders as `<a>`) |
-| `target` | `string` | - | Link target |
-| `htmx` | `object` | - | HTMX attributes |
-| `data` | `Record<string, string>` | - | Data attributes |
-| `ariaLabel` | `string` | - | Accessibility label |
+| Option       | Type                                                                                  | Default     | Description                 |
+| ------------ | ------------------------------------------------------------------------------------- | ----------- | --------------------------- |
+| `variant`    | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'success' \| 'link'` | `'primary'` | Visual style                |
+| `size`       | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'`                                                | `'md'`      | Button size                 |
+| `type`       | `'button' \| 'submit' \| 'reset'`                                                     | `'button'`  | HTML button type            |
+| `disabled`   | `boolean`                                                                             | `false`     | Disable the button          |
+| `loading`    | `boolean`                                                                             | `false`     | Show loading spinner        |
+| `fullWidth`  | `boolean`                                                                             | `false`     | Full container width        |
+| `iconBefore` | `string`                                                                              | -           | HTML for icon before text   |
+| `iconAfter`  | `string`                                                                              | -           | HTML for icon after text    |
+| `iconOnly`   | `boolean`                                                                             | `false`     | Hide text, show icon only   |
+| `className`  | `string`                                                                              | -           | Additional CSS classes      |
+| `id`         | `string`                                                                              | -           | Button ID                   |
+| `name`       | `string`                                                                              | -           | Form field name             |
+| `value`      | `string`                                                                              | -           | Form field value            |
+| `href`       | `string`                                                                              | -           | Link URL (renders as `<a>`) |
+| `target`     | `string`                                                                              | -           | Link target                 |
+| `htmx`       | `object`                                                                              | -           | HTMX attributes             |
+| `data`       | `Record<string, string>`                                                              | -           | Data attributes             |
+| `ariaLabel`  | `string`                                                                              | -           | Accessibility label         |
 
 ### Returns
 

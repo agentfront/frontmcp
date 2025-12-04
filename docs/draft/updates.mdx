@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-11-28" tags={["Releases"]}>
+<Update label="draft" description="2025-12-04" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -15,9 +15,15 @@ mode: 'center'
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
+    💥 **Zod 4 + MCP 1.23 alignment** – The SDK, CLI, and plugins now build against `zod@4` and `@modelcontextprotocol/sdk@1.23`, so upgrade your peer dependencies and regenerate any JSON schema helpers with `zod-from-json-schema` before shipping extensions.
+
     **Features**
 
     🎨 **Platform-aware UI library** – Build HTML-only consent, troubleshooting, and widget-rich flows with the new `@frontmcp/ui` package, complete with Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
+
+    🖼️ **Tool UI templates** – Attach inline HTML, React, or MDX widgets with the new `ui` option on tools, pick inline/fullscreen/PiP display modes, hydrate React components, and gate outbound calls with built-in CSP controls.
+
+    🗂️ **Resource widget kit** – Drop in `resourceWidget`, `resourceList`, `resourceItem`, plus `codePreview` and `imagePreview` helpers to show documents, tickets, or semantic search hits with consistent badges, metadata, and HTMX-powered actions.
 
     📡 **Transport-aware auth** – Flip the new `auth.transport` switches per app to enable streamable, stateful, or stateless HTTP plus SSE listeners, so production stays locked down while demos and CI can bypass the `initialize` handshake.
 
@@ -33,7 +39,7 @@ mode: 'center'
 
     🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
 
-    🧪 **@frontmcp/testing** – Author Jest-based end-to-end suites with fixture injection, HTTP mocking, request interceptors, and custom MCP matchers while the runner boots your server automatically via `test.use()`.
+    🧪 **@frontmcp/testing** – Author Jest-based end-to-end suites with fixture injection, HTTP mocking, UI assertions (HTML sanitization, bound value checks, screenshot helpers), and custom MCP matchers while the runner boots your server automatically via `test.use()`.
 
     🗃️ **Demo Showcase server** – Boot the new `apps/demo-showcase` notes app to exercise tools, resources, prompts, and OpenAPI adapters in one place, complete with sample `apps/demo-showcase/e2e` suites you can copy into your own repo.
 
@@ -51,11 +57,15 @@ mode: 'center'
 
     🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
 
+    🧱 **Computed destructuring guard** – New runtime rules block computed property destructuring and suspicious proxy traps so untrusted scripts cannot smuggle forbidden identifiers into the execution context.
+
     **Docs**
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
+
+    📁 **Resource widget reference** – `/docs/ui/components/resource-widget` covers resource cards, lists, and preview helpers so Tool UI responses stay consistent across chats and dashboards.
 
     🛰️ **Discovery reference** – Added `/docs/servers/discovery` to explain `prompts/list`, `prompts/get`, and `resources/templates/list` responses plus the new `list_changed` notifications.
 

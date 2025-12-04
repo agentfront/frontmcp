@@ -315,41 +315,41 @@ const userManagement = card(`
 
 ### `modal(options)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `id` | `string` | required | Modal ID for open/close |
-| `title` | `string` | - | Modal header title |
-| `content` | `string` | required | Modal body HTML |
-| `footer` | `string` | - | Modal footer HTML |
-| `size` | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'` | Modal width |
-| `open` | `boolean` | `false` | Initially open |
-| `closable` | `boolean` | `true` | Show close button |
-| `closeOnBackdrop` | `boolean` | `true` | Close on backdrop click |
-| `className` | `string` | - | Additional CSS classes |
+| Option            | Type                                     | Default  | Description             |
+| ----------------- | ---------------------------------------- | -------- | ----------------------- |
+| `id`              | `string`                                 | required | Modal ID for open/close |
+| `title`           | `string`                                 | -        | Modal header title      |
+| `content`         | `string`                                 | required | Modal body HTML         |
+| `footer`          | `string`                                 | -        | Modal footer HTML       |
+| `size`            | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'`   | Modal width             |
+| `open`            | `boolean`                                | `false`  | Initially open          |
+| `closable`        | `boolean`                                | `true`   | Show close button       |
+| `closeOnBackdrop` | `boolean`                                | `true`   | Close on backdrop click |
+| `className`       | `string`                                 | -        | Additional CSS classes  |
 
 ### `drawer(options)`
 
 Same as `modal` plus:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'` | Slide direction |
-| `width` | `string` | `'320px'` | Drawer width (left/right) |
-| `height` | `string` | `'50%'` | Drawer height (top/bottom) |
+| Option     | Type                                     | Default   | Description                |
+| ---------- | ---------------------------------------- | --------- | -------------------------- |
+| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'` | Slide direction            |
+| `width`    | `string`                                 | `'320px'` | Drawer width (left/right)  |
+| `height`   | `string`                                 | `'50%'`   | Drawer height (top/bottom) |
 
 ### `dialog(options)`
 
 Simplified confirmation dialog:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `id` | `string` | required | Dialog ID |
-| `title` | `string` | required | Dialog title |
-| `message` | `string` | required | Confirmation message |
-| `confirmText` | `string` | `'Confirm'` | Confirm button text |
-| `confirmVariant` | `string` | `'primary'` | Confirm button variant |
-| `cancelText` | `string` | `'Cancel'` | Cancel button text |
-| `onConfirm` | `object` | - | HTMX options for confirm |
+| Option           | Type     | Default     | Description              |
+| ---------------- | -------- | ----------- | ------------------------ |
+| `id`             | `string` | required    | Dialog ID                |
+| `title`          | `string` | required    | Dialog title             |
+| `message`        | `string` | required    | Confirmation message     |
+| `confirmText`    | `string` | `'Confirm'` | Confirm button text      |
+| `confirmVariant` | `string` | `'primary'` | Confirm button variant   |
+| `cancelText`     | `string` | `'Cancel'`  | Cancel button text       |
+| `onConfirm`      | `object` | -           | HTMX options for confirm |
 
 ### Returns
 

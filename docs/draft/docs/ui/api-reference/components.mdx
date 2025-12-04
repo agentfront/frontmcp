@@ -19,25 +19,25 @@ import { button, buttonGroup } from '@frontmcp/ui';
 
 Creates a button element.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `label` | `string` | Button text content |
+| Parameter | Type            | Description           |
+| --------- | --------------- | --------------------- |
+| `label`   | `string`        | Button text content   |
 | `options` | `ButtonOptions` | Configuration options |
 
 #### ButtonOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `variant` | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'link'` | `'primary'` | Visual style |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | `'md'` | Button size |
-| `disabled` | `boolean` | `false` | Disable interactions |
-| `loading` | `boolean` | `false` | Show loading spinner |
-| `fullWidth` | `boolean` | `false` | Stretch to container width |
-| `type` | `'button' \| 'submit' \| 'reset'` | `'button'` | HTML button type |
-| `id` | `string` | - | DOM element ID |
-| `className` | `string` | - | Additional CSS classes |
-| `data` | `Record<string, string>` | - | Data attributes |
-| `htmx` | `HtmxOptions` | - | HTMX attributes |
+| Property    | Type                                                                     | Default     | Description                |
+| ----------- | ------------------------------------------------------------------------ | ----------- | -------------------------- |
+| `variant`   | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'link'` | `'primary'` | Visual style               |
+| `size`      | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'`                                   | `'md'`      | Button size                |
+| `disabled`  | `boolean`                                                                | `false`     | Disable interactions       |
+| `loading`   | `boolean`                                                                | `false`     | Show loading spinner       |
+| `fullWidth` | `boolean`                                                                | `false`     | Stretch to container width |
+| `type`      | `'button' \| 'submit' \| 'reset'`                                        | `'button'`  | HTML button type           |
+| `id`        | `string`                                                                 | -           | DOM element ID             |
+| `className` | `string`                                                                 | -           | Additional CSS classes     |
+| `data`      | `Record<string, string>`                                                 | -           | Data attributes            |
+| `htmx`      | `HtmxOptions`                                                            | -           | HTMX attributes            |
 
 ```typescript
 // Basic
@@ -64,11 +64,11 @@ button('Load More', {
 
 Groups multiple buttons together.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `direction` | `'horizontal' \| 'vertical'` | `'horizontal'` | Layout direction |
-| `gap` | `'xs' \| 'sm' \| 'md' \| 'lg'` | `'sm'` | Spacing between buttons |
-| `align` | `'start' \| 'center' \| 'end'` | `'start'` | Alignment |
+| Property    | Type                           | Default        | Description             |
+| ----------- | ------------------------------ | -------------- | ----------------------- |
+| `direction` | `'horizontal' \| 'vertical'`   | `'horizontal'` | Layout direction        |
+| `gap`       | `'xs' \| 'sm' \| 'md' \| 'lg'` | `'sm'`         | Spacing between buttons |
+| `align`     | `'start' \| 'center' \| 'end'` | `'start'`      | Alignment               |
 
 ### Preset Buttons
 
@@ -99,22 +99,22 @@ import { card, cardGroup } from '@frontmcp/ui';
 
 Creates a card container.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `content` | `string` | Card body content (HTML) |
-| `options` | `CardOptions` | Configuration options |
+| Parameter | Type          | Description              |
+| --------- | ------------- | ------------------------ |
+| `content` | `string`      | Card body content (HTML) |
+| `options` | `CardOptions` | Configuration options    |
 
 #### CardOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `title` | `string` | - | Card header title |
-| `subtitle` | `string` | - | Header subtitle |
-| `footer` | `string` | - | Footer content (HTML) |
-| `variant` | `'default' \| 'outline' \| 'elevated' \| 'ghost'` | `'default'` | Visual style |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Padding size |
-| `noPadding` | `boolean` | `false` | Remove body padding |
-| `className` | `string` | - | Additional CSS classes |
+| Property    | Type                                              | Default     | Description            |
+| ----------- | ------------------------------------------------- | ----------- | ---------------------- |
+| `title`     | `string`                                          | -           | Card header title      |
+| `subtitle`  | `string`                                          | -           | Header subtitle        |
+| `footer`    | `string`                                          | -           | Footer content (HTML)  |
+| `variant`   | `'default' \| 'outline' \| 'elevated' \| 'ghost'` | `'default'` | Visual style           |
+| `size`      | `'sm' \| 'md' \| 'lg'`                            | `'md'`      | Padding size           |
+| `noPadding` | `boolean`                                         | `false`     | Remove body padding    |
+| `className` | `string`                                          | -           | Additional CSS classes |
 
 ```typescript
 card('<p>Card content</p>', {
@@ -129,10 +129,10 @@ card('<p>Card content</p>', {
 
 Groups cards in a grid layout.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `cols` | `1 \| 2 \| 3 \| 4` | `2` | Number of columns |
-| `gap` | `'sm' \| 'md' \| 'lg'` | `'md'` | Gap between cards |
+| Property | Type                   | Default | Description       |
+| -------- | ---------------------- | ------- | ----------------- |
+| `cols`   | `1 \| 2 \| 3 \| 4`     | `2`     | Number of columns |
+| `gap`    | `'sm' \| 'md' \| 'lg'` | `'md'`  | Gap between cards |
 
 ---
 
@@ -146,21 +146,21 @@ import { badge, badgeGroup } from '@frontmcp/ui';
 
 Creates a badge/tag element.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `label` | `string` | Badge text |
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `label`   | `string`       | Badge text            |
 | `options` | `BadgeOptions` | Configuration options |
 
 #### BadgeOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `variant` | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info'` | `'default'` | Color variant |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg'` | `'md'` | Badge size |
-| `rounded` | `'sm' \| 'md' \| 'lg' \| 'full'` | `'full'` | Border radius |
-| `dot` | `boolean` | `false` | Show as status dot |
-| `removable` | `boolean` | `false` | Show remove button |
-| `className` | `string` | - | Additional CSS classes |
+| Property    | Type                                                                                    | Default     | Description            |
+| ----------- | --------------------------------------------------------------------------------------- | ----------- | ---------------------- |
+| `variant`   | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info'` | `'default'` | Color variant          |
+| `size`      | `'xs' \| 'sm' \| 'md' \| 'lg'`                                                          | `'md'`      | Badge size             |
+| `rounded`   | `'sm' \| 'md' \| 'lg' \| 'full'`                                                        | `'full'`    | Border radius          |
+| `dot`       | `boolean`                                                                               | `false`     | Show as status dot     |
+| `removable` | `boolean`                                                                               | `false`     | Show remove button     |
+| `className` | `string`                                                                                | -           | Additional CSS classes |
 
 ```typescript
 badge('New', { variant: 'success' });
@@ -208,24 +208,24 @@ import { alert, toast, toastContainer } from '@frontmcp/ui';
 
 Creates an alert/banner element.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `message` | `string` | Alert content (HTML) |
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `message` | `string`       | Alert content (HTML)  |
 | `options` | `AlertOptions` | Configuration options |
 
 #### AlertOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `variant` | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style |
-| `title` | `string` | - | Alert heading |
-| `showIcon` | `boolean` | `true` | Show variant icon |
-| `icon` | `string` | - | Custom icon HTML |
-| `dismissible` | `boolean` | `false` | Show close button |
-| `className` | `string` | - | Additional CSS classes |
-| `id` | `string` | - | Alert ID |
-| `actions` | `string` | - | HTML for action buttons |
-| `onDismiss` | `HtmxOptions` | - | HTMX options for dismiss |
+| Property      | Type                                                        | Default  | Description              |
+| ------------- | ----------------------------------------------------------- | -------- | ------------------------ |
+| `variant`     | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style             |
+| `title`       | `string`                                                    | -        | Alert heading            |
+| `showIcon`    | `boolean`                                                   | `true`   | Show variant icon        |
+| `icon`        | `string`                                                    | -        | Custom icon HTML         |
+| `dismissible` | `boolean`                                                   | `false`  | Show close button        |
+| `className`   | `string`                                                    | -        | Additional CSS classes   |
+| `id`          | `string`                                                    | -        | Alert ID                 |
+| `actions`     | `string`                                                    | -        | HTML for action buttons  |
+| `onDismiss`   | `HtmxOptions`                                               | -        | HTMX options for dismiss |
 
 ```typescript
 alert('Operation completed successfully', {
@@ -250,14 +250,14 @@ Creates a toast notification.
 
 #### ToastOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `variant` | `AlertVariant` | `'info'` | Visual style |
-| `title` | `string` | - | Toast heading |
-| `duration` | `number` | `5000` | Auto-dismiss ms (0 = no auto-dismiss) |
-| `position` | `'top-right' \| 'top-left' \| 'bottom-right' \| 'bottom-left' \| 'top-center' \| 'bottom-center'` | `'top-right'` | Screen position |
-| `id` | `string` | auto-generated | Toast ID |
-| `dismissible` | `boolean` | `true` | Show close button |
+| Property      | Type                                                                                              | Default        | Description                           |
+| ------------- | ------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
+| `variant`     | `AlertVariant`                                                                                    | `'info'`       | Visual style                          |
+| `title`       | `string`                                                                                          | -              | Toast heading                         |
+| `duration`    | `number`                                                                                          | `5000`         | Auto-dismiss ms (0 = no auto-dismiss) |
+| `position`    | `'top-right' \| 'top-left' \| 'bottom-right' \| 'bottom-left' \| 'top-center' \| 'bottom-center'` | `'top-right'`  | Screen position                       |
+| `id`          | `string`                                                                                          | auto-generated | Toast ID                              |
+| `dismissible` | `boolean`                                                                                         | `true`         | Show close button                     |
 
 ### `toastContainer(position?)`
 
@@ -277,23 +277,23 @@ Creates a text input field.
 
 #### InputOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `type` | `'text' \| 'email' \| 'password' \| 'number' \| 'tel' \| 'url' \| 'search' \| 'date' \| 'time' \| 'datetime-local'` | `'text'` | Input type |
-| `name` | `string` | - | Field name |
-| `value` | `string` | - | Initial value |
-| `placeholder` | `string` | - | Placeholder text |
-| `label` | `string` | - | Associated label |
-| `hint` | `string` | - | Help text |
-| `error` | `string` | - | Error message |
-| `required` | `boolean` | `false` | Required field |
-| `disabled` | `boolean` | `false` | Disabled state |
-| `readonly` | `boolean` | `false` | Read-only state |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Input size |
-| `state` | `'default' \| 'error' \| 'success'` | `'default'` | Validation state |
-| `prefix` | `string` | - | Text/icon before input |
-| `suffix` | `string` | - | Text/icon after input |
-| `htmx` | `HtmxOptions` | - | HTMX attributes |
+| Property      | Type                                                                                                                | Default     | Description            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------- |
+| `type`        | `'text' \| 'email' \| 'password' \| 'number' \| 'tel' \| 'url' \| 'search' \| 'date' \| 'time' \| 'datetime-local'` | `'text'`    | Input type             |
+| `name`        | `string`                                                                                                            | -           | Field name             |
+| `value`       | `string`                                                                                                            | -           | Initial value          |
+| `placeholder` | `string`                                                                                                            | -           | Placeholder text       |
+| `label`       | `string`                                                                                                            | -           | Associated label       |
+| `hint`        | `string`                                                                                                            | -           | Help text              |
+| `error`       | `string`                                                                                                            | -           | Error message          |
+| `required`    | `boolean`                                                                                                           | `false`     | Required field         |
+| `disabled`    | `boolean`                                                                                                           | `false`     | Disabled state         |
+| `readonly`    | `boolean`                                                                                                           | `false`     | Read-only state        |
+| `size`        | `'sm' \| 'md' \| 'lg'`                                                                                              | `'md'`      | Input size             |
+| `state`       | `'default' \| 'error' \| 'success'`                                                                                 | `'default'` | Validation state       |
+| `prefix`      | `string`                                                                                                            | -           | Text/icon before input |
+| `suffix`      | `string`                                                                                                            | -           | Text/icon after input  |
+| `htmx`        | `HtmxOptions`                                                                                                       | -           | HTMX attributes        |
 
 ```typescript
 input({
@@ -311,15 +311,15 @@ Creates a select dropdown.
 
 #### SelectOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `name` | `string` | - | Field name |
-| `options` | `SelectOption[]` | `[]` | Dropdown options |
-| `value` | `string` | - | Selected value |
-| `placeholder` | `string` | - | Placeholder option |
-| `label` | `string` | - | Associated label |
-| `multiple` | `boolean` | `false` | Multi-select |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Select size |
+| Property      | Type                   | Default | Description        |
+| ------------- | ---------------------- | ------- | ------------------ |
+| `name`        | `string`               | -       | Field name         |
+| `options`     | `SelectOption[]`       | `[]`    | Dropdown options   |
+| `value`       | `string`               | -       | Selected value     |
+| `placeholder` | `string`               | -       | Placeholder option |
+| `label`       | `string`               | -       | Associated label   |
+| `multiple`    | `boolean`              | `false` | Multi-select       |
+| `size`        | `'sm' \| 'md' \| 'lg'` | `'md'`  | Select size        |
 
 ```typescript
 interface SelectOption {
@@ -344,14 +344,14 @@ Creates a textarea element.
 
 #### TextareaOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `name` | `string` | - | Field name |
-| `value` | `string` | - | Initial value |
-| `placeholder` | `string` | - | Placeholder text |
-| `label` | `string` | - | Associated label |
-| `rows` | `number` | `4` | Visible rows |
-| `resize` | `'none' \| 'vertical' \| 'horizontal' \| 'both'` | `'vertical'` | Resize behavior |
+| Property      | Type                                             | Default      | Description      |
+| ------------- | ------------------------------------------------ | ------------ | ---------------- |
+| `name`        | `string`                                         | -            | Field name       |
+| `value`       | `string`                                         | -            | Initial value    |
+| `placeholder` | `string`                                         | -            | Placeholder text |
+| `label`       | `string`                                         | -            | Associated label |
+| `rows`        | `number`                                         | `4`          | Visible rows     |
+| `resize`      | `'none' \| 'vertical' \| 'horizontal' \| 'both'` | `'vertical'` | Resize behavior  |
 
 ### `checkbox(options)`
 
@@ -359,12 +359,12 @@ Creates a checkbox input.
 
 #### CheckboxOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `name` | `string` | - | Field name |
-| `label` | `string` | - | Checkbox label |
-| `checked` | `boolean` | `false` | Initial state |
-| `value` | `string` | - | Checkbox value |
+| Property   | Type      | Default | Description    |
+| ---------- | --------- | ------- | -------------- |
+| `name`     | `string`  | -       | Field name     |
+| `label`    | `string`  | -       | Checkbox label |
+| `checked`  | `boolean` | `false` | Initial state  |
+| `value`    | `string`  | -       | Checkbox value |
 | `disabled` | `boolean` | `false` | Disabled state |
 
 ### `radioGroup(options)`
@@ -373,12 +373,12 @@ Creates a group of radio buttons.
 
 #### RadioGroupOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `name` | `string` | - | Field name (shared) |
-| `options` | `SelectOption[]` | `[]` | Radio options |
-| `value` | `string` | - | Selected value |
-| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout |
+| Property    | Type                         | Default      | Description         |
+| ----------- | ---------------------------- | ------------ | ------------------- |
+| `name`      | `string`                     | -            | Field name (shared) |
+| `options`   | `SelectOption[]`             | `[]`         | Radio options       |
+| `value`     | `string`                     | -            | Selected value      |
+| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout              |
 
 ### `form(content, options?)`
 
@@ -386,13 +386,13 @@ Wraps content in a form element.
 
 #### FormOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `action` | `string` | - | Form action URL |
-| `method` | `'get' \| 'post'` | `'post'` | HTTP method |
-| `id` | `string` | - | Form ID |
-| `className` | `string` | - | Additional CSS classes |
-| `htmx` | `HtmxOptions` | - | HTMX form handling |
+| Property    | Type              | Default  | Description            |
+| ----------- | ----------------- | -------- | ---------------------- |
+| `action`    | `string`          | -        | Form action URL        |
+| `method`    | `'get' \| 'post'` | `'post'` | HTTP method            |
+| `id`        | `string`          | -        | Form ID                |
+| `className` | `string`          | -        | Additional CSS classes |
+| `htmx`      | `HtmxOptions`     | -        | HTMX form handling     |
 
 ### Form Layout Helpers
 
@@ -427,27 +427,27 @@ Creates a data table.
 
 #### TableOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `columns` | `TableColumn[]` | `[]` | Column definitions |
-| `data` | `Record<string, unknown>[]` | `[]` | Row data |
-| `striped` | `boolean` | `false` | Striped rows |
-| `hover` | `boolean` | `true` | Row hover effect |
-| `bordered` | `boolean` | `false` | Cell borders |
-| `compact` | `boolean` | `false` | Reduced padding |
-| `caption` | `string` | - | Table caption |
-| `emptyMessage` | `string` | `'No data'` | Empty state message |
+| Property       | Type                        | Default     | Description         |
+| -------------- | --------------------------- | ----------- | ------------------- |
+| `columns`      | `TableColumn[]`             | `[]`        | Column definitions  |
+| `data`         | `Record<string, unknown>[]` | `[]`        | Row data            |
+| `striped`      | `boolean`                   | `false`     | Striped rows        |
+| `hover`        | `boolean`                   | `true`      | Row hover effect    |
+| `bordered`     | `boolean`                   | `false`     | Cell borders        |
+| `compact`      | `boolean`                   | `false`     | Reduced padding     |
+| `caption`      | `string`                    | -           | Table caption       |
+| `emptyMessage` | `string`                    | `'No data'` | Empty state message |
 
 #### TableColumn
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `key` | `string` | Data property key |
-| `header` | `string` | Column header text |
-| `align` | `'left' \| 'center' \| 'right'` | Text alignment |
-| `width` | `string` | Column width (CSS) |
-| `sortable` | `boolean` | Enable sorting |
-| `render` | `(value, row) => string` | Custom cell renderer |
+| Property   | Type                            | Description          |
+| ---------- | ------------------------------- | -------------------- |
+| `key`      | `string`                        | Data property key    |
+| `header`   | `string`                        | Column header text   |
+| `align`    | `'left' \| 'center' \| 'right'` | Text alignment       |
+| `width`    | `string`                        | Column width (CSS)   |
+| `sortable` | `boolean`                       | Enable sorting       |
+| `render`   | `(value, row) => string`        | Custom cell renderer |
 
 ```typescript
 table({
@@ -471,13 +471,13 @@ Creates pagination controls.
 
 #### PaginationOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `total` | `number` | - | Total items |
-| `page` | `number` | `1` | Current page |
-| `pageSize` | `number` | `10` | Items per page |
-| `baseUrl` | `string` | - | URL template |
-| `htmx` | `HtmxOptions` | - | HTMX navigation |
+| Property   | Type          | Default | Description     |
+| ---------- | ------------- | ------- | --------------- |
+| `total`    | `number`      | -       | Total items     |
+| `page`     | `number`      | `1`     | Current page    |
+| `pageSize` | `number`      | `10`    | Items per page  |
+| `baseUrl`  | `string`      | -       | URL template    |
+| `htmx`     | `HtmxOptions` | -       | HTMX navigation |
 
 ---
 
@@ -569,14 +569,14 @@ Creates an avatar element.
 
 #### AvatarOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `src` | `string` | - | Image URL |
-| `alt` | `string` | `''` | Alt text |
-| `initials` | `string` | - | Fallback initials |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'` | `'md'` | Avatar size |
-| `shape` | `'circle' \| 'square'` | `'circle'` | Shape |
-| `status` | `'online' \| 'offline' \| 'busy' \| 'away'` | - | Status indicator |
+| Property   | Type                                        | Default    | Description       |
+| ---------- | ------------------------------------------- | ---------- | ----------------- |
+| `src`      | `string`                                    | -          | Image URL         |
+| `alt`      | `string`                                    | `''`       | Alt text          |
+| `initials` | `string`                                    | -          | Fallback initials |
+| `size`     | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'`      | `'md'`     | Avatar size       |
+| `shape`    | `'circle' \| 'square'`                      | `'circle'` | Shape             |
+| `status`   | `'online' \| 'offline' \| 'busy' \| 'away'` | -          | Status indicator  |
 
 ```typescript
 avatar({
@@ -598,11 +598,11 @@ Groups multiple avatars with overlap.
 
 #### AvatarGroupOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `max` | `number` | - | Max visible (shows +N) |
-| `size` | `AvatarSize` | `'md'` | Size for all |
-| `spacing` | `'tight' \| 'normal'` | `'normal'` | Overlap amount |
+| Property  | Type                  | Default    | Description            |
+| --------- | --------------------- | ---------- | ---------------------- |
+| `max`     | `number`              | -          | Max visible (shows +N) |
+| `size`    | `AvatarSize`          | `'md'`     | Size for all           |
+| `spacing` | `'tight' \| 'normal'` | `'normal'` | Overlap amount         |
 
 ### `avatarWithText(options)`
 
@@ -610,11 +610,11 @@ Avatar with name and optional subtitle.
 
 #### AvatarWithTextOptions
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `avatar` | `AvatarOptions` | Avatar config |
-| `name` | `string` | Primary text |
-| `subtitle` | `string` | Secondary text |
+| Property   | Type            | Description    |
+| ---------- | --------------- | -------------- |
+| `avatar`   | `AvatarOptions` | Avatar config  |
+| `name`     | `string`        | Primary text   |
+| `subtitle` | `string`        | Secondary text |
 
 ---
 
@@ -630,13 +630,13 @@ Creates a modal dialog.
 
 #### ModalOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `id` | `string` | **required** | Modal ID |
-| `title` | `string` | - | Modal title |
-| `size` | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'` | Modal width |
-| `closable` | `boolean` | `true` | Show close button |
-| `footer` | `string` | - | Footer content |
+| Property   | Type                                     | Default      | Description       |
+| ---------- | ---------------------------------------- | ------------ | ----------------- |
+| `id`       | `string`                                 | **required** | Modal ID          |
+| `title`    | `string`                                 | -            | Modal title       |
+| `size`     | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'`       | Modal width       |
+| `closable` | `boolean`                                | `true`       | Show close button |
+| `footer`   | `string`                                 | -            | Footer content    |
 
 ```typescript
 modal('<p>Modal content</p>', {
@@ -660,15 +660,15 @@ Creates a confirmation dialog.
 
 #### ConfirmModalOptions
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `id` | `string` | Modal ID |
-| `title` | `string` | Dialog title |
-| `message` | `string` | Confirmation message |
-| `confirmText` | `string` | Confirm button text |
-| `cancelText` | `string` | Cancel button text |
+| Property         | Type            | Description          |
+| ---------------- | --------------- | -------------------- |
+| `id`             | `string`        | Modal ID             |
+| `title`          | `string`        | Dialog title         |
+| `message`        | `string`        | Confirmation message |
+| `confirmText`    | `string`        | Confirm button text  |
+| `cancelText`     | `string`        | Cancel button text   |
 | `confirmVariant` | `ButtonVariant` | Confirm button style |
-| `onConfirm` | `HtmxOptions` | Confirm action |
+| `onConfirm`      | `HtmxOptions`   | Confirm action       |
 
 ### `drawer(content, options)`
 
@@ -676,12 +676,12 @@ Creates a slide-out drawer.
 
 #### DrawerOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `id` | `string` | **required** | Drawer ID |
-| `title` | `string` | - | Drawer title |
-| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'` | Slide direction |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Drawer width |
+| Property   | Type                                     | Default      | Description     |
+| ---------- | ---------------------------------------- | ------------ | --------------- |
+| `id`       | `string`                                 | **required** | Drawer ID       |
+| `title`    | `string`                                 | -            | Drawer title    |
+| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'`    | Slide direction |
+| `size`     | `'sm' \| 'md' \| 'lg'`                   | `'md'`       | Drawer width    |
 
 ---
 
@@ -691,20 +691,20 @@ All interactive components accept an `htmx` property for server-driven updates.
 
 ### HtmxOptions
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `get` | `string` | GET request URL |
-| `post` | `string` | POST request URL |
-| `put` | `string` | PUT request URL |
-| `delete` | `string` | DELETE request URL |
-| `patch` | `string` | PATCH request URL |
-| `target` | `string` | CSS selector for target |
-| `swap` | `'innerHTML' \| 'outerHTML' \| 'beforeend' \| 'afterend' \| 'beforebegin' \| 'afterbegin' \| 'delete' \| 'none'` | Swap strategy |
-| `trigger` | `string` | Event trigger |
-| `indicator` | `string` | Loading indicator selector |
-| `confirm` | `string` | Confirmation message |
-| `vals` | `Record<string, string>` | Additional values |
-| `headers` | `Record<string, string>` | Request headers |
+| Property    | Type                                                                                                             | Description                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `get`       | `string`                                                                                                         | GET request URL            |
+| `post`      | `string`                                                                                                         | POST request URL           |
+| `put`       | `string`                                                                                                         | PUT request URL            |
+| `delete`    | `string`                                                                                                         | DELETE request URL         |
+| `patch`     | `string`                                                                                                         | PATCH request URL          |
+| `target`    | `string`                                                                                                         | CSS selector for target    |
+| `swap`      | `'innerHTML' \| 'outerHTML' \| 'beforeend' \| 'afterend' \| 'beforebegin' \| 'afterbegin' \| 'delete' \| 'none'` | Swap strategy              |
+| `trigger`   | `string`                                                                                                         | Event trigger              |
+| `indicator` | `string`                                                                                                         | Loading indicator selector |
+| `confirm`   | `string`                                                                                                         | Confirmation message       |
+| `vals`      | `Record<string, string>`                                                                                         | Additional values          |
+| `headers`   | `Record<string, string>`                                                                                         | Request headers            |
 
 ```typescript
 button('Delete', {

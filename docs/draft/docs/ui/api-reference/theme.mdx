@@ -28,8 +28,8 @@ const myTheme = createTheme({
 });
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter   | Type                   | Description            |
+| ----------- | ---------------------- | ---------------------- |
 | `overrides` | `Partial<ThemeConfig>` | Properties to override |
 
 **Returns:** `ThemeConfig` - Complete theme configuration
@@ -50,9 +50,9 @@ const merged = mergeThemes(DEFAULT_THEME, {
 });
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `base` | `ThemeConfig` | Base theme |
+| Parameter  | Type                       | Description     |
+| ---------- | -------------------------- | --------------- |
+| `base`     | `ThemeConfig`              | Base theme      |
 | `override` | `DeepPartial<ThemeConfig>` | Override values |
 
 **Returns:** `ThemeConfig` - Merged theme configuration
@@ -75,9 +75,9 @@ const css = buildThemeCss(DEFAULT_THEME);
 // Returns: "--color-primary: #24292f;\n--color-secondary: #57606a;\n..."
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `theme` | `ThemeConfig` | Theme configuration |
+| Parameter | Type          | Description         |
+| --------- | ------------- | ------------------- |
+| `theme`   | `ThemeConfig` | Theme configuration |
 
 **Returns:** `string` - CSS custom property declarations
 
@@ -94,9 +94,9 @@ const styleTag = buildStyleBlock(DEFAULT_THEME);
 // Returns: "<style type="text/tailwindcss">@theme { ... }</style>"
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `theme` | `ThemeConfig` | Theme configuration |
+| Parameter | Type          | Description         |
+| --------- | ------------- | ------------------- |
+| `theme`   | `ThemeConfig` | Theme configuration |
 
 **Returns:** `string` - HTML style element
 
@@ -589,13 +589,13 @@ const scripts = buildCdnScripts({
 });
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `tailwind` | `boolean` | Include Tailwind CSS |
-| `htmx` | `boolean` | Include HTMX |
-| `alpine` | `boolean` | Include Alpine.js |
-| `icons` | `boolean` | Include icon library |
-| `inline` | `boolean` | Inline scripts (for blocked networks) |
+| Option     | Type      | Description                           |
+| ---------- | --------- | ------------------------------------- |
+| `tailwind` | `boolean` | Include Tailwind CSS                  |
+| `htmx`     | `boolean` | Include HTMX                          |
+| `alpine`   | `boolean` | Include Alpine.js                     |
+| `icons`    | `boolean` | Include icon library                  |
+| `inline`   | `boolean` | Inline scripts (for blocked networks) |
 
 ### `fetchAndCacheScriptsFromTheme(theme)`
 
@@ -682,12 +682,12 @@ interface PlatformCapabilities {
 
 ### Platform Comparison
 
-| Platform | Network | Scripts | Tailwind | HTMX | callTool |
-|----------|---------|---------|----------|------|----------|
-| OpenAI | open | external | Yes | Yes | Yes |
-| Claude | blocked | inline | Limited | No | No |
-| Gemini | limited | inline | Limited | No | No |
-| ngrok | open | external | Yes | Yes | Yes |
+| Platform | Network | Scripts  | Tailwind | HTMX | callTool |
+| -------- | ------- | -------- | -------- | ---- | -------- |
+| OpenAI   | open    | external | Yes      | Yes  | Yes      |
+| Claude   | blocked | inline   | Limited  | No   | No       |
+| Gemini   | limited | inline   | Limited  | No   | No       |
+| ngrok    | open    | external | Yes      | Yes  | Yes      |
 
 ---
 
@@ -704,6 +704,7 @@ import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
 ```
 
 **Color Palette:**
+
 - Primary: `#24292f` (near-black)
 - Secondary: `#57606a` (medium gray)
 - Accent: `#0969da` (blue)
@@ -713,10 +714,12 @@ import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
 - Info: `#0969da`
 
 **Typography:**
+
 - Sans: System UI font stack
 - Mono: `ui-monospace, SFMono-Regular, ...`
 
 **Border Radius:**
+
 - sm: `3px`
 - md: `6px`
 - lg: `8px`

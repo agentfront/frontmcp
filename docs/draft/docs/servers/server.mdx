@@ -47,13 +47,13 @@ Everything else is optional with sensible defaults.
 
 **Info field descriptions:**
 
-| Field        | Description                                    |
-| ------------ | ---------------------------------------------- |
-| `name`       | Server name shown in MCP discovery             |
-| `version`    | Semantic version for clients to track          |
-| `title`      | Optional human-readable title                  |
-| `websiteUrl` | Link to documentation or homepage              |
-| `icons`      | MCP Icon array for visual branding             |
+| Field        | Description                           |
+| ------------ | ------------------------------------- |
+| `name`       | Server name shown in MCP discovery    |
+| `version`    | Semantic version for clients to track |
+| `title`      | Optional human-readable title         |
+| `websiteUrl` | Link to documentation or homepage     |
+| `icons`      | MCP Icon array for visual branding    |
 
 ```ts
 @FrontMcp({
@@ -114,11 +114,11 @@ http: {
 }
 ```
 
-| Field         | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `port`        | HTTP listening port (default: 3001)                        |
-| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery    |
-| `hostFactory` | Custom host implementation for advanced setups             |
+| Field         | Description                                             |
+| ------------- | ------------------------------------------------------- |
+| `port`        | HTTP listening port (default: 3001)                     |
+| `entryPath`   | JSON-RPC entry path; must match `.well-known` discovery |
+| `hostFactory` | Custom host implementation for advanced setups          |
 
 - **Port**: listening port for Streamable HTTP.
 - **entryPath**: your MCP JSON-RPC entry (`''` or `'/mcp'`). Must align with discovery.
@@ -171,10 +171,10 @@ session: {
 }
 ```
 
-| Field             | Description                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| `sessionMode`     | `'stateless'` (JWT) or `'stateful'` (server-side store)      |
-| `transportIdMode` | `'uuid'` (per-node) or `'jwt'` (signed, distributed)         |
+| Field             | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `sessionMode`     | `'stateless'` (JWT) or `'stateful'` (server-side store) |
+| `transportIdMode` | `'uuid'` (per-node) or `'jwt'` (signed, distributed)    |
 
 - **sessionMode** (default **`'stateless'`**):
 
@@ -201,12 +201,12 @@ logging: {
 }
 ```
 
-| Field           | Description                                                    |
-| --------------- | -------------------------------------------------------------- |
-| `level`         | Minimum log level: Debug, Verbose, Info, Warn, Error, Off      |
-| `enableConsole` | Whether to output to stdout (default: true)                    |
-| `prefix`        | Optional prefix for all log messages                           |
-| `transports`    | Custom log transport implementations                           |
+| Field           | Description                                               |
+| --------------- | --------------------------------------------------------- |
+| `level`         | Minimum log level: Debug, Verbose, Info, Warn, Error, Off |
+| `enableConsole` | Whether to output to stdout (default: true)               |
+| `prefix`        | Optional prefix for all log messages                      |
+| `transports`    | Custom log transport implementations                      |
 
 Use custom log transports for shipping logs to external systems; console remains on by default.
 

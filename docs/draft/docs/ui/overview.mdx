@@ -56,11 +56,11 @@ When your MCP tools return data, AI platforms typically display it as raw text o
 
 FrontMCP UI adapts to different AI platform capabilities:
 
-| Platform | Network Access | External Scripts | Widget Display |
-|----------|---------------|------------------|----------------|
-| **OpenAI** | Full | CDN allowed | Inline, Fullscreen, PiP |
-| **Claude** | Blocked | Inline only | Artifacts |
-| **Gemini** | Limited | Inline preferred | Basic |
+| Platform   | Network Access | External Scripts | Widget Display          |
+| ---------- | -------------- | ---------------- | ----------------------- |
+| **OpenAI** | Full           | CDN allowed      | Inline, Fullscreen, PiP |
+| **Claude** | Blocked        | Inline only      | Artifacts               |
+| **Gemini** | Limited        | Inline preferred | Basic                   |
 
 The library automatically detects the platform and adjusts rendering accordingly.
 
@@ -138,6 +138,7 @@ yarn add @frontmcp/ui
 ```bash pnpm
 pnpm add @frontmcp/ui
 ```
+
 </CodeGroup>
 
 <Info>

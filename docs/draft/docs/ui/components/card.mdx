@@ -195,42 +195,42 @@ const userCard = card(`
 
 ### `card(content, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `content` | `string` | Card body HTML content |
-| `options` | `CardOptions` | Configuration options |
+| Parameter | Type          | Description            |
+| --------- | ------------- | ---------------------- |
+| `content` | `string`      | Card body HTML content |
+| `options` | `CardOptions` | Configuration options  |
 
 ### CardOptions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `variant` | `'default' \| 'outlined' \| 'elevated' \| 'filled' \| 'ghost'` | `'default'` | Visual style |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Padding size |
-| `title` | `string` | - | Card header title |
-| `subtitle` | `string` | - | Card header subtitle |
-| `headerActions` | `string` | - | HTML for header action buttons |
-| `footer` | `string` | - | HTML for card footer |
-| `className` | `string` | - | Additional CSS classes |
-| `id` | `string` | - | Card ID |
-| `clickable` | `boolean` | `false` | Add hover effects |
-| `href` | `string` | - | Link URL (renders as `<a>`) |
-| `htmx` | `object` | - | HTMX attributes |
-| `data` | `Record<string, string>` | - | Data attributes |
+| Option          | Type                                                           | Default     | Description                    |
+| --------------- | -------------------------------------------------------------- | ----------- | ------------------------------ |
+| `variant`       | `'default' \| 'outlined' \| 'elevated' \| 'filled' \| 'ghost'` | `'default'` | Visual style                   |
+| `size`          | `'sm' \| 'md' \| 'lg'`                                         | `'md'`      | Padding size                   |
+| `title`         | `string`                                                       | -           | Card header title              |
+| `subtitle`      | `string`                                                       | -           | Card header subtitle           |
+| `headerActions` | `string`                                                       | -           | HTML for header action buttons |
+| `footer`        | `string`                                                       | -           | HTML for card footer           |
+| `className`     | `string`                                                       | -           | Additional CSS classes         |
+| `id`            | `string`                                                       | -           | Card ID                        |
+| `clickable`     | `boolean`                                                      | `false`     | Add hover effects              |
+| `href`          | `string`                                                       | -           | Link URL (renders as `<a>`)    |
+| `htmx`          | `object`                                                       | -           | HTMX attributes                |
+| `data`          | `Record<string, string>`                                       | -           | Data attributes                |
 
 ### `cardGroup(cards, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `cards` | `string[]` | Array of card HTML strings |
-| `options` | `object` | Group configuration |
+| Parameter | Type       | Description                |
+| --------- | ---------- | -------------------------- |
+| `cards`   | `string[]` | Array of card HTML strings |
+| `options` | `object`   | Group configuration        |
 
 ### CardGroup Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout direction |
-| `gap` | `'sm' \| 'md' \| 'lg'` | `'md'` | Space between cards |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                         | Default      | Description            |
+| ----------- | ---------------------------- | ------------ | ---------------------- |
+| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout direction       |
+| `gap`       | `'sm' \| 'md' \| 'lg'`       | `'md'`       | Space between cards    |
+| `className` | `string`                     | -            | Additional CSS classes |
 
 ### Returns
 
