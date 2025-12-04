@@ -175,12 +175,9 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
 >;
 
 /**
- * Tool metadata options with properly typed UI template.
- * The template function receives input/output types inferred from schemas.
- */
-/**
  * UI template type - accepts multiple formats.
  * Uses `unknown` for context types to avoid breaking generic inference.
+ * Template functions receive input/output as `unknown` - cast if type safety needed.
  */
 type __UITemplateType =
   | ((ctx: { input: unknown; output: unknown; structuredContent?: unknown; helpers: TemplateHelpers }) => string)
