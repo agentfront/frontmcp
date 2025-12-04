@@ -201,10 +201,13 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
     // If hydration is enabled, wrap with hydration markers
     if (options?.hydrate) {
       const componentName = (Component as { name?: string }).name || 'Component';
-      return `<div data-hydrate="${componentName}" data-props='${JSON.stringify(props).replace(
-        /'/g,
-        '&#39;',
-      )}'>${html}</div>`;
+      // Full HTML attribute escaping to prevent XSS
+      const escapedProps = JSON.stringify(props)
+        .replace(/&/g, '&amp;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<div data-hydrate="${componentName}" data-props='${escapedProps}'>${html}</div>`;
     }
 
     return html;

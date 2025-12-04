@@ -258,7 +258,7 @@ export function detectTemplateType(template: unknown): {
     if (containsMdxSyntax(template)) {
       // Could be MDX or just JSX string
       // MDX typically has markdown features (headers, lists, etc.)
-      const hasMarkdown = /^#{1,6}\s|^\*\s|^\d+\.\s|^\-\s/m.test(template);
+      const hasMarkdown = /^#{1,6}\s|^\*\s|^\d+\.\s|^-\s/m.test(template);
 
       if (hasMarkdown) {
         return {

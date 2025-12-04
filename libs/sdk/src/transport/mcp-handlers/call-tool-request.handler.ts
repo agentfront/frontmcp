@@ -37,7 +37,7 @@ export default function callToolRequestHandler({
             return formatMcpErrorResponse(new InternalMcpError('FlowControl output is not a valid CallToolResult'));
           }
           // For handled, next, abort, fail - return appropriate response
-          logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type });
+          logger.warn(`FlowControl ended with type: ${e.type}`, { tool: toolName, type: e.type, output: e.output });
           return formatMcpErrorResponse(new InternalMcpError(`Flow ended with: ${e.type}`));
         }
 

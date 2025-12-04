@@ -274,7 +274,7 @@ const html = successLayout({
 Build your own layout functions:
 
 ```typescript title="src/layouts/product-layout.ts"
-import { baseLayout, card, badge, button } from '@frontmcp/ui';
+import { baseLayout, card, badge, button, escapeHtml } from '@frontmcp/ui';
 import { ThemeConfig } from '@frontmcp/ui';
 
 interface ProductLayoutOptions {
@@ -292,6 +292,10 @@ interface ProductLayoutOptions {
 export function productLayout(options: ProductLayoutOptions): string {
   const { product, relatedProducts, theme } = options;
 
+  // Escape user-provided content for security
+  const safeName = escapeHtml(product.name);
+  const safeDescription = escapeHtml(product.description);
+
   const stockBadge = product.inStock
     ? badge('In Stock', { variant: 'success' })
     : badge('Out of Stock', { variant: 'danger' });
@@ -301,11 +305,11 @@ export function productLayout(options: ProductLayoutOptions): string {
       <div class="grid md:grid-cols-2 gap-8">
         <!-- Image Gallery -->
         <div class="space-y-4">
-          <img src="${product.images[0]}" alt="${product.name}"
+          <img src="${escapeHtml(product.images[0])}" alt="${safeName}"
                class="w-full rounded-xl shadow-lg" />
           <div class="grid grid-cols-4 gap-2">
             ${product.images.slice(1).map(img => `
-              <img src="${img}" class="rounded-lg cursor-pointer hover:opacity-75" />
+              <img src="${escapeHtml(img)}" class="rounded-lg cursor-pointer hover:opacity-75" />
             `).join('')}
           </div>
         </div>
@@ -315,8 +319,8 @@ export function productLayout(options: ProductLayoutOptions): string {
           <div class="flex items-center gap-2 mb-2">
             ${stockBadge}
           </div>
-          <h1 class="text-3xl font-bold mb-4">${product.name}</h1>
-          <p class="text-gray-600 mb-6">${product.description}</p>
+          <h1 class="text-3xl font-bold mb-4">${safeName}</h1>
+          <p class="text-gray-600 mb-6">${safeDescription}</p>
           <div class="text-2xl font-bold text-primary mb-6">
             $${product.price.toFixed(2)}
           </div>
@@ -334,7 +338,7 @@ export function productLayout(options: ProductLayoutOptions): string {
   `;
 
   return baseLayout({
-    title: product.name,
+    title: safeName,
     content,
     theme,
   });

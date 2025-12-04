@@ -16,6 +16,18 @@
 import type { ToolResultWrapper } from '../client/mcp-test-client.types';
 
 // ═══════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Escape special regex metacharacters in a string.
+ * This prevents user-provided tag/class names from being interpreted as regex patterns.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // UI ASSERTIONS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -138,7 +150,8 @@ export const UIAssertions = {
    * @throws Error if the element is not found
    */
   assertContainsElement(html: string, tag: string): void {
-    const regex = new RegExp(`<${tag}[\\s>]`, 'i');
+    // Escape regex metacharacters to prevent user input from breaking the regex
+    const regex = new RegExp(`<${escapeRegex(tag)}[\\s>]`, 'i');
     if (!regex.test(html)) {
       throw new Error(`Expected HTML to contain <${tag}> element`);
     }
@@ -151,7 +164,8 @@ export const UIAssertions = {
    * @throws Error if the class is not found
    */
   assertHasCssClass(html: string, className: string): void {
-    const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${className}\\b[^"']*["']`, 'i');
+    // Escape regex metacharacters to prevent user input from breaking the regex
+    const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`, 'i');
     if (!classRegex.test(html)) {
       throw new Error(`Expected HTML to have CSS class "${className}"`);
     }
@@ -175,6 +189,7 @@ export const UIAssertions = {
 
   /**
    * Assert that widget metadata is present in the result.
+   * Checks for ui/html, openai/outputTemplate, or ui/mimeType.
    * @param result - The tool result wrapper
    * @throws Error if widget metadata is missing
    */
@@ -185,8 +200,13 @@ export const UIAssertions = {
       throw new Error('Expected tool result to have _meta with widget metadata');
     }
 
-    if (!meta['ui/resourceUri']) {
-      throw new Error('Expected _meta to have ui/resourceUri (widget metadata)');
+    // Check for any widget-related metadata fields (aligned with toHaveWidgetMetadata matcher)
+    const hasUiHtml = Boolean(meta['ui/html']);
+    const hasOutputTemplate = Boolean(meta['openai/outputTemplate']);
+    const hasMimeType = Boolean(meta['ui/mimeType']);
+
+    if (!hasUiHtml && !hasOutputTemplate && !hasMimeType) {
+      throw new Error('Expected _meta to have widget metadata (ui/html, openai/outputTemplate, or ui/mimeType)');
     }
   },
 

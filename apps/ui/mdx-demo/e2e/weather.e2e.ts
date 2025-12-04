@@ -1,5 +1,5 @@
 /**
- * @file weather.e2e.spec.ts
+ * @file weather.e2e.ts
  * @description E2E tests for MDX Weather Tool UI
  *
  * Tests verify that MDX templates are properly compiled and rendered,

@@ -225,7 +225,13 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
     // If hydration is enabled, wrap with markers
     if (options?.hydrate) {
-      return `<div data-mdx-hydrate="true" data-props='${JSON.stringify(props).replace(/'/g, '&#39;')}'>${html}</div>`;
+      // Full HTML attribute escaping to prevent XSS
+      const escapedProps = JSON.stringify(props)
+        .replace(/&/g, '&amp;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<div data-mdx-hydrate="true" data-props='${escapedProps}'>${html}</div>`;
     }
 
     return html;

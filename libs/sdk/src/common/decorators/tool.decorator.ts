@@ -9,6 +9,7 @@ import {
   ResourceLinkOutputSchema,
   ToolInputType,
   ToolOutputType,
+  UIContentSecurityPolicy,
 } from '../metadata';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
@@ -214,7 +215,7 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
      */
     template: __UITemplateType;
     /** Content Security Policy for the sandboxed widget */
-    csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+    csp?: UIContentSecurityPolicy;
     /** Whether the widget can invoke tools via the MCP bridge */
     widgetAccessible?: boolean;
     /** Preferred display mode: 'inline' | 'fullscreen' | 'pip' */

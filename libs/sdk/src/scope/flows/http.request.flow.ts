@@ -85,8 +85,8 @@ declare global {
 })
 export default class HttpRequestFlow extends FlowBase<typeof name> {
   logger = this.scope.logger.child('HttpRequestFlow');
-  private requestStartTime: number = 0;
-  private requestId: string = '';
+  private requestStartTime = 0;
+  private requestId = '';
 
   static canActivate(request: ServerRequest, scope: ScopeEntry) {
     const requestPath = normalizeEntryPrefix(request.path);

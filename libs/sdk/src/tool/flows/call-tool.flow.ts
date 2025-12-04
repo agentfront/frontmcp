@@ -407,7 +407,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // Use async version to support React component templates via SSR
         const uiResult = await scope.toolUI.renderAndRegisterAsync({
           toolName: tool.metadata.name,
-          requestId: String(requestId),
+          requestId,
           input: (input?.arguments ?? {}) as Record<string, unknown>,
           output: rawOutput,
           structuredContent: result.structuredContent,

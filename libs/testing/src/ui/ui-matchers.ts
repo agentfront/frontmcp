@@ -23,6 +23,14 @@ import type { ToolResultWrapper } from '../client/mcp-test-client.types';
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * Escape special regex metacharacters in a string.
+ * This prevents user-provided tag/class names from being interpreted as regex patterns.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Extract UI HTML from a tool result wrapper or raw result.
  */
 function extractUiHtml(received: unknown): string | undefined {
@@ -102,7 +110,8 @@ const toContainHtmlElement: MatcherFunction<[tag: string]> = function (received,
   }
 
   // Match opening tags: <tag> or <tag attributes>
-  const regex = new RegExp(`<${tag}[\\s>]`, 'i');
+  // Escape regex metacharacters to prevent user input from breaking the regex
+  const regex = new RegExp(`<${escapeRegex(tag)}[\\s>]`, 'i');
   const pass = regex.test(html);
 
   return {
@@ -215,7 +224,8 @@ const toHaveCssClass: MatcherFunction<[className: string]> = function (received,
   }
 
   // Match class="... className ..." or className="... className ..."
-  const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${className}\\b[^"']*["']`, 'i');
+  // Escape regex metacharacters to prevent user input from breaking the regex
+  const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`, 'i');
   const pass = classRegex.test(html);
 
   return {

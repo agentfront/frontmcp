@@ -260,6 +260,10 @@ sections:
 
 A simple Markdown renderer without JSX:
 
+<Warning>
+This example uses `new Function()` for expression evaluation, which is equivalent to `eval()`. **Never use this pattern with untrusted template content** as it enables arbitrary code execution. For production use, implement a safe expression parser or restrict to simple property access patterns (e.g., `output.name` only).
+</Warning>
+
 ```typescript title="src/renderers/markdown-renderer.ts"
 import { marked } from 'marked';
 import { escapeHtml, TemplateContext } from '@frontmcp/ui';
@@ -278,6 +282,7 @@ export const markdownRenderer = {
     context: TemplateContext<In, Out>
   ): string {
     // Interpolate variables
+    // WARNING: new Function() is equivalent to eval() - only use with trusted templates
     const interpolated = template.replace(
       /\{([^}]+)\}/g,
       (_, expr) => {

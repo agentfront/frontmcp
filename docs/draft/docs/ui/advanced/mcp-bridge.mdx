@@ -207,7 +207,7 @@ import { card, button, input, badge } from '@frontmcp/ui';
         <li class="flex items-center gap-2 py-2">
           <input type="checkbox"
                  ${todo.done ? 'checked' : ''}
-                 onchange="toggleTodo('${todo.id}', this.checked)">
+                 onchange="toggleTodo(${JSON.stringify(todo.id)}, this.checked)">
           <span class="${todo.done ? 'line-through text-gray-500' : ''}">
             ${helpers.escapeHtml(todo.text)}
           </span>

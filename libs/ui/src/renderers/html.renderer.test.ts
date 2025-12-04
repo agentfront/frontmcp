@@ -8,7 +8,7 @@ import { OPENAI_PLATFORM, CLAUDE_PLATFORM } from '../theme';
 
 describe('HtmlRenderer', () => {
   let renderer: HtmlRenderer;
-  const mockContext: TemplateContext<{}, { name: string }> = {
+  const mockContext: TemplateContext<unknown, { name: string }> = {
     input: {},
     output: { name: 'Test' },
     helpers: {
@@ -42,7 +42,7 @@ describe('HtmlRenderer', () => {
     });
 
     it('should handle function templates', () => {
-      const fn = (ctx: any) => `<div>${ctx.output.name}</div>`;
+      const fn = (ctx: TemplateContext<unknown, { name: string }>) => `<div>${ctx.output.name}</div>`;
       expect(renderer.canHandle(fn)).toBe(true);
     });
 
@@ -97,35 +97,36 @@ describe('HtmlRenderer', () => {
     });
 
     it('should execute function templates with context', async () => {
-      const template = (ctx: TemplateContext<{}, { name: string }>) => `<div>Hello ${ctx.output.name}</div>`;
+      const template = (ctx: TemplateContext<unknown, { name: string }>) => `<div>Hello ${ctx.output.name}</div>`;
       const result = await renderer.render(template, mockContext);
       expect(result).toBe('<div>Hello Test</div>');
     });
 
     it('should provide helpers to template functions', async () => {
-      const template = (ctx: TemplateContext<{}, { name: string }>) =>
+      const template = (ctx: TemplateContext<unknown, { name: string }>) =>
         `<div>${ctx.helpers.escapeHtml('<script>')}</div>`;
       const result = await renderer.render(template, mockContext);
       expect(result).toBe('<div>&lt;script&gt;</div>');
     });
 
     it('should provide input to template functions', async () => {
-      const contextWithInput: TemplateContext<{ query: string }, {}> = {
+      const contextWithInput: TemplateContext<{ query: string }, unknown> = {
         ...mockContext,
         input: { query: 'test' },
         output: {},
       };
-      const template = (ctx: TemplateContext<{ query: string }, {}>) => `<div>Query: ${ctx.input.query}</div>`;
+      const template = (ctx: TemplateContext<{ query: string }, unknown>) => `<div>Query: ${ctx.input.query}</div>`;
       const result = await renderer.render(template, contextWithInput);
       expect(result).toBe('<div>Query: test</div>');
     });
 
     it('should provide structuredContent to template functions', async () => {
-      const contextWithStructured: TemplateContext<{}, {}> = {
+      const contextWithStructured: TemplateContext<unknown, unknown> = {
         ...mockContext,
         structuredContent: { items: [1, 2, 3] },
       };
-      const template = (ctx: TemplateContext<{}, {}>) => `<div>Items: ${JSON.stringify(ctx.structuredContent)}</div>`;
+      const template = (ctx: TemplateContext<unknown, unknown>) =>
+        `<div>Items: ${JSON.stringify(ctx.structuredContent)}</div>`;
       const result = await renderer.render(template, contextWithStructured);
       expect(result).toContain('Items:');
       expect(result).toContain('[1,2,3]');

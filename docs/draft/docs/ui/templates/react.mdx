@@ -304,10 +304,10 @@ Full type safety with generics:
 import { TemplateContext } from '@frontmcp/ui';
 import { z } from 'zod';
 
-// Define schemas
-const inputSchema = {
+// Define schemas using z.object()
+const inputSchema = z.object({
   userId: z.string(),
-};
+});
 
 const outputSchema = z.object({
   user: z.object({
@@ -319,7 +319,7 @@ const outputSchema = z.object({
 });
 
 // Infer types from schemas
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 // Fully typed component

@@ -58,7 +58,7 @@ export const PII_PATTERNS = {
   emailInText: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
 
   // Phone: Various formats (US-centric but flexible)
-  phone: /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/,
+  phone: /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,4}[-\s.]?[0-9]{1,9}$/,
 
   // Phone embedded in text
   phoneInText: /(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g,
@@ -180,7 +180,14 @@ export function redactPIIFromText(text: string): string {
 /**
  * Sanitize a value based on its type
  */
-function sanitizeValue(key: string, value: unknown, path: string[], options: SanitizeOptions, depth: number): unknown {
+function sanitizeValue(
+  key: string,
+  value: unknown,
+  path: string[],
+  options: SanitizeOptions,
+  depth: number,
+  visited: WeakSet<object>,
+): unknown {
   const maxDepth = options.maxDepth ?? 10;
 
   // Prevent infinite recursion
@@ -230,14 +237,26 @@ function sanitizeValue(key: string, value: unknown, path: string[], options: San
 
   // Handle arrays
   if (Array.isArray(value)) {
-    return value.map((item, index) => sanitizeValue(String(index), item, [...path, String(index)], options, depth + 1));
+    // Check for circular reference
+    if (visited.has(value)) {
+      return REDACTION_TOKENS.REDACTED;
+    }
+    visited.add(value);
+    return value.map((item, index) =>
+      sanitizeValue(String(index), item, [...path, String(index)], options, depth + 1, visited),
+    );
   }
 
   // Handle objects
   if (typeof value === 'object') {
+    // Check for circular reference
+    if (visited.has(value)) {
+      return REDACTION_TOKENS.REDACTED;
+    }
+    visited.add(value);
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      result[k] = sanitizeValue(k, v, [...path, k], options, depth + 1);
+      result[k] = sanitizeValue(k, v, [...path, k], options, depth + 1, visited);
     }
     return result;
   }
@@ -274,8 +293,9 @@ export function sanitizeInput(
   input: Record<string, unknown>,
   mode: true | string[] | SanitizerFn = true,
 ): Record<string, unknown> {
+  // Return empty object for invalid inputs to maintain type contract
   if (!input || typeof input !== 'object') {
-    return input;
+    return {};
   }
 
   const options: SanitizeOptions = {
@@ -284,7 +304,8 @@ export function sanitizeInput(
     sanitizeInText: true,
   };
 
-  return sanitizeValue('', input, [], options, 0) as Record<string, unknown>;
+  const visited = new WeakSet<object>();
+  return sanitizeValue('', input, [], options, 0, visited) as Record<string, unknown>;
 }
 
 /**
@@ -325,6 +346,7 @@ export function detectPII(
 } {
   const maxDepth = options?.maxDepth ?? 10;
   const fields: string[] = [];
+  const visited = new WeakSet<object>();
 
   const check = (value: unknown, path: string[], depth: number): void => {
     // Prevent stack overflow on deeply nested structures
@@ -340,11 +362,17 @@ export function detectPII(
     }
 
     if (Array.isArray(value)) {
+      // Check for circular reference
+      if (visited.has(value)) return;
+      visited.add(value);
       value.forEach((item, index) => check(item, [...path, String(index)], depth + 1));
       return;
     }
 
     if (typeof value === 'object') {
+      // Check for circular reference
+      if (visited.has(value)) return;
+      visited.add(value);
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         check(v, [...path, k], depth + 1);
       }

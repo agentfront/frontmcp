@@ -94,9 +94,9 @@ export const MCP_BRIDGE_RUNTIME = `
 
     get provider() {
       if (isOpenAI) return 'openai';
-      if (isExtApps) return 'ext-apps';
       if (isClaude) return 'claude';
       if (isGemini) return 'gemini';
+      if (isExtApps) return 'ext-apps';
       return 'unknown';
     },
 
@@ -192,13 +192,18 @@ export const MCP_BRIDGE_RUNTIME = `
       if (isOpenAI && window.openai && window.openai.callTool) {
         return window.openai.callTool(name, params);
       }
-      if (isExtApps) {
-        return this._sendRequest('tools/call', { name: name, arguments: params });
-      }
       if (isClaude) {
         return Promise.reject(new Error(
           'Tool calls are not supported in Claude widgets (network-blocked sandbox)'
         ));
+      }
+      if (isGemini) {
+        return Promise.reject(new Error(
+          'Tool calls are not supported in Gemini widgets'
+        ));
+      }
+      if (isExtApps) {
+        return this._sendRequest('tools/call', { name: name, arguments: params });
       }
       return Promise.reject(new Error('Tool calls not supported in this environment'));
     },
@@ -261,16 +266,21 @@ export const MCP_BRIDGE_RUNTIME = `
       if (isOpenAI && window.openai && window.openai.sendFollowUpMessage) {
         return window.openai.sendFollowUpMessage({ prompt: prompt });
       }
+      if (isClaude) {
+        return Promise.reject(new Error(
+          'Follow-up messages are not supported in Claude widgets (network-blocked sandbox)'
+        ));
+      }
+      if (isGemini) {
+        return Promise.reject(new Error(
+          'Follow-up messages are not supported in Gemini widgets'
+        ));
+      }
       if (isExtApps) {
         return this._sendRequest('ui/message', {
           role: 'user',
           content: { type: 'text', text: prompt }
         });
-      }
-      if (isClaude) {
-        return Promise.reject(new Error(
-          'Follow-up messages are not supported in Claude widgets (network-blocked sandbox)'
-        ));
       }
       return Promise.reject(new Error('Messages not supported in this environment'));
     },
@@ -352,10 +362,7 @@ export const MCP_BRIDGE_RUNTIME = `
         if (result && result.hostContext) {
           hostContext = Object.assign(hostContext, result.hostContext);
         }
-        // Store trusted origin for message validation
-        if (result && result.trustedOrigin) {
-          trustedOrigin = result.trustedOrigin;
-        }
+        // Note: trustedOrigin is now set from first message event origin (trust-on-first-use)
         // Send initialized notification
         window.parent.postMessage({
           jsonrpc: '2.0',
@@ -370,14 +377,19 @@ export const MCP_BRIDGE_RUNTIME = `
   // ==================== Event Handling ====================
 
   window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data || data.jsonrpc !== '2.0') return;
+
+    // Trust-on-first-use: Establish trusted origin from the first valid message
+    if (isExtApps && !trustedOrigin && event.origin) {
+      trustedOrigin = event.origin;
+    }
+
     // Validate origin for ext-apps environment to prevent spoofed messages
     if (isExtApps && trustedOrigin && event.origin !== trustedOrigin) {
       console.warn('MCP Bridge: Ignoring message from untrusted origin:', event.origin);
       return;
     }
-
-    var data = event.data;
-    if (!data || data.jsonrpc !== '2.0') return;
 
     // Handle responses
     if (data.id && pendingRequests.has(data.id)) {
@@ -385,7 +397,10 @@ export const MCP_BRIDGE_RUNTIME = `
       pendingRequests.delete(data.id);
 
       if (data.error) {
-        pending.reject(new Error(data.error.message || 'Unknown error'));
+        var err = new Error(data.error.message || 'Unknown error');
+        err.code = data.error.code;
+        err.data = data.error.data;
+        pending.reject(err);
       } else {
         pending.resolve(data.result);
       }
@@ -492,5 +507,12 @@ export function getMCPBridgeScript(): string {
  */
 export function isMCPBridgeSupported(): boolean {
   if (typeof window === 'undefined') return false;
-  return typeof window.openai !== 'undefined' || window.parent !== window || typeof window.claude !== 'undefined';
+  const w = window as unknown as { openai?: unknown; claude?: unknown; __mcpPlatform?: string };
+  return (
+    typeof w.openai !== 'undefined' ||
+    typeof w.claude !== 'undefined' ||
+    w.__mcpPlatform === 'claude' ||
+    w.__mcpPlatform === 'gemini' ||
+    window.parent !== window
+  );
 }

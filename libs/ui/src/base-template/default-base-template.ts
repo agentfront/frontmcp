@@ -37,7 +37,10 @@ export interface BaseTemplateOptions {
   fonts?: boolean;
   /** Use inline scripts (for blocked network platforms) */
   inline?: boolean;
-  /** Additional head content (scripts, meta tags) */
+  /**
+   * Additional head content (scripts, meta tags).
+   * @warning This content is injected WITHOUT escaping. Only use with trusted content.
+   */
   headContent?: string;
   /** Custom body classes */
   bodyClass?: string;
