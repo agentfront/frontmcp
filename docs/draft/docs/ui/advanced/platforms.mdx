@@ -11,12 +11,12 @@ FrontMCP UI adapts to different AI platform capabilities. Each platform has diff
 
 ## Platform Capabilities
 
-| Platform | Network | External Scripts | Widget Modes | Theme |
-|----------|---------|------------------|--------------|-------|
-| **OpenAI** | Open | CDN allowed | inline, fullscreen, pip | Yes |
-| **Claude** | Blocked | Inline only | Artifacts | Limited |
-| **Gemini** | Limited | Inline preferred | Basic | No |
-| **ngrok** | Open | CDN allowed | All | Yes |
+| Platform   | Network | External Scripts | Widget Modes            | Theme   |
+| ---------- | ------- | ---------------- | ----------------------- | ------- |
+| **OpenAI** | Open    | CDN allowed      | inline, fullscreen, pip | Yes     |
+| **Claude** | Blocked | Inline only      | Artifacts               | Limited |
+| **Gemini** | Limited | Inline preferred | Basic                   | No      |
+| **ngrok**  | Open    | CDN allowed      | All                     | Yes     |
 
 ## Platform Detection
 
@@ -43,6 +43,7 @@ if (platform.scripts === 'inline') {
 OpenAI's Apps SDK provides full widget capabilities:
 
 ### Features
+
 - Full network access
 - External CDN scripts (Tailwind, HTMX)
 - Multiple display modes (inline, fullscreen, pip)
@@ -96,6 +97,7 @@ window.openai.setWidgetState(state)       // Persist state
 Claude uses Artifacts with restricted capabilities:
 
 ### Constraints
+
 - **Network blocked** - Cannot fetch external resources
 - **Scripts must be inline** - No CDN script tags
 - **Limited interactivity** - No tool invocation from widgets
@@ -190,6 +192,7 @@ console.log(GEMINI_PLATFORM);
 ### Best Practices
 
 For Gemini, keep widgets simple:
+
 - Use inline styles
 - Avoid complex interactivity
 - Focus on data display

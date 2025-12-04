@@ -250,54 +250,54 @@ const settingsCard = card(`
 
 ### `descriptionList(items, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `items` | `DescriptionItem[]` | Array of term/description pairs |
-| `options` | `object` | Configuration options |
+| Parameter | Type                | Description                     |
+| --------- | ------------------- | ------------------------------- |
+| `items`   | `DescriptionItem[]` | Array of term/description pairs |
+| `options` | `object`            | Configuration options           |
 
 #### DescriptionItem
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `term` | `string` | Label/key |
+| Property      | Type     | Description         |
+| ------------- | -------- | ------------------- |
+| `term`        | `string` | Label/key           |
 | `description` | `string` | Value (can be HTML) |
 
 #### Description List Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `layout` | `'vertical' \| 'horizontal'` | `'vertical'` | Layout direction |
-| `variant` | `'default' \| 'bordered'` | `'default'` | Visual style |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                         | Default      | Description            |
+| ----------- | ---------------------------- | ------------ | ---------------------- |
+| `layout`    | `'vertical' \| 'horizontal'` | `'vertical'` | Layout direction       |
+| `variant`   | `'default' \| 'bordered'`    | `'default'`  | Visual style           |
+| `className` | `string`                     | -            | Additional CSS classes |
 
 ### `actionList(items, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `items` | `ActionItem[] \| GroupedItems[]` | List items or groups |
-| `options` | `object` | Configuration options |
+| Parameter | Type                             | Description           |
+| --------- | -------------------------------- | --------------------- |
+| `items`   | `ActionItem[] \| GroupedItems[]` | List items or groups  |
+| `options` | `object`                         | Configuration options |
 
 #### ActionItem
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `title` | `string` | Item title |
-| `description` | `string` | Optional description |
-| `icon` | `string` | Leading icon (emoji or HTML) |
-| `trailing` | `string` | Trailing content (HTML) |
-| `href` | `string` | Link URL |
-| `htmx` | `object` | HTMX attributes |
-| `selectable` | `boolean` | Can be selected |
-| `selected` | `boolean` | Currently selected |
-| `disabled` | `boolean` | Disable interaction |
+| Property      | Type      | Description                  |
+| ------------- | --------- | ---------------------------- |
+| `title`       | `string`  | Item title                   |
+| `description` | `string`  | Optional description         |
+| `icon`        | `string`  | Leading icon (emoji or HTML) |
+| `trailing`    | `string`  | Trailing content (HTML)      |
+| `href`        | `string`  | Link URL                     |
+| `htmx`        | `object`  | HTMX attributes              |
+| `selectable`  | `boolean` | Can be selected              |
+| `selected`    | `boolean` | Currently selected           |
+| `disabled`    | `boolean` | Disable interaction          |
 
 #### Action List Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `selection` | `'none' \| 'single' \| 'multiple'` | `'none'` | Selection mode |
-| `dividers` | `boolean` | `true` | Show dividers between items |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                               | Default  | Description                 |
+| ----------- | ---------------------------------- | -------- | --------------------------- |
+| `selection` | `'none' \| 'single' \| 'multiple'` | `'none'` | Selection mode              |
+| `dividers`  | `boolean`                          | `true`   | Show dividers between items |
+| `className` | `string`                           | -        | Additional CSS classes      |
 
 ### Returns
 

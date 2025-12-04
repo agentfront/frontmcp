@@ -1,0 +1,192 @@
+---
+title: Resource Widget
+sidebarTitle: Resource Widget
+icon: folder-open
+description: Present resources, files, and tool outputs with consistent cards, lists, and previews.
+---
+
+# Resource Widget
+
+`resourceWidget`, `resourceList`, and friends render high-signal cards for documents, tickets, users, or model outputs without writing custom HTML. They complement Tool UI templates, consent screens, and status dashboards by sharing the same typography, spacing, and HTMX support as the rest of `@frontmcp/ui`.
+
+## Import
+
+```ts
+import {
+  resourceWidget,
+  resourceList,
+  resourceItem,
+  codePreview,
+  imagePreview,
+} from '@frontmcp/ui';
+```
+
+Supported resource types: `document`, `image`, `code`, `data`, `file`, `link`, `user`, `event`, `message`, `task`, or `custom`.
+
+## Single resource card
+
+```ts
+const runbookCard = resourceWidget({
+  type: 'document',
+  title: 'Incident RUN-102',
+  description: 'Standard operating procedure for restoring the checkout service.',
+  url: 'https://status.example.com/runbooks/run-102',
+  meta: {
+    updatedAt: '2025-12-03T10:00:00Z',
+    author: 'SRE Team',
+    tags: ['p1', 'checkout'],
+  },
+});
+```
+
+### ResourceOptions
+
+| Option                      | Description                                                      |
+| --------------------------- | ---------------------------------------------------------------- |
+| `type`                      | Resource category (used for iconography and semantics).          |
+| `title`                     | Primary label displayed in the card header.                      |
+| `description`               | Optional summary or secondary text.                              |
+| `icon` / `thumbnail`        | Override the default icon or show a preview image.               |
+| `url`                       | When provided, the title becomes a link.                         |
+| `meta`                      | Additional metadata (timestamps, author, size, mime type, tags). |
+| `status`                    | Badge `{ label, variant }` rendered in the header.               |
+| `actions`                   | CTA buttons with optional HTMX attributes and icons.             |
+| `className` / `cardOptions` | Tailwind classes and low-level card configuration.               |
+
+`meta.tags` automatically render as badges, while `meta.size`, `meta.mimeType`, and timestamps are condensed into a single footnote. Actions inherit button variants (`primary`, `secondary`, `danger`, `ghost`) and can declare `htmx.get`, `htmx.post`, or `hx-confirm` prompts for progressive enhancement.
+
+<Tip>
+  Pair `resourceWidget` with `escapeHtml` from `@frontmcp/ui` when interpolating user input to keep Tool UI outputs compliant with the Mintlify callout and XSS guidance.
+</Tip>
+
+## Metadata, status badges, and actions
+
+```ts
+const enrichedCard = resourceWidget({
+  type: 'task',
+  title: 'Refactor billing webhook',
+  description: 'Consolidate Stripe retries and add alerting.',
+  status: { label: 'In Progress', variant: 'warning' },
+  meta: {
+    createdAt: '2025-12-01T09:00:00Z',
+    updatedAt: '2025-12-03T15:24:00Z',
+    author: 'Mira Patel',
+    tags: ['backend', 'priority-high'],
+  },
+  actions: [
+    {
+      label: 'Open in Jira',
+      icon: 'external-link',
+      href: 'https://jira.example.com/browse/BILL-2187',
+      variant: 'primary',
+    },
+    {
+      label: 'Assign to me',
+      htmx: { post: '/api/tasks/BILL-2187/assign', target: '#task-list' },
+      variant: 'ghost',
+    },
+  ],
+});
+```
+
+<Note>
+  Actions fall back to disabled ghost buttons automatically if you pass an unsupported variant or forget an `href`. This mirrors the validation-first authoring workflow recommended in Mintlify’s writing guidelines.
+</Note>
+
+## Lists and grids
+
+Group multiple resources with built-in spacing, responsive columns, and optional “Load More” patterns.
+
+```ts
+const recentNotes = resourceList({
+  title: 'Latest research notes',
+  layout: 'grid',
+  columns: 2,
+  resources: notes.map((note) => ({
+    type: 'document',
+    title: note.title,
+    description: note.summary,
+    url: note.url,
+    meta: { updatedAt: note.updatedAt, tags: note.tags },
+  })),
+  showLoadMore: true,
+  loadMoreUrl: '/notes?page=2',
+});
+```
+
+<Tip>
+  Switch `layout` to `'list'` for stacked cards or keep `'grid'` with `columns={3}` when embedding the widget inside fullscreen Tool UI templates.
+</Tip>
+
+## Compact items
+
+Use `resourceItem` for inline menus or secondary panes.
+
+```ts
+const inlineItem = resourceItem({
+  type: 'user',
+  title: 'Dana Walker',
+  description: 'Last active 4 minutes ago • Support lead',
+  status: { label: 'Online', variant: 'success' },
+  url: 'mailto:dana@example.com',
+});
+```
+
+## Preview helpers
+
+```ts
+const diffPreview = codePreview({
+  code: `diff --git a/index.ts b/index.ts
+@@ -1,4 +1,6 @@
+-import { oldFlow } from './old';
++import { newFlow } from './new';
+`,
+  language: 'diff',
+  filename: 'patch.diff',
+  showCopy: true,
+});
+
+const receiptPreview = imagePreview({
+  src: 'https://cdn.example.com/receipts/123.png',
+  alt: 'Receipt 123 total $56.42',
+  caption: 'Submitted via mobile upload',
+  clickable: true,
+});
+```
+
+The helpers share styling with other components, add copy-to-clipboard behavior, and constrain height so images or large diffs never overflow Tool UI containers.
+
+## Tool UI example
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+
+@Tool({
+  name: 'list_notes_with_ui',
+  description: 'Return the latest notes with visuals',
+  ui: {
+    template: (ctx) =>
+      resourceList({
+        title: 'Notes by tag',
+        resources: ctx.output.notes.map((note) => ({
+          type: 'document',
+          title: note.title,
+          description: note.preview,
+          url: `notes://note/${note.id}`,
+          meta: { updatedAt: note.updatedAt, tags: note.tags },
+        })),
+      }),
+  },
+})
+export class ListNotesWithUiTool extends ToolContext {
+  async execute({ tag }: { tag?: string }) {
+    return {
+      notes: await this.noteStore.find({ tag }),
+    };
+  }
+}
+```
+
+<Check>
+  Combine `resourceList` with Tool UI templates to give chat clients rich visual summaries without shipping a separate dashboard.
+</Check>

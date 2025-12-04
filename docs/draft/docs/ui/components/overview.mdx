@@ -62,6 +62,9 @@ import {
   <Card title="Modal" icon="window-maximize" href="/docs/ui/components/modal">
     Dialogs and drawers for overlay content
   </Card>
+  <Card title="Resource Widget" icon="folder-open" href="/docs/ui/components/resource-widget">
+    Cards, lists, and preview helpers for documents, tickets, and tool outputs
+  </Card>
 </CardGroup>
 
 ## Usage Pattern
@@ -92,6 +95,7 @@ const html = button('Click', { variant: 'invalid-variant' });
 ```
 
 The error box displays:
+
 - Component name
 - Invalid parameter
 - Human-readable error message
@@ -116,6 +120,7 @@ const html = button('Load More', {
 ```
 
 Common HTMX attributes:
+
 - `get`, `post`, `put`, `delete` - HTTP methods
 - `target` - CSS selector for target element
 - `swap` - How to swap content (`innerHTML`, `beforeend`, etc.)
@@ -158,32 +163,5 @@ const html = card(`
 ```
 
 <Info>
-  The `escapeHtml` function is also available as `ctx.helpers.escapeHtml` in template functions.
+  Escape user input before passing it to the component helpers, especially for Tool UI templates that run inside AI clients.
 </Info>
-
-## Component Groups
-
-Many components have companion "group" functions for layouts:
-
-```typescript
-import { button, buttonGroup, card, cardGroup, badge, badgeGroup } from '@frontmcp/ui';
-
-// Button group
-const buttons = buttonGroup([
-  button('Edit'),
-  button('Delete', { variant: 'danger' }),
-], { attached: true });
-
-// Card grid
-const cards = cardGroup([
-  card('Card 1'),
-  card('Card 2'),
-], { direction: 'horizontal', gap: 'md' });
-
-// Badge list
-const badges = badgeGroup([
-  badge('Tag 1'),
-  badge('Tag 2'),
-  badge('Tag 3'),
-]);
-```

@@ -12,6 +12,7 @@ The MCP Bridge (`window.mcpBridge`) provides a unified API for widget interactiv
 ## What is MCP Bridge?
 
 MCP Bridge is a runtime adapter that:
+
 - Normalizes platform APIs (OpenAI, Claude, etc.)
 - Provides tool invocation capabilities
 - Manages widget state
@@ -291,13 +292,13 @@ ui: {
 
 ## Platform Compatibility
 
-| Feature | OpenAI | Claude | Gemini |
-|---------|--------|--------|--------|
-| `callTool` | Yes | No | No |
-| `sendMessage` | Yes | No | No |
-| `openLink` | Yes | Yes | Yes |
-| `setWidgetState` | Yes | No | No |
-| `onContextChange` | Yes | Limited | No |
+| Feature           | OpenAI | Claude  | Gemini |
+| ----------------- | ------ | ------- | ------ |
+| `callTool`        | Yes    | No      | No     |
+| `sendMessage`     | Yes    | No      | No     |
+| `openLink`        | Yes    | Yes     | Yes    |
+| `setWidgetState`  | Yes    | No      | No     |
+| `onContextChange` | Yes    | Limited | No     |
 
 Always check capabilities before using features:
 

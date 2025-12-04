@@ -239,34 +239,34 @@ export class ProcessDataTool extends ToolContext {
 
 ### `alert(message, options?)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `message` | `string` | Alert message text |
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `message` | `string`       | Alert message text    |
 | `options` | `AlertOptions` | Configuration options |
 
 ### AlertOptions
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `variant` | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style |
-| `title` | `string` | - | Alert heading |
-| `showIcon` | `boolean` | `true` | Show variant icon |
-| `icon` | `string` | - | Custom icon HTML |
-| `dismissible` | `boolean` | `false` | Show close button |
-| `className` | `string` | - | Additional CSS classes |
-| `id` | `string` | - | Alert ID |
-| `actions` | `string` | - | HTML for action buttons |
-| `onDismiss` | `object` | - | HTMX options for dismiss |
+| Option        | Type                                                        | Default  | Description              |
+| ------------- | ----------------------------------------------------------- | -------- | ------------------------ |
+| `variant`     | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style             |
+| `title`       | `string`                                                    | -        | Alert heading            |
+| `showIcon`    | `boolean`                                                   | `true`   | Show variant icon        |
+| `icon`        | `string`                                                    | -        | Custom icon HTML         |
+| `dismissible` | `boolean`                                                   | `false`  | Show close button        |
+| `className`   | `string`                                                    | -        | Additional CSS classes   |
+| `id`          | `string`                                                    | -        | Alert ID                 |
+| `actions`     | `string`                                                    | -        | HTML for action buttons  |
+| `onDismiss`   | `object`                                                    | -        | HTMX options for dismiss |
 
 ### `toast(message, options?)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `variant` | `AlertVariant` | `'info'` | Visual style |
-| `title` | `string` | - | Toast heading |
-| `duration` | `number` | `5000` | Auto-dismiss ms (0 = no auto) |
-| `position` | `string` | `'top-right'` | Screen position |
-| `id` | `string` | auto-generated | Toast ID |
+| Option     | Type           | Default        | Description                   |
+| ---------- | -------------- | -------------- | ----------------------------- |
+| `variant`  | `AlertVariant` | `'info'`       | Visual style                  |
+| `title`    | `string`       | -              | Toast heading                 |
+| `duration` | `number`       | `5000`         | Auto-dismiss ms (0 = no auto) |
+| `position` | `string`       | `'top-right'`  | Screen position               |
+| `id`       | `string`       | auto-generated | Toast ID                      |
 
 ### Returns
 
