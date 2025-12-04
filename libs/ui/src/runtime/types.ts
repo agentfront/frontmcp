@@ -86,11 +86,52 @@ export type WidgetServingMode =
   | 'custom-url'; // Custom URL (CDN or external hosting)
 
 /**
+ * Template type - can be:
+ * - HTML string
+ * - Template builder function: (ctx) => string
+ * - React component function (imported from .tsx file)
+ * - JSX string (transpiled at runtime)
+ * - MDX string (Markdown + JSX, transpiled at runtime)
+ *
+ * The renderer is auto-detected based on template type.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ToolUITemplate<In = unknown, Out = unknown> = TemplateBuilderFn<In, Out> | string | ((props: any) => any);
+
+/**
  * UI template configuration for tools.
  */
 export interface ToolUIConfig<In = unknown, Out = unknown> {
-  /** Template builder function or static HTML string. */
-  template: TemplateBuilderFn<In, Out> | string;
+  /**
+   * Template for rendering the tool UI.
+   *
+   * Supports multiple formats (auto-detected):
+   * - HTML string: `"<div>Hello</div>"`
+   * - Template builder: `(ctx) => \`<div>\${ctx.output.name}</div>\``
+   * - React component: `import { MyWidget } from './widget.tsx'`
+   * - JSX string: `"function Widget({ output }) { return <div>{output.name}</div>; }"`
+   * - MDX string: `"# Title\n<Card name={output.name} />"`
+   *
+   * @example HTML template builder
+   * ```typescript
+   * template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`
+   * ```
+   *
+   * @example React component
+   * ```typescript
+   * import { MyWidget } from './my-widget.tsx';
+   * template: MyWidget
+   * ```
+   *
+   * @example MDX content
+   * ```typescript
+   * template: `
+   * # User Profile
+   * <UserCard name={output.name} />
+   * `
+   * ```
+   */
+  template: ToolUITemplate<In, Out>;
 
   /** Content Security Policy for the sandboxed widget. */
   csp?: UIContentSecurityPolicy;
@@ -118,6 +159,45 @@ export interface ToolUIConfig<In = unknown, Out = unknown> {
 
   /** Path for direct URL serving when `servingMode: 'direct-url'`. */
   directPath?: string;
+
+  /**
+   * Enable client-side hydration for React/MDX components.
+   * When true, the rendered HTML includes hydration markers and
+   * the React runtime is included for client-side interactivity.
+   *
+   * @default false
+   */
+  hydrate?: boolean;
+
+  /**
+   * Custom React components to make available in MDX templates.
+   * These components can be used directly in MDX content.
+   *
+   * @example
+   * ```typescript
+   * import { Card, Badge } from './components';
+   *
+   * mdxComponents: { Card, Badge }
+   * // Now in MDX: # Title\n<Card><Badge>New</Badge></Card>
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mdxComponents?: Record<string, any>;
+
+  /**
+   * Custom wrapper function for the rendered content.
+   * Allows per-tool customization of the HTML document structure.
+   *
+   * @example
+   * ```typescript
+   * wrapper: (content, ctx) => `
+   *   <div class="custom-wrapper">
+   *     ${content}
+   *   </div>
+   * `
+   * ```
+   */
+  wrapper?: (content: string, ctx: TemplateContext<In, Out>) => string;
 }
 
 // Local alias for use within this file

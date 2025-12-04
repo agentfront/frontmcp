@@ -7,7 +7,7 @@
 
 import type { ToolUIConfig } from '../../common/metadata/tool-ui.metadata';
 import type { AIPlatformType } from '../../notification/notification.service';
-import { renderToolTemplate } from './render-template';
+import { renderToolTemplate, renderToolTemplateAsync, isReactComponent } from './render-template';
 import { buildUIMeta, type UIMetadata } from './platform-adapters';
 
 /**
@@ -114,6 +114,9 @@ export class ToolUIRegistry {
   /**
    * Render a tool's UI template and register it for resource access.
    *
+   * NOTE: This synchronous version does NOT support React components.
+   * Use `renderAndRegisterAsync()` for React component templates.
+   *
    * @param options - Rendering options
    * @returns Registration result with URI, HTML, and metadata
    */
@@ -162,6 +165,73 @@ export class ToolUIRegistry {
     });
 
     return { uri, html, meta };
+  }
+
+  /**
+   * Render a tool's UI template and register it for resource access (async version).
+   *
+   * This version supports all template types including React components via SSR.
+   * Use this method when the template may be a React component.
+   *
+   * @param options - Rendering options
+   * @returns Promise resolving to registration result with URI, HTML, and metadata
+   */
+  async renderAndRegisterAsync(options: RenderAndRegisterOptions): Promise<UIRegistrationResult> {
+    const {
+      toolName,
+      requestId,
+      input,
+      output,
+      structuredContent,
+      uiConfig,
+      platformType,
+      token,
+      directUrl,
+      cacheTtl = this.defaultTtl,
+    } = options;
+
+    // 1. Render the template (async for React/MDX support)
+    const html = await renderToolTemplateAsync({
+      template: uiConfig.template,
+      input,
+      output,
+      structuredContent,
+      mdxComponents: uiConfig.mdxComponents,
+    });
+
+    // 2. Generate unique resource URI
+    const uri = this.generateResourceUri(toolName, requestId);
+
+    // 3. Cache the rendered HTML
+    const now = Date.now();
+    this.cacheEntry(uri, {
+      html,
+      context: { toolName, input, output, structuredContent },
+      expiresAt: now + cacheTtl,
+      createdAt: now,
+    });
+
+    // 4. Build platform-specific metadata
+    const meta = buildUIMeta({
+      uiConfig,
+      platformType,
+      resourceUri: uri,
+      html,
+      token,
+      directUrl,
+    });
+
+    return { uri, html, meta };
+  }
+
+  /**
+   * Check if a template requires async rendering (e.g., React components).
+   *
+   * @param template - The template to check
+   * @returns true if the template requires async rendering
+   */
+  requiresAsyncRendering(template: ToolUIConfig['template']): boolean {
+    return isReactComponent(template);
   }
 
   /**

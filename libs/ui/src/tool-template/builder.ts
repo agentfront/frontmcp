@@ -3,12 +3,25 @@
  *
  * Provides utilities for building and rendering tool UI templates
  * with the MCP Bridge runtime.
+ *
+ * Supports multiple template types with auto-detection:
+ * - HTML strings and template builder functions
+ * - React components (imported or JSX strings)
+ * - MDX content (Markdown + JSX)
  */
 
-import type { TemplateContext, TemplateBuilderFn, ToolUIConfig, UIContentSecurityPolicy } from '../runtime/types';
+import type {
+  TemplateContext,
+  TemplateBuilderFn,
+  ToolUIConfig,
+  UIContentSecurityPolicy,
+  ToolUITemplate,
+} from '../runtime/types';
 import { createTemplateHelpers, wrapToolUI, type WrapToolUIFullOptions } from '../runtime/wrapper';
 import type { ThemeConfig, PlatformCapabilities, DeepPartial } from '../theme';
 import { escapeHtml } from '../layouts/base';
+import { rendererRegistry } from '../renderers/registry';
+import { detectTemplateType } from '../renderers/utils/detect';
 
 // ============================================
 // Template Builder Types
@@ -75,7 +88,8 @@ export function buildTemplateContext<In = Record<string, unknown>, Out = unknown
 }
 
 /**
- * Execute a template builder function or return static template
+ * Execute a template builder function or return static template.
+ * This is used for simple HTML templates only.
  */
 export function executeTemplate<In = Record<string, unknown>, Out = unknown>(
   template: TemplateBuilderFn<In, Out> | string,
@@ -88,13 +102,80 @@ export function executeTemplate<In = Record<string, unknown>, Out = unknown>(
 }
 
 /**
- * Render a tool UI template to a complete HTML document.
+ * Render a template using the appropriate renderer (auto-detected).
  *
- * This is the main entry point for rendering tool UIs. It:
+ * This function detects the template type and routes to the appropriate
+ * renderer (HTML, React, or MDX).
+ *
+ * @param template - The template to render
+ * @param ctx - Template context with input/output/helpers
+ * @param options - Additional render options
+ * @returns Promise resolving to rendered HTML string
+ */
+export async function renderTemplate<In = Record<string, unknown>, Out = unknown>(
+  template: ToolUITemplate<In, Out>,
+  ctx: TemplateContext<In, Out>,
+  options?: {
+    hydrate?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mdxComponents?: Record<string, any>;
+  },
+): Promise<{ html: string; rendererType: string }> {
+  // Detect template type
+  const detection = detectTemplateType(template);
+
+  // For simple HTML templates, use direct execution (sync, faster)
+  if (detection.type === 'html-function' || detection.type === 'html-string') {
+    const html = typeof template === 'function' ? (template as TemplateBuilderFn<In, Out>)(ctx) : (template as string);
+
+    return { html, rendererType: 'html' };
+  }
+
+  // For React/MDX, use the renderer registry
+  try {
+    const result = await rendererRegistry.render(template, ctx, {
+      hydrate: options?.hydrate,
+      mdxComponents: options?.mdxComponents,
+    });
+
+    return { html: result.html, rendererType: result.rendererType };
+  } catch (error) {
+    // Fallback to HTML if renderer fails
+    console.warn(
+      `[@frontmcp/ui] Renderer failed for ${detection.type}, falling back to HTML:`,
+      error instanceof Error ? error.message : error,
+    );
+
+    // Try to execute as HTML template
+    if (typeof template === 'function') {
+      try {
+        const html = (template as TemplateBuilderFn<In, Out>)(ctx);
+        return { html, rendererType: 'html-fallback' };
+      } catch {
+        // If that fails too, return error message
+        return {
+          html: `<div class="error">Template rendering failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }</div>`,
+          rendererType: 'error',
+        };
+      }
+    }
+
+    return { html: String(template), rendererType: 'html-fallback' };
+  }
+}
+
+/**
+ * Render a tool UI template to a complete HTML document (sync version).
+ *
+ * This is the sync entry point for rendering simple HTML tool UIs. It:
  * 1. Builds the template context with input/output/helpers
  * 2. Executes the template builder function
  * 3. Wraps the content in a complete HTML document with MCP Bridge
  * 4. Applies CSP and theme configuration
+ *
+ * Note: For React/MDX templates, use `renderToolTemplateAsync` instead.
  *
  * @param options - Render options
  * @returns Rendered template with HTML and metadata
@@ -120,8 +201,8 @@ export function renderToolTemplate<In = Record<string, unknown>, Out = unknown>(
   // Build template context
   const ctx = buildTemplateContext(input, output, structuredContent);
 
-  // Execute template to get content HTML
-  const content = executeTemplate(ui.template, ctx);
+  // Execute template to get content HTML (sync for HTML templates)
+  const content = executeTemplate(ui.template as TemplateBuilderFn<In, Out> | string, ctx);
 
   // Build wrapper options
   const wrapperOptions: WrapToolUIFullOptions = {
@@ -146,6 +227,91 @@ export function renderToolTemplate<In = Record<string, unknown>, Out = unknown>(
   return {
     html,
     mimeType: 'text/html',
+    openaiMeta: Object.keys(openaiMeta).length > 0 ? openaiMeta : undefined,
+  };
+}
+
+/**
+ * Render a tool UI template to a complete HTML document (async version).
+ *
+ * This is the async entry point that supports all template types:
+ * - HTML strings and template builder functions
+ * - React components (imported or JSX strings)
+ * - MDX content (Markdown + JSX)
+ *
+ * The template type is auto-detected and the appropriate renderer is used.
+ *
+ * @param options - Render options
+ * @returns Promise resolving to rendered template with HTML and metadata
+ *
+ * @example React component
+ * ```typescript
+ * import { WeatherWidget } from './weather-widget.tsx';
+ *
+ * const result = await renderToolTemplateAsync({
+ *   ui: { template: WeatherWidget, hydrate: true },
+ *   toolName: 'get_weather',
+ *   input: { location: 'San Francisco' },
+ *   output: { temperature: 72, conditions: 'sunny' },
+ * });
+ * ```
+ *
+ * @example MDX content
+ * ```typescript
+ * const result = await renderToolTemplateAsync({
+ *   ui: {
+ *     template: `# Weather in {output.location}\nTemperature: {output.temperature}°F`,
+ *   },
+ *   toolName: 'get_weather',
+ *   input: { location: 'San Francisco' },
+ *   output: { temperature: 72, location: 'San Francisco' },
+ * });
+ * ```
+ */
+export async function renderToolTemplateAsync<In = Record<string, unknown>, Out = unknown>(
+  options: RenderTemplateOptions<In, Out>,
+): Promise<RenderedTemplate & { rendererType: string }> {
+  const { ui, toolName, input, output, structuredContent, theme, platform } = options;
+
+  // Build template context
+  const ctx = buildTemplateContext(input, output, structuredContent);
+
+  // Render template using the appropriate renderer (auto-detected)
+  const { html: content, rendererType } = await renderTemplate(ui.template, ctx, {
+    hydrate: ui.hydrate,
+    mdxComponents: ui.mdxComponents,
+  });
+
+  // Apply custom wrapper if provided
+  const wrappedContent = ui.wrapper ? ui.wrapper(content, ctx) : content;
+
+  // Build wrapper options
+  const wrapperOptions: WrapToolUIFullOptions = {
+    content: wrappedContent,
+    toolName,
+    input: input as Record<string, unknown>,
+    output,
+    structuredContent,
+    csp: ui.csp,
+    widgetAccessible: ui.widgetAccessible,
+    title: `${toolName} Result`,
+    theme,
+    platform,
+    // Pass renderer type for framework runtime injection
+    rendererType,
+    hydrate: ui.hydrate,
+  };
+
+  // Wrap in complete HTML document
+  const html = wrapToolUI(wrapperOptions);
+
+  // Build OpenAI meta if widget features are used
+  const openaiMeta = buildOpenAIMetaFromUI(ui as ToolUIConfig);
+
+  return {
+    html,
+    mimeType: 'text/html',
+    rendererType,
     openaiMeta: Object.keys(openaiMeta).length > 0 ? openaiMeta : undefined,
   };
 }

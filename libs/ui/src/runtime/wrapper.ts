@@ -67,6 +67,17 @@ export interface WrapToolUIFullOptions extends WrapToolUIOptions {
    * ```
    */
   sanitizeInput?: boolean | string[] | SanitizerFn;
+
+  /**
+   * The type of renderer used (for framework runtime injection).
+   * Auto-detected by renderToolTemplateAsync.
+   */
+  rendererType?: string;
+
+  /**
+   * Enable client-side hydration for React/MDX components.
+   */
+  hydrate?: boolean;
 }
 
 // ============================================
@@ -177,6 +188,8 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
     platform = OPENAI_PLATFORM,
     hostContext,
     sanitizeInput: sanitizeOption,
+    rendererType,
+    hydrate,
   } = options;
 
   // Apply input sanitization if enabled
@@ -204,6 +217,13 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
     alpine: false,
     icons: false,
     inline: useInline,
+  });
+
+  // Build framework runtime scripts (React/MDX)
+  const frameworkScripts = buildFrameworkRuntimeScripts({
+    rendererType,
+    hydrate,
+    platform,
   });
 
   // Build theme CSS
@@ -252,6 +272,9 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
   ${scripts}
   ${styleBlock}
 
+  <!-- Framework Runtime -->
+  ${frameworkScripts}
+
   <!-- Tool Data -->
   ${dataScript}
 
@@ -262,6 +285,76 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
   ${content}
 </body>
 </html>`;
+}
+
+/**
+ * Build framework-specific runtime scripts (React, MDX).
+ * Only included when using React/MDX renderers with hydration enabled.
+ */
+function buildFrameworkRuntimeScripts(options: {
+  rendererType?: string;
+  hydrate?: boolean;
+  platform: PlatformCapabilities;
+}): string {
+  const { rendererType, hydrate, platform } = options;
+
+  // No framework scripts needed for HTML templates
+  if (!rendererType || rendererType === 'html' || rendererType === 'html-fallback') {
+    return '';
+  }
+
+  // Only include runtime if hydration is enabled
+  if (!hydrate) {
+    return '';
+  }
+
+  // React/MDX both need React runtime for hydration
+  if (rendererType === 'react' || rendererType === 'mdx') {
+    const useCdn = canUseCdn(platform);
+
+    if (useCdn) {
+      // Use CDN for platforms with network access
+      return `
+  <!-- React Runtime (for hydration) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script>
+    // Hydration script for React/MDX components
+    (function() {
+      document.addEventListener('DOMContentLoaded', function() {
+        var hydratables = document.querySelectorAll('[data-hydrate], [data-mdx-hydrate]');
+        if (hydratables.length > 0 && window.__frontmcp_components) {
+          hydratables.forEach(function(el) {
+            var componentName = el.getAttribute('data-hydrate');
+            var propsJson = el.getAttribute('data-props');
+            var props = propsJson ? JSON.parse(propsJson) : {};
+
+            if (window.__frontmcp_components[componentName]) {
+              try {
+                ReactDOM.hydrateRoot(el, React.createElement(
+                  window.__frontmcp_components[componentName],
+                  props
+                ));
+              } catch (e) {
+                console.error('[FrontMCP] Hydration failed:', e);
+              }
+            }
+          });
+        }
+      });
+    })();
+  </script>`;
+    } else {
+      // For blocked-network platforms, SSR only (no hydration)
+      return `
+  <!-- React hydration not available on blocked-network platforms -->
+  <script>
+    console.warn('[FrontMCP] React hydration disabled - platform does not support external scripts');
+  </script>`;
+    }
+  }
+
+  return '';
 }
 
 /**

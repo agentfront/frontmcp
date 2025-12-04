@@ -141,10 +141,15 @@ export type WidgetServingMode =
  */
 export interface ToolUIConfig<In = unknown, Out = unknown> {
   /**
-   * Template builder function or static HTML string.
-   * The function receives TemplateContext with input, output, and helper functions.
+   * Template for rendering tool UI.
+   *
+   * Supports multiple formats (auto-detected by renderer):
+   * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
+   * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
+   * - React component: `MyWidget` - receives props with input/output/helpers
    */
-  template: TemplateBuilderFn<In, Out> | string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  template: TemplateBuilderFn<In, Out> | string | ((props: any) => any);
 
   /**
    * Content Security Policy for the sandboxed widget.
@@ -238,4 +243,22 @@ export interface ToolUIConfig<In = unknown, Out = unknown> {
    * ```
    */
   directPath?: string;
+
+  /**
+   * Custom React components available in MDX templates.
+   * These components can be used directly in MDX content without importing.
+   *
+   * @example
+   * ```typescript
+   * ui: {
+   *   template: `# Weather\n<Alert type="info">Data loaded</Alert>`,
+   *   mdxComponents: {
+   *     Alert: ({ type, children }) => <div className={type}>{children}</div>,
+   *     Card: MyCardComponent,
+   *   }
+   * }
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mdxComponents?: Record<string, any>;
 }

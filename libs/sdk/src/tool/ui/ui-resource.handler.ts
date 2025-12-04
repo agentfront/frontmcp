@@ -242,6 +242,10 @@ export function handleUIResourceRead(
     // OpenAI caches widget HTML from outputTemplate URI, so we must return
     // a template that reads from window.openai.toolOutput at runtime.
     // This ensures fresh structuredContent is rendered on each tool call.
+    //
+    // For MCP Inspector and other clients that don't inject toolOutput,
+    // they should use the dynamic URI (ui://tools/{toolName}/result/{requestId})
+    // which returns the pre-rendered HTML directly.
     const html = generatePlaceholderWidget(widgetParsed.toolName);
 
     return {

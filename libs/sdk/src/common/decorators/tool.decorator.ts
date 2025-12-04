@@ -178,22 +178,41 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
  * Tool metadata options with properly typed UI template.
  * The template function receives input/output types inferred from schemas.
  */
+/**
+ * UI template type - accepts multiple formats.
+ * Uses `unknown` for context types to avoid breaking generic inference.
+ */
+type __UITemplateType =
+  | ((ctx: { input: unknown; output: unknown; structuredContent?: unknown; helpers: TemplateHelpers }) => string)
+  | string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | ((props: any) => any); // React component signature
+
 export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = __ToolMetadataBase<I, O> & {
   /**
    * UI template configuration for rendering interactive widgets.
    */
   ui?: {
     /**
-     * Template builder function that receives typed input and output.
-     * @param ctx - Context with input, output, and helper functions
-     * @returns HTML string to render
+     * Template for rendering tool UI.
+     *
+     * Supports multiple formats (auto-detected by renderer):
+     * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
+     * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
+     * - React component: `MyWidget` - receives props with input/output/helpers
+     *
+     * @example HTML template builder
+     * ```typescript
+     * template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`
+     * ```
+     *
+     * @example React component
+     * ```typescript
+     * import { MyWidget } from './my-widget.tsx';
+     * template: MyWidget
+     * ```
      */
-    template: (ctx: {
-      input: z.infer<z.ZodObject<I>>;
-      output: __InferFromSingleSchema<O>;
-      structuredContent?: unknown;
-      helpers: TemplateHelpers;
-    }) => string;
+    template: __UITemplateType;
     /** Content Security Policy for the sandboxed widget */
     csp?: { connectDomains?: string[]; resourceDomains?: string[] };
     /** Whether the widget can invoke tools via the MCP bridge */

@@ -10,7 +10,7 @@ export { ToolUIRegistry } from './tool-ui.registry';
 export type { RenderAndRegisterOptions, UIRegistrationResult, CachedUI } from './tool-ui.registry';
 
 // Template rendering
-export { renderToolTemplate, hasUIConfig } from './render-template';
+export { renderToolTemplate, renderToolTemplateAsync, hasUIConfig, isReactComponent } from './render-template';
 export type { RenderTemplateOptions } from './render-template';
 
 // Platform adapters

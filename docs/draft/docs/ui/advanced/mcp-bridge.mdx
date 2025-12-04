@@ -1,0 +1,319 @@
+---
+title: MCP Bridge & Interactivity
+sidebarTitle: MCP Bridge
+icon: bolt
+description: Make your widgets interactive with MCP Bridge
+---
+
+# MCP Bridge
+
+The MCP Bridge (`window.mcpBridge`) provides a unified API for widget interactivity across platforms. It enables widgets to call tools, send messages, and interact with the host environment.
+
+## What is MCP Bridge?
+
+MCP Bridge is a runtime adapter that:
+- Normalizes platform APIs (OpenAI, Claude, etc.)
+- Provides tool invocation capabilities
+- Manages widget state
+- Handles theme and display mode changes
+
+```typescript
+// Available as window.mcpBridge in widgets
+interface MCPBridge {
+  readonly provider: 'openai' | 'ext-apps' | 'claude' | 'unknown';
+
+  callTool(name: string, params: object): Promise<unknown>;
+  sendMessage(content: string): Promise<void>;
+  openLink(url: string): Promise<void>;
+
+  readonly toolInput: Record<string, unknown>;
+  readonly toolOutput: unknown;
+  readonly structuredContent: unknown;
+  readonly widgetState: Record<string, unknown>;
+  readonly context: HostContext;
+
+  setWidgetState(state: object): void;
+  onContextChange(callback: (ctx: Partial<HostContext>) => void): () => void;
+  onToolResult(callback: (result: unknown) => void): () => void;
+}
+```
+
+## Calling Tools
+
+Invoke MCP tools from your widget:
+
+```typescript
+// In your widget script
+async function loadMoreItems() {
+  try {
+    const result = await window.mcpBridge.callTool('list_items', {
+      page: 2,
+      limit: 10,
+    });
+
+    // Update widget with results
+    document.getElementById('items').innerHTML = renderItems(result.items);
+  } catch (error) {
+    console.error('Tool call failed:', error);
+  }
+}
+```
+
+### Button with Tool Call
+
+```typescript
+import { button } from '@frontmcp/ui';
+
+const html = `
+${button('Load More', { id: 'load-more-btn' })}
+
+<script>
+  document.getElementById('load-more-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('load-more-btn');
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+
+    try {
+      const result = await window.mcpBridge.callTool('get_more_data', {});
+      // Handle result
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Load More';
+    }
+  });
+</script>
+`;
+```
+
+## Sending Messages
+
+Send follow-up messages to the chat:
+
+```typescript
+async function askQuestion(question) {
+  await window.mcpBridge.sendMessage(question);
+}
+```
+
+```html
+<input type="text" id="question" placeholder="Ask a question...">
+<button onclick="askQuestion(document.getElementById('question').value)">
+  Ask
+</button>
+```
+
+## Opening Links
+
+Open external URLs:
+
+```typescript
+await window.mcpBridge.openLink('https://example.com/docs');
+```
+
+This uses the platform's native link opening mechanism (new tab, in-app browser, etc.).
+
+## Accessing Tool Data
+
+Get the original tool input and output:
+
+```typescript
+// In your widget script
+const input = window.mcpBridge.toolInput;
+const output = window.mcpBridge.toolOutput;
+const structured = window.mcpBridge.structuredContent;
+
+console.log('Tool was called with:', input);
+console.log('Tool returned:', output);
+```
+
+## Widget State
+
+Persist state across sessions:
+
+```typescript
+// Get current state
+const state = window.mcpBridge.widgetState;
+
+// Update state
+window.mcpBridge.setWidgetState({
+  ...state,
+  selectedTab: 'details',
+  expandedSections: ['info', 'history'],
+});
+```
+
+<Warning>
+  Widget state is platform-specific. Not all platforms support persistence.
+  Check `supportsFullInteractivity()` before relying on this feature.
+</Warning>
+
+## Host Context
+
+Access theme, display mode, and other context:
+
+```typescript
+const context = window.mcpBridge.context;
+
+console.log(context.theme);        // 'light' | 'dark' | 'system'
+console.log(context.displayMode);  // 'inline' | 'fullscreen' | 'pip'
+console.log(context.locale);       // 'en-US'
+console.log(context.viewport);     // { width, height, maxHeight }
+```
+
+### Subscribe to Context Changes
+
+React to theme or display mode changes:
+
+```typescript
+const unsubscribe = window.mcpBridge.onContextChange((changes) => {
+  if (changes.theme) {
+    document.documentElement.classList.toggle('dark', changes.theme === 'dark');
+  }
+
+  if (changes.displayMode) {
+    updateLayoutForMode(changes.displayMode);
+  }
+});
+
+// Later: cleanup
+unsubscribe();
+```
+
+## Tool Result Updates
+
+Listen for tool result updates (streaming, progressive loading):
+
+```typescript
+const unsubscribe = window.mcpBridge.onToolResult((result) => {
+  // Update widget with new result
+  renderWidget(result);
+});
+```
+
+## Complete Interactive Widget
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, button, input, badge } from '@frontmcp/ui';
+
+@Tool({
+  name: 'todo_list',
+  description: 'Interactive todo list',
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+
+      const todoItems = output.todos.map(todo => `
+        <li class="flex items-center gap-2 py-2">
+          <input type="checkbox"
+                 ${todo.done ? 'checked' : ''}
+                 onchange="toggleTodo('${todo.id}', this.checked)">
+          <span class="${todo.done ? 'line-through text-gray-500' : ''}">
+            ${helpers.escapeHtml(todo.text)}
+          </span>
+          ${badge(todo.priority, { variant: todo.priority === 'high' ? 'danger' : 'default' })}
+        </li>
+      `).join('');
+
+      return card(`
+        <ul class="divide-y">${todoItems}</ul>
+
+        <div class="flex gap-2 mt-4">
+          ${input({ id: 'new-todo', placeholder: 'New todo...' })}
+          ${button('Add', { id: 'add-btn' })}
+        </div>
+
+        <script>
+          async function toggleTodo(id, done) {
+            await window.mcpBridge.callTool('update_todo', { id, done });
+          }
+
+          document.getElementById('add-btn').addEventListener('click', async () => {
+            const input = document.getElementById('new-todo');
+            if (input.value.trim()) {
+              await window.mcpBridge.callTool('add_todo', { text: input.value });
+              input.value = '';
+            }
+          });
+        </script>
+      `, { title: 'My Todos' });
+    },
+    widgetAccessible: true, // Enable tool calls from widget
+  },
+})
+export class TodoListTool extends ToolContext {
+  // ...
+}
+```
+
+## Security Considerations
+
+### Enable Widget Access Explicitly
+
+```typescript
+ui: {
+  template: ...,
+  widgetAccessible: true, // Must opt-in
+}
+```
+
+### Validate Tool Calls
+
+Server-side, validate all tool calls from widgets:
+
+```typescript
+// In your tool's execute method
+async execute(input: Input): Promise<Output> {
+  // Validate input
+  const validated = inputSchema.parse(input);
+
+  // Check permissions
+  if (!this.scope.hasPermission('todos:write')) {
+    throw new UnauthorizedError();
+  }
+
+  // Process request...
+}
+```
+
+### Content Security Policy
+
+Restrict what the widget can access:
+
+```typescript
+ui: {
+  csp: {
+    connectDomains: ['api.yourdomain.com'],
+    resourceDomains: ['cdn.yourdomain.com'],
+  },
+}
+```
+
+## Platform Compatibility
+
+| Feature | OpenAI | Claude | Gemini |
+|---------|--------|--------|--------|
+| `callTool` | Yes | No | No |
+| `sendMessage` | Yes | No | No |
+| `openLink` | Yes | Yes | Yes |
+| `setWidgetState` | Yes | No | No |
+| `onContextChange` | Yes | Limited | No |
+
+Always check capabilities before using features:
+
+```typescript
+if (window.mcpBridge?.callTool) {
+  await window.mcpBridge.callTool('my_tool', params);
+} else {
+  showMessage('Interactive features not available on this platform');
+}
+```
+
+## Best Practices
+
+1. **Check feature availability** - Not all platforms support all features
+2. **Handle errors gracefully** - Tool calls can fail
+3. **Show loading states** - Give feedback during async operations
+4. **Validate on server** - Never trust client-side input
+5. **Use CSP** - Limit what widgets can access
+6. **Clean up subscriptions** - Prevent memory leaks

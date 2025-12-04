@@ -132,20 +132,45 @@ export function renderMcpSessionPolyfill(mcpSession?: McpSession): string {
 
   /**
    * Get tool output from all possible sources.
+   * Priority: pre-rendered HTML from metadata > structured data > raw output
+   *
+   * Note: Returns undefined for null values from OpenAI (which is its initial state)
+   * to allow proper loading state handling in the bridge.
    */
   window.__frontmcp.getToolOutput = function() {
-    // OpenAI injects into window.openai.toolOutput
-    if (window.openai && window.openai.toolOutput !== undefined) {
+    // 1. Check for pre-rendered HTML in OpenAI toolResponseMetadata (highest priority)
+    // This is set when the tool has a UI template (React, HTML, etc.)
+    if (window.openai && window.openai.toolResponseMetadata) {
+      var html = window.openai.toolResponseMetadata['ui/html'];
+      if (html && typeof html === 'string') {
+        return html;  // Return HTML string directly
+      }
+    }
+
+    // 2. Check for pre-rendered HTML in MCP response metadata (for MCP Inspector, etc.)
+    if (window.__mcpResponseMeta) {
+      var mcpHtml = window.__mcpResponseMeta['ui/html'];
+      if (mcpHtml && typeof mcpHtml === 'string') {
+        return mcpHtml;  // Return HTML string directly
+      }
+    }
+
+    // 3. OpenAI injects structured data into window.openai.toolOutput
+    // Skip null - that's OpenAI's initial state before real data is injected
+    if (window.openai && window.openai.toolOutput !== undefined && window.openai.toolOutput !== null) {
       return window.openai.toolOutput;
     }
-    // MCP Bridge stores in window.__mcpToolOutput
-    if (window.__mcpToolOutput !== undefined) {
+
+    // 4. MCP Bridge stores in window.__mcpToolOutput (skip null)
+    if (window.__mcpToolOutput !== undefined && window.__mcpToolOutput !== null) {
       return window.__mcpToolOutput;
     }
-    // Explicit injection
+
+    // 5. Explicit injection
     if (window.__frontmcp.toolOutput !== undefined) {
       return window.__frontmcp.toolOutput;
     }
+
     return undefined;
   };
 })();

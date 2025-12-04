@@ -17,6 +17,7 @@
 import { DEFAULT_THEME, type ThemeConfig } from '../theme';
 import { renderThemeStyles, type ThemeStylesOptions } from './theme-styles';
 import { renderMcpSessionPolyfill, type McpSession } from './polyfills';
+import { renderBridgeScript } from './bridge';
 
 /**
  * Options for creating a default base template.
@@ -102,7 +103,7 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     inline = false,
     headContent = '',
     bodyClass = 'bg-transparent font-sans antialiased',
-    containerClass = 'min-h-screen p-4',
+    containerClass = 'p-4',
   } = options;
 
   // Build theme styles (fonts, scripts, @theme CSS)
@@ -119,6 +120,9 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
   // Build MCP session polyfill (detectMcpSession, callTool, getToolOutput)
   const polyfills = renderMcpSessionPolyfill(mcpSession);
 
+  // Build reactive bridge (handles data injection and re-rendering)
+  const bridge = renderBridgeScript();
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,6 +132,7 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
   <title>${escapeAttr(toolName)} Widget</title>
   ${themeStyles}
   ${polyfills}
+  ${bridge}
   ${headContent}
 </head>
 <body class="${escapeAttr(bodyClass)}">
@@ -138,24 +143,42 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     'use strict';
 
     var root = document.getElementById('widget-root');
-    var rendered = false;
 
     /**
-     * Render the widget content using custom or default renderer.
+     * Render the widget based on bridge state.
+     * Uses the reactive bridge to automatically re-render when data changes.
      */
-    function render(data) {
-      if (rendered) return;
-      rendered = true;
+    function render() {
+      var state = window.__frontmcp.bridge.getState();
 
+      // Loading state
+      if (state.loading) {
+        root.innerHTML = renderLoading();
+        return;
+      }
+
+      // Error state
+      if (state.error) {
+        root.innerHTML = renderError(state.error);
+        return;
+      }
+
+      // No data state
+      if (state.data === null) {
+        root.innerHTML = renderEmpty();
+        return;
+      }
+
+      // Render data
       try {
         // Check for custom renderer provided by developer
         if (window.__frontmcp && typeof window.__frontmcp.renderContent === 'function') {
-          root.innerHTML = window.__frontmcp.renderContent(data);
+          root.innerHTML = window.__frontmcp.renderContent(state.data);
           return;
         }
 
-        // Fall back to default JSON renderer
-        root.innerHTML = defaultRenderer(data);
+        // Fall back to default renderer
+        root.innerHTML = defaultRenderer(state.data);
       } catch (e) {
         console.error('[frontmcp] Error rendering widget:', e);
         root.innerHTML = renderError(e.message || 'Render error');
@@ -163,14 +186,41 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     }
 
     /**
-     * Default JSON renderer for tool output.
+     * Default renderer for tool output.
+     * Handles both pre-rendered HTML strings and raw JSON data.
      */
     function defaultRenderer(data) {
-      // Format JSON with syntax highlighting
+      // Check if data is pre-rendered HTML (server-side rendered widget)
+      if (typeof data === 'string' && data.trim().startsWith('<')) {
+        // Direct HTML injection - content was already rendered/sanitized server-side
+        return data;
+      }
+
+      // Check for special wrapper with HTML content
+      if (data && typeof data === 'object' && data.__html) {
+        return data.__html;
+      }
+
+      // Fallback: JSON renderer for raw data
       var json = JSON.stringify(data, null, 2);
       return '<pre class="p-4 bg-surface rounded-md overflow-auto text-sm font-mono text-text-primary border border-border">' +
         escapeHtml(json) +
         '</pre>';
+    }
+
+    /**
+     * Render loading state with animated spinner.
+     */
+    function renderLoading() {
+      return '<div class="flex items-center justify-center p-8">' +
+        '<div class="flex flex-col items-center gap-3">' +
+        '<svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">' +
+        '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>' +
+        '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>' +
+        '</svg>' +
+        '<p class="text-text-secondary text-sm">Loading...</p>' +
+        '</div>' +
+        '</div>';
     }
 
     /**
@@ -179,6 +229,15 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     function renderError(message) {
       return '<div class="p-4 bg-red-50 border border-red-200 rounded-md">' +
         '<p class="text-red-600 text-sm">Error: ' + escapeHtml(message) + '</p>' +
+        '</div>';
+    }
+
+    /**
+     * Render empty state (no data available).
+     */
+    function renderEmpty() {
+      return '<div class="p-4 text-text-secondary text-sm text-center">' +
+        'No data available' +
         '</div>';
     }
 
@@ -195,51 +254,21 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     }
 
     /**
-     * Check for tool output from all possible sources.
+     * Initialize the widget with reactive rendering.
      */
-    function checkForData() {
-      var data = window.__frontmcp.getToolOutput();
-      if (data !== undefined) {
-        render(data);
-        return true;
-      }
-      return false;
+    function init() {
+      // Subscribe to bridge state changes for reactive re-rendering
+      window.__frontmcp.bridge.subscribe(render);
+
+      // Initial render
+      render();
     }
 
-    /**
-     * Poll for data injection with exponential backoff.
-     */
-    function pollForData() {
-      if (checkForData()) return;
-
-      var attempts = 0;
-      var maxAttempts = 50; // ~10 seconds with exponential backoff
-      var baseDelay = 50;
-
-      function poll() {
-        if (checkForData()) return;
-
-        attempts++;
-        if (attempts >= maxAttempts) {
-          root.innerHTML = '<div class="p-4 text-text-secondary text-sm">' +
-            'Waiting for data...' +
-            '</div>';
-          return;
-        }
-
-        // Exponential backoff: 50ms, 75ms, 112ms, 168ms, ...
-        var delay = Math.min(baseDelay * Math.pow(1.5, Math.min(attempts, 10)), 1000);
-        setTimeout(poll, delay);
-      }
-
-      poll();
-    }
-
-    // Start polling when DOM is ready
+    // Initialize when DOM is ready
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', pollForData);
+      document.addEventListener('DOMContentLoaded', init);
     } else {
-      pollForData();
+      init();
     }
   })();
   </script>

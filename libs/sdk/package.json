@@ -35,7 +35,17 @@
     }
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.23.0",

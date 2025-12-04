@@ -5,7 +5,11 @@ import { RawZodShape } from '../common.types';
 
 export enum LogLevel {
   Debug = 0,
+  /**
+   * @deprecated use 'Verbose' instead
+   */
   VERBOSE = 1,
+  Verbose = 1,
   Info = 2,
   Warn = 3,
   Error = 4,

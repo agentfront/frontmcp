@@ -26,3 +26,6 @@ export {
 
 // Platform polyfills
 export { renderMcpSessionPolyfill, type McpSession } from './polyfills';
+
+// Platform bridge (reactive data store)
+export { renderBridgeScript, type BridgeState, type PlatformBridge, BRIDGE_TYPES } from './bridge';

@@ -4,6 +4,12 @@
  * Comprehensive UI library for FrontMCP applications.
  * Provides theme system, layouts, components, page templates, and widgets
  * for building authentication and authorization UIs across multiple LLM platforms.
+ *
+ * Key features:
+ * - Multi-framework renderer support (HTML, React, MDX)
+ * - Platform-aware theming (OpenAI, Claude, etc.)
+ * - Runtime JSX/TSX transpilation with SWC
+ * - MCP Bridge integration for cross-platform widgets
  */
 
 // Validation system
@@ -32,3 +38,6 @@ export * from './tool-template';
 
 // Base Template (for Tool UI widgets)
 export * from './base-template';
+
+// Multi-Framework Renderer System
+export * from './renderers';

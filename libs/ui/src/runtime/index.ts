@@ -24,6 +24,7 @@ export type {
   TemplateContext,
   TemplateHelpers,
   TemplateBuilderFn,
+  ToolUITemplate,
   ToolUIConfig,
   WidgetServingMode,
 } from './types';

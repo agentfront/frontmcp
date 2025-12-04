@@ -63,7 +63,7 @@
   "navigation": {
     "dropdowns": [
       {
-        "dropdown": "Documentation",
+        "dropdown": "FrontMCP",
         "icon": "book",
         "versions": [
           {
@@ -165,6 +165,77 @@
                 "group": "Deployment",
                 "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
               }
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "FrontMCP UI",
+        "icon": "palette",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["docs/ui/overview", "docs/ui/getting-started"]
+          },
+          {
+            "group": "Components",
+            "icon": "grid-2",
+            "pages": [
+              "docs/ui/components/overview",
+              "docs/ui/components/button",
+              "docs/ui/components/card",
+              "docs/ui/components/badge",
+              "docs/ui/components/alert",
+              "docs/ui/components/form",
+              "docs/ui/components/table",
+              "docs/ui/components/list",
+              "docs/ui/components/avatar",
+              "docs/ui/components/modal"
+            ]
+          },
+          {
+            "group": "Layouts",
+            "icon": "table-layout",
+            "pages": ["docs/ui/layouts/overview", "docs/ui/layouts/templates"]
+          },
+          {
+            "group": "Templates",
+            "icon": "code",
+            "pages": [
+              "docs/ui/templates/overview",
+              "docs/ui/templates/html",
+              "docs/ui/templates/react",
+              "docs/ui/templates/mdx",
+              "docs/ui/templates/custom"
+            ]
+          },
+          {
+            "group": "Integration",
+            "icon": "plug",
+            "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation"]
+          },
+          {
+            "group": "Theming",
+            "icon": "paintbrush",
+            "pages": ["docs/ui/theming/overview", "docs/ui/theming/customization", "docs/ui/theming/dark-mode"]
+          },
+          {
+            "group": "Advanced",
+            "icon": "bolt",
+            "pages": [
+              "docs/ui/advanced/platforms",
+              "docs/ui/advanced/mcp-bridge",
+              "docs/ui/advanced/hydration",
+              "docs/ui/advanced/custom-renderers"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "icon": "book-open",
+            "pages": [
+              "docs/ui/api-reference/components",
+              "docs/ui/api-reference/theme",
+              "docs/ui/api-reference/runtime"
             ]
           }
         ]

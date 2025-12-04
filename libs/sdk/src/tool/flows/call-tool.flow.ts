@@ -404,7 +404,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           'openai';
 
         // Render the UI and get platform-specific metadata
-        const uiResult = scope.toolUI.renderAndRegister({
+        // Use async version to support React component templates via SSR
+        const uiResult = await scope.toolUI.renderAndRegisterAsync({
           toolName: tool.metadata.name,
           requestId: String(requestId),
           input: (input?.arguments ?? {}) as Record<string, unknown>,
@@ -420,11 +421,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           ...uiResult.meta,
         };
 
-        // When UI is rendered and we have structuredContent, clear the text content
-        // The widget will display the data, so we don't need JSON text in content[]
-        if (result.structuredContent !== undefined) {
-          result.content = [];
-        }
+        // When UI is rendered, clear the text content since the widget will display the data
+        // The structuredContent remains as the actual tool output data
+        // The rendered HTML is available in _meta['ui/html'] for the widget to use
+        result.content = [];
 
         this.logger.verbose('finalize: UI metadata added', {
           tool: tool.metadata.name,
