@@ -353,6 +353,68 @@ const html = baseLayout(content, {
 });
 ```
 
+## Testing Tool UI
+
+When using `@frontmcp/ui` components in Tool UI templates (React, MDX), you can use `@frontmcp/testing` for E2E validation:
+
+```typescript
+import { test, expect, UIAssertions } from '@frontmcp/testing';
+
+test.describe('Tool UI with @frontmcp/ui', () => {
+  test('renders UI components correctly', async ({ mcp }) => {
+    const result = await mcp.tools.call('my-tool', { data: 'test' });
+
+    // Verify HTML is rendered (not fallback)
+    expect(result).toHaveRenderedHtml();
+    expect(result).toHaveProperHtmlStructure();
+
+    // Verify data binding
+    const output = result.json();
+    expect(result).toContainBoundValue(output.data);
+
+    // Security validation
+    expect(result).toBeXssSafe();
+
+    // Extract HTML for additional assertions
+    const html = UIAssertions.assertRenderedUI(result);
+
+    // Verify @frontmcp/ui component classes
+    expect(html).toContain('btn-primary'); // Button class
+    expect(html).toContain('card'); // Card component
+  });
+});
+```
+
+### UI Matchers
+
+| Matcher                       | Description                                     |
+| ----------------------------- | ----------------------------------------------- |
+| `toHaveRenderedHtml()`        | Checks `_meta['ui/html']` exists, not fallback  |
+| `toContainHtmlElement(tag)`   | Checks HTML contains `<tag>` element            |
+| `toContainBoundValue(value)`  | Checks output value appears in HTML             |
+| `toBeXssSafe()`               | No `<script>`, event handlers, `javascript:`    |
+| `toHaveWidgetMetadata()`      | Has platform metadata                           |
+| `toHaveCssClass(className)`   | Checks for specific CSS class                   |
+| `toNotContainRawContent(str)` | Content is NOT present (for fallback detection) |
+| `toHaveProperHtmlStructure()` | HTML has tags, not escaped text                 |
+
+### UIAssertions Helper
+
+```typescript
+import { UIAssertions } from '@frontmcp/testing';
+
+// Extract HTML from result
+const html = UIAssertions.assertRenderedUI(result);
+
+// Validate data binding
+UIAssertions.assertDataBinding(html, output, ['field1', 'field2']);
+
+// Comprehensive validation
+const html = UIAssertions.assertValidUI(result, ['field1', 'field2']);
+```
+
+See [@frontmcp/testing documentation](../testing/README.md) for full API reference.
+
 ## Development
 
 ### Building

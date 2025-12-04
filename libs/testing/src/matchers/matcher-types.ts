@@ -204,6 +204,100 @@ export interface McpMatchers<R = unknown> {
    * ```
    */
   toHaveErrorCode(code: number): R;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // UI MATCHERS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Check if tool result has rendered HTML in _meta['ui/html'].
+   * Fails if the HTML is the mdx-fallback (escaped raw content).
+   *
+   * @example
+   * ```typescript
+   * const result = await mcp.tools.call('get_weather', { location: 'London' });
+   * expect(result).toHaveRenderedHtml();
+   * ```
+   */
+  toHaveRenderedHtml(): R;
+
+  /**
+   * Check if HTML contains a specific HTML element tag.
+   * @param tag - The HTML tag name to look for (e.g., 'div', 'h1', 'span')
+   *
+   * @example
+   * ```typescript
+   * expect(result).toContainHtmlElement('div');
+   * expect(result).toContainHtmlElement('h1');
+   * ```
+   */
+  toContainHtmlElement(tag: string): R;
+
+  /**
+   * Check if a bound value from tool output appears in the rendered HTML.
+   * @param value - The value to look for (string or number)
+   *
+   * @example
+   * ```typescript
+   * const output = result.json();
+   * expect(result).toContainBoundValue(output.location);
+   * expect(result).toContainBoundValue(output.temperature);
+   * ```
+   */
+  toContainBoundValue(value: string | number): R;
+
+  /**
+   * Check if HTML is XSS-safe (no script tags, event handlers, or javascript: URIs).
+   *
+   * @example
+   * ```typescript
+   * expect(result).toBeXssSafe();
+   * ```
+   */
+  toBeXssSafe(): R;
+
+  /**
+   * Check if tool result has widget metadata (ui/resourceUri).
+   *
+   * @example
+   * ```typescript
+   * expect(result).toHaveWidgetMetadata();
+   * ```
+   */
+  toHaveWidgetMetadata(): R;
+
+  /**
+   * Check if HTML has a specific CSS class.
+   * @param className - The CSS class name to look for
+   *
+   * @example
+   * ```typescript
+   * expect(result).toHaveCssClass('weather-card');
+   * ```
+   */
+  toHaveCssClass(className: string): R;
+
+  /**
+   * Check that HTML does NOT contain specific content (useful for fallback checks).
+   * @param content - The content that should NOT be in the HTML
+   *
+   * @example
+   * ```typescript
+   * expect(result).toNotContainRawContent('mdx-fallback');
+   * expect(result).toNotContainRawContent('<Alert'); // Custom component should be rendered
+   * ```
+   */
+  toNotContainRawContent(content: string): R;
+
+  /**
+   * Check if HTML has proper structure (not just escaped text).
+   *
+   * @example
+   * ```typescript
+   * expect(result).toHaveProperHtmlStructure();
+   * ```
+   */
+  toHaveProperHtmlStructure(): R;
 }
 
 // ═══════════════════════════════════════════════════════════════════

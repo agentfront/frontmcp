@@ -23,7 +23,23 @@ import type { McpMatchers } from './matchers/matcher-types';
 /**
  * Extended Jest matchers interface that includes MCP matchers
  */
-type McpExpectMatchers<R = void> = jest.Matchers<R> & McpMatchers<R>;
+type McpExpectMatchers<R = void> = jest.Matchers<R> &
+  McpMatchers<R> & {
+    /**
+     * Inverts the matchers that follow
+     */
+    not: jest.Matchers<R> & McpMatchers<R>;
+
+    /**
+     * Used to access matchers that are resolved asynchronously
+     */
+    resolves: jest.Matchers<Promise<R>> & McpMatchers<Promise<R>>;
+
+    /**
+     * Used to access matchers that are rejected asynchronously
+     */
+    rejects: jest.Matchers<Promise<R>> & McpMatchers<Promise<R>>;
+  };
 
 /**
  * Extended expect interface with MCP matchers

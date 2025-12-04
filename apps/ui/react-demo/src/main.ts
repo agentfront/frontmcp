@@ -17,12 +17,7 @@ import WeatherMcpApp from './apps/weather';
     port: 3003,
   },
   auth: {
-    mode: 'transparent',
-    remote: {
-      provider: 'https://sample-app.frontegg.com',
-      name: 'frontegg',
-      dcrEnabled: false,
-    },
+    mode: 'public',
   },
 })
 export default class Server {}

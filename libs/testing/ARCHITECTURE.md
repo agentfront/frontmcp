@@ -314,6 +314,82 @@ expect(tools).toContainTool('my-tool'); // ✓ TypeScript knows this exists
 expect(result).toBeSuccessful(); // ✓ TypeScript knows this exists
 ```
 
+#### UI Matchers (`src/ui/`)
+
+The UI matchers provide specialized validation for Tool UI responses.
+
+| File               | Purpose                         |
+| ------------------ | ------------------------------- |
+| `ui-matchers.ts`   | Jest matchers for UI validation |
+| `ui-assertions.ts` | Imperative assertion helpers    |
+| `index.ts`         | Barrel exports                  |
+
+**UI Matchers:**
+
+```typescript
+// Check for rendered HTML
+expect(result).toHaveRenderedHtml(); // _meta['ui/html'] exists, not mdx-fallback
+
+// Check HTML elements
+expect(result).toContainHtmlElement('div');
+
+// Check data binding (output values in HTML)
+expect(result).toContainBoundValue('London');
+expect(result).toContainBoundValue(25);
+
+// Security validation
+expect(result).toBeXssSafe(); // No <script>, onclick=, javascript:
+
+// Widget metadata
+expect(result).toHaveWidgetMetadata();
+
+// CSS classes
+expect(result).toHaveCssClass('weather-card');
+
+// Raw content checks (for fallback detection)
+expect(result).toNotContainRawContent('mdx-fallback');
+expect(result).toHaveProperHtmlStructure();
+```
+
+**UIAssertions Helper:**
+
+For imperative assertions with detailed error messages:
+
+```typescript
+import { UIAssertions } from '@frontmcp/testing';
+
+// Extract and validate HTML
+const html = UIAssertions.assertRenderedUI(result);
+
+// Validate data binding
+UIAssertions.assertDataBinding(html, output, ['location', 'temperature']);
+
+// Security checks
+UIAssertions.assertXssSafe(html);
+
+// Comprehensive validation
+const html = UIAssertions.assertValidUI(result, ['location', 'temperature']);
+```
+
+**How UI Matchers Extract HTML:**
+
+```typescript
+function extractUiHtml(received: unknown): string | undefined {
+  // Handle ToolResultWrapper
+  const wrapper = received as ToolResultWrapper;
+  const meta = wrapper?.raw?._meta || wrapper?._meta;
+
+  if (meta && typeof meta === 'object') {
+    const uiHtml = (meta as Record<string, unknown>)['ui/html'];
+    if (typeof uiHtml === 'string') {
+      return uiHtml;
+    }
+  }
+
+  return undefined;
+}
+```
+
 #### Registering Matchers
 
 Matchers are registered in the setup file:
@@ -1151,6 +1227,11 @@ libs/testing/
 │   │   ├── index.ts                # Matcher exports
 │   │   ├── mcp-matchers.ts         # Matcher implementations
 │   │   └── matcher-types.ts        # TypeScript declarations
+│   │
+│   ├── ui/
+│   │   ├── index.ts                # UI exports
+│   │   ├── ui-matchers.ts          # Jest matchers for Tool UI validation
+│   │   └── ui-assertions.ts        # Imperative assertion helpers
 │   │
 │   ├── server/
 │   │   └── test-server.ts          # Server lifecycle management

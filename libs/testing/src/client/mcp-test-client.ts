@@ -887,6 +887,11 @@ export class McpTestClient {
     const raw = response.data ?? { content: [] };
     const isError = !response.success || raw.isError === true;
 
+    // Check for Tool UI response - has structuredContent and ui/html in _meta
+    const meta = raw._meta as Record<string, unknown> | undefined;
+    const hasUI = meta?.['ui/html'] !== undefined;
+    const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
+
     return {
       raw,
       isSuccess: !isError,
@@ -894,6 +899,11 @@ export class McpTestClient {
       error: response.error,
       durationMs: response.durationMs,
       json<T>(): T {
+        // For Tool UI responses, return structuredContent (the typed output)
+        if (hasUI && structuredContent !== undefined) {
+          return structuredContent as T;
+        }
+        // For regular responses, parse text content as JSON
         const textContent = raw.content?.find((c) => c.type === 'text');
         if (textContent && 'text' in textContent) {
           return JSON.parse(textContent.text) as T;
@@ -915,6 +925,9 @@ export class McpTestClient {
       },
       hasResourceContent(): boolean {
         return raw.content?.some((c) => c.type === 'resource') ?? false;
+      },
+      hasToolUI(): boolean {
+        return hasUI;
       },
     };
   }

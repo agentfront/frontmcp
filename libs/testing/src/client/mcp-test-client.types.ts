@@ -136,7 +136,12 @@ export interface ToolResultWrapper {
   error?: McpErrorInfo;
   /** Duration of the tool call in ms */
   durationMs: number;
-  /** Parse text content as JSON */
+  /**
+   * Parse tool output as JSON
+   *
+   * For Tool UI responses: returns structuredContent (the typed output)
+   * For regular responses: parses text content as JSON
+   */
   json<T = unknown>(): T;
   /** Get first text content */
   text(): string | undefined;
@@ -146,6 +151,8 @@ export interface ToolResultWrapper {
   hasImageContent(): boolean;
   /** Check if response has resource content */
   hasResourceContent(): boolean;
+  /** Check if response has Tool UI metadata (ui/html in _meta) */
+  hasToolUI(): boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════
