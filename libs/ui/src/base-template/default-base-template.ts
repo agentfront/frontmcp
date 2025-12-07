@@ -257,6 +257,119 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
     }
 
     /**
+     * Create debug overlay panel.
+     * Shows bridge state, logs, and OpenAI data status.
+     */
+    function createDebugOverlay() {
+      var overlay = document.createElement('div');
+      overlay.id = 'frontmcp-debug-overlay';
+      overlay.style.cssText = 'position:fixed;bottom:10px;right:10px;width:400px;max-height:60vh;' +
+        'background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;' +
+        'padding:10px;border-radius:4px;z-index:99999;overflow:auto;display:none;';
+
+      var toggle = document.createElement('button');
+      toggle.id = 'frontmcp-debug-toggle';
+      toggle.textContent = 'Debug';
+      toggle.style.cssText = 'position:fixed;bottom:10px;right:10px;padding:4px 8px;' +
+        'background:#333;color:#0f0;font-family:monospace;font-size:10px;border:1px solid #0f0;' +
+        'border-radius:4px;z-index:100000;cursor:pointer;';
+
+      toggle.onclick = function() {
+        var o = document.getElementById('frontmcp-debug-overlay');
+        if (o.style.display === 'none') {
+          o.style.display = 'block';
+          toggle.style.right = '420px';
+          updateDebugOverlay();
+        } else {
+          o.style.display = 'none';
+          toggle.style.right = '10px';
+        }
+      };
+
+      document.body.appendChild(overlay);
+      document.body.appendChild(toggle);
+
+      // Auto-update every second
+      setInterval(updateDebugOverlay, 1000);
+    }
+
+    function updateDebugOverlay() {
+      var overlay = document.getElementById('frontmcp-debug-overlay');
+      if (!overlay || overlay.style.display === 'none') return;
+
+      var state = window.__frontmcp.bridge.getState();
+      var debug = window.__frontmcp.bridge.debug;
+      var logs = debug.getLogs();
+      var errors = debug.getLastErrors();
+      var stateHistory = debug.getStateHistory();
+
+      var html = '<div style="margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:5px;">' +
+        '<strong>FrontMCP Debug Panel</strong>' +
+        '<span style="float:right;color:#666;">v' + stateHistory.version + '</span>' +
+        '</div>';
+
+      // Bridge State
+      html += '<div style="margin-bottom:10px;">' +
+        '<div style="color:#ff0;">Bridge State:</div>' +
+        '<div>Loading: ' + state.loading + '</div>' +
+        '<div>Has Data: ' + (state.data !== null) + '</div>' +
+        '<div>Data Type: ' + (state.data === null ? 'null' : typeof state.data) + '</div>' +
+        (typeof state.data === 'string' ? '<div>Data Length: ' + state.data.length + '</div>' : '') +
+        '<div>Error: ' + (state.error || 'none') + '</div>' +
+        '</div>';
+
+      // OpenAI Status
+      html += '<div style="margin-bottom:10px;">' +
+        '<div style="color:#ff0;">OpenAI Status:</div>' +
+        '<div>Intercepted: ' + stateHistory.openaiIntercepted + '</div>' +
+        '<div>Poll Count: ' + stateHistory.pollCount + '</div>';
+
+      if (window.openai) {
+        html += '<div>window.openai: exists</div>' +
+          '<div>toolOutput: ' + (window.openai.toolOutput !== undefined ? 'present' : 'undefined') + '</div>' +
+          '<div>toolResponseMetadata: ' + (window.openai.toolResponseMetadata !== undefined ? 'present' : 'undefined') + '</div>';
+        if (window.openai.toolResponseMetadata) {
+          html += '<div>meta keys: ' + Object.keys(window.openai.toolResponseMetadata).join(', ') + '</div>';
+        }
+      } else {
+        html += '<div>window.openai: undefined</div>';
+      }
+      html += '</div>';
+
+      // Errors
+      if (errors.length > 0) {
+        html += '<div style="margin-bottom:10px;">' +
+          '<div style="color:#f00;">Errors (' + errors.length + '):</div>';
+        errors.slice(-5).forEach(function(e) {
+          html += '<div style="color:#f88;font-size:10px;">[' + e.level + '] ' + escapeHtml(e.message) + '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Recent Logs
+      html += '<div>' +
+        '<div style="color:#ff0;">Recent Logs (' + logs.length + '):</div>' +
+        '<div style="max-height:150px;overflow:auto;">';
+      logs.slice(-10).forEach(function(e) {
+        var color = e.level === 'error' ? '#f00' : e.level === 'warn' ? '#ff0' : '#0f0';
+        html += '<div style="color:' + color + ';font-size:10px;">' +
+          '[' + e.ts.split('T')[1].split('.')[0] + '] ' + escapeHtml(e.message) +
+          '</div>';
+      });
+      html += '</div></div>';
+
+      // Actions
+      html += '<div style="margin-top:10px;border-top:1px solid #333;padding-top:5px;">' +
+        '<button onclick="console.log(window.__frontmcp.bridge.debug.dumpAll())" ' +
+        'style="font-size:10px;padding:2px 6px;margin-right:5px;">Dump to Console</button>' +
+        '<button onclick="window.__frontmcp.bridge.reset()" ' +
+        'style="font-size:10px;padding:2px 6px;">Reset Bridge</button>' +
+        '</div>';
+
+      overlay.innerHTML = html;
+    }
+
+    /**
      * Initialize the widget with reactive rendering.
      */
     function init() {
@@ -265,6 +378,70 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
 
       // Initial render
       render();
+
+      // Global click handler for SSR-compatible tool calls
+      // Handles buttons/elements with data-tool-call attribute
+      document.addEventListener('click', function(e) {
+        var target = e.target;
+        // Walk up the DOM to find element with data-tool-call (handles clicks on child elements)
+        while (target && target !== document.body) {
+          if (target.hasAttribute && target.hasAttribute('data-tool-call')) {
+            var toolName = target.getAttribute('data-tool-call');
+            var argsStr = target.getAttribute('data-tool-args');
+            var args = {};
+
+            if (argsStr) {
+              try {
+                args = JSON.parse(argsStr);
+              } catch (parseErr) {
+                console.error('[frontmcp] Failed to parse data-tool-args:', parseErr);
+              }
+            }
+
+            // Prevent default behavior and stop propagation
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Show loading state on the button
+            var originalContent = target.innerHTML;
+            var loadingContent = '<span style="display:inline-flex;align-items:center;">' +
+              '<span style="animation:spin 1s linear infinite;margin-right:4px;">⏳</span>' +
+              'Loading...' +
+              '</span>';
+            target.innerHTML = loadingContent;
+            target.disabled = true;
+
+            // Call the tool
+            if (window.__frontmcp && typeof window.__frontmcp.callTool === 'function') {
+              window.__frontmcp.callTool(toolName, args)
+                .then(function(result) {
+                  console.log('[frontmcp] Tool call success:', toolName, result);
+                  // The bridge will handle re-rendering when new data arrives
+                })
+                .catch(function(err) {
+                  console.error('[frontmcp] Tool call failed:', toolName, err);
+                  // Restore button state on error
+                  target.innerHTML = originalContent;
+                  target.disabled = false;
+                });
+            } else {
+              console.error('[frontmcp] callTool not available');
+              target.innerHTML = originalContent;
+              target.disabled = false;
+            }
+
+            return;
+          }
+          target = target.parentElement;
+        }
+      });
+
+      // Create debug overlay if debug mode is enabled
+      var DEBUG = window.location.search.indexOf('frontmcp_debug=1') > -1 ||
+                  window.localStorage.getItem('frontmcp_debug') === '1';
+      if (DEBUG) {
+        createDebugOverlay();
+      }
     }
 
     // Initialize when DOM is ready

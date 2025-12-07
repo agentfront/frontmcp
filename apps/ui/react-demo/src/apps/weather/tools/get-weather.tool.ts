@@ -6,7 +6,6 @@
  */
 
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, descriptionList, badge } from '@frontmcp/ui';
 import { z } from 'zod';
 import WeatherCard from './weather-ui';
 
@@ -30,17 +29,6 @@ const outputSchema = z.object({
 type WeatherInput = z.infer<z.ZodObject<typeof inputSchema>>;
 type WeatherOutput = z.infer<typeof outputSchema>;
 
-// Weather condition icon mapping (using emoji for simplicity)
-const iconMap: Record<string, string> = {
-  sunny: '☀️',
-  cloudy: '☁️',
-  rainy: '🌧️',
-  snowy: '❄️',
-  stormy: '⛈️',
-  windy: '💨',
-  foggy: '🌫️',
-};
-
 @Tool({
   name: 'get_weather',
   description: 'Get current weather for a location. Returns temperature, conditions, humidity, and wind speed.',
@@ -55,6 +43,7 @@ const iconMap: Record<string, string> = {
     template: WeatherCard,
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
+    widgetAccessible: true,
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {

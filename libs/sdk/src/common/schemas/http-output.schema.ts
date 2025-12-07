@@ -310,6 +310,38 @@ export const httpRespond = {
     },
   }),
 
+  /**
+   * Session expired error (HTTP 404).
+   * Per MCP Spec 2025-11-25: When server terminates session, respond with HTTP 404.
+   * This signals to clients that they should start a new session with InitializeRequest.
+   */
+  sessionExpired: (message: string, requestId?: RequestId | null): z.infer<typeof HttpJsonSchema> => ({
+    kind: 'json',
+    status: 404,
+    contentType: 'application/json; charset=utf-8',
+    body: {
+      jsonrpc: JSON_RPC,
+      error: { code: -32001, message },
+      id: requestId ?? randomUUID(),
+    },
+  }),
+
+  /**
+   * Session not found/not initialized error (HTTP 404).
+   * Per user requirement: Invalid or missing session should return HTTP 404 (not 400).
+   * This signals to clients that they should start a new session with InitializeRequest.
+   */
+  sessionNotFound: (message: string, requestId?: RequestId | null): z.infer<typeof HttpJsonSchema> => ({
+    kind: 'json',
+    status: 404,
+    contentType: 'application/json; charset=utf-8',
+    body: {
+      jsonrpc: JSON_RPC,
+      error: { code: -32000, message },
+      id: requestId ?? randomUUID(),
+    },
+  }),
+
   rpcRequest: (requestId: RequestId, method: string, params: any): JSONRPCMessage => ({
     jsonrpc: JSON_RPC,
     id: requestId ?? randomUUID(),

@@ -1,12 +1,22 @@
 /**
  * Template Helpers
  *
- * Utility functions available in template rendering context.
- * These helpers provide safe HTML generation, formatting, and
- * other common operations needed by tool UI templates.
+ * Re-exports template helper utilities from @frontmcp/ui/runtime.
+ * Also provides individual helper functions for backwards compatibility.
+ *
+ * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  */
 
 import type { TemplateHelpers } from '../../common/metadata/tool-ui.metadata';
+
+// Re-export createTemplateHelpers from @frontmcp/ui
+export { createTemplateHelpers } from '@frontmcp/ui/runtime';
+
+// ============================================
+// Individual Helper Functions (Backwards Compatibility)
+// ============================================
+// These are exported individually for SDK consumers who import them directly.
+// For new code, prefer using createTemplateHelpers() instead.
 
 let idCounter = 0;
 
@@ -82,8 +92,9 @@ export function jsonEmbed(data: unknown): string {
 
 /**
  * Create a TemplateHelpers object with all helper functions.
+ * @deprecated Use createTemplateHelpers from @frontmcp/ui/runtime instead
  */
-export function createTemplateHelpers(): TemplateHelpers {
+export function createTemplateHelpersLocal(): TemplateHelpers {
   return {
     escapeHtml,
     formatDate,

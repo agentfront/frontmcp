@@ -433,10 +433,36 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         });
       } catch (error) {
         // UI rendering failure should not fail the tool call
-        this.logger.warn('finalize: UI rendering failed', {
+        // Log with full context to help debugging
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        const uiConfig = tool.metadata.ui;
+
+        this.logger.error('finalize: UI rendering failed', {
           tool: tool.metadata.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
+          stack: errorStack,
+          templateType: uiConfig?.template
+            ? typeof uiConfig.template === 'function'
+              ? 'react-component'
+              : typeof uiConfig.template === 'string'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
+            : 'none',
+          hasStructuredContent: result.structuredContent !== undefined,
+          structuredContentKeys: result.structuredContent ? Object.keys(result.structuredContent as object) : [],
         });
+
+        // In debug mode, also log to console for immediate visibility
+        if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+          console.error('[FrontMCP] UI Rendering Error:', {
+            tool: tool.metadata.name,
+            error: errorMessage,
+            stack: errorStack,
+          });
+        }
       }
     }
 

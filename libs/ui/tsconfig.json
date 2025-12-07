@@ -4,6 +4,7 @@
     "module": "NodeNext",
     "target": "ES2022",
     "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "strictNullChecks": true,

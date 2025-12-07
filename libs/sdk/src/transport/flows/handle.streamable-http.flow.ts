@@ -24,9 +24,27 @@ export const plan = {
   finalize: ['cleanup'],
 } as const satisfies FlowPlan<string>;
 
+// Relaxed session schema for state - payload is optional when using mcp-session-id header directly
+const stateSessionSchema = z.object({
+  id: z.string(),
+  payload: z
+    .object({
+      nodeId: z.string(),
+      authSig: z.string(),
+      uuid: z.string().uuid(),
+      iat: z.number(),
+      protocol: z.enum(['legacy-sse', 'sse', 'streamable-http', 'stateful-http', 'stateless-http']).optional(),
+      isPublic: z.boolean().optional(),
+      platformType: z
+        .enum(['openai', 'claude', 'gemini', 'cursor', 'continue', 'cody', 'generic-mcp', 'ext-apps', 'unknown'])
+        .optional(),
+    })
+    .optional(),
+});
+
 export const stateSchema = z.object({
   token: z.string(),
-  session: sessionIdSchema,
+  session: stateSessionSchema,
   requestType: z.enum(['initialize', 'message', 'elicitResult', 'sseListener']).optional(),
 });
 
@@ -62,14 +80,37 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const authorization = request[ServerRequestTokens.auth] as Authorization;
     const { token } = authorization;
 
-    // Get session from authorization or create new one - stored only in state, not mutated on request
-    // Pass user-agent for pre-initialize platform detection
-    const session =
-      authorization.session ??
-      createSessionId('streamable-http', token, {
+    // CRITICAL: The mcp-session-id header is the client's reference to their session.
+    // We MUST use this exact ID for transport registry lookup.
+    //
+    // Priority 1: Use mcp-session-id header if present (client's session ID for lookup)
+    //             This is the ID the client received from initialize and is referencing.
+    // Priority 2: Use session from authorization if header matches or is absent
+    // Priority 3: Create new session (first request - no header, no authorization.session)
+    const mcpSessionHeader = request.headers?.['mcp-session-id'] as string | undefined;
+
+    let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
+
+    if (mcpSessionHeader) {
+      // Client sent session ID - ALWAYS use it for transport lookup
+      // If authorization.session exists and matches, use its payload for protocol detection
+      // If authorization.session differs or is missing, still use header ID (payload may be undefined)
+      if (authorization.session?.id === mcpSessionHeader) {
+        session = authorization.session;
+      } else {
+        session = { id: mcpSessionHeader };
+      }
+    } else if (authorization.session) {
+      // No header but authorization has session - use it (shouldn't happen in normal flow)
+      session = authorization.session;
+    } else {
+      // No session - create new one (initialize request)
+      session = createSessionId('streamable-http', token, {
         userAgent: request.headers?.['user-agent'] as string | undefined,
         platformDetectionConfig: (this.scope as Scope).metadata?.session?.platformDetection,
       });
+    }
+
     this.state.set(stateSchema.parse({ token, session }));
   }
 
@@ -132,7 +173,32 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { token, session } = this.state.required;
     const transport = await transportService.getTransporter('streamable-http', token, session.id);
     if (!transport) {
-      this.respond(httpRespond.rpcError('session not initialized'));
+      // Check if session was ever created to differentiate error types per MCP Spec 2025-11-25
+      const wasCreated = transportService.wasSessionCreated('streamable-http', token, session.id);
+      const body = request.body as Record<string, unknown> | undefined;
+
+      if (wasCreated) {
+        // Session existed but was terminated/evicted → HTTP 404 (client should re-initialize)
+        logger.info('Session expired - client should re-initialize', {
+          sessionId: session.id?.slice(0, 20),
+          tokenHash: token.slice(0, 8),
+          method: body?.['method'],
+          requestId: body?.['id'],
+          mcpSessionId: request.headers?.['mcp-session-id'],
+        });
+        this.respond(httpRespond.sessionExpired('session expired'));
+      } else {
+        // Session was never created → HTTP 404 (per user requirement: invalid/missing session = 404)
+        logger.warn('Session not initialized - client attempted request without initializing', {
+          sessionId: session.id?.slice(0, 20),
+          tokenHash: token.slice(0, 8),
+          method: body?.['method'],
+          requestId: body?.['id'],
+          mcpSessionId: request.headers?.['mcp-session-id'],
+          userAgent: (request.headers?.['user-agent'] as string | undefined)?.slice(0, 50),
+        });
+        this.respond(httpRespond.sessionNotFound('session not initialized'));
+      }
       return;
     }
 

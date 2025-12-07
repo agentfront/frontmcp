@@ -24,6 +24,7 @@ import {
 } from '../theme';
 import { escapeHtml } from '../layouts/base';
 import { sanitizeInput as sanitizeInputFn, type SanitizerFn } from './sanitizer';
+import { BRIDGE_SCRIPT_TAGS } from '../bridge/runtime/iife-generator';
 
 // ============================================
 // Extended Options
@@ -138,11 +139,12 @@ export function createTemplateHelpers() {
      * Escapes characters that could break out of script tags or HTML
      */
     jsonEmbed: (data: unknown): string => {
-      return JSON.stringify(data)
-        .replace(/</g, '\\u003c')
-        .replace(/>/g, '\\u003e')
-        .replace(/&/g, '\\u0026')
-        .replace(/'/g, '\\u0027');
+      // JSON.stringify returns undefined for undefined input, handle it
+      const json = JSON.stringify(data);
+      if (json === undefined) {
+        return 'undefined';
+      }
+      return json.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/'/g, '\\u0027');
     },
   };
 }
@@ -388,6 +390,235 @@ function buildDataInjectionScript(options: {
   window.__mcpWidgetAccessible = ${helpers.jsonEmbed(widgetAccessible)};
   window.__mcpHostContext = ${helpers.jsonEmbed(contextData)};
 </script>`;
+}
+
+// ============================================
+// Universal Wrapper (Works on All Platforms)
+// ============================================
+
+/**
+ * Options for the universal wrapper.
+ */
+export interface WrapToolUIUniversalOptions {
+  /** Rendered template content (HTML) */
+  content: string;
+  /** Tool name */
+  toolName: string;
+  /** Tool input arguments */
+  input?: Record<string, unknown>;
+  /** Tool output/result */
+  output?: unknown;
+  /** Structured content */
+  structuredContent?: unknown;
+  /** CSP configuration */
+  csp?: WrapToolUIOptions['csp'];
+  /** Widget accessibility flag */
+  widgetAccessible?: boolean;
+  /** Page title */
+  title?: string;
+  /** Theme configuration */
+  theme?: DeepPartial<ThemeConfig>;
+  /** Whether to include the FrontMCP Bridge */
+  includeBridge?: boolean;
+  /** Whether to inline all scripts (for blocked-network environments) */
+  inlineScripts?: boolean;
+  /** Renderer type used */
+  rendererType?: string;
+  /** Enable hydration */
+  hydrate?: boolean;
+}
+
+/**
+ * Wrap tool UI content in a universal HTML document.
+ *
+ * This wrapper produces HTML that works on ALL platforms:
+ * - OpenAI ChatGPT (Apps SDK)
+ * - Anthropic Claude
+ * - MCP Apps (ext-apps / SEP-1865)
+ * - Google Gemini
+ * - Any MCP-compatible host
+ *
+ * The FrontMCP Bridge auto-detects the host at runtime and adapts
+ * its communication protocol accordingly.
+ *
+ * @param options - Universal wrapper options
+ * @returns Complete HTML document string
+ *
+ * @example
+ * ```typescript
+ * const html = wrapToolUIUniversal({
+ *   content: '<div class="p-4">Weather: 72°F</div>',
+ *   toolName: 'get_weather',
+ *   output: { temperature: 72 },
+ * });
+ * ```
+ */
+export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string {
+  const {
+    content,
+    toolName,
+    input = {},
+    output,
+    structuredContent,
+    csp,
+    widgetAccessible = false,
+    title,
+    theme: themeOverrides,
+    includeBridge = true,
+    inlineScripts = false,
+    rendererType,
+    hydrate,
+  } = options;
+
+  // Merge theme
+  const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
+
+  // Build font links (skip for inline mode / blocked network)
+  const fontPreconnect = inlineScripts ? '' : buildFontPreconnect();
+  const fontStylesheets = inlineScripts ? '' : buildFontStylesheets({ inter: true });
+
+  // Build CDN scripts
+  const scripts = buildCdnScripts({
+    tailwind: true,
+    htmx: false,
+    alpine: false,
+    icons: false,
+    inline: inlineScripts,
+  });
+
+  // Build theme CSS
+  const themeCss = buildThemeCss(theme);
+  const customCss = theme.customCss || '';
+
+  // Build Tailwind style block
+  const styleBlock = `<style type="text/tailwindcss">
+    @theme {
+      ${themeCss}
+    }
+    ${customCss}
+  </style>`;
+
+  // Build CSP meta tag
+  const cspMetaTag = buildCSPMetaTag(csp);
+
+  // Build data injection script
+  const dataScript = buildDataInjectionScript({
+    toolName,
+    input,
+    output,
+    structuredContent,
+    widgetAccessible,
+  });
+
+  // Build framework runtime (for React/MDX hydration)
+  const frameworkScripts = buildFrameworkRuntimeScriptsUniversal({
+    rendererType,
+    hydrate,
+    inlineScripts,
+  });
+
+  // Universal bridge script (works on all platforms)
+  const bridgeScript = includeBridge ? BRIDGE_SCRIPT_TAGS.universal : '';
+
+  // Page title
+  const pageTitle = title || `${escapeHtml(toolName)} - Tool Result`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  ${cspMetaTag}
+
+  <!-- Fonts -->
+  ${fontPreconnect}
+  ${fontStylesheets}
+
+  <!-- Tailwind CSS -->
+  ${scripts}
+  ${styleBlock}
+
+  <!-- Framework Runtime -->
+  ${frameworkScripts}
+
+  <!-- Tool Data -->
+  ${dataScript}
+
+  <!-- FrontMCP Bridge (Universal - Auto-detects host platform) -->
+  ${bridgeScript}
+</head>
+<body class="bg-background text-text-primary font-sans antialiased">
+  ${content}
+</body>
+</html>`;
+}
+
+/**
+ * Build framework runtime scripts for universal wrapper.
+ */
+function buildFrameworkRuntimeScriptsUniversal(options: {
+  rendererType?: string;
+  hydrate?: boolean;
+  inlineScripts?: boolean;
+}): string {
+  const { rendererType, hydrate, inlineScripts } = options;
+
+  // No framework scripts needed for HTML templates
+  if (!rendererType || rendererType === 'html' || rendererType === 'html-fallback') {
+    return '';
+  }
+
+  // Only include runtime if hydration is enabled
+  if (!hydrate) {
+    return '';
+  }
+
+  // React/MDX both need React runtime for hydration
+  if (rendererType === 'react' || rendererType === 'mdx') {
+    if (!inlineScripts) {
+      // Use CDN for platforms with network access
+      return `
+  <!-- React Runtime (for hydration) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script>
+    // Hydration script for React/MDX components
+    (function() {
+      document.addEventListener('DOMContentLoaded', function() {
+        var hydratables = document.querySelectorAll('[data-hydrate], [data-mdx-hydrate]');
+        if (hydratables.length > 0 && window.__frontmcp_components) {
+          hydratables.forEach(function(el) {
+            var componentName = el.getAttribute('data-hydrate');
+            var propsJson = el.getAttribute('data-props');
+            var props = propsJson ? JSON.parse(propsJson) : {};
+
+            if (window.__frontmcp_components[componentName]) {
+              try {
+                ReactDOM.hydrateRoot(el, React.createElement(
+                  window.__frontmcp_components[componentName],
+                  props
+                ));
+              } catch (e) {
+                console.error('[FrontMCP] Hydration failed:', e);
+              }
+            }
+          });
+        }
+      });
+    })();
+  </script>`;
+    } else {
+      // For inline mode, skip hydration
+      return `
+  <!-- React hydration disabled (inline scripts mode) -->
+  <script>
+    console.warn('[FrontMCP] React hydration disabled - inline scripts mode');
+  </script>`;
+    }
+  }
+
+  return '';
 }
 
 // ============================================

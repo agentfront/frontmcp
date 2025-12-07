@@ -126,6 +126,9 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    * Handle public mode - allow anonymous access without requiring authorization
    * In public mode, we create an anonymous authorization with a stateful session
    * but NO token. This allows public docs/CI to work without Authorization header.
+   *
+   * CRITICAL: When client sends mcp-session-id header, we MUST use that exact ID
+   * for transport registry lookup. Creating a new session ID would cause mismatch.
    */
   @Stage('handlePublicMode')
   async handlePublicMode() {
@@ -141,49 +144,43 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // For new sessions (no existing session header), don't pre-determine the protocol.
-    // Let the router stage in http.request.flow determine the intent from the request.
-    // This ensures GET /sse correctly routes to legacy-sse instead of defaulting to streamable-http.
     const sessionIdHeader = this.state.sessionIdHeader;
-
-    // Only use protocol from session header if one was provided (existing session)
-    // For new sessions, protocol will be set by the transport handler after intent detection
-    const protocol = sessionIdHeader ? this.state.sessionProtocol : undefined;
     const machineId = getMachineId();
 
-    // Check if we have an existing public session to reuse (encrypted format with isPublic: true)
+    // CRITICAL: If client sent session ID, ALWAYS use it for transport lookup.
+    // The transport registry uses this ID as the key. Creating a different ID
+    // would cause "session not initialized" error.
     if (sessionIdHeader) {
+      // Try to decrypt/validate for payload extraction (optional - for nodeId validation)
       const existingPayload = decryptPublicSession(sessionIdHeader);
-      if (existingPayload && existingPayload.nodeId === machineId) {
-        // Reuse existing public session
-        const user = { sub: `anon:${existingPayload.iat * 1000}`, iss: 'public', name: 'Anonymous' };
 
-        this.respond({
-          kind: 'authorized',
-          authorization: {
-            token: '',
-            user,
-            session: { id: sessionIdHeader, payload: existingPayload },
+      // Determine user based on whether we could extract payload
+      const user = existingPayload
+        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: 'public', name: 'Anonymous' }
+        : { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
+
+      // ALWAYS use client's session ID, regardless of validation result.
+      // If payload is valid and nodeId matches, include payload for protocol detection.
+      // If validation failed, transport layer will handle the error appropriately.
+      this.respond({
+        kind: 'authorized',
+        authorization: {
+          token: '',
+          user,
+          session: {
+            id: sessionIdHeader, // ← CRITICAL: Always use client's session ID
+            payload: existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined,
           },
-        });
-        return;
-      }
+        },
+      });
+      return;
     }
 
-    // No existing public session - create a new one
+    // No session header → create new session (initialize request)
+    // For new sessions, don't pre-determine protocol. Let transport handler detect it.
     const now = Date.now();
-
-    // Public mode without token - create anonymous authorization WITH stateful session
-    // Session is required for transport layer to function correctly
-    // Use crypto.randomUUID() for unique anonymous user ID to avoid collision under concurrent requests
     const user = { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
     const uuid = crypto.randomUUID();
-
-    // Validate protocol value before assignment to ensure type safety
-    const validProtocols = ['sse', 'legacy-sse', 'streamable-http', 'stateful-http', 'stateless-http'] as const;
-    type ValidProtocol = (typeof validProtocols)[number];
-    const validatedProtocol: ValidProtocol | undefined =
-      protocol && validProtocols.includes(protocol as ValidProtocol) ? (protocol as ValidProtocol) : undefined;
 
     // Create a valid session payload matching the SessionIdPayload schema
     const payload = {
@@ -191,7 +188,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       nodeId: machineId,
       authSig: 'public',
       iat: Math.floor(now / 1000),
-      protocol: validatedProtocol,
       isPublic: true,
     };
 

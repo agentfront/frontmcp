@@ -229,6 +229,10 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
 
   // Check if it's a React component
   if (isReactComponent(template)) {
+    // Get component name for error reporting
+    const componentName =
+      (template as React.ComponentType).displayName || (template as React.ComponentType).name || 'UnknownComponent';
+
     try {
       // Dynamically import React and ReactDOMServer
       // This allows SDK to work without React as a hard dependency
@@ -248,8 +252,23 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
       const element = React.createElement(template as React.ComponentType<any>, ctx);
       return ReactDOMServer.renderToString(element);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`React template rendering failed: ${message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      // Log detailed error for debugging
+      if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+        console.error('[FrontMCP] React SSR Error:', {
+          component: componentName,
+          error: errorMessage,
+          stack: errorStack,
+          propsKeys: Object.keys(ctx),
+          hasInput: 'input' in ctx,
+          hasOutput: 'output' in ctx,
+          hasStructuredContent: 'structuredContent' in ctx,
+        });
+      }
+
+      throw new Error(`React template rendering failed for "${componentName}": ${errorMessage}`);
     }
   }
 

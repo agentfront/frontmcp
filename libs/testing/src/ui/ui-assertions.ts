@@ -2,6 +2,15 @@
  * @file ui-assertions.ts
  * @description UI-specific assertion helpers for testing tool UI responses
  *
+ * The metadata keys used in these assertions align with the UIMetadata interface
+ * from @frontmcp/ui/adapters. Key fields include:
+ * - `ui/html`: Inline rendered HTML (universal)
+ * - `ui/mimeType`: MIME type for the HTML content
+ * - `openai/outputTemplate`: Resource URI for widget template (OpenAI)
+ * - `openai/widgetAccessible`: Whether widget can invoke tools (OpenAI)
+ *
+ * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
+ *
  * @example
  * ```typescript
  * import { UIAssertions } from '@frontmcp/testing';
@@ -14,6 +23,9 @@
  */
 
 import type { ToolResultWrapper } from '../client/mcp-test-client.types';
+
+// Type-only reference: Metadata keys used below align with UIMetadata from @frontmcp/ui/adapters
+// This is an optional peer dependency, so we don't import it directly
 
 // ═══════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS

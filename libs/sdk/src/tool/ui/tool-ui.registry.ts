@@ -9,6 +9,7 @@ import type { ToolUIConfig } from '../../common/metadata/tool-ui.metadata';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { renderToolTemplate, renderToolTemplateAsync, isReactComponent } from './render-template';
 import { buildUIMeta, type UIMetadata } from './platform-adapters';
+import { wrapToolUIUniversal } from '@frontmcp/ui/runtime';
 
 /**
  * Default TTL for cached UI entries (5 minutes).
@@ -173,6 +174,10 @@ export class ToolUIRegistry {
    * This version supports all template types including React components via SSR.
    * Use this method when the template may be a React component.
    *
+   * For React/MDX components, the output is wrapped in a complete HTML document
+   * with the FrontMCP Bridge runtime, enabling interactive features like button
+   * clicks (via `data-tool-call` attribute) when loaded in OpenAI's iframe.
+   *
    * @param options - Rendering options
    * @returns Promise resolving to registration result with URI, HTML, and metadata
    */
@@ -191,7 +196,7 @@ export class ToolUIRegistry {
     } = options;
 
     // 1. Render the template (async for React/MDX support)
-    const html = await renderToolTemplateAsync({
+    const renderedContent = await renderToolTemplateAsync({
       template: uiConfig.template,
       input,
       output,
@@ -199,10 +204,24 @@ export class ToolUIRegistry {
       mdxComponents: uiConfig.mdxComponents,
     });
 
-    // 2. Generate unique resource URI
+    // 2. Wrap in a complete HTML document with FrontMCP Bridge runtime.
+    // This is essential for React/MDX components to have working click handlers
+    // (via `data-tool-call` attribute) when loaded in OpenAI's iframe.
+    const html = wrapToolUIUniversal({
+      content: renderedContent,
+      toolName,
+      input: input as Record<string, unknown>,
+      output,
+      structuredContent,
+      csp: uiConfig.csp,
+      widgetAccessible: uiConfig.widgetAccessible,
+      includeBridge: true,
+    });
+
+    // 3. Generate unique resource URI
     const uri = this.generateResourceUri(toolName, requestId);
 
-    // 3. Cache the rendered HTML
+    // 4. Cache the rendered HTML
     const now = Date.now();
     this.cacheEntry(uri, {
       html,
@@ -211,7 +230,7 @@ export class ToolUIRegistry {
       createdAt: now,
     });
 
-    // 4. Build platform-specific metadata
+    // 5. Build platform-specific metadata
     const meta = buildUIMeta({
       uiConfig,
       platformType,
