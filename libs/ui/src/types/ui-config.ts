@@ -301,6 +301,59 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * @example 'sandbox.example.com'
    */
   sandboxDomain?: string;
+
+  // ============================================
+  // Rendering Options
+  // ============================================
+
+  /**
+   * Enable client-side React hydration after server-side rendering (SSR).
+   *
+   * **Default: `false`**
+   *
+   * When `false` (default):
+   * - SSR output is static HTML
+   * - No React runtime is loaded on the client
+   * - All interactivity is handled by the FrontMCP Bridge IIFE
+   * - This prevents React Hydration Error #418 in MCP clients
+   *
+   * When `true`:
+   * - React/ReactDOM CDN scripts are included
+   * - Client attempts to hydrate React components
+   * - May cause hydration mismatch errors in some MCP clients (Claude, ChatGPT)
+   *
+   * **Why disabled by default?**
+   * MCP clients like Claude and ChatGPT render HTML in sandboxed iframes.
+   * React hydration expects the client-rendered HTML to exactly match the
+   * server-rendered HTML. Due to timing differences, random data, and
+   * different execution contexts, mismatches frequently occur causing
+   * React Error #418 ("Hydration failed...").
+   *
+   * The FrontMCP Bridge IIFE already provides all necessary interactivity
+   * (tool calls via `data-tool-call`, state updates, loading states) without
+   * requiring React hydration.
+   *
+   * **Only enable if:**
+   * - You need React state management on the client
+   * - You're sure your template produces deterministic HTML
+   * - You've tested hydration works in your target MCP client
+   *
+   * @example
+   * ```typescript
+   * // Disable hydration (default behavior - recommended)
+   * ui: {
+   *   template: MyReactComponent,
+   *   hydrate: false
+   * }
+   *
+   * // Enable hydration (use with caution)
+   * ui: {
+   *   template: MyStatefulComponent,
+   *   hydrate: true
+   * }
+   * ```
+   */
+  hydrate?: boolean;
 }
 
 /**

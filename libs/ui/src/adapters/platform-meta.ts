@@ -134,6 +134,12 @@ export interface BuildUIMetaOptions<In = unknown, Out = unknown> {
 /**
  * Build platform-specific UI metadata for tool response.
  *
+ * The `servingMode` option in `uiConfig` controls how HTML is delivered:
+ * - `'inline'` (default): HTML embedded directly in `_meta['ui/html']`
+ * - `'mcp-resource'`: Only resource URI included, client fetches via `resources/read`
+ * - `'direct-url'`: Only direct URL included, client fetches via HTTP
+ * - `'custom-url'`: Only custom URL included
+ *
  * @example
  * ```typescript
  * import { buildUIMeta } from '@frontmcp/ui/adapters';
@@ -150,10 +156,22 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
   const { uiConfig, platformType, resourceUri, html, token, directUrl } = options;
 
   const meta: UIMetadata = {};
+  const servingMode = uiConfig.servingMode ?? 'inline';
 
-  // Universal fields - always include inline HTML
-  meta['ui/html'] = html;
+  // Conditionally include HTML based on serving mode
+  // For 'inline' mode (default), embed HTML directly in response
+  // For other modes, client fetches HTML from resourceUri or directUrl
+  if (servingMode === 'inline') {
+    meta['ui/html'] = html;
+  }
+
+  // Always include MIME type for platforms that need it
   meta['ui/mimeType'] = getMimeType(platformType);
+
+  // Include resource URI for mcp-resource mode
+  if (servingMode === 'mcp-resource') {
+    meta['ui/resourceUri'] = resourceUri;
+  }
 
   // Include token if provided
   if (token) {

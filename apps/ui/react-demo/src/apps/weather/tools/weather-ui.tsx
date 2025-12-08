@@ -8,7 +8,7 @@
  * more self-contained and easier to use.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Badge,
@@ -98,14 +98,14 @@ export function WeatherCardWithHooks({
 }: WeatherCardWithHooksProps = {}) {
   // Get bridge context (used for client-side state)
   const { ready } = useMcpBridgeContext();
+  // Get tool output - prefer structuredContent (SSR), then ssrOutput, then hooks
+  const hookOutput = useToolOutput<WeatherOutput>();
+
+  const [output, setOutput] = useState(structuredContent ?? ssrOutput ?? hookOutput);
 
   // Get tool input - prefer SSR props, fall back to hooks for client-side
   const hookInput = useToolInput<WeatherInput>();
   const input = ssrInput ?? hookInput;
-
-  // Get tool output - prefer structuredContent (SSR), then ssrOutput, then hooks
-  const hookOutput = useToolOutput<WeatherOutput>();
-  const output = structuredContent ?? ssrOutput ?? hookOutput;
 
   // Get current theme from the host platform
   const theme = useTheme();
@@ -113,7 +113,11 @@ export function WeatherCardWithHooks({
   console.log('render weather', typeof window === 'undefined' ? 'SSR' : 'client-side');
 
   // Hook to call another tool (e.g., to refresh weather)
-  const [refreshWeather, { loading: refreshing }] = useCallTool<WeatherInput, WeatherOutput>('get_weather');
+  const [refreshWeather, { loading: refreshing }] = useCallTool<WeatherInput, WeatherOutput>('get_weather', {
+    onSuccess: (output: any) => {
+      setOutput(output.structuredContent);
+    },
+  });
 
   // No data state - show placeholder when no output available
   // Note: During SSR, bridgeLoading/bridgeError don't matter if we have structuredContent

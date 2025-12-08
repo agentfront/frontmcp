@@ -207,6 +207,12 @@ export class ToolUIRegistry {
     // 2. Wrap in a complete HTML document with FrontMCP Bridge runtime.
     // This is essential for React/MDX components to have working click handlers
     // (via `data-tool-call` attribute) when loaded in OpenAI's iframe.
+    //
+    // For OpenAI platform, we skip the CSP meta tag because OpenAI handles CSP
+    // through `_meta['openai/widgetCSP']` in the MCP response, not HTML meta tags.
+    // Including a CSP meta tag causes browser warnings when it's placed outside <head>
+    // due to OpenAI's iframe HTML processing.
+    const isOpenAIPlatform = platformType === 'openai';
     const html = wrapToolUIUniversal({
       content: renderedContent,
       toolName,
@@ -216,6 +222,7 @@ export class ToolUIRegistry {
       csp: uiConfig.csp,
       widgetAccessible: uiConfig.widgetAccessible,
       includeBridge: true,
+      skipCspMeta: isOpenAIPlatform,
     });
 
     // 3. Generate unique resource URI

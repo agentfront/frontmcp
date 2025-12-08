@@ -416,7 +416,9 @@ export function createDefaultBaseTemplate(options: BaseTemplateOptions): string 
               window.__frontmcp.callTool(toolName, args)
                 .then(function(result) {
                   console.log('[frontmcp] Tool call success:', toolName, result);
-                  // The bridge will handle re-rendering when new data arrives
+                  // Restore button state on success
+                  target.innerHTML = originalContent;
+                  target.disabled = false;
                 })
                 .catch(function(err) {
                   console.error('[frontmcp] Tool call failed:', toolName, err);

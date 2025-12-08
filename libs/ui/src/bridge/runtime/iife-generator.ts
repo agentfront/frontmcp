@@ -210,48 +210,43 @@ var OpenAIAdapter = {
     supportsDisplayModes: true
   }),
   canHandle: function() {
-    return typeof window !== 'undefined' && window.openai && window.openai.canvas;
+    if (typeof window === 'undefined') return false;
+    // Check for window.openai.callTool (the actual OpenAI SDK API)
+    if (window.openai && typeof window.openai.callTool === 'function') return true;
+    // Also check if we're being injected with tool metadata (OpenAI injects toolOutput)
+    if (window.openai && (window.openai.toolOutput !== undefined || window.openai.toolInput !== undefined)) return true;
+    return false;
   },
   initialize: function(context) {
     var sdk = window.openai;
     context.sdk = sdk;
-    if (sdk.canvas.getTheme) {
-      context.hostContext.theme = sdk.canvas.getTheme() === 'dark' ? 'dark' : 'light';
+    // OpenAI SDK exposes theme and displayMode directly as properties
+    if (sdk.theme) {
+      context.hostContext.theme = sdk.theme;
     }
-    if (sdk.canvas.getDisplayMode) {
-      context.hostContext.displayMode = sdk.canvas.getDisplayMode() || 'inline';
+    if (sdk.displayMode) {
+      context.hostContext.displayMode = sdk.displayMode;
     }
-    if (sdk.canvas.onContextChange) {
-      sdk.canvas.onContextChange(function(changes) {
-        Object.assign(context.hostContext, changes);
-        context.notifyContextChange(changes);
-      });
-    }
+    // Note: OpenAI SDK does not have an onContextChange equivalent
     return Promise.resolve();
   },
   callTool: function(context, name, args) {
-    return context.sdk.canvas.callServerTool(name, args);
+    return context.sdk.callTool(name, args);
   },
   sendMessage: function(context, content) {
-    return context.sdk.canvas.sendMessage(content);
+    if (typeof context.sdk.sendFollowUpMessage === 'function') {
+      return context.sdk.sendFollowUpMessage(content);
+    }
+    return Promise.reject(new Error('Messages not supported'));
   },
   openLink: function(context, url) {
-    if (context.sdk.canvas.openLink) {
-      return context.sdk.canvas.openLink(url);
-    }
     window.open(url, '_blank', 'noopener,noreferrer');
     return Promise.resolve();
   },
   requestDisplayMode: function(context, mode) {
-    if (context.sdk.canvas.setDisplayMode) {
-      return context.sdk.canvas.setDisplayMode(mode);
-    }
     return Promise.resolve();
   },
   requestClose: function(context) {
-    if (context.sdk.canvas.close) {
-      return context.sdk.canvas.close();
-    }
     return Promise.resolve();
   }
 };
@@ -278,7 +273,8 @@ var ExtAppsAdapter = {
   canHandle: function() {
     if (typeof window === 'undefined') return false;
     if (window.parent === window) return false;
-    if (window.openai && window.openai.canvas) return false;
+    // Check for OpenAI SDK (window.openai.callTool) - defer to OpenAIAdapter
+    if (window.openai && typeof window.openai.callTool === 'function') return false;
     if (window.__mcpPlatform === 'ext-apps') return true;
     return true;
   },
@@ -655,6 +651,8 @@ FrontMcpBridge.prototype.initialize = function() {
   this._adapter = detectPlatform();
   return this._adapter.initialize(this._context).then(function() {
     self._initialized = true;
+    // Set up the data-tool-call click handler after initialization
+    self._setupDataToolCallHandler();
   });
 };
 
@@ -672,8 +670,24 @@ FrontMcpBridge.prototype.getHostContext = function() { return Object.assign({}, 
 FrontMcpBridge.prototype.hasCapability = function(cap) { return this._adapter && this._adapter.capabilities[cap] === true; };
 
 FrontMcpBridge.prototype.callTool = function(name, args) {
-  if (!this._adapter) return Promise.reject(new Error('Not initialized'));
-  return this._adapter.callTool(this._context, name, args);
+  // Priority 1: Direct OpenAI SDK call (most reliable in OpenAI iframe)
+  // This bypasses adapter abstraction for maximum compatibility
+  if (typeof window !== 'undefined' && window.openai && typeof window.openai.callTool === 'function') {
+    log('callTool: Using OpenAI SDK directly');
+    return window.openai.callTool(name, args);
+  }
+
+  // Priority 2: Use adapter (if initialized and supports tool calls)
+  if (this._adapter && this._adapter.capabilities && this._adapter.capabilities.canCallTools) {
+    log('callTool: Using adapter ' + this._adapter.id);
+    return this._adapter.callTool(this._context, name, args);
+  }
+
+  // Not initialized or no tool support
+  if (!this._adapter) {
+    return Promise.reject(new Error('Bridge not initialized. Wait for bridge:ready event.'));
+  }
+  return Promise.reject(new Error('Tool calls not supported on this platform (' + this._adapter.id + ')'));
 };
 
 FrontMcpBridge.prototype.sendMessage = function(content) {
@@ -720,6 +734,112 @@ FrontMcpBridge.prototype.onToolResult = function(callback) {
     var idx = listeners.indexOf(callback);
     if (idx !== -1) listeners.splice(idx, 1);
   };
+};
+
+// ==================== data-tool-call Click Handler ====================
+
+FrontMcpBridge.prototype._setupDataToolCallHandler = function() {
+  var self = this;
+
+  document.addEventListener('click', function(e) {
+    // Find the closest element with data-tool-call attribute
+    var target = e.target;
+    while (target && target !== document) {
+      if (target.hasAttribute && target.hasAttribute('data-tool-call')) {
+        var toolName = target.getAttribute('data-tool-call');
+        var argsAttr = target.getAttribute('data-tool-args');
+        var args = {};
+
+        try {
+          if (argsAttr) {
+            args = JSON.parse(argsAttr);
+          }
+        } catch (parseErr) {
+          console.error('[frontmcp] Failed to parse data-tool-args:', parseErr);
+        }
+
+        log('data-tool-call clicked: ' + toolName);
+
+        // Show loading state - save original content first
+        var originalContent = target.innerHTML;
+        var originalDisabled = target.disabled;
+        target.disabled = true;
+        target.classList.add('opacity-50', 'cursor-not-allowed');
+
+        // Add spinner for buttons
+        var spinner = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+        if (target.tagName === 'BUTTON') {
+          target.innerHTML = spinner + 'Loading...';
+        }
+
+        // Helper to reset button state
+        function resetButton() {
+          target.innerHTML = originalContent;
+          target.disabled = originalDisabled;
+          target.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        // Determine how to call the tool
+        var toolCallPromise;
+
+        // Priority 1: Direct OpenAI SDK call (bypasses adapter abstraction)
+        if (typeof window !== 'undefined' && window.openai && typeof window.openai.callTool === 'function') {
+          log('Using OpenAI SDK directly for tool call');
+          toolCallPromise = window.openai.callTool(toolName, args);
+        }
+        // Priority 2: Use adapter (if it supports tool calls)
+        else if (self.hasCapability('canCallTools')) {
+          log('Using adapter for tool call');
+          toolCallPromise = self.callTool(toolName, args);
+        }
+        // No tool call capability
+        else {
+          console.error('[frontmcp] Tool calls not supported on this platform (' + self.adapterId + ')');
+          resetButton();
+          target.dispatchEvent(new CustomEvent('tool:error', {
+            detail: { name: toolName, args: args, error: 'Tool calls not supported on this platform' },
+            bubbles: true
+          }));
+          e.preventDefault();
+          return;
+        }
+
+        // Handle the tool call result
+        toolCallPromise.then(function(result) {
+          log('Tool call succeeded: ' + toolName);
+          resetButton();
+
+          // Update bridge state to trigger widget re-render
+          // React isn't hydrated in OpenAI iframe, so useState doesn't work
+          // Instead, we use the bridge's reactive state system
+          if (result && window.__frontmcp && window.__frontmcp.bridge) {
+            var newData = result.structuredContent || result;
+            log('Updating bridge state with new data');
+            window.__frontmcp.bridge.setData(newData);
+          }
+
+          // Dispatch success event
+          target.dispatchEvent(new CustomEvent('tool:success', {
+            detail: { name: toolName, args: args, result: result },
+            bubbles: true
+          }));
+        }).catch(function(err) {
+          console.error('[frontmcp] Tool call failed: ' + toolName, err);
+          resetButton();
+          // Dispatch error event
+          target.dispatchEvent(new CustomEvent('tool:error', {
+            detail: { name: toolName, args: args, error: err.message || err },
+            bubbles: true
+          }));
+        });
+
+        // Prevent default behavior (e.g., form submission)
+        e.preventDefault();
+        return;
+      }
+      target = target.parentElement;
+    }
+  }, true); // Use capture phase to handle before React handlers
 };
 `.trim();
 }

@@ -79,6 +79,17 @@ export interface WrapToolUIFullOptions extends WrapToolUIOptions {
    * Enable client-side hydration for React/MDX components.
    */
   hydrate?: boolean;
+
+  /**
+   * Skip CSP meta tag generation.
+   *
+   * OpenAI handles CSP through `_meta['openai/widgetCSP']` in the MCP response,
+   * not through HTML meta tags. When true, the CSP meta tag is omitted from the
+   * HTML output to avoid browser warnings about CSP meta tags outside <head>.
+   *
+   * @default false
+   */
+  skipCspMeta?: boolean;
 }
 
 // ============================================
@@ -191,7 +202,8 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
     hostContext,
     sanitizeInput: sanitizeOption,
     rendererType,
-    hydrate,
+    hydrate = false, // Disabled by default to prevent React hydration Error #418 in MCP clients
+    skipCspMeta = false,
   } = options;
 
   // Apply input sanitization if enabled
@@ -242,8 +254,8 @@ export function wrapToolUI(options: WrapToolUIFullOptions): string {
   </style>`
     : '';
 
-  // Build CSP meta tag
-  const cspMetaTag = buildCSPMetaTag(csp);
+  // Build CSP meta tag (skip for platforms like OpenAI that handle CSP via _meta)
+  const cspMetaTag = skipCspMeta ? '' : buildCSPMetaTag(csp);
 
   // Build data injection script
   const dataScript = buildDataInjectionScript({
@@ -426,6 +438,16 @@ export interface WrapToolUIUniversalOptions {
   rendererType?: string;
   /** Enable hydration */
   hydrate?: boolean;
+  /**
+   * Skip CSP meta tag generation.
+   *
+   * OpenAI handles CSP through `_meta['openai/widgetCSP']` in the MCP response,
+   * not through HTML meta tags. When true, the CSP meta tag is omitted from the
+   * HTML output to avoid browser warnings about CSP meta tags outside <head>.
+   *
+   * @default false
+   */
+  skipCspMeta?: boolean;
 }
 
 /**
@@ -467,7 +489,8 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
     includeBridge = true,
     inlineScripts = false,
     rendererType,
-    hydrate,
+    hydrate = false, // Disabled by default to prevent React hydration Error #418 in MCP clients
+    skipCspMeta = false,
   } = options;
 
   // Merge theme
@@ -498,8 +521,8 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
     ${customCss}
   </style>`;
 
-  // Build CSP meta tag
-  const cspMetaTag = buildCSPMetaTag(csp);
+  // Build CSP meta tag (skip for platforms like OpenAI that handle CSP via _meta)
+  const cspMetaTag = skipCspMeta ? '' : buildCSPMetaTag(csp);
 
   // Build data injection script
   const dataScript = buildDataInjectionScript({
@@ -636,14 +659,24 @@ export function wrapToolUIMinimal(
   options: Pick<
     WrapToolUIOptions,
     'content' | 'toolName' | 'input' | 'output' | 'structuredContent' | 'csp' | 'widgetAccessible' | 'title'
-  >,
+  > & { skipCspMeta?: boolean },
 ): string {
-  const { content, toolName, input = {}, output, structuredContent, csp, widgetAccessible = false, title } = options;
+  const {
+    content,
+    toolName,
+    input = {},
+    output,
+    structuredContent,
+    csp,
+    widgetAccessible = false,
+    title,
+    skipCspMeta = false,
+  } = options;
 
   const helpers = createTemplateHelpers();
 
-  // Build CSP meta tag
-  const cspMetaTag = buildCSPMetaTag(csp);
+  // Build CSP meta tag (skip for platforms like OpenAI that handle CSP via _meta)
+  const cspMetaTag = skipCspMeta ? '' : buildCSPMetaTag(csp);
 
   // Build data injection
   const contextData = { theme: 'light', displayMode: 'inline' };

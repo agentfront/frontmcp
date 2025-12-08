@@ -44,6 +44,7 @@ type WeatherOutput = z.infer<typeof outputSchema>;
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
     widgetAccessible: true,
+    servingMode: 'mcp-resource',
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
