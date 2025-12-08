@@ -152,7 +152,8 @@ describe('IIFE Generator', () => {
 
     it('should detect OpenAI environment', () => {
       expect(script).toContain('window.openai');
-      expect(script).toContain('window.openai.canvas');
+      // OpenAI detection uses the existence of window.openai.callTool function
+      expect(script).toContain('window.openai.callTool');
     });
 
     it('should detect Claude environment', () => {

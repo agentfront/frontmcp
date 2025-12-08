@@ -108,6 +108,35 @@ export class Scope extends ScopeEntry {
       this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
       this.scopeResources.registerDynamicResource(ToolUIResourceTemplate);
       this.logger.verbose(`Registered UI resource templates for ${toolsWithUI.length} tool(s) with UI configs`);
+
+      // Pre-compile static widgets for tools with servingMode: 'mcp-resource'
+      // This is done at server startup so that the static widget HTML is immediately
+      // available when OpenAI fetches it via resources/read (at tools/list time).
+      // The static widget reads data from the FrontMCP Bridge at runtime.
+      const mcpResourceTools = toolsWithUI.filter(
+        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'mcp-resource' && t.metadata.ui.template,
+      );
+
+      if (mcpResourceTools.length > 0) {
+        // Compile all static widgets in parallel
+        await Promise.all(
+          mcpResourceTools.map(async (tool) => {
+            try {
+              await this.toolUIRegistry.compileStaticWidgetAsync({
+                toolName: tool.metadata.name,
+                template: tool.metadata.ui!.template,
+                uiConfig: tool.metadata.ui!,
+              });
+              this.logger.verbose(`Compiled static widget for tool: ${tool.metadata.name}`);
+            } catch (error) {
+              // Log error but don't fail server startup
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.logger.error(`Failed to compile static widget for tool "${tool.metadata.name}": ${errorMessage}`);
+            }
+          }),
+        );
+        this.logger.info(`Pre-compiled ${mcpResourceTools.length} static widget(s) for mcp-resource mode tools`);
+      }
     }
 
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);

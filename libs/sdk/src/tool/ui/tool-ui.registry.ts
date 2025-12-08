@@ -9,7 +9,7 @@ import type { ToolUIConfig } from '../../common/metadata/tool-ui.metadata';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { renderToolTemplate, renderToolTemplateAsync, isReactComponent } from './render-template';
 import { buildUIMeta, type UIMetadata } from './platform-adapters';
-import { wrapToolUIUniversal } from '@frontmcp/ui/runtime';
+import { wrapToolUIUniversal, wrapStaticWidgetUniversal } from '@frontmcp/ui/runtime';
 
 /**
  * Default TTL for cached UI entries (5 minutes).
@@ -104,12 +104,87 @@ export interface UIRegistrationResult {
  * return { content: [...], _meta: { ...result.meta } };
  * ```
  */
+/**
+ * Options for compiling a static widget.
+ */
+export interface CompileStaticWidgetOptions {
+  /** Tool name (used for cache key and URI) */
+  toolName: string;
+  /** The template to compile (React component, HTML string, or builder function) */
+  template: ToolUIConfig['template'];
+  /** Tool UI configuration */
+  uiConfig: ToolUIConfig;
+}
+
 export class ToolUIRegistry {
   private readonly cache = new Map<string, CachedUI>();
   private readonly defaultTtl: number;
 
+  /**
+   * Cache for static widgets (keyed by tool name).
+   * Static widgets are pre-compiled at server startup for tools with servingMode: 'mcp-resource'.
+   * These widgets read data from the FrontMCP Bridge at runtime (window.openai.toolOutput).
+   */
+  private readonly staticWidgetCache = new Map<string, string>();
+
   constructor(options?: { defaultTtl?: number }) {
     this.defaultTtl = options?.defaultTtl ?? DEFAULT_CACHE_TTL_MS;
+  }
+
+  /**
+   * Compile a static widget template for a tool at server startup.
+   *
+   * For tools with `servingMode: 'mcp-resource'`, the widget HTML is pre-compiled
+   * WITHOUT embedded data. The widget reads data from the FrontMCP Bridge at runtime
+   * (via window.openai.toolOutput or window.__frontmcp.toolOutput).
+   *
+   * This is called during tool registration, not during tool calls.
+   *
+   * @param options - Static widget compilation options
+   */
+  async compileStaticWidgetAsync(options: CompileStaticWidgetOptions): Promise<void> {
+    const { toolName, template, uiConfig } = options;
+
+    // Render the template SSR'd WITHOUT data
+    // The widget will read data from Bridge at runtime
+    const ssrContent = await renderToolTemplateAsync({
+      template,
+      input: {}, // Empty - data comes from Bridge at runtime
+      output: undefined,
+      structuredContent: undefined,
+      mdxComponents: uiConfig.mdxComponents,
+    });
+
+    // Wrap in a complete HTML document with FrontMCP Bridge
+    // The Bridge will read data from window.openai.toolOutput at runtime
+    const widgetHtml = wrapStaticWidgetUniversal({
+      toolName,
+      ssrContent,
+      uiConfig,
+    });
+
+    // Cache the static widget HTML
+    this.staticWidgetCache.set(toolName, widgetHtml);
+  }
+
+  /**
+   * Get the pre-compiled static widget HTML for a tool.
+   *
+   * @param toolName - The tool name to look up
+   * @returns Pre-compiled widget HTML, or undefined if not cached
+   */
+  getStaticWidget(toolName: string): string | undefined {
+    return this.staticWidgetCache.get(toolName);
+  }
+
+  /**
+   * Check if a tool has a pre-compiled static widget.
+   *
+   * @param toolName - The tool name to check
+   * @returns true if the tool has a cached static widget
+   */
+  hasStaticWidget(toolName: string): boolean {
+    return this.staticWidgetCache.has(toolName);
   }
 
   /**

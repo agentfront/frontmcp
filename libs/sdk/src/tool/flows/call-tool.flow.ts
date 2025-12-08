@@ -21,7 +21,7 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
 } from '../../errors';
-import { hasUIConfig } from '../ui';
+import { hasUIConfig, buildStaticWidgetUri } from '../ui';
 import { Scope } from '../../scope';
 
 const inputSchema = z.object({
@@ -403,34 +403,58 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
           'openai';
 
-        // Render the UI and get platform-specific metadata
-        // Use async version to support React component templates via SSR
-        const uiResult = await scope.toolUI.renderAndRegisterAsync({
-          toolName: tool.metadata.name,
-          requestId,
-          input: (input?.arguments ?? {}) as Record<string, unknown>,
-          output: rawOutput,
-          structuredContent: result.structuredContent,
-          uiConfig: tool.metadata.ui,
-          platformType,
-        });
+        // Get the serving mode (default to 'inline' for backward compatibility)
+        const servingMode = tool.metadata.ui.servingMode ?? 'inline';
 
-        // Merge UI metadata into result._meta
-        result._meta = {
-          ...result._meta,
-          ...uiResult.meta,
-        };
+        if (servingMode === 'mcp-resource') {
+          // For mcp-resource mode: do NOT render per-request HTML
+          // Instead, reference the static template URI which was compiled at server startup
+          // The widget will be fetched via resources/read and reads data from Bridge at runtime
+          const staticWidgetUri = buildStaticWidgetUri(tool.metadata.name);
 
-        // When UI is rendered, clear the text content since the widget will display the data
-        // The structuredContent remains as the actual tool output data
-        // The rendered HTML is available in _meta['ui/html'] for the widget to use
-        result.content = [];
+          result._meta = {
+            ...result._meta,
+            'ui/resourceUri': staticWidgetUri,
+          };
 
-        this.logger.verbose('finalize: UI metadata added', {
-          tool: tool.metadata.name,
-          uri: uiResult.uri,
-          platform: platformType,
-        });
+          // Clear text content since the widget will display the data
+          result.content = [];
+
+          this.logger.verbose('finalize: UI using static widget (mcp-resource mode)', {
+            tool: tool.metadata.name,
+            uri: staticWidgetUri,
+            platform: platformType,
+          });
+        } else {
+          // For inline mode (default): render HTML with data embedded in each response
+          // Use async version to support React component templates via SSR
+          const uiResult = await scope.toolUI.renderAndRegisterAsync({
+            toolName: tool.metadata.name,
+            requestId,
+            input: (input?.arguments ?? {}) as Record<string, unknown>,
+            output: rawOutput,
+            structuredContent: result.structuredContent,
+            uiConfig: tool.metadata.ui,
+            platformType,
+          });
+
+          // Merge UI metadata into result._meta
+          result._meta = {
+            ...result._meta,
+            ...uiResult.meta,
+          };
+
+          // When UI is rendered, clear the text content since the widget will display the data
+          // The structuredContent remains as the actual tool output data
+          // The rendered HTML is available in _meta['ui/html'] for the widget to use
+          result.content = [];
+
+          this.logger.verbose('finalize: UI metadata added (inline mode)', {
+            tool: tool.metadata.name,
+            uri: uiResult.uri,
+            platform: platformType,
+          });
+        }
       } catch (error) {
         // UI rendering failure should not fail the tool call
         // Log with full context to help debugging

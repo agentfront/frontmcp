@@ -238,14 +238,32 @@ export function handleUIResourceRead(
   // This is used by OpenAI at discovery time
   const widgetParsed = parseWidgetUri(uri);
   if (widgetParsed) {
-    // ALWAYS return the dynamic placeholder widget for static URIs.
+    // Check for pre-compiled static widget from the developer's template
+    // Static widgets are compiled at server startup for tools with servingMode: 'mcp-resource'
+    const cachedWidget = registry.getStaticWidget(widgetParsed.toolName);
+    if (cachedWidget) {
+      // Return the developer's actual template (SSR'd React/MDX component)
+      // This template includes the FrontMCP Bridge for runtime data access
+      return {
+        handled: true,
+        result: {
+          contents: [
+            {
+              uri,
+              mimeType,
+              text: cachedWidget,
+            },
+          ],
+        },
+      };
+    }
+
+    // Fallback to dynamic placeholder widget if no pre-compiled template.
+    // This is returned when the tool doesn't have a UI template configured
+    // or uses a different serving mode.
+    //
     // OpenAI caches widget HTML from outputTemplate URI, so we must return
     // a template that reads from window.openai.toolOutput at runtime.
-    // This ensures fresh structuredContent is rendered on each tool call.
-    //
-    // For MCP Inspector and other clients that don't inject toolOutput,
-    // they should use the dynamic URI (ui://tools/{toolName}/result/{requestId})
-    // which returns the pre-rendered HTML directly.
     const html = generatePlaceholderWidget(widgetParsed.toolName);
 
     return {

@@ -54,9 +54,11 @@ export {
 export {
   type WrapToolUIFullOptions,
   type WrapToolUIUniversalOptions,
+  type WrapStaticWidgetOptions,
   wrapToolUI,
   wrapToolUIMinimal,
   wrapToolUIUniversal,
+  wrapStaticWidgetUniversal,
   createTemplateHelpers,
   buildOpenAIMeta,
   getToolUIMimeType,

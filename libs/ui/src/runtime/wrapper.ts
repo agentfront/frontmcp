@@ -709,6 +709,135 @@ export function wrapToolUIMinimal(
 }
 
 // ============================================
+// Static Widget Wrapper (For MCP Resource Mode)
+// ============================================
+
+/**
+ * Options for wrapping a static widget.
+ */
+export interface WrapStaticWidgetOptions {
+  /** Tool name */
+  toolName: string;
+  /** SSR'd template content (rendered WITHOUT data) */
+  ssrContent: string;
+  /** Tool UI configuration */
+  uiConfig: {
+    csp?: WrapToolUIOptions['csp'];
+    widgetAccessible?: boolean;
+  };
+  /** Page title */
+  title?: string;
+  /** Theme configuration */
+  theme?: DeepPartial<ThemeConfig>;
+}
+
+/**
+ * Wrap a static widget template for MCP resource mode.
+ *
+ * Unlike `wrapToolUIUniversal`, this function creates a widget that:
+ * - Does NOT embed data (input/output/structuredContent)
+ * - Reads data at runtime from the FrontMCP Bridge (window.openai.toolOutput)
+ * - Is cached at server startup and returned for all requests
+ *
+ * This is used for `servingMode: 'mcp-resource'` where OpenAI caches the
+ * outputTemplate HTML and injects data via window.openai.toolOutput.
+ *
+ * @param options - Static widget options
+ * @returns Complete HTML document string
+ *
+ * @example
+ * ```typescript
+ * const html = wrapStaticWidgetUniversal({
+ *   toolName: 'get_weather',
+ *   ssrContent: '<div class="weather-card"><!-- Template without data --></div>',
+ *   uiConfig: { widgetAccessible: true },
+ * });
+ * ```
+ */
+export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): string {
+  const { toolName, ssrContent, uiConfig, title, theme: themeOverrides } = options;
+
+  // Merge theme
+  const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
+
+  // Build font links
+  const fontPreconnect = buildFontPreconnect();
+  const fontStylesheets = buildFontStylesheets({ inter: true });
+
+  // Build CDN scripts
+  const scripts = buildCdnScripts({
+    tailwind: true,
+    htmx: false,
+    alpine: false,
+    icons: false,
+    inline: false,
+  });
+
+  // Build theme CSS
+  const themeCss = buildThemeCss(theme);
+  const customCss = theme.customCss || '';
+
+  // Build Tailwind style block
+  const styleBlock = `<style type="text/tailwindcss">
+    @theme {
+      ${themeCss}
+    }
+    ${customCss}
+  </style>`;
+
+  // Build CSP meta tag (skip for OpenAI - they handle CSP via _meta)
+  // For static widgets, we skip CSP meta tag since OpenAI handles it
+  const cspMetaTag = '';
+
+  // Universal bridge script (works on all platforms)
+  // This will read data from window.openai.toolOutput at runtime
+  const bridgeScript = BRIDGE_SCRIPT_TAGS.universal;
+
+  // Tool name injection (for Bridge to know which tool this is)
+  // NOTE: Unlike wrapToolUIUniversal, we do NOT inject input/output/structuredContent
+  // The Bridge will read data from window.openai.toolOutput at runtime
+  const helpers = createTemplateHelpers();
+  const toolNameScript = `<script>
+  // Tool metadata (static widget - data injected by host at runtime)
+  window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
+  window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
+  // Data will be provided by host platform:
+  // - OpenAI: window.openai.toolOutput
+  // - FrontMCP Bridge: window.__mcpToolOutput, window.__mcpStructuredContent
+</script>`;
+
+  // Page title
+  const pageTitle = title || `${escapeHtml(toolName)} - Tool Widget`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  ${cspMetaTag}
+
+  <!-- Fonts -->
+  ${fontPreconnect}
+  ${fontStylesheets}
+
+  <!-- Tailwind CSS -->
+  ${scripts}
+  ${styleBlock}
+
+  <!-- Tool Metadata -->
+  ${toolNameScript}
+
+  <!-- FrontMCP Bridge (Universal - Reads data from host at runtime) -->
+  ${bridgeScript}
+</head>
+<body class="bg-background text-text-primary font-sans antialiased">
+  ${ssrContent}
+</body>
+</html>`;
+}
+
+// ============================================
 // OpenAI-Specific Functions
 // ============================================
 

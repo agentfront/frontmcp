@@ -110,8 +110,6 @@ export function WeatherCardWithHooks({
   // Get current theme from the host platform
   const theme = useTheme();
 
-  console.log('render weather', typeof window === 'undefined' ? 'SSR' : 'client-side');
-
   // Hook to call another tool (e.g., to refresh weather)
   const [refreshWeather, { loading: refreshing }] = useCallTool<WeatherInput, WeatherOutput>('get_weather', {
     onSuccess: (output: any) => {
