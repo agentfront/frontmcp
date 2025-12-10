@@ -4,16 +4,23 @@
  * Manages UI template rendering for tool responses.
  * Provides platform-specific metadata generation for MCP clients.
  *
- * Two serving modes:
+ * Three serving modes:
  * - **inline**: HTML is rendered per-request and embedded in _meta['ui/html']
  * - **mcp-resource**: Static widget is pre-compiled at startup, client fetches via resources/read
+ * - **hybrid**: Shell (React + renderer) cached at startup, component + data in response
  */
 
+import { createHash } from 'crypto';
 import type { ToolUIConfig, WidgetManifest, BuildManifestResult } from '../../common/metadata/tool-ui.metadata';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { renderToolTemplateAsync, isReactComponent } from './render-template';
 import { buildUIMeta, type UIMetadata } from './platform-adapters';
-import { wrapToolUIUniversal, wrapStaticWidgetUniversal, wrapLeanWidgetShell } from '@frontmcp/ui/runtime';
+import {
+  wrapToolUIUniversal,
+  wrapStaticWidgetUniversal,
+  wrapLeanWidgetShell,
+  wrapHybridWidgetShell,
+} from '@frontmcp/ui/runtime';
 import { buildToolWidgetManifest, detectUIType } from '@frontmcp/ui/build';
 
 /**
@@ -85,6 +92,33 @@ export interface CompileStaticWidgetOptions {
   /** Tool name (used for cache key and URI) */
   toolName: string;
   /** The template to compile (React component, HTML string, or builder function) */
+  template: ToolUIConfig['template'];
+  /** Tool UI configuration */
+  uiConfig: ToolUIConfig;
+}
+
+/**
+ * Payload for hybrid mode component delivery.
+ * Sent in `_meta['ui/component']` at tool call time.
+ */
+export interface HybridComponentPayload {
+  /** Transpiled component JavaScript code (ES module format) */
+  code: string;
+  /** Renderer type for the component */
+  type: 'react' | 'mdx' | 'html';
+  /** Tool name for identification */
+  toolName: string;
+  /** Content hash for cache validation */
+  hash: string;
+}
+
+/**
+ * Options for building a hybrid component payload.
+ */
+export interface BuildHybridComponentPayloadOptions {
+  /** Tool name */
+  toolName: string;
+  /** The template to transpile */
   template: ToolUIConfig['template'];
   /** Tool UI configuration */
   uiConfig: ToolUIConfig;
@@ -233,6 +267,104 @@ export class ToolUIRegistry {
 
     // Cache the lean widget HTML
     this.staticWidgetCache.set(toolName, leanHtml);
+  }
+
+  /**
+   * Compile a hybrid widget shell at server startup.
+   *
+   * For tools with `servingMode: 'hybrid'`, we create a shell that:
+   * - Contains React 19 runtime from esm.sh CDN
+   * - Contains FrontMCP Bridge (universal)
+   * - Contains all FrontMCP hooks (useMcpBridgeContext, useToolOutput, etc.)
+   * - Contains all FrontMCP UI components (Card, Badge, Button)
+   * - Contains dynamic renderer script that imports components via blob URL
+   * - NO component code (comes at tool call time via `_meta['ui/component']`)
+   *
+   * The shell listens for `ui/component` in tool response metadata and dynamically
+   * imports the transpiled component code, then renders it with tool output data.
+   *
+   * @param options - Options for hybrid widget compilation
+   */
+  compileHybridWidgetAsync(options: { toolName: string; uiConfig: ToolUIConfig }): void {
+    const { toolName, uiConfig } = options;
+
+    // Create a hybrid shell with React runtime and dynamic renderer
+    const hybridHtml = wrapHybridWidgetShell({
+      toolName,
+      uiConfig: {
+        widgetAccessible: uiConfig.widgetAccessible,
+        csp: uiConfig.csp,
+      },
+    });
+
+    // Cache the hybrid widget HTML
+    this.staticWidgetCache.set(toolName, hybridHtml);
+  }
+
+  /**
+   * Build a component payload for hybrid mode tool responses.
+   *
+   * For tools with `servingMode: 'hybrid'`, this method is called at tool call time
+   * to build the transpiled component code that gets delivered in `_meta['ui/component']`.
+   *
+   * The component code is in ES module format so it can be dynamically imported
+   * via blob URL in the hybrid shell's renderer.
+   *
+   * @param options - Options for building the component payload
+   * @returns The hybrid component payload, or undefined if template is not a function
+   */
+  buildHybridComponentPayload(options: BuildHybridComponentPayloadOptions): HybridComponentPayload | undefined {
+    const { toolName, template, uiConfig } = options;
+
+    // Detect the UI type
+    const detectedType = this.detectUIType(template);
+
+    // Only support function templates (React components) for hybrid mode
+    if (typeof template !== 'function') {
+      // For HTML strings, return undefined - hybrid mode is designed for React components
+      // HTML templates should use inline mode instead
+      return undefined;
+    }
+
+    // Get the component function as a string
+    const componentSource = template.toString();
+
+    // Sanitize tool name for JavaScript variable name
+    const safeName = toolName.replace(/[^a-zA-Z0-9_]/g, '_');
+
+    // Build ES module compatible component code
+    // The component is exported as default and also registered globally
+    // for the hybrid shell's dynamic renderer
+    const code = `
+// FrontMCP Hybrid Widget Component: ${toolName}
+// Type: ${detectedType}
+
+// The component function
+const ${safeName} = ${componentSource};
+
+// Register component globally for dynamic rendering
+window.__frontmcp_component = ${safeName};
+
+// Also register in __frontmcp_components for multiple components
+window.__frontmcp_components = window.__frontmcp_components || {};
+window.__frontmcp_components['${toolName}'] = ${safeName};
+
+// Export as default for ES module import
+export default ${safeName};
+`.trim();
+
+    // Generate hash for cache validation
+    const hash = createHash('sha256').update(code).digest('hex').substring(0, 16);
+
+    // Determine renderer type
+    const type = detectedType === 'react' || detectedType === 'mdx' ? (detectedType as 'react' | 'mdx') : 'react'; // Default to react for function templates
+
+    return {
+      code,
+      type,
+      toolName,
+      hash,
+    };
   }
 
   /**

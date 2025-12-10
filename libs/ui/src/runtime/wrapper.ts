@@ -1022,6 +1022,469 @@ export function wrapLeanWidgetShell(options: WrapLeanWidgetShellOptions): string
 </html>`;
 }
 
+// ============================================
+// Hybrid Widget Shell (For Hybrid Serving Mode)
+// ============================================
+
+/**
+ * Options for hybrid widget shell (hybrid mode resourceTemplate).
+ */
+export interface WrapHybridWidgetShellOptions {
+  /** Tool name */
+  toolName: string;
+  /** UI configuration */
+  uiConfig: { widgetAccessible?: boolean; csp?: WrapToolUIOptions['csp'] };
+  /** Optional page title */
+  title?: string;
+  /** Optional theme overrides */
+  theme?: Partial<ThemeConfig>;
+}
+
+/**
+ * Create a hybrid widget shell for hybrid serving mode.
+ *
+ * This shell contains:
+ * - React 19 runtime from esm.sh CDN
+ * - FrontMCP Bridge for platform-agnostic communication
+ * - All FrontMCP hooks (useMcpBridgeContext, useToolOutput, useCallTool, etc.)
+ * - All FrontMCP UI components (Card, Badge, Button)
+ * - Dynamic renderer that imports and renders component code at runtime
+ *
+ * NO component code is included - it comes in the tool response via `_meta['ui/component']`.
+ *
+ * Flow:
+ * 1. Shell is cached at tools/list (OpenAI caches outputTemplate)
+ * 2. Tool response contains component code + structured data
+ * 3. Shell imports component via blob URL and renders with data
+ * 4. Re-renders on data updates via bridge notifications
+ *
+ * @param options - Hybrid widget shell options
+ * @returns Complete HTML document string with dynamic renderer
+ */
+export function wrapHybridWidgetShell(options: WrapHybridWidgetShellOptions): string {
+  const { toolName, uiConfig, title, theme: themeOverrides } = options;
+
+  // Merge theme
+  const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
+
+  // Build font links
+  const fontPreconnect = buildFontPreconnect();
+  const fontStylesheets = buildFontStylesheets({ inter: true });
+
+  // Build CDN scripts (Tailwind for styling)
+  const tailwindScript = buildCdnScripts({
+    tailwind: true,
+    htmx: false,
+    alpine: false,
+    icons: false,
+    inline: false,
+  });
+
+  // Build theme CSS
+  const themeCss = buildThemeCss(theme);
+  const customCss = theme.customCss || '';
+
+  // Build Tailwind style block
+  const styleBlock = `<style type="text/tailwindcss">
+    @theme {
+      ${themeCss}
+    }
+    ${customCss}
+  </style>`;
+
+  // Loading placeholder content
+  const placeholderContent = `
+    <div id="frontmcp-widget-root" class="flex items-center justify-center min-h-[200px] p-4">
+      <div class="text-center text-gray-500">
+        <svg class="animate-spin mx-auto mb-2" style="width: 1.5rem; height: 1.5rem; color: #9ca3af;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-sm">Loading widget...</p>
+      </div>
+    </div>
+    <div id="frontmcp-error" style="display: none; padding: 1rem; margin: 1rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; color: #dc2626; font-size: 0.875rem;"></div>
+  `;
+
+  // Tool metadata script
+  const toolMetaScript = `<script>
+  // Hybrid widget shell - component comes at tool call time
+  window.__mcpToolName = ${JSON.stringify(toolName)};
+  window.__mcpWidgetAccessible = ${JSON.stringify(uiConfig.widgetAccessible ?? false)};
+  window.__mcpHybridShell = true;
+</script>`;
+
+  // FrontMCP Bridge script (platform-agnostic)
+  const bridgeScript = BRIDGE_SCRIPT_TAGS.universal;
+
+  // Spinner animation CSS
+  const spinnerCss = `<style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+  </style>`;
+
+  // React 19 runtime + FrontMCP hooks + UI components + dynamic renderer
+  // This is the key script that makes hybrid mode work
+  const hybridRuntimeScript = `
+  <!-- FrontMCP Hybrid Widget Runtime -->
+  <script type="module">
+  // ============================================
+  // 1. Import React 19 from esm.sh
+  // ============================================
+  import React from 'https://esm.sh/react@19';
+  import ReactDOM from 'https://esm.sh/react-dom@19/client';
+
+  // Make React available globally
+  window.React = React;
+  window.ReactDOM = ReactDOM;
+
+  // ============================================
+  // 2. Provide webpack namespace objects for transpiled components
+  // ============================================
+  window.external_react_namespaceObject = React;
+  window.jsx_runtime_namespaceObject = {
+    jsx: (type, props, key) => {
+      if (key !== undefined) props = { ...props, key };
+      return React.createElement(type, props);
+    },
+    jsxs: (type, props, key) => {
+      if (key !== undefined) props = { ...props, key };
+      return React.createElement(type, props);
+    },
+    Fragment: React.Fragment,
+  };
+  window.process = window.process || { env: { NODE_ENV: 'production' } };
+
+  // ============================================
+  // 3. FrontMCP Hooks (platform-agnostic via bridge)
+  // ============================================
+  function useMcpBridgeContext() {
+    return {
+      bridge: window.FrontMcpBridge || null,
+      loading: false,
+      error: null,
+      ready: window.FrontMcpBridge?.initialized ?? false,
+      adapterId: window.FrontMcpBridge?.adapterId ?? 'unknown',
+      capabilities: window.FrontMcpBridge?.capabilities ?? {},
+    };
+  }
+
+  function useToolOutput() {
+    const [output, setOutput] = React.useState(null);
+    React.useEffect(() => {
+      const bridge = window.FrontMcpBridge;
+      if (!bridge) return;
+
+      // Get initial output
+      const initial = bridge.getToolOutput();
+      if (initial) setOutput(initial);
+
+      // Subscribe to updates
+      const unsubscribe = bridge.onToolResult((result) => {
+        setOutput(result);
+      });
+      return unsubscribe;
+    }, []);
+    return output;
+  }
+
+  function useToolInput() {
+    const bridge = window.FrontMcpBridge;
+    return bridge?.getToolInput() || window.__mcpToolInput || {};
+  }
+
+  function useTheme() {
+    const [theme, setTheme] = React.useState('light');
+    React.useEffect(() => {
+      const bridge = window.FrontMcpBridge;
+      if (bridge?.getTheme) setTheme(bridge.getTheme());
+    }, []);
+    return theme;
+  }
+
+  function useCallTool(toolName, options = {}) {
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+
+    const isAvailable = !!(
+      (window.openai && typeof window.openai.callTool === 'function') ||
+      (window.FrontMcpBridge && window.FrontMcpBridge.hasCapability('canCallTools'))
+    );
+
+    const callTool = React.useCallback(async (args) => {
+      setLoading(true);
+      setError(null);
+      try {
+        let result;
+        if (window.openai && typeof window.openai.callTool === 'function') {
+          result = await window.openai.callTool(toolName, args || {});
+        } else if (window.FrontMcpBridge) {
+          result = await window.FrontMcpBridge.callTool(toolName, args || {});
+        } else {
+          throw new Error('Tool calling not available');
+        }
+        options.onSuccess?.(result);
+        return result;
+      } catch (err) {
+        setError(err);
+        options.onError?.(err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    }, [toolName]);
+
+    return [callTool, { loading, error, available: isAvailable }];
+  }
+
+  // ============================================
+  // 4. FrontMCP UI Components
+  // ============================================
+  function Card({ title, subtitle, variant, size, className, children, footer }) {
+    const baseClasses = 'rounded-lg border bg-bg-surface';
+    const variantClasses = variant === 'elevated' ? 'shadow-md' : 'border-divider';
+    const sizeClasses = { sm: 'p-3', md: 'p-4', lg: 'p-6' }[size || 'md'];
+    return React.createElement('div', { className: [baseClasses, variantClasses, sizeClasses, className].filter(Boolean).join(' ') },
+      (title || subtitle) && React.createElement('div', { className: 'mb-4' },
+        title && React.createElement('h3', { className: 'text-lg font-semibold text-text-primary' }, title),
+        subtitle && React.createElement('p', { className: 'text-sm text-text-secondary mt-1' }, subtitle)
+      ),
+      children,
+      footer && React.createElement('div', { className: 'mt-4 pt-4 border-t border-divider' }, footer)
+    );
+  }
+
+  function Badge({ children, variant, size, pill }) {
+    const baseClasses = 'inline-flex items-center font-medium';
+    const variantClasses = {
+      default: 'bg-bg-secondary text-text-primary',
+      success: 'bg-green-100 text-green-800',
+      warning: 'bg-yellow-100 text-yellow-800',
+      info: 'bg-blue-100 text-blue-800',
+      danger: 'bg-red-100 text-red-800',
+    }[variant || 'default'];
+    const sizeClasses = { sm: 'px-2 py-0.5 text-xs', md: 'px-2.5 py-1 text-sm', lg: 'px-3 py-1.5 text-base' }[size || 'md'];
+    const pillClasses = pill ? 'rounded-full' : 'rounded-md';
+    return React.createElement('span', {
+      className: [baseClasses, variantClasses, sizeClasses, pillClasses].filter(Boolean).join(' ')
+    }, children);
+  }
+
+  function Button({ children, variant, size, disabled, onClick, className }) {
+    const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors';
+    const variantClasses = {
+      primary: 'bg-primary text-white hover:bg-primary/90',
+      secondary: 'bg-bg-secondary text-text-primary hover:bg-bg-secondary/80',
+      outline: 'border border-divider bg-transparent hover:bg-bg-secondary',
+      ghost: 'bg-transparent hover:bg-bg-secondary',
+    }[variant || 'primary'];
+    const sizeClasses = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2 text-base', lg: 'px-6 py-3 text-lg' }[size || 'md'];
+    const disabledClasses = disabled ? 'opacity-50 cursor-not-allowed' : '';
+    return React.createElement('button', {
+      type: 'button',
+      className: [baseClasses, variantClasses, sizeClasses, disabledClasses, className].filter(Boolean).join(' '),
+      disabled,
+      onClick,
+    }, children);
+  }
+
+  // Expose via react_namespaceObject for transpiled components
+  window.react_namespaceObject = {
+    ...React,
+    useMcpBridgeContext,
+    useToolOutput,
+    useToolInput,
+    useTheme,
+    useCallTool,
+    Card,
+    Badge,
+    Button,
+    McpBridgeProvider: ({ children }) => children,
+  };
+  window.react_dom_namespaceObject = ReactDOM;
+
+  // Template helpers
+  window.__frontmcp_helpers = {
+    escapeHtml: (str) => String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c),
+    formatDate: (d) => new Date(d).toLocaleDateString(),
+    formatCurrency: (a, c) => new Intl.NumberFormat('en-US', {style:'currency',currency:c||'USD'}).format(a),
+  };
+
+  // Component-specific helpers (for weather demo, etc.)
+  window.iconMap = {
+    sunny: '\\u2600\\uFE0F', cloudy: '\\u2601\\uFE0F', rainy: '\\uD83C\\uDF27\\uFE0F',
+    snowy: '\\u2744\\uFE0F', stormy: '\\u26C8\\uFE0F', windy: '\\uD83D\\uDCA8', foggy: '\\uD83C\\uDF2B\\uFE0F',
+  };
+  window.getConditionBadgeVariant = function(c) {
+    switch(c) { case 'sunny': return 'success'; case 'rainy': case 'snowy': return 'info'; case 'stormy': return 'warning'; default: return 'default'; }
+  };
+
+  console.log('[FrontMCP Hybrid] React 19 runtime loaded with hooks and components');
+
+  // ============================================
+  // 5. Dynamic Renderer
+  // ============================================
+  let currentComponent = null;
+  let reactRoot = null;
+
+  function hideLoader() {
+    const loader = document.querySelector('#frontmcp-widget-root > div');
+    if (loader) loader.style.display = 'none';
+  }
+
+  function showError(message) {
+    const errorEl = document.getElementById('frontmcp-error');
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    }
+    hideLoader();
+  }
+
+  function render() {
+    const bridge = window.FrontMcpBridge;
+    const output = bridge?.getToolOutput();
+
+    if (!currentComponent) {
+      console.log('[FrontMCP Hybrid] No component loaded yet');
+      return false;
+    }
+
+    if (!output) {
+      console.log('[FrontMCP Hybrid] No data available yet');
+      return false;
+    }
+
+    const root = document.getElementById('frontmcp-widget-root');
+    if (!root) return false;
+
+    const props = {
+      input: bridge.getToolInput() || {},
+      output: output,
+      structuredContent: bridge.getStructuredContent(),
+      helpers: window.__frontmcp_helpers,
+    };
+
+    try {
+      hideLoader();
+      const element = React.createElement(currentComponent, props);
+      if (!reactRoot) {
+        reactRoot = ReactDOM.createRoot(root);
+      }
+      reactRoot.render(element);
+      console.log('[FrontMCP Hybrid] Component rendered with data');
+      return true;
+    } catch (err) {
+      console.error('[FrontMCP Hybrid] Render failed:', err);
+      showError('Rendering failed: ' + err.message);
+      return false;
+    }
+  }
+
+  async function loadComponent(payload) {
+    if (!payload?.code) {
+      console.warn('[FrontMCP Hybrid] No component code in payload');
+      return;
+    }
+
+    console.log('[FrontMCP Hybrid] Loading component, type:', payload.type);
+
+    try {
+      // Import component via blob URL
+      const blob = new Blob([payload.code], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+
+      const module = await import(/* webpackIgnore: true */ url);
+      currentComponent = module.default || window.__frontmcp_component;
+      URL.revokeObjectURL(url);
+
+      if (!currentComponent) {
+        throw new Error('Component not found in module');
+      }
+
+      console.log('[FrontMCP Hybrid] Component loaded successfully');
+      render();
+    } catch (err) {
+      console.error('[FrontMCP Hybrid] Failed to load component:', err);
+      showError('Failed to load component: ' + err.message);
+    }
+  }
+
+  // ============================================
+  // 6. Bridge Integration
+  // ============================================
+  async function initializeBridge() {
+    // Wait for bridge to be ready
+    if (!window.FrontMcpBridge?.initialized) {
+      await new Promise(resolve => {
+        window.addEventListener('bridge:ready', resolve, { once: true });
+        // Fallback timeout
+        setTimeout(resolve, 5000);
+      });
+    }
+
+    const bridge = window.FrontMcpBridge;
+    if (!bridge) {
+      console.error('[FrontMCP Hybrid] Bridge not available');
+      showError('Bridge initialization failed');
+      return;
+    }
+
+    console.log('[FrontMCP Hybrid] Bridge ready, adapter:', bridge.adapterId);
+
+    // Listen for component code in tool response metadata
+    if (typeof bridge.onToolResponseMetadata === 'function') {
+      bridge.onToolResponseMetadata(function(metadata) {
+        console.log('[FrontMCP Hybrid] Received tool response metadata');
+
+        // Check for component payload
+        const componentPayload = metadata['ui/component'];
+        if (componentPayload) {
+          loadComponent(componentPayload);
+        }
+      });
+    }
+
+    // Listen for data updates (for re-renders)
+    if (typeof bridge.onToolResult === 'function') {
+      bridge.onToolResult(function(result) {
+        console.log('[FrontMCP Hybrid] Received tool result update');
+        render();
+      });
+    }
+
+    // Check if data already available (e.g., page refresh)
+    const existingMetadata = bridge.getToolResponseMetadata?.();
+    if (existingMetadata?.['ui/component']) {
+      loadComponent(existingMetadata['ui/component']);
+    }
+  }
+
+  // Start initialization
+  initializeBridge();
+  </script>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title || toolName)}</title>
+  ${fontPreconnect}
+  ${fontStylesheets}
+  ${tailwindScript}
+  ${styleBlock}
+  ${spinnerCss}
+  ${toolMetaScript}
+  ${bridgeScript}
+</head>
+<body class="bg-white font-sans antialiased">
+  ${placeholderContent}
+  ${hybridRuntimeScript}
+</body>
+</html>`;
+}
+
 /**
  * Wrap a static widget template for MCP resource mode.
  *

@@ -82,6 +82,7 @@ export type TemplateBuilderFn<In, Out> = (ctx: TemplateContext<In, Out>) => stri
 export type WidgetServingMode =
   | 'inline' // HTML embedded directly in tool response _meta
   | 'mcp-resource' // Via ui:// resource URI (MCP resources/read)
+  | 'hybrid' // Shell (React + renderer) cached, component + data in response
   | 'direct-url' // HTTP endpoint on MCP server
   | 'custom-url'; // Custom URL (CDN or external hosting)
 

@@ -162,6 +162,31 @@ export class Scope extends ScopeEntry {
         }
         this.logger.info(`Pre-compiled ${inlineTools.length} lean widget shell(s) for inline mode tools`);
       }
+
+      // Pre-compile hybrid widget shells for hybrid mode tools
+      // These contain React runtime + Bridge + dynamic renderer, but NO component code
+      // The component code is delivered per-request in _meta['ui/component']
+      const hybridTools = toolsWithUI.filter(
+        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'hybrid' && t.metadata.ui.template,
+      );
+
+      if (hybridTools.length > 0) {
+        for (const tool of hybridTools) {
+          try {
+            this.toolUIRegistry.compileHybridWidgetAsync({
+              toolName: tool.metadata.name,
+              uiConfig: tool.metadata.ui!,
+            });
+            this.logger.verbose(`Compiled hybrid widget shell for tool: ${tool.metadata.name}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+              `Failed to compile hybrid widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
+            );
+          }
+        }
+        this.logger.info(`Pre-compiled ${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`);
+      }
     }
 
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);

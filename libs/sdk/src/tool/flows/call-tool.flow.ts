@@ -32,12 +32,10 @@ const inputSchema = z.object({
 const outputSchema = CallToolResultSchema;
 
 const stateSchema = z.object({
-  input: z
-    .object({
-      name: z.string().min(1).max(64),
-      arguments: z.object({}).passthrough().optional(),
-    })
-    .passthrough(),
+  input: z.looseObject({
+    name: z.string().min(1).max(64),
+    arguments: z.looseObject({}).optional(),
+  }),
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   tool: z.instanceof(ToolEntry),
   toolContext: z.instanceof(ToolContext),
@@ -426,6 +424,45 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           this.logger.verbose('finalize: UI using mcp-resource mode (structured data only)', {
             tool: tool.metadata.name,
             platform: platformType,
+            outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],
+          });
+        } else if (servingMode === 'hybrid') {
+          // For hybrid mode: return structured data + transpiled component code
+          // The hybrid shell (React runtime + renderer) was pre-compiled at server startup
+          // and advertised via outputTemplate URI in tools/list.
+          // The shell dynamically imports the component code from _meta['ui/component']
+          // and renders it with toolOutput data from the platform context.
+
+          // Build the component payload with transpiled code
+          const componentPayload = scope.toolUI.buildHybridComponentPayload({
+            toolName: tool.metadata.name,
+            template: tool.metadata.ui.template,
+            uiConfig: tool.metadata.ui,
+          });
+
+          // Return structured data as JSON text content
+          result.content = [
+            {
+              type: 'text',
+              text: JSON.stringify(rawOutput),
+            },
+          ];
+
+          // Add component payload to _meta for the hybrid shell's dynamic renderer
+          if (componentPayload) {
+            result._meta = {
+              ...result._meta,
+              'ui/component': componentPayload,
+              'ui/type': componentPayload.type,
+            };
+          }
+
+          this.logger.verbose('finalize: UI using hybrid mode (structured data + component)', {
+            tool: tool.metadata.name,
+            platform: platformType,
+            hasComponent: !!componentPayload,
+            componentType: componentPayload?.type,
+            componentHash: componentPayload?.hash,
             outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],
           });
         } else {
