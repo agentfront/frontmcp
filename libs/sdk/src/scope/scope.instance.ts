@@ -29,7 +29,7 @@ import PromptRegistry from '../prompt/prompt.registry';
 import { NotificationService } from '../notification';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
-import { ToolUIRegistry, ToolUIResourceTemplate, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
+import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -104,10 +104,9 @@ export class Scope extends ScopeEntry {
     // This enables resource capabilities to be advertised when tools have UI
     const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
     if (toolsWithUI.length > 0) {
-      // Register both static widget template (for OpenAI discovery) and dynamic result template
+      // Register static widget template for OpenAI discovery (ui://widget/{toolName}.html)
       this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
-      this.scopeResources.registerDynamicResource(ToolUIResourceTemplate);
-      this.logger.verbose(`Registered UI resource templates for ${toolsWithUI.length} tool(s) with UI configs`);
+      this.logger.verbose(`Registered UI resource template for ${toolsWithUI.length} tool(s) with UI configs`);
 
       // Pre-compile static widgets for tools with servingMode: 'mcp-resource'
       // This is done at server startup so that the static widget HTML is immediately
@@ -136,6 +135,32 @@ export class Scope extends ScopeEntry {
           }),
         );
         this.logger.info(`Pre-compiled ${mcpResourceTools.length} static widget(s) for mcp-resource mode tools`);
+      }
+
+      // Pre-compile lean widget shells for inline mode tools
+      // These are minimal HTML shells (no React/JS) that OpenAI caches at discovery
+      // The actual React widget comes in each tool response with embedded data
+      const inlineTools = toolsWithUI.filter(
+        (t) =>
+          t.metadata.ui &&
+          (t.metadata.ui.servingMode === 'inline' || !t.metadata.ui.servingMode) &&
+          t.metadata.ui.template,
+      );
+
+      if (inlineTools.length > 0) {
+        for (const tool of inlineTools) {
+          try {
+            this.toolUIRegistry.compileLeanWidgetAsync({
+              toolName: tool.metadata.name,
+              uiConfig: tool.metadata.ui!,
+            });
+            this.logger.verbose(`Compiled lean widget shell for tool: ${tool.metadata.name}`);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to compile lean widget shell for tool "${tool.metadata.name}": ${errorMessage}`);
+          }
+        }
+        this.logger.info(`Pre-compiled ${inlineTools.length} lean widget shell(s) for inline mode tools`);
       }
     }
 

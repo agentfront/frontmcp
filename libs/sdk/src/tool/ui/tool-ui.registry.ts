@@ -1,50 +1,26 @@
 /**
  * Tool UI Registry
  *
- * Manages UI template rendering and caching for tool responses.
+ * Manages UI template rendering for tool responses.
  * Provides platform-specific metadata generation for MCP clients.
+ *
+ * Two serving modes:
+ * - **inline**: HTML is rendered per-request and embedded in _meta['ui/html']
+ * - **mcp-resource**: Static widget is pre-compiled at startup, client fetches via resources/read
  */
 
-import type { ToolUIConfig } from '../../common/metadata/tool-ui.metadata';
+import type { ToolUIConfig, WidgetManifest, BuildManifestResult } from '../../common/metadata/tool-ui.metadata';
 import type { AIPlatformType } from '../../notification/notification.service';
-import { renderToolTemplate, renderToolTemplateAsync, isReactComponent } from './render-template';
+import { renderToolTemplateAsync, isReactComponent } from './render-template';
 import { buildUIMeta, type UIMetadata } from './platform-adapters';
-import { wrapToolUIUniversal, wrapStaticWidgetUniversal } from '@frontmcp/ui/runtime';
+import { wrapToolUIUniversal, wrapStaticWidgetUniversal, wrapLeanWidgetShell } from '@frontmcp/ui/runtime';
+import { buildToolWidgetManifest, detectUIType } from '@frontmcp/ui/build';
 
 /**
- * Default TTL for cached UI entries (5 minutes).
+ * Options for renderAndRegisterAsync (inline mode).
  */
-const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
-
-/**
- * Maximum number of cached entries before cleanup.
- */
-const MAX_CACHE_SIZE = 1000;
-
-/**
- * Cached UI entry.
- */
-export interface CachedUI {
-  /** Rendered HTML content */
-  html: string;
-  /** Original context for potential re-rendering */
-  context: {
-    toolName: string;
-    input: Record<string, unknown>;
-    output: unknown;
-    structuredContent?: unknown;
-  };
-  /** Expiration timestamp */
-  expiresAt: number;
-  /** Creation timestamp for ordering */
-  createdAt: number;
-}
-
-/**
- * Options for renderAndRegister.
- */
-export interface RenderAndRegisterOptions {
-  /** Tool name (used for URI generation) */
+export interface RenderOptions {
+  /** Tool name */
   toolName: string;
   /** Unique request identifier */
   requestId: string;
@@ -62,16 +38,12 @@ export interface RenderAndRegisterOptions {
   token?: string;
   /** Direct URL for widget serving (optional) */
   directUrl?: string;
-  /** Cache TTL in milliseconds (default: 5 minutes) */
-  cacheTtl?: number;
 }
 
 /**
- * Result of UI registration.
+ * Result of rendering UI for inline mode.
  */
-export interface UIRegistrationResult {
-  /** Generated resource URI */
-  uri: string;
+export interface UIRenderResult {
   /** Rendered HTML content */
   html: string;
   /** Platform-specific metadata for _meta field */
@@ -79,19 +51,20 @@ export interface UIRegistrationResult {
 }
 
 /**
- * ToolUIRegistry manages UI template rendering and caching.
+ * ToolUIRegistry manages UI template rendering for tool responses.
  *
  * It provides:
- * - Template rendering with context
- * - TTL-based caching for rendered HTML
+ * - Static widget compilation for mcp-resource mode (pre-compiled at startup)
+ * - Per-request HTML rendering for inline mode (embedded in _meta)
  * - Platform-specific _meta generation
- * - Resource URI generation for ui:// protocol
+ * - Widget manifest management
  *
  * @example
  * ```typescript
  * const registry = new ToolUIRegistry();
  *
- * const result = registry.renderAndRegister({
+ * // For inline mode: render HTML per-request
+ * const result = await registry.renderAndRegisterAsync({
  *   toolName: 'get_weather',
  *   requestId: 'abc123',
  *   input: { location: 'London' },
@@ -104,6 +77,7 @@ export interface UIRegistrationResult {
  * return { content: [...], _meta: { ...result.meta } };
  * ```
  */
+
 /**
  * Options for compiling a static widget.
  */
@@ -117,9 +91,6 @@ export interface CompileStaticWidgetOptions {
 }
 
 export class ToolUIRegistry {
-  private readonly cache = new Map<string, CachedUI>();
-  private readonly defaultTtl: number;
-
   /**
    * Cache for static widgets (keyed by tool name).
    * Static widgets are pre-compiled at server startup for tools with servingMode: 'mcp-resource'.
@@ -127,9 +98,17 @@ export class ToolUIRegistry {
    */
   private readonly staticWidgetCache = new Map<string, string>();
 
-  constructor(options?: { defaultTtl?: number }) {
-    this.defaultTtl = options?.defaultTtl ?? DEFAULT_CACHE_TTL_MS;
-  }
+  /**
+   * Cache for widget manifests (keyed by tool name).
+   * Manifests describe the widget's renderer type, CSP, and other metadata.
+   */
+  private readonly manifestCache = new Map<string, WidgetManifest>();
+
+  /**
+   * Cache for build results (keyed by tool name).
+   * Includes HTML, manifest, and hash for cache validation.
+   */
+  private readonly buildResultCache = new Map<string, BuildManifestResult>();
 
   /**
    * Compile a static widget template for a tool at server startup.
@@ -145,7 +124,70 @@ export class ToolUIRegistry {
   async compileStaticWidgetAsync(options: CompileStaticWidgetOptions): Promise<void> {
     const { toolName, template, uiConfig } = options;
 
-    // Render the template SSR'd WITHOUT data
+    // Try to use the new manifest builder first
+    try {
+      // Detect uiType if not provided (using type assertion for extended config)
+      const extendedConfig = uiConfig as ToolUIConfig & {
+        uiType?: string;
+        bundlingMode?: string;
+        resourceMode?: 'cdn' | 'inline';
+        runtimeOptions?: { hydrate?: boolean };
+      };
+      const detectedType = detectUIType(template as Parameters<typeof detectUIType>[0]);
+
+      // Convert ToolUIConfig to WidgetConfig format for the manifest builder
+      const widgetConfig = {
+        template: template as Parameters<typeof buildToolWidgetManifest>[0]['uiConfig']['template'],
+        uiType: (extendedConfig.uiType ?? detectedType) as 'html' | 'react' | 'mdx' | 'markdown' | 'auto',
+        displayMode: (uiConfig.displayMode ?? 'inline') as 'inline' | 'fullscreen' | 'pip',
+        bundlingMode: (extendedConfig.bundlingMode ?? 'static') as 'static' | 'dynamic',
+        resourceMode: (extendedConfig.resourceMode ?? 'cdn') as 'cdn' | 'inline',
+        widgetAccessible: uiConfig.widgetAccessible,
+        widgetDescription: uiConfig.widgetDescription,
+        csp: uiConfig.csp
+          ? {
+              scriptSrc: uiConfig.csp.resourceDomains ?? [],
+              styleSrc: uiConfig.csp.resourceDomains ?? [],
+              connectSrc: uiConfig.csp.connectDomains ?? [],
+              imgSrc: uiConfig.csp.resourceDomains ?? [],
+            }
+          : undefined,
+        mdxComponents: uiConfig.mdxComponents,
+        runtimeOptions: extendedConfig.runtimeOptions,
+      };
+
+      const result = await buildToolWidgetManifest({
+        toolName,
+        uiConfig: widgetConfig,
+        schema: {},
+      });
+
+      // For React/MDX components, we need to use wrapStaticWidgetUniversal
+      // to include the React runtime and rendering script
+      if (result.componentCode && (result.rendererType === 'react' || result.rendererType === 'mdx')) {
+        // Re-wrap with wrapStaticWidgetUniversal to include React runtime + rendering
+        const widgetHtml = wrapStaticWidgetUniversal({
+          toolName,
+          ssrContent: result.content,
+          uiConfig,
+          rendererType: result.rendererType,
+          componentCode: result.componentCode,
+        });
+        this.staticWidgetCache.set(toolName, widgetHtml);
+      } else {
+        // Use the pre-built HTML for non-React templates
+        this.staticWidgetCache.set(toolName, result.html);
+      }
+
+      this.manifestCache.set(toolName, result.manifest);
+      this.buildResultCache.set(toolName, result);
+      return;
+    } catch (error) {
+      // Fall back to legacy compilation
+      console.warn(`[ToolUIRegistry] Manifest build failed for ${toolName}, using legacy method:`, error);
+    }
+
+    // Legacy fallback: Render the template SSR'd WITHOUT data
     // The widget will read data from Bridge at runtime
     const ssrContent = await renderToolTemplateAsync({
       template,
@@ -165,6 +207,32 @@ export class ToolUIRegistry {
 
     // Cache the static widget HTML
     this.staticWidgetCache.set(toolName, widgetHtml);
+  }
+
+  /**
+   * Compile a lean widget shell for inline mode tools at server startup.
+   *
+   * For tools with `servingMode: 'inline'`, we create a minimal HTML shell that:
+   * - Contains only HTML structure, theme CSS, and fonts
+   * - NO React runtime, NO component code, NO bridge
+   * - OpenAI caches this at discovery time
+   * - The actual React widget comes in each tool response with embedded data
+   *
+   * @param options - Options for lean widget compilation
+   */
+  compileLeanWidgetAsync(options: { toolName: string; uiConfig: ToolUIConfig }): void {
+    const { toolName, uiConfig } = options;
+
+    // Create a lean HTML shell with just theme and structure
+    const leanHtml = wrapLeanWidgetShell({
+      toolName,
+      uiConfig: {
+        widgetAccessible: uiConfig.widgetAccessible,
+      },
+    });
+
+    // Cache the lean widget HTML
+    this.staticWidgetCache.set(toolName, leanHtml);
   }
 
   /**
@@ -188,141 +256,197 @@ export class ToolUIRegistry {
   }
 
   /**
-   * Render a tool's UI template and register it for resource access.
+   * Get the widget manifest for a tool.
    *
-   * NOTE: This synchronous version does NOT support React components.
-   * Use `renderAndRegisterAsync()` for React component templates.
-   *
-   * @param options - Rendering options
-   * @returns Registration result with URI, HTML, and metadata
+   * @param toolName - The tool name to look up
+   * @returns Widget manifest, or undefined if not cached
    */
-  renderAndRegister(options: RenderAndRegisterOptions): UIRegistrationResult {
-    const {
-      toolName,
-      requestId,
-      input,
-      output,
-      structuredContent,
-      uiConfig,
-      platformType,
-      token,
-      directUrl,
-      cacheTtl = this.defaultTtl,
-    } = options;
-
-    // 1. Render the template
-    const html = renderToolTemplate({
-      template: uiConfig.template,
-      input,
-      output,
-      structuredContent,
-    });
-
-    // 2. Generate unique resource URI
-    const uri = this.generateResourceUri(toolName, requestId);
-
-    // 3. Cache the rendered HTML
-    const now = Date.now();
-    this.cacheEntry(uri, {
-      html,
-      context: { toolName, input, output, structuredContent },
-      expiresAt: now + cacheTtl,
-      createdAt: now,
-    });
-
-    // 4. Build platform-specific metadata
-    const meta = buildUIMeta({
-      uiConfig,
-      platformType,
-      resourceUri: uri,
-      html,
-      token,
-      directUrl,
-    });
-
-    return { uri, html, meta };
+  getManifest(toolName: string): WidgetManifest | undefined {
+    return this.manifestCache.get(toolName);
   }
 
   /**
-   * Render a tool's UI template and register it for resource access (async version).
+   * Check if a tool has a cached manifest.
    *
-   * This version supports all template types including React components via SSR.
-   * Use this method when the template may be a React component.
+   * @param toolName - The tool name to check
+   * @returns true if the tool has a cached manifest
+   */
+  hasManifest(toolName: string): boolean {
+    return this.manifestCache.has(toolName);
+  }
+
+  /**
+   * Get the full build result for a tool.
    *
-   * For React/MDX components, the output is wrapped in a complete HTML document
-   * with the FrontMCP Bridge runtime, enabling interactive features like button
-   * clicks (via `data-tool-call` attribute) when loaded in OpenAI's iframe.
+   * @param toolName - The tool name to look up
+   * @returns Build result, or undefined if not cached
+   */
+  getBuildResult(toolName: string): BuildManifestResult | undefined {
+    return this.buildResultCache.get(toolName);
+  }
+
+  /**
+   * Detect the UI type for a template.
+   *
+   * @param template - The template to analyze
+   * @returns Detected UI type
+   */
+  detectUIType(template: ToolUIConfig['template']): string {
+    // Use the imported detectUIType function from @frontmcp/ui/build
+    return detectUIType(template as Parameters<typeof detectUIType>[0]);
+  }
+
+  /**
+   * Render a tool's UI template for inline mode.
+   *
+   * This version supports all template types including React components.
+   * The rendered HTML is embedded directly in _meta['ui/html'] for the client.
+   *
+   * For React/MDX components, the output is wrapped using wrapStaticWidgetUniversal
+   * which includes the React 19 CDN, client-side rendering script, and all the
+   * FrontMCP hooks/components. This provides the same rendering capability as
+   * mcp-resource mode, but with data embedded in each response.
    *
    * @param options - Rendering options
-   * @returns Promise resolving to registration result with URI, HTML, and metadata
+   * @returns Promise resolving to render result with HTML and metadata
    */
-  async renderAndRegisterAsync(options: RenderAndRegisterOptions): Promise<UIRegistrationResult> {
-    const {
-      toolName,
-      requestId,
-      input,
-      output,
-      structuredContent,
-      uiConfig,
-      platformType,
-      token,
-      directUrl,
-      cacheTtl = this.defaultTtl,
-    } = options;
+  async renderAndRegisterAsync(options: RenderOptions): Promise<UIRenderResult> {
+    const { toolName, input, output, structuredContent, uiConfig, platformType, token, directUrl } = options;
 
-    // 1. Render the template (async for React/MDX support)
-    const renderedContent = await renderToolTemplateAsync({
-      template: uiConfig.template,
-      input,
-      output,
-      structuredContent,
-      mdxComponents: uiConfig.mdxComponents,
-    });
+    // Detect if this is a React component
+    const detectedType = this.detectUIType(uiConfig.template);
+    const isReactBased = detectedType === 'react' || detectedType === 'mdx';
 
-    // 2. Wrap in a complete HTML document with FrontMCP Bridge runtime.
-    // This is essential for React/MDX components to have working click handlers
-    // (via `data-tool-call` attribute) when loaded in OpenAI's iframe.
-    //
-    // For OpenAI platform, we skip the CSP meta tag because OpenAI handles CSP
-    // through `_meta['openai/widgetCSP']` in the MCP response, not HTML meta tags.
-    // Including a CSP meta tag causes browser warnings when it's placed outside <head>
-    // due to OpenAI's iframe HTML processing.
-    const isOpenAIPlatform = platformType === 'openai';
-    const html = wrapToolUIUniversal({
-      content: renderedContent,
-      toolName,
-      input: input as Record<string, unknown>,
-      output,
-      structuredContent,
-      csp: uiConfig.csp,
-      widgetAccessible: uiConfig.widgetAccessible,
-      includeBridge: true,
-      skipCspMeta: isOpenAIPlatform,
-    });
+    let html: string;
 
-    // 3. Generate unique resource URI
-    const uri = this.generateResourceUri(toolName, requestId);
+    if (isReactBased && typeof uiConfig.template === 'function') {
+      // For React/MDX components: Use wrapStaticWidgetUniversal with component code
+      // This includes the React 19 CDN, client-side renderer, and all FrontMCP hooks
+      // Same approach as mcp-resource mode, but with data embedded
 
-    // 4. Cache the rendered HTML
-    const now = Date.now();
-    this.cacheEntry(uri, {
-      html,
-      context: { toolName, input, output, structuredContent },
-      expiresAt: now + cacheTtl,
-      createdAt: now,
-    });
+      // 1. Build the component code that will be embedded in the HTML
+      const componentCode = this.buildComponentCode(uiConfig.template, toolName);
 
-    // 5. Build platform-specific metadata
+      // 2. Render SSR content (optional, for initial display)
+      const ssrContent = await renderToolTemplateAsync({
+        template: uiConfig.template,
+        input,
+        output,
+        structuredContent,
+        mdxComponents: uiConfig.mdxComponents,
+      });
+
+      // 3. Wrap with React runtime + component code
+      // This creates a complete HTML document with:
+      // - React 19 CDN imports
+      // - FrontMCP hooks (useMcpBridgeContext, useToolOutput, etc.)
+      // - FrontMCP UI components (Card, Badge, Button)
+      // - The component code registered as window.__frontmcp_component
+      // - Client-side rendering script that hydrates with the embedded data
+      html = wrapStaticWidgetUniversal({
+        toolName,
+        ssrContent,
+        uiConfig,
+        rendererType: detectedType,
+        componentCode,
+        // For inline mode, we embed the data in the HTML so the component
+        // can render immediately without waiting for window.openai.toolOutput
+        embeddedData: {
+          input: input as Record<string, unknown>,
+          output,
+          structuredContent,
+        },
+        // Self-contained mode: no bridge, React manages state internally
+        // This prevents OpenAI's wrapper from interfering with React re-renders
+        selfContained: true,
+      });
+    } else {
+      // For HTML templates: Use the original wrapToolUIUniversal approach
+      // which embeds the pre-rendered content with the Bridge runtime
+
+      // 1. Render the template
+      const renderedContent = await renderToolTemplateAsync({
+        template: uiConfig.template,
+        input,
+        output,
+        structuredContent,
+        mdxComponents: uiConfig.mdxComponents,
+      });
+
+      // 2. Wrap in a complete HTML document with FrontMCP Bridge runtime.
+      // For OpenAI platform, we skip the CSP meta tag because OpenAI handles CSP
+      // through `_meta['openai/widgetCSP']` in the MCP response, not HTML meta tags.
+      const isOpenAIPlatform = platformType === 'openai';
+      html = wrapToolUIUniversal({
+        content: renderedContent,
+        toolName,
+        input: input as Record<string, unknown>,
+        output,
+        structuredContent,
+        csp: uiConfig.csp,
+        widgetAccessible: uiConfig.widgetAccessible,
+        includeBridge: true,
+        skipCspMeta: isOpenAIPlatform,
+      });
+    }
+
+    // Get manifest info if available (from static widget compilation)
+    const manifest = this.manifestCache.get(toolName);
+    const buildResult = this.buildResultCache.get(toolName);
+
+    // Determine renderer type
+    const rendererType = manifest?.uiType ?? detectedType ?? 'auto';
+
+    // Build platform-specific metadata
+    // For inline mode, HTML is embedded in _meta['ui/html']
     const meta = buildUIMeta({
       uiConfig,
       platformType,
-      resourceUri: uri,
       html,
       token,
       directUrl,
+      rendererType,
+      contentHash: buildResult?.hash,
+      manifestUri: manifest?.uri,
     });
 
-    return { uri, html, meta };
+    return { html, meta };
+  }
+
+  /**
+   * Build component code string for embedding in widget HTML.
+   *
+   * @param template - The React component
+   * @param toolName - Tool name for naming the component
+   * @returns JavaScript code string that defines and registers the component
+   */
+  private buildComponentCode(template: unknown, toolName: string): string | undefined {
+    if (typeof template !== 'function') {
+      return undefined;
+    }
+
+    // Get the component function as a string
+    const componentSource = template.toString();
+
+    // Sanitize tool name for JavaScript variable name
+    const safeName = toolName.replace(/[^a-zA-Z0-9_]/g, '_');
+
+    // Build the component code that will be embedded in the HTML
+    // The component is registered on window.__frontmcp_component for the render script
+    return `
+// FrontMCP Widget Component: ${toolName}
+(function() {
+  // The component function
+  var ${safeName} = ${componentSource};
+
+  // Register component globally for client-side rendering
+  window.__frontmcp_component = ${safeName};
+
+  // Also register in __frontmcp_components for multiple components
+  window.__frontmcp_components = window.__frontmcp_components || {};
+  window.__frontmcp_components['${toolName}'] = ${safeName};
+})();
+`.trim();
   }
 
   /**
@@ -333,158 +457,5 @@ export class ToolUIRegistry {
    */
   requiresAsyncRendering(template: ToolUIConfig['template']): boolean {
     return isReactComponent(template);
-  }
-
-  /**
-   * Get rendered HTML for a resource URI.
-   *
-   * @param uri - The resource URI
-   * @returns Rendered HTML, or undefined if not found or expired
-   */
-  getRenderedHtml(uri: string): string | undefined {
-    const entry = this.cache.get(uri);
-    if (!entry) {
-      return undefined;
-    }
-
-    if (entry.expiresAt < Date.now()) {
-      this.cache.delete(uri);
-      return undefined;
-    }
-
-    return entry.html;
-  }
-
-  /**
-   * Get the full cached entry for a resource URI.
-   *
-   * @param uri - The resource URI
-   * @returns Cached entry, or undefined if not found or expired
-   */
-  getCachedEntry(uri: string): CachedUI | undefined {
-    const entry = this.cache.get(uri);
-    if (!entry) {
-      return undefined;
-    }
-
-    if (entry.expiresAt < Date.now()) {
-      this.cache.delete(uri);
-      return undefined;
-    }
-
-    return entry;
-  }
-
-  /**
-   * Check if a URI is registered and valid.
-   *
-   * @param uri - The resource URI to check
-   * @returns true if the URI is registered and not expired
-   */
-  has(uri: string): boolean {
-    return this.getRenderedHtml(uri) !== undefined;
-  }
-
-  /**
-   * Get the latest (most recent) cached entry for a tool by name.
-   * Useful for static widget URIs where requestId is not known.
-   *
-   * @param toolName - The tool name to look up
-   * @returns The most recent cached entry for this tool, or undefined
-   */
-  getLatestForTool(toolName: string): CachedUI | undefined {
-    const now = Date.now();
-    let latestEntry: CachedUI | undefined;
-    let latestCreatedAt = 0;
-
-    // Find the most recent non-expired entry for this tool
-    for (const [, entry] of this.cache) {
-      if (entry.context.toolName === toolName && entry.expiresAt > now) {
-        // Keep the entry with the latest creation time (most recently created)
-        if (entry.createdAt > latestCreatedAt) {
-          latestCreatedAt = entry.createdAt;
-          latestEntry = entry;
-        }
-      }
-    }
-
-    return latestEntry;
-  }
-
-  /**
-   * Remove a specific URI from the cache.
-   *
-   * @param uri - The resource URI to remove
-   * @returns true if the URI was found and removed
-   */
-  remove(uri: string): boolean {
-    return this.cache.delete(uri);
-  }
-
-  /**
-   * Clear all cached entries.
-   */
-  clear(): void {
-    this.cache.clear();
-  }
-
-  /**
-   * Get the number of cached entries (including expired).
-   */
-  get size(): number {
-    return this.cache.size;
-  }
-
-  /**
-   * Clean up expired entries.
-   *
-   * @returns Number of entries removed
-   */
-  cleanup(): number {
-    const now = Date.now();
-    let removed = 0;
-
-    for (const [uri, entry] of this.cache) {
-      if (entry.expiresAt < now) {
-        this.cache.delete(uri);
-        removed++;
-      }
-    }
-
-    return removed;
-  }
-
-  /**
-   * Generate a resource URI for a tool result.
-   *
-   * @param toolName - The tool name
-   * @param requestId - The unique request ID
-   * @returns Resource URI in ui:// protocol format
-   */
-  private generateResourceUri(toolName: string, requestId: string): string {
-    return `ui://tools/${encodeURIComponent(toolName)}/result/${encodeURIComponent(requestId)}`;
-  }
-
-  /**
-   * Cache an entry, enforcing size limits.
-   */
-  private cacheEntry(uri: string, entry: CachedUI): void {
-    // Enforce size limit with LRU-style eviction
-    if (this.cache.size >= MAX_CACHE_SIZE) {
-      // First, try to remove expired entries
-      const removed = this.cleanup();
-
-      // If still at limit after cleanup, remove oldest entries
-      if (this.cache.size >= MAX_CACHE_SIZE && removed === 0) {
-        // Remove ~10% of entries (oldest first by insertion order)
-        const toRemove = Math.ceil(MAX_CACHE_SIZE * 0.1);
-        const keys = [...this.cache.keys()].slice(0, toRemove);
-        for (const key of keys) {
-          this.cache.delete(key);
-        }
-      }
-    }
-
-    this.cache.set(uri, entry);
   }
 }

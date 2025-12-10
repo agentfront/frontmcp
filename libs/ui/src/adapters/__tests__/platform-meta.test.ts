@@ -1,6 +1,9 @@
 /**
  * @file platform-meta.test.ts
  * @description Tests for platform metadata adapters, including MCP Apps (ext-apps).
+ *
+ * Note: buildUIMeta is used for inline mode (HTML embedded in _meta).
+ * For mcp-resource mode, tools/list provides the static widget URI via buildToolDiscoveryMeta.
  */
 
 import { buildUIMeta, buildToolDiscoveryMeta, type AIPlatformType, type UITemplateConfig } from '../platform-meta';
@@ -10,20 +13,19 @@ describe('Platform Metadata Adapters', () => {
     template: () => '<div>Test</div>',
   };
 
-  const resourceUri = 'ui://tools/test_tool/result/abc123';
   const html = '<div>Test HTML</div>';
 
-  describe('buildUIMeta - ext-apps platform', () => {
-    it('should generate ext-apps metadata with resourceUri', () => {
+  describe('buildUIMeta - ext-apps platform (inline mode)', () => {
+    it('should generate ext-apps metadata with mimeType', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
-      expect(meta['ui/resourceUri']).toBe(resourceUri);
       expect(meta['ui/mimeType']).toBe('text/html+mcp');
+      // Inline mode embeds HTML directly, no resourceUri needed
+      expect(meta['ui/html']).toBe(html);
     });
 
     it('should include CSP configuration', () => {
@@ -36,7 +38,6 @@ describe('Platform Metadata Adapters', () => {
           },
         },
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -53,7 +54,6 @@ describe('Platform Metadata Adapters', () => {
           displayMode: 'fullscreen',
         },
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -67,7 +67,6 @@ describe('Platform Metadata Adapters', () => {
           prefersBorder: true,
         },
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -81,7 +80,6 @@ describe('Platform Metadata Adapters', () => {
           sandboxDomain: 'sandbox.example.com',
         },
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -92,7 +90,6 @@ describe('Platform Metadata Adapters', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -178,7 +175,7 @@ describe('Platform Metadata Adapters', () => {
     });
   });
 
-  describe('buildUIMeta - universal fields', () => {
+  describe('buildUIMeta - universal fields (inline mode)', () => {
     it('should always include ui/html', () => {
       const platforms: AIPlatformType[] = ['openai', 'claude', 'gemini', 'ext-apps', 'generic-mcp', 'unknown'];
 
@@ -186,7 +183,6 @@ describe('Platform Metadata Adapters', () => {
         const meta = buildUIMeta({
           uiConfig: baseUIConfig,
           platformType,
-          resourceUri,
           html,
         });
 
@@ -198,7 +194,6 @@ describe('Platform Metadata Adapters', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
-        resourceUri,
         html,
         token: 'test-token-123',
       });
@@ -210,7 +205,6 @@ describe('Platform Metadata Adapters', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
-        resourceUri,
         html,
         directUrl: 'https://mcp-server.example.com/widgets/test?token=123',
       });
@@ -224,7 +218,6 @@ describe('Platform Metadata Adapters', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'openai',
-        resourceUri,
         html,
       });
 
@@ -235,7 +228,6 @@ describe('Platform Metadata Adapters', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
-        resourceUri,
         html,
       });
 
@@ -249,7 +241,6 @@ describe('Platform Metadata Adapters', () => {
         const meta = buildUIMeta({
           uiConfig: baseUIConfig,
           platformType,
-          resourceUri,
           html,
         });
 

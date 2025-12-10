@@ -55,10 +55,12 @@ export {
   type WrapToolUIFullOptions,
   type WrapToolUIUniversalOptions,
   type WrapStaticWidgetOptions,
+  type WrapLeanWidgetShellOptions,
   wrapToolUI,
   wrapToolUIMinimal,
   wrapToolUIUniversal,
   wrapStaticWidgetUniversal,
+  wrapLeanWidgetShell,
   createTemplateHelpers,
   buildOpenAIMeta,
   getToolUIMimeType,
@@ -81,3 +83,30 @@ export {
   detectPIIType,
   redactPIIFromText,
 } from './sanitizer';
+
+// Renderer Runtime
+export {
+  RendererRuntime,
+  createRendererRuntime,
+  bootstrapRendererRuntime,
+  generateBootstrapScript,
+  type RendererRuntimeConfig,
+} from './renderer-runtime';
+
+// Renderer Adapters
+export {
+  type RendererAdapter,
+  type RenderContext,
+  type RenderOptions,
+  type RenderResult,
+  type AdapterLoader,
+  HtmlRendererAdapter,
+  ReactRendererAdapter,
+  MdxRendererAdapter,
+  createHtmlAdapter,
+  createReactAdapter,
+  createMdxAdapter,
+  loadAdapter,
+  getAdapterLoader,
+  adapterLoaders,
+} from './adapters';

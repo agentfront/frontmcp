@@ -6,6 +6,8 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
+import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
+import type { Scope } from '../../scope/scope.instance';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -209,11 +211,36 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // This should never happen if hasUIConfig returned true
             return item;
           }
+
+          // Get manifest info from registry (if available)
+          const scope = this.scope as Scope;
+          const manifest = scope.toolUI.getManifest(finalName);
+
+          // Detect UI type for CDN info
+          const uiType = (manifest?.uiType ?? scope.toolUI.detectUIType(uiConfig.template)) as UIType;
+
+          // Always include outputTemplate for all UI tools
+          // - mcp-resource mode: Full widget with React runtime and bridge
+          // - inline mode: Lean shell (just HTML + theme), actual widget comes in tool response
           const meta: Record<string, unknown> = {
             'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,
             'openai/resultCanProduceWidget': true,
             'openai/widgetAccessible': uiConfig.widgetAccessible ?? false,
+            // CDN info for client-side resource loading
+            'ui/cdn': buildCDNInfoForUIType(uiType),
           };
+
+          // Add manifest information for client-side renderer selection
+          if (manifest) {
+            meta['ui/type'] = manifest.uiType;
+            meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+            meta['ui/displayMode'] = manifest.displayMode;
+            meta['ui/bundlingMode'] = manifest.bundlingMode;
+          } else if (uiConfig.template) {
+            // Fallback to detecting UI type from template
+            meta['ui/type'] = uiType;
+            meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+          }
 
           // Add invocation status if configured
           if (uiConfig.invocationStatus?.invoking) {

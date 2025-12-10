@@ -584,3 +584,82 @@ export type {
 } from '../types';
 export type { ThemeConfig, PlatformCapabilities, DeepPartial } from '../theme';
 export { DEFAULT_THEME, OPENAI_PLATFORM, CLAUDE_PLATFORM } from '../theme';
+
+// ============================================
+// Widget Manifest Builder (New API)
+// ============================================
+
+export {
+  // Main builder
+  buildToolWidgetManifest,
+  batchBuildWidgets,
+  // Detection utilities
+  detectUIType,
+  // CSP utilities
+  buildCSPForType,
+  buildCSPMetaContent,
+  // Asset utilities
+  getRendererAssets,
+  // _meta field builders (NEW)
+  buildToolResponseMeta,
+  getOutputModeForClient,
+} from './widget-manifest';
+
+export type { BatchBuildOptions, BatchBuildResult, BuildMetaOptions } from './widget-manifest';
+
+// Re-export runtime types for convenience
+export type {
+  UIType,
+  BundlingMode,
+  DisplayMode,
+  OutputMode,
+  CSPDirectives,
+  RendererAssets,
+  WidgetManifest,
+  WidgetConfig,
+  BuildManifestResult,
+  BuildManifestOptions,
+  // _meta field types (NEW)
+  UIMetaFields,
+  OpenAIMetaFields,
+  ToolResponseMeta,
+  // Deprecated
+  RuntimePayload,
+} from '../types/ui-runtime';
+
+export {
+  DEFAULT_CSP_BY_TYPE,
+  DEFAULT_RENDERER_ASSETS,
+  isUIType,
+  isBundlingMode,
+  isDisplayMode,
+  isResourceMode,
+  isOutputMode,
+} from '../types/ui-runtime';
+
+export type { ResourceMode, CDNResource } from '../types/ui-runtime';
+
+// ============================================
+// CDN Resource Utilities
+// ============================================
+
+export {
+  // CDN URL Constants
+  REACT_CDN,
+  REACT_DOM_CDN,
+  MARKED_CDN,
+  HANDLEBARS_CDN,
+  MDX_RUNTIME_CDN,
+  TAILWIND_CDN,
+  // Helper Functions
+  getDefaultAssets,
+  buildCDNScriptTag,
+  buildScriptsForUIType,
+  buildTailwindScriptTag,
+  hasInlineScripts,
+  getURLsToPreFetch,
+  // CDN Info for tools/list _meta
+  buildCDNInfoForUIType,
+} from './cdn-resources';
+
+export type { CDNInfo } from './cdn-resources';

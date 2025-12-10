@@ -51,6 +51,16 @@ export interface UIMetadata {
   /** Direct URL to widget (for direct-url serving mode) */
   'ui/directUrl'?: string;
 
+  // Widget manifest fields (new)
+  /** Renderer type for the widget (html, react, mdx, markdown, auto) */
+  'ui/type'?: string;
+  /** Manifest URI for accessing widget configuration */
+  'ui/manifestUri'?: string;
+  /** Hash of the widget content for cache validation */
+  'ui/contentHash'?: string;
+  /** Required renderer assets for lazy loading */
+  'ui/requiredRenderers'?: string[];
+
   // OpenAI-specific fields
   /** OpenAI: Resource URI for widget template */
   'openai/outputTemplate'?: string;
@@ -117,14 +127,18 @@ export interface BuildUIMetaOptions<In = unknown, Out = unknown> {
   uiConfig: UITemplateConfig<In, Out>;
   /** Detected platform type */
   platformType: AIPlatformType;
-  /** Generated resource URI (e.g., ui://tools/get_weather/result/abc123) */
-  resourceUri: string;
   /** Rendered HTML content */
   html: string;
   /** Widget access token */
   token?: string;
   /** Direct URL for widget serving */
   directUrl?: string;
+  /** Renderer type for the widget (html, react, mdx, markdown, auto) */
+  rendererType?: string;
+  /** Hash of the widget content for cache validation */
+  contentHash?: string;
+  /** Manifest URI for accessing widget configuration */
+  manifestUri?: string;
 }
 
 // ============================================
@@ -134,11 +148,9 @@ export interface BuildUIMetaOptions<In = unknown, Out = unknown> {
 /**
  * Build platform-specific UI metadata for tool response.
  *
- * The `servingMode` option in `uiConfig` controls how HTML is delivered:
- * - `'inline'` (default): HTML embedded directly in `_meta['ui/html']`
- * - `'mcp-resource'`: Only resource URI included, client fetches via `resources/read`
- * - `'direct-url'`: Only direct URL included, client fetches via HTTP
- * - `'custom-url'`: Only custom URL included
+ * For inline serving mode (default), HTML is embedded directly in `_meta['ui/html']`.
+ * For mcp-resource mode, the static widget URI is provided in tools/list
+ * and the tool response contains only structured data.
  *
  * @example
  * ```typescript
@@ -147,31 +159,33 @@ export interface BuildUIMetaOptions<In = unknown, Out = unknown> {
  * const meta = buildUIMeta({
  *   uiConfig: { template: (ctx) => `<div>${ctx.output.value}</div>` },
  *   platformType: 'openai',
- *   resourceUri: 'ui://tools/my_tool/result/abc123',
  *   html: '<div>Hello World</div>',
  * });
  * ```
  */
 export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOptions<In, Out>): UIMetadata {
-  const { uiConfig, platformType, resourceUri, html, token, directUrl } = options;
+  const { uiConfig, platformType, html, token, directUrl, rendererType, contentHash, manifestUri } = options;
 
   const meta: UIMetadata = {};
-  const servingMode = uiConfig.servingMode ?? 'inline';
 
-  // Conditionally include HTML based on serving mode
-  // For 'inline' mode (default), embed HTML directly in response
-  // For other modes, client fetches HTML from resourceUri or directUrl
-  if (servingMode === 'inline') {
-    meta['ui/html'] = html;
+  // Add manifest-related fields if provided
+  if (rendererType) {
+    meta['ui/type'] = rendererType;
   }
+  if (contentHash) {
+    meta['ui/contentHash'] = contentHash;
+  }
+  if (manifestUri) {
+    meta['ui/manifestUri'] = manifestUri;
+  }
+
+  // For inline mode, embed HTML directly in response
+  // This is the only serving mode that uses buildUIMeta
+  // (mcp-resource mode returns structured data only, no UI _meta)
+  meta['ui/html'] = html;
 
   // Always include MIME type for platforms that need it
   meta['ui/mimeType'] = getMimeType(platformType);
-
-  // Include resource URI for mcp-resource mode
-  if (servingMode === 'mcp-resource') {
-    meta['ui/resourceUri'] = resourceUri;
-  }
 
   // Include token if provided
   if (token) {
@@ -186,7 +200,7 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
   // Platform-specific fields
   switch (platformType) {
     case 'openai':
-      return buildOpenAIMeta(meta, uiConfig, resourceUri);
+      return buildOpenAIMeta(meta, uiConfig);
 
     case 'claude':
       return buildClaudeMeta(meta, uiConfig);
@@ -197,13 +211,13 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
     case 'cursor':
     case 'continue':
     case 'cody':
-      return buildIDEMeta(meta, uiConfig, resourceUri);
+      return buildIDEMeta(meta, uiConfig);
 
     case 'generic-mcp':
-      return buildGenericMeta(meta, uiConfig, resourceUri);
+      return buildGenericMeta(meta, uiConfig);
 
     case 'ext-apps':
-      return buildExtAppsMeta(meta, uiConfig, resourceUri);
+      return buildExtAppsMeta(meta, uiConfig);
 
     default:
       // Unknown platform - just return universal fields
@@ -228,20 +242,17 @@ function getMimeType(platformType: AIPlatformType): string {
 }
 
 /**
- * Build OpenAI-specific metadata for tool CALL response.
+ * Build OpenAI-specific metadata for tool CALL response (inline mode).
  *
  * NOTE: Per OpenAI's pizzaz example, the call response should only include
  * invocation status in _meta. The outputTemplate, resultCanProduceWidget, etc.
  * are discovery-time fields that belong in tools/list _meta, NOT in call response.
  *
- * OpenAI fetches the widget HTML from the outputTemplate URI (set in tools/list)
- * and injects structuredContent as window.openai.toolOutput for the widget to read.
+ * For mcp-resource mode: OpenAI fetches the widget HTML from the outputTemplate URI
+ * (set in tools/list) and injects structuredContent as window.openai.toolOutput.
+ * For inline mode: HTML is embedded directly in _meta['ui/html'].
  */
-function buildOpenAIMeta<In, Out>(
-  meta: UIMetadata,
-  uiConfig: UITemplateConfig<In, Out>,
-  _resourceUri: string,
-): UIMetadata {
+function buildOpenAIMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
   // Only include invocation status in call response _meta
   // (per pizzaz example - they don't include outputTemplate in call response)
   if (uiConfig.invocationStatus?.invoking) {
@@ -305,11 +316,9 @@ function buildGeminiMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<I
 
 /**
  * Build IDE-specific metadata (Cursor, Continue, Cody).
+ * For inline mode, HTML is embedded directly in _meta['ui/html'].
  */
-function buildIDEMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>, resourceUri: string): UIMetadata {
-  // IDEs may support resource URIs
-  meta['ide/outputTemplate'] = resourceUri;
-
+function buildIDEMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
   if (uiConfig.widgetDescription) {
     meta['ide/widgetDescription'] = uiConfig.widgetDescription;
   }
@@ -319,15 +328,9 @@ function buildIDEMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, 
 
 /**
  * Build generic MCP client metadata.
+ * For inline mode, HTML is embedded directly in _meta['ui/html'].
  */
-function buildGenericMeta<In, Out>(
-  meta: UIMetadata,
-  uiConfig: UITemplateConfig<In, Out>,
-  resourceUri: string,
-): UIMetadata {
-  // Generic MCP clients may support the OpenAI format
-  meta['openai/outputTemplate'] = resourceUri;
-
+function buildGenericMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
   if (uiConfig.widgetAccessible) {
     meta['openai/widgetAccessible'] = true;
   }
@@ -341,24 +344,17 @@ function buildGenericMeta<In, Out>(
 
 /**
  * Build MCP Apps (ext-apps) metadata per specification.
+ * For inline mode, HTML is embedded directly in _meta['ui/html'].
  *
  * Per MCP Apps spec: https://github.com/modelcontextprotocol/ext-apps
- * - ui/resourceUri: Points to the UI resource
  * - ui/csp: Content security policy for sandboxed iframe
  * - ui/displayMode: How the UI should be displayed
  * - ui/prefersBorder: Whether to show border around UI
  * - ui/domain: Optional dedicated sandbox domain
  */
-function buildExtAppsMeta<In, Out>(
-  meta: UIMetadata,
-  uiConfig: UITemplateConfig<In, Out>,
-  resourceUri: string,
-): UIMetadata {
+function buildExtAppsMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
   // MCP Apps uses text/html+mcp MIME type
   meta['ui/mimeType'] = 'text/html+mcp';
-
-  // Resource URI for the UI template
-  meta['ui/resourceUri'] = resourceUri;
 
   // CSP configuration (uses camelCase per MCP Apps spec)
   if (uiConfig.csp) {

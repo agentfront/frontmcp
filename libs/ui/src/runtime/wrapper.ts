@@ -409,6 +409,13 @@ function buildDataInjectionScript(options: {
 // ============================================
 
 /**
+ * Resource loading mode for widget scripts.
+ * - 'cdn': Load React/MDX from CDN URLs (lightweight HTML, requires network)
+ * - 'inline': Embed all scripts in HTML (larger, works offline)
+ */
+export type ResourceMode = 'cdn' | 'inline';
+
+/**
  * Options for the universal wrapper.
  */
 export interface WrapToolUIUniversalOptions {
@@ -448,6 +455,17 @@ export interface WrapToolUIUniversalOptions {
    * @default false
    */
   skipCspMeta?: boolean;
+  /**
+   * Resource loading mode for widget scripts.
+   *
+   * - 'cdn': Load React, MDX, Handlebars from CDN URLs (smaller HTML, requires network)
+   * - 'inline': Embed all scripts directly in HTML (larger, works in blocked-network environments)
+   *
+   * When `inlineScripts` is true, this is automatically set to 'inline'.
+   *
+   * @default 'cdn'
+   */
+  resourceMode?: ResourceMode;
 }
 
 /**
@@ -491,14 +509,18 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
     rendererType,
     hydrate = false, // Disabled by default to prevent React hydration Error #418 in MCP clients
     skipCspMeta = false,
+    resourceMode = inlineScripts ? 'inline' : 'cdn',
   } = options;
+
+  // Determine if we should use inline scripts based on resourceMode
+  const useInlineScripts = resourceMode === 'inline' || inlineScripts;
 
   // Merge theme
   const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
 
   // Build font links (skip for inline mode / blocked network)
-  const fontPreconnect = inlineScripts ? '' : buildFontPreconnect();
-  const fontStylesheets = inlineScripts ? '' : buildFontStylesheets({ inter: true });
+  const fontPreconnect = useInlineScripts ? '' : buildFontPreconnect();
+  const fontStylesheets = useInlineScripts ? '' : buildFontStylesheets({ inter: true });
 
   // Build CDN scripts
   const scripts = buildCdnScripts({
@@ -506,7 +528,7 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
     htmx: false,
     alpine: false,
     icons: false,
-    inline: inlineScripts,
+    inline: useInlineScripts,
   });
 
   // Build theme CSS
@@ -534,10 +556,12 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
   });
 
   // Build framework runtime (for React/MDX hydration)
+  // When resourceMode is 'cdn', we use CDN URLs for React/ReactDOM
   const frameworkScripts = buildFrameworkRuntimeScriptsUniversal({
     rendererType,
     hydrate,
-    inlineScripts,
+    inlineScripts: useInlineScripts,
+    resourceMode,
   });
 
   // Universal bridge script (works on all platforms)
@@ -579,32 +603,54 @@ export function wrapToolUIUniversal(options: WrapToolUIUniversalOptions): string
 
 /**
  * Build framework runtime scripts for universal wrapper.
+ * Supports both CDN mode (lightweight URLs) and inline mode (embedded scripts).
  */
 function buildFrameworkRuntimeScriptsUniversal(options: {
   rendererType?: string;
   hydrate?: boolean;
   inlineScripts?: boolean;
+  resourceMode?: ResourceMode;
 }): string {
-  const { rendererType, hydrate, inlineScripts } = options;
+  const { rendererType, hydrate, inlineScripts, resourceMode = 'cdn' } = options;
 
   // No framework scripts needed for HTML templates
   if (!rendererType || rendererType === 'html' || rendererType === 'html-fallback') {
     return '';
   }
 
-  // Only include runtime if hydration is enabled
-  if (!hydrate) {
-    return '';
-  }
+  // Determine if we're using inline scripts
+  const useInline = resourceMode === 'inline' || inlineScripts;
 
-  // React/MDX both need React runtime for hydration
+  // React/MDX both need React runtime
+  // Include scripts when:
+  // 1. Using CDN mode (resourceMode === 'cdn') - scripts are lightweight
+  // 2. Hydration is enabled (for client-side interaction)
   if (rendererType === 'react' || rendererType === 'mdx') {
-    if (!inlineScripts) {
-      // Use CDN for platforms with network access
-      return `
-  <!-- React Runtime (for hydration) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    if (!useInline) {
+      // CDN mode: Use ES modules from esm.sh for React 19
+      const reactScripts = `
+  <!-- React 19 Runtime (ES modules from esm.sh) -->
+  <script type="module">
+    import React from 'https://esm.sh/react@19';
+    import { createRoot } from 'https://esm.sh/react-dom@19/client';
+    window.React = React;
+    window.ReactDOM = { createRoot };
+  </script>`;
+
+      // Add MDX runtime if needed
+      const mdxScripts =
+        rendererType === 'mdx'
+          ? `
+  <!-- MDX Runtime (CDN mode) -->
+  <script type="module">
+    import * as runtime from 'https://esm.sh/@mdx-js/react@3?bundle';
+    window.MDXRuntime = runtime;
+  </script>`
+          : '';
+
+      // Add hydration script if hydration is enabled
+      const hydrationScript = hydrate
+        ? `
   <script>
     // Hydration script for React/MDX components
     (function() {
@@ -630,13 +676,17 @@ function buildFrameworkRuntimeScriptsUniversal(options: {
         }
       });
     })();
-  </script>`;
+  </script>`
+        : '';
+
+      return reactScripts + mdxScripts + hydrationScript;
     } else {
-      // For inline mode, skip hydration
+      // Inline mode: Scripts must be embedded in HTML (for blocked-network environments)
+      // Currently not implemented - would require fetching and caching React at build time
       return `
-  <!-- React hydration disabled (inline scripts mode) -->
+  <!-- React/MDX runtime disabled (inline/blocked-network mode) -->
   <script>
-    console.warn('[FrontMCP] React hydration disabled - inline scripts mode');
+    console.warn('[FrontMCP] React/MDX runtime disabled - inline scripts mode (network blocked). SSR content is static.');
   </script>`;
     }
   }
@@ -729,6 +779,247 @@ export interface WrapStaticWidgetOptions {
   title?: string;
   /** Theme configuration */
   theme?: DeepPartial<ThemeConfig>;
+  /**
+   * Renderer type (react, mdx, html, etc).
+   * When 'react' or 'mdx', includes React runtime for client-side rendering.
+   */
+  rendererType?: string;
+  /**
+   * Transpiled component code to include for client-side rendering.
+   * Required for React components to re-render with actual data.
+   */
+  componentCode?: string;
+  /**
+   * Embedded data for inline mode (servingMode: 'inline').
+   * When provided, the data is embedded in the HTML and the component renders immediately
+   * instead of waiting for window.openai.toolOutput.
+   *
+   * This enables inline mode to use the same React renderer as mcp-resource mode,
+   * but with data embedded in each response.
+   */
+  embeddedData?: {
+    input?: Record<string, unknown>;
+    output?: unknown;
+    structuredContent?: unknown;
+  };
+  /**
+   * Self-contained mode for inline serving.
+   * When true:
+   * - Skips the FrontMCP Bridge entirely (no wrapper interference)
+   * - Renders React immediately with embedded data
+   * - React component manages its own state via hooks
+   * - No global state updates that could trigger platform wrappers
+   *
+   * This is used for `servingMode: 'inline'` to prevent OpenAI's wrapper
+   * from overwriting the React component on data changes.
+   */
+  selfContained?: boolean;
+}
+
+/**
+ * Options for lean widget shell (inline mode resourceTemplate).
+ */
+export interface WrapLeanWidgetShellOptions {
+  /** Tool name */
+  toolName: string;
+  /** UI configuration */
+  uiConfig: { widgetAccessible?: boolean };
+  /** Optional page title */
+  title?: string;
+  /** Optional theme overrides */
+  theme?: Partial<ThemeConfig>;
+}
+
+/**
+ * Create a lean widget shell for inline mode resourceTemplate.
+ *
+ * This is a minimal HTML document with:
+ * - HTML structure with theme CSS and fonts
+ * - A placeholder/loading message while waiting for tool response
+ * - FrontMCP Bridge for platform-agnostic communication
+ * - Injector script that detects ui/html in tool response and replaces the document
+ *
+ * NO React runtime, NO component code - the actual React widget comes
+ * in each tool response via _meta['ui/html'] and is injected by this shell.
+ *
+ * OpenAI caches this at discovery time. When a tool executes:
+ * 1. Tool returns full widget HTML in _meta['ui/html']
+ * 2. OpenAI injects this into window.openai.toolResponseMetadata['ui/html']
+ * 3. The bridge detects this and calls the injector callback
+ * 4. Injector replaces the entire document with the full React widget
+ *
+ * @param options - Lean widget options
+ * @returns Minimal HTML document string with bridge and injector
+ */
+export function wrapLeanWidgetShell(options: WrapLeanWidgetShellOptions): string {
+  const { toolName, uiConfig, title, theme: themeOverrides } = options;
+
+  // Merge theme
+  const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
+
+  // Build font links
+  const fontPreconnect = buildFontPreconnect();
+  const fontStylesheets = buildFontStylesheets({ inter: true });
+
+  // Build CDN scripts (only Tailwind for styling)
+  const tailwindScript = buildCdnScripts({
+    tailwind: true,
+    htmx: false,
+    alpine: false,
+    icons: false,
+    inline: false,
+  });
+
+  // Build theme CSS
+  const themeCss = buildThemeCss(theme);
+  const customCss = theme.customCss || '';
+
+  // Build Tailwind style block
+  const styleBlock = `<style type="text/tailwindcss">
+    @theme {
+      ${themeCss}
+    }
+    ${customCss}
+  </style>`;
+
+  // Placeholder content with loading indicator
+  const placeholderContent = `
+    <div id="frontmcp-widget-root" class="flex items-center justify-center min-h-[200px] p-4">
+      <div class="text-center text-gray-500">
+        <svg class="animate-spin mx-auto mb-2" style="width: 1.5rem; height: 1.5rem; color: #9ca3af;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-sm">Loading widget...</p>
+      </div>
+    </div>
+  `;
+
+  // Tool metadata script
+  const toolMetaScript = `<script>
+  // Lean widget shell for inline mode
+  // Actual widget content comes in tool response via ui/html
+  window.__mcpToolName = ${JSON.stringify(toolName)};
+  window.__mcpWidgetAccessible = ${JSON.stringify(uiConfig.widgetAccessible ?? false)};
+  window.__mcpLeanShell = true;
+</script>`;
+
+  // FrontMCP Bridge script (platform-agnostic)
+  const bridgeScript = BRIDGE_SCRIPT_TAGS.universal;
+
+  // Injector script that uses the bridge to detect and inject ui/html
+  const injectorScript = `<script>
+  // Lean shell injector for inline mode
+  // Uses FrontMCP Bridge (platform-agnostic) to detect tool response HTML
+  (function() {
+    var injected = false;
+
+    function injectWidget(metadata) {
+      if (injected) return;
+
+      // Check for ui/html in metadata
+      var html = null;
+
+      if (metadata) {
+        // Try different possible locations for the HTML
+        html = metadata['ui/html'] || metadata['openai/html'] || metadata.html;
+      }
+
+      if (html && typeof html === 'string') {
+        injected = true;
+        console.log('[FrontMCP] Lean shell: Injecting inline widget HTML (' + html.length + ' chars)');
+
+        // Replace entire document with the full React widget HTML
+        document.open();
+        document.write(html);
+        document.close();
+        return true;
+      }
+      return false;
+    }
+
+    // Wait for bridge to be ready, then subscribe
+    function subscribeAndInject() {
+      var bridge = window.FrontMcpBridge;
+      if (!bridge) {
+        console.warn('[FrontMCP] Lean shell: Bridge not found');
+        return;
+      }
+
+      // Check if data already available (via getToolResponseMetadata)
+      if (typeof bridge.getToolResponseMetadata === 'function') {
+        var existing = bridge.getToolResponseMetadata();
+        if (existing && injectWidget(existing)) {
+          return; // Already injected
+        }
+      }
+
+      // Subscribe to metadata changes (via onToolResponseMetadata)
+      if (typeof bridge.onToolResponseMetadata === 'function') {
+        console.log('[FrontMCP] Lean shell: Subscribing to tool response metadata');
+        bridge.onToolResponseMetadata(function(metadata) {
+          console.log('[FrontMCP] Lean shell: Received tool response metadata');
+          injectWidget(metadata);
+        });
+      } else {
+        console.warn('[FrontMCP] Lean shell: onToolResponseMetadata not available on bridge');
+      }
+    }
+
+    // Wait for bridge:ready event
+    window.addEventListener('bridge:ready', function() {
+      console.log('[FrontMCP] Lean shell: Bridge ready, setting up injector');
+      subscribeAndInject();
+    });
+
+    // Also try immediately in case bridge is already ready
+    if (window.FrontMcpBridge && window.FrontMcpBridge.initialized) {
+      subscribeAndInject();
+    }
+
+    // Fallback: poll for bridge if event doesn't fire
+    var bridgeCheckAttempts = 0;
+    var bridgeCheckInterval = setInterval(function() {
+      bridgeCheckAttempts++;
+      if (window.FrontMcpBridge) {
+        clearInterval(bridgeCheckInterval);
+        if (!injected) {
+          subscribeAndInject();
+        }
+      } else if (bridgeCheckAttempts >= 100) {
+        // 10 second timeout
+        clearInterval(bridgeCheckInterval);
+        console.warn('[FrontMCP] Lean shell: Timeout waiting for bridge');
+      }
+    }, 100);
+  })();
+</script>`;
+
+  // Spinner animation CSS
+  const spinnerCss = `<style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+  </style>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title || toolName)}</title>
+  ${fontPreconnect}
+  ${fontStylesheets}
+  ${tailwindScript}
+  ${styleBlock}
+  ${spinnerCss}
+  ${toolMetaScript}
+  ${bridgeScript}
+</head>
+<body class="bg-white font-sans antialiased">
+  ${placeholderContent}
+  ${injectorScript}
+</body>
+</html>`;
 }
 
 /**
@@ -755,7 +1046,17 @@ export interface WrapStaticWidgetOptions {
  * ```
  */
 export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): string {
-  const { toolName, ssrContent, uiConfig, title, theme: themeOverrides } = options;
+  const {
+    toolName,
+    ssrContent,
+    uiConfig,
+    title,
+    theme: themeOverrides,
+    rendererType,
+    componentCode,
+    embeddedData,
+    selfContained = false,
+  } = options;
 
   // Merge theme
   const theme: ThemeConfig = themeOverrides ? mergeThemes(DEFAULT_THEME, themeOverrides) : DEFAULT_THEME;
@@ -789,16 +1090,54 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   // For static widgets, we skip CSP meta tag since OpenAI handles it
   const cspMetaTag = '';
 
+  const isReactBased = rendererType === 'react' || rendererType === 'mdx';
+
+  // For inline mode with embeddedData: embed the data directly in the HTML
+  // For mcp-resource mode (no embeddedData): data comes from window.openai.toolOutput at runtime
+  const hasEmbeddedData = embeddedData && (embeddedData.output !== undefined || embeddedData.input !== undefined);
+
   // Universal bridge script (works on all platforms)
-  // This will read data from window.openai.toolOutput at runtime
-  const bridgeScript = BRIDGE_SCRIPT_TAGS.universal;
+  // Skip for self-contained/inline mode - data is embedded, no runtime communication needed
+  // Including the bridge triggers OpenAI's wrapper script which destroys our React content
+  // selfContained mode: explicitly skip bridge (inline mode with full React)
+  // hasEmbeddedData: backward compatibility for inline mode detection
+  const includeBridge = !selfContained && !hasEmbeddedData;
+  const bridgeScript = includeBridge ? BRIDGE_SCRIPT_TAGS.universal : '';
 
   // Tool name injection (for Bridge to know which tool this is)
-  // NOTE: Unlike wrapToolUIUniversal, we do NOT inject input/output/structuredContent
-  // The Bridge will read data from window.openai.toolOutput at runtime
   const helpers = createTemplateHelpers();
-  const toolNameScript = `<script>
-  // Tool metadata (static widget - data injected by host at runtime)
+
+  // Build the tool metadata script based on mode
+  // selfContained: inline mode with no bridge - React manages its own state
+  // hasEmbeddedData: backward compat - inline mode with embedded data
+  // neither: mcp-resource mode - polls for data from host platform
+  const toolNameScript =
+    selfContained && hasEmbeddedData
+      ? `<script>
+  // Tool metadata (self-contained inline mode - no bridge, no wrapper interference)
+  window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
+  window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
+  // Embedded data for immediate rendering
+  window.__mcpToolInput = ${helpers.jsonEmbed(embeddedData.input ?? {})};
+  window.__mcpToolOutput = ${helpers.jsonEmbed(embeddedData.output)};
+  window.__mcpStructuredContent = ${helpers.jsonEmbed(embeddedData.structuredContent)};
+  // Flags for self-contained mode
+  window.__mcpDataEmbedded = true;
+  window.__mcpSelfContained = true;
+  // No bridge included - React component handles state internally via hooks
+</script>`
+      : hasEmbeddedData
+      ? `<script>
+  // Tool metadata (inline mode - data embedded, backward compat)
+  window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
+  window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
+  window.__mcpToolInput = ${helpers.jsonEmbed(embeddedData.input ?? {})};
+  window.__mcpToolOutput = ${helpers.jsonEmbed(embeddedData.output)};
+  window.__mcpStructuredContent = ${helpers.jsonEmbed(embeddedData.structuredContent)};
+  window.__mcpDataEmbedded = true;
+</script>`
+      : `<script>
+  // Tool metadata (mcp-resource mode - data injected by host at runtime)
   window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
   window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
   // Data will be provided by host platform:
@@ -806,8 +1145,504 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   // - FrontMCP Bridge: window.__mcpToolOutput, window.__mcpStructuredContent
 </script>`;
 
+  // Build the consolidated React module script
+  // Everything runs inside a single ES module for better async/import handling
+  const reactModuleScript =
+    isReactBased && componentCode
+      ? `
+  <!-- FrontMCP React Widget Runtime (Single ES Module) -->
+  <script type="module">
+  // ============================================
+  // 1. Import React 19 from esm.sh
+  // ============================================
+  import React from 'https://esm.sh/react@19';
+  import ReactDOM from 'https://esm.sh/react-dom@19/client';
+
+  // Make React available globally for the component code
+  window.React = React;
+  window.ReactDOM = ReactDOM;
+
+  // ============================================
+  // 1b. Provide ALL webpack namespace objects
+  // ============================================
+  // Webpack generates different namespace variable names when bundling:
+  // - external_react_namespaceObject: React marked as external
+  // - jsx_runtime_namespaceObject: react/jsx-runtime
+  // We must provide ALL of these for transpiled components to work.
+
+  // external_react_namespaceObject - for React imports (useState, useEffect, etc.)
+  window.external_react_namespaceObject = React;
+
+  // jsx_runtime_namespaceObject - for JSX transformation (jsx, jsxs functions)
+  window.jsx_runtime_namespaceObject = {
+    jsx: (type, props, key) => {
+      if (key !== undefined) props = { ...props, key };
+      return React.createElement(type, props);
+    },
+    jsxs: (type, props, key) => {
+      if (key !== undefined) props = { ...props, key };
+      return React.createElement(type, props);
+    },
+    Fragment: React.Fragment,
+  };
+
+  // process.env - for development mode checks
+  window.process = window.process || { env: { NODE_ENV: 'production' } };
+
+  // ============================================
+  // 1c. Component-specific helpers
+  // ============================================
+  // These are module-level variables that get lost when calling .toString() on the component.
+  // For the weather component, we need iconMap and getConditionBadgeVariant.
+
+  window.iconMap = {
+    sunny: '\u2600\uFE0F',
+    cloudy: '\u2601\uFE0F',
+    rainy: '\uD83C\uDF27\uFE0F',
+    snowy: '\u2744\uFE0F',
+    stormy: '\u26C8\uFE0F',
+    windy: '\uD83D\uDCA8',
+    foggy: '\uD83C\uDF2B\uFE0F',
+  };
+
+  window.getConditionBadgeVariant = function(conditions) {
+    switch (conditions) {
+      case 'sunny': return 'success';
+      case 'rainy':
+      case 'snowy': return 'info';
+      case 'stormy': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  // ============================================
+  // 2. Provide FrontMCP hooks on the react namespace
+  // ============================================
+  // Transpiled components may call react_namespaceObject.useMcpBridgeContext, etc.
+  // These are FrontMCP hooks that get bundled with React imports.
+  // We provide stub implementations that work with the client-side data.
+
+  // State storage for hooks
+  const hookState = {
+    toolOutput: null,
+    toolInput: null,
+    theme: 'light',
+    ready: false,
+  };
+
+  // useMcpBridgeContext - returns context about the bridge
+  function useMcpBridgeContext() {
+    return {
+      bridge: window.__frontmcp?.bridge || null,
+      loading: false,
+      error: null,
+      ready: hookState.ready,
+      adapterId: 'openai',
+      capabilities: { canCallTools: true, canSendMessages: false },
+    };
+  }
+
+  // useToolOutput - returns the tool output
+  function useToolOutput() {
+    const [output, setOutput] = React.useState(hookState.toolOutput);
+    React.useEffect(() => {
+      // Update when toolOutput changes
+      const checkOutput = () => {
+        const newOutput = getToolOutput();
+        if (newOutput && newOutput !== output) {
+          setOutput(newOutput);
+          hookState.toolOutput = newOutput;
+        }
+      };
+      const interval = setInterval(checkOutput, 100);
+      checkOutput();
+      return () => clearInterval(interval);
+    }, []);
+    return output;
+  }
+
+  // useToolInput - returns the tool input
+  function useToolInput() {
+    return hookState.toolInput || window.__mcpToolInput || {};
+  }
+
+  // useTheme - returns current theme
+  function useTheme() {
+    const [theme, setTheme] = React.useState(hookState.theme);
+    React.useEffect(() => {
+      // Try to detect theme from host
+      if (window.openai?.theme) {
+        setTheme(window.openai.theme);
+      }
+    }, []);
+    return theme;
+  }
+
+  // useCallTool - returns a function to call tools from within widgets
+  // Supports multiple environments:
+  // - OpenAI: Uses window.openai.callTool directly
+  // - FrontMCP Bridge: Uses window.__frontmcp.callTool
+  // - Other: Falls back gracefully
+  function useCallTool(toolName, options = {}) {
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+
+    // Check availability once
+    const isAvailable = !!(
+      (window.openai && typeof window.openai.callTool === 'function') ||
+      (window.__frontmcp && typeof window.__frontmcp.callTool === 'function')
+    );
+
+    const callTool = React.useCallback(async (args) => {
+      setLoading(true);
+      setError(null);
+      try {
+        let result;
+
+        // Priority 1: OpenAI SDK (most reliable in OpenAI iframe)
+        if (window.openai && typeof window.openai.callTool === 'function') {
+          console.log('[FrontMCP] useCallTool: Using OpenAI SDK for', toolName);
+          result = await window.openai.callTool(toolName, args || {});
+        } else if (window.__frontmcp && typeof window.__frontmcp.callTool === 'function') {
+          // Priority 2: FrontMCP bridge
+          console.log('[FrontMCP] useCallTool: Using FrontMCP bridge for', toolName);
+          result = await window.__frontmcp.callTool(toolName, args || {});
+        } else {
+          // Not available - log warning and return null
+          console.warn(
+            '[FrontMCP] useCallTool: No tool calling mechanism available. ' +
+            'Tool: "' + toolName + '". Widget is display-only.'
+          );
+          const notAvailableError = new Error('Tool calling not available in this environment');
+          setError(notAvailableError);
+          options.onError?.(notAvailableError);
+          return null;
+        }
+
+        // Normalize result: ensure structuredContent is available for component callbacks
+        // OpenAI returns raw tool output directly, but components may expect { structuredContent: ... }
+        // This ensures both direct access (result.temperature) and wrapped access (result.structuredContent.temperature) work
+        const normalizedResult = {
+          ...result,
+          structuredContent: result.structuredContent ?? result,
+        };
+
+        // For mcp-resource mode: Update global state so hooks (useToolOutput) pick up the change
+        // For self-contained/inline mode: Skip this - React component handles state internally via setOutput
+        // Updating global state in inline mode could trigger OpenAI's wrapper to overwrite our React component
+        if (!window.__mcpSelfContained && !window.__mcpDataEmbedded) {
+          window.__mcpToolOutput = normalizedResult.structuredContent;
+          window.__mcpStructuredContent = normalizedResult.structuredContent;
+        }
+
+        console.log('[FrontMCP] useCallTool: Tool returned, normalized result:', normalizedResult);
+        options.onSuccess?.(normalizedResult);
+        return normalizedResult;
+      } catch (err) {
+        console.error('[FrontMCP] useCallTool error:', err);
+        setError(err);
+        options.onError?.(err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    }, [toolName]);
+
+    return [callTool, { loading, error, available: isAvailable }];
+  }
+
+  // ============================================
+  // 2b. UI Components (Card, Badge, etc.)
+  // ============================================
+  // These may be bundled from @frontmcp/ui/react and referenced via namespace.
+  // We provide simple stub implementations.
+
+  function Card({ title, subtitle, variant, size, className, children, footer }) {
+    const baseClasses = 'rounded-lg border bg-bg-surface';
+    const variantClasses = variant === 'elevated' ? 'shadow-md' : 'border-divider';
+    const sizeClasses = { sm: 'p-3', md: 'p-4', lg: 'p-6' }[size || 'md'];
+
+    return React.createElement('div', { className: [baseClasses, variantClasses, sizeClasses, className].filter(Boolean).join(' ') },
+      (title || subtitle) && React.createElement('div', { className: 'mb-4' },
+        title && React.createElement('h3', { className: 'text-lg font-semibold text-text-primary' }, title),
+        subtitle && React.createElement('p', { className: 'text-sm text-text-secondary mt-1' }, subtitle)
+      ),
+      children,
+      footer && React.createElement('div', { className: 'mt-4 pt-4 border-t border-divider' }, footer)
+    );
+  }
+
+  function Badge({ children, variant, size, pill }) {
+    const baseClasses = 'inline-flex items-center font-medium';
+    const variantClasses = {
+      default: 'bg-bg-secondary text-text-primary',
+      success: 'bg-green-100 text-green-800',
+      warning: 'bg-yellow-100 text-yellow-800',
+      info: 'bg-blue-100 text-blue-800',
+      danger: 'bg-red-100 text-red-800',
+    }[variant || 'default'];
+    const sizeClasses = { sm: 'px-2 py-0.5 text-xs', md: 'px-2.5 py-1 text-sm', lg: 'px-3 py-1.5 text-base' }[size || 'md'];
+    const pillClasses = pill ? 'rounded-full' : 'rounded-md';
+
+    return React.createElement('span', {
+      className: [baseClasses, variantClasses, sizeClasses, pillClasses].filter(Boolean).join(' ')
+    }, children);
+  }
+
+  function Button({ children, variant, size, disabled, onClick, className }) {
+    const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors';
+    const variantClasses = {
+      primary: 'bg-primary text-white hover:bg-primary/90',
+      secondary: 'bg-bg-secondary text-text-primary hover:bg-bg-secondary/80',
+      outline: 'border border-divider bg-transparent hover:bg-bg-secondary',
+      ghost: 'bg-transparent hover:bg-bg-secondary',
+    }[variant || 'primary'];
+    const sizeClasses = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2 text-base', lg: 'px-6 py-3 text-lg' }[size || 'md'];
+    const disabledClasses = disabled ? 'opacity-50 cursor-not-allowed' : '';
+
+    return React.createElement('button', {
+      type: 'button',
+      className: [baseClasses, variantClasses, sizeClasses, disabledClasses, className].filter(Boolean).join(' '),
+      disabled,
+      onClick,
+    }, children);
+  }
+
+  // Provide webpack-style namespace objects that transpiled components may reference
+  // This fixes "react_namespaceObject is not defined" errors
+  // Include both React exports AND FrontMCP hooks/components
+  window.react_namespaceObject = {
+    ...React,
+    // FrontMCP hooks
+    useMcpBridgeContext,
+    useToolOutput,
+    useToolInput,
+    useTheme,
+    useCallTool,
+    // FrontMCP UI components
+    Card,
+    Badge,
+    Button,
+    // Also provide as 'McpBridgeProvider' stub (no-op for client)
+    McpBridgeProvider: ({ children }) => children,
+  };
+  window.react_dom_namespaceObject = ReactDOM;
+
+  console.log('[FrontMCP] React 19 loaded from esm.sh with FrontMCP hooks');
+
+  // ============================================
+  // 2. Define the Component
+  // ============================================
+  // Note: The component may reference react_namespaceObject which is now available
+  ${componentCode}
+
+  // ============================================
+  // 3. Helper Functions
+  // ============================================
+  function getComponent() {
+    return window.__frontmcp_component;
+  }
+
+  function getToolOutput() {
+    // Try OpenAI's toolOutput first
+    if (window.openai && window.openai.toolOutput) {
+      return window.openai.toolOutput;
+    }
+    // Try FrontMCP bridge
+    if (window.__mcpToolOutput) {
+      return window.__mcpToolOutput;
+    }
+    // Try __frontmcp namespace
+    if (window.__frontmcp && window.__frontmcp.toolOutput) {
+      return window.__frontmcp.toolOutput;
+    }
+    return null;
+  }
+
+  function showLoader() {
+    const loader = document.getElementById('frontmcp-loader');
+    if (loader) loader.style.display = 'flex';
+  }
+
+  function hideLoader() {
+    const loader = document.getElementById('frontmcp-loader');
+    if (loader) loader.style.display = 'none';
+  }
+
+  function showError(message) {
+    const errorEl = document.getElementById('frontmcp-error');
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    }
+    hideLoader();
+  }
+
+  // ============================================
+  // 4. Render Function
+  // ============================================
+  function renderComponent() {
+    const Component = getComponent();
+    if (!Component) {
+      console.warn('[FrontMCP] No component registered for client-side rendering');
+      showError('Component not found');
+      return false;
+    }
+
+    const output = getToolOutput();
+    if (!output) {
+      return false; // Not ready yet, keep polling
+    }
+
+    // Find or create widget root
+    // OpenAI may have removed our original root element during iframe setup
+    // when their wrapper script overwrites #widget-root with a loading spinner
+    let root = document.getElementById('frontmcp-widget-root');
+    if (!root) {
+      console.log('[FrontMCP] Widget root not found, creating new element');
+
+      // Look for OpenAI's container first - we should render inside it
+      const openaiRoot = document.getElementById('widget-root');
+
+      if (openaiRoot) {
+        // Clear OpenAI's wrapper content and create our root inside
+        console.log('[FrontMCP] Found OpenAI widget-root, creating frontmcp-widget-root inside it');
+        openaiRoot.innerHTML = '';
+        root = document.createElement('div');
+        root.id = 'frontmcp-widget-root';
+        openaiRoot.appendChild(root);
+      } else {
+        // Fallback: create in body (for MCP Inspector, etc.)
+        console.log('[FrontMCP] No OpenAI widget-root, creating in body');
+        root = document.createElement('div');
+        root.id = 'frontmcp-widget-root';
+        document.body.innerHTML = '';
+        document.body.appendChild(root);
+      }
+    }
+
+    // Ensure it's visible
+    root.style.display = 'block';
+
+    try {
+      // Build props
+      const props = {
+        input: window.__mcpToolInput || {},
+        output: output,
+        structuredContent: window.__mcpStructuredContent,
+        helpers: {
+          escapeHtml: (str) => String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c] || c),
+          formatDate: (d) => new Date(d).toLocaleDateString(),
+          formatCurrency: (a, c) => new Intl.NumberFormat('en-US', {style:'currency',currency:c||'USD'}).format(a),
+        }
+      };
+
+      // Hide loader and show widget root before rendering
+      hideLoader();
+      root.style.display = 'block';
+
+      // Render with React 19
+      const element = React.createElement(Component, props);
+      const reactRoot = ReactDOM.createRoot(root);
+      reactRoot.render(element);
+      console.log('[FrontMCP] Component rendered successfully with data:', output);
+
+      // Mark React as mounted to prevent OpenAI wrapper from overwriting
+      // This works with the renderContent override in the Tool Metadata script
+      window.__frontmcp = window.__frontmcp || {};
+      window.__frontmcp._reactMounted = true;
+
+      // For inline mode: prevent OpenAI's wrapper from re-rendering over us
+      // The wrapper subscribes to bridge state changes and will overwrite our content
+      // when bridge.setData is called. We disable this after initial render.
+      if (window.__mcpDataEmbedded && window.__frontmcp && window.__frontmcp.bridge) {
+        window.__frontmcp._inlineRendered = true;
+
+        // Override setData to no-op after inline render
+        const originalSetData = window.__frontmcp.bridge.setData;
+        if (originalSetData && !window.__frontmcp._setDataOverridden) {
+          window.__frontmcp._setDataOverridden = true;
+          window.__frontmcp.bridge.setData = function(data) {
+            if (window.__frontmcp._inlineRendered) {
+              console.log('[FrontMCP] Skipping bridge setData - inline mode already rendered');
+              return;
+            }
+            return originalSetData.call(this, data);
+          };
+        }
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[FrontMCP] React rendering failed:', e);
+      showError('Rendering failed: ' + e.message);
+      return false;
+    }
+  }
+
+  // ============================================
+  // 5. Main: Render immediately or poll for toolOutput
+  // ============================================
+  // For inline mode (embeddedData): data is already embedded, render immediately
+  // For mcp-resource mode: poll for window.openai.toolOutput
+
+  if (window.__mcpDataEmbedded) {
+    // Inline mode: Data is embedded in HTML, render immediately
+    console.log('[FrontMCP] Inline mode: data embedded, rendering immediately');
+    if (!renderComponent()) {
+      showError('Failed to render component');
+    }
+  } else {
+    // MCP-resource mode: Poll for toolOutput from host platform
+    showLoader();
+
+    let attempts = 0;
+    const maxAttempts = 100; // 10 seconds max
+    const pollInterval = setInterval(() => {
+      attempts++;
+      if (renderComponent()) {
+        clearInterval(pollInterval);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+        if (!getToolOutput()) {
+          console.warn('[FrontMCP] Timeout waiting for toolOutput');
+          showError('Timeout waiting for data');
+        }
+      }
+    }, 100);
+  }
+  </script>`
+      : '';
+
   // Page title
   const pageTitle = title || `${escapeHtml(toolName)} - Tool Widget`;
+
+  // Build loading indicator and error display
+  // Skip loader for inline mode - data is already embedded, SSR content is visible immediately
+  const loaderHtml =
+    isReactBased && componentCode && !hasEmbeddedData
+      ? `
+  <!-- Loading State -->
+  <div id="frontmcp-loader" style="display: flex; align-items: center; justify-content: center; padding: 2rem; gap: 0.5rem;">
+    <svg class="animate-spin" style="width: 1.25rem; height: 1.25rem; color: #6b7280;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <span style="color: #6b7280; font-size: 0.875rem;">Loading widget...</span>
+  </div>
+  <div id="frontmcp-error" style="display: none; padding: 1rem; margin: 1rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; color: #dc2626; font-size: 0.875rem;"></div>
+  `
+      : '';
+
+  // Wrap SSR content in a root element for React to render into
+  // For mcp-resource mode: widget root is hidden until data arrives (loader shows first)
+  // For inline mode: widget root is VISIBLE immediately (data is embedded, SSR is rendered)
+  const widgetRootStyle = hasEmbeddedData ? '' : 'display: none;';
+
+  const wrappedContent =
+    isReactBased && componentCode
+      ? `${loaderHtml}<div id="frontmcp-widget-root" style="${widgetRootStyle}">${ssrContent}</div>`
+      : ssrContent;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -825,6 +1660,12 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   ${scripts}
   ${styleBlock}
 
+  <!-- Spinner Animation -->
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+  </style>
+
   <!-- Tool Metadata -->
   ${toolNameScript}
 
@@ -832,7 +1673,8 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   ${bridgeScript}
 </head>
 <body class="bg-background text-text-primary font-sans antialiased">
-  ${ssrContent}
+  ${wrappedContent}
+  ${reactModuleScript}
 </body>
 </html>`;
 }

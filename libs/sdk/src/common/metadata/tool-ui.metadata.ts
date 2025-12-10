@@ -10,6 +10,7 @@
 
 // Re-export all UI configuration types from @frontmcp/ui
 export {
+  // Legacy UI Config Types
   type UIContentSecurityPolicy,
   type TemplateHelpers,
   type TemplateContext,
@@ -18,4 +19,18 @@ export {
   type WidgetDisplayMode,
   // Re-export UITemplateConfig as ToolUIConfig for backwards compatibility
   type UITemplateConfig as ToolUIConfig,
+  // New Widget Runtime Types
+  type UIType,
+  type BundlingMode,
+  type DisplayMode,
+  type ResourceMode,
+  type CSPDirectives,
+  type RendererAssets,
+  type WidgetManifest,
+  type RuntimePayload,
+  type WidgetConfig,
+  type WidgetTemplate,
+  type WidgetRuntimeOptions,
+  type BuildManifestResult,
+  type BuildManifestOptions,
 } from '@frontmcp/ui/types';

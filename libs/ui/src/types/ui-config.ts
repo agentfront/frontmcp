@@ -129,7 +129,6 @@ export type WidgetDisplayMode = 'inline' | 'fullscreen' | 'pip';
 // ============================================
 // UI Template Configuration
 // ============================================
-
 /**
  * UI template configuration for tools.
  * Enables rendering interactive widgets for tool responses in supported hosts
@@ -354,6 +353,61 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * ```
    */
   hydrate?: boolean;
+
+  // ============================================
+  // Runtime/Build Configuration (from ui-runtime.ts)
+  // ============================================
+
+  /**
+   * UI renderer type.
+   *
+   * - `'html'`: HTML with optional Handlebars
+   * - `'react'`: React component (SSR)
+   * - `'mdx'`: MDX template
+   * - `'markdown'`: Pure Markdown
+   * - `'auto'`: Auto-detect from template (default)
+   *
+   * @default 'auto'
+   */
+  uiType?: 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
+
+  /**
+   * Bundling mode.
+   *
+   * - `'static'`: Pre-compile widget shell, inject data at runtime (default)
+   * - `'dynamic'`: Generate fresh HTML per tool invocation
+   *
+   * @default 'static'
+   */
+  bundlingMode?: 'static' | 'dynamic';
+
+  /**
+   * Resource loading mode.
+   *
+   * - `'cdn'`: Load React/MDX/Handlebars from CDN URLs (lightweight)
+   * - `'inline'`: Embed all scripts in HTML (self-contained)
+   *
+   * Use 'cdn' for most platforms (OpenAI, ChatGPT, Cursor).
+   * Use 'inline' for network-blocked environments (Claude Artifacts).
+   *
+   * @default 'cdn'
+   */
+  resourceMode?: 'cdn' | 'inline';
+
+  /**
+   * Runtime options for specific renderers.
+   */
+  runtimeOptions?: {
+    /** Enable React hydration after SSR */
+    hydrate?: boolean;
+    /** Markdown rendering options */
+    markdown?: {
+      /** Enable GitHub-flavored markdown */
+      gfm?: boolean;
+      /** Syntax highlighting theme */
+      highlightTheme?: string;
+    };
+  };
 }
 
 /**

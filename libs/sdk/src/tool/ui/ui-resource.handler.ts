@@ -1,26 +1,25 @@
 /**
  * UI Resource Handler
  *
- * Handles resources/read requests for ui:// URIs, serving cached widget HTML
+ * Handles resources/read requests for ui:// URIs, serving widget HTML
  * from the ToolUIRegistry.
  *
- * URI format: ui://tools/{toolName}/result/{requestId}
+ * Supported URI format:
+ * - ui://widget/{toolName}.html - Static widget HTML (pre-compiled at startup)
+ *
+ * The static widget is registered at server startup for tools with
+ * `servingMode: 'mcp-resource'`. The widget HTML includes the FrontMCP Bridge
+ * which reads tool output from the platform context at runtime.
  *
  * @example
  * ```typescript
- * // Client requests widget HTML
+ * // Client requests widget HTML (OpenAI discovery)
  * const result = await client.readResource({
- *   uri: 'ui://tools/get_weather/result/abc123'
+ *   uri: 'ui://widget/get_weather.html'
  * });
  *
- * // Returns:
- * // {
- * //   contents: [{
- * //     uri: 'ui://tools/get_weather/result/abc123',
- * //     mimeType: 'text/html',
- * //     text: '<div>Weather widget HTML...</div>'
- * //   }]
- * // }
+ * // Returns pre-compiled widget with FrontMCP Bridge
+ * // Widget reads tool output from window.openai.toolOutput at runtime
  * ```
  */
 
@@ -35,27 +34,10 @@ import { createDefaultBaseTemplate } from '@frontmcp/ui';
 export const UI_RESOURCE_SCHEME = 'ui://';
 
 /**
- * Pattern for UI resource URIs: ui://tools/{toolName}/result/{requestId}
- */
-const UI_URI_PATTERN = /^ui:\/\/tools\/([^/]+)\/result\/([^/]+)$/;
-
-/**
  * Pattern for static widget URIs: ui://widget/{toolName}.html
  * This format is used by OpenAI at discovery time (tools/list)
  */
 const UI_WIDGET_PATTERN = /^ui:\/\/widget\/([^/]+)\.html$/;
-
-/**
- * Parse a UI resource URI
- *
- * @param uri - URI to parse
- * @returns Parsed components or undefined if not a valid UI URI
- */
-export interface ParsedUIUri {
-  toolName: string;
-  requestId: string;
-  fullUri: string;
-}
 
 /**
  * Parsed static widget URI
@@ -73,25 +55,6 @@ export interface ParsedWidgetUri {
  */
 export function isUIResourceUri(uri: string): boolean {
   return uri.startsWith(UI_RESOURCE_SCHEME);
-}
-
-/**
- * Parse a UI resource URI into its components
- *
- * @param uri - URI to parse
- * @returns Parsed components or undefined if invalid
- */
-export function parseUIResourceUri(uri: string): ParsedUIUri | undefined {
-  const match = uri.match(UI_URI_PATTERN);
-  if (!match) {
-    return undefined;
-  }
-
-  return {
-    toolName: decodeURIComponent(match[1]),
-    requestId: decodeURIComponent(match[2]),
-    fullUri: uri,
-  };
 }
 
 /**
@@ -127,17 +90,6 @@ export function isStaticWidgetUri(uri: string): boolean {
  */
 export function buildStaticWidgetUri(toolName: string): string {
   return `ui://widget/${encodeURIComponent(toolName)}.html`;
-}
-
-/**
- * Build a UI resource URI from components
- *
- * @param toolName - Name of the tool
- * @param requestId - Request ID
- * @returns Formatted UI resource URI
- */
-export function buildUIResourceUri(toolName: string, requestId: string): string {
-  return `ui://tools/${encodeURIComponent(toolName)}/result/${encodeURIComponent(requestId)}`;
 }
 
 /**
@@ -234,7 +186,7 @@ export function handleUIResourceRead(
   // Get the platform-appropriate MIME type
   const mimeType = getUIResourceMimeType(platformType);
 
-  // Try static widget URI first (ui://widget/{toolName}.html)
+  // Try static widget URI (ui://widget/{toolName}.html)
   // This is used by OpenAI at discovery time
   const widgetParsed = parseWidgetUri(uri);
   if (widgetParsed) {
@@ -280,54 +232,10 @@ export function handleUIResourceRead(
     };
   }
 
-  // Try dynamic URI (ui://tools/{toolName}/result/{requestId})
-  const parsed = parseUIResourceUri(uri);
-  if (!parsed) {
-    return {
-      handled: true,
-      error: `Invalid UI resource URI format: ${uri}. Expected: ui://tools/{toolName}/result/{requestId} or ui://widget/{toolName}.html`,
-    };
-  }
-
-  // Try to get cached HTML from the registry by exact URI
-  const cachedEntry = registry.getCachedEntry(uri);
-  if (!cachedEntry) {
-    // Also try to get just by the HTML (in case cached with different URI format)
-    const html = registry.getRenderedHtml(uri);
-    if (!html) {
-      return {
-        handled: true,
-        error: `UI resource not found or expired: ${uri}`,
-      };
-    }
-
-    // Return the HTML as a resource
-    return {
-      handled: true,
-      result: {
-        contents: [
-          {
-            uri,
-            mimeType,
-            text: html,
-          },
-        ],
-      },
-    };
-  }
-
-  // Return the cached HTML
+  // Unknown UI resource URI format
   return {
     handled: true,
-    result: {
-      contents: [
-        {
-          uri,
-          mimeType,
-          text: cachedEntry.html,
-        },
-      ],
-    },
+    error: `Invalid UI resource URI format: ${uri}. Expected: ui://widget/{toolName}.html`,
   };
 }
 

@@ -669,6 +669,78 @@ FrontMcpBridge.prototype.getWidgetState = function() { return this._context.widg
 FrontMcpBridge.prototype.getHostContext = function() { return Object.assign({}, this._context.hostContext); };
 FrontMcpBridge.prototype.hasCapability = function(cap) { return this._adapter && this._adapter.capabilities[cap] === true; };
 
+// Get tool response metadata (platform-agnostic)
+// Used by inline mode widgets to detect when ui/html arrives
+FrontMcpBridge.prototype.getToolResponseMetadata = function() {
+  // OpenAI injects toolResponseMetadata for widget-producing tools
+  if (typeof window !== 'undefined' && window.openai && window.openai.toolResponseMetadata) {
+    return window.openai.toolResponseMetadata;
+  }
+  // Claude (future support)
+  if (typeof window !== 'undefined' && window.claude && window.claude.toolResponseMetadata) {
+    return window.claude.toolResponseMetadata;
+  }
+  // FrontMCP direct injection (for testing/ext-apps)
+  if (typeof window !== 'undefined' && window.__mcpToolResponseMetadata) {
+    return window.__mcpToolResponseMetadata;
+  }
+  return null;
+};
+
+// Subscribe to tool response metadata changes (for inline mode injection)
+FrontMcpBridge.prototype.onToolResponseMetadata = function(callback) {
+  var self = this;
+  var called = false;
+
+  // Check if already available
+  var existing = self.getToolResponseMetadata();
+  if (existing) {
+    called = true;
+    callback(existing);
+  }
+
+  // Set up property interceptors for OpenAI
+  if (typeof window !== 'undefined') {
+    // OpenAI: Intercept toolResponseMetadata assignment
+    if (!window.__frontmcpMetadataIntercepted) {
+      window.__frontmcpMetadataIntercepted = true;
+      window.__frontmcpMetadataCallbacks = [];
+
+      // Create openai object if it doesn't exist
+      if (!window.openai) window.openai = {};
+
+      var originalMetadata = window.openai.toolResponseMetadata;
+      Object.defineProperty(window.openai, 'toolResponseMetadata', {
+        get: function() { return originalMetadata; },
+        set: function(val) {
+          originalMetadata = val;
+          log('toolResponseMetadata set, notifying ' + window.__frontmcpMetadataCallbacks.length + ' listeners');
+          for (var i = 0; i < window.__frontmcpMetadataCallbacks.length; i++) {
+            try { window.__frontmcpMetadataCallbacks[i](val); } catch(e) {}
+          }
+        },
+        configurable: true
+      });
+    }
+
+    // Register callback
+    window.__frontmcpMetadataCallbacks.push(function(metadata) {
+      if (!called) {
+        called = true;
+        callback(metadata);
+      }
+    });
+  }
+
+  // Return unsubscribe function
+  return function() {
+    if (window.__frontmcpMetadataCallbacks) {
+      var idx = window.__frontmcpMetadataCallbacks.indexOf(callback);
+      if (idx !== -1) window.__frontmcpMetadataCallbacks.splice(idx, 1);
+    }
+  };
+};
+
 FrontMcpBridge.prototype.callTool = function(name, args) {
   // Priority 1: Direct OpenAI SDK call (most reliable in OpenAI iframe)
   // This bypasses adapter abstraction for maximum compatibility

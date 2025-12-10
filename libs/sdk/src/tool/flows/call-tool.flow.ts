@@ -21,7 +21,7 @@ import {
   ToolExecutionError,
   AuthorizationRequiredError,
 } from '../../errors';
-import { hasUIConfig, buildStaticWidgetUri } from '../ui';
+import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 
 const inputSchema = z.object({
@@ -407,23 +407,26 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         const servingMode = tool.metadata.ui.servingMode ?? 'inline';
 
         if (servingMode === 'mcp-resource') {
-          // For mcp-resource mode: do NOT render per-request HTML
-          // Instead, reference the static template URI which was compiled at server startup
-          // The widget will be fetched via resources/read and reads data from Bridge at runtime
-          const staticWidgetUri = buildStaticWidgetUri(tool.metadata.name);
+          // For mcp-resource mode: return ONLY structured data
+          // The static widget was already registered at server startup and advertised in tools/list
+          // Widget reads tool output from platform context (e.g., window.openai.toolOutput)
+          // NO UI _meta fields needed - the client uses the outputTemplate URI from tools/list
 
-          result._meta = {
-            ...result._meta,
-            'ui/resourceUri': staticWidgetUri,
-          };
+          // Return structured data as JSON text content
+          result.content = [
+            {
+              type: 'text',
+              text: JSON.stringify(rawOutput),
+            },
+          ];
 
-          // Clear text content since the widget will display the data
-          result.content = [];
+          // Do NOT add any UI _meta fields - widget reads from platform context
+          // The outputTemplate URI (ui://widget/{toolName}.html) was already provided in tools/list
 
-          this.logger.verbose('finalize: UI using static widget (mcp-resource mode)', {
+          this.logger.verbose('finalize: UI using mcp-resource mode (structured data only)', {
             tool: tool.metadata.name,
-            uri: staticWidgetUri,
             platform: platformType,
+            outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],
           });
         } else {
           // For inline mode (default): render HTML with data embedded in each response
@@ -451,7 +454,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
           this.logger.verbose('finalize: UI metadata added (inline mode)', {
             tool: tool.metadata.name,
-            uri: uiResult.uri,
             platform: platformType,
           });
         }

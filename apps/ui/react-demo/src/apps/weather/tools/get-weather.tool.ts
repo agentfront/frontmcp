@@ -45,6 +45,7 @@ type WeatherOutput = z.infer<typeof outputSchema>;
     displayMode: 'inline',
     widgetAccessible: true,
     servingMode: 'inline',
+    resourceMode: 'cdn', // Load React from CDN (lightweight) - use 'inline' for network-blocked environments
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
