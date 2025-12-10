@@ -1,24 +1,39 @@
 import { InitializeRequestSchema, InitializeRequest, InitializeResult } from '@modelcontextprotocol/sdk/types.js';
-import { DEFAULT_NEGOTIATED_PROTOCOL_VERSION, LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
+import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { UnsupportedClientVersionException } from '../../exceptions/mcp-exceptions/unsupported-client-version.exception';
 import type { ClientCapabilities } from '../../notification';
 import { detectPlatformFromCapabilities } from '../../notification';
 
-function guardClientVersion(clientVersion: string) {
-  try {
-    return new Date(clientVersion) > new Date(DEFAULT_NEGOTIATED_PROTOCOL_VERSION);
-  } catch {
+/**
+ * Validates that the client's protocol version is a valid date string format.
+ * Per MCP spec, older versions should be accepted if supported - version negotiation
+ * determines which version to use, not this guard.
+ */
+function guardClientVersion(clientVersion: string): void {
+  const parsed = new Date(clientVersion);
+  if (isNaN(parsed.getTime())) {
     throw UnsupportedClientVersionException.fromVersion(clientVersion);
   }
+  // Don't reject older versions - let version negotiation handle it
 }
 export default function initializeRequestHandler({
   serverOptions,
   scope,
 }: McpHandlerOptions): McpHandler<InitializeRequest, InitializeResult> {
+  const logger = scope.logger.child('initialize-handler');
+
   return {
     requestSchema: InitializeRequestSchema,
     handler: async (request, ctx): Promise<InitializeResult> => {
+      logger.info('initialize: received request', {
+        clientName: request.params.clientInfo?.name,
+        clientVersion: request.params.clientInfo?.version,
+        protocolVersion: request.params.protocolVersion,
+        hasCapabilities: !!request.params.capabilities,
+        sessionId: ctx.authInfo?.sessionId?.slice(0, 20),
+      });
+
       guardClientVersion(request.params.protocolVersion);
 
       // Store client capabilities and client info from the initialize request
@@ -65,7 +80,15 @@ export default function initializeRequestHandler({
         }
       }
 
-      return {
+      // MCP Protocol Version Negotiation (per spec):
+      // "If the server supports the requested protocol version, it MUST respond with the same version.
+      //  Otherwise, the server MUST respond with another protocol version it supports."
+      const requestedVersion = request.params.protocolVersion;
+      const protocolVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
+        ? requestedVersion
+        : LATEST_PROTOCOL_VERSION;
+
+      const result: InitializeResult = {
         capabilities: serverOptions.capabilities!,
         instructions: serverOptions.instructions,
         serverInfo: {
@@ -73,8 +96,17 @@ export default function initializeRequestHandler({
           version: '0.0.1',
           title: 'FrontMcpServer',
         },
-        protocolVersion: LATEST_PROTOCOL_VERSION,
+        protocolVersion,
       };
+
+      logger.info('initialize: sending response', {
+        capabilities: JSON.stringify(result.capabilities),
+        protocolVersion: result.protocolVersion,
+        serverName: result.serverInfo.name,
+        sessionId: ctx.authInfo?.sessionId?.slice(0, 20),
+      });
+
+      return result;
     },
   };
 }

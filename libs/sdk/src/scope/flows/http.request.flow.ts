@@ -125,6 +125,11 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       hasBody: !!request.body,
       bodyMethod: body?.['method'],
     });
+
+    // Log full headers for debugging Claude connection issues
+    this.logger.info(`[${this.requestId}] FULL HEADERS`, {
+      headers: JSON.stringify(request.headers),
+    });
   }
 
   @Stage('checkAuthorization')

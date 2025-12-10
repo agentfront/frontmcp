@@ -50,6 +50,7 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
     // Check if completions capability should be enabled (when prompts or resources are present)
     const hasPrompts = this.scope.prompts.hasAny();
     const hasResources = this.scope.resources.hasAny();
+    const hasTools = this.scope.tools.hasAny();
     const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
 
     const serverOptions = {
@@ -64,6 +65,15 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
       },
       serverInfo: info,
     };
+
+    this.logger.info('connectServer: advertising capabilities', {
+      hasTools,
+      hasResources,
+      hasPrompts,
+      capabilities: JSON.stringify(serverOptions.capabilities),
+      serverInfo: JSON.stringify(serverOptions.serverInfo),
+    });
+
     this.server = new McpServer(info, serverOptions);
     const handlers = createMcpHandlers({
       scope: this.scope,

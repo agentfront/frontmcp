@@ -147,12 +147,34 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   })
   async onInitialize() {
     const transportService = (this.scope as Scope).transportService;
+    const logger = (this.scope as Scope).logger.child('handle:streamable-http:onInitialize');
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
-    const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
-    await transport.initialize(request, response);
-    this.handled();
+
+    logger.info('onInitialize: creating transport', {
+      sessionId: session.id.slice(0, 30),
+      hasToken: !!token,
+      tokenPrefix: token?.slice(0, 10),
+    });
+
+    try {
+      const transport = await transportService.createTransporter('streamable-http', token, session.id, response);
+      logger.info('onInitialize: transport created, calling initialize');
+      await transport.initialize(request, response);
+      logger.info('onInitialize: completed successfully');
+      this.handled();
+    } catch (error) {
+      // FlowControl is expected control flow (from this.handled()), not an error
+      if (error instanceof FlowControl) {
+        throw error;
+      }
+      logger.error('onInitialize: failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
   }
 
   @Stage('onElicitResult', {

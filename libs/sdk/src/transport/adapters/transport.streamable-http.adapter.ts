@@ -37,12 +37,46 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
           console.log(`stateless session initialized`);
         }
       },
-      eventStore: this.eventStore,
+      // Disable eventStore to prevent priming events - Claude.ai's client doesn't handle them
+      // The priming event has empty data with no `event:` type, which violates MCP spec
+      // ("Event types MUST be message") and confuses some clients
+      eventStore: undefined,
     });
   }
 
   initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
     this.ensureAuthInfo(req, this);
+
+    console.log('[StreamableHttpAdapter] initialize() called', {
+      method: req.method,
+      sessionId: this.key.sessionId.slice(0, 30),
+      bodyMethod: (req.body as { method?: string })?.method,
+    });
+
+    // Intercept response to log what gets sent back to client
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+    let responseBody = '';
+
+    res.write = (chunk: unknown, ...args: unknown[]) => {
+      if (chunk) {
+        responseBody += typeof chunk === 'string' ? chunk : (chunk as Buffer).toString();
+      }
+      return (originalWrite as (...a: unknown[]) => boolean)(chunk, ...args);
+    };
+
+    res.end = (chunk?: unknown, ...args: unknown[]) => {
+      if (chunk) {
+        responseBody += typeof chunk === 'string' ? chunk : (chunk as Buffer).toString();
+      }
+      console.log('[StreamableHttpAdapter] initialize response', {
+        statusCode: res.statusCode,
+        headers: res.getHeaders?.() || {},
+        bodyPreview: responseBody.slice(0, 1000),
+      });
+      return (originalEnd as (...a: unknown[]) => ServerResponse)(chunk, ...args);
+    };
+
     return this.transport.handleRequest(req, res, req.body);
   }
 

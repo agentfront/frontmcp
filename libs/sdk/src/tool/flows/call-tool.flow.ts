@@ -484,14 +484,48 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             ...uiResult.meta,
           };
 
-          // When UI is rendered, clear the text content since the widget will display the data
-          // The structuredContent remains as the actual tool output data
-          // The rendered HTML is available in _meta['ui/html'] for the widget to use
-          result.content = [];
+          // For platforms that support widgets (OpenAI, ext-apps), clear content since widget displays data
+          // For Claude and other platforms, keep the text content as they don't support _meta UI fields
+          const supportsWidgets = platformType === 'openai' || platformType === 'ext-apps';
+
+          if (supportsWidgets) {
+            // Clear content - widget will display from _meta['ui/html']
+            result.content = [];
+          } else {
+            // For Claude and other platforms without widget support:
+            // Return JSON data + HTML template as artifact hint
+            const htmlContent = uiResult?.meta?.['ui/html'];
+
+            if (htmlContent) {
+              // Include HTML template as artifact hint for Claude
+              // Claude can use this to create an HTML artifact for visual display
+              result.content = [
+                {
+                  type: 'text',
+                  text: `## Data\n\`\`\`json\n${JSON.stringify(
+                    rawOutput,
+                    null,
+                    2,
+                  )}\n\`\`\`\n\n## Visual Template (for artifact rendering)\n\`\`\`html\n${htmlContent}\n\`\`\``,
+                },
+              ];
+            } else {
+              // Fallback: JSON only
+              result.content = [
+                {
+                  type: 'text',
+                  text: JSON.stringify(rawOutput, null, 2),
+                },
+              ];
+            }
+          }
 
           this.logger.verbose('finalize: UI metadata added (inline mode)', {
             tool: tool.metadata.name,
             platform: platformType,
+            supportsWidgets,
+            contentCleared: supportsWidgets,
+            htmlHintIncluded: !supportsWidgets && !!uiResult?.meta?.['ui/html'],
           });
         }
       } catch (error) {

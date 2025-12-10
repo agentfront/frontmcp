@@ -44,7 +44,7 @@ type WeatherOutput = z.infer<typeof outputSchema>;
     widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
     displayMode: 'inline',
     widgetAccessible: true,
-    servingMode: 'inline',
+    servingMode: 'mcp-resource',
     resourceMode: 'cdn', // Load React from CDN (lightweight) - use 'inline' for network-blocked environments
   },
 })
