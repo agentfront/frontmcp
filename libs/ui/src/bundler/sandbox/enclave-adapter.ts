@@ -88,11 +88,17 @@ const DEFAULT_ENCLAVE_OPTIONS: Partial<CreateEnclaveOptions> = {
 };
 
 /**
+ * Threshold of blocked imports that triggers STRICT security level.
+ * When a SecurityPolicy blocks more than this many imports, we escalate to STRICT.
+ */
+const STRICT_SECURITY_BLOCKED_IMPORTS_THRESHOLD = 10;
+
+/**
  * Map SecurityPolicy to enclave-vm security level.
  */
 function mapSecurityLevel(policy?: SecurityPolicy): SecurityLevel {
   // If policy has specific blockedImports or restrictive settings, use STRICT
-  if (policy?.blockedImports && policy.blockedImports.length > 10) {
+  if (policy?.blockedImports && policy.blockedImports.length > STRICT_SECURITY_BLOCKED_IMPORTS_THRESHOLD) {
     return 'STRICT';
   }
   // Default to SECURE for widget code
@@ -355,13 +361,20 @@ export async function executeDefault<T = unknown>(code: string, context: Executi
     return result.exports.default as T;
   }
 
-  // Check for named exports - if only one, return it
+  // Check for named exports
   const exportKeys = Object.keys(result.exports);
+
+  // Handle empty exports - throw error as code should export something
+  if (exportKeys.length === 0) {
+    throw new ExecutionError('Code did not export any values');
+  }
+
+  // If only one named export, return it as the default
   if (exportKeys.length === 1) {
     return result.exports[exportKeys[0]] as T;
   }
 
-  // Return the whole exports object
+  // Multiple exports - return the whole exports object
   return result.exports as T;
 }
 

@@ -213,19 +213,43 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           }
 
           // Get manifest info from registry (if available)
-          // Type guard: verify scope has toolUI before accessing
-          if (!('toolUI' in this.scope)) {
+          // Type guard: verify scope has toolUI with required methods before accessing
+          const isValidScope = (obj: unknown): obj is Scope => {
+            return (
+              obj !== null &&
+              typeof obj === 'object' &&
+              'toolUI' in obj &&
+              typeof (obj as { toolUI?: unknown }).toolUI === 'object' &&
+              (obj as { toolUI?: unknown }).toolUI !== null &&
+              typeof (obj as { toolUI: { getManifest?: unknown } }).toolUI.getManifest === 'function' &&
+              typeof (obj as { toolUI: { detectUIType?: unknown } }).toolUI.detectUIType === 'function'
+            );
+          };
+
+          if (!isValidScope(this.scope)) {
             this.logger.warn(`parseTools: toolUI not available in scope for ${finalName}`);
             return item;
           }
-          const scope = this.scope as Scope;
-          const manifest = scope.toolUI.getManifest(finalName);
+          const scope = this.scope;
 
-          // Detect UI type for CDN info with validation
-          const validUITypes: UIType[] = ['html', 'react', 'mdx', 'markdown', 'auto'];
-          const detectedType = scope.toolUI.detectUIType(uiConfig.template);
-          const uiType: UIType =
-            manifest?.uiType ?? (validUITypes.includes(detectedType as UIType) ? (detectedType as UIType) : 'auto');
+          // Type guard for UIType validation
+          const isValidUIType = (type: string): type is UIType => {
+            const validTypes: UIType[] = ['html', 'react', 'mdx', 'markdown', 'auto'];
+            return validTypes.includes(type as UIType);
+          };
+
+          // Get manifest and detect UI type with error handling
+          let manifest;
+          let detectedType: string;
+          try {
+            manifest = scope.toolUI.getManifest(finalName);
+            detectedType = scope.toolUI.detectUIType(uiConfig.template);
+          } catch (error) {
+            this.logger.warn(`parseTools: failed to access toolUI for ${finalName}`, error);
+            return item;
+          }
+
+          const uiType: UIType = manifest?.uiType ?? (isValidUIType(detectedType) ? detectedType : 'auto');
 
           // Always include outputTemplate for all UI tools
           // - static mode: Full widget with React runtime and bridge
