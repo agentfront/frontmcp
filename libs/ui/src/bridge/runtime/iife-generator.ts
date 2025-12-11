@@ -348,6 +348,12 @@ var ExtAppsAdapter = {
   sendRequest: function(method, params) {
     var self = this;
     return new Promise(function(resolve, reject) {
+      // Security: Require trusted origin before sending requests to prevent message leaks
+      if (!self.trustedOrigin && self.trustedOrigins.length === 0) {
+        reject(new Error('Cannot send request: no trusted origin established'));
+        return;
+      }
+
       var id = ++self.requestId;
       var timeout = setTimeout(function() {
         delete self.pendingRequests[id];
@@ -356,7 +362,7 @@ var ExtAppsAdapter = {
 
       self.pendingRequests[id] = { resolve: resolve, reject: reject, timeout: timeout };
 
-      var targetOrigin = self.trustedOrigin || '*';
+      var targetOrigin = self.trustedOrigin || self.trustedOrigins[0];
       window.parent.postMessage({ jsonrpc: '2.0', id: id, method: method, params: params }, targetOrigin);
     });
   },
@@ -728,22 +734,26 @@ FrontMcpBridge.prototype.onToolResponseMetadata = function(callback) {
       });
     }
 
-    // Register callback
-    window.__frontmcpMetadataCallbacks.push(function(metadata) {
+    // Register callback wrapper (store reference for unsubscribe)
+    var wrapper = function(metadata) {
       if (!called) {
         called = true;
         callback(metadata);
       }
-    });
+    };
+    window.__frontmcpMetadataCallbacks.push(wrapper);
+
+    // Return unsubscribe function that removes the wrapper (not the original callback)
+    return function() {
+      if (window.__frontmcpMetadataCallbacks) {
+        var idx = window.__frontmcpMetadataCallbacks.indexOf(wrapper);
+        if (idx !== -1) window.__frontmcpMetadataCallbacks.splice(idx, 1);
+      }
+    };
   }
 
-  // Return unsubscribe function
-  return function() {
-    if (window.__frontmcpMetadataCallbacks) {
-      var idx = window.__frontmcpMetadataCallbacks.indexOf(callback);
-      if (idx !== -1) window.__frontmcpMetadataCallbacks.splice(idx, 1);
-    }
-  };
+  // Return no-op unsubscribe for non-window environments
+  return function() {};
 };
 
 FrontMcpBridge.prototype.callTool = function(name, args) {

@@ -279,12 +279,11 @@ function createSandboxGlobals(context: ExecutionContext, consoleOutput: string[]
     countReset: () => {},
   };
 
-  // Build allowed globals
+  // Build allowed globals (without context.globals - added later with filtering)
   const globals: Record<string, unknown> = {
     console: sandboxConsole,
     React: context.React,
     ReactDOM: context.ReactDOM,
-    ...context.globals,
   };
 
   // Add standard globals that are in the allowed list
@@ -309,6 +308,16 @@ function createSandboxGlobals(context: ExecutionContext, consoleOutput: string[]
   delete globals['__dirname'];
   delete globals['__filename'];
   delete globals['Buffer'];
+
+  // Add user globals last, filtering out dangerous keys that could bypass sandbox
+  if (context.globals) {
+    const dangerousKeys = ['process', 'require', '__dirname', '__filename', 'Buffer', 'eval', 'Function'];
+    for (const [key, value] of Object.entries(context.globals)) {
+      if (!dangerousKeys.includes(key)) {
+        globals[key] = value;
+      }
+    }
+  }
 
   return globals;
 }

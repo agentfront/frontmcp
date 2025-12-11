@@ -572,7 +572,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
               : 'unknown'
             : 'none',
           hasStructuredContent: result.structuredContent !== undefined,
-          structuredContentKeys: result.structuredContent ? Object.keys(result.structuredContent as object) : [],
+          structuredContentKeys:
+            result.structuredContent &&
+            typeof result.structuredContent === 'object' &&
+            result.structuredContent !== null &&
+            !Array.isArray(result.structuredContent)
+              ? Object.keys(result.structuredContent)
+              : [],
         });
 
         // In debug mode, also log to console for immediate visibility

@@ -185,11 +185,10 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    *
    * @see {@link ToolUIConfig} for all available options including:
    * - `template`: React component, HTML string, or builder function
-   * - `uiType`: 'html' | 'react' | 'mdx' | 'markdown' | 'auto'
    * - `servingMode`: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'
-   * - `resourceMode`: 'cdn' | 'inline'
    * - `csp`: Content Security Policy configuration
    * - `widgetAccessible`: Enable MCP bridge for tool calls from widget
+   * - `displayMode`: 'inline' | 'fullscreen' | 'pip'
    * - And more...
    *
    * @example HTML template builder
@@ -205,8 +204,6 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    * import WeatherCard from './weather-ui';
    * ui: {
    *   template: WeatherCard,
-   *   uiType: 'react',
-   *   resourceMode: 'cdn',
    *   servingMode: 'static',
    * }
    * ```

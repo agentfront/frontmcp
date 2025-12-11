@@ -239,7 +239,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           } else if (uiConfig.template) {
             // Fallback to detecting UI type from template
             meta['ui/type'] = uiType;
-            meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+            // Note: ui/manifestUri is only set when a manifest exists in the registry
           }
 
           // Add invocation status if configured
