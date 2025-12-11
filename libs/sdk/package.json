@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@frontmcp/ui": "workspace:*",
+    "@frontmcp/ui": "0.4.0",
     "@modelcontextprotocol/sdk": "1.23.0",
     "axios": "^1.6.0",
     "ioredis": "^5.8.0",
