@@ -10,11 +10,11 @@ Apps are the **organizational units** for capabilities in FrontMCP. Each app gro
 
 In FrontMCP, apps provide domain boundaries and enable multi-tenant architectures:
 
-| Aspect       | App                        | Server               | Tool                 |
-| ------------ | -------------------------- | -------------------- | -------------------- |
-| **Purpose**  | Group capabilities         | Host apps            | Execute actions      |
-| **Scope**    | Feature/domain boundary    | Process entry point  | Single operation     |
-| **Contains** | Tools, resources, prompts  | Apps, global providers | Input → Output logic |
+| Aspect       | App                       | Server                 | Tool                 |
+| ------------ | ------------------------- | ---------------------- | -------------------- |
+| **Purpose**  | Group capabilities        | Host apps              | Execute actions      |
+| **Scope**    | Feature/domain boundary   | Process entry point    | Single operation     |
+| **Contains** | Tools, resources, prompts | Apps, global providers | Input → Output logic |
 
 Apps are ideal for:
 
@@ -68,20 +68,20 @@ export default class Server {}
 
 **Field descriptions:**
 
-| Field           | Description                                                     |
-| --------------- | --------------------------------------------------------------- |
-| `id`            | Unique identifier; used in URLs when `splitByApp: true`         |
-| `name`          | Human-readable display name                                     |
-| `description`   | Optional description for documentation                          |
-| `providers`     | DI providers scoped to this app                                 |
-| `authProviders` | Authentication providers for this app                           |
-| `plugins`       | Plugins attached at app scope                                   |
-| `adapters`      | Adapters (e.g., OpenAPI) that generate tools/resources          |
-| `tools`         | Tool classes registered to this app                             |
-| `resources`     | Resource classes registered to this app                         |
-| `prompts`       | Prompt classes registered to this app                           |
-| `auth`          | App-level auth config (overrides server auth)                   |
-| `standalone`    | Isolation mode: `true`, `false`, or `'includeInParent'`         |
+| Field           | Description                                             |
+| --------------- | ------------------------------------------------------- |
+| `id`            | Unique identifier; used in URLs when `splitByApp: true` |
+| `name`          | Human-readable display name                             |
+| `description`   | Optional description for documentation                  |
+| `providers`     | DI providers scoped to this app                         |
+| `authProviders` | Authentication providers for this app                   |
+| `plugins`       | Plugins attached at app scope                           |
+| `adapters`      | Adapters (e.g., OpenAPI) that generate tools/resources  |
+| `tools`         | Tool classes registered to this app                     |
+| `resources`     | Resource classes registered to this app                 |
+| `prompts`       | Prompt classes registered to this app                   |
+| `auth`          | App-level auth config (overrides server auth)           |
+| `standalone`    | Isolation mode: `true`, `false`, or `'includeInParent'` |
 
 **Scoping & auth**
 

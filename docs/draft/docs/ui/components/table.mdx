@@ -274,30 +274,30 @@ const usersTable = card(`
 
 ### `table(options)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `headers` | `string[]` | - | Column headers (simple mode) |
-| `rows` | `string[][]` | - | Row data (simple mode) |
-| `columns` | `Column[]` | - | Column config (object mode) |
-| `data` | `object[]` | - | Row data (object mode) |
-| `variant` | `'default' \| 'bordered' \| 'striped' \| 'compact'` | `'default'` | Table style |
-| `responsive` | `boolean` | `true` | Horizontal scroll on small screens |
-| `caption` | `string` | - | Table caption |
-| `emptyMessage` | `string` | - | Message when no data |
-| `footer` | `string` | - | Footer HTML |
-| `className` | `string` | - | Additional CSS classes |
+| Option         | Type                                                | Default     | Description                        |
+| -------------- | --------------------------------------------------- | ----------- | ---------------------------------- |
+| `headers`      | `string[]`                                          | -           | Column headers (simple mode)       |
+| `rows`         | `string[][]`                                        | -           | Row data (simple mode)             |
+| `columns`      | `Column[]`                                          | -           | Column config (object mode)        |
+| `data`         | `object[]`                                          | -           | Row data (object mode)             |
+| `variant`      | `'default' \| 'bordered' \| 'striped' \| 'compact'` | `'default'` | Table style                        |
+| `responsive`   | `boolean`                                           | `true`      | Horizontal scroll on small screens |
+| `caption`      | `string`                                            | -           | Table caption                      |
+| `emptyMessage` | `string`                                            | -           | Message when no data               |
+| `footer`       | `string`                                            | -           | Footer HTML                        |
+| `className`    | `string`                                            | -           | Additional CSS classes             |
 
 ### Column Configuration
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `key` | `string` | Property key in data objects |
-| `header` | `string` | Column header text |
-| `render` | `(value, row) => string` | Custom cell renderer |
-| `align` | `'left' \| 'center' \| 'right'` | Text alignment |
-| `width` | `string` | Column width (CSS value) |
-| `sortable` | `boolean` | Show sort indicator |
-| `sortDirection` | `'asc' \| 'desc'` | Current sort direction |
+| Option          | Type                            | Description                  |
+| --------------- | ------------------------------- | ---------------------------- |
+| `key`           | `string`                        | Property key in data objects |
+| `header`        | `string`                        | Column header text           |
+| `render`        | `(value, row) => string`        | Custom cell renderer         |
+| `align`         | `'left' \| 'center' \| 'right'` | Text alignment               |
+| `width`         | `string`                        | Column width (CSS value)     |
+| `sortable`      | `boolean`                       | Show sort indicator          |
+| `sortDirection` | `'asc' \| 'desc'`               | Current sort direction       |
 
 ### Returns
 

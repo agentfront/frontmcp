@@ -76,13 +76,13 @@ helpers.escapeHtml('Tom & Jerry');
 // 'Tom &amp; Jerry'
 ```
 
-| Character | Escaped |
-|-----------|---------|
-| `&` | `&amp;` |
-| `<` | `&lt;` |
-| `>` | `&gt;` |
-| `"` | `&quot;` |
-| `'` | `&#x27;` |
+| Character | Escaped  |
+| --------- | -------- |
+| `&`       | `&amp;`  |
+| `<`       | `&lt;`   |
+| `>`       | `&gt;`   |
+| `"`       | `&quot;` |
+| `'`       | `&#x27;` |
 
 <Warning>
   Always use `escapeHtml` for user-provided content to prevent XSS vulnerabilities.
@@ -100,11 +100,11 @@ helpers.formatDate(date, 'time');      // "10:30:45 AM"
 helpers.formatDate(date, 'datetime');  // "1/15/2024, 10:30:45 AM"
 ```
 
-| Format | Description |
-|--------|-------------|
-| (default) | Localized date |
-| `'iso'` | ISO 8601 format |
-| `'time'` | Localized time |
+| Format       | Description             |
+| ------------ | ----------------------- |
+| (default)    | Localized date          |
+| `'iso'`      | ISO 8601 format         |
+| `'time'`     | Localized time          |
 | `'datetime'` | Localized date and time |
 
 ### `formatCurrency(amount, currency?)`
@@ -140,12 +140,12 @@ helpers.jsonEmbed(data);
 // '{"name":"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"}'
 ```
 
-| Character | Escaped |
-|-----------|---------|
-| `<` | `\u003c` |
-| `>` | `\u003e` |
-| `&` | `\u0026` |
-| `'` | `\u0027` |
+| Character | Escaped  |
+| --------- | -------- |
+| `<`       | `\u003c` |
+| `>`       | `\u003e` |
+| `&`       | `\u0026` |
+| `'`       | `\u0027` |
 
 ```typescript
 const html = `
@@ -342,22 +342,22 @@ const html = wrapToolUI({
 
 #### WrapToolUIFullOptions
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `content` | `string` | **required** | HTML content |
-| `toolName` | `string` | **required** | Tool name |
-| `input` | `Record<string, unknown>` | `{}` | Tool input |
-| `output` | `unknown` | - | Tool output |
-| `structuredContent` | `unknown` | - | Parsed content |
-| `csp` | `UIContentSecurityPolicy` | - | CSP configuration |
-| `widgetAccessible` | `boolean` | `false` | Enable tool calls |
-| `title` | `string` | - | Page title |
-| `theme` | `DeepPartial<ThemeConfig>` | `DEFAULT_THEME` | Theme config |
-| `platform` | `PlatformCapabilities` | `OPENAI_PLATFORM` | Target platform |
-| `hostContext` | `Partial<HostContext>` | - | Initial context |
-| `sanitizeInput` | `boolean \| string[] \| SanitizerFn` | - | Input sanitization |
-| `rendererType` | `string` | - | Renderer type |
-| `hydrate` | `boolean` | `false` | Enable hydration |
+| Property            | Type                                 | Default           | Description        |
+| ------------------- | ------------------------------------ | ----------------- | ------------------ |
+| `content`           | `string`                             | **required**      | HTML content       |
+| `toolName`          | `string`                             | **required**      | Tool name          |
+| `input`             | `Record<string, unknown>`            | `{}`              | Tool input         |
+| `output`            | `unknown`                            | -                 | Tool output        |
+| `structuredContent` | `unknown`                            | -                 | Parsed content     |
+| `csp`               | `UIContentSecurityPolicy`            | -                 | CSP configuration  |
+| `widgetAccessible`  | `boolean`                            | `false`           | Enable tool calls  |
+| `title`             | `string`                             | -                 | Page title         |
+| `theme`             | `DeepPartial<ThemeConfig>`           | `DEFAULT_THEME`   | Theme config       |
+| `platform`          | `PlatformCapabilities`               | `OPENAI_PLATFORM` | Target platform    |
+| `hostContext`       | `Partial<HostContext>`               | -                 | Initial context    |
+| `sanitizeInput`     | `boolean \| string[] \| SanitizerFn` | -                 | Input sanitization |
+| `rendererType`      | `string`                             | -                 | Renderer type      |
+| `hydrate`           | `boolean`                            | `false`           | Enable hydration   |
 
 ### `wrapToolUIMinimal(options)`
 

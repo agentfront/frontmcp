@@ -337,6 +337,7 @@ const CreateUserTool = tool({
   // Implementation
 });
 ```
+
 </CodeGroup>
 
 <CardGroup cols={2}>
@@ -701,20 +702,21 @@ ui: {
   mdxComponents: { Alert },
 }
 ```
+
 </CodeGroup>
 
 ### UI Configuration Options
 
-| Option              | Description                                                   |
-| ------------------- | ------------------------------------------------------------- |
-| `template`          | HTML function, React component, or MDX string                 |
-| `displayMode`       | `'inline'` (default), `'fullscreen'`, or `'pip'`              |
-| `widgetDescription` | Human-readable description shown to users                     |
-| `widgetAccessible`  | Allow widget to call tools via MCP Bridge                     |
-| `csp`               | Content Security Policy (allowed domains)                     |
+| Option              | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `template`          | HTML function, React component, or MDX string                   |
+| `displayMode`       | `'inline'` (default), `'fullscreen'`, or `'pip'`                |
+| `widgetDescription` | Human-readable description shown to users                       |
+| `widgetAccessible`  | Allow widget to call tools via MCP Bridge                       |
+| `csp`               | Content Security Policy (allowed domains)                       |
 | `servingMode`       | How HTML is delivered: `'inline'`, `'static'`, `'hybrid'`, etc. |
-| `mdxComponents`     | Custom components for MDX templates                           |
-| `hydrate`           | Enable client-side React hydration for interactivity          |
+| `mdxComponents`     | Custom components for MDX templates                             |
+| `hydrate`           | Enable client-side React hydration for interactivity            |
 
 ### Using @frontmcp/ui Components
 

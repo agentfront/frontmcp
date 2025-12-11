@@ -11,11 +11,11 @@ FrontMCP UI supports three template types for building tool widgets. Each type i
 
 ## Overview
 
-| Type | Best For | Features |
-|------|----------|----------|
-| **HTML** | Simple widgets, server-rendered | Lightweight, no dependencies |
-| **React** | Complex UIs, component reuse | Full React features, TypeScript |
-| **MDX** | Documentation, mixed content | Markdown + JSX, content-focused |
+| Type      | Best For                        | Features                        |
+| --------- | ------------------------------- | ------------------------------- |
+| **HTML**  | Simple widgets, server-rendered | Lightweight, no dependencies    |
+| **React** | Complex UIs, component reuse    | Full React features, TypeScript |
+| **MDX**   | Documentation, mixed content    | Markdown + JSX, content-focused |
 
 ## Auto-Detection
 
@@ -68,6 +68,7 @@ ui: {
   `,
 }
 ```
+
 </CodeGroup>
 
 ## Template Context
@@ -118,6 +119,7 @@ function MyWidget({ input, output, helpers }) {
 
 Created: {helpers.formatDate(output.createdAt)}
 ```
+
 </CodeGroup>
 
 ## Choosing a Template Type

@@ -373,6 +373,26 @@ test.describe('Weather Tool UI', () => {
 });
 ```
 
+## Reference suites in the repo
+
+<Note>
+Use the weather demos under `apps/ui/**` as golden tests before copying patterns into your own workspace. They exercise every matcher in this guide, including `toHaveRenderedHtml`, `toNotContainRawContent`, and the `UIAssertions` helpers.
+</Note>
+
+- `apps/ui/react-demo/e2e/weather.e2e.ts` verifies the React renderer, CDN-based serving mode, and transparent auth defaults.
+- `apps/ui/mdx-demo/e2e/weather.e2e.ts` ensures the MDX renderer compiles markdown + JSX without falling back to escaped content.
+
+Run them directly when updating the UI runtime:
+
+```bash
+pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
+pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+```
+
+<Tip>
+Keep these suites green before upgrading React, MDX, or `@frontmcp/ui`—they catch regressions in widget metadata long before production clients do.
+</Tip>
+
 ## Running Tests
 
 ```bash
