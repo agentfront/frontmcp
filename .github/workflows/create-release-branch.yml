@@ -37,6 +37,8 @@ jobs:
 
       - name: Install deps
         run: yarn
+        env:
+          npm_config_onnxruntime_node_install_cuda: skip
 
       - name: Configure git user
         run: |
