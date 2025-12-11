@@ -6,7 +6,7 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
-import { buildCDNInfoForUIType } from '@frontmcp/ui/build';
+import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
 import type { Scope } from '../../scope/scope.instance';
 
 const inputSchema = z.object({
@@ -216,8 +216,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           const scope = this.scope as Scope;
           const manifest = scope.toolUI.getManifest(finalName);
 
-          // Detect UI type for CDN info
-          const uiType = manifest?.uiType ?? scope.toolUI.detectUIType(uiConfig.template);
+          // Detect UI type for CDN info (cast needed as detectUIType returns string)
+          const uiType = (manifest?.uiType ?? scope.toolUI.detectUIType(uiConfig.template)) as UIType;
 
           // Always include outputTemplate for all UI tools
           // - static mode: Full widget with React runtime and bridge
