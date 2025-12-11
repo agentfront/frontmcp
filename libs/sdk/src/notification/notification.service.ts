@@ -35,6 +35,15 @@ export interface ClientCapabilities {
   };
   /** Other capabilities can be added here as needed */
   sampling?: Record<string, unknown>;
+  /** Experimental capabilities including MCP Apps extension */
+  experimental?: {
+    /** MCP Apps (ext-apps) extension capability */
+    'io.modelcontextprotocol/ui'?: {
+      /** Supported MIME types (e.g., ['text/html+mcp']) */
+      mimeTypes?: string[];
+    };
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -46,6 +55,37 @@ export interface ClientInfo {
   name: string;
   /** Client version string */
   version: string;
+}
+
+/**
+ * MCP Apps extension key in capabilities.experimental
+ */
+export const MCP_APPS_EXTENSION_KEY = 'io.modelcontextprotocol/ui' as const;
+
+/**
+ * Check if client capabilities include MCP Apps extension.
+ * @param capabilities - Client capabilities from initialize request
+ * @returns true if the client supports MCP Apps
+ */
+export function hasMcpAppsExtension(capabilities?: ClientCapabilities): boolean {
+  if (!capabilities?.experimental) {
+    return false;
+  }
+  const uiExtension = capabilities.experimental[MCP_APPS_EXTENSION_KEY];
+  return uiExtension !== undefined && uiExtension !== null;
+}
+
+/**
+ * Detect platform from client capabilities.
+ * Checks for known extension capabilities before falling back to client info.
+ * @param capabilities - Client capabilities from initialize request
+ * @returns Platform type if detected from capabilities, undefined otherwise
+ */
+export function detectPlatformFromCapabilities(capabilities?: ClientCapabilities): AIPlatformType | undefined {
+  if (hasMcpAppsExtension(capabilities)) {
+    return 'ext-apps';
+  }
+  return undefined;
 }
 
 /**

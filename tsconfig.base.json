@@ -20,16 +20,28 @@
     "lib": ["es2022", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "typeRoots": ["./node_modules/@types", "./types"],
     "paths": {
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
       "@frontmcp/testing": ["libs/testing/src/index.ts"],
       "@frontmcp/ui": ["libs/ui/src/index.ts"],
-      "ast-guard": ["libs/ast-guard/dist/src/index.d.ts"],
+      "@frontmcp/ui/types": ["libs/ui/src/types/index.ts"],
+      "@frontmcp/ui/adapters": ["libs/ui/src/adapters/index.ts"],
+      "@frontmcp/ui/build": ["libs/ui/src/build/index.ts"],
+      "@frontmcp/ui/renderers": ["libs/ui/src/renderers/index.ts"],
+      "@frontmcp/ui/components": ["libs/ui/src/components/index.ts"],
+      "@frontmcp/ui/runtime": ["libs/ui/src/runtime/index.ts"],
+      "@frontmcp/ui/theme": ["libs/ui/src/theme/index.ts"],
+      "@frontmcp/ui/bridge": ["libs/ui/src/bridge/index.ts"],
+      "@frontmcp/ui/web-components": ["libs/ui/src/web-components/index.ts"],
+      "@frontmcp/ui/react": ["libs/ui/src/react/index.ts"],
+      "@frontmcp/ui/render": ["libs/ui/src/render/index.ts"],
+      "@frontmcp/ui/styles": ["libs/ui/src/styles/index.ts"],
+      "@frontmcp/ui/registry": ["libs/ui/src/registry/index.ts"],
       "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"],
-      "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"],
-      "vectoriadb": ["libs/vectoriadb/src/index.ts"]
+      "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

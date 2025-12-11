@@ -37,12 +37,49 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
           console.log(`stateless session initialized`);
         }
       },
-      eventStore: this.eventStore,
+      // Disable eventStore to prevent priming events - Claude.ai's client doesn't handle them
+      // The priming event has empty data with no `event:` type, which violates MCP spec
+      // ("Event types MUST be message") and confuses some clients
+      eventStore: undefined,
     });
   }
 
   initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
     this.ensureAuthInfo(req, this);
+
+    this.logger.info('[StreamableHttpAdapter] initialize() called', {
+      method: req.method,
+      sessionId: this.key.sessionId.slice(0, 30),
+      bodyMethod: (req.body as { method?: string })?.method,
+    });
+
+    // Intercept response to log what gets sent back to client
+    const originalWrite = res.write.bind(res) as typeof res.write;
+    const originalEnd = res.end.bind(res) as typeof res.end;
+    let responseBody = '';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.write = function (this: ServerResponse, chunk: any, encodingOrCb?: any, cb?: any): boolean {
+      if (chunk) {
+        responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      }
+      return originalWrite.call(this, chunk, encodingOrCb, cb);
+    } as typeof res.write;
+
+    const adapter = this;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.end = function (this: ServerResponse, chunk?: any, encodingOrCb?: any, cb?: any): ServerResponse {
+      if (chunk) {
+        responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      }
+      adapter.logger.info('[StreamableHttpAdapter] initialize response', {
+        statusCode: res.statusCode,
+        headers: res.getHeaders?.() ?? {},
+        bodyPreview: responseBody.slice(0, 1000),
+      });
+      return originalEnd.call(this, chunk, encodingOrCb, cb);
+    } as typeof res.end;
+
     return this.transport.handleRequest(req, res, req.body);
   }
 

@@ -35,9 +35,9 @@
   "dependencies": {
     "ioredis": "^5.8.0",
     "@frontmcp/sdk": "^0.4.0",
-    "enclave-vm": "^1.0.0",
+    "ast-guard": "^1.1.0",
+    "enclave-vm": "^1.0.1",
     "vectoriadb": "^1.0.0",
-    "ast-guard": "^1.0.0",
     "piscina": "^4.7.0"
   }
 }

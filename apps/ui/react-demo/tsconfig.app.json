@@ -11,7 +11,7 @@
     "target": "es2021",
     "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": [
     "out-tsc",
     "dist",

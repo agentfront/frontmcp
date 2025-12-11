@@ -18,6 +18,7 @@ export type AIPlatformType =
   | 'continue' // Continue.dev
   | 'cody' // Sourcegraph Cody
   | 'generic-mcp' // Generic MCP client
+  | 'ext-apps' // MCP Apps spec compliant clients (io.modelcontextprotocol/ui extension)
   | 'unknown'; // Unknown client
 
 /**
@@ -31,6 +32,7 @@ export const aiPlatformTypeSchema = z.enum([
   'continue',
   'cody',
   'generic-mcp',
+  'ext-apps',
   'unknown',
 ]);
 
@@ -97,14 +99,16 @@ export interface Authorization {
   user: UserClaim;
   session?: {
     id: string;
-    payload: SessionIdPayload;
+    /** Payload may be undefined when session validation failed but ID is passed for transport lookup */
+    payload?: SessionIdPayload;
   };
 }
 
 export const sessionIdSchema = z.object({
   id: z.string(),
-  payload: sessionIdPayloadSchema,
-} satisfies RawZodShape<{ id: string; payload: SessionIdPayload }>);
+  /** Payload is optional - may be undefined when session validation failed but ID is passed for transport lookup */
+  payload: sessionIdPayloadSchema.optional(),
+} satisfies RawZodShape<{ id: string; payload?: SessionIdPayload }>);
 
 export const authorizationSchema = z.object({
   token: z.string(),

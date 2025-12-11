@@ -12,4 +12,7 @@ export {
   type AIPlatformType,
   detectAIPlatform,
   detectPlatformFromUserAgent,
+  detectPlatformFromCapabilities,
+  hasMcpAppsExtension,
+  MCP_APPS_EXTENSION_KEY,
 } from './notification.service';

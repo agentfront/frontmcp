@@ -10,17 +10,32 @@
  * Architecture:
  * - On OpenAI: Proxy directly to native window.openai API
  * - On Claude: Polyfill with limited functionality (network-blocked)
- * - On ext-apps: JSON-RPC postMessage bridge
+ * - On ext-apps: JSON-RPC postMessage bridge (SEP-1865 compliant)
+ * - On Gemini: Gemini SDK integration
  * - On Unknown: LocalStorage-based state, basic functionality
  *
  * @see https://developers.openai.com/apps-sdk/build/chatgpt-ui
+ * @see https://github.com/modelcontextprotocol/ext-apps (SEP-1865)
  */
 
 import type { ProviderType, ThemeMode, DisplayMode, HostContext } from './types';
+import { BRIDGE_SCRIPT_TAGS, generateBridgeIIFE } from '../bridge/runtime/iife-generator';
 
 /**
  * The MCP Bridge runtime script.
  * This is injected into UI templates to provide a unified API across providers.
+ *
+ * Uses the new FrontMcpBridge adapter system which supports:
+ * - OpenAI ChatGPT Apps SDK
+ * - ext-apps (SEP-1865 protocol)
+ * - Claude (Anthropic)
+ * - Gemini (Google)
+ * - Generic fallback
+ *
+ * The bridge exposes:
+ * - window.FrontMcpBridge - New unified bridge API
+ * - window.mcpBridge - Legacy compatibility bridge
+ * - window.openai - OpenAI polyfill for non-OpenAI platforms
  *
  * Provides full OpenAI window.openai API compatibility:
  * - Properties: theme, userAgent, locale, maxHeight, displayMode, safeArea,
@@ -513,6 +528,60 @@ export function isMCPBridgeSupported(): boolean {
     typeof w.claude !== 'undefined' ||
     w.__mcpPlatform === 'claude' ||
     w.__mcpPlatform === 'gemini' ||
+    w.__mcpPlatform === 'ext-apps' ||
     window.parent !== window
   );
 }
+
+// ============================================
+// New FrontMcpBridge System Exports
+// ============================================
+
+/**
+ * The new FrontMcpBridge runtime script (universal - includes all adapters).
+ * This is the recommended bridge for new integrations.
+ *
+ * @example
+ * ```typescript
+ * import { FRONTMCP_BRIDGE_RUNTIME } from '@frontmcp/ui/runtime';
+ * const html = `<!DOCTYPE html><html><head>${FRONTMCP_BRIDGE_RUNTIME}</head>...</html>`;
+ * ```
+ */
+export const FRONTMCP_BRIDGE_RUNTIME = BRIDGE_SCRIPT_TAGS.universal;
+
+/**
+ * Platform-specific bridge scripts.
+ *
+ * Use these for smaller bundle sizes when targeting a specific platform.
+ *
+ * @example
+ * ```typescript
+ * import { PLATFORM_BRIDGE_SCRIPTS } from '@frontmcp/ui/runtime';
+ *
+ * // For ChatGPT only
+ * const chatgptHtml = `<html><head>${PLATFORM_BRIDGE_SCRIPTS.chatgpt}</head>...</html>`;
+ *
+ * // For Claude only
+ * const claudeHtml = `<html><head>${PLATFORM_BRIDGE_SCRIPTS.claude}</head>...</html>`;
+ * ```
+ */
+export const PLATFORM_BRIDGE_SCRIPTS = BRIDGE_SCRIPT_TAGS;
+
+/**
+ * Generate a custom bridge script with specific options.
+ *
+ * @example
+ * ```typescript
+ * import { generateCustomBridge } from '@frontmcp/ui/runtime';
+ *
+ * const script = generateCustomBridge({
+ *   adapters: ['openai', 'ext-apps'],
+ *   debug: true,
+ *   trustedOrigins: ['https://my-host.com']
+ * });
+ * ```
+ */
+export { generateBridgeIIFE as generateCustomBridge } from '../bridge/runtime/iife-generator';
+
+// Re-export IIFE generator options type
+export type { IIFEGeneratorOptions } from '../bridge/runtime/iife-generator';

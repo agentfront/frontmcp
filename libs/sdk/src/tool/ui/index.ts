@@ -3,21 +3,59 @@
  *
  * Provides UI template rendering and platform-specific metadata generation
  * for MCP tool responses.
+ *
+ * Three serving modes:
+ * - **inline**: HTML is rendered per-request and embedded in _meta['ui/html']
+ * - **static**: Static widget is pre-compiled at startup, client fetches via resources/read
+ * - **hybrid**: Shell (React + renderer) cached at startup, component + data in response
+ *
+ * NOTE: Core Tool UI functionality has moved to @frontmcp/ui/registry for standalone usage.
+ * This module re-exports from @frontmcp/ui/registry for backwards compatibility.
  */
 
-// Registry
-export { ToolUIRegistry } from './tool-ui.registry';
-export type { RenderAndRegisterOptions, UIRegistrationResult, CachedUI } from './tool-ui.registry';
+// ============================================
+// Core Registry (from @frontmcp/ui/registry)
+// ============================================
+export {
+  // Registry
+  ToolUIRegistry,
+  // Template rendering
+  renderToolTemplateAsync,
+  renderToolTemplate,
+  hasUIConfig,
+  isReactComponent,
+  containsMdxSyntax,
+  // URI utilities
+  UI_RESOURCE_SCHEME,
+  isUIResourceUri,
+  isStaticWidgetUri,
+  parseWidgetUri,
+  buildStaticWidgetUri,
+  getUIResourceMimeType,
+} from '@frontmcp/ui/registry';
 
-// Template rendering
-export { renderToolTemplate, renderToolTemplateAsync, hasUIConfig, isReactComponent } from './render-template';
-export type { RenderTemplateOptions } from './render-template';
+export type {
+  // Registry types
+  RenderOptions,
+  UIRenderResult,
+  CompileStaticWidgetOptions,
+  HybridComponentPayload,
+  BuildHybridComponentPayloadOptions,
+  // Template types
+  RenderTemplateOptions,
+  // URI types
+  ParsedWidgetUri,
+} from '@frontmcp/ui/registry';
 
-// Platform adapters
+// ============================================
+// Platform Adapters (from @frontmcp/ui/adapters)
+// ============================================
 export { buildUIMeta } from './platform-adapters';
 export type { UIMetadata, BuildUIMetaOptions } from './platform-adapters';
 
-// Template helpers
+// ============================================
+// Template Helpers (from @frontmcp/ui/runtime)
+// ============================================
 export {
   escapeHtml,
   formatDate,
@@ -28,26 +66,12 @@ export {
   resetIdCounter,
 } from './template-helpers';
 
-// UI Resource Handler
-export {
-  UI_RESOURCE_SCHEME,
-  isUIResourceUri,
-  isStaticWidgetUri,
-  parseUIResourceUri,
-  parseWidgetUri,
-  buildUIResourceUri,
-  buildStaticWidgetUri,
-  handleUIResourceRead,
-  createUIResourceHandler,
-  getUIResourceMimeType,
-} from './ui-resource.handler';
-export type {
-  ParsedUIUri,
-  ParsedWidgetUri,
-  UIResourceHandleResult,
-  UIResourceHandlerOptions,
-  HandleUIResourceOptions,
-} from './ui-resource.handler';
+// ============================================
+// SDK-Specific (MCP Integration)
+// ============================================
+// UI Resource Handler - SDK-specific functions for MCP resource handling
+export { handleUIResourceRead, createUIResourceHandler } from './ui-resource.handler';
+export type { UIResourceHandleResult, UIResourceHandlerOptions, HandleUIResourceOptions } from './ui-resource.handler';
 
 // UI Resource Templates (for capability advertisement)
-export { ToolUIResourceTemplate, StaticWidgetResourceTemplate } from './ui-resource-template';
+export { StaticWidgetResourceTemplate } from './ui-resource-template';

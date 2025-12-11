@@ -612,7 +612,8 @@ type ToolUITemplate<In = unknown, Out = unknown> =
 ```typescript
 type WidgetServingMode =
   | 'inline'      // Embedded in tool response _meta
-  | 'mcp-resource' // Via ui:// resource URI
+  | 'static'      // Pre-compiled at startup, via ui:// resource URI
+  | 'hybrid'      // Shell cached at startup, component in response
   | 'direct-url'  // HTTP endpoint on MCP server
   | 'custom-url'; // External/CDN hosting
 ```

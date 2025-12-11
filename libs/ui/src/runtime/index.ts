@@ -29,8 +29,16 @@ export type {
   WidgetServingMode,
 } from './types';
 
-// MCP Bridge Runtime
+// MCP Bridge Runtime (legacy)
 export { MCP_BRIDGE_RUNTIME, getMCPBridgeScript, isMCPBridgeSupported } from './mcp-bridge';
+
+// New FrontMcpBridge Runtime
+export {
+  FRONTMCP_BRIDGE_RUNTIME,
+  PLATFORM_BRIDGE_SCRIPTS,
+  generateCustomBridge,
+  type IIFEGeneratorOptions,
+} from './mcp-bridge';
 
 // CSP utilities
 export {
@@ -45,8 +53,16 @@ export {
 // Wrapper utilities
 export {
   type WrapToolUIFullOptions,
+  type WrapToolUIUniversalOptions,
+  type WrapStaticWidgetOptions,
+  type WrapLeanWidgetShellOptions,
+  type WrapHybridWidgetShellOptions,
   wrapToolUI,
   wrapToolUIMinimal,
+  wrapToolUIUniversal,
+  wrapStaticWidgetUniversal,
+  wrapLeanWidgetShell,
+  wrapHybridWidgetShell,
   createTemplateHelpers,
   buildOpenAIMeta,
   getToolUIMimeType,
@@ -69,3 +85,30 @@ export {
   detectPIIType,
   redactPIIFromText,
 } from './sanitizer';
+
+// Renderer Runtime
+export {
+  RendererRuntime,
+  createRendererRuntime,
+  bootstrapRendererRuntime,
+  generateBootstrapScript,
+  type RendererRuntimeConfig,
+} from './renderer-runtime';
+
+// Renderer Adapters
+export {
+  type RendererAdapter,
+  type RenderContext,
+  type RenderOptions,
+  type RenderResult,
+  type AdapterLoader,
+  HtmlRendererAdapter,
+  ReactRendererAdapter,
+  MdxRendererAdapter,
+  createHtmlAdapter,
+  createReactAdapter,
+  createMdxAdapter,
+  loadAdapter,
+  getAdapterLoader,
+  adapterLoaders,
+} from './adapters';

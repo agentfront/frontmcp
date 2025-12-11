@@ -391,7 +391,7 @@ export interface ExtendedToolUIConfig<In = unknown, Out = unknown> {
   };
 
   /** How the widget HTML should be served to the client. */
-  servingMode?: 'inline' | 'mcp-resource' | 'direct-url' | 'custom-url';
+  servingMode?: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url';
 
   /** Custom URL for widget serving when `servingMode: 'custom-url'`. */
   customWidgetUrl?: string;

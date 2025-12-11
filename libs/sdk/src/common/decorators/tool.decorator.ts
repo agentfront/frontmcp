@@ -9,9 +9,8 @@ import {
   ResourceLinkOutputSchema,
   ToolInputType,
   ToolOutputType,
-  UIContentSecurityPolicy,
 } from '../metadata';
-import type { TemplateHelpers } from '../metadata/tool-ui.metadata';
+import type { ToolUIConfig } from '../metadata/tool-ui.metadata';
 import z from 'zod';
 import { ToolContext } from '../interfaces';
 
@@ -175,50 +174,45 @@ type __ToolMetadataBase<I extends __Shape, O extends __OutputSchema> = ToolMetad
 >;
 
 /**
- * UI template type - accepts multiple formats.
- * Uses `unknown` for context types to avoid breaking generic inference.
- * Template functions receive input/output as `unknown` - cast if type safety needed.
+ * Tool metadata options with optional UI configuration.
+ *
+ * The `ui` property accepts a `ToolUIConfig` from `@frontmcp/ui/types`
+ * for configuring interactive widget rendering.
  */
-type __UITemplateType =
-  | ((ctx: { input: unknown; output: unknown; structuredContent?: unknown; helpers: TemplateHelpers }) => string)
-  | string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  | ((props: any) => any); // React component signature
-
 export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = __ToolMetadataBase<I, O> & {
   /**
    * UI template configuration for rendering interactive widgets.
+   *
+   * The template builder function receives typed `ctx.input` and `ctx.output`
+   * based on the tool's `inputSchema` and `outputSchema`.
+   *
+   * @see {@link ToolUIConfig} for all available options including:
+   * - `template`: React component, HTML string, or builder function
+   * - `servingMode`: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'
+   * - `csp`: Content Security Policy configuration
+   * - `widgetAccessible`: Enable MCP bridge for tool calls from widget
+   * - `displayMode`: 'inline' | 'fullscreen' | 'pip'
+   * - And more...
+   *
+   * @example HTML template builder with typed context
+   * ```typescript
+   * ui: {
+   *   template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`,
+   *   // ctx.output is typed based on outputSchema
+   *   servingMode: 'inline',
+   * }
+   * ```
+   *
+   * @example React component
+   * ```typescript
+   * import WeatherCard from './weather-ui';
+   * ui: {
+   *   template: WeatherCard,
+   *   servingMode: 'static',
+   * }
+   * ```
    */
-  ui?: {
-    /**
-     * Template for rendering tool UI.
-     *
-     * Supports multiple formats (auto-detected by renderer):
-     * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
-     * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
-     * - React component: `MyWidget` - receives props with input/output/helpers
-     *
-     * @example HTML template builder
-     * ```typescript
-     * template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`
-     * ```
-     *
-     * @example React component
-     * ```typescript
-     * import { MyWidget } from './my-widget.tsx';
-     * template: MyWidget
-     * ```
-     */
-    template: __UITemplateType;
-    /** Content Security Policy for the sandboxed widget */
-    csp?: UIContentSecurityPolicy;
-    /** Whether the widget can invoke tools via the MCP bridge */
-    widgetAccessible?: boolean;
-    /** Preferred display mode: 'inline' | 'fullscreen' | 'pip' */
-    displayMode?: 'inline' | 'fullscreen' | 'pip';
-    /** Human-readable description of what the widget does */
-    widgetDescription?: string;
-  };
+  ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I | z.ZodObject<I> }>, ToolOutputOf<{ outputSchema: O }>>;
 };
 
 // ---------- ctor & reflection ----------

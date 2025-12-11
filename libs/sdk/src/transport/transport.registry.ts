@@ -24,6 +24,16 @@ export class TransportService {
   private readonly bus?: TransportBus;
   private readonly scope: Scope;
 
+  /**
+   * Session history cache for tracking if sessions were ever created.
+   * Used to differentiate between "session never initialized" (HTTP 400) and
+   * "session expired/terminated" (HTTP 404) per MCP Spec 2025-11-25.
+   *
+   * Key: "type:tokenHash:sessionId", Value: creation timestamp
+   */
+  private readonly sessionHistory: Map<string, number> = new Map();
+  private readonly MAX_SESSION_HISTORY = 10000;
+
   constructor(scope: Scope) {
     this.scope = scope;
     this.distributed = false; // get from scope metadata
@@ -166,6 +176,22 @@ export class TransportService {
     return transporter;
   }
 
+  /**
+   * Check if a session was ever created (even if it's been terminated/evicted).
+   * Used to differentiate between "session never initialized" (HTTP 400) and
+   * "session expired/terminated" (HTTP 404) per MCP Spec 2025-11-25.
+   *
+   * @param type - Transport type (e.g., 'streamable-http', 'sse')
+   * @param token - The authorization token
+   * @param sessionId - The session ID to check
+   * @returns true if session was ever created, false otherwise
+   */
+  wasSessionCreated(type: TransportType, token: string, sessionId: string): boolean {
+    const tokenHash = this.sha256(token);
+    const historyKey = `${type}:${tokenHash}:${sessionId}`;
+    return this.sessionHistory.has(historyKey);
+  }
+
   /* --------------------------------- internals -------------------------------- */
 
   private sha256(value: string): string {
@@ -212,6 +238,20 @@ export class TransportService {
     const typeBucket = this.ensureTypeBucket(key.type);
     const tokenBucket = this.ensureTokenBucket(typeBucket, key.tokenHash);
     tokenBucket.set(key.sessionId, t);
+
+    // Record session creation in history for HTTP 404 detection
+    const historyKey = `${key.type}:${key.tokenHash}:${key.sessionId}`;
+    this.sessionHistory.set(historyKey, Date.now());
+
+    // Evict oldest entries if cache exceeds max size (LRU-like eviction)
+    if (this.sessionHistory.size > this.MAX_SESSION_HISTORY) {
+      const entries = [...this.sessionHistory.entries()].sort((a, b) => a[1] - b[1]);
+      // Remove oldest 10% of entries
+      const toEvict = Math.ceil(this.MAX_SESSION_HISTORY * 0.1);
+      for (let i = 0; i < toEvict && i < entries.length; i++) {
+        this.sessionHistory.delete(entries[i][0]);
+      }
+    }
   }
 
   private evictLocal(key: TransportKey): void {

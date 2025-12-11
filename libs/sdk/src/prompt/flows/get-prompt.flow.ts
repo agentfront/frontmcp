@@ -14,7 +14,7 @@ import {
 
 const inputSchema = z.object({
   request: GetPromptRequestSchema,
-  // z.any() used because ctx is a complex RequestHandlerExtra type from @modelcontextprotocol/sdk
+  // z.any() used because ctx is the MCP SDK's PromptGetExtra type which varies by SDK version
   ctx: z.any(),
 });
 

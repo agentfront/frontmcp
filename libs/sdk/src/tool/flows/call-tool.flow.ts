@@ -26,24 +26,25 @@ import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
+  // z.any() used because ctx is the MCP SDK's ToolCallExtra type which varies by SDK version
   ctx: z.any(),
 });
 
 const outputSchema = CallToolResultSchema;
 
 const stateSchema = z.object({
-  input: z
-    .object({
-      name: z.string().min(1).max(64),
-      arguments: z.object({}).passthrough().optional(),
-    })
-    .passthrough(),
+  input: z.looseObject({
+    name: z.string().min(1).max(64),
+    arguments: z.looseObject({}).optional(),
+  }),
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   tool: z.instanceof(ToolEntry),
   toolContext: z.instanceof(ToolContext),
   // Store the raw executed output for plugins to see
   rawOutput: z.any().optional(),
   output: outputSchema,
+  // Tool owner ID for hook filtering (set during parseInput)
+  _toolOwnerId: z.string().optional(),
 });
 
 const plan = {
@@ -73,6 +74,29 @@ declare global {
 
 const name = 'tools:call-tool' as const;
 const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
+
+/**
+ * Safely stringify a value, handling circular references and other edge cases.
+ * This prevents tool calls from failing due to serialization errors.
+ */
+const safeStringify = (value: unknown, space?: number): string => {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(
+      value,
+      (_key, val) => {
+        if (typeof val === 'object' && val !== null) {
+          if (seen.has(val)) return '[Circular]';
+          seen.add(val);
+        }
+        return val;
+      },
+      space,
+    );
+  } catch {
+    return JSON.stringify({ error: 'Output could not be serialized' });
+  }
+};
 
 @Flow({
   name,
@@ -114,12 +138,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return entry.fullName === name || entry.name === name;
     });
 
-    // Store tool owner ID in the flow input for hook filtering
-    if (tool?.owner) {
-      (this.rawInput as any)._toolOwnerId = tool.owner.id;
-    }
+    // Store tool owner ID in state for hook filtering
+    const toolOwnerId = tool?.owner?.id;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo });
+    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId });
     this.logger.verbose('parseInput:done');
   }
 
@@ -403,40 +425,175 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
           'openai';
 
-        // Render the UI and get platform-specific metadata
-        // Use async version to support React component templates via SSR
-        const uiResult = await scope.toolUI.renderAndRegisterAsync({
-          toolName: tool.metadata.name,
-          requestId,
-          input: (input?.arguments ?? {}) as Record<string, unknown>,
-          output: rawOutput,
-          structuredContent: result.structuredContent,
-          uiConfig: tool.metadata.ui,
-          platformType,
-        });
+        // Get the serving mode (default to 'inline' for backward compatibility)
+        const servingMode = tool.metadata.ui.servingMode ?? 'inline';
 
-        // Merge UI metadata into result._meta
-        result._meta = {
-          ...result._meta,
-          ...uiResult.meta,
-        };
+        if (servingMode === 'static') {
+          // For static mode: return ONLY structured data
+          // The static widget was already registered at server startup and advertised in tools/list
+          // Widget reads tool output from platform context (e.g., window.openai.toolOutput)
+          // NO UI _meta fields needed - the client uses the outputTemplate URI from tools/list
 
-        // When UI is rendered, clear the text content since the widget will display the data
-        // The structuredContent remains as the actual tool output data
-        // The rendered HTML is available in _meta['ui/html'] for the widget to use
-        result.content = [];
+          // Return structured data as JSON text content
+          result.content = [
+            {
+              type: 'text',
+              text: safeStringify(rawOutput),
+            },
+          ];
 
-        this.logger.verbose('finalize: UI metadata added', {
-          tool: tool.metadata.name,
-          uri: uiResult.uri,
-          platform: platformType,
-        });
+          // Do NOT add any UI _meta fields - widget reads from platform context
+          // The outputTemplate URI (ui://widget/{toolName}.html) was already provided in tools/list
+
+          this.logger.verbose('finalize: UI using static mode (structured data only)', {
+            tool: tool.metadata.name,
+            platform: platformType,
+            outputKeys:
+              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
+          });
+        } else if (servingMode === 'hybrid') {
+          // For hybrid mode: return structured data + transpiled component code
+          // The hybrid shell (React runtime + renderer) was pre-compiled at server startup
+          // and advertised via outputTemplate URI in tools/list.
+          // The shell dynamically imports the component code from _meta['ui/component']
+          // and renders it with toolOutput data from the platform context.
+
+          // Build the component payload with transpiled code
+          const componentPayload = scope.toolUI.buildHybridComponentPayload({
+            toolName: tool.metadata.name,
+            template: tool.metadata.ui.template,
+            uiConfig: tool.metadata.ui,
+          });
+
+          // Return structured data as JSON text content
+          result.content = [
+            {
+              type: 'text',
+              text: safeStringify(rawOutput),
+            },
+          ];
+
+          // Add component payload to _meta for the hybrid shell's dynamic renderer
+          if (componentPayload) {
+            result._meta = {
+              ...result._meta,
+              'ui/component': componentPayload,
+              'ui/type': componentPayload.type,
+            };
+          }
+
+          this.logger.verbose('finalize: UI using hybrid mode (structured data + component)', {
+            tool: tool.metadata.name,
+            platform: platformType,
+            hasComponent: !!componentPayload,
+            componentType: componentPayload?.type,
+            componentHash: componentPayload?.hash,
+            outputKeys:
+              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
+          });
+        } else {
+          // For inline mode (default): render HTML with data embedded in each response
+          // Use async version to support React component templates via SSR
+          const uiResult = await scope.toolUI.renderAndRegisterAsync({
+            toolName: tool.metadata.name,
+            requestId,
+            input:
+              input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+                ? (input.arguments as Record<string, unknown>)
+                : {},
+            output: rawOutput,
+            structuredContent: result.structuredContent,
+            uiConfig: tool.metadata.ui,
+            platformType,
+          });
+
+          // Merge UI metadata into result._meta
+          result._meta = {
+            ...result._meta,
+            ...uiResult.meta,
+          };
+
+          // For platforms that support widgets (OpenAI, ext-apps), clear content since widget displays data
+          // For Claude and other platforms, keep the text content as they don't support _meta UI fields
+          const supportsWidgets = platformType === 'openai' || platformType === 'ext-apps';
+
+          if (supportsWidgets) {
+            // Clear content - widget will display from _meta['ui/html']
+            result.content = [];
+          } else {
+            // For Claude and other platforms without widget support:
+            // Return JSON data + HTML template as artifact hint
+            const htmlContent = uiResult?.meta?.['ui/html'];
+
+            if (htmlContent) {
+              // Include HTML template as artifact hint for Claude
+              // Claude can use this to create an HTML artifact for visual display
+              result.content = [
+                {
+                  type: 'text',
+                  text: `## Data\n\`\`\`json\n${safeStringify(
+                    rawOutput,
+                    2,
+                  )}\n\`\`\`\n\n## Visual Template (for artifact rendering)\n\`\`\`html\n${htmlContent}\n\`\`\``,
+                },
+              ];
+            } else {
+              // Fallback: JSON only
+              result.content = [
+                {
+                  type: 'text',
+                  text: safeStringify(rawOutput, 2),
+                },
+              ];
+            }
+          }
+
+          this.logger.verbose('finalize: UI metadata added (inline mode)', {
+            tool: tool.metadata.name,
+            platform: platformType,
+            supportsWidgets,
+            contentCleared: supportsWidgets,
+            htmlHintIncluded: !supportsWidgets && !!uiResult?.meta?.['ui/html'],
+          });
+        }
       } catch (error) {
         // UI rendering failure should not fail the tool call
-        this.logger.warn('finalize: UI rendering failed', {
+        // Log with full context to help debugging
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        const uiConfig = tool.metadata.ui;
+
+        this.logger.error('finalize: UI rendering failed', {
           tool: tool.metadata.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
+          stack: errorStack,
+          templateType: uiConfig?.template
+            ? typeof uiConfig.template === 'function'
+              ? 'react-component'
+              : typeof uiConfig.template === 'string'
+              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+                ? 'react-file'
+                : 'html-file'
+              : 'unknown'
+            : 'none',
+          hasStructuredContent: result.structuredContent !== undefined,
+          structuredContentKeys:
+            result.structuredContent &&
+            typeof result.structuredContent === 'object' &&
+            result.structuredContent !== null &&
+            !Array.isArray(result.structuredContent)
+              ? Object.keys(result.structuredContent)
+              : [],
         });
+
+        // In debug mode, also log to console for immediate visibility
+        if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+          console.error('[FrontMCP] UI Rendering Error:', {
+            tool: tool.metadata.name,
+            error: errorMessage,
+            stack: errorStack,
+          });
+        }
       }
     }
 

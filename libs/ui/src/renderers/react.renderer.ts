@@ -32,10 +32,11 @@ type ReactTemplate<In = unknown, Out = unknown> =
 
 /**
  * React runtime CDN URLs.
+ * Using esm.sh for React 19 (ES modules).
  */
 const REACT_CDN = {
-  react: 'https://unpkg.com/react@18/umd/react.production.min.js',
-  reactDom: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+  react: 'https://esm.sh/react@19',
+  reactDom: 'https://esm.sh/react-dom@19/client',
 };
 
 /**

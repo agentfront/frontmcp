@@ -86,7 +86,12 @@ export function renderMcpSessionPolyfill(mcpSession?: McpSession): string {
    * This wraps window.mcpBridge.callTool with HTTP fallback support.
    */
   window.__frontmcp.callTool = async function(toolName, args) {
-    // If MCP bridge has callTool, use it
+    // Priority 1: Direct OpenAI SDK call (most reliable in OpenAI iframe)
+    if (typeof window !== 'undefined' && window.openai && typeof window.openai.callTool === 'function') {
+      return window.openai.callTool(toolName, args);
+    }
+
+    // Priority 2: If MCP bridge has callTool, use it
     if (window.mcpBridge && typeof window.mcpBridge.callTool === 'function') {
       try {
         return await window.mcpBridge.callTool(toolName, args);
@@ -96,7 +101,7 @@ export function renderMcpSessionPolyfill(mcpSession?: McpSession): string {
       }
     }
 
-    // HTTP fallback using detected session
+    // Priority 3: HTTP fallback using detected session
     var session = window.__frontmcp.detectMcpSession();
     if (!session) {
       throw new Error(

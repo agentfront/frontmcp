@@ -6,10 +6,13 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
+import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
+import { isUIType } from '@frontmcp/ui/types';
+import type { Scope } from '../../scope/scope.instance';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = ListToolsResultSchema;
@@ -209,11 +212,63 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             // This should never happen if hasUIConfig returned true
             return item;
           }
+
+          // Get manifest info from registry (if available)
+          // Type guard: verify scope has toolUI with required methods before accessing
+          const isValidScope = (obj: unknown): obj is Scope => {
+            return (
+              obj !== null &&
+              typeof obj === 'object' &&
+              'toolUI' in obj &&
+              typeof (obj as { toolUI?: unknown }).toolUI === 'object' &&
+              (obj as { toolUI?: unknown }).toolUI !== null &&
+              typeof (obj as { toolUI: { getManifest?: unknown } }).toolUI.getManifest === 'function' &&
+              typeof (obj as { toolUI: { detectUIType?: unknown } }).toolUI.detectUIType === 'function'
+            );
+          };
+
+          if (!isValidScope(this.scope)) {
+            this.logger.warn(`parseTools: toolUI not available in scope for ${finalName}`);
+            return item;
+          }
+          const scope = this.scope;
+
+          // Get manifest and detect UI type with error handling
+          let manifest;
+          let detectedType: string;
+          try {
+            manifest = scope.toolUI.getManifest(finalName);
+            detectedType = scope.toolUI.detectUIType(uiConfig.template);
+          } catch (error) {
+            this.logger.warn(`parseTools: failed to access toolUI for ${finalName}`, error);
+            return item;
+          }
+
+          // Use centralized type guard from @frontmcp/ui/types
+          const uiType: UIType = manifest?.uiType ?? (isUIType(detectedType) ? detectedType : 'auto');
+
+          // Always include outputTemplate for all UI tools
+          // - static mode: Full widget with React runtime and bridge
+          // - inline mode: Lean shell (just HTML + theme), actual widget comes in tool response
           const meta: Record<string, unknown> = {
             'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,
             'openai/resultCanProduceWidget': true,
             'openai/widgetAccessible': uiConfig.widgetAccessible ?? false,
+            // CDN info for client-side resource loading
+            'ui/cdn': buildCDNInfoForUIType(uiType),
           };
+
+          // Add manifest information for client-side renderer selection
+          if (manifest) {
+            meta['ui/type'] = manifest.uiType;
+            meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+            meta['ui/displayMode'] = manifest.displayMode;
+            meta['ui/bundlingMode'] = manifest.bundlingMode;
+          } else if (uiConfig.template) {
+            // Fallback to detecting UI type from template
+            meta['ui/type'] = uiType;
+            // Note: ui/manifestUri is only set when a manifest exists in the registry
+          }
 
           // Add invocation status if configured
           if (uiConfig.invocationStatus?.invoking) {

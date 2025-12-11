@@ -91,6 +91,30 @@ export function renderBridgeScript(): string {
   'use strict';
 
   // ============================================
+  // Debug Mode
+  // ============================================
+
+  var DEBUG = window.location.search.indexOf('frontmcp_debug=1') > -1 ||
+              window.localStorage.getItem('frontmcp_debug') === '1';
+  var debugLog = [];
+
+  function log(level, message, data) {
+    var entry = {
+      ts: new Date().toISOString(),
+      level: level,
+      message: message,
+      data: data
+    };
+    debugLog.push(entry);
+    if (DEBUG) {
+      console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](
+        '[frontmcp] ' + message,
+        data || ''
+      );
+    }
+  }
+
+  // ============================================
   // Bridge State Management
   // ============================================
 
@@ -101,7 +125,9 @@ export function renderBridgeScript(): string {
   function notify() {
     stateVersion++;
     for (var i = 0; i < subscribers.length; i++) {
-      try { subscribers[i](); } catch(e) { console.error('[frontmcp] Subscriber error:', e); }
+      try { subscribers[i](); } catch(e) {
+        log('error', 'Subscriber error:', { error: e.message, stack: e.stack });
+      }
     }
     // Dispatch custom event for HTMX
     if (typeof CustomEvent !== 'undefined') {
@@ -112,18 +138,90 @@ export function renderBridgeScript(): string {
   function setData(data) {
     // Skip if data hasn't actually changed (prevents unnecessary re-renders)
     if (!state.loading && state.data === data) return;
+    log('info', 'setData called', {
+      dataType: typeof data,
+      dataLength: typeof data === 'string' ? data.length : 'N/A',
+      isNull: data === null,
+      isUndefined: data === undefined
+    });
     state = { data: data, loading: false, error: null };
     notify();
   }
 
   function setError(error) {
+    log('error', 'setError called', { error: error });
     state = { data: null, loading: false, error: error };
     notify();
   }
 
   function reset() {
+    log('info', 'reset called');
     state = { data: null, loading: true, error: null };
     notify();
+  }
+
+  // ============================================
+  // Data Validation
+  // ============================================
+
+  function validateToolOutput(data, source) {
+    var errors = [];
+
+    if (data === undefined) {
+      errors.push('toolOutput is undefined');
+    } else if (data === null) {
+      // null is valid initial state from OpenAI
+      log('info', 'toolOutput is null (OpenAI initial state)', { source: source });
+      return { valid: false, errors: ['initial_state'], isInitial: true };
+    }
+
+    if (typeof data === 'object' && data !== null) {
+      if (data.isError === true) {
+        errors.push('Tool returned error: ' + JSON.stringify(data));
+      }
+      // Check for MCP error structure
+      if (data.error && data.error.code) {
+        errors.push('MCP error: code=' + data.error.code + ', message=' + (data.error.message || 'unknown'));
+      }
+    }
+
+    if (errors.length > 0) {
+      log('warn', 'Validation issues', { source: source, errors: errors });
+    }
+
+    return { valid: errors.length === 0, errors: errors, isInitial: false };
+  }
+
+  function validateMetadata(meta, source) {
+    var errors = [];
+
+    if (!meta) {
+      errors.push('toolResponseMetadata is null/undefined');
+      return { valid: false, errors: errors };
+    }
+
+    if (typeof meta !== 'object') {
+      errors.push('toolResponseMetadata is not an object: ' + typeof meta);
+      return { valid: false, errors: errors };
+    }
+
+    var html = meta['ui/html'];
+    if (html !== undefined) {
+      if (typeof html !== 'string') {
+        errors.push('ui/html is not a string: ' + typeof html);
+      } else if (html.length === 0) {
+        errors.push('ui/html is empty string');
+      } else if (html.indexOf('validation-error') > -1) {
+        errors.push('ui/html contains validation error');
+        log('warn', 'HTML contains validation error', { htmlPreview: html.substring(0, 500) });
+      }
+    }
+
+    if (errors.length > 0) {
+      log('warn', 'Metadata validation issues', { source: source, errors: errors, keys: Object.keys(meta) });
+    }
+
+    return { valid: errors.length === 0, errors: errors };
   }
 
   // ============================================
@@ -133,12 +231,24 @@ export function renderBridgeScript(): string {
   var openaiIntercepted = false;
 
   function checkOpenAIData(openai) {
-    if (!openai) return false;
+    if (!openai) {
+      log('warn', 'checkOpenAIData: openai object is null');
+      return false;
+    }
+
+    log('info', 'checkOpenAIData called', {
+      hasToolOutput: openai.toolOutput !== undefined,
+      hasToolResponseMetadata: openai.toolResponseMetadata !== undefined,
+      toolOutputType: typeof openai.toolOutput,
+      metadataKeys: openai.toolResponseMetadata ? Object.keys(openai.toolResponseMetadata) : []
+    });
 
     // Priority 1: Pre-rendered HTML from toolResponseMetadata
     if (openai.toolResponseMetadata) {
+      var metaValidation = validateMetadata(openai.toolResponseMetadata, 'openai.toolResponseMetadata');
       var html = openai.toolResponseMetadata['ui/html'];
       if (html && typeof html === 'string') {
+        log('info', 'Using ui/html from metadata', { htmlLength: html.length });
         setData(html);
         return true;
       }
@@ -146,10 +256,18 @@ export function renderBridgeScript(): string {
 
     // Priority 2: Tool output (skip null - that's OpenAI's initial state)
     if (openai.toolOutput !== undefined && openai.toolOutput !== null) {
-      setData(openai.toolOutput);
-      return true;
+      var outputValidation = validateToolOutput(openai.toolOutput, 'openai.toolOutput');
+      if (!outputValidation.isInitial) {
+        log('info', 'Using toolOutput', {
+          valid: outputValidation.valid,
+          errors: outputValidation.errors
+        });
+        setData(openai.toolOutput);
+        return true;
+      }
     }
 
+    log('info', 'checkOpenAIData: no data found yet');
     return false;
   }
 
@@ -251,7 +369,50 @@ export function renderBridgeScript(): string {
     // Manual control (for testing/custom injection)
     setData: setData,
     setError: setError,
-    reset: reset
+    reset: reset,
+
+    // Debug API
+    debug: {
+      getLogs: function() { return debugLog.slice(); },
+      getLastErrors: function() {
+        return debugLog.filter(function(e) { return e.level === 'error' || e.level === 'warn'; });
+      },
+      enableDebug: function() {
+        DEBUG = true;
+        window.localStorage.setItem('frontmcp_debug', '1');
+        console.log('[frontmcp] Debug mode enabled. Reload page to see all logs.');
+      },
+      disableDebug: function() {
+        DEBUG = false;
+        window.localStorage.removeItem('frontmcp_debug');
+      },
+      isDebugEnabled: function() { return DEBUG; },
+      getStateHistory: function() {
+        return {
+          current: state,
+          version: stateVersion,
+          subscriberCount: subscribers.length,
+          openaiIntercepted: openaiIntercepted,
+          pollCount: pollCount
+        };
+      },
+      dumpAll: function() {
+        console.group('[frontmcp] Debug Dump');
+        console.log('State:', state);
+        console.log('Version:', stateVersion);
+        console.log('Subscribers:', subscribers.length);
+        console.log('OpenAI Intercepted:', openaiIntercepted);
+        console.log('Poll Count:', pollCount);
+        console.log('Debug Logs:', debugLog);
+        console.groupEnd();
+        return {
+          state: state,
+          logs: debugLog,
+          version: stateVersion,
+          openaiIntercepted: openaiIntercepted
+        };
+      }
+    }
   };
 
   // ============================================
