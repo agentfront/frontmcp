@@ -1,3 +1,23 @@
+## [v0.5.0] - 2025-12-11
+
+### feat
+
+- Ship @frontmcp/ui with HTML, React, and MDX templates, platform detection, HTMX hooks, and consent/error layouts so tools can return polished UI anywhere.
+- Expose Tool UI metadata (display modes, serving modes, widget accessibility, CSP, hydration) plus OpenAI App SDK resource widgets for richer tool responses.
+- Implement public, transparent, and orchestrated authentication modes with consent screens, incremental scopes, session strategies, and runnable Nx demo servers.
+- Add first-class MCP resource and prompt registries, `@ResourceTemplate` execution, capability notifications, and improved error handling across transports.
+- Deliver the CodeCall plugin, VectoriaDB semantic store, AST Guard, sandbox upgrades, and tool-owner enforcement to harden plugin execution.
+- Introduce @frontmcp/testing with Jest integration, HTTP mocking, fixtures, and e2e helpers for deterministic transport coverage.
+
+### docs
+
+- Expand Mintlify docs with platform-aware UI guides, authentication mode walkthroughs, CodeCall/Vectoria/AST Guard guides, testing references, and refreshed navigation for v0.5.
+
+### build
+
+- Require Node >= 22 (tested on 24), bump @types/node to 24, upgrade to MCP SDK 1.23, Zod 4, add @huggingface/transformers + zod-from-json-schema, and align Nx tooling + engine metadata.
+- Streamline CI by skipping CUDA for ONNX validator installs and tightening SWC/Jest configs across packages.
+
 ## [v0.4.0] - 2025-11-22
 
 ### feat

@@ -1,0 +1,197 @@
+---
+title: Resource Widgets
+sidebarTitle: Resource Widgets
+icon: panel-right
+description: Render OpenAI App SDK resource cards, lists, and previews from your MCP tools.
+---
+
+# Resource Widgets
+
+`@frontmcp/ui` ships specialized helpers for OpenAI App SDK-style experiences. Use `resourceWidget`, `resourceList`, and `resourceItem` to present documents, tasks, and media with consistent metadata, then pair them with `codePreview` or `imagePreview` when you need inline viewers.
+
+## Import
+
+```typescript
+import {
+  resourceWidget,
+  resourceList,
+  resourceItem,
+  codePreview,
+  imagePreview,
+  escapeHtml,
+} from '@frontmcp/ui';
+```
+
+## Resource Types
+
+| Type       | Description                                  |
+| ---------- | -------------------------------------------- |
+| `document` | Files, notes, briefs, or transcripts         |
+| `image`    | Screenshots, marketing assets, generated art |
+| `code`     | Snippets, diffs, or diagnostics              |
+| `data`     | Metrics, analytics exports, dashboards       |
+| `file`     | Generic binary downloads                     |
+| `link`     | Deep links to dashboards or SaaS tools       |
+| `user`     | People/org profiles                          |
+| `event`    | Meetings, incidents, launches                |
+| `message`  | Conversations or notifications               |
+| `task`     | Tickets, todos, approvals                    |
+| `custom`   | Catch-all with your own icon                 |
+
+## `resourceWidget()`
+
+Build a rich card with thumbnail/metadata/actions. Everything resolves to HTML, so you can stream it from a tool response or hydrate it later.
+
+```typescript
+const noteWidget = resourceWidget({
+  type: 'document',
+  title: ctx.output.title,
+  description: ctx.output.summary,
+  icon: '📝',
+  url: `notes://${ctx.output.id}`,
+  status: ctx.output.archived
+    ? { label: 'Archived', variant: 'secondary' }
+    : { label: 'Active', variant: 'success' },
+  meta: {
+    author: ctx.output.author,
+    updatedAt: ctx.output.updatedAt,
+    tags: ctx.output.tags,
+  },
+  actions: [
+    {
+      label: 'Open in CRM',
+      icon: '↗️',
+      href: `https://crm.example.com/notes/${ctx.output.id}`,
+      variant: 'primary',
+    },
+    {
+      label: 'Sync',
+      icon: '♻️',
+      htmx: {
+        post: `/api/notes/${ctx.output.id}/sync`,
+        target: '#note-sync',
+        swap: 'innerHTML',
+      },
+    },
+  ],
+});
+```
+
+### Metadata & Statuses
+
+Use the `meta` object for timestamps, MIME types, and authors. Dates accept ISO strings or `Date` instances and are formatted automatically. Add status badges to show review states, SLA breaches, or completion.
+
+```typescript
+const attachment = resourceWidget({
+  type: 'file',
+  title: 'Invoice.pdf',
+  description: 'Quarterly renewal',
+  status: { label: 'Needs approval', variant: 'warning' },
+  meta: {
+    size: 48211,
+    mimeType: 'application/pdf',
+    createdAt: ctx.output.createdAt,
+    tags: ['finance', 'q4'],
+  },
+});
+```
+
+### Actions
+
+Actions render as buttons. Combine `href` links with HTMX interactions for optimistic UI.
+
+```typescript
+const actions = [
+  { label: 'Approve', variant: 'primary', icon: '✅', href: '/api/approve' },
+  {
+    label: 'Assign',
+    icon: '👤',
+    htmx: { post: `/api/tasks/${ctx.output.id}/assign`, target: '#task-status' },
+  },
+];
+```
+
+## `resourceList()`
+
+Render multiple widgets at once. Switch between list/grid layouts and optionally show a “Load more” button that hooks into HTMX.
+
+```typescript
+const list = resourceList({
+  title: 'Active incidents',
+  layout: 'grid',
+  columns: 2,
+  resources: ctx.output.incidents map((incident) =>
+    resourceWidget({
+      type: 'event',
+      title: incident.title,
+      description: incident.summary,
+      status: {
+        label: incident.severity.toUpperCase(),
+        variant: incident.severity === 'critical' ? 'danger' : 'warning',
+      },
+      meta: {
+        updatedAt: incident.updatedAt,
+        tags: incident.services,
+      },
+    }),
+  ),
+  showLoadMore: ctx.output.hasMore,
+  loadMoreUrl: '/api/incidents?page=2',
+});
+```
+
+## `resourceItem()`
+
+Use `resourceItem` for compact rows (sidebars, inline drawers, etc.).
+
+```typescript
+const upcoming = resourceItem({
+  type: 'task',
+  title: ctx.output.task.title,
+  description: ctx.output.task.dueDate,
+  status: ctx.output.task.completed
+    ? { label: 'Done', variant: 'success' }
+    : { label: 'Pending', variant: 'secondary' },
+});
+```
+
+## Preview helpers
+
+### `codePreview`
+
+Embed highlighted code with optional filenames, copy buttons, and line numbers.
+
+```typescript
+const preview = codePreview({
+  code: ctx.output.diff,
+  language: 'diff',
+  filename: ctx.output.path,
+  lineNumbers: true,
+  showCopy: true,
+  maxHeight: '320px',
+});
+```
+
+### `imagePreview`
+
+Display images or screenshots with optional captions.
+
+```typescript
+const hero = imagePreview({
+  src: ctx.output.url,
+  alt: ctx.output.description,
+  caption: 'Latest marketing mockup',
+  maxHeight: '420px',
+});
+```
+
+## Best practices
+
+- Escape user-provided strings with `escapeHtml` (or `ctx.helpers.escapeHtml`) before injecting into descriptions or custom markup.
+- Keep action labels short (two words max) and prefer HTMX POSTs for mutating operations so you can reflect state in-page.
+- Set CSP/resource policies via the Tool UI `csp` option when your widget links to external domains.
+- Choose `layout: 'grid'` with `columns: 1` for clients like Claude Artifacts where horizontal space is limited.
+
+<Warning>
+Never trust raw tool output inside `resourceWidget`—escape it or whitelist the fields you pass into `title`, `description`, and `meta`.
+</Warning>
