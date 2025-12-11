@@ -373,7 +373,7 @@ jobs:
           set -euo pipefail
 
           LAST_MINOR="${{ steps.versions.outputs.last_minor }}"
-          NEXT_MINOR="${{ steps.next.outputs.next_minor }}"
+          NEXT_MINOR="${{ steps.versions.outputs.next_minor }}"
 
           if [ -z "$LAST_MINOR" ]; then
             echo "No previous version to archive, skipping docs archival"
