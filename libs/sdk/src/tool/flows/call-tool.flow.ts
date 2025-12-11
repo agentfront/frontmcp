@@ -43,6 +43,8 @@ const stateSchema = z.object({
   // Store the raw executed output for plugins to see
   rawOutput: z.any().optional(),
   output: outputSchema,
+  // Tool owner ID for hook filtering (set during parseInput)
+  _toolOwnerId: z.string().optional(),
 });
 
 const plan = {
@@ -136,12 +138,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return entry.fullName === name || entry.name === name;
     });
 
-    // Store tool owner ID in the flow input for hook filtering
-    if (tool?.owner) {
-      (this.rawInput as any)._toolOwnerId = tool.owner.id;
-    }
+    // Store tool owner ID in state for hook filtering
+    const toolOwnerId = tool?.owner?.id;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo });
+    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId });
     this.logger.verbose('parseInput:done');
   }
 
@@ -448,7 +448,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           this.logger.verbose('finalize: UI using static mode (structured data only)', {
             tool: tool.metadata.name,
             platform: platformType,
-            outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],
+            outputKeys:
+              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
           });
         } else if (servingMode === 'hybrid') {
           // For hybrid mode: return structured data + transpiled component code
@@ -487,7 +488,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             hasComponent: !!componentPayload,
             componentType: componentPayload?.type,
             componentHash: componentPayload?.hash,
-            outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],
+            outputKeys:
+              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
           });
         } else {
           // For inline mode (default): render HTML with data embedded in each response
@@ -495,7 +497,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           const uiResult = await scope.toolUI.renderAndRegisterAsync({
             toolName: tool.metadata.name,
             requestId,
-            input: (input?.arguments ?? {}) as Record<string, unknown>,
+            input:
+              input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+                ? (input.arguments as Record<string, unknown>)
+                : {},
             output: rawOutput,
             structuredContent: result.structuredContent,
             uiConfig: tool.metadata.ui,

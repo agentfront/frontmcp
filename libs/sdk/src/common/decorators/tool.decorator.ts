@@ -183,6 +183,9 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
   /**
    * UI template configuration for rendering interactive widgets.
    *
+   * The template builder function receives typed `ctx.input` and `ctx.output`
+   * based on the tool's `inputSchema` and `outputSchema`.
+   *
    * @see {@link ToolUIConfig} for all available options including:
    * - `template`: React component, HTML string, or builder function
    * - `servingMode`: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'
@@ -191,10 +194,11 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    * - `displayMode`: 'inline' | 'fullscreen' | 'pip'
    * - And more...
    *
-   * @example HTML template builder
+   * @example HTML template builder with typed context
    * ```typescript
    * ui: {
    *   template: (ctx) => `<div>${ctx.helpers.escapeHtml(ctx.output.name)}</div>`,
+   *   // ctx.output is typed based on outputSchema
    *   servingMode: 'inline',
    * }
    * ```
@@ -208,7 +212,7 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    * }
    * ```
    */
-  ui?: ToolUIConfig;
+  ui?: ToolUIConfig<ToolInputOf<{ inputSchema: I | z.ZodObject<I> }>, ToolOutputOf<{ outputSchema: O }>>;
 };
 
 // ---------- ctor & reflection ----------

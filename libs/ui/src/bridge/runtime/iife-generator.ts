@@ -899,10 +899,10 @@ FrontMcpBridge.prototype._setupDataToolCallHandler = function() {
           // Update bridge state to trigger widget re-render
           // React isn't hydrated in OpenAI iframe, so useState doesn't work
           // Instead, we use the bridge's reactive state system
-          if (result && window.__frontmcp && window.__frontmcp.bridge) {
+          if (result && window.__frontmcp && window.__frontmcp.bridge && typeof window.__frontmcp.bridge.setWidgetState === 'function') {
             var newData = result.structuredContent || result;
             log('Updating bridge state with new data');
-            window.__frontmcp.bridge.setData(newData);
+            window.__frontmcp.bridge.setWidgetState(newData);
           }
 
           // Dispatch success event

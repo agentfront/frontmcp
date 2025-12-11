@@ -66,7 +66,11 @@ export interface ExecutionResult<T = unknown> {
  * Provides a sandboxed execution context with:
  * - Controlled module resolution
  * - Restricted global access
- * - Timeout enforcement
+ * - Console output capture
+ *
+ * @remarks
+ * Note: Synchronous code execution does not enforce timeouts.
+ * Infinite loops or long-running synchronous code will block indefinitely.
  *
  * @param code - Bundled JavaScript code
  * @param context - Execution context
@@ -311,7 +315,21 @@ function createSandboxGlobals(context: ExecutionContext, consoleOutput: string[]
 
   // Add user globals last, filtering out dangerous keys that could bypass sandbox
   if (context.globals) {
-    const dangerousKeys = ['process', 'require', '__dirname', '__filename', 'Buffer', 'eval', 'Function'];
+    const dangerousKeys = [
+      'process',
+      'require',
+      '__dirname',
+      '__filename',
+      'Buffer',
+      'eval',
+      'Function',
+      'globalThis',
+      'constructor',
+      '__proto__',
+      'global',
+      'window',
+      'self',
+    ];
     for (const [key, value] of Object.entries(context.globals)) {
       if (!dangerousKeys.includes(key)) {
         globals[key] = value;
