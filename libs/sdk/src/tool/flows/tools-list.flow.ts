@@ -7,6 +7,7 @@ import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprot
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
+import { isUIType } from '@frontmcp/ui/types';
 import type { Scope } from '../../scope/scope.instance';
 
 const inputSchema = z.object({
@@ -232,12 +233,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           }
           const scope = this.scope;
 
-          // Type guard for UIType validation
-          const isValidUIType = (type: string): type is UIType => {
-            const validTypes: UIType[] = ['html', 'react', 'mdx', 'markdown', 'auto'];
-            return validTypes.includes(type as UIType);
-          };
-
           // Get manifest and detect UI type with error handling
           let manifest;
           let detectedType: string;
@@ -249,7 +244,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
             return item;
           }
 
-          const uiType: UIType = manifest?.uiType ?? (isValidUIType(detectedType) ? detectedType : 'auto');
+          // Use centralized type guard from @frontmcp/ui/types
+          const uiType: UIType = manifest?.uiType ?? (isUIType(detectedType) ? detectedType : 'auto');
 
           // Always include outputTemplate for all UI tools
           // - static mode: Full widget with React runtime and bridge

@@ -139,6 +139,34 @@ function createJSXRuntime(React: unknown): Record<string, unknown> {
 }
 
 /**
+ * Dangerous global keys that should never be injected from user context.
+ * These could potentially bypass enclave security if allowed.
+ */
+const DANGEROUS_GLOBAL_KEYS = new Set([
+  'process',
+  'require',
+  '__dirname',
+  '__filename',
+  'Buffer',
+  'eval',
+  'Function',
+  'constructor',
+  'global',
+  'globalThis',
+  'module',
+  'exports',
+  '__proto__',
+]);
+
+/**
+ * Sanitize a key for use as a global variable name.
+ * Replaces non-alphanumeric characters (except _ and $) with underscores.
+ */
+function sanitizeGlobalKey(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_$]/g, '_');
+}
+
+/**
  * Build globals object from execution context.
  */
 function buildGlobals(context: ExecutionContext): Record<string, unknown> {
@@ -164,14 +192,37 @@ function buildGlobals(context: ExecutionContext): Record<string, unknown> {
   // Add modules as globals (enclave-vm handles require internally)
   if (context.modules) {
     for (const [key, value] of Object.entries(context.modules)) {
-      // Make modules accessible as globals
-      globals[key.replace(/[^a-zA-Z0-9_$]/g, '_')] = value;
+      // Sanitize key and make modules accessible as globals
+      const sanitizedKey = sanitizeGlobalKey(key);
+      if (DANGEROUS_GLOBAL_KEYS.has(sanitizedKey)) {
+        throw new ExecutionError(
+          `Dangerous module key '${key}' (sanitized: '${sanitizedKey}') is not allowed in execution context`,
+          { code: 'SECURITY_VIOLATION' },
+        );
+      }
+      globals[sanitizedKey] = value;
     }
   }
 
-  // Add user globals
+  // Add user globals with security filtering
   if (context.globals) {
-    Object.assign(globals, context.globals);
+    for (const [key, value] of Object.entries(context.globals)) {
+      // Check for dangerous keys (both original and sanitized)
+      if (DANGEROUS_GLOBAL_KEYS.has(key)) {
+        throw new ExecutionError(`Dangerous global key '${key}' is not allowed in execution context`, {
+          code: 'SECURITY_VIOLATION',
+        });
+      }
+      // Sanitize the key for safe global variable naming
+      const sanitizedKey = sanitizeGlobalKey(key);
+      if (DANGEROUS_GLOBAL_KEYS.has(sanitizedKey)) {
+        throw new ExecutionError(
+          `Dangerous global key '${key}' (sanitized: '${sanitizedKey}') is not allowed in execution context`,
+          { code: 'SECURITY_VIOLATION' },
+        );
+      }
+      globals[sanitizedKey] = value;
+    }
   }
 
   return globals;
