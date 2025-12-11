@@ -11,7 +11,7 @@ import type { Scope } from '../../scope/scope.instance';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = ListToolsResultSchema;

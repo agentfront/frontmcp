@@ -207,7 +207,7 @@ export function formatNumber(value: unknown, decimals?: number): string {
  * ```
  */
 export function jsonEmbed(data: unknown): string {
-  const json = JSON.stringify(data);
+  const json = JSON.stringify(data ?? null);
   // Escape characters that could break out of script tags
   return json
     .replace(/</g, '\\u003c')
@@ -230,7 +230,7 @@ export function jsonEmbed(data: unknown): string {
  * ```
  */
 export function json(data: unknown, pretty?: boolean): string {
-  return JSON.stringify(data, null, pretty ? 2 : undefined);
+  return JSON.stringify(data ?? null, null, pretty ? 2 : undefined);
 }
 
 /**

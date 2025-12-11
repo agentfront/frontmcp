@@ -166,12 +166,20 @@ export async function executeDefault<T = unknown>(code: string, context: Executi
  * Create a restricted require function.
  */
 function createRequire(context: ExecutionContext): (id: string) => unknown {
+  // Normalize all context.modules keys to lowercase for consistent lookup
+  const normalizedContextModules: Record<string, unknown> = {};
+  if (context.modules) {
+    for (const [key, value] of Object.entries(context.modules)) {
+      normalizedContextModules[key.toLowerCase()] = value;
+    }
+  }
+
   const modules: Record<string, unknown> = {
     react: context.React,
     'react-dom': context.ReactDOM,
     'react/jsx-runtime': context.React ? createJSXRuntime(context.React) : undefined,
     'react/jsx-dev-runtime': context.React ? createJSXRuntime(context.React) : undefined,
-    ...context.modules,
+    ...normalizedContextModules,
   };
 
   return (id: string): unknown => {
@@ -239,7 +247,7 @@ function createJSXRuntime(React: unknown): Record<string, unknown> {
  */
 function createSandboxGlobals(context: ExecutionContext, consoleOutput: string[]): Record<string, unknown> {
   const policy = context.security ?? DEFAULT_SECURITY_POLICY;
-  const allowedGlobals = policy.allowedGlobals ?? DEFAULT_SECURITY_POLICY.allowedGlobals!;
+  const allowedGlobals = policy.allowedGlobals ?? DEFAULT_SECURITY_POLICY.allowedGlobals ?? [];
 
   // Create sandboxed console
   const sandboxConsole = {

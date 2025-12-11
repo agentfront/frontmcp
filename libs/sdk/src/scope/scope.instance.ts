@@ -118,14 +118,23 @@ export class Scope extends ScopeEntry {
 
       if (staticModeTools.length > 0) {
         // Compile all static widgets in parallel
+        let staticCompiledCount = 0;
         await Promise.all(
           staticModeTools.map(async (tool) => {
+            const uiConfig = tool.metadata.ui;
+            if (!uiConfig?.template) {
+              this.logger.warn(
+                `Skipping static widget pre-compile for tool "${tool.metadata.name}" due to missing ui.template`,
+              );
+              return;
+            }
             try {
               await this.toolUIRegistry.compileStaticWidgetAsync({
                 toolName: tool.metadata.name,
-                template: tool.metadata.ui!.template,
-                uiConfig: tool.metadata.ui!,
+                template: uiConfig.template,
+                uiConfig,
               });
+              staticCompiledCount++;
               this.logger.verbose(`Compiled static widget for tool: ${tool.metadata.name}`);
             } catch (error) {
               // Log error but don't fail server startup
@@ -134,7 +143,9 @@ export class Scope extends ScopeEntry {
             }
           }),
         );
-        this.logger.info(`Pre-compiled ${staticModeTools.length} static widget(s) for static mode tools`);
+        this.logger.info(
+          `Pre-compiled ${staticCompiledCount}/${staticModeTools.length} static widget(s) for static mode tools`,
+        );
       }
 
       // Pre-compile lean widget shells for inline mode tools
@@ -148,19 +159,34 @@ export class Scope extends ScopeEntry {
       );
 
       if (inlineTools.length > 0) {
-        for (const tool of inlineTools) {
-          try {
-            this.toolUIRegistry.compileLeanWidgetAsync({
-              toolName: tool.metadata.name,
-              uiConfig: tool.metadata.ui!,
-            });
-            this.logger.verbose(`Compiled lean widget shell for tool: ${tool.metadata.name}`);
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to compile lean widget shell for tool "${tool.metadata.name}": ${errorMessage}`);
-          }
-        }
-        this.logger.info(`Pre-compiled ${inlineTools.length} lean widget shell(s) for inline mode tools`);
+        let inlineCompiledCount = 0;
+        await Promise.all(
+          inlineTools.map(async (tool) => {
+            const uiConfig = tool.metadata.ui;
+            if (!uiConfig) {
+              this.logger.warn(
+                `Skipping lean widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
+              );
+              return;
+            }
+            try {
+              await this.toolUIRegistry.compileLeanWidgetAsync({
+                toolName: tool.metadata.name,
+                uiConfig,
+              });
+              inlineCompiledCount++;
+              this.logger.verbose(`Compiled lean widget shell for tool: ${tool.metadata.name}`);
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.logger.error(
+                `Failed to compile lean widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
+              );
+            }
+          }),
+        );
+        this.logger.info(
+          `Pre-compiled ${inlineCompiledCount}/${inlineTools.length} lean widget shell(s) for inline mode tools`,
+        );
       }
 
       // Pre-compile hybrid widget shells for hybrid mode tools
@@ -171,21 +197,34 @@ export class Scope extends ScopeEntry {
       );
 
       if (hybridTools.length > 0) {
-        for (const tool of hybridTools) {
-          try {
-            this.toolUIRegistry.compileHybridWidgetAsync({
-              toolName: tool.metadata.name,
-              uiConfig: tool.metadata.ui!,
-            });
-            this.logger.verbose(`Compiled hybrid widget shell for tool: ${tool.metadata.name}`);
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(
-              `Failed to compile hybrid widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
-            );
-          }
-        }
-        this.logger.info(`Pre-compiled ${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`);
+        let hybridCompiledCount = 0;
+        await Promise.all(
+          hybridTools.map(async (tool) => {
+            const uiConfig = tool.metadata.ui;
+            if (!uiConfig) {
+              this.logger.warn(
+                `Skipping hybrid widget pre-compile for tool "${tool.metadata.name}" due to missing ui config`,
+              );
+              return;
+            }
+            try {
+              await this.toolUIRegistry.compileHybridWidgetAsync({
+                toolName: tool.metadata.name,
+                uiConfig,
+              });
+              hybridCompiledCount++;
+              this.logger.verbose(`Compiled hybrid widget shell for tool: ${tool.metadata.name}`);
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.logger.error(
+                `Failed to compile hybrid widget shell for tool "${tool.metadata.name}": ${errorMessage}`,
+              );
+            }
+          }),
+        );
+        this.logger.info(
+          `Pre-compiled ${hybridCompiledCount}/${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`,
+        );
       }
     }
 

@@ -105,10 +105,6 @@ export {
   type OpenAIRuntime,
   type OpenAIUserAgent,
   type SafeAreaInsets,
-  // Legacy types for backwards compatibility (aliases to ./types)
-  // These are deprecated - use imports from @frontmcp/ui/types instead
-  type ToolUITemplate,
-  type ToolUIConfig,
   // MCP Bridge Runtime
   MCP_BRIDGE_RUNTIME,
   getMCPBridgeScript,
@@ -167,8 +163,6 @@ export * from './renderers';
 // Core bridge exports are also available here:
 export {
   // Core types
-  type DisplayMode as BridgeDisplayMode,
-  type HostContext as BridgeHostContext,
   type PlatformAdapter,
   type AdapterCapabilities,
   type BridgeConfig,

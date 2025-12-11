@@ -72,6 +72,29 @@ declare global {
 const name = 'tools:call-tool' as const;
 const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 
+/**
+ * Safely stringify a value, handling circular references and other edge cases.
+ * This prevents tool calls from failing due to serialization errors.
+ */
+const safeStringify = (value: unknown, space?: number): string => {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(
+      value,
+      (_key, val) => {
+        if (typeof val === 'object' && val !== null) {
+          if (seen.has(val)) return '[Circular]';
+          seen.add(val);
+        }
+        return val;
+      },
+      space,
+    );
+  } catch {
+    return JSON.stringify({ error: 'Output could not be serialized' });
+  }
+};
+
 @Flow({
   name,
   plan,
@@ -414,7 +437,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           result.content = [
             {
               type: 'text',
-              text: JSON.stringify(rawOutput),
+              text: safeStringify(rawOutput),
             },
           ];
 
@@ -444,7 +467,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           result.content = [
             {
               type: 'text',
-              text: JSON.stringify(rawOutput),
+              text: safeStringify(rawOutput),
             },
           ];
 
@@ -502,9 +525,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
               result.content = [
                 {
                   type: 'text',
-                  text: `## Data\n\`\`\`json\n${JSON.stringify(
+                  text: `## Data\n\`\`\`json\n${safeStringify(
                     rawOutput,
-                    null,
                     2,
                   )}\n\`\`\`\n\n## Visual Template (for artifact rendering)\n\`\`\`html\n${htmlContent}\n\`\`\``,
                 },
@@ -514,7 +536,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
               result.content = [
                 {
                   type: 'text',
-                  text: JSON.stringify(rawOutput, null, 2),
+                  text: safeStringify(rawOutput, 2),
                 },
               ];
             }

@@ -47,35 +47,38 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
   initialize(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void> {
     this.ensureAuthInfo(req, this);
 
-    console.log('[StreamableHttpAdapter] initialize() called', {
+    this.logger.info('[StreamableHttpAdapter] initialize() called', {
       method: req.method,
       sessionId: this.key.sessionId.slice(0, 30),
       bodyMethod: (req.body as { method?: string })?.method,
     });
 
     // Intercept response to log what gets sent back to client
-    const originalWrite = res.write.bind(res);
-    const originalEnd = res.end.bind(res);
+    const originalWrite = res.write.bind(res) as typeof res.write;
+    const originalEnd = res.end.bind(res) as typeof res.end;
     let responseBody = '';
 
-    res.write = (chunk: unknown, ...args: unknown[]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.write = function (this: ServerResponse, chunk: any, encodingOrCb?: any, cb?: any): boolean {
       if (chunk) {
-        responseBody += typeof chunk === 'string' ? chunk : (chunk as Buffer).toString();
+        responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
       }
-      return (originalWrite as (...a: unknown[]) => boolean)(chunk, ...args);
-    };
+      return originalWrite.call(this, chunk, encodingOrCb, cb);
+    } as typeof res.write;
 
-    res.end = (chunk?: unknown, ...args: unknown[]) => {
+    const adapter = this;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res.end = function (this: ServerResponse, chunk?: any, encodingOrCb?: any, cb?: any): ServerResponse {
       if (chunk) {
-        responseBody += typeof chunk === 'string' ? chunk : (chunk as Buffer).toString();
+        responseBody += typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
       }
-      console.log('[StreamableHttpAdapter] initialize response', {
+      adapter.logger.info('[StreamableHttpAdapter] initialize response', {
         statusCode: res.statusCode,
-        headers: res.getHeaders?.() || {},
+        headers: res.getHeaders?.() ?? {},
         bodyPreview: responseBody.slice(0, 1000),
       });
-      return (originalEnd as (...a: unknown[]) => ServerResponse)(chunk, ...args);
-    };
+      return originalEnd.call(this, chunk, encodingOrCb, cb);
+    } as typeof res.end;
 
     return this.transport.handleRequest(req, res, req.body);
   }

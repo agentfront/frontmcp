@@ -173,7 +173,7 @@ export function validateSize(
   size: number,
   policy: SecurityPolicy = DEFAULT_SECURITY_POLICY,
 ): SecurityViolation | undefined {
-  const maxSize = policy.maxBundleSize ?? DEFAULT_SECURITY_POLICY.maxBundleSize!;
+  const maxSize = policy.maxBundleSize ?? DEFAULT_SECURITY_POLICY.maxBundleSize ?? 512000;
 
   if (size > maxSize) {
     return {

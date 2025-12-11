@@ -334,9 +334,14 @@ var ExtAppsAdapter = {
     if (this.trustedOrigins.length > 0) {
       return this.trustedOrigins.indexOf(origin) !== -1;
     }
+    // When no trusted origins configured, only trust first message in iframe context
+    // This helps mitigate race conditions where a malicious iframe could establish trust
     if (!this.trustedOrigin) {
-      this.trustedOrigin = origin;
-      return true;
+      if (window.parent !== window && origin) {
+        this.trustedOrigin = origin;
+        return true;
+      }
+      return false;
     }
     return this.trustedOrigin === origin;
   },

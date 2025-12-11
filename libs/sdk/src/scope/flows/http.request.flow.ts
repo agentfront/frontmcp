@@ -126,10 +126,22 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       bodyMethod: body?.['method'],
     });
 
-    // Log full headers for debugging Claude connection issues
-    this.logger.info(`[${this.requestId}] FULL HEADERS`, {
-      headers: JSON.stringify(request.headers),
-    });
+    // Log sanitized headers for debugging connection issues
+    const headers = request.headers ?? {};
+    const sanitizedHeaders = Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => {
+        // Redact clearly sensitive headers
+        if (/^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$/i.test(key)) {
+          return [key, '[REDACTED]'];
+        }
+        // Truncate session identifiers instead of logging full values
+        if (key === 'mcp-session-id') {
+          return [key, String(value).slice(0, 8) + '...'];
+        }
+        return [key, value];
+      }),
+    );
+    this.logger.debug(`[${this.requestId}] HEADERS`, { headers: sanitizedHeaders });
   }
 
   @Stage('checkAuthorization')
