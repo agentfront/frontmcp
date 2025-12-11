@@ -63,6 +63,7 @@ export default class ExampleApp {}
 ```
 
 The model now sees only four meta-tools:
+
 - `codecall:search` - Find relevant tools
 - `codecall:describe` - Get detailed schemas
 - `codecall:execute` - Run JavaScript orchestration plans
@@ -78,12 +79,12 @@ CodeCall implements defense-in-depth with multiple security layers:
 
 Choose a preset that matches your threat model:
 
-| Level | Timeout | Max Iterations | Tool Calls | Use Case |
-|-------|---------|----------------|------------|----------|
-| **STRICT** | 1s | 100 | 5 | Ultra-sensitive environments |
-| **SECURE** | 3s | 1,000 | 20 | Production default |
-| **STANDARD** | 5s | 10,000 | 50 | Internal/trusted models |
-| **PERMISSIVE** | 30s | 100,000 | 200 | Development only |
+| Level          | Timeout | Max Iterations | Tool Calls | Use Case                     |
+| -------------- | ------- | -------------- | ---------- | ---------------------------- |
+| **STRICT**     | 1s      | 100            | 5          | Ultra-sensitive environments |
+| **SECURE**     | 3s      | 1,000          | 20         | Production default           |
+| **STANDARD**   | 5s      | 10,000         | 50         | Internal/trusted models      |
+| **PERMISSIVE** | 30s     | 100,000        | 200        | Development only             |
 
 ```ts
 CodeCallPlugin.init({
@@ -107,6 +108,7 @@ const result = await callTool('codecall:execute', { script: '...' });
 ```
 
 This prevents:
+
 - Recursive script execution (infinite loops)
 - Sandbox escape attempts
 - Privilege escalation attacks
@@ -153,6 +155,7 @@ return result.data;
 ```
 
 This prevents:
+
 - Information leakage through stack traces
 - Internal system path exposure
 - Exception-based control flow manipulation
@@ -249,6 +252,7 @@ Find tools by natural language query:
 ```
 
 **Response:**
+
 ```json
 {
   "tools": [
@@ -280,6 +284,7 @@ Get detailed schemas for selected tools:
 ```
 
 **Response includes:**
+
 - Full JSON Schema for inputs/outputs
 - Description and usage notes
 - Example inputs/outputs
@@ -302,6 +307,7 @@ Run a JavaScript orchestration script:
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -315,6 +321,7 @@ Run a JavaScript orchestration script:
 ```
 
 **Error Response:**
+
 ```json
 {
   "status": "error",
@@ -342,6 +349,7 @@ Direct tool invocation without JavaScript:
 ```
 
 **Benefits:**
+
 - No VM overhead for simple calls
 - Still enforces access control
 - Maintains audit logging
@@ -383,6 +391,7 @@ const [user1, user2, user3] = results;
 ```
 
 **Limits:**
+
 - Maximum 100 parallel operations
 - Maximum 20 concurrent executions
 - Shares tool call limit with sequential calls
@@ -430,6 +439,7 @@ auditLogger.subscribe((event) => {
 ```
 
 **Event Types:**
+
 - `execution:start` / `execution:success` / `execution:failure`
 - `security:self-reference` - Blocked recursive call
 - `security:validation-failure` - AST validation failed
@@ -442,14 +452,14 @@ auditLogger.subscribe((event) => {
 
 Errors are categorized with actionable suggestions:
 
-| Category | Example | Suggestion |
-|----------|---------|------------|
-| `syntax` | Unexpected token | Check JavaScript syntax at line X |
-| `security` | eval is not allowed | Remove prohibited construct |
-| `timeout` | Execution exceeded 3s | Simplify logic or increase timeout |
-| `tool_not_found` | Unknown tool 'foo' | Use codecall:search to find tools |
-| `tool_error` | Tool threw error | Check tool input parameters |
-| `runtime` | Cannot read property | Debug the script logic |
+| Category         | Example               | Suggestion                         |
+| ---------------- | --------------------- | ---------------------------------- |
+| `syntax`         | Unexpected token      | Check JavaScript syntax at line X  |
+| `security`       | eval is not allowed   | Remove prohibited construct        |
+| `timeout`        | Execution exceeded 3s | Simplify logic or increase timeout |
+| `tool_not_found` | Unknown tool 'foo'    | Use codecall:search to find tools  |
+| `tool_error`     | Tool threw error      | Check tool input parameters        |
+| `runtime`        | Cannot read property  | Debug the script logic             |
 
 ---
 
@@ -472,6 +482,7 @@ CodeCallPlugin.init({
 ```
 
 **Sanitization includes:**
+
 - Circular reference detection → `[circular]`
 - Prototype pollution prevention → removes `__proto__`, `constructor`
 - Large output truncation with warnings

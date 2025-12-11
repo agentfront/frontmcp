@@ -5,6 +5,55 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.5.0" description="2025-12-11" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.5.0: Tool UIs, orchestration, and security"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.5.0"
+    cta="View full changlog"
+  >
+    🎨 **Tool UI widgets** – Compose HTML, React, or MDX templates with @frontmcp/ui, static/hybrid serving modes, and OpenAI App SDK resource widgets for richer outputs.
+
+    🛡️ **Auth modes** – Mix public, transparent, and orchestrated OAuth flows with consent screens, incremental scopes, stateless/stateful sessions, and runnable demo servers.
+
+    🧠 **Resources & prompts** – Register ResourceTemplates, prompt catalogs, and capability notifications so clients can browse every tool, resource, and prompt without custom wiring.
+
+    🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool execution guards to keep automated code paths safe.
+
+    🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23, Zod 4, Node 24, and refreshed transformer dependencies.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.1" description="2025-12-11" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.1"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in Node 22 and 24.
+
+    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards green across CI.
+
+    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and source links more useful.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.0.0" description="2025-12-11" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.0.0"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the framework upgrade.
+
+    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP requests.
+
+    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator aligned with FrontMCP v0.5.
+
+  </Card>
+</Update>
+
 <Update label="v0.4.0" description="2025-11-22" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.4.0: Generator-first adapters and typed error surfaces"
@@ -18,6 +67,7 @@ mode: 'center'
     🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically.
 
     📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how independent libraries ship alongside synchronized packages.
+
   </Card>
 </Update>
 
