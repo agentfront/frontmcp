@@ -1,3 +1,11 @@
+## [1.0.1] - 2025-12-11
+
+### Changed
+
+- Updated SWC/Jest config to inline ES2022 settings and tightened test exclusions
+- Added repository directory metadata and bumped @types/node dev dependency
+- Expanded tsconfig exclusions for tests and utilities
+
 # Changelog
 
 ## [1.0.0] - 2025-11-21

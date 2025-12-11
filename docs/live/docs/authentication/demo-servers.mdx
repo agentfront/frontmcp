@@ -1,0 +1,185 @@
+---
+title: Authentication Demo Servers
+slug: authentication/demo-servers
+icon: terminal
+description: Run the Nx sample servers that showcase public, transparent, and orchestrated authentication modes.
+---
+
+FrontMCP bundles three ready-to-serve authentication demos under `apps/auth/**`. Each project runs the same Notes + Tasks apps but wires a different auth mode, transport policy, and consent experience so you can validate clients before touching your own code.
+
+## Projects at a glance
+
+| Project                  | Mode                   | Default port | Highlights                                                                      | Serve command                                      |
+| ------------------------ | ---------------------- | ------------ | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `demo-public`            | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `pnpm nx serve demo-public --port 3003`            |
+| `demo-orchestrated-auth` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `pnpm nx serve demo-orchestrated-auth --port 3005` |
+| `demo-transparent-auth`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `pnpm nx serve demo-transparent-auth --port 3004`  |
+
+<Note>
+All commands assume `pnpm install` has already been run at the repo root. Replace the port if it conflicts with another service.
+</Note>
+
+## Run a demo locally
+
+<Steps>
+<Step title="Pick a project">
+Decide which auth mode to explore (`demo-public`, `demo-transparent-auth`, or `demo-orchestrated-auth`).
+</Step>
+<Step title="Configure environment">
+Transparent mode needs an upstream IdP. Export `IDP_PROVIDER_URL` and `IDP_EXPECTED_AUDIENCE` before serving:
+
+```bash
+export IDP_PROVIDER_URL="https://auth.example.com"
+export IDP_EXPECTED_AUDIENCE="https://api.example.com"
+```
+
+</Step>
+<Step title="Serve the project">
+Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log. Requests are available at `http://localhost:<port>`.
+
+<Check>
+`curl http://localhost:<port>/health` returns `ok` when the server is ready.
+</Check>
+</Step>
+</Steps>
+
+---
+
+## demo-public: instant anonymous access
+
+```ts title="apps/auth/demo-public/src/main.ts"
+@FrontMcp({
+  auth: {
+    mode: 'public',
+    sessionTtl: 3600,
+    anonymousScopes: ['anonymous'],
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+    },
+  },
+});
+```
+
+- Exercises the `auth.publicAccess` path without any login UI.
+- Turns on stateful HTTP so you can hit tools and resources via plain JSON for smoke tests.
+- Leaves Streamable HTTP enabled for real MCP clients while skipping the `initialize` handshake.
+
+<Tip>
+Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures that still cover transport-level behavior.
+</Tip>
+
+---
+
+## demo-orchestrated-auth: built-in OAuth server
+
+```ts title="apps/auth/demo-orchestrated-auth/src/main.ts"
+@FrontMcp({
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+    consent: {
+      enabled: true,
+      groupByApp: true,
+      showDescriptions: true,
+      requireSelection: true,
+    },
+    sessionMode: 'stateful',
+    allowDefaultPublic: false,
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+    },
+  },
+});
+```
+
+- Spins up the full OAuth 2.1 stack (authorization code + PKCE) entirely inside FrontMCP.
+- Shows the consent UI grouping tools by app, plus incremental auth defaults.
+- Uses the same transport defaults documented in [Transport controls](/docs/servers/server#transport-controls) so you can compare behavior with production builds.
+
+<Warning>
+The demo login accepts any email address. Replace it with a real IdP before exposing the flow to users.
+</Warning>
+
+---
+
+## demo-transparent-auth: pass-through tokens
+
+```ts title="apps/auth/demo-transparent-auth/src/main.ts"
+@FrontMcp({
+  auth: {
+    mode: 'transparent',
+    remote: {
+      provider: process.env.IDP_PROVIDER_URL!,
+      dcrEnabled: false,
+    },
+    expectedAudience: process.env.IDP_EXPECTED_AUDIENCE!,
+    requiredScopes: [],
+    allowAnonymous: false,
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+    },
+  },
+});
+```
+
+- Validates upstream JWTs while reusing the same consent UI and transport toggles.
+- Demonstrates how to forward-declare an IdP without shipping secrets—set `IDP_PROVIDER_URL`/`IDP_EXPECTED_AUDIENCE` per environment.
+- Keeps anonymous access off so every tool call requires a verified token.
+
+<Note>
+If your IdP exposes a JWKS file, frontload the URL in `remote.jwksUri` to skip metadata discovery during tests.
+</Note>
+
+---
+
+## Test with @frontmcp/testing
+
+You can point the Jest fixtures at any demo by spinning it up through the built-in `TestServer` helper:
+
+```ts title="demo-public.e2e.ts"
+import { test, expect, TestServer } from '@frontmcp/testing';
+
+let serverProcess;
+
+test.beforeAll(async () => {
+  serverProcess = await TestServer.startNx('demo-public', { port: 4001 });
+});
+
+test.afterAll(async () => {
+  await serverProcess?.stop();
+});
+
+test.use({
+  server: serverProcess?.info.baseUrl ?? 'http://localhost:4001',
+  transport: 'streamable-http',
+});
+
+test('lists demo tools', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  expect(tools).toContainTool('create-note');
+});
+```
+
+Pair this with the [`auth.transport` reference](/docs/servers/server#transport-controls) to mirror the exact transports your production server exposes.
+
+---
+
+## What to read next
+
+<CardGroup cols={2}>
+  <Card title="Authentication Modes" icon="layer-group" href="/docs/authentication/modes">
+    Understand when to reach for public, transparent, or orchestrated auth.
+  </Card>
+  <Card title="Transport controls" icon="server" href="/docs/servers/server#transport-controls">
+    Dive deeper into Streamable, stateful, and stateless HTTP settings.
+  </Card>
+</CardGroup>

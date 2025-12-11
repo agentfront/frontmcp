@@ -1,3 +1,15 @@
+## [2.0.0] - 2025-12-11
+
+### Breaking
+
+- Migrated to Zod v4 (now a peer dependency) and aligned JSON schema types with Zod’s v4 JSONSchema
+- Renamed utility export `toJSONSchema7` to `toJsonSchema`, affecting consumers of the types/helpers
+
+### Changed
+
+- Updated SWC/Jest config to inline ES2022 settings and modernized tooling versions
+- Adjusted exports formatting and minor parameter resolver refactors for consistency
+
 # Changelog
 
 ## [1.0.0] - 2025-11-21

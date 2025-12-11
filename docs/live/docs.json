@@ -21,7 +21,13 @@
     "dark": "#15803D"
   },
   "contextual": {
-    "options": ["copy", "chatgpt", "cursor", "mcp", "view"]
+    "options": [
+      "copy",
+      "chatgpt",
+      "cursor",
+      "mcp",
+      "view"
+    ]
   },
   "interaction": {
     "drilldown": true
@@ -63,11 +69,11 @@
   "navigation": {
     "dropdowns": [
       {
-        "dropdown": "Documentation",
+        "dropdown": "FrontMCP SDK",
         "icon": "book",
         "versions": [
           {
-            "version": "v0.4 (latest)",
+            "version": "v0.5 (latest)",
             "default": true,
             "groups": [
               {
@@ -84,36 +90,34 @@
                 "group": "Servers",
                 "pages": [
                   "docs/servers/server",
-                  {
-                    "group": "Core Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/apps",
-                      "docs/servers/tools",
-                      "docs/servers/resources",
-                      "docs/servers/prompts"
-                    ]
-                  },
-                  {
-                    "group": "Authentication",
-                    "icon": "shield-check",
-                    "pages": [
-                      "docs/servers/authentication/overview",
-                      "docs/servers/authentication/token",
-                      "docs/servers/authentication/remote",
-                      "docs/servers/authentication/remote-proxy",
-                      "docs/servers/authentication/local"
-                    ]
-                  },
-                  {
-                    "group": "Extensibility Components",
-                    "icon": "toolbox",
-                    "pages": [
-                      "docs/servers/extensibility/providers",
-                      "docs/servers/extensibility/plugins",
-                      "docs/servers/extensibility/logging"
-                    ]
-                  }
+                  "docs/servers/apps",
+                  "docs/servers/tools",
+                  "docs/servers/resources",
+                  "docs/servers/prompts"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "icon": "shield-check",
+                "pages": [
+                  "docs/authentication/overview",
+                  "docs/authentication/modes",
+                  "docs/authentication/local",
+                  "docs/authentication/remote",
+                  "docs/authentication/remote-proxy",
+                  "docs/authentication/progressive",
+                  "docs/authentication/token",
+                  "docs/authentication/production"
+                ]
+              },
+              {
+                "group": "Extensibility",
+                "icon": "puzzle-piece",
+                "pages": [
+                  "docs/extensibility/providers",
+                  "docs/extensibility/plugins",
+                  "docs/extensibility/adapters",
+                  "docs/extensibility/logging"
                 ]
               },
               {
@@ -122,19 +126,131 @@
               },
               {
                 "group": "Plugins",
-                "pages": ["docs/plugins/cache-plugin", "docs/plugins/codecall-plugin"]
+                "pages": [
+                  "docs/plugins/overview",
+                  "docs/plugins/cache-plugin",
+                  {
+                    "group": "CodeCall",
+                    "icon": "code",
+                    "pages": [
+                      "docs/plugins/codecall/overview",
+                      "docs/plugins/codecall/security",
+                      "docs/plugins/codecall/api-reference",
+                      "docs/plugins/codecall/configuration",
+                      "docs/plugins/codecall/scaling"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Testing",
+                "icon": "flask-vial",
+                "pages": [
+                  "docs/testing/overview",
+                  "docs/testing/fixtures",
+                  "docs/testing/matchers",
+                  "docs/testing/authentication",
+                  "docs/testing/interceptors",
+                  "docs/testing/http-mocking",
+                  "docs/testing/api-reference"
+                ]
               },
               {
                 "group": "Guides",
                 "pages": [
+                  "docs/guides/create-plugin",
                   "docs/guides/add-openapi-adapter",
                   "docs/guides/caching-and-cache-miss",
-                  "docs/guides/customize-flow-stages"
+                  "docs/guides/customize-flow-stages",
+                  "docs/guides/ast-guard",
+                  "docs/guides/enclave",
+                  "docs/guides/vectoriadb"
                 ]
               },
               {
                 "group": "Deployment",
                 "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
+              }
+            ]
+          },
+          {
+            "version": "v0.4",
+            "default": false,
+            "groups": [
+              {
+                "tag": "version 0.4",
+                "group": "Get Started",
+                "pages": [
+                  "docs/v/0.4/getting-started/welcome",
+                  "docs/v/0.4/getting-started/installation",
+                  "docs/v/0.4/getting-started/quickstart",
+                  "updates"
+                ]
+              },
+              {
+                "group": "Servers",
+                "pages": [
+                  "docs/v/0.4/servers/server",
+                  {
+                    "group": "Core Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "docs/v/0.4/servers/apps",
+                      "docs/v/0.4/servers/tools",
+                      "docs/v/0.4/servers/resources",
+                      "docs/v/0.4/servers/prompts"
+                    ]
+                  },
+                  {
+                    "group": "Authentication",
+                    "icon": "shield-check",
+                    "pages": [
+                      "docs/v/0.4/servers/authentication/overview",
+                      "docs/v/0.4/servers/authentication/token",
+                      "docs/v/0.4/servers/authentication/remote",
+                      "docs/v/0.4/servers/authentication/remote-proxy",
+                      "docs/v/0.4/servers/authentication/local"
+                    ]
+                  },
+                  {
+                    "group": "Extensibility Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "docs/v/0.4/servers/extensibility/providers",
+                      "docs/v/0.4/servers/extensibility/plugins",
+                      "docs/v/0.4/servers/extensibility/logging"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Adapters",
+                "pages": [
+                  "docs/v/0.4/adapters/overview",
+                  "docs/v/0.4/adapters/openapi-adapter"
+                ]
+              },
+              {
+                "group": "Plugins",
+                "pages": [
+                  "docs/v/0.4/plugins/cache-plugin",
+                  "docs/v/0.4/plugins/codecall-plugin"
+                ]
+              },
+              {
+                "group": "Guides",
+                "pages": [
+                  "docs/v/0.4/guides/add-openapi-adapter",
+                  "docs/v/0.4/guides/caching-and-cache-miss",
+                  "docs/v/0.4/guides/customize-flow-stages"
+                ]
+              },
+              {
+                "group": "Deployment",
+                "pages": [
+                  "docs/v/0.4/deployment/local-dev-server",
+                  "docs/v/0.4/deployment/production-build"
+                ]
               }
             ]
           },
@@ -190,7 +306,10 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.3/deployment/local-dev-server", "docs/v/0.3/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.3/deployment/local-dev-server",
+                  "docs/v/0.3/deployment/production-build"
+                ]
               },
               {
                 "group": "Guides",
@@ -202,7 +321,9 @@
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.3/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.3/adapters/openapi-adapter"
+                ]
               }
             ]
           },
@@ -258,11 +379,16 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.2/deployment/local-dev-server", "docs/v/0.2/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.2/deployment/local-dev-server",
+                  "docs/v/0.2/deployment/production-build"
+                ]
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.2/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.2/adapters/openapi-adapter"
+                ]
               }
             ]
           },
@@ -318,34 +444,111 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.1/deployment/local-dev-server", "docs/v/0.1/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.1/deployment/local-dev-server",
+                  "docs/v/0.1/deployment/production-build"
+                ]
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.1/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.1/adapters/openapi-adapter"
+                ]
               }
             ]
           }
         ]
       },
       {
-        "dropdown": "Blog",
-        "icon": "blog",
-        "groups": [
-          {
-            "group": "General",
-            "pages": ["blog/index", "blog/external-links"]
+            "dropdown": "FrontMCP UI",
+            "icon": "palette",
+            "groups": [
+              {
+                "group": "Get Started",
+                "pages": ["docs/ui/overview", "docs/ui/getting-started"]
+              },
+              {
+                "group": "Components",
+                "icon": "grid-2",
+                "pages": [
+                  "docs/ui/components/overview",
+                  "docs/ui/components/button",
+                  "docs/ui/components/card",
+                  "docs/ui/components/badge",
+                  "docs/ui/components/alert",
+                  "docs/ui/components/form",
+                  "docs/ui/components/table",
+                  "docs/ui/components/list",
+                  "docs/ui/components/avatar",
+                  "docs/ui/components/modal"
+                ]
+              },
+              {
+                "group": "Layouts",
+                "icon": "table-layout",
+                "pages": ["docs/ui/layouts/overview", "docs/ui/layouts/templates"]
+              },
+              {
+                "group": "Templates",
+                "icon": "code",
+                "pages": [
+                  "docs/ui/templates/overview",
+                  "docs/ui/templates/html",
+                  "docs/ui/templates/react",
+                  "docs/ui/templates/mdx",
+                  "docs/ui/templates/custom"
+                ]
+              },
+              {
+                "group": "Integration",
+                "icon": "plug",
+                "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation"]
+              },
+              {
+                "group": "Theming",
+                "icon": "paintbrush",
+                "pages": ["docs/ui/theming/overview", "docs/ui/theming/customization", "docs/ui/theming/dark-mode"]
+              },
+              {
+                "group": "Advanced",
+                "icon": "bolt",
+                "pages": [
+                  "docs/ui/advanced/platforms",
+                  "docs/ui/advanced/mcp-bridge",
+                  "docs/ui/advanced/hydration",
+                  "docs/ui/advanced/custom-renderers"
+                ]
+              },
+              {
+                "group": "API Reference",
+                "icon": "book-open",
+                "pages": [
+                  "docs/ui/api-reference/components",
+                  "docs/ui/api-reference/theme",
+                  "docs/ui/api-reference/runtime"
+                ]
+              }
+            ]
           },
-          {
-            "group": "November 2025",
-            "pages": [
-              "blog/11-2025/openapi-mcp-security-nightmare",
-              "blog/11-2025/mcp-run-out-of-socket",
-              "blog/11-2025/introducing-frontmcp"
+      {
+            "dropdown": "Blog",
+            "icon": "blog",
+            "groups": [
+              {
+                "group": "General",
+                "pages": ["blog/index", "blog/external-links"]
+              },
+              {
+                "group": "November 2025",
+                "pages": [
+                  "blog/11-2025/codecall-plugin",
+                  "blog/11-2025/openapi-mcp-security-nightmare",
+                  "blog/11-2025/mcp-run-out-of-socket",
+                  "blog/11-2025/introducing-frontmcp"
+                ]
+              }
             ]
           }
-        ]
-      }
     ]
   }
 }
