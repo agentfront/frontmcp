@@ -12,7 +12,7 @@
         "outputPath": "libs/testing/dist",
         "main": "libs/testing/src/index.ts",
         "tsConfig": "libs/testing/tsconfig.lib.json",
-        "assets": ["README.md", "LICENSE", "libs/testing/jest-preset.js"]
+        "assets": ["libs/testing/README.md", "LICENSE", "libs/testing/jest-preset.js"]
       }
     },
     "build": {
