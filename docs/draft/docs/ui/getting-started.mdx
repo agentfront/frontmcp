@@ -12,7 +12,7 @@ This guide walks you through adding visual widgets to your FrontMCP tools using 
 ## Prerequisites
 
 - A FrontMCP server project set up with `@frontmcp/sdk`
-- Node.js 18+ installed
+- Node.js 22 or newer (Node 24 Active LTS recommended to match the dev runtime)
 
 ## Installation
 
@@ -28,6 +28,7 @@ yarn add @frontmcp/ui
 ```bash pnpm
 pnpm add @frontmcp/ui
 ```
+
 </CodeGroup>
 
 ## Step 1: Add UI Config to Your Tool
@@ -103,13 +104,13 @@ ui: {
 
 ### Available Helpers
 
-| Helper | Description |
-|--------|-------------|
-| `escapeHtml(str)` | Escape HTML special characters |
-| `formatDate(date, format?)` | Format a date for display |
-| `formatCurrency(amount, currency?)` | Format a number as currency |
-| `uniqueId(prefix?)` | Generate a unique DOM ID |
-| `jsonEmbed(data)` | Safely embed JSON in HTML |
+| Helper                              | Description                    |
+| ----------------------------------- | ------------------------------ |
+| `escapeHtml(str)`                   | Escape HTML special characters |
+| `formatDate(date, format?)`         | Format a date for display      |
+| `formatCurrency(amount, currency?)` | Format a number as currency    |
+| `uniqueId(prefix?)`                 | Generate a unique DOM ID       |
+| `jsonEmbed(data)`                   | Safely embed JSON in HTML      |
 
 ## Step 3: Use Pre-built Components
 
@@ -264,6 +265,47 @@ export class GetWeatherTool extends ToolContext {
   - `inline` - Rendered inline with the chat
   - `fullscreen` - Takes over the full viewport
   - `pip` - Picture-in-picture mode (OpenAI only)
+</Tip>
+
+## Try the Weather UI demos
+
+<Steps>
+<Step title="Spin up the React demo">
+
+```bash
+pnpm nx serve react-demo --port 3003
+```
+
+This server exposes the `get_weather` tool with a React-based widget, transparent auth defaults, and `publicMode`-friendly settings so you can hit it from the MCP Inspector.
+
+</Step>
+<Step title="Spin up the MDX demo">
+
+```bash
+pnpm nx serve mdx-demo --port 3004
+```
+
+The MDX demo renders the same weather tool with Markdown + JSX templates. Use it to compare HTML vs MDX fallbacks or to verify that custom components compile correctly.
+
+</Step>
+<Step title="Run the UI regression tests">
+
+```bash
+pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
+pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+```
+
+Both suites rely on `@frontmcp/testing`’s `UIAssertions` helpers (`toHaveRenderedHtml`, `toNotContainRawContent`, `assertValidUI`) so you can copy/paste the assertions into your own projects.
+
+<Check>
+The Jest output should confirm every test as passing and report that rendered HTML contains widget metadata instead of the `mdx-fallback`.
+</Check>
+
+</Step>
+</Steps>
+
+<Tip>
+Keep these demos around as golden references; updating them first helps catch regressions in new template renderers or auth transport tweaks before they land in production apps.
 </Tip>
 
 ## Next Steps

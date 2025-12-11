@@ -12,6 +12,7 @@ By default, React templates are rendered server-side. Hydration enables client-s
 ## What is Hydration?
 
 Hydration is the process of:
+
 1. **Server**: Render React component to HTML string
 2. **Client**: Load React runtime and attach to existing DOM
 3. **Result**: Interactive React components
@@ -221,6 +222,7 @@ function MyWidget() {
 ## Platform Considerations
 
 Hydration requires:
+
 - JavaScript execution on the client
 - React runtime to be loaded
 
@@ -231,6 +233,7 @@ Full support for hydration with React runtime loading from CDN.
 ### Claude
 
 Limited support. Claude Artifacts have restricted JavaScript execution. Consider:
+
 - Keep interactions simple
 - Use HTMX instead for basic interactivity
 - Test thoroughly in Claude environment
@@ -261,6 +264,7 @@ ui: {
 ## When to Use Hydration
 
 **Use hydration when:**
+
 - Complex client-side state management
 - Real-time updates (polling, WebSocket)
 - Rich form interactions
@@ -268,6 +272,7 @@ ui: {
 - Reusable interactive components
 
 **Don't use hydration when:**
+
 - Static data display only
 - Simple interactions (use HTMX)
 - Claude/Gemini is primary target

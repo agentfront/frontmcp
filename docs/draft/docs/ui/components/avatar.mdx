@@ -78,12 +78,12 @@ avatar({ name: 'Alice', status: 'away' })
 
 ### Status Colors
 
-| Status | Color |
-|--------|-------|
-| `online` | Green |
-| `offline` | Gray |
-| `busy` | Red |
-| `away` | Yellow |
+| Status    | Color  |
+| --------- | ------ |
+| `online`  | Green  |
+| `offline` | Gray   |
+| `busy`    | Red    |
+| `away`    | Yellow |
 
 ## With Badge
 
@@ -247,31 +247,31 @@ const userList = actionList([
 
 ### `avatar(options)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `src` | `string` | - | Image URL |
-| `alt` | `string` | - | Image alt text |
-| `name` | `string` | - | Name for initials generation |
-| `initials` | `string` | - | Custom initials (overrides name) |
-| `icon` | `string` | - | Icon instead of image/initials |
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl'` | `'md'` | Avatar size |
-| `shape` | `'circle' \| 'rounded' \| 'square'` | `'circle'` | Avatar shape |
-| `status` | `'online' \| 'offline' \| 'busy' \| 'away'` | - | Status indicator |
-| `badge` | `string` | - | Badge content |
-| `badgeVariant` | `string` | `'primary'` | Badge color variant |
-| `color` | `string` | auto | Background color for initials |
-| `href` | `string` | - | Link URL |
-| `htmx` | `object` | - | HTMX attributes |
-| `className` | `string` | - | Additional CSS classes |
+| Option         | Type                                            | Default     | Description                      |
+| -------------- | ----------------------------------------------- | ----------- | -------------------------------- |
+| `src`          | `string`                                        | -           | Image URL                        |
+| `alt`          | `string`                                        | -           | Image alt text                   |
+| `name`         | `string`                                        | -           | Name for initials generation     |
+| `initials`     | `string`                                        | -           | Custom initials (overrides name) |
+| `icon`         | `string`                                        | -           | Icon instead of image/initials   |
+| `size`         | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl'` | `'md'`      | Avatar size                      |
+| `shape`        | `'circle' \| 'rounded' \| 'square'`             | `'circle'`  | Avatar shape                     |
+| `status`       | `'online' \| 'offline' \| 'busy' \| 'away'`     | -           | Status indicator                 |
+| `badge`        | `string`                                        | -           | Badge content                    |
+| `badgeVariant` | `string`                                        | `'primary'` | Badge color variant              |
+| `color`        | `string`                                        | auto        | Background color for initials    |
+| `href`         | `string`                                        | -           | Link URL                         |
+| `htmx`         | `object`                                        | -           | HTMX attributes                  |
+| `className`    | `string`                                        | -           | Additional CSS classes           |
 
 ### `avatarGroup(avatars, options?)`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `stacked` | `boolean` | `true` | Overlap avatars |
-| `spacing` | `'tight' \| 'normal' \| 'loose'` | `'normal'` | Overlap amount |
-| `max` | `number` | - | Max visible before +N |
-| `className` | `string` | - | Additional CSS classes |
+| Option      | Type                             | Default    | Description            |
+| ----------- | -------------------------------- | ---------- | ---------------------- |
+| `stacked`   | `boolean`                        | `true`     | Overlap avatars        |
+| `spacing`   | `'tight' \| 'normal' \| 'loose'` | `'normal'` | Overlap amount         |
+| `max`       | `number`                         | -          | Max visible before +N  |
+| `className` | `string`                         | -          | Additional CSS classes |
 
 ### Returns
 
