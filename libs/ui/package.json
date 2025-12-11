@@ -123,6 +123,12 @@
       "types": "./dist/src/handlebars/index.d.ts",
       "import": "./dist/src/handlebars/index.js",
       "default": "./dist/src/handlebars/index.js"
+    },
+    "./registry": {
+      "development": "./src/registry/index.ts",
+      "types": "./dist/src/registry/index.d.ts",
+      "import": "./dist/src/registry/index.js",
+      "default": "./dist/src/registry/index.js"
     }
   },
   "dependencies": {

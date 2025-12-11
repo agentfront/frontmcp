@@ -8,7 +8,7 @@
  * - ui://widget/{toolName}.html - Static widget HTML (pre-compiled at startup)
  *
  * The static widget is registered at server startup for tools with
- * `servingMode: 'mcp-resource'`. The widget HTML includes the FrontMCP Bridge
+ * `servingMode: 'static'`. The widget HTML includes the FrontMCP Bridge
  * which reads tool output from the platform context at runtime.
  *
  * @example
@@ -24,73 +24,17 @@
  */
 
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
-import type { ToolUIRegistry } from './tool-ui.registry';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { createDefaultBaseTemplate } from '@frontmcp/ui';
-
-/**
- * UI resource URI scheme
- */
-export const UI_RESOURCE_SCHEME = 'ui://';
-
-/**
- * Pattern for static widget URIs: ui://widget/{toolName}.html
- * This format is used by OpenAI at discovery time (tools/list)
- */
-const UI_WIDGET_PATTERN = /^ui:\/\/widget\/([^/]+)\.html$/;
-
-/**
- * Parsed static widget URI
- */
-export interface ParsedWidgetUri {
-  toolName: string;
-  fullUri: string;
-}
-
-/**
- * Check if a URI is a UI resource URI
- *
- * @param uri - URI to check
- * @returns True if the URI starts with ui://
- */
-export function isUIResourceUri(uri: string): boolean {
-  return uri.startsWith(UI_RESOURCE_SCHEME);
-}
-
-/**
- * Parse a static widget URI into its components
- *
- * @param uri - URI to parse (format: ui://widget/{toolName}.html)
- * @returns Parsed components or undefined if invalid
- */
-export function parseWidgetUri(uri: string): ParsedWidgetUri | undefined {
-  const match = uri.match(UI_WIDGET_PATTERN);
-  if (!match) {
-    return undefined;
-  }
-
-  return {
-    toolName: decodeURIComponent(match[1]),
-    fullUri: uri,
-  };
-}
-
-/**
- * Check if URI is a static widget URI (ui://widget/{toolName}.html)
- */
-export function isStaticWidgetUri(uri: string): boolean {
-  return UI_WIDGET_PATTERN.test(uri);
-}
-
-/**
- * Build a static widget URI from tool name
- *
- * @param toolName - Name of the tool
- * @returns Static widget URI (ui://widget/{toolName}.html)
- */
-export function buildStaticWidgetUri(toolName: string): string {
-  return `ui://widget/${encodeURIComponent(toolName)}.html`;
-}
+import {
+  type ToolUIRegistry,
+  UI_RESOURCE_SCHEME,
+  isUIResourceUri,
+  isStaticWidgetUri,
+  parseWidgetUri,
+  getUIResourceMimeType,
+  type ParsedWidgetUri,
+} from '@frontmcp/ui/registry';
 
 /**
  * Result of handling a UI resource request
@@ -136,36 +80,6 @@ function generatePlaceholderWidget(toolName: string): string {
 }
 
 /**
- * Get the MIME type for UI resources based on platform.
- *
- * Per user requirement: OpenAI or default uses 'text/html+skybridge'
- *
- * @param platformType - The detected platform type
- * @returns The appropriate MIME type
- */
-export function getUIResourceMimeType(platformType?: AIPlatformType): string {
-  // Per requirement: "for openai or default text/html+skybridge"
-  // This aligns with OpenAI's skybridge widget protocol
-  switch (platformType) {
-    case 'claude':
-      // Claude uses standard text/html (network-blocked environment)
-      return 'text/html';
-    case 'gemini':
-      // Gemini uses standard text/html
-      return 'text/html';
-    case 'openai':
-    case 'cursor':
-    case 'continue':
-    case 'cody':
-    case 'generic-mcp':
-    case 'unknown':
-    default:
-      // OpenAI and default use skybridge MIME type
-      return 'text/html+skybridge';
-  }
-}
-
-/**
  * Handle a UI resource read request
  *
  * @param uri - The UI resource URI
@@ -191,7 +105,7 @@ export function handleUIResourceRead(
   const widgetParsed = parseWidgetUri(uri);
   if (widgetParsed) {
     // Check for pre-compiled static widget from the developer's template
-    // Static widgets are compiled at server startup for tools with servingMode: 'mcp-resource'
+    // Static widgets are compiled at server startup for tools with servingMode: 'static'
     const cachedWidget = registry.getStaticWidget(widgetParsed.toolName);
     if (cachedWidget) {
       // Return the developer's actual template (SSR'd React/MDX component)

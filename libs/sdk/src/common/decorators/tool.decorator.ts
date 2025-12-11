@@ -186,7 +186,7 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    * @see {@link ToolUIConfig} for all available options including:
    * - `template`: React component, HTML string, or builder function
    * - `uiType`: 'html' | 'react' | 'mdx' | 'markdown' | 'auto'
-   * - `servingMode`: 'inline' | 'mcp-resource' | 'direct-url' | 'custom-url'
+   * - `servingMode`: 'inline' | 'static' | 'hybrid' | 'direct-url' | 'custom-url'
    * - `resourceMode`: 'cdn' | 'inline'
    * - `csp`: Content Security Policy configuration
    * - `widgetAccessible`: Enable MCP bridge for tool calls from widget
@@ -207,7 +207,7 @@ export type ToolMetadataOptions<I extends __Shape, O extends __OutputSchema> = _
    *   template: WeatherCard,
    *   uiType: 'react',
    *   resourceMode: 'cdn',
-   *   servingMode: 'mcp-resource',
+   *   servingMode: 'static',
    * }
    * ```
    */

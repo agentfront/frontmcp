@@ -149,7 +149,7 @@ export interface BuildUIMetaOptions<In = unknown, Out = unknown> {
  * Build platform-specific UI metadata for tool response.
  *
  * For inline serving mode (default), HTML is embedded directly in `_meta['ui/html']`.
- * For mcp-resource mode, the static widget URI is provided in tools/list
+ * For static mode, the static widget URI is provided in tools/list
  * and the tool response contains only structured data.
  *
  * @example
@@ -181,7 +181,7 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
 
   // For inline mode, embed HTML directly in response
   // This is the only serving mode that uses buildUIMeta
-  // (mcp-resource mode returns structured data only, no UI _meta)
+  // (static mode returns structured data only, no UI _meta)
   meta['ui/html'] = html;
 
   // Always include MIME type for platforms that need it
@@ -248,7 +248,7 @@ function getMimeType(platformType: AIPlatformType): string {
  * invocation status in _meta. The outputTemplate, resultCanProduceWidget, etc.
  * are discovery-time fields that belong in tools/list _meta, NOT in call response.
  *
- * For mcp-resource mode: OpenAI fetches the widget HTML from the outputTemplate URI
+ * For static mode: OpenAI fetches the widget HTML from the outputTemplate URI
  * (set in tools/list) and injects structuredContent as window.openai.toolOutput.
  * For inline mode: HTML is embedded directly in _meta['ui/html'].
  */

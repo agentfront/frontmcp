@@ -215,3 +215,38 @@ export {
   // Base class for custom elements
   FmcpElement,
 } from './web-components';
+
+// ============================================
+// Registry Module - Standalone Tool UI Building
+// ============================================
+// The registry module provides the ToolUIRegistry class for standalone widget
+// compilation and rendering without requiring @frontmcp/sdk.
+//
+// For full access to the registry system, import from '@frontmcp/ui/registry':
+// import { ToolUIRegistry, renderToolTemplateAsync } from '@frontmcp/ui/registry';
+//
+// Core registry exports:
+export {
+  // Core registry
+  ToolUIRegistry,
+  type RenderOptions,
+  type UIRenderResult,
+  type CompileStaticWidgetOptions,
+  type HybridComponentPayload,
+  type BuildHybridComponentPayloadOptions,
+  // Template rendering
+  renderToolTemplate,
+  renderToolTemplateAsync,
+  isReactComponent,
+  hasUIConfig,
+  containsMdxSyntax,
+  type RenderTemplateOptions,
+  // URI utilities
+  UI_RESOURCE_SCHEME,
+  isUIResourceUri,
+  isStaticWidgetUri,
+  parseWidgetUri,
+  buildStaticWidgetUri,
+  getUIResourceMimeType,
+  type ParsedWidgetUri,
+} from './registry';

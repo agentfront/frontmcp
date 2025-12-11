@@ -3,7 +3,7 @@
  * @description Tests for platform metadata adapters, including MCP Apps (ext-apps).
  *
  * Note: buildUIMeta is used for inline mode (HTML embedded in _meta).
- * For mcp-resource mode, tools/list provides the static widget URI via buildToolDiscoveryMeta.
+ * For static mode, tools/list provides the static widget URI via buildToolDiscoveryMeta.
  */
 
 import { buildUIMeta, buildToolDiscoveryMeta, type AIPlatformType, type UITemplateConfig } from '../platform-meta';

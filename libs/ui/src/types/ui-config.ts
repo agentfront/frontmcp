@@ -113,10 +113,16 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  */
 export type WidgetServingMode =
   | 'inline' // HTML embedded directly in tool response _meta
-  | 'mcp-resource' // Via ui:// resource URI (MCP resources/read)
+  | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
   | 'direct-url' // HTTP endpoint on MCP server
   | 'custom-url'; // Custom URL (CDN or external hosting)
+
+/**
+ * @deprecated Use 'static' instead of 'mcp-resource'. Will be removed in v2.0.
+ * Alias maintained for backwards compatibility.
+ */
+export type WidgetServingModeLegacy = 'mcp-resource';
 
 // ============================================
 // Display Mode
@@ -221,8 +227,12 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`
    *   Best for small widgets, works on all platforms including network-blocked ones.
    *
-   * - `'mcp-resource'`: Widget registered as MCP resource with `ui://` URI.
+   * - `'static'`: Widget pre-compiled at server startup, registered as MCP resource with `ui://` URI.
    *   Client fetches via `resources/read`. Good for OpenAI's template system.
+   *   Widget is resolved during `tools/list`, not dependent on tool call.
+   *
+   * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
+   *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
    *
    * - `'direct-url'`: Served from MCP server's HTTP endpoint.
    *   Avoids third-party cookie issues since widget loads from same domain.

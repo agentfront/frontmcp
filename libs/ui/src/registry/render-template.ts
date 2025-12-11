@@ -4,10 +4,12 @@
  * Executes tool UI templates with proper context and helpers.
  * Supports sync rendering for HTML strings/template functions,
  * async rendering for React components via SSR, and MDX rendering.
+ *
+ * @packageDocumentation
  */
 
-import type { ToolUIConfig, TemplateContext, TemplateBuilderFn } from '../../common/metadata/tool-ui.metadata';
-import { createTemplateHelpers } from './template-helpers';
+import type { UITemplateConfig, TemplateContext, TemplateBuilderFn } from '../types';
+import { createTemplateHelpers } from '../runtime/wrapper';
 
 /**
  * Check if a string contains MDX syntax (Markdown + JSX).
@@ -18,7 +20,7 @@ import { createTemplateHelpers } from './template-helpers';
  * - Import/export statements
  * - Frontmatter: `---\n...\n---`
  */
-function containsMdxSyntax(source: string): boolean {
+export function containsMdxSyntax(source: string): boolean {
   // Has JSX component tags (PascalCase)
   if (/<[A-Z][a-zA-Z0-9]*/.test(source)) {
     return true;
@@ -61,7 +63,7 @@ function containsMdxSyntax(source: string): boolean {
 /**
  * Render MDX content to HTML string.
  *
- * Dynamically imports the MDX renderer from @frontmcp/ui.
+ * Uses the MDX renderer from @frontmcp/ui.
  * Falls back to plain text if MDX rendering is not available.
  */
 async function renderMdxContent<In, Out>(
@@ -71,8 +73,8 @@ async function renderMdxContent<In, Out>(
   mdxComponents?: Record<string, any>,
 ): Promise<string> {
   try {
-    // Dynamically import the MDX renderer
-    const { mdxRenderer } = await import('@frontmcp/ui');
+    // Import the MDX renderer from renderers module
+    const { mdxRenderer } = await import('../renderers/index.js');
 
     // Render MDX to HTML with custom components
     const html = await mdxRenderer.render(mdxContent, context, { mdxComponents });
@@ -80,7 +82,7 @@ async function renderMdxContent<In, Out>(
   } catch (error) {
     // If MDX rendering fails, warn and return escaped content
     console.error(
-      '[@frontmcp/sdk] MDX rendering failed:',
+      '[@frontmcp/ui] MDX rendering failed:',
       error instanceof Error ? error.stack || error.message : String(error),
     );
 
@@ -182,8 +184,8 @@ export function renderToolTemplate(options: RenderTemplateOptions): string {
  * Check if a tool has UI configuration.
  * Uses loose typing to handle variance issues with generic tool metadata.
  */
-export function hasUIConfig(metadata: { ui?: unknown }): metadata is { ui: ToolUIConfig<unknown, unknown> } {
-  const ui = metadata.ui as ToolUIConfig<unknown, unknown> | undefined;
+export function hasUIConfig(metadata: { ui?: unknown }): metadata is { ui: UITemplateConfig<unknown, unknown> } {
+  const ui = metadata.ui as UITemplateConfig<unknown, unknown> | undefined;
   return ui !== undefined && ui.template !== undefined;
 }
 
@@ -235,7 +237,7 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
 
     try {
       // Dynamically import React and ReactDOMServer
-      // This allows SDK to work without React as a hard dependency
+      // This allows UI package to work without React as a hard dependency
       const [React, ReactDOMServer] = await Promise.all([
         import('react').catch(() => {
           throw new Error('React is required for React component templates. Install react as a dependency.');

@@ -220,7 +220,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           const uiType = (manifest?.uiType ?? scope.toolUI.detectUIType(uiConfig.template)) as UIType;
 
           // Always include outputTemplate for all UI tools
-          // - mcp-resource mode: Full widget with React runtime and bridge
+          // - static mode: Full widget with React runtime and bridge
           // - inline mode: Lean shell (just HTML + theme), actual widget comes in tool response
           const meta: Record<string, unknown> = {
             'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,

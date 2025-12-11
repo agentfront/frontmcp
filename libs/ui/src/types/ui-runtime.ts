@@ -880,7 +880,8 @@ export interface WidgetConfig<Input = Record<string, unknown>, Output = unknown>
    * How the widget HTML should be served to the client.
    *
    * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`
-   * - `'mcp-resource'`: Via `ui://` resource URI (MCP resources/read)
+   * - `'static'`: Pre-compiled at startup, via `ui://` resource URI (MCP resources/read)
+   * - `'hybrid'`: Shell pre-compiled at startup, component in response
    * - `'direct-url'`: HTTP endpoint on MCP server
    * - `'custom-url'`: Custom URL (CDN or external hosting)
    *
@@ -1059,7 +1060,7 @@ export interface BuildManifestResult {
    * that can be embedded in the widget HTML for client-side re-rendering
    * when tool output becomes available.
    *
-   * This is used by `wrapStaticWidgetUniversal` for mcp-resource mode.
+   * This is used by `wrapStaticWidgetUniversal` for static mode.
    */
   componentCode?: string;
 

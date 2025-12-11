@@ -6,22 +6,24 @@
  *
  * Three serving modes:
  * - **inline**: HTML is rendered per-request and embedded in _meta['ui/html']
- * - **mcp-resource**: Static widget is pre-compiled at startup, client fetches via resources/read
+ * - **static**: Static widget is pre-compiled at startup, client fetches via resources/read
  * - **hybrid**: Shell (React + renderer) cached at startup, component + data in response
+ *
+ * @packageDocumentation
  */
 
 import { createHash } from 'crypto';
-import type { ToolUIConfig, WidgetManifest, BuildManifestResult } from '../../common/metadata/tool-ui.metadata';
-import type { AIPlatformType } from '../../notification/notification.service';
+import type { UITemplateConfig, WidgetManifest, BuildManifestResult } from '../types';
+import type { AIPlatformType, UIMetadata } from '../adapters';
 import { renderToolTemplateAsync, isReactComponent } from './render-template';
-import { buildUIMeta, type UIMetadata } from './platform-adapters';
+import { buildUIMeta } from '../adapters';
 import {
   wrapToolUIUniversal,
   wrapStaticWidgetUniversal,
   wrapLeanWidgetShell,
   wrapHybridWidgetShell,
-} from '@frontmcp/ui/runtime';
-import { buildToolWidgetManifest, detectUIType } from '@frontmcp/ui/build';
+} from '../runtime/wrapper';
+import { buildToolWidgetManifest, detectUIType } from '../build';
 
 /**
  * Options for renderAndRegisterAsync (inline mode).
@@ -38,7 +40,7 @@ export interface RenderOptions {
   /** Structured content (parsed from output) */
   structuredContent?: unknown;
   /** Tool UI configuration */
-  uiConfig: ToolUIConfig;
+  uiConfig: UITemplateConfig;
   /** Detected platform type */
   platformType: AIPlatformType;
   /** Widget access token (optional) */
@@ -61,7 +63,7 @@ export interface UIRenderResult {
  * ToolUIRegistry manages UI template rendering for tool responses.
  *
  * It provides:
- * - Static widget compilation for mcp-resource mode (pre-compiled at startup)
+ * - Static widget compilation for static mode (pre-compiled at startup)
  * - Per-request HTML rendering for inline mode (embedded in _meta)
  * - Platform-specific _meta generation
  * - Widget manifest management
@@ -92,9 +94,9 @@ export interface CompileStaticWidgetOptions {
   /** Tool name (used for cache key and URI) */
   toolName: string;
   /** The template to compile (React component, HTML string, or builder function) */
-  template: ToolUIConfig['template'];
+  template: UITemplateConfig['template'];
   /** Tool UI configuration */
-  uiConfig: ToolUIConfig;
+  uiConfig: UITemplateConfig;
 }
 
 /**
@@ -119,15 +121,15 @@ export interface BuildHybridComponentPayloadOptions {
   /** Tool name */
   toolName: string;
   /** The template to transpile */
-  template: ToolUIConfig['template'];
+  template: UITemplateConfig['template'];
   /** Tool UI configuration */
-  uiConfig: ToolUIConfig;
+  uiConfig: UITemplateConfig;
 }
 
 export class ToolUIRegistry {
   /**
    * Cache for static widgets (keyed by tool name).
-   * Static widgets are pre-compiled at server startup for tools with servingMode: 'mcp-resource'.
+   * Static widgets are pre-compiled at server startup for tools with servingMode: 'static'.
    * These widgets read data from the FrontMCP Bridge at runtime (window.openai.toolOutput).
    */
   private readonly staticWidgetCache = new Map<string, string>();
@@ -147,7 +149,7 @@ export class ToolUIRegistry {
   /**
    * Compile a static widget template for a tool at server startup.
    *
-   * For tools with `servingMode: 'mcp-resource'`, the widget HTML is pre-compiled
+   * For tools with `servingMode: 'static'`, the widget HTML is pre-compiled
    * WITHOUT embedded data. The widget reads data from the FrontMCP Bridge at runtime
    * (via window.openai.toolOutput or window.__frontmcp.toolOutput).
    *
@@ -161,7 +163,7 @@ export class ToolUIRegistry {
     // Try to use the new manifest builder first
     try {
       // Detect uiType if not provided (using type assertion for extended config)
-      const extendedConfig = uiConfig as ToolUIConfig & {
+      const extendedConfig = uiConfig as UITemplateConfig & {
         uiType?: string;
         bundlingMode?: string;
         resourceMode?: 'cdn' | 'inline';
@@ -169,7 +171,7 @@ export class ToolUIRegistry {
       };
       const detectedType = detectUIType(template as Parameters<typeof detectUIType>[0]);
 
-      // Convert ToolUIConfig to WidgetConfig format for the manifest builder
+      // Convert UITemplateConfig to WidgetConfig format for the manifest builder
       const widgetConfig = {
         template: template as Parameters<typeof buildToolWidgetManifest>[0]['uiConfig']['template'],
         uiType: (extendedConfig.uiType ?? detectedType) as 'html' | 'react' | 'mdx' | 'markdown' | 'auto',
@@ -254,7 +256,7 @@ export class ToolUIRegistry {
    *
    * @param options - Options for lean widget compilation
    */
-  compileLeanWidgetAsync(options: { toolName: string; uiConfig: ToolUIConfig }): void {
+  compileLeanWidgetAsync(options: { toolName: string; uiConfig: UITemplateConfig }): void {
     const { toolName, uiConfig } = options;
 
     // Create a lean HTML shell with just theme and structure
@@ -285,7 +287,7 @@ export class ToolUIRegistry {
    *
    * @param options - Options for hybrid widget compilation
    */
-  compileHybridWidgetAsync(options: { toolName: string; uiConfig: ToolUIConfig }): void {
+  compileHybridWidgetAsync(options: { toolName: string; uiConfig: UITemplateConfig }): void {
     const { toolName, uiConfig } = options;
 
     // Create a hybrid shell with React runtime and dynamic renderer
@@ -314,7 +316,7 @@ export class ToolUIRegistry {
    * @returns The hybrid component payload, or undefined if template is not a function
    */
   buildHybridComponentPayload(options: BuildHybridComponentPayloadOptions): HybridComponentPayload | undefined {
-    const { toolName, template, uiConfig } = options;
+    const { toolName, template } = options;
 
     // Detect the UI type
     const detectedType = this.detectUIType(template);
@@ -423,8 +425,8 @@ export default ${safeName};
    * @param template - The template to analyze
    * @returns Detected UI type
    */
-  detectUIType(template: ToolUIConfig['template']): string {
-    // Use the imported detectUIType function from @frontmcp/ui/build
+  detectUIType(template: UITemplateConfig['template']): string {
+    // Use the imported detectUIType function from build module
     return detectUIType(template as Parameters<typeof detectUIType>[0]);
   }
 
@@ -437,7 +439,7 @@ export default ${safeName};
    * For React/MDX components, the output is wrapped using wrapStaticWidgetUniversal
    * which includes the React 19 CDN, client-side rendering script, and all the
    * FrontMCP hooks/components. This provides the same rendering capability as
-   * mcp-resource mode, but with data embedded in each response.
+   * static mode, but with data embedded in each response.
    *
    * @param options - Rendering options
    * @returns Promise resolving to render result with HTML and metadata
@@ -454,7 +456,7 @@ export default ${safeName};
     if (isReactBased && typeof uiConfig.template === 'function') {
       // For React/MDX components: Use wrapStaticWidgetUniversal with component code
       // This includes the React 19 CDN, client-side renderer, and all FrontMCP hooks
-      // Same approach as mcp-resource mode, but with data embedded
+      // Same approach as static mode, but with data embedded
 
       // 1. Build the component code that will be embedded in the HTML
       const componentCode = this.buildComponentCode(uiConfig.template, toolName);
@@ -587,7 +589,7 @@ export default ${safeName};
    * @param template - The template to check
    * @returns true if the template requires async rendering
    */
-  requiresAsyncRendering(template: ToolUIConfig['template']): boolean {
+  requiresAsyncRendering(template: UITemplateConfig['template']): boolean {
     return isReactComponent(template);
   }
 }

@@ -135,7 +135,9 @@ ui: {
   template: ...,
   servingMode: 'inline',        // Embedded in tool response (default)
   // or
-  servingMode: 'mcp-resource',  // Via ui:// resource URI
+  servingMode: 'static',        // Pre-compiled at startup, via ui:// resource URI
+  // or
+  servingMode: 'hybrid',        // Shell cached at startup, component in response
   // or
   servingMode: 'direct-url',    // HTTP endpoint on MCP server
   // or

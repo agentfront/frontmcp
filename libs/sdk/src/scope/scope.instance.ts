@@ -108,18 +108,18 @@ export class Scope extends ScopeEntry {
       this.scopeResources.registerDynamicResource(StaticWidgetResourceTemplate);
       this.logger.verbose(`Registered UI resource template for ${toolsWithUI.length} tool(s) with UI configs`);
 
-      // Pre-compile static widgets for tools with servingMode: 'mcp-resource'
+      // Pre-compile static widgets for tools with servingMode: 'static'
       // This is done at server startup so that the static widget HTML is immediately
       // available when OpenAI fetches it via resources/read (at tools/list time).
       // The static widget reads data from the FrontMCP Bridge at runtime.
-      const mcpResourceTools = toolsWithUI.filter(
-        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'mcp-resource' && t.metadata.ui.template,
+      const staticModeTools = toolsWithUI.filter(
+        (t) => t.metadata.ui && t.metadata.ui.servingMode === 'static' && t.metadata.ui.template,
       );
 
-      if (mcpResourceTools.length > 0) {
+      if (staticModeTools.length > 0) {
         // Compile all static widgets in parallel
         await Promise.all(
-          mcpResourceTools.map(async (tool) => {
+          staticModeTools.map(async (tool) => {
             try {
               await this.toolUIRegistry.compileStaticWidgetAsync({
                 toolName: tool.metadata.name,
@@ -134,7 +134,7 @@ export class Scope extends ScopeEntry {
             }
           }),
         );
-        this.logger.info(`Pre-compiled ${mcpResourceTools.length} static widget(s) for mcp-resource mode tools`);
+        this.logger.info(`Pre-compiled ${staticModeTools.length} static widget(s) for static mode tools`);
       }
 
       // Pre-compile lean widget shells for inline mode tools

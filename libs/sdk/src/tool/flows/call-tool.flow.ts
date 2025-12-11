@@ -404,8 +404,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         // Get the serving mode (default to 'inline' for backward compatibility)
         const servingMode = tool.metadata.ui.servingMode ?? 'inline';
 
-        if (servingMode === 'mcp-resource') {
-          // For mcp-resource mode: return ONLY structured data
+        if (servingMode === 'static') {
+          // For static mode: return ONLY structured data
           // The static widget was already registered at server startup and advertised in tools/list
           // Widget reads tool output from platform context (e.g., window.openai.toolOutput)
           // NO UI _meta fields needed - the client uses the outputTemplate URI from tools/list
@@ -421,7 +421,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           // Do NOT add any UI _meta fields - widget reads from platform context
           // The outputTemplate URI (ui://widget/{toolName}.html) was already provided in tools/list
 
-          this.logger.verbose('finalize: UI using mcp-resource mode (structured data only)', {
+          this.logger.verbose('finalize: UI using static mode (structured data only)', {
             tool: tool.metadata.name,
             platform: platformType,
             outputKeys: rawOutput ? Object.keys(rawOutput as object) : [],

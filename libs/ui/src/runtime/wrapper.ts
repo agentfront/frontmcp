@@ -794,7 +794,7 @@ export interface WrapStaticWidgetOptions {
    * When provided, the data is embedded in the HTML and the component renders immediately
    * instead of waiting for window.openai.toolOutput.
    *
-   * This enables inline mode to use the same React renderer as mcp-resource mode,
+   * This enables inline mode to use the same React renderer as static mode,
    * but with data embedded in each response.
    */
   embeddedData?: {
@@ -1493,7 +1493,7 @@ export function wrapHybridWidgetShell(options: WrapHybridWidgetShellOptions): st
  * - Reads data at runtime from the FrontMCP Bridge (window.openai.toolOutput)
  * - Is cached at server startup and returned for all requests
  *
- * This is used for `servingMode: 'mcp-resource'` where OpenAI caches the
+ * This is used for `servingMode: 'static'` where OpenAI caches the
  * outputTemplate HTML and injects data via window.openai.toolOutput.
  *
  * @param options - Static widget options
@@ -1556,7 +1556,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   const isReactBased = rendererType === 'react' || rendererType === 'mdx';
 
   // For inline mode with embeddedData: embed the data directly in the HTML
-  // For mcp-resource mode (no embeddedData): data comes from window.openai.toolOutput at runtime
+  // For static mode (no embeddedData): data comes from window.openai.toolOutput at runtime
   const hasEmbeddedData = embeddedData && (embeddedData.output !== undefined || embeddedData.input !== undefined);
 
   // Universal bridge script (works on all platforms)
@@ -1573,7 +1573,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   // Build the tool metadata script based on mode
   // selfContained: inline mode with no bridge - React manages its own state
   // hasEmbeddedData: backward compat - inline mode with embedded data
-  // neither: mcp-resource mode - polls for data from host platform
+  // neither: static mode - polls for data from host platform
   const toolNameScript =
     selfContained && hasEmbeddedData
       ? `<script>
@@ -1600,7 +1600,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   window.__mcpDataEmbedded = true;
 </script>`
       : `<script>
-  // Tool metadata (mcp-resource mode - data injected by host at runtime)
+  // Tool metadata (static mode - data injected by host at runtime)
   window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
   window.__mcpWidgetAccessible = ${helpers.jsonEmbed(uiConfig.widgetAccessible ?? false)};
   // Data will be provided by host platform:
@@ -1790,7 +1790,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
           structuredContent: result.structuredContent ?? result,
         };
 
-        // For mcp-resource mode: Update global state so hooks (useToolOutput) pick up the change
+        // For static mode: Update global state so hooks (useToolOutput) pick up the change
         // For self-contained/inline mode: Skip this - React component handles state internally via setOutput
         // Updating global state in inline mode could trigger OpenAI's wrapper to overwrite our React component
         if (!window.__mcpSelfContained && !window.__mcpDataEmbedded) {
@@ -2047,7 +2047,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
   // 5. Main: Render immediately or poll for toolOutput
   // ============================================
   // For inline mode (embeddedData): data is already embedded, render immediately
-  // For mcp-resource mode: poll for window.openai.toolOutput
+  // For static mode: poll for window.openai.toolOutput
 
   if (window.__mcpDataEmbedded) {
     // Inline mode: Data is embedded in HTML, render immediately
@@ -2098,7 +2098,7 @@ export function wrapStaticWidgetUniversal(options: WrapStaticWidgetOptions): str
       : '';
 
   // Wrap SSR content in a root element for React to render into
-  // For mcp-resource mode: widget root is hidden until data arrives (loader shows first)
+  // For static mode: widget root is hidden until data arrives (loader shows first)
   // For inline mode: widget root is VISIBLE immediately (data is embedded, SSR is rendered)
   const widgetRootStyle = hasEmbeddedData ? '' : 'display: none;';
 
