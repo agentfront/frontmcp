@@ -16,6 +16,7 @@ import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
+  // z.any() used because ctx is the MCP SDK's ResourceReadExtra type which varies by SDK version
   ctx: z.any(),
 });
 

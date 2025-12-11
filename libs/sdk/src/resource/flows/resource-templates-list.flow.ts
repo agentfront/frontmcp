@@ -12,7 +12,7 @@ import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({
   request: ListResourceTemplatesRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = ListResourceTemplatesResultSchema;

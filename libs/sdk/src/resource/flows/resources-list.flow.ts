@@ -8,7 +8,7 @@ import { InvalidMethodError, InvalidInputError } from '../../errors';
 
 const inputSchema = z.object({
   request: ListResourcesRequestSchema,
-  ctx: z.any(),
+  ctx: z.unknown(),
 });
 
 const outputSchema = ListResourcesResultSchema;

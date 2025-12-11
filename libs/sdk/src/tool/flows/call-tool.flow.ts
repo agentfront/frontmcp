@@ -26,6 +26,7 @@ import { Scope } from '../../scope';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
+  // z.any() used because ctx is the MCP SDK's ToolCallExtra type which varies by SDK version
   ctx: z.any(),
 });
 
