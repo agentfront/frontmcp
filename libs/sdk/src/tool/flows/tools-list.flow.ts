@@ -213,11 +213,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           }
 
           // Get manifest info from registry (if available)
+          // Type guard: verify scope has toolUI before accessing
+          if (!('toolUI' in this.scope)) {
+            this.logger.warn(`parseTools: toolUI not available in scope for ${finalName}`);
+            return item;
+          }
           const scope = this.scope as Scope;
           const manifest = scope.toolUI.getManifest(finalName);
 
-          // Detect UI type for CDN info (cast needed as detectUIType returns string)
-          const uiType = (manifest?.uiType ?? scope.toolUI.detectUIType(uiConfig.template)) as UIType;
+          // Detect UI type for CDN info with validation
+          const validUITypes: UIType[] = ['html', 'react', 'mdx', 'markdown', 'auto'];
+          const detectedType = scope.toolUI.detectUIType(uiConfig.template);
+          const uiType: UIType =
+            manifest?.uiType ?? (validUITypes.includes(detectedType as UIType) ? (detectedType as UIType) : 'auto');
 
           // Always include outputTemplate for all UI tools
           // - static mode: Full widget with React runtime and bridge
