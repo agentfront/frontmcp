@@ -1,0 +1,237 @@
+---
+title: Card Component
+sidebarTitle: Card
+icon: square
+description: Content containers with headers, footers, and styles
+---
+
+# Card
+
+Cards are containers for grouping related content. They support headers with titles and actions, footers, and multiple visual styles.
+
+## Import
+
+```typescript
+import { card, cardGroup } from '@frontmcp/ui';
+```
+
+## Basic Usage
+
+```typescript
+const html = card('This is the card content.');
+```
+
+## With Header
+
+```typescript
+const html = card('Card body content here.', {
+  title: 'Card Title',
+  subtitle: 'Optional description',
+});
+```
+
+## With Header Actions
+
+```typescript
+import { card, button, badge } from '@frontmcp/ui';
+
+const html = card('User information and details.', {
+  title: 'User Profile',
+  headerActions: `
+    ${badge('Active', { variant: 'success' })}
+    ${button('Edit', { variant: 'ghost', size: 'sm' })}
+  `,
+});
+```
+
+## With Footer
+
+```typescript
+const html = card('Main card content.', {
+  title: 'Settings',
+  footer: `
+    ${button('Cancel', { variant: 'outline' })}
+    ${button('Save Changes')}
+  `,
+});
+```
+
+## Variants
+
+<Tabs>
+  <Tab title="Preview">
+    Five card variants:
+    - **default** - White background with border and subtle shadow
+    - **outlined** - Transparent with 2px border
+    - **elevated** - White background with larger shadow
+    - **filled** - Gray background, no border
+    - **ghost** - Transparent, no visual container
+  </Tab>
+  <Tab title="Code">
+    ```typescript
+    card('Default card', { variant: 'default' })
+    card('Outlined card', { variant: 'outlined' })
+    card('Elevated card', { variant: 'elevated' })
+    card('Filled card', { variant: 'filled' })
+    card('Ghost card', { variant: 'ghost' })
+    ```
+  </Tab>
+</Tabs>
+
+## Sizes
+
+Control padding with the `size` option:
+
+```typescript
+card('Small padding', { size: 'sm' })  // p-4
+card('Medium padding', { size: 'md' }) // p-6 (default)
+card('Large padding', { size: 'lg' })  // p-8
+```
+
+## Clickable Cards
+
+Make the entire card clickable:
+
+```typescript
+// With hover effects
+const html = card('Click anywhere on this card.', {
+  title: 'Interactive Card',
+  clickable: true,
+});
+
+// As a link
+const link = card('Navigate to details page.', {
+  title: 'Product',
+  href: '/products/123',
+  clickable: true,
+});
+```
+
+## HTMX Integration
+
+Load content dynamically:
+
+```typescript
+const html = card('Initial content.', {
+  title: 'Dynamic Card',
+  htmx: {
+    get: '/api/content',
+    trigger: 'load',
+    swap: 'innerHTML',
+  },
+});
+```
+
+## Card Groups
+
+Arrange multiple cards in a layout:
+
+```typescript
+import { card, cardGroup } from '@frontmcp/ui';
+
+// Vertical stack (default)
+const vertical = cardGroup([
+  card('Card 1', { title: 'First' }),
+  card('Card 2', { title: 'Second' }),
+  card('Card 3', { title: 'Third' }),
+]);
+
+// Horizontal row
+const horizontal = cardGroup([
+  card('Feature A', { title: 'Speed' }),
+  card('Feature B', { title: 'Security' }),
+  card('Feature C', { title: 'Scalability' }),
+], { direction: 'horizontal' });
+
+// With custom gap
+const spaced = cardGroup([
+  card('Item 1'),
+  card('Item 2'),
+], { gap: 'lg' });
+```
+
+## Complex Example
+
+```typescript
+import { card, badge, button, avatar } from '@frontmcp/ui';
+
+const userCard = card(`
+  <div class="flex items-center gap-4">
+    ${avatar({ name: 'John Doe', src: '/avatars/john.jpg' })}
+    <div>
+      <h3 class="font-semibold">John Doe</h3>
+      <p class="text-sm text-gray-500">john@example.com</p>
+    </div>
+  </div>
+
+  <div class="mt-4 pt-4 border-t border-gray-200">
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div>
+        <div class="text-2xl font-bold">128</div>
+        <div class="text-sm text-gray-500">Posts</div>
+      </div>
+      <div>
+        <div class="text-2xl font-bold">1.2k</div>
+        <div class="text-sm text-gray-500">Followers</div>
+      </div>
+      <div>
+        <div class="text-2xl font-bold">89</div>
+        <div class="text-sm text-gray-500">Following</div>
+      </div>
+    </div>
+  </div>
+`, {
+  headerActions: badge('Pro', { variant: 'primary', pill: true }),
+  footer: `
+    <div class="flex gap-2">
+      ${button('Follow', { fullWidth: true })}
+      ${button('Message', { variant: 'outline', fullWidth: true })}
+    </div>
+  `,
+});
+```
+
+## API Reference
+
+### `card(content, options?)`
+
+| Parameter | Type          | Description            |
+| --------- | ------------- | ---------------------- |
+| `content` | `string`      | Card body HTML content |
+| `options` | `CardOptions` | Configuration options  |
+
+### CardOptions
+
+| Option          | Type                                                           | Default     | Description                    |
+| --------------- | -------------------------------------------------------------- | ----------- | ------------------------------ |
+| `variant`       | `'default' \| 'outlined' \| 'elevated' \| 'filled' \| 'ghost'` | `'default'` | Visual style                   |
+| `size`          | `'sm' \| 'md' \| 'lg'`                                         | `'md'`      | Padding size                   |
+| `title`         | `string`                                                       | -           | Card header title              |
+| `subtitle`      | `string`                                                       | -           | Card header subtitle           |
+| `headerActions` | `string`                                                       | -           | HTML for header action buttons |
+| `footer`        | `string`                                                       | -           | HTML for card footer           |
+| `className`     | `string`                                                       | -           | Additional CSS classes         |
+| `id`            | `string`                                                       | -           | Card ID                        |
+| `clickable`     | `boolean`                                                      | `false`     | Add hover effects              |
+| `href`          | `string`                                                       | -           | Link URL (renders as `<a>`)    |
+| `htmx`          | `object`                                                       | -           | HTMX attributes                |
+| `data`          | `Record<string, string>`                                       | -           | Data attributes                |
+
+### `cardGroup(cards, options?)`
+
+| Parameter | Type       | Description                |
+| --------- | ---------- | -------------------------- |
+| `cards`   | `string[]` | Array of card HTML strings |
+| `options` | `object`   | Group configuration        |
+
+### CardGroup Options
+
+| Option      | Type                         | Default      | Description            |
+| ----------- | ---------------------------- | ------------ | ---------------------- |
+| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout direction       |
+| `gap`       | `'sm' \| 'md' \| 'lg'`       | `'md'`       | Space between cards    |
+| `className` | `string`                     | -            | Additional CSS classes |
+
+### Returns
+
+`string` - HTML string for the card element.

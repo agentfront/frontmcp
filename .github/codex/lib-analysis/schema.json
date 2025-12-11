@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "libraries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "bump": { "type": "string", "enum": ["major", "minor", "patch"] },
+          "changelog": { "type": "string", "minLength": 10 }
+        },
+        "required": ["name", "bump", "changelog"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["libraries"],
+  "additionalProperties": false
+}

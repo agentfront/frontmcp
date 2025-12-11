@@ -1,6 +1,6 @@
 {
   "name": "json-schema-to-zod-v3",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Production-ready converter from JSON Schema (Draft 7+) to Zod v3 schemas with full TypeScript support",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",

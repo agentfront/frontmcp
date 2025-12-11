@@ -1,0 +1,421 @@
+---
+title: Testing Tool UI
+sidebarTitle: Testing
+icon: flask-vial
+description: E2E testing for Tool UI with @frontmcp/testing
+---
+
+# Testing Tool UI
+
+`@frontmcp/testing` provides specialized matchers and assertions for validating Tool UI responses. This guide covers E2E testing patterns for tools with UI templates.
+
+## Setup
+
+Install the testing library:
+
+```bash
+npm install -D @frontmcp/testing
+# or
+yarn add -D @frontmcp/testing
+```
+
+## Basic Test Structure
+
+```typescript
+import { test, expect } from '@frontmcp/testing';
+
+// Configure test to use your server
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+  transport: 'streamable-http',
+  publicMode: true,
+});
+
+test.describe('Weather Tool UI', () => {
+  test('renders weather widget', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'London' });
+
+    expect(result).toBeSuccessful();
+    expect(result).toHaveRenderedHtml();
+    expect(result).toBeXssSafe();
+  });
+});
+```
+
+## UI Matchers
+
+### toHaveRenderedHtml()
+
+Checks that the tool response has rendered HTML in `_meta['ui/html']` and is not the mdx-fallback (which indicates rendering failure):
+
+```typescript
+expect(result).toHaveRenderedHtml();
+```
+
+### toContainHtmlElement(tag)
+
+Checks that the rendered HTML contains a specific element:
+
+```typescript
+expect(result).toContainHtmlElement('div');
+expect(result).toContainHtmlElement('h1');
+expect(result).toContainHtmlElement('table');
+```
+
+### toContainBoundValue(value)
+
+Verifies that output values are correctly bound in the rendered HTML:
+
+```typescript
+const output = result.json<WeatherOutput>();
+
+// String values
+expect(result).toContainBoundValue(output.location);
+expect(result).toContainBoundValue(output.conditions);
+
+// Number values
+expect(result).toContainBoundValue(output.temperature);
+expect(result).toContainBoundValue(output.humidity);
+```
+
+### toBeXssSafe()
+
+Checks that the HTML doesn't contain potential XSS vulnerabilities:
+
+- No `<script>` tags
+- No inline event handlers (`onclick=`, `onerror=`, etc.)
+- No `javascript:` URIs
+
+```typescript
+expect(result).toBeXssSafe();
+```
+
+### toHaveWidgetMetadata()
+
+Verifies the response includes widget metadata (`ui/html`, `openai/outputTemplate`, or `ui/mimeType`):
+
+```typescript
+expect(result).toHaveWidgetMetadata();
+```
+
+### toHaveCssClass(className)
+
+Checks for specific CSS classes in the rendered HTML:
+
+```typescript
+expect(result).toHaveCssClass('weather-card');
+expect(result).toHaveCssClass('btn-primary');
+```
+
+### toNotContainRawContent(content)
+
+Verifies that specific raw content is NOT in the HTML. Useful for detecting rendering failures:
+
+```typescript
+// MDX custom components should be rendered, not raw
+expect(result).toNotContainRawContent('<Alert');
+expect(result).toNotContainRawContent('<WeatherCard');
+expect(result).toNotContainRawContent('mdx-fallback');
+```
+
+### toHaveProperHtmlStructure()
+
+Checks that HTML has proper structure (not escaped text):
+
+```typescript
+expect(result).toHaveProperHtmlStructure();
+```
+
+## UIAssertions Helper
+
+For more control and detailed error messages, use the `UIAssertions` helper:
+
+```typescript
+import { UIAssertions } from '@frontmcp/testing';
+
+test('comprehensive validation', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather', { location: 'Tokyo' });
+
+  // Extract HTML and validate
+  const html = UIAssertions.assertRenderedUI(result);
+
+  // Validate data binding
+  const output = result.json<WeatherOutput>();
+  UIAssertions.assertDataBinding(html, output, [
+    'location',
+    'temperature',
+    'conditions',
+    'humidity',
+  ]);
+
+  // Security validation
+  UIAssertions.assertXssSafe(html);
+
+  // Element validation
+  UIAssertions.assertContainsElement(html, 'div');
+  UIAssertions.assertContainsElement(html, 'h1');
+
+  // Fallback detection
+  UIAssertions.assertNotContainsRaw(html, 'mdx-fallback');
+});
+```
+
+### assertValidUI(result, boundKeys?)
+
+Comprehensive validation that returns the HTML:
+
+```typescript
+const html = UIAssertions.assertValidUI(result, [
+  'location',
+  'temperature',
+  'conditions',
+]);
+
+// Continue with additional assertions on html
+expect(html).toContain('weather-card');
+```
+
+## Testing Different Template Types
+
+### React Templates
+
+```typescript
+test('React template renders correctly', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather', { location: 'Sydney' });
+
+  expect(result).toHaveRenderedHtml();
+  expect(result).toHaveProperHtmlStructure();
+
+  // React components should be server-rendered to HTML
+  expect(result).toNotContainRawContent('WeatherCard');
+
+  // Data binding
+  const output = result.json<WeatherOutput>();
+  expect(result).toContainBoundValue(output.location);
+});
+```
+
+### MDX Templates
+
+```typescript
+test('MDX template renders Markdown and components', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather_mdx', { location: 'Berlin' });
+
+  expect(result).toHaveRenderedHtml();
+
+  // Markdown should be rendered as HTML
+  expect(result).toContainHtmlElement('h1'); // # Header
+  expect(result).toContainHtmlElement('h2'); // ## Header
+  expect(result).toContainHtmlElement('li'); // - List item
+
+  // Custom MDX components should be rendered
+  expect(result).toNotContainRawContent('<Alert');
+  expect(result).toNotContainRawContent('<WeatherCard');
+
+  // No fallback
+  expect(result).toNotContainRawContent('mdx-fallback');
+});
+```
+
+### HTML Templates
+
+```typescript
+test('HTML template renders with escaping', async ({ mcp }) => {
+  const result = await mcp.tools.call('simple_tool', { data: '<test>' });
+
+  expect(result).toHaveRenderedHtml();
+  expect(result).toBeXssSafe();
+
+  // User input should be escaped
+  expect(result).toNotContainRawContent('<test>');
+});
+```
+
+## Testing XSS Prevention
+
+Verify that user input is properly escaped:
+
+```typescript
+test('handles XSS in user input', async ({ mcp }) => {
+  // Test with script injection
+  const result1 = await mcp.tools.call('get_weather', {
+    location: '<script>alert("xss")</script>',
+  });
+  expect(result1).toBeXssSafe();
+  expect(result1).toNotContainRawContent('<script>');
+
+  // Test with event handler injection
+  const result2 = await mcp.tools.call('get_weather', {
+    location: '<img onerror="alert(1)" src="">',
+  });
+  const html = UIAssertions.assertRenderedUI(result2);
+  expect(html).not.toMatch(/<img[^>]*onerror/i);
+});
+```
+
+## Testing Data Binding
+
+Ensure all output fields are rendered in the UI:
+
+```typescript
+test('all output fields are bound', async ({ mcp }) => {
+  const result = await mcp.tools.call('get_weather', { location: 'Paris' });
+
+  const output = result.json<WeatherOutput>();
+  const html = UIAssertions.assertRenderedUI(result);
+
+  // Use assertDataBinding for comprehensive check
+  UIAssertions.assertDataBinding(html, output, [
+    'location',
+    'temperature',
+    'conditions',
+    'humidity',
+    'windSpeed',
+  ]);
+});
+```
+
+## Tool Result json() for UI
+
+When a tool has UI enabled, `result.json()` returns the `structuredContent` (typed output) instead of parsing text content:
+
+```typescript
+// Tool with UI: json() returns structuredContent
+const result = await mcp.tools.call('get_weather', { location: 'London' });
+const output = result.json<WeatherOutput>(); // Returns structuredContent
+
+// Check if result has Tool UI
+if (result.hasToolUI()) {
+  // HTML is in _meta['ui/html']
+  expect(result).toHaveRenderedHtml();
+}
+```
+
+## Complete Test Suite Example
+
+```typescript
+import { test, expect, UIAssertions } from '@frontmcp/testing';
+
+interface WeatherOutput {
+  location: string;
+  temperature: number;
+  units: 'celsius' | 'fahrenheit';
+  conditions: string;
+  humidity: number;
+  windSpeed: number;
+}
+
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+  transport: 'streamable-http',
+  publicMode: true,
+});
+
+test.describe('Weather Tool UI', () => {
+  test('renders weather UI with data binding', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'London' });
+
+    expect(result).toBeSuccessful();
+    expect(result).toHaveRenderedHtml();
+    expect(result).toBeXssSafe();
+    expect(result).toHaveWidgetMetadata();
+
+    const output = result.json<WeatherOutput>();
+    expect(result).toContainBoundValue(output.location);
+    expect(result).toContainBoundValue(output.temperature);
+  });
+
+  test('has proper HTML structure', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'Tokyo' });
+
+    expect(result).toHaveRenderedHtml();
+    expect(result).toHaveProperHtmlStructure();
+    expect(result).toContainHtmlElement('div');
+  });
+
+  test('handles XSS safely', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', {
+      location: '<script>alert("xss")</script>',
+    });
+
+    expect(result).toBeSuccessful();
+    expect(result).toBeXssSafe();
+    expect(result).toNotContainRawContent('<script>');
+  });
+
+  test('renders known city data correctly', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'San Francisco' });
+
+    expect(result).toBeSuccessful();
+    expect(result).toHaveRenderedHtml();
+
+    const output = result.json<WeatherOutput>();
+    expect(output.conditions).toBe('foggy');
+    expect(result).toContainBoundValue('San Francisco');
+    expect(result).toContainBoundValue(18);
+  });
+
+  test('complete validation suite', async ({ mcp }) => {
+    const result = await mcp.tools.call('get_weather', { location: 'Paris' });
+
+    const html = UIAssertions.assertValidUI(result, [
+      'location',
+      'temperature',
+      'conditions',
+      'humidity',
+    ]);
+
+    UIAssertions.assertContainsElement(html, 'div');
+    UIAssertions.assertNotContainsRaw(html, 'mdx-fallback');
+  });
+});
+```
+
+## Reference suites in the repo
+
+<Note>
+Use the weather demos under `apps/ui/**` as golden tests before copying patterns into your own workspace. They exercise every matcher in this guide, including `toHaveRenderedHtml`, `toNotContainRawContent`, and the `UIAssertions` helpers.
+</Note>
+
+- `apps/ui/react-demo/e2e/weather.e2e.ts` verifies the React renderer, CDN-based serving mode, and transparent auth defaults.
+- `apps/ui/mdx-demo/e2e/weather.e2e.ts` ensures the MDX renderer compiles markdown + JSX without falling back to escaped content.
+
+Run them directly when updating the UI runtime:
+
+```bash
+pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
+pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+```
+
+<Tip>
+Keep these suites green before upgrading React, MDX, or `@frontmcp/ui`—they catch regressions in widget metadata long before production clients do.
+</Tip>
+
+## Running Tests
+
+```bash
+# Using frontmcp CLI (recommended)
+npx frontmcp test
+
+# Using nx
+nx e2e my-app
+
+# With specific test file
+npx frontmcp test --testPathPattern weather.e2e.ts
+
+# Run sequentially (useful for debugging)
+npx frontmcp test --runInBand
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing Library" icon="book" href="/docs/testing">
+    Full @frontmcp/testing documentation
+  </Card>
+  <Card title="Templates" icon="code" href="/docs/ui/templates/overview">
+    Learn about template types
+  </Card>
+</CardGroup>

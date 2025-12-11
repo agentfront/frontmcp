@@ -1,0 +1,326 @@
+---
+title: Getting Started with FrontMCP UI
+sidebarTitle: Getting Started
+icon: rocket-launch
+description: Add rich visual widgets to your MCP tools in minutes
+---
+
+# Getting Started
+
+This guide walks you through adding visual widgets to your FrontMCP tools using `@frontmcp/ui`.
+
+## Prerequisites
+
+- A FrontMCP server project set up with `@frontmcp/sdk`
+- Node.js 22 or newer (Node 24 Active LTS recommended to match the dev runtime)
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/ui
+```
+
+```bash yarn
+yarn add @frontmcp/ui
+```
+
+```bash pnpm
+pnpm add @frontmcp/ui
+```
+
+</CodeGroup>
+
+## Step 1: Add UI Config to Your Tool
+
+The simplest way to add a widget is with an HTML template function:
+
+```typescript title="src/tools/hello.tool.ts"
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'say_hello',
+  description: 'Greet a user',
+  inputSchema: {
+    name: z.string().describe('Name to greet'),
+  },
+  ui: {
+    template: (ctx) => `
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <h1 class="text-2xl font-bold text-gray-800">
+          Hello, ${ctx.helpers.escapeHtml(ctx.output.name)}!
+        </h1>
+        <p class="text-gray-600 mt-2">
+          Welcome to FrontMCP UI
+        </p>
+      </div>
+    `,
+  },
+})
+export class HelloTool extends ToolContext {
+  async execute(input: { name: string }) {
+    return { name: input.name };
+  }
+}
+```
+
+<Warning>
+  Always use `ctx.helpers.escapeHtml()` for user-provided content to prevent XSS attacks.
+</Warning>
+
+## Step 2: Use Template Helpers
+
+The template context provides several helper functions:
+
+```typescript
+ui: {
+  template: (ctx) => {
+    const { input, output, helpers } = ctx;
+
+    return `
+      <div class="p-4">
+        <!-- Escape HTML to prevent XSS -->
+        <p>${helpers.escapeHtml(output.message)}</p>
+
+        <!-- Format dates -->
+        <p>Created: ${helpers.formatDate(output.createdAt)}</p>
+
+        <!-- Format currency -->
+        <p>Total: ${helpers.formatCurrency(output.amount, 'USD')}</p>
+
+        <!-- Generate unique IDs -->
+        <input id="${helpers.uniqueId('input')}" type="text" />
+
+        <!-- Safely embed JSON -->
+        <script>
+          const data = ${helpers.jsonEmbed(output.data)};
+        </script>
+      </div>
+    `;
+  },
+}
+```
+
+### Available Helpers
+
+| Helper                              | Description                    |
+| ----------------------------------- | ------------------------------ |
+| `escapeHtml(str)`                   | Escape HTML special characters |
+| `formatDate(date, format?)`         | Format a date for display      |
+| `formatCurrency(amount, currency?)` | Format a number as currency    |
+| `uniqueId(prefix?)`                 | Generate a unique DOM ID       |
+| `jsonEmbed(data)`                   | Safely embed JSON in HTML      |
+
+## Step 3: Use Pre-built Components
+
+`@frontmcp/ui` provides a library of styled components:
+
+```typescript title="src/tools/user-profile.tool.ts"
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, badge, button, alert } from '@frontmcp/ui';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_user',
+  description: 'Get user profile',
+  inputSchema: {
+    userId: z.string(),
+  },
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+
+      return card(`
+        <div class="flex items-center gap-4">
+          <img
+            src="${helpers.escapeHtml(output.avatar)}"
+            class="w-16 h-16 rounded-full"
+            alt="Avatar"
+          />
+          <div>
+            <h2 class="text-xl font-bold">
+              ${helpers.escapeHtml(output.name)}
+            </h2>
+            <p class="text-gray-600">
+              ${helpers.escapeHtml(output.email)}
+            </p>
+          </div>
+          ${badge(output.role, { variant: 'primary', pill: true })}
+        </div>
+      `, {
+        title: 'User Profile',
+        footer: button('Edit Profile', { variant: 'outline', size: 'sm' }),
+      });
+    },
+  },
+})
+export class GetUserTool extends ToolContext {
+  async execute(input: { userId: string }) {
+    return {
+      name: 'John Doe',
+      email: 'john@example.com',
+      avatar: 'https://example.com/avatar.jpg',
+      role: 'Admin',
+    };
+  }
+}
+```
+
+## Complete Weather Example
+
+Here's a full example combining multiple components:
+
+```typescript title="src/tools/weather.tool.ts"
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, badge, alert } from '@frontmcp/ui';
+import { z } from 'zod';
+
+const inputSchema = {
+  location: z.string().describe('City name'),
+  units: z.enum(['celsius', 'fahrenheit']).optional(),
+};
+
+const outputSchema = z.object({
+  location: z.string(),
+  temperature: z.number(),
+  units: z.enum(['celsius', 'fahrenheit']),
+  conditions: z.string(),
+  humidity: z.number(),
+  windSpeed: z.number(),
+});
+
+@Tool({
+  name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema,
+  outputSchema,
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+      const tempUnit = output.units === 'celsius' ? '°C' : '°F';
+
+      const weatherIcons: Record<string, string> = {
+        sunny: '☀️',
+        cloudy: '☁️',
+        rainy: '🌧️',
+        foggy: '🌫️',
+      };
+
+      const icon = weatherIcons[output.conditions.toLowerCase()] || '🌤️';
+
+      return card(`
+        <div class="text-center">
+          <div class="text-6xl mb-4">${icon}</div>
+          <div class="text-4xl font-bold mb-2">
+            ${output.temperature}${tempUnit}
+          </div>
+          ${badge(output.conditions, { variant: 'info' })}
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mt-6">
+          <div class="text-center p-3 bg-gray-50 rounded-lg">
+            <div class="text-sm text-gray-500">Humidity</div>
+            <div class="text-lg font-semibold">${output.humidity}%</div>
+          </div>
+          <div class="text-center p-3 bg-gray-50 rounded-lg">
+            <div class="text-sm text-gray-500">Wind</div>
+            <div class="text-lg font-semibold">${output.windSpeed} km/h</div>
+          </div>
+        </div>
+      `, {
+        title: helpers.escapeHtml(output.location),
+        subtitle: 'Current Weather',
+      });
+    },
+    displayMode: 'inline',
+    widgetDescription: 'Displays current weather conditions',
+  },
+})
+export class GetWeatherTool extends ToolContext {
+  async execute(input: { location: string; units?: 'celsius' | 'fahrenheit' }) {
+    // In production, call a weather API here
+    const units = input.units || 'celsius';
+
+    return {
+      location: input.location,
+      temperature: units === 'celsius' ? 18 : 64,
+      units,
+      conditions: 'Cloudy',
+      humidity: 65,
+      windSpeed: 12,
+    };
+  }
+}
+```
+
+## Testing Your Widget
+
+1. Start your MCP server in development mode
+2. Connect to it via an MCP client (OpenAI, Claude, etc.)
+3. Call your tool and see the widget rendered
+
+<Tip>
+  Use the `displayMode` option to control how your widget appears:
+  - `inline` - Rendered inline with the chat
+  - `fullscreen` - Takes over the full viewport
+  - `pip` - Picture-in-picture mode (OpenAI only)
+</Tip>
+
+## Try the Weather UI demos
+
+<Steps>
+<Step title="Spin up the React demo">
+
+```bash
+pnpm nx serve react-demo --port 3003
+```
+
+This server exposes the `get_weather` tool with a React-based widget, transparent auth defaults, and `publicMode`-friendly settings so you can hit it from the MCP Inspector.
+
+</Step>
+<Step title="Spin up the MDX demo">
+
+```bash
+pnpm nx serve mdx-demo --port 3004
+```
+
+The MDX demo renders the same weather tool with Markdown + JSX templates. Use it to compare HTML vs MDX fallbacks or to verify that custom components compile correctly.
+
+</Step>
+<Step title="Run the UI regression tests">
+
+```bash
+pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
+pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+```
+
+Both suites rely on `@frontmcp/testing`’s `UIAssertions` helpers (`toHaveRenderedHtml`, `toNotContainRawContent`, `assertValidUI`) so you can copy/paste the assertions into your own projects.
+
+<Check>
+The Jest output should confirm every test as passing and report that rendered HTML contains widget metadata instead of the `mdx-fallback`.
+</Check>
+
+</Step>
+</Steps>
+
+<Tip>
+Keep these demos around as golden references; updating them first helps catch regressions in new template renderers or auth transport tweaks before they land in production apps.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="grid-2" href="/docs/ui/components/overview">
+    Explore all available components
+  </Card>
+  <Card title="Templates" icon="code" href="/docs/ui/templates/overview">
+    Learn about React and MDX templates
+  </Card>
+  <Card title="Theming" icon="paintbrush" href="/docs/ui/theming/overview">
+    Customize colors and styling
+  </Card>
+  <Card title="Platform Support" icon="globe" href="/docs/ui/advanced/platforms">
+    Platform-specific considerations
+  </Card>
+</CardGroup>

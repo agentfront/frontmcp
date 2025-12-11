@@ -1,0 +1,752 @@
+---
+title: Component API Reference
+sidebarTitle: Components
+icon: cube
+description: Complete API reference for all @frontmcp/ui components
+---
+
+# Component API Reference
+
+Complete API reference for all `@frontmcp/ui` components. Each component returns an HTML string and validates its options using Zod schemas.
+
+## Button
+
+```typescript
+import { button, buttonGroup } from '@frontmcp/ui';
+```
+
+### `button(label, options?)`
+
+Creates a button element.
+
+| Parameter | Type            | Description           |
+| --------- | --------------- | --------------------- |
+| `label`   | `string`        | Button text content   |
+| `options` | `ButtonOptions` | Configuration options |
+
+#### ButtonOptions
+
+| Property    | Type                                                                     | Default     | Description                |
+| ----------- | ------------------------------------------------------------------------ | ----------- | -------------------------- |
+| `variant`   | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'danger' \| 'link'` | `'primary'` | Visual style               |
+| `size`      | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'`                                   | `'md'`      | Button size                |
+| `disabled`  | `boolean`                                                                | `false`     | Disable interactions       |
+| `loading`   | `boolean`                                                                | `false`     | Show loading spinner       |
+| `fullWidth` | `boolean`                                                                | `false`     | Stretch to container width |
+| `type`      | `'button' \| 'submit' \| 'reset'`                                        | `'button'`  | HTML button type           |
+| `id`        | `string`                                                                 | -           | DOM element ID             |
+| `className` | `string`                                                                 | -           | Additional CSS classes     |
+| `data`      | `Record<string, string>`                                                 | -           | Data attributes            |
+| `htmx`      | `HtmxOptions`                                                            | -           | HTMX attributes            |
+
+```typescript
+// Basic
+button('Click me');
+
+// With options
+button('Submit', {
+  variant: 'primary',
+  size: 'lg',
+  type: 'submit',
+});
+
+// With HTMX
+button('Load More', {
+  htmx: {
+    get: '/api/items?page=2',
+    target: '#items',
+    swap: 'beforeend',
+  },
+});
+```
+
+### `buttonGroup(buttons, options?)`
+
+Groups multiple buttons together.
+
+| Property    | Type                           | Default        | Description             |
+| ----------- | ------------------------------ | -------------- | ----------------------- |
+| `direction` | `'horizontal' \| 'vertical'`   | `'horizontal'` | Layout direction        |
+| `gap`       | `'xs' \| 'sm' \| 'md' \| 'lg'` | `'sm'`         | Spacing between buttons |
+| `align`     | `'start' \| 'center' \| 'end'` | `'start'`      | Alignment               |
+
+### Preset Buttons
+
+```typescript
+import {
+  primaryButton,
+  secondaryButton,
+  outlineButton,
+  ghostButton,
+  dangerButton,
+  linkButton,
+} from '@frontmcp/ui';
+
+// Each accepts (label, options?) and pre-applies the variant
+primaryButton('Save');    // variant: 'primary'
+dangerButton('Delete');   // variant: 'danger'
+```
+
+---
+
+## Card
+
+```typescript
+import { card, cardGroup } from '@frontmcp/ui';
+```
+
+### `card(content, options?)`
+
+Creates a card container.
+
+| Parameter | Type          | Description              |
+| --------- | ------------- | ------------------------ |
+| `content` | `string`      | Card body content (HTML) |
+| `options` | `CardOptions` | Configuration options    |
+
+#### CardOptions
+
+| Property    | Type                                              | Default     | Description            |
+| ----------- | ------------------------------------------------- | ----------- | ---------------------- |
+| `title`     | `string`                                          | -           | Card header title      |
+| `subtitle`  | `string`                                          | -           | Header subtitle        |
+| `footer`    | `string`                                          | -           | Footer content (HTML)  |
+| `variant`   | `'default' \| 'outline' \| 'elevated' \| 'ghost'` | `'default'` | Visual style           |
+| `size`      | `'sm' \| 'md' \| 'lg'`                            | `'md'`      | Padding size           |
+| `noPadding` | `boolean`                                         | `false`     | Remove body padding    |
+| `className` | `string`                                          | -           | Additional CSS classes |
+
+```typescript
+card('<p>Card content</p>', {
+  title: 'Card Title',
+  subtitle: 'A brief description',
+  footer: '<button>Action</button>',
+  variant: 'elevated',
+});
+```
+
+### `cardGroup(cards, options?)`
+
+Groups cards in a grid layout.
+
+| Property | Type                   | Default | Description       |
+| -------- | ---------------------- | ------- | ----------------- |
+| `cols`   | `1 \| 2 \| 3 \| 4`     | `2`     | Number of columns |
+| `gap`    | `'sm' \| 'md' \| 'lg'` | `'md'`  | Gap between cards |
+
+---
+
+## Badge
+
+```typescript
+import { badge, badgeGroup } from '@frontmcp/ui';
+```
+
+### `badge(label, options?)`
+
+Creates a badge/tag element.
+
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `label`   | `string`       | Badge text            |
+| `options` | `BadgeOptions` | Configuration options |
+
+#### BadgeOptions
+
+| Property    | Type                                                                                    | Default     | Description            |
+| ----------- | --------------------------------------------------------------------------------------- | ----------- | ---------------------- |
+| `variant`   | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info'` | `'default'` | Color variant          |
+| `size`      | `'xs' \| 'sm' \| 'md' \| 'lg'`                                                          | `'md'`      | Badge size             |
+| `rounded`   | `'sm' \| 'md' \| 'lg' \| 'full'`                                                        | `'full'`    | Border radius          |
+| `dot`       | `boolean`                                                                               | `false`     | Show as status dot     |
+| `removable` | `boolean`                                                                               | `false`     | Show remove button     |
+| `className` | `string`                                                                                | -           | Additional CSS classes |
+
+```typescript
+badge('New', { variant: 'success' });
+badge('Beta', { variant: 'warning', size: 'sm' });
+```
+
+### Preset Badges
+
+```typescript
+import {
+  activeBadge,
+  inactiveBadge,
+  pendingBadge,
+  errorBadge,
+  newBadge,
+  betaBadge,
+} from '@frontmcp/ui';
+
+// Status badges
+activeBadge();    // Green "Active"
+pendingBadge();   // Yellow "Pending"
+errorBadge();     // Red "Error"
+```
+
+### Status Dots
+
+```typescript
+import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/ui';
+
+onlineDot();   // Green dot
+offlineDot();  // Gray dot
+busyDot();     // Red dot
+awayDot();     // Yellow dot
+```
+
+---
+
+## Alert
+
+```typescript
+import { alert, toast, toastContainer } from '@frontmcp/ui';
+```
+
+### `alert(message, options?)`
+
+Creates an alert/banner element.
+
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `message` | `string`       | Alert content (HTML)  |
+| `options` | `AlertOptions` | Configuration options |
+
+#### AlertOptions
+
+| Property      | Type                                                        | Default  | Description              |
+| ------------- | ----------------------------------------------------------- | -------- | ------------------------ |
+| `variant`     | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style             |
+| `title`       | `string`                                                    | -        | Alert heading            |
+| `showIcon`    | `boolean`                                                   | `true`   | Show variant icon        |
+| `icon`        | `string`                                                    | -        | Custom icon HTML         |
+| `dismissible` | `boolean`                                                   | `false`  | Show close button        |
+| `className`   | `string`                                                    | -        | Additional CSS classes   |
+| `id`          | `string`                                                    | -        | Alert ID                 |
+| `actions`     | `string`                                                    | -        | HTML for action buttons  |
+| `onDismiss`   | `HtmxOptions`                                               | -        | HTMX options for dismiss |
+
+```typescript
+alert('Operation completed successfully', {
+  variant: 'success',
+  title: 'Success',
+  dismissible: true,
+});
+```
+
+### Preset Alerts
+
+```typescript
+import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui';
+
+successAlert('Saved!');
+dangerAlert('Error occurred', { title: 'Error' });
+```
+
+### `toast(message, options?)`
+
+Creates a toast notification.
+
+#### ToastOptions
+
+| Property      | Type                                                                                              | Default        | Description                           |
+| ------------- | ------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
+| `variant`     | `AlertVariant`                                                                                    | `'info'`       | Visual style                          |
+| `title`       | `string`                                                                                          | -              | Toast heading                         |
+| `duration`    | `number`                                                                                          | `5000`         | Auto-dismiss ms (0 = no auto-dismiss) |
+| `position`    | `'top-right' \| 'top-left' \| 'bottom-right' \| 'bottom-left' \| 'top-center' \| 'bottom-center'` | `'top-right'`  | Screen position                       |
+| `id`          | `string`                                                                                          | auto-generated | Toast ID                              |
+| `dismissible` | `boolean`                                                                                         | `true`         | Show close button                     |
+
+### `toastContainer(position?)`
+
+Creates a container for toast notifications.
+
+---
+
+## Form Components
+
+```typescript
+import { input, select, textarea, checkbox, radioGroup, form } from '@frontmcp/ui';
+```
+
+### `input(options)`
+
+Creates a text input field.
+
+#### InputOptions
+
+| Property      | Type                                                                                                                | Default     | Description            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------- |
+| `type`        | `'text' \| 'email' \| 'password' \| 'number' \| 'tel' \| 'url' \| 'search' \| 'date' \| 'time' \| 'datetime-local'` | `'text'`    | Input type             |
+| `name`        | `string`                                                                                                            | -           | Field name             |
+| `value`       | `string`                                                                                                            | -           | Initial value          |
+| `placeholder` | `string`                                                                                                            | -           | Placeholder text       |
+| `label`       | `string`                                                                                                            | -           | Associated label       |
+| `hint`        | `string`                                                                                                            | -           | Help text              |
+| `error`       | `string`                                                                                                            | -           | Error message          |
+| `required`    | `boolean`                                                                                                           | `false`     | Required field         |
+| `disabled`    | `boolean`                                                                                                           | `false`     | Disabled state         |
+| `readonly`    | `boolean`                                                                                                           | `false`     | Read-only state        |
+| `size`        | `'sm' \| 'md' \| 'lg'`                                                                                              | `'md'`      | Input size             |
+| `state`       | `'default' \| 'error' \| 'success'`                                                                                 | `'default'` | Validation state       |
+| `prefix`      | `string`                                                                                                            | -           | Text/icon before input |
+| `suffix`      | `string`                                                                                                            | -           | Text/icon after input  |
+| `htmx`        | `HtmxOptions`                                                                                                       | -           | HTMX attributes        |
+
+```typescript
+input({
+  type: 'email',
+  name: 'email',
+  label: 'Email Address',
+  placeholder: 'you@example.com',
+  required: true,
+});
+```
+
+### `select(options)`
+
+Creates a select dropdown.
+
+#### SelectOptions
+
+| Property      | Type                   | Default | Description        |
+| ------------- | ---------------------- | ------- | ------------------ |
+| `name`        | `string`               | -       | Field name         |
+| `options`     | `SelectOption[]`       | `[]`    | Dropdown options   |
+| `value`       | `string`               | -       | Selected value     |
+| `placeholder` | `string`               | -       | Placeholder option |
+| `label`       | `string`               | -       | Associated label   |
+| `multiple`    | `boolean`              | `false` | Multi-select       |
+| `size`        | `'sm' \| 'md' \| 'lg'` | `'md'`  | Select size        |
+
+```typescript
+interface SelectOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+select({
+  name: 'country',
+  label: 'Country',
+  options: [
+    { value: 'us', label: 'United States' },
+    { value: 'uk', label: 'United Kingdom' },
+  ],
+});
+```
+
+### `textarea(options)`
+
+Creates a textarea element.
+
+#### TextareaOptions
+
+| Property      | Type                                             | Default      | Description      |
+| ------------- | ------------------------------------------------ | ------------ | ---------------- |
+| `name`        | `string`                                         | -            | Field name       |
+| `value`       | `string`                                         | -            | Initial value    |
+| `placeholder` | `string`                                         | -            | Placeholder text |
+| `label`       | `string`                                         | -            | Associated label |
+| `rows`        | `number`                                         | `4`          | Visible rows     |
+| `resize`      | `'none' \| 'vertical' \| 'horizontal' \| 'both'` | `'vertical'` | Resize behavior  |
+
+### `checkbox(options)`
+
+Creates a checkbox input.
+
+#### CheckboxOptions
+
+| Property   | Type      | Default | Description    |
+| ---------- | --------- | ------- | -------------- |
+| `name`     | `string`  | -       | Field name     |
+| `label`    | `string`  | -       | Checkbox label |
+| `checked`  | `boolean` | `false` | Initial state  |
+| `value`    | `string`  | -       | Checkbox value |
+| `disabled` | `boolean` | `false` | Disabled state |
+
+### `radioGroup(options)`
+
+Creates a group of radio buttons.
+
+#### RadioGroupOptions
+
+| Property    | Type                         | Default      | Description         |
+| ----------- | ---------------------------- | ------------ | ------------------- |
+| `name`      | `string`                     | -            | Field name (shared) |
+| `options`   | `SelectOption[]`             | `[]`         | Radio options       |
+| `value`     | `string`                     | -            | Selected value      |
+| `direction` | `'horizontal' \| 'vertical'` | `'vertical'` | Layout              |
+
+### `form(content, options?)`
+
+Wraps content in a form element.
+
+#### FormOptions
+
+| Property    | Type              | Default  | Description            |
+| ----------- | ----------------- | -------- | ---------------------- |
+| `action`    | `string`          | -        | Form action URL        |
+| `method`    | `'get' \| 'post'` | `'post'` | HTTP method            |
+| `id`        | `string`          | -        | Form ID                |
+| `className` | `string`          | -        | Additional CSS classes |
+| `htmx`      | `HtmxOptions`     | -        | HTMX form handling     |
+
+### Form Layout Helpers
+
+```typescript
+import { formRow, formSection, formActions, hiddenInput, csrfInput } from '@frontmcp/ui';
+
+// Group fields horizontally
+formRow([input1, input2]);
+
+// Section with heading
+formSection('Contact Info', fields);
+
+// Action buttons (right-aligned)
+formActions([cancelBtn, submitBtn]);
+
+// Hidden fields
+hiddenInput('id', '123');
+csrfInput('token-value');
+```
+
+---
+
+## Table
+
+```typescript
+import { table, pagination } from '@frontmcp/ui';
+```
+
+### `table(options)`
+
+Creates a data table.
+
+#### TableOptions
+
+| Property       | Type                        | Default     | Description         |
+| -------------- | --------------------------- | ----------- | ------------------- |
+| `columns`      | `TableColumn[]`             | `[]`        | Column definitions  |
+| `data`         | `Record<string, unknown>[]` | `[]`        | Row data            |
+| `striped`      | `boolean`                   | `false`     | Striped rows        |
+| `hover`        | `boolean`                   | `true`      | Row hover effect    |
+| `bordered`     | `boolean`                   | `false`     | Cell borders        |
+| `compact`      | `boolean`                   | `false`     | Reduced padding     |
+| `caption`      | `string`                    | -           | Table caption       |
+| `emptyMessage` | `string`                    | `'No data'` | Empty state message |
+
+#### TableColumn
+
+| Property   | Type                            | Description          |
+| ---------- | ------------------------------- | -------------------- |
+| `key`      | `string`                        | Data property key    |
+| `header`   | `string`                        | Column header text   |
+| `align`    | `'left' \| 'center' \| 'right'` | Text alignment       |
+| `width`    | `string`                        | Column width (CSS)   |
+| `sortable` | `boolean`                       | Enable sorting       |
+| `render`   | `(value, row) => string`        | Custom cell renderer |
+
+```typescript
+table({
+  columns: [
+    { key: 'name', header: 'Name', sortable: true },
+    { key: 'email', header: 'Email' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (value) => badge(value, { variant: value === 'active' ? 'success' : 'default' }),
+    },
+  ],
+  data: users,
+  striped: true,
+});
+```
+
+### `pagination(options)`
+
+Creates pagination controls.
+
+#### PaginationOptions
+
+| Property   | Type          | Default | Description     |
+| ---------- | ------------- | ------- | --------------- |
+| `total`    | `number`      | -       | Total items     |
+| `page`     | `number`      | `1`     | Current page    |
+| `pageSize` | `number`      | `10`    | Items per page  |
+| `baseUrl`  | `string`      | -       | URL template    |
+| `htmx`     | `HtmxOptions` | -       | HTMX navigation |
+
+---
+
+## List
+
+```typescript
+import { descriptionList, actionList, permissionList, featureList } from '@frontmcp/ui';
+```
+
+### `descriptionList(items, options?)`
+
+Creates a term/description list.
+
+```typescript
+interface DescriptionItem {
+  term: string;
+  description: string;
+}
+
+descriptionList([
+  { term: 'Name', description: 'John Doe' },
+  { term: 'Email', description: 'john@example.com' },
+], { columns: 2 });
+```
+
+### `actionList(items)`
+
+Creates a list of actionable items.
+
+```typescript
+interface ActionItem {
+  label: string;
+  description?: string;
+  icon?: string;
+  href?: string;
+  htmx?: HtmxOptions;
+}
+
+actionList([
+  { label: 'Settings', icon: 'cog', href: '/settings' },
+  { label: 'Logout', icon: 'sign-out', htmx: { post: '/logout' } },
+]);
+```
+
+### `permissionList(items)`
+
+Creates a permission checklist.
+
+```typescript
+interface PermissionItem {
+  name: string;
+  granted: boolean;
+  description?: string;
+}
+
+permissionList([
+  { name: 'Read access', granted: true },
+  { name: 'Write access', granted: false },
+]);
+```
+
+### `featureList(items)`
+
+Creates a feature comparison list.
+
+```typescript
+interface FeatureItem {
+  name: string;
+  included: boolean;
+}
+
+featureList([
+  { name: 'Unlimited projects', included: true },
+  { name: 'Priority support', included: false },
+]);
+```
+
+---
+
+## Avatar
+
+```typescript
+import { avatar, avatarGroup, avatarWithText } from '@frontmcp/ui';
+```
+
+### `avatar(options)`
+
+Creates an avatar element.
+
+#### AvatarOptions
+
+| Property   | Type                                        | Default    | Description       |
+| ---------- | ------------------------------------------- | ---------- | ----------------- |
+| `src`      | `string`                                    | -          | Image URL         |
+| `alt`      | `string`                                    | `''`       | Alt text          |
+| `initials` | `string`                                    | -          | Fallback initials |
+| `size`     | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl'`      | `'md'`     | Avatar size       |
+| `shape`    | `'circle' \| 'square'`                      | `'circle'` | Shape             |
+| `status`   | `'online' \| 'offline' \| 'busy' \| 'away'` | -          | Status indicator  |
+
+```typescript
+avatar({
+  src: '/user.jpg',
+  alt: 'John Doe',
+  size: 'lg',
+  status: 'online',
+});
+
+avatar({
+  initials: 'JD',
+  size: 'md',
+});
+```
+
+### `avatarGroup(avatars, options?)`
+
+Groups multiple avatars with overlap.
+
+#### AvatarGroupOptions
+
+| Property  | Type                  | Default    | Description            |
+| --------- | --------------------- | ---------- | ---------------------- |
+| `max`     | `number`              | -          | Max visible (shows +N) |
+| `size`    | `AvatarSize`          | `'md'`     | Size for all           |
+| `spacing` | `'tight' \| 'normal'` | `'normal'` | Overlap amount         |
+
+### `avatarWithText(options)`
+
+Avatar with name and optional subtitle.
+
+#### AvatarWithTextOptions
+
+| Property   | Type            | Description    |
+| ---------- | --------------- | -------------- |
+| `avatar`   | `AvatarOptions` | Avatar config  |
+| `name`     | `string`        | Primary text   |
+| `subtitle` | `string`        | Secondary text |
+
+---
+
+## Modal
+
+```typescript
+import { modal, modalTrigger, confirmModal, drawer } from '@frontmcp/ui';
+```
+
+### `modal(content, options)`
+
+Creates a modal dialog.
+
+#### ModalOptions
+
+| Property   | Type                                     | Default      | Description       |
+| ---------- | ---------------------------------------- | ------------ | ----------------- |
+| `id`       | `string`                                 | **required** | Modal ID          |
+| `title`    | `string`                                 | -            | Modal title       |
+| `size`     | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'`       | Modal width       |
+| `closable` | `boolean`                                | `true`       | Show close button |
+| `footer`   | `string`                                 | -            | Footer content    |
+
+```typescript
+modal('<p>Modal content</p>', {
+  id: 'my-modal',
+  title: 'Confirm Action',
+  footer: button('Confirm', { variant: 'primary' }),
+});
+```
+
+### `modalTrigger(targetId, trigger)`
+
+Creates a button that opens a modal.
+
+```typescript
+modalTrigger('my-modal', button('Open Modal'));
+```
+
+### `confirmModal(options)`
+
+Creates a confirmation dialog.
+
+#### ConfirmModalOptions
+
+| Property         | Type            | Description          |
+| ---------------- | --------------- | -------------------- |
+| `id`             | `string`        | Modal ID             |
+| `title`          | `string`        | Dialog title         |
+| `message`        | `string`        | Confirmation message |
+| `confirmText`    | `string`        | Confirm button text  |
+| `cancelText`     | `string`        | Cancel button text   |
+| `confirmVariant` | `ButtonVariant` | Confirm button style |
+| `onConfirm`      | `HtmxOptions`   | Confirm action       |
+
+### `drawer(content, options)`
+
+Creates a slide-out drawer.
+
+#### DrawerOptions
+
+| Property   | Type                                     | Default      | Description     |
+| ---------- | ---------------------------------------- | ------------ | --------------- |
+| `id`       | `string`                                 | **required** | Drawer ID       |
+| `title`    | `string`                                 | -            | Drawer title    |
+| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'`    | Slide direction |
+| `size`     | `'sm' \| 'md' \| 'lg'`                   | `'md'`       | Drawer width    |
+
+---
+
+## HTMX Options
+
+All interactive components accept an `htmx` property for server-driven updates.
+
+### HtmxOptions
+
+| Property    | Type                                                                                                             | Description                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `get`       | `string`                                                                                                         | GET request URL            |
+| `post`      | `string`                                                                                                         | POST request URL           |
+| `put`       | `string`                                                                                                         | PUT request URL            |
+| `delete`    | `string`                                                                                                         | DELETE request URL         |
+| `patch`     | `string`                                                                                                         | PATCH request URL          |
+| `target`    | `string`                                                                                                         | CSS selector for target    |
+| `swap`      | `'innerHTML' \| 'outerHTML' \| 'beforeend' \| 'afterend' \| 'beforebegin' \| 'afterbegin' \| 'delete' \| 'none'` | Swap strategy              |
+| `trigger`   | `string`                                                                                                         | Event trigger              |
+| `indicator` | `string`                                                                                                         | Loading indicator selector |
+| `confirm`   | `string`                                                                                                         | Confirmation message       |
+| `vals`      | `Record<string, string>`                                                                                         | Additional values          |
+| `headers`   | `Record<string, string>`                                                                                         | Request headers            |
+
+```typescript
+button('Delete', {
+  htmx: {
+    delete: '/api/items/123',
+    target: '#item-123',
+    swap: 'outerHTML',
+    confirm: 'Are you sure?',
+  },
+});
+```
+
+---
+
+## Zod Schemas
+
+All components export Zod schemas for runtime validation.
+
+```typescript
+import {
+  ButtonOptionsSchema,
+  CardOptionsSchema,
+  BadgeOptionsSchema,
+  AlertOptionsSchema,
+  InputOptionsSchema,
+  SelectOptionsSchema,
+  TableOptionsSchema,
+  AvatarOptionsSchema,
+  ModalOptionsSchema,
+} from '@frontmcp/ui';
+
+// Validate options
+const result = ButtonOptionsSchema.safeParse(userInput);
+if (!result.success) {
+  console.error(result.error);
+}
+```
+
+Invalid options render a styled error box instead of the component:
+
+```html
+<div class="validation-error" data-component="button" data-param="variant">
+  Invalid property "variant" in button component
+</div>
+```

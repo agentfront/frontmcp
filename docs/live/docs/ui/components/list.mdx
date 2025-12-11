@@ -1,0 +1,304 @@
+---
+title: List Components
+sidebarTitle: List
+icon: list
+description: Description lists and action lists
+---
+
+# List Components
+
+Lists organize related content in vertical layouts. FrontMCP UI provides description lists for key-value pairs and action lists for interactive items.
+
+## Import
+
+```typescript
+import { descriptionList, actionList, listItem } from '@frontmcp/ui';
+```
+
+## Description List
+
+Display key-value pairs in a structured format:
+
+```typescript
+const html = descriptionList([
+  { term: 'Full Name', description: 'John Doe' },
+  { term: 'Email', description: 'john@example.com' },
+  { term: 'Phone', description: '+1 (555) 123-4567' },
+  { term: 'Location', description: 'San Francisco, CA' },
+]);
+```
+
+### With Custom Rendering
+
+```typescript
+import { descriptionList, badge, button } from '@frontmcp/ui';
+
+const html = descriptionList([
+  { term: 'Status', description: badge('Active', { variant: 'success' }) },
+  { term: 'Plan', description: badge('Pro', { variant: 'primary', pill: true }) },
+  {
+    term: 'Actions',
+    description: button('Upgrade', { size: 'sm', variant: 'outline' }),
+  },
+]);
+```
+
+### Horizontal Layout
+
+```typescript
+const html = descriptionList([
+  { term: 'Created', description: 'Jan 15, 2025' },
+  { term: 'Modified', description: 'Feb 20, 2025' },
+  { term: 'Status', description: 'Published' },
+], { layout: 'horizontal' });
+```
+
+### Bordered Style
+
+```typescript
+const html = descriptionList([
+  { term: 'Order ID', description: '#12345' },
+  { term: 'Date', description: 'March 15, 2025' },
+  { term: 'Total', description: '$149.99' },
+], { variant: 'bordered' });
+```
+
+## Action List
+
+Interactive list items with icons, descriptions, and actions:
+
+```typescript
+const html = actionList([
+  {
+    title: 'Profile Settings',
+    description: 'Update your personal information',
+    icon: '👤',
+    href: '/settings/profile',
+  },
+  {
+    title: 'Security',
+    description: 'Manage passwords and 2FA',
+    icon: '🔒',
+    href: '/settings/security',
+  },
+  {
+    title: 'Notifications',
+    description: 'Configure email and push notifications',
+    icon: '🔔',
+    href: '/settings/notifications',
+  },
+]);
+```
+
+### With Actions
+
+```typescript
+import { actionList, button, badge } from '@frontmcp/ui';
+
+const html = actionList([
+  {
+    title: 'Premium Plan',
+    description: 'Unlock all features',
+    icon: '⭐',
+    trailing: badge('Recommended', { variant: 'primary', pill: true }),
+    href: '/upgrade',
+  },
+  {
+    title: 'Invite Team',
+    description: 'Add collaborators to your workspace',
+    icon: '👥',
+    trailing: button('Invite', { size: 'sm' }),
+    onClick: 'openInviteModal()',
+  },
+]);
+```
+
+### With HTMX
+
+```typescript
+const html = actionList([
+  {
+    title: 'Load Recent Files',
+    description: 'View your recently accessed documents',
+    icon: '📄',
+    htmx: {
+      get: '/api/files/recent',
+      target: '#file-list',
+      swap: 'innerHTML',
+    },
+  },
+  {
+    title: 'Sync Data',
+    description: 'Synchronize with cloud storage',
+    icon: '☁️',
+    htmx: {
+      post: '/api/sync',
+      target: '#sync-status',
+      indicator: '#sync-spinner',
+    },
+  },
+]);
+```
+
+### Selectable Items
+
+```typescript
+const html = actionList([
+  { title: 'Option A', selectable: true, selected: true },
+  { title: 'Option B', selectable: true },
+  { title: 'Option C', selectable: true },
+], { selection: 'single' });
+
+// Multi-select
+const multiSelect = actionList([
+  { title: 'Feature 1', selectable: true, selected: true },
+  { title: 'Feature 2', selectable: true, selected: true },
+  { title: 'Feature 3', selectable: true },
+], { selection: 'multiple' });
+```
+
+### Grouped Lists
+
+```typescript
+const html = actionList([
+  {
+    group: 'Account',
+    items: [
+      { title: 'Profile', icon: '👤', href: '/profile' },
+      { title: 'Billing', icon: '💳', href: '/billing' },
+    ],
+  },
+  {
+    group: 'Workspace',
+    items: [
+      { title: 'Team', icon: '👥', href: '/team' },
+      { title: 'Projects', icon: '📁', href: '/projects' },
+    ],
+  },
+]);
+```
+
+## List Item
+
+Create individual list items for custom layouts:
+
+```typescript
+import { listItem } from '@frontmcp/ui';
+
+const item = listItem({
+  title: 'Document.pdf',
+  description: 'Last modified 2 hours ago',
+  icon: '📄',
+  trailing: '<span class="text-sm text-gray-500">2.4 MB</span>',
+});
+```
+
+### Sizes
+
+```typescript
+listItem({ title: 'Small item', size: 'sm' })
+listItem({ title: 'Medium item', size: 'md' })  // default
+listItem({ title: 'Large item', size: 'lg' })
+```
+
+## Complete Example
+
+```typescript
+import { card, descriptionList, actionList, badge, button } from '@frontmcp/ui';
+
+const settingsCard = card(`
+  <div class="space-y-6">
+    <!-- Account Info -->
+    <div>
+      <h3 class="text-sm font-medium text-gray-500 mb-3">Account Information</h3>
+      ${descriptionList([
+        { term: 'Email', description: 'john@example.com' },
+        { term: 'Plan', description: badge('Pro', { variant: 'primary', pill: true }) },
+        { term: 'Member Since', description: 'January 2024' },
+      ], { variant: 'bordered' })}
+    </div>
+
+    <!-- Quick Actions -->
+    <div>
+      <h3 class="text-sm font-medium text-gray-500 mb-3">Quick Actions</h3>
+      ${actionList([
+        {
+          title: 'Edit Profile',
+          description: 'Update your name and avatar',
+          icon: '✏️',
+          href: '/settings/profile',
+        },
+        {
+          title: 'Change Password',
+          description: 'Update your security credentials',
+          icon: '🔑',
+          href: '/settings/password',
+        },
+        {
+          title: 'Export Data',
+          description: 'Download a copy of your data',
+          icon: '📦',
+          trailing: button('Export', { size: 'sm', variant: 'outline' }),
+        },
+      ])}
+    </div>
+  </div>
+`, { title: 'Settings' });
+```
+
+## API Reference
+
+### `descriptionList(items, options?)`
+
+| Parameter | Type                | Description                     |
+| --------- | ------------------- | ------------------------------- |
+| `items`   | `DescriptionItem[]` | Array of term/description pairs |
+| `options` | `object`            | Configuration options           |
+
+#### DescriptionItem
+
+| Property      | Type     | Description         |
+| ------------- | -------- | ------------------- |
+| `term`        | `string` | Label/key           |
+| `description` | `string` | Value (can be HTML) |
+
+#### Description List Options
+
+| Option      | Type                         | Default      | Description            |
+| ----------- | ---------------------------- | ------------ | ---------------------- |
+| `layout`    | `'vertical' \| 'horizontal'` | `'vertical'` | Layout direction       |
+| `variant`   | `'default' \| 'bordered'`    | `'default'`  | Visual style           |
+| `className` | `string`                     | -            | Additional CSS classes |
+
+### `actionList(items, options?)`
+
+| Parameter | Type                             | Description           |
+| --------- | -------------------------------- | --------------------- |
+| `items`   | `ActionItem[] \| GroupedItems[]` | List items or groups  |
+| `options` | `object`                         | Configuration options |
+
+#### ActionItem
+
+| Property      | Type      | Description                  |
+| ------------- | --------- | ---------------------------- |
+| `title`       | `string`  | Item title                   |
+| `description` | `string`  | Optional description         |
+| `icon`        | `string`  | Leading icon (emoji or HTML) |
+| `trailing`    | `string`  | Trailing content (HTML)      |
+| `href`        | `string`  | Link URL                     |
+| `htmx`        | `object`  | HTMX attributes              |
+| `selectable`  | `boolean` | Can be selected              |
+| `selected`    | `boolean` | Currently selected           |
+| `disabled`    | `boolean` | Disable interaction          |
+
+#### Action List Options
+
+| Option      | Type                               | Default  | Description                 |
+| ----------- | ---------------------------------- | -------- | --------------------------- |
+| `selection` | `'none' \| 'single' \| 'multiple'` | `'none'` | Selection mode              |
+| `dividers`  | `boolean`                          | `true`   | Show dividers between items |
+| `className` | `string`                           | -        | Additional CSS classes      |
+
+### Returns
+
+`string` - HTML string for the list element.

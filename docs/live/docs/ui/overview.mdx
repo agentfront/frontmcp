@@ -1,0 +1,164 @@
+---
+title: FrontMCP UI Overview
+sidebarTitle: Overview
+icon: palette
+description: Rich visual widgets for MCP tool responses
+---
+
+# FrontMCP UI
+
+`@frontmcp/ui` is a platform-agnostic component library for building rich HTML widgets that display alongside AI tool responses. Transform plain text outputs into interactive, visually appealing interfaces.
+
+## Why Use FrontMCP UI?
+
+When your MCP tools return data, AI platforms typically display it as raw text or JSON. FrontMCP UI lets you create visual widgets that make your tool outputs more useful and engaging.
+
+<CardGroup cols={2}>
+  <Card title="Plain Text Response" icon="file-lines">
+    ```json
+    {
+      "location": "San Francisco",
+      "temperature": 18,
+      "conditions": "Foggy",
+      "humidity": 75
+    }
+    ```
+  </Card>
+  <Card title="With FrontMCP UI" icon="palette">
+    A beautifully styled weather card with icons, formatted temperatures, and visual humidity indicators.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Multi-Framework Support" icon="layer-group">
+    Build widgets with HTML strings, React components, or MDX (Markdown + JSX). The renderer auto-detects your template type.
+  </Card>
+  <Card title="Platform-Aware" icon="globe">
+    Works across OpenAI, Claude, and Gemini with automatic platform detection and fallbacks for different capabilities.
+  </Card>
+  <Card title="Built-in Components" icon="grid-2">
+    Pre-built components for buttons, cards, badges, alerts, forms, tables, and more with consistent styling.
+  </Card>
+  <Card title="Theming System" icon="paintbrush">
+    Customize colors, typography, and spacing. Includes dark mode support and CSS variable integration.
+  </Card>
+  <Card title="Zod Validation" icon="shield-check">
+    All component inputs are validated with Zod schemas. Invalid options render helpful error boxes instead of crashing.
+  </Card>
+  <Card title="HTMX Integration" icon="bolt">
+    Add dynamic interactions without JavaScript using HTMX attributes for server-driven updates.
+  </Card>
+</CardGroup>
+
+## Platform Support
+
+FrontMCP UI adapts to different AI platform capabilities:
+
+| Platform   | Network Access | External Scripts | Widget Display          |
+| ---------- | -------------- | ---------------- | ----------------------- |
+| **OpenAI** | Full           | CDN allowed      | Inline, Fullscreen, PiP |
+| **Claude** | Blocked        | Inline only      | Artifacts               |
+| **Gemini** | Limited        | Inline preferred | Basic                   |
+
+The library automatically detects the platform and adjusts rendering accordingly.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your MCP Tool                         │
+│  @Tool({ ui: { template: ... } })                       │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│               FrontMCP UI Renderer                       │
+│  Auto-detects: HTML | React | MDX                       │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+    ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │  OpenAI  │  │  Claude  │  │  Gemini  │
+    │  Widget  │  │ Artifact │  │  Widget  │
+    └──────────┘  └──────────┘  └──────────┘
+```
+
+## Quick Example
+
+Add a visual widget to your tool in just a few lines:
+
+```typescript title="src/tools/weather.tool.ts"
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, badge } from '@frontmcp/ui';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema: {
+    location: z.string().describe('City name'),
+  },
+  ui: {
+    template: (ctx) => card(`
+      <div class="text-4xl mb-4">🌤️</div>
+      <div class="text-2xl font-bold">${ctx.output.temperature}°C</div>
+      <div class="text-gray-600">${ctx.output.conditions}</div>
+    `, {
+      title: ctx.output.location,
+      subtitle: 'Current Weather',
+    }),
+  },
+})
+export class GetWeatherTool extends ToolContext {
+  async execute(input: { location: string }) {
+    // Fetch weather data...
+    return {
+      location: input.location,
+      temperature: 18,
+      conditions: 'Partly Cloudy',
+    };
+  }
+}
+```
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/ui
+```
+
+```bash yarn
+yarn add @frontmcp/ui
+```
+
+```bash pnpm
+pnpm add @frontmcp/ui
+```
+
+</CodeGroup>
+
+<Info>
+  `@frontmcp/ui` has a peer dependency on `react` for React/MDX templates.
+  If you only use HTML templates, React is optional.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket-launch" href="/docs/ui/getting-started">
+    Build your first widget in minutes
+  </Card>
+  <Card title="Components" icon="grid-2" href="/docs/ui/components/overview">
+    Explore the component library
+  </Card>
+  <Card title="Templates" icon="code" href="/docs/ui/templates/overview">
+    Learn about HTML, React, and MDX templates
+  </Card>
+  <Card title="Theming" icon="paintbrush" href="/docs/ui/theming/overview">
+    Customize the look and feel
+  </Card>
+</CardGroup>

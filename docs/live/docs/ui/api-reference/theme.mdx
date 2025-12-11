@@ -1,0 +1,800 @@
+---
+title: Theme API Reference
+sidebarTitle: Theme
+icon: paintbrush
+description: Complete API reference for the @frontmcp/ui theme system
+---
+
+# Theme API Reference
+
+Complete API reference for the `@frontmcp/ui` theme system. The theme system provides comprehensive control over colors, typography, spacing, and external resources.
+
+## Theme Functions
+
+### `createTheme(overrides)`
+
+Creates a new theme by extending the default theme.
+
+```typescript
+import { createTheme } from '@frontmcp/ui';
+
+const myTheme = createTheme({
+  name: 'my-brand',
+  colors: {
+    semantic: {
+      primary: '#0969da',
+    },
+  },
+});
+```
+
+| Parameter   | Type                   | Description            |
+| ----------- | ---------------------- | ---------------------- |
+| `overrides` | `Partial<ThemeConfig>` | Properties to override |
+
+**Returns:** `ThemeConfig` - Complete theme configuration
+
+---
+
+### `mergeThemes(base, override)`
+
+Deep merges two theme configurations.
+
+```typescript
+import { mergeThemes, DEFAULT_THEME } from '@frontmcp/ui';
+
+const merged = mergeThemes(DEFAULT_THEME, {
+  colors: {
+    semantic: { primary: '#ff0000' },
+  },
+});
+```
+
+| Parameter  | Type                       | Description     |
+| ---------- | -------------------------- | --------------- |
+| `base`     | `ThemeConfig`              | Base theme      |
+| `override` | `DeepPartial<ThemeConfig>` | Override values |
+
+**Returns:** `ThemeConfig` - Merged theme configuration
+
+<Info>
+  Dark variants are handled specially - `override.dark` is merged on top of `base.dark`,
+  and nested `.dark` properties are stripped to prevent infinite recursion.
+</Info>
+
+---
+
+### `buildThemeCss(theme)`
+
+Converts a theme configuration to CSS custom properties.
+
+```typescript
+import { buildThemeCss, DEFAULT_THEME } from '@frontmcp/ui';
+
+const css = buildThemeCss(DEFAULT_THEME);
+// Returns: "--color-primary: #24292f;\n--color-secondary: #57606a;\n..."
+```
+
+| Parameter | Type          | Description         |
+| --------- | ------------- | ------------------- |
+| `theme`   | `ThemeConfig` | Theme configuration |
+
+**Returns:** `string` - CSS custom property declarations
+
+---
+
+### `buildStyleBlock(theme)`
+
+Creates a complete `<style>` block with Tailwind `@theme` directive.
+
+```typescript
+import { buildStyleBlock, DEFAULT_THEME } from '@frontmcp/ui';
+
+const styleTag = buildStyleBlock(DEFAULT_THEME);
+// Returns: "<style type="text/tailwindcss">@theme { ... }</style>"
+```
+
+| Parameter | Type          | Description         |
+| --------- | ------------- | ------------------- |
+| `theme`   | `ThemeConfig` | Theme configuration |
+
+**Returns:** `string` - HTML style element
+
+<Warning>
+  The `theme.customCss` property is injected without sanitization. Only use with trusted theme configurations.
+</Warning>
+
+---
+
+## Theme Configuration
+
+### ThemeConfig
+
+The complete theme configuration interface.
+
+```typescript
+interface ThemeConfig {
+  /** Theme name/identifier */
+  name?: string;
+
+  /** Color configuration (required) */
+  colors: ThemeColors;
+
+  /** Typography configuration */
+  typography?: ThemeTypography;
+
+  /** Spacing scale */
+  spacing?: ThemeSpacing;
+
+  /** Border radius */
+  radius?: ThemeRadius;
+
+  /** Shadows */
+  shadows?: ThemeShadows;
+
+  /** Component-specific tokens */
+  components?: ComponentTokens;
+
+  /** CDN resource configuration */
+  cdn?: ThemeCdnConfig;
+
+  /** Dark mode variant */
+  dark?: Partial<ThemeConfig>;
+
+  /** Additional CSS custom properties */
+  customVars?: Record<string, string>;
+
+  /** Additional CSS (outside @theme) */
+  customCss?: string;
+}
+```
+
+---
+
+## Color Configuration
+
+### ThemeColors
+
+```typescript
+interface ThemeColors {
+  /** Semantic colors (required) */
+  semantic: SemanticColors;
+
+  /** Surface/background colors */
+  surface?: SurfaceColors;
+
+  /** Text colors */
+  text?: TextColors;
+
+  /** Border colors */
+  border?: BorderColors;
+
+  /** Additional custom colors */
+  custom?: Record<string, string>;
+}
+```
+
+### SemanticColors
+
+Core brand and state colors.
+
+```typescript
+interface SemanticColors {
+  /** Primary brand color */
+  primary: string | ColorScale;
+
+  /** Secondary brand color */
+  secondary?: string | ColorScale;
+
+  /** Accent/highlight color */
+  accent?: string | ColorScale;
+
+  /** Neutral/gray tones */
+  neutral?: string | ColorScale;
+
+  /** Success state */
+  success?: string;
+
+  /** Warning state */
+  warning?: string;
+
+  /** Error/danger state */
+  danger?: string;
+
+  /** Info state */
+  info?: string;
+}
+```
+
+Colors can be a single string or a full scale:
+
+```typescript
+interface ColorScale {
+  50?: string;
+  100?: string;
+  200?: string;
+  300?: string;
+  400?: string;
+  500?: string;
+  600?: string;
+  700?: string;
+  800?: string;
+  900?: string;
+  950?: string;
+}
+
+// Single color
+{ primary: '#0969da' }
+
+// Full scale
+{
+  primary: {
+    50: '#eff6ff',
+    100: '#dbeafe',
+    500: '#3b82f6',
+    900: '#1e3a8a',
+  }
+}
+```
+
+### SurfaceColors
+
+Background and surface colors.
+
+```typescript
+interface SurfaceColors {
+  /** Page background */
+  background?: string;
+
+  /** Card/panel background */
+  surface?: string;
+
+  /** Elevated surface (modal, dropdown) */
+  elevated?: string;
+
+  /** Overlay/backdrop */
+  overlay?: string;
+}
+```
+
+### TextColors
+
+```typescript
+interface TextColors {
+  /** Primary text */
+  primary?: string;
+
+  /** Secondary/muted text */
+  secondary?: string;
+
+  /** Disabled text */
+  disabled?: string;
+
+  /** Inverse text (on dark backgrounds) */
+  inverse?: string;
+
+  /** Link text */
+  link?: string;
+}
+```
+
+### BorderColors
+
+```typescript
+interface BorderColors {
+  /** Default border */
+  default?: string;
+
+  /** Hover border */
+  hover?: string;
+
+  /** Focus border */
+  focus?: string;
+
+  /** Divider lines */
+  divider?: string;
+}
+```
+
+---
+
+## Typography Configuration
+
+### ThemeTypography
+
+```typescript
+interface ThemeTypography {
+  families?: FontFamilies;
+  sizes?: FontSizes;
+  weights?: FontWeights;
+  lineHeight?: {
+    tight?: string;
+    normal?: string;
+    relaxed?: string;
+  };
+}
+```
+
+### FontFamilies
+
+```typescript
+interface FontFamilies {
+  /** Sans-serif (default) */
+  sans?: string;
+
+  /** Serif */
+  serif?: string;
+
+  /** Monospace */
+  mono?: string;
+
+  /** Display/heading */
+  display?: string;
+}
+```
+
+### FontSizes
+
+```typescript
+interface FontSizes {
+  xs?: string;    // Extra small
+  sm?: string;    // Small
+  base?: string;  // Base/default
+  lg?: string;    // Large
+  xl?: string;    // Extra large
+  '2xl'?: string;
+  '3xl'?: string;
+  '4xl'?: string;
+  '5xl'?: string;
+}
+```
+
+### FontWeights
+
+```typescript
+interface FontWeights {
+  normal?: string;   // 400
+  medium?: string;   // 500
+  semibold?: string; // 600
+  bold?: string;     // 700
+}
+```
+
+---
+
+## Spacing & Sizing
+
+### ThemeSpacing
+
+```typescript
+interface ThemeSpacing {
+  px?: string;   // 1px
+  0?: string;    // 0
+  1?: string;    // 0.25rem
+  2?: string;    // 0.5rem
+  3?: string;    // 0.75rem
+  4?: string;    // 1rem
+  5?: string;    // 1.25rem
+  6?: string;    // 1.5rem
+  8?: string;    // 2rem
+  10?: string;   // 2.5rem
+  12?: string;   // 3rem
+  16?: string;   // 4rem
+  20?: string;   // 5rem
+  24?: string;   // 6rem
+}
+```
+
+### ThemeRadius
+
+```typescript
+interface ThemeRadius {
+  none?: string;   // 0
+  sm?: string;     // 0.125rem
+  md?: string;     // 0.375rem
+  lg?: string;     // 0.5rem
+  xl?: string;     // 0.75rem
+  '2xl'?: string;  // 1rem
+  full?: string;   // 9999px
+}
+```
+
+### ThemeShadows
+
+```typescript
+interface ThemeShadows {
+  sm?: string;   // Small shadow
+  md?: string;   // Medium shadow
+  lg?: string;   // Large shadow
+  xl?: string;   // Extra large shadow
+}
+```
+
+---
+
+## Component Tokens
+
+Override default styling for specific components.
+
+### ComponentTokens
+
+```typescript
+interface ComponentTokens {
+  button?: ButtonTokens;
+  card?: CardTokens;
+  input?: InputTokens;
+}
+```
+
+### ButtonTokens
+
+```typescript
+interface ButtonTokens {
+  radius?: string;      // Border radius
+  paddingX?: string;    // Horizontal padding
+  paddingY?: string;    // Vertical padding
+  fontSize?: string;    // Font size
+  fontWeight?: string;  // Font weight
+}
+```
+
+### CardTokens
+
+```typescript
+interface CardTokens {
+  radius?: string;       // Border radius
+  padding?: string;      // Content padding
+  shadow?: string;       // Box shadow
+  borderWidth?: string;  // Border width
+}
+```
+
+### InputTokens
+
+```typescript
+interface InputTokens {
+  radius?: string;          // Border radius
+  paddingX?: string;        // Horizontal padding
+  paddingY?: string;        // Vertical padding
+  borderWidth?: string;     // Border width
+  focusRingWidth?: string;  // Focus ring width
+}
+```
+
+---
+
+## CDN Configuration
+
+Configure external resource URLs for fonts, icons, and scripts.
+
+### ThemeCdnConfig
+
+```typescript
+interface ThemeCdnConfig {
+  /** Font configuration */
+  fonts?: ThemeCdnFonts;
+
+  /** Icon library configuration */
+  icons?: ThemeCdnIcons;
+
+  /** Script CDN configuration */
+  scripts?: ThemeCdnScripts;
+}
+```
+
+### ThemeCdnFonts
+
+```typescript
+interface ThemeCdnFonts {
+  /** Preconnect URLs for font providers */
+  preconnect?: string[];
+
+  /** Font stylesheet URLs */
+  stylesheets?: string[];
+}
+```
+
+```typescript
+fonts: {
+  preconnect: [
+    'https://fonts.googleapis.com',
+    'https://fonts.gstatic.com',
+  ],
+  stylesheets: [
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+  ],
+}
+```
+
+### ThemeCdnIcons
+
+```typescript
+interface ThemeCdnIcons {
+  /** Icon library script */
+  script?: CdnScriptResource;
+}
+
+interface CdnScriptResource {
+  /** URL to the script */
+  url: string;
+
+  /** Subresource integrity hash */
+  integrity?: string;
+}
+```
+
+### ThemeCdnScripts
+
+```typescript
+interface ThemeCdnScripts {
+  /** Tailwind CSS Browser CDN URL */
+  tailwind?: string;
+
+  /** HTMX script resource */
+  htmx?: CdnScriptResource;
+
+  /** Alpine.js script resource */
+  alpine?: CdnScriptResource;
+}
+```
+
+```typescript
+scripts: {
+  tailwind: 'https://cdn.tailwindcss.com',
+  htmx: {
+    url: 'https://unpkg.com/htmx.org@2.0.4',
+    integrity: 'sha384-...',
+  },
+}
+```
+
+---
+
+## CDN Builder Functions
+
+### `buildFontPreconnect(theme?)`
+
+Builds preconnect `<link>` tags for font providers.
+
+```typescript
+import { buildFontPreconnect } from '@frontmcp/ui';
+
+const links = buildFontPreconnect();
+// '<link rel="preconnect" href="https://fonts.googleapis.com">'
+```
+
+### `buildFontStylesheets(options?)`
+
+Builds font stylesheet `<link>` tags.
+
+```typescript
+import { buildFontStylesheets } from '@frontmcp/ui';
+
+const links = buildFontStylesheets({ inter: true, roboto: true });
+```
+
+### `buildCdnScripts(options)`
+
+Builds `<script>` tags for Tailwind, HTMX, Alpine, and icons.
+
+```typescript
+import { buildCdnScripts } from '@frontmcp/ui';
+
+const scripts = buildCdnScripts({
+  tailwind: true,
+  htmx: true,
+  alpine: false,
+  icons: true,
+  inline: false, // Use CDN tags (vs inline scripts)
+});
+```
+
+| Option     | Type      | Description                           |
+| ---------- | --------- | ------------------------------------- |
+| `tailwind` | `boolean` | Include Tailwind CSS                  |
+| `htmx`     | `boolean` | Include HTMX                          |
+| `alpine`   | `boolean` | Include Alpine.js                     |
+| `icons`    | `boolean` | Include icon library                  |
+| `inline`   | `boolean` | Inline scripts (for blocked networks) |
+
+### `fetchAndCacheScriptsFromTheme(theme)`
+
+Fetches and caches scripts for offline/blocked-network use.
+
+```typescript
+import { fetchAndCacheScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+
+// Pre-fetch at server startup
+await fetchAndCacheScriptsFromTheme(DEFAULT_THEME);
+```
+
+---
+
+## Platform Detection
+
+### `getPlatform(userAgent?)`
+
+Detects the current platform from user agent or context.
+
+```typescript
+import { getPlatform } from '@frontmcp/ui';
+
+const platform = getPlatform();
+// { id: 'openai', network: 'open', scripts: 'external', ... }
+```
+
+### `canUseCdn(platform)`
+
+Checks if the platform supports external CDN resources.
+
+```typescript
+import { canUseCdn, getPlatform } from '@frontmcp/ui';
+
+if (canUseCdn(getPlatform())) {
+  // Use external scripts
+}
+```
+
+### `needsInlineScripts(platform)`
+
+Checks if scripts must be inlined.
+
+```typescript
+import { needsInlineScripts, getPlatform } from '@frontmcp/ui';
+
+const inline = needsInlineScripts(getPlatform());
+```
+
+---
+
+## Platform Presets
+
+Pre-configured platform capabilities.
+
+```typescript
+import {
+  OPENAI_PLATFORM,
+  CLAUDE_PLATFORM,
+  GEMINI_PLATFORM,
+  NGROK_PLATFORM,
+} from '@frontmcp/ui';
+```
+
+### PlatformCapabilities
+
+```typescript
+interface PlatformCapabilities {
+  id: string;
+  network: 'open' | 'blocked' | 'limited';
+  scripts: 'external' | 'inline';
+  supportsTailwind: boolean;
+  supportsHtmx: boolean;
+  supportsAlpine: boolean;
+  capabilities: {
+    callTool: boolean;
+    sendMessage: boolean;
+    openExternal: boolean;
+    requestDisplayMode: boolean;
+    widgetState: boolean;
+  };
+}
+```
+
+### Platform Comparison
+
+| Platform | Network | Scripts  | Tailwind | HTMX | callTool |
+| -------- | ------- | -------- | -------- | ---- | -------- |
+| OpenAI   | open    | external | Yes      | Yes  | Yes      |
+| Claude   | blocked | inline   | Limited  | No   | No       |
+| Gemini   | limited | inline   | Limited  | No   | No       |
+| ngrok    | open    | external | Yes      | Yes  | Yes      |
+
+---
+
+## Theme Presets
+
+### DEFAULT_THEME / GITHUB_OPENAI_THEME
+
+The default FrontMCP theme with GitHub/OpenAI-inspired gray-black aesthetic.
+
+```typescript
+import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
+
+// DEFAULT_THEME === GITHUB_OPENAI_THEME
+```
+
+**Color Palette:**
+
+- Primary: `#24292f` (near-black)
+- Secondary: `#57606a` (medium gray)
+- Accent: `#0969da` (blue)
+- Success: `#1a7f37`
+- Warning: `#9a6700`
+- Danger: `#cf222e`
+- Info: `#0969da`
+
+**Typography:**
+
+- Sans: System UI font stack
+- Mono: `ui-monospace, SFMono-Regular, ...`
+
+**Border Radius:**
+
+- sm: `3px`
+- md: `6px`
+- lg: `8px`
+
+---
+
+## Complete Example
+
+```typescript
+import { createTheme, buildStyleBlock, buildCdnScripts } from '@frontmcp/ui';
+
+// Create custom theme
+const brandTheme = createTheme({
+  name: 'brand',
+  colors: {
+    semantic: {
+      primary: '#6366f1',    // Indigo
+      secondary: '#8b5cf6',  // Purple
+      accent: '#ec4899',     // Pink
+      success: '#10b981',
+      warning: '#f59e0b',
+      danger: '#ef4444',
+    },
+    surface: {
+      background: '#fafafa',
+      surface: '#ffffff',
+      elevated: '#ffffff',
+    },
+    text: {
+      primary: '#18181b',
+      secondary: '#52525b',
+      muted: '#a1a1aa',
+    },
+  },
+  typography: {
+    families: {
+      sans: '"Inter", system-ui, sans-serif',
+      mono: '"JetBrains Mono", monospace',
+    },
+  },
+  radius: {
+    md: '8px',
+    lg: '12px',
+  },
+  cdn: {
+    fonts: {
+      preconnect: ['https://fonts.googleapis.com'],
+      stylesheets: [
+        'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+      ],
+    },
+  },
+  dark: {
+    colors: {
+      semantic: {
+        primary: '#818cf8',
+      },
+      surface: {
+        background: '#18181b',
+        surface: '#27272a',
+      },
+      text: {
+        primary: '#fafafa',
+        secondary: '#a1a1aa',
+      },
+    },
+  },
+});
+
+// Build style block
+const styles = buildStyleBlock(brandTheme);
+
+// Build scripts
+const scripts = buildCdnScripts({
+  tailwind: true,
+  htmx: true,
+});
+```

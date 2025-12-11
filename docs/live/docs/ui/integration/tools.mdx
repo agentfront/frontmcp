@@ -1,0 +1,382 @@
+---
+title: Using UI in Tools
+sidebarTitle: Tools
+icon: wrench
+description: Integrate FrontMCP UI with the @Tool decorator
+---
+
+# Using UI in Tools
+
+The `@Tool` decorator's `ui` option lets you attach visual widgets to your tool responses. This guide covers all configuration options and patterns.
+
+## Basic Configuration
+
+Add a `ui` property to your `@Tool` decorator:
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'my_tool',
+  description: 'Tool with a widget',
+  inputSchema: {
+    query: z.string(),
+  },
+  ui: {
+    template: (ctx) => `<div>${ctx.output.result}</div>`,
+  },
+})
+export class MyTool extends ToolContext {
+  async execute(input: { query: string }) {
+    return { result: 'Hello World' };
+  }
+}
+```
+
+## ToolUIConfig Options
+
+### template (required)
+
+The template to render. Auto-detected as HTML, React, or MDX:
+
+```typescript
+// HTML template function
+ui: {
+  template: (ctx) => `<p>${ctx.helpers.escapeHtml(ctx.output.message)}</p>`,
+}
+
+// React component
+import { MyWidget } from './widgets/my-widget';
+ui: {
+  template: MyWidget,
+}
+
+// MDX string
+ui: {
+  template: `# {output.title}\n\n{output.content}`,
+}
+```
+
+### displayMode
+
+How the widget should be displayed:
+
+```typescript
+ui: {
+  template: ...,
+  displayMode: 'inline',      // Rendered inline with chat (default)
+  // or
+  displayMode: 'fullscreen',  // Takes over viewport
+  // or
+  displayMode: 'pip',         // Picture-in-picture (OpenAI only)
+}
+```
+
+### widgetDescription
+
+Human-readable description shown to users:
+
+```typescript
+ui: {
+  template: ...,
+  widgetDescription: 'Displays weather conditions for the requested location',
+}
+```
+
+### csp (Content Security Policy)
+
+Control what resources the widget can access:
+
+```typescript
+ui: {
+  template: ...,
+  csp: {
+    // Allowed domains for fetch/XHR/WebSocket
+    connectDomains: ['api.example.com', 'ws.example.com'],
+
+    // Allowed domains for images, scripts, fonts, styles
+    resourceDomains: ['cdn.example.com', 'fonts.googleapis.com'],
+  },
+}
+```
+
+### widgetAccessible
+
+Allow the widget to call tools via MCP Bridge:
+
+```typescript
+ui: {
+  template: ...,
+  widgetAccessible: true, // Widget can call tools
+}
+```
+
+### invocationStatus
+
+Custom status messages during tool invocation:
+
+```typescript
+ui: {
+  template: ...,
+  invocationStatus: {
+    invoking: 'Fetching weather data...',
+    invoked: 'Weather data retrieved',
+  },
+}
+```
+
+### servingMode
+
+How the widget HTML is delivered:
+
+```typescript
+ui: {
+  template: ...,
+  servingMode: 'inline',        // Embedded in tool response (default)
+  // or
+  servingMode: 'static',        // Pre-compiled at startup, via ui:// resource URI
+  // or
+  servingMode: 'hybrid',        // Shell cached at startup, component in response
+  // or
+  servingMode: 'direct-url',    // HTTP endpoint on MCP server
+  // or
+  servingMode: 'custom-url',    // External hosting (CDN)
+}
+```
+
+### hydrate
+
+Enable client-side React hydration:
+
+```typescript
+ui: {
+  template: MyReactComponent,
+  hydrate: true, // Include React runtime for interactivity
+}
+```
+
+### mdxComponents
+
+Register components for MDX templates:
+
+```typescript
+import { card, badge } from '@frontmcp/ui';
+
+ui: {
+  template: `# {output.title}\n<Card>{output.content}</Card>`,
+  mdxComponents: {
+    Card: ({ children }) => card(children),
+    Badge: ({ variant, children }) => badge(children, { variant }),
+  },
+}
+```
+
+### wrapper
+
+Custom wrapper for the rendered content:
+
+```typescript
+ui: {
+  template: (ctx) => `<p>${ctx.output.message}</p>`,
+  wrapper: (content, ctx) => `
+    <div class="custom-wrapper" data-tool="${ctx.input.toolName}">
+      ${content}
+    </div>
+  `,
+}
+```
+
+## Complete Example
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, badge, button, descriptionList } from '@frontmcp/ui';
+import { z } from 'zod';
+
+const inputSchema = {
+  orderId: z.string().describe('Order ID to look up'),
+};
+
+const outputSchema = z.object({
+  id: z.string(),
+  status: z.enum(['pending', 'processing', 'shipped', 'delivered']),
+  customer: z.object({
+    name: z.string(),
+    email: z.string(),
+  }),
+  items: z.array(z.object({
+    name: z.string(),
+    quantity: z.number(),
+    price: z.number(),
+  })),
+  total: z.number(),
+  createdAt: z.string(),
+  trackingUrl: z.string().optional(),
+});
+
+type OrderOutput = z.infer<typeof outputSchema>;
+
+@Tool({
+  name: 'get_order',
+  description: 'Retrieve order details by ID',
+  inputSchema,
+  outputSchema,
+  annotations: {
+    title: 'Order Lookup',
+    readOnlyHint: true,
+  },
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+
+      const statusVariants = {
+        pending: 'warning',
+        processing: 'info',
+        shipped: 'primary',
+        delivered: 'success',
+      } as const;
+
+      const itemRows = output.items.map(item => `
+        <tr>
+          <td class="py-2">${helpers.escapeHtml(item.name)}</td>
+          <td class="py-2 text-center">${item.quantity}</td>
+          <td class="py-2 text-right">${helpers.formatCurrency(item.price)}</td>
+        </tr>
+      `).join('');
+
+      return card(`
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="text-sm text-gray-500">Order ID</p>
+            <p class="font-mono">${helpers.escapeHtml(output.id)}</p>
+          </div>
+          ${badge(output.status.charAt(0).toUpperCase() + output.status.slice(1), {
+            variant: statusVariants[output.status],
+          })}
+        </div>
+
+        <div class="border-t border-b py-4 my-4">
+          ${descriptionList([
+            { term: 'Customer', description: helpers.escapeHtml(output.customer.name) },
+            { term: 'Email', description: helpers.escapeHtml(output.customer.email) },
+            { term: 'Order Date', description: helpers.formatDate(output.createdAt) },
+          ])}
+        </div>
+
+        <table class="w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-2 text-left">Item</th>
+              <th class="py-2 text-center">Qty</th>
+              <th class="py-2 text-right">Price</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+          <tfoot>
+            <tr class="border-t font-bold">
+              <td colspan="2" class="py-2">Total</td>
+              <td class="py-2 text-right">${helpers.formatCurrency(output.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      `, {
+        title: 'Order Details',
+        footer: output.trackingUrl
+          ? button('Track Shipment', { href: output.trackingUrl, target: '_blank' })
+          : undefined,
+      });
+    },
+    displayMode: 'inline',
+    widgetDescription: 'Displays order details including items, customer info, and status',
+    invocationStatus: {
+      invoking: 'Looking up order...',
+      invoked: 'Order found',
+    },
+  },
+})
+export class GetOrderTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input: { orderId: string }): Promise<OrderOutput> {
+    // Fetch order from database...
+    return {
+      id: input.orderId,
+      status: 'shipped',
+      customer: { name: 'John Doe', email: 'john@example.com' },
+      items: [
+        { name: 'Widget Pro', quantity: 2, price: 49.99 },
+        { name: 'Widget Basic', quantity: 1, price: 29.99 },
+      ],
+      total: 129.97,
+      createdAt: new Date().toISOString(),
+      trackingUrl: 'https://tracking.example.com/12345',
+    };
+  }
+}
+```
+
+## Type Safety
+
+Use Zod schema inference for typed templates:
+
+```typescript
+import { z } from 'zod';
+import { TemplateContext } from '@frontmcp/ui';
+
+const inputSchema = {
+  userId: z.string(),
+};
+
+const outputSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+});
+
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Output = z.infer<typeof outputSchema>;
+
+// Fully typed context
+const template = (ctx: TemplateContext<Input, Output>) => {
+  // TypeScript knows ctx.input.userId and ctx.output.name exist
+  return `<p>User: ${ctx.helpers.escapeHtml(ctx.output.name)}</p>`;
+};
+```
+
+## Error Handling in Templates
+
+Handle potential errors gracefully:
+
+```typescript
+ui: {
+  template: (ctx) => {
+    const { output, helpers } = ctx;
+
+    // Handle error responses
+    if (output.error) {
+      return alert(output.error, { variant: 'danger', title: 'Error' });
+    }
+
+    // Handle empty data
+    if (!output.items?.length) {
+      return `
+        <div class="text-center py-8">
+          <p class="text-gray-500">No items found</p>
+        </div>
+      `;
+    }
+
+    // Normal rendering
+    return card(/* ... */);
+  },
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validation" icon="shield-check" href="/docs/ui/integration/validation">
+    Validate component inputs with Zod
+  </Card>
+  <Card title="Templates" icon="code" href="/docs/ui/templates/overview">
+    Learn about template types
+  </Card>
+</CardGroup>

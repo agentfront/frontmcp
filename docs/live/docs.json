@@ -21,7 +21,13 @@
     "dark": "#15803D"
   },
   "contextual": {
-    "options": ["copy", "chatgpt", "cursor", "mcp", "view"]
+    "options": [
+      "copy",
+      "chatgpt",
+      "cursor",
+      "mcp",
+      "view"
+    ]
   },
   "interaction": {
     "drilldown": true
@@ -67,7 +73,7 @@
         "icon": "book",
         "versions": [
           {
-            "version": "v0.4 (latest)",
+            "version": "v0.5 (latest)",
             "default": true,
             "groups": [
               {
@@ -118,11 +124,17 @@
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/adapters/overview", "docs/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/adapters/overview",
+                  "docs/adapters/openapi-adapter"
+                ]
               },
               {
                 "group": "Plugins",
-                "pages": ["docs/plugins/cache-plugin", "docs/plugins/codecall-plugin"]
+                "pages": [
+                  "docs/plugins/cache-plugin",
+                  "docs/plugins/codecall-plugin"
+                ]
               },
               {
                 "group": "Guides",
@@ -134,7 +146,91 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
+                "pages": [
+                  "docs/deployment/local-dev-server",
+                  "docs/deployment/production-build"
+                ]
+              }
+            ]
+          },
+          {
+            "version": "v0.4",
+            "default": false,
+            "groups": [
+              {
+                "tag": "version 0.4",
+                "group": "Get Started",
+                "pages": [
+                  "docs/v/0.4/getting-started/welcome",
+                  "docs/v/0.4/getting-started/installation",
+                  "docs/v/0.4/getting-started/quickstart",
+                  "updates"
+                ]
+              },
+              {
+                "group": "Servers",
+                "pages": [
+                  "docs/v/0.4/servers/server",
+                  {
+                    "group": "Core Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "docs/v/0.4/servers/apps",
+                      "docs/v/0.4/servers/tools",
+                      "docs/v/0.4/servers/resources",
+                      "docs/v/0.4/servers/prompts"
+                    ]
+                  },
+                  {
+                    "group": "Authentication",
+                    "icon": "shield-check",
+                    "pages": [
+                      "docs/v/0.4/servers/authentication/overview",
+                      "docs/v/0.4/servers/authentication/token",
+                      "docs/v/0.4/servers/authentication/remote",
+                      "docs/v/0.4/servers/authentication/remote-proxy",
+                      "docs/v/0.4/servers/authentication/local"
+                    ]
+                  },
+                  {
+                    "group": "Extensibility Components",
+                    "icon": "toolbox",
+                    "pages": [
+                      "docs/v/0.4/servers/extensibility/providers",
+                      "docs/v/0.4/servers/extensibility/plugins",
+                      "docs/v/0.4/servers/extensibility/logging"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Adapters",
+                "pages": [
+                  "docs/v/0.4/adapters/overview",
+                  "docs/v/0.4/adapters/openapi-adapter"
+                ]
+              },
+              {
+                "group": "Plugins",
+                "pages": [
+                  "docs/v/0.4/plugins/cache-plugin",
+                  "docs/v/0.4/plugins/codecall-plugin"
+                ]
+              },
+              {
+                "group": "Guides",
+                "pages": [
+                  "docs/v/0.4/guides/add-openapi-adapter",
+                  "docs/v/0.4/guides/caching-and-cache-miss",
+                  "docs/v/0.4/guides/customize-flow-stages"
+                ]
+              },
+              {
+                "group": "Deployment",
+                "pages": [
+                  "docs/v/0.4/deployment/local-dev-server",
+                  "docs/v/0.4/deployment/production-build"
+                ]
               }
             ]
           },
@@ -190,7 +286,10 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.3/deployment/local-dev-server", "docs/v/0.3/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.3/deployment/local-dev-server",
+                  "docs/v/0.3/deployment/production-build"
+                ]
               },
               {
                 "group": "Guides",
@@ -202,7 +301,9 @@
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.3/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.3/adapters/openapi-adapter"
+                ]
               }
             ]
           },
@@ -258,11 +359,16 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.2/deployment/local-dev-server", "docs/v/0.2/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.2/deployment/local-dev-server",
+                  "docs/v/0.2/deployment/production-build"
+                ]
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.2/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.2/adapters/openapi-adapter"
+                ]
               }
             ]
           },
@@ -318,11 +424,16 @@
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/v/0.1/deployment/local-dev-server", "docs/v/0.1/deployment/production-build"]
+                "pages": [
+                  "docs/v/0.1/deployment/local-dev-server",
+                  "docs/v/0.1/deployment/production-build"
+                ]
               },
               {
                 "group": "Adapters",
-                "pages": ["docs/v/0.1/adapters/openapi-adapter"]
+                "pages": [
+                  "docs/v/0.1/adapters/openapi-adapter"
+                ]
               }
             ]
           }
@@ -334,7 +445,10 @@
         "groups": [
           {
             "group": "General",
-            "pages": ["blog/index", "blog/external-links"]
+            "pages": [
+              "blog/index",
+              "blog/external-links"
+            ]
           },
           {
             "group": "November 2025",

@@ -1,0 +1,347 @@
+---
+title: Local OAuth Provider
+sidebarTitle: Local OAuth
+slug: authentication/local
+icon: server
+description: Configure FrontMCP's built-in OAuth 2.1 authorization server
+---
+
+FrontMCP includes a built-in OAuth 2.1 authorization server for self-contained authentication scenarios.
+
+<Warning>
+  The built-in login page accepts any email format without validation. Replace with a real identity provider for production use.
+</Warning>
+
+## Basic Configuration
+
+```typescript
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+    consent: { enabled: true },
+  },
+})
+export class Server {}
+```
+
+## Configuration Options
+
+| Option               | Type                        | Default              | Description                      |
+| -------------------- | --------------------------- | -------------------- | -------------------------------- |
+| `consent`            | `ConsentConfig`             | `{ enabled: false }` | Consent UI configuration         |
+| `sessionMode`        | `'stateful' \| 'stateless'` | `'stateful'`         | Session management strategy      |
+| `tokenStorage`       | `object`                    | `{ type: 'memory' }` | Token storage backend            |
+| `allowDefaultPublic` | `boolean`                   | `false`              | Allow unauthenticated access     |
+| `anonymousScopes`    | `string[]`                  | `['anonymous']`      | Scopes for anonymous sessions    |
+| `incrementalAuth`    | `IncrementalAuthConfig`     | `{ enabled: true }`  | Progressive authorization config |
+
+---
+
+## OAuth Endpoints
+
+Local mode exposes standard OAuth 2.1 endpoints:
+
+| Endpoint                                  | Method | Description                 |
+| ----------------------------------------- | ------ | --------------------------- |
+| `/oauth/authorize`                        | GET    | Start authorization flow    |
+| `/oauth/token`                            | POST   | Exchange code for tokens    |
+| `/oauth/register`                         | POST   | Dynamic Client Registration |
+| `/oauth/userinfo`                         | GET    | Get user profile            |
+| `/.well-known/oauth-authorization-server` | GET    | Server metadata             |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys         |
+
+### Authorization Request
+
+```
+GET /oauth/authorize
+  ?response_type=code
+  &client_id=your-client-id
+  &redirect_uri=http://localhost:3000/callback
+  &scope=openid profile
+  &state=random-state
+  &code_challenge=base64url(sha256(verifier))
+  &code_challenge_method=S256
+```
+
+### Token Exchange
+
+```bash
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=authorization-code
+&redirect_uri=http://localhost:3000/callback
+&client_id=your-client-id
+&code_verifier=original-verifier
+```
+
+---
+
+## Key Management
+
+### Auto-Generated Keys
+
+By default, FrontMCP generates RS256 keys at startup:
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  // Keys auto-generated
+}
+```
+
+<Info>
+  Auto-generated keys are lost on restart. Existing tokens become invalid.
+</Info>
+
+### Persistent Keys
+
+Provide keys for stable token validation:
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  local: {
+    signKey: {
+      kty: 'RSA',
+      kid: 'my-key-id',
+      alg: 'RS256',
+      n: '...',  // RSA modulus
+      e: 'AQAB',
+      d: '...',  // Private exponent
+      // ... other JWK parameters
+    },
+  },
+}
+```
+
+### ES256 Keys
+
+Use ES256 for smaller tokens:
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  local: {
+    signKey: {
+      kty: 'EC',
+      crv: 'P-256',
+      x: '...',
+      y: '...',
+      d: '...',
+    },
+  },
+}
+```
+
+---
+
+## Dynamic Client Registration
+
+DCR allows clients to register programmatically. DCR is enabled by default in development.
+
+### Registration Request
+
+```bash
+POST /oauth/register
+Content-Type: application/json
+
+{
+  "redirect_uris": ["http://localhost:3000/callback"],
+  "client_name": "My Application",
+  "token_endpoint_auth_method": "none",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"]
+}
+```
+
+### Registration Response
+
+```json
+{
+  "client_id": "generated-uuid",
+  "client_id_issued_at": 1234567890,
+  "redirect_uris": ["http://localhost:3000/callback"],
+  "client_name": "My Application",
+  "token_endpoint_auth_method": "none",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"]
+}
+```
+
+<Warning>
+  DCR is intended for development only. In production, pre-register clients. DCR only allows localhost redirect URIs by default.
+</Warning>
+
+---
+
+## Per-App Configuration
+
+Configure local auth per app with `splitByApp: true`:
+
+```typescript
+@App({
+  name: 'Billing',
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+    consent: { enabled: true },
+  },
+})
+export class BillingApp {}
+
+@App({
+  name: 'Analytics',
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+  },
+})
+export class AnalyticsApp {}
+
+@FrontMcp({
+  info: { name: 'Suite', version: '1.0.0' },
+  apps: [BillingApp, AnalyticsApp],
+  splitByApp: true,
+})
+export class Server {}
+```
+
+---
+
+## Token Storage
+
+### In-Memory (Development)
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  tokenStorage: { type: 'memory' },
+}
+```
+
+### Redis (Production)
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  tokenStorage: {
+    type: 'redis',
+    config: {
+      host: process.env.REDIS_HOST!,
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      keyPrefix: 'myapp:auth:',
+    },
+  },
+}
+```
+
+---
+
+## Consent Configuration
+
+Enable and customize the consent UI:
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  consent: {
+    enabled: true,
+    groupByApp: true,           // Group tools by app
+    showDescriptions: true,     // Show tool descriptions
+    allowSelectAll: true,       // Allow selecting all tools
+    requireSelection: true,     // Require at least one tool
+    rememberConsent: true,      // Remember for future sessions
+    excludedTools: ['health'],  // Always available tools
+    defaultSelectedTools: [],   // Pre-selected tools
+    customMessage: 'Select the tools you want to grant access to.',
+  },
+}
+```
+
+---
+
+## Complete Example
+
+```typescript
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'MyServer', version: '1.0.0' },
+  auth: {
+    mode: 'orchestrated',
+    type: 'local',
+    consent: { enabled: true },
+    sessionMode: 'stateful',
+    tokenStorage: {
+      type: 'redis',
+      config: {
+        host: process.env.REDIS_HOST!,
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+      },
+    },
+    refresh: {
+      enabled: true,
+      skewSeconds: 60,
+    },
+    local: {
+      signKey: JSON.parse(process.env.JWT_SIGNING_KEY!),
+    },
+    incrementalAuth: {
+      enabled: true,
+      allowSkip: true,
+      skippedAppBehavior: 'require-auth',
+    },
+  },
+})
+export class Server {}
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tokens invalid after restart">
+    Auto-generated keys are lost on restart. Either:
+    - Provide persistent keys via `local.signKey`
+    - Use Redis for token storage
+    - Accept that users must re-authenticate
+  </Accordion>
+  <Accordion title="PKCE verification failed">
+    Ensure you're using S256 challenge method and the code_verifier matches the original code_challenge.
+  </Accordion>
+  <Accordion title="Session not found across instances">
+    When running multiple server instances, use Redis for token storage to share session state.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Remote OAuth" icon="cloud" href="/docs/authentication/remote">
+    Connect to external identity providers
+  </Card>
+  <Card title="Progressive Authorization" icon="forward" href="/docs/authentication/progressive">
+    Implement incremental app authorization
+  </Card>
+  <Card title="Production Checklist" icon="clipboard-check" href="/docs/authentication/production">
+    Security requirements for deployment
+  </Card>
+  <Card title="Tokens & Sessions" icon="key" href="/docs/authentication/token">
+    Configure token lifetimes
+  </Card>
+</CardGroup>

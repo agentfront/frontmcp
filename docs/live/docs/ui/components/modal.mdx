@@ -1,0 +1,356 @@
+---
+title: Modal Component
+sidebarTitle: Modal
+icon: window-maximize
+description: Dialogs and drawers for overlay content
+---
+
+# Modal
+
+Modals display content in an overlay that requires user attention. FrontMCP UI provides centered dialogs and slide-in drawers.
+
+## Import
+
+```typescript
+import { modal, drawer, dialog } from '@frontmcp/ui';
+```
+
+## Basic Modal
+
+```typescript
+const html = modal({
+  id: 'example-modal',
+  title: 'Modal Title',
+  content: '<p>Modal content goes here.</p>',
+});
+```
+
+## With Footer
+
+```typescript
+import { modal, button } from '@frontmcp/ui';
+
+const html = modal({
+  id: 'confirm-modal',
+  title: 'Confirm Action',
+  content: '<p>Are you sure you want to proceed?</p>',
+  footer: `
+    ${button('Cancel', { variant: 'outline', data: { 'close-modal': 'confirm-modal' } })}
+    ${button('Confirm')}
+  `,
+});
+```
+
+## Sizes
+
+```typescript
+modal({ id: 'small', title: 'Small', size: 'sm', content: '...' })   // 400px
+modal({ id: 'medium', title: 'Medium', size: 'md', content: '...' }) // 500px (default)
+modal({ id: 'large', title: 'Large', size: 'lg', content: '...' })   // 640px
+modal({ id: 'xl', title: 'XL', size: 'xl', content: '...' })         // 768px
+modal({ id: 'full', title: 'Full', size: 'full', content: '...' })   // 100%
+```
+
+## Drawer
+
+Slide-in panels from screen edges:
+
+```typescript
+// Right drawer (default)
+const html = drawer({
+  id: 'settings-drawer',
+  title: 'Settings',
+  content: settingsContent,
+  position: 'right',
+});
+
+// Left drawer
+const leftDrawer = drawer({
+  id: 'menu-drawer',
+  title: 'Menu',
+  content: menuContent,
+  position: 'left',
+});
+
+// Bottom drawer
+const bottomDrawer = drawer({
+  id: 'details-drawer',
+  title: 'Details',
+  content: detailsContent,
+  position: 'bottom',
+});
+```
+
+## Opening Modals
+
+### With Button
+
+```typescript
+import { button, modal } from '@frontmcp/ui';
+
+// Button to open modal
+const openButton = button('Open Modal', {
+  data: { 'open-modal': 'my-modal' },
+});
+
+// The modal
+const myModal = modal({
+  id: 'my-modal',
+  title: 'My Modal',
+  content: '<p>Hello from modal!</p>',
+});
+
+// Include both in your template
+const html = `${openButton}${myModal}`;
+```
+
+### With HTMX
+
+Load modal content dynamically:
+
+```typescript
+// Button that loads modal content
+const openButton = button('Edit User', {
+  htmx: {
+    get: '/api/users/123/edit-form',
+    target: '#modal-container',
+  },
+});
+
+// Container for modal
+const container = '<div id="modal-container"></div>';
+
+// Server returns modal HTML
+const serverResponse = modal({
+  id: 'edit-modal',
+  title: 'Edit User',
+  content: editFormHtml,
+  open: true,  // Opens immediately when inserted
+});
+```
+
+## Closing Modals
+
+### Close Button
+
+Modals include a close button by default. Disable it:
+
+```typescript
+modal({
+  id: 'required-modal',
+  title: 'Required Action',
+  content: '...',
+  closable: false,  // No X button
+});
+```
+
+### Close on Backdrop
+
+```typescript
+modal({
+  id: 'my-modal',
+  closeOnBackdrop: true,  // Click outside to close (default)
+});
+
+modal({
+  id: 'important-modal',
+  closeOnBackdrop: false, // Must use close button
+});
+```
+
+### Programmatic Close
+
+```typescript
+// Button inside modal that closes it
+button('Close', {
+  data: { 'close-modal': 'my-modal' },
+})
+
+// Or with HTMX (server-side close)
+button('Save & Close', {
+  htmx: {
+    post: '/api/save',
+    target: '#my-modal',
+    swap: 'outerHTML',  // Server returns empty or updated content
+  },
+});
+```
+
+## Confirmation Dialog
+
+A simplified modal for confirmations:
+
+```typescript
+import { dialog } from '@frontmcp/ui';
+
+const html = dialog({
+  id: 'delete-dialog',
+  title: 'Delete Item?',
+  message: 'This action cannot be undone. The item will be permanently deleted.',
+  confirmText: 'Delete',
+  confirmVariant: 'danger',
+  cancelText: 'Cancel',
+  onConfirm: {
+    delete: '/api/items/123',
+    target: '#item-123',
+    swap: 'outerHTML',
+  },
+});
+```
+
+## Modal with Form
+
+```typescript
+import { modal, input, select, button, formGroup } from '@frontmcp/ui';
+
+const createUserModal = modal({
+  id: 'create-user-modal',
+  title: 'Create User',
+  content: `
+    <form hx-post="/api/users" hx-target="#user-list" hx-swap="beforeend">
+      ${formGroup([
+        input({ name: 'name', label: 'Name', required: true }),
+        input({ name: 'email', type: 'email', label: 'Email', required: true }),
+        select({
+          name: 'role',
+          label: 'Role',
+          options: [
+            { value: 'user', label: 'User' },
+            { value: 'admin', label: 'Admin' },
+          ],
+        }),
+      ])}
+    </form>
+  `,
+  footer: `
+    ${button('Cancel', { variant: 'outline', data: { 'close-modal': 'create-user-modal' } })}
+    ${button('Create User', { type: 'submit' })}
+  `,
+});
+```
+
+## Nested Modals
+
+```typescript
+// First modal
+const parentModal = modal({
+  id: 'parent-modal',
+  title: 'Parent Modal',
+  content: `
+    <p>This is the parent modal.</p>
+    ${button('Open Child', { data: { 'open-modal': 'child-modal' } })}
+  `,
+});
+
+// Second modal (opens on top)
+const childModal = modal({
+  id: 'child-modal',
+  title: 'Child Modal',
+  content: '<p>This is the child modal.</p>',
+});
+```
+
+## Complete Example
+
+```typescript
+import { card, button, modal, input, select, formGroup, alert } from '@frontmcp/ui';
+
+const userManagement = card(`
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-lg font-semibold">Users</h2>
+    ${button('Add User', {
+      iconBefore: '➕',
+      data: { 'open-modal': 'add-user-modal' },
+    })}
+  </div>
+
+  <div id="user-list">
+    <!-- User list content -->
+  </div>
+
+  ${modal({
+    id: 'add-user-modal',
+    title: 'Add New User',
+    size: 'lg',
+    content: `
+      <form id="add-user-form" hx-post="/api/users" hx-target="#user-list" hx-swap="beforeend">
+        ${alert('Fill in the details below to create a new user account.', {
+          variant: 'info',
+          showIcon: false,
+        })}
+
+        <div class="mt-4">
+          ${formGroup([
+            input({ name: 'name', label: 'Full Name', required: true }),
+            input({ name: 'email', type: 'email', label: 'Email', required: true }),
+            input({ name: 'password', type: 'password', label: 'Password', required: true }),
+            select({
+              name: 'role',
+              label: 'Role',
+              options: [
+                { value: 'viewer', label: 'Viewer' },
+                { value: 'editor', label: 'Editor' },
+                { value: 'admin', label: 'Administrator' },
+              ],
+            }),
+          ])}
+        </div>
+      </form>
+    `,
+    footer: `
+      ${button('Cancel', {
+        variant: 'outline',
+        data: { 'close-modal': 'add-user-modal' },
+      })}
+      ${button('Create User', {
+        type: 'submit',
+        form: 'add-user-form',
+      })}
+    `,
+  })}
+`);
+```
+
+## API Reference
+
+### `modal(options)`
+
+| Option            | Type                                     | Default  | Description             |
+| ----------------- | ---------------------------------------- | -------- | ----------------------- |
+| `id`              | `string`                                 | required | Modal ID for open/close |
+| `title`           | `string`                                 | -        | Modal header title      |
+| `content`         | `string`                                 | required | Modal body HTML         |
+| `footer`          | `string`                                 | -        | Modal footer HTML       |
+| `size`            | `'sm' \| 'md' \| 'lg' \| 'xl' \| 'full'` | `'md'`   | Modal width             |
+| `open`            | `boolean`                                | `false`  | Initially open          |
+| `closable`        | `boolean`                                | `true`   | Show close button       |
+| `closeOnBackdrop` | `boolean`                                | `true`   | Close on backdrop click |
+| `className`       | `string`                                 | -        | Additional CSS classes  |
+
+### `drawer(options)`
+
+Same as `modal` plus:
+
+| Option     | Type                                     | Default   | Description                |
+| ---------- | ---------------------------------------- | --------- | -------------------------- |
+| `position` | `'left' \| 'right' \| 'top' \| 'bottom'` | `'right'` | Slide direction            |
+| `width`    | `string`                                 | `'320px'` | Drawer width (left/right)  |
+| `height`   | `string`                                 | `'50%'`   | Drawer height (top/bottom) |
+
+### `dialog(options)`
+
+Simplified confirmation dialog:
+
+| Option           | Type     | Default     | Description              |
+| ---------------- | -------- | ----------- | ------------------------ |
+| `id`             | `string` | required    | Dialog ID                |
+| `title`          | `string` | required    | Dialog title             |
+| `message`        | `string` | required    | Confirmation message     |
+| `confirmText`    | `string` | `'Confirm'` | Confirm button text      |
+| `confirmVariant` | `string` | `'primary'` | Confirm button variant   |
+| `cancelText`     | `string` | `'Cancel'`  | Cancel button text       |
+| `onConfirm`      | `object` | -           | HTMX options for confirm |
+
+### Returns
+
+`string` - HTML string for the modal element.

@@ -9,7 +9,10 @@ Build and run your first MCP server with FrontMCP. This quickstart gets you from
 
 ## Prerequisites
 
-- **Node.js ≥ 22**
+- **Node.js**:
+  - **Minimum**: Version 22 (LTS Maintenance)
+  - **Recommended**: Version 24 (Active LTS)
+  - _FrontMCP is developed and tested on Node.js 24_
 - **npm ≥ 10** (or pnpm/yarn)
 
 ---
@@ -58,17 +61,17 @@ If you already have a Node.js project, install FrontMCP:
 <CodeGroup>
 
 ```bash npm
-npm install -D frontmcp @types/node@^20
+npm install -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 
 ```bash pnpm
-pnpm add -D frontmcp @types/node@^20
+pnpm add -D frontmcp @types/node@^24
 pnpm dlx frontmcp init
 ```
 
 ```bash yarn
-yarn add -D frontmcp @types/node@^20
+yarn add -D frontmcp @types/node@^24
 npx frontmcp init
 ```
 
@@ -309,7 +312,7 @@ npm run doctor
 <AccordionGroup>
   <Accordion title="Server won't start">
     **Check:**
-    1. Node.js version ≥ 22: `node --version`
+    1. Node.js version 22+ (Node 24 recommended): `node --version`
     2. Port 3000 is available
     3. No TypeScript errors: Check console output
 

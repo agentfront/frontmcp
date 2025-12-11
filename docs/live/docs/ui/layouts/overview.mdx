@@ -1,0 +1,312 @@
+---
+title: Layout System
+sidebarTitle: Overview
+icon: table-layout
+description: Page layouts and structural patterns
+---
+
+# Layout System
+
+FrontMCP UI provides layout utilities to structure your tool widgets with consistent spacing, alignment, and responsive behavior.
+
+## Base Layout
+
+The `baseLayout` function wraps your content in a complete HTML document:
+
+```typescript
+import { baseLayout } from '@frontmcp/ui';
+
+const html = baseLayout({
+  title: 'My Widget',
+  content: '<p>Hello World</p>',
+});
+```
+
+This generates:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Widget</title>
+  <!-- Theme CSS variables -->
+  <!-- Tailwind CDN -->
+  <!-- Font preconnects -->
+</head>
+<body>
+  <p>Hello World</p>
+</body>
+</html>
+```
+
+## Layout Options
+
+```typescript
+baseLayout({
+  // Required
+  content: string,
+
+  // Optional
+  title: string,           // Page title
+  theme: ThemeConfig,      // Custom theme
+  platform: PlatformId,    // Target platform
+  scripts: boolean,        // Include Tailwind/HTMX (default: true)
+  fonts: boolean,          // Include font stylesheets (default: true)
+  bodyClass: string,       // Additional body classes
+  headContent: string,     // Extra <head> content
+})
+```
+
+## Grid Layouts
+
+### CSS Grid
+
+```typescript
+const html = `
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  ${card('Card 1')}
+  ${card('Card 2')}
+  ${card('Card 3')}
+</div>
+`;
+```
+
+### Auto-fit Grid
+
+```typescript
+const html = `
+<div class="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4">
+  ${items.map(item => card(item.content)).join('')}
+</div>
+`;
+```
+
+## Flexbox Layouts
+
+### Horizontal
+
+```typescript
+const html = `
+<div class="flex items-center gap-4">
+  ${avatar({ name: 'John' })}
+  <div>
+    <h3 class="font-semibold">John Doe</h3>
+    <p class="text-sm text-gray-500">john@example.com</p>
+  </div>
+  ${badge('Admin', { variant: 'primary' })}
+</div>
+`;
+```
+
+### Vertical Stack
+
+```typescript
+const html = `
+<div class="flex flex-col gap-4">
+  ${alert('Welcome!', { variant: 'info' })}
+  ${card('Main content goes here')}
+  ${buttonGroup([button('Save'), button('Cancel', { variant: 'outline' })])}
+</div>
+`;
+```
+
+### Space Between
+
+```typescript
+const html = `
+<div class="flex items-center justify-between">
+  <h2 class="text-lg font-semibold">Users</h2>
+  ${button('Add User', { size: 'sm' })}
+</div>
+`;
+```
+
+## Container Widths
+
+```typescript
+// Centered container with max-width
+const html = `
+<div class="max-w-md mx-auto">
+  ${content}
+</div>
+`;
+
+// Size options
+const sizes = {
+  sm: 'max-w-sm',   // 384px
+  md: 'max-w-md',   // 448px
+  lg: 'max-w-lg',   // 512px
+  xl: 'max-w-xl',   // 576px
+  '2xl': 'max-w-2xl', // 672px
+  '4xl': 'max-w-4xl', // 896px
+  full: 'max-w-full',
+};
+```
+
+## Spacing
+
+### Padding
+
+```typescript
+const html = `
+<div class="p-4">Uniform padding</div>
+<div class="px-6 py-4">Horizontal/vertical</div>
+<div class="pt-8 pb-4 px-6">Individual sides</div>
+`;
+```
+
+### Margin
+
+```typescript
+const html = `
+<div class="m-4">Uniform margin</div>
+<div class="mx-auto">Center horizontally</div>
+<div class="mt-8 mb-4">Top/bottom</div>
+`;
+```
+
+### Gap (Flex/Grid)
+
+```typescript
+const html = `
+<div class="flex gap-2">Small gap</div>
+<div class="flex gap-4">Medium gap</div>
+<div class="flex gap-6">Large gap</div>
+`;
+```
+
+## Common Layout Patterns
+
+### Card Grid
+
+```typescript
+import { card, cardGroup } from '@frontmcp/ui';
+
+const html = cardGroup([
+  card('Feature 1', { title: 'Speed' }),
+  card('Feature 2', { title: 'Security' }),
+  card('Feature 3', { title: 'Scale' }),
+], {
+  direction: 'horizontal',
+  gap: 'md',
+});
+```
+
+### Split View
+
+```typescript
+const html = `
+<div class="flex gap-6">
+  <div class="w-1/3">
+    ${sidebar}
+  </div>
+  <div class="flex-1">
+    ${mainContent}
+  </div>
+</div>
+`;
+```
+
+### Sticky Header
+
+```typescript
+const html = `
+<div class="min-h-screen">
+  <header class="sticky top-0 bg-white border-b z-10 px-4 py-3">
+    ${headerContent}
+  </header>
+  <main class="p-4">
+    ${mainContent}
+  </main>
+</div>
+`;
+```
+
+### Footer at Bottom
+
+```typescript
+const html = `
+<div class="min-h-screen flex flex-col">
+  <main class="flex-1 p-4">
+    ${mainContent}
+  </main>
+  <footer class="bg-gray-100 p-4 text-center text-sm text-gray-500">
+    ${footerContent}
+  </footer>
+</div>
+`;
+```
+
+## Responsive Design
+
+### Breakpoints
+
+```typescript
+// sm: 640px, md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px
+
+const html = `
+<div class="
+  p-4
+  md:p-6
+  lg:p-8
+  grid
+  grid-cols-1
+  md:grid-cols-2
+  lg:grid-cols-3
+  gap-4
+">
+  ${cards}
+</div>
+`;
+```
+
+### Mobile-First
+
+```typescript
+// Stack on mobile, side-by-side on larger screens
+const html = `
+<div class="flex flex-col md:flex-row gap-4">
+  <div class="md:w-64">${sidebar}</div>
+  <div class="flex-1">${content}</div>
+</div>
+`;
+```
+
+### Hidden on Breakpoints
+
+```typescript
+const html = `
+<div class="hidden md:block">Desktop only</div>
+<div class="md:hidden">Mobile only</div>
+`;
+```
+
+## Helper Functions
+
+### escapeHtml
+
+Always escape user content in layouts:
+
+```typescript
+import { escapeHtml } from '@frontmcp/ui';
+
+const html = `
+<div class="p-4">
+  <h2>${escapeHtml(title)}</h2>
+  <p>${escapeHtml(content)}</p>
+</div>
+`;
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Layout Templates" icon="clone" href="/docs/ui/layouts/templates">
+    Pre-built layout templates
+  </Card>
+  <Card title="Theming" icon="paintbrush" href="/docs/ui/theming/overview">
+    Customize colors and styling
+  </Card>
+</CardGroup>
