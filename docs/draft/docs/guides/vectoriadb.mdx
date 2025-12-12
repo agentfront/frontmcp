@@ -346,7 +346,7 @@ import {
 } from 'vectoriadb';
 
 try {
-  await toolIndex add(doc.id, doc.text, doc.metadata);
+  await toolIndex.add(doc.id, doc.text, doc.metadata);
 } catch (error) {
   if (error instanceof VectoriaNotInitializedError) {
     await toolIndex.initialize();
