@@ -133,8 +133,8 @@
   },
   "dependencies": {
     "@swc/core": "^1.5.0",
-    "enclave-vm": "^1.0.1",
-    "esbuild": "^0.24.0",
+    "enclave-vm": "^1.0.3",
+    "esbuild": "^0.27.1",
     "handlebars": "^4.7.8",
     "tslib": "^2.3.0",
     "zod": "^4.0.0"
