@@ -244,6 +244,8 @@ jobs:
 
           # Create single prompt for all libraries
           cat > .github/codex/lib-analysis/prompt.md <<EOF
+          IMPORTANT: You MUST ONLY analyze the libraries explicitly listed below. Do NOT explore the codebase or include any other libraries.
+
           Analyze the following independent libraries and determine:
           1. The appropriate semantic version bump (MAJOR/MINOR/PATCH)
           2. A changelog entry for each library
@@ -255,11 +257,17 @@ jobs:
           - MINOR: New features, backwards-compatible functionality additions
           - PATCH: Backwards-compatible bug fixes, documentation, refactoring, minor improvements
 
-          Libraries to analyze:
+          CRITICAL: Return the library name EXACTLY as shown in the "LIBRARY:" field below (the folder name like "json-schema-to-zod-v3", NOT the npm package name like "@frontmcp/json-schema-to-zod-v3").
+
+          Libraries to analyze (ONLY these, no others):
           $LIBS_DATA
 
-          For each library, respond with version bump recommendation and changelog.
-          The changelog should start with ## [NEW_VERSION] - $TODAY and include appropriate sections.
+          For each library listed above, respond with:
+          - name: The EXACT folder name from the "LIBRARY:" field (e.g., "json-schema-to-zod-v3", "mcp-from-openapi")
+          - bump: major, minor, or patch
+          - changelog: Starting with ## [NEW_VERSION] - $TODAY and including appropriate sections
+
+          DO NOT include any libraries not listed above.
           EOF
 
           # Create output schema
@@ -322,18 +330,45 @@ jobs:
             exit 0
           fi
 
+          # Get the list of valid independent libraries for validation
+          VALID_LIBS="${{ steps.independent.outputs.independent_projects }}"
+
           # Process each library from Codex results
           LIBS_COUNT=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries.length)")
 
           for ((i=0; i<LIBS_COUNT; i++)); do
-            LIB_NAME=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].name)")
+            RAW_LIB_NAME=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].name)")
             BUMP_TYPE=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].bump)")
             CHANGELOG_ENTRY=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].changelog)")
 
+            # Normalize library name: handle @frontmcp/name, @scope/name, or plain name formats
+            LIB_NAME=$(node -e "
+              const raw = '$RAW_LIB_NAME';
+              // Remove @scope/ prefix if present (e.g., @frontmcp/sdk -> sdk)
+              let name = raw.replace(/^@[^/]+\//, '');
+              // Handle special case: 'frontmcp (CLI)' -> 'cli'
+              if (raw.toLowerCase().includes('cli')) name = 'cli';
+              // Handle 'frontmcp' -> 'cli' (the CLI package name)
+              if (name === 'frontmcp') name = 'cli';
+              console.log(name);
+            ")
+
             echo "================================"
-            echo "Processing: $LIB_NAME"
+            echo "Processing: $RAW_LIB_NAME (normalized: $LIB_NAME)"
             echo "Bump: $BUMP_TYPE"
             echo "================================"
+
+            # Validate that this library is in the independent libs list
+            if ! echo ",$VALID_LIBS," | grep -q ",$LIB_NAME,"; then
+              echo "⚠️  Skipping $LIB_NAME - not in independent libraries list: $VALID_LIBS"
+              continue
+            fi
+
+            # Validate that the library directory exists
+            if [ ! -d "libs/$LIB_NAME" ]; then
+              echo "⚠️  Skipping $LIB_NAME - directory libs/$LIB_NAME does not exist"
+              continue
+            fi
 
             # Bump version
             node scripts/bump-version.mjs "$LIB_NAME" "$BUMP_TYPE"
