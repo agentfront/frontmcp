@@ -31,7 +31,9 @@
     "dev-inspect": "tsx src/cli.ts inspector",
     "prepare": "npm run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
   "devDependencies": {
     "typescript": "^5.5.3",
     "tsx": "^4.20.6",

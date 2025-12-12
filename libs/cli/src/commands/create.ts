@@ -63,7 +63,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
       '@frontmcp/sdk': frontmcpLibRange,
       '@frontmcp/plugins': frontmcpLibRange,
       '@frontmcp/adapters': frontmcpLibRange,
-      zod: '^3.25.76',
+      zod: '^4.0.0',
       'reflect-metadata': '^0.2.2',
     },
     devDependencies: {
@@ -112,7 +112,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     '@frontmcp/sdk': frontmcpLibRange,
     '@frontmcp/plugins': frontmcpLibRange,
     '@frontmcp/adapters': frontmcpLibRange,
-    zod: '^3.25.76',
+    zod: '^4.0.0',
     'reflect-metadata': '^0.2.2',
   };
 
