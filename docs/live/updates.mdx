@@ -5,6 +5,53 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.5.1" description="2025-12-12" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.5.1: Dependency cleanup and UI upgrades"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.5.1"
+    cta="View full changlog"
+  >
+    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity.
+
+    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your workspace SDK, adapter, and plugin versions so generators never ship stale dependencies.
+
+    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews.
+
+    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK expects the 2.x line, keeping semantic search upgrades drop-in.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.1" description="2025-12-12" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.1"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    ✨ **Zod 4-ready output** – Generators now emit helpers validated against `zod@^4`, so the latest `frontmcp create` scaffolds work without manual downgrades.
+
+    🧪 **Node 22/24 parity** – The published build and tests match FrontMCP’s runtime matrix, keeping conversions deterministic across local dev and CI.
+
+    📦 **Aligned metadata** – Package exports and repository links point directly at the monorepo paths, making IDE go-to-definition and debugging simpler.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.0.0" description="2025-12-12" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.0.0"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    🧩 **Generator parity** – Request mappers and schema helpers align with `@modelcontextprotocol/sdk 1.24.3`, so adapters inherit the protocol tweaks from FrontMCP 0.5.1 automatically.
+
+    🔁 **Clearer HTTP planning** – Operation metadata now calls out where each input lands (path, query, header, body), which shortens the feedback loop when wiring new tools.
+
+    ⚙️ **Modern toolchain** – ES2022 output and pinned dependencies match the main repo, giving you smaller bundles and faster installs.
+
+  </Card>
+</Update>
+
 <Update label="v0.5.0" description="2025-12-11" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.5.0: Tool UIs, orchestration, and security"
@@ -174,7 +221,7 @@ mode: 'center'
         - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
         - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
         capabilities like caching.
-        - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
+        - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
 
