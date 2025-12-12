@@ -87,7 +87,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.23.0",
+    "@modelcontextprotocol/sdk": "1.24.3",
     "jose": "^6.0.11",
     "tslib": "^2.3.0"
   },

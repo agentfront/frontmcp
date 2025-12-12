@@ -12,7 +12,7 @@
         "outputPath": "libs/ui/dist",
         "main": "libs/ui/src/index.ts",
         "tsConfig": "libs/ui/tsconfig.lib.json",
-        "assets": ["README.md", "LICENSE"]
+        "assets": ["libs/ui/README.md", "LICENSE"]
       }
     },
     "build": {
