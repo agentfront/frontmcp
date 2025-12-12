@@ -46,15 +46,19 @@ Install the package alongside your server:
 
 <CodeGroup>
 ```bash npm
-npm install vectoriadb
+npm install vectoriadb@^2
 ```
 ```bash pnpm
-pnpm add vectoriadb
+pnpm add vectoriadb@^2
 ```
 ```bash yarn
-yarn add vectoriadb
+yarn add vectoriadb@^2
 ```
 </CodeGroup>
+
+<Info>
+  FrontMCP 0.5 depends on `vectoriadb@^2.0.1`. Use the `^2` range to stay compatible with the SDK and automatically pick up 2.x optimizations and fixes.
+</Info>
 
 Initialize a singleton database during server startup (for example inside your custom bootstrap or provider):
 
@@ -342,7 +346,7 @@ import {
 } from 'vectoriadb';
 
 try {
-  await toolIndex.add(doc.id, doc.text, doc.metadata);
+  await toolIndex add(doc.id, doc.text, doc.metadata);
 } catch (error) {
   if (error instanceof VectoriaNotInitializedError) {
     await toolIndex.initialize();
