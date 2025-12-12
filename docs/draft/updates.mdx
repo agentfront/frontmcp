@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-11" tags={["Releases"]}>
+<Update label="draft" description="2025-12-12" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -47,7 +47,7 @@ mode: 'center'
 
     🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
 
-    🤖 **Schema & transformer upgrades** – Core packages now ship with MCP SDK `1.23.0`, Zod 4, Hugging Face Transformers, and `zod-from-json-schema` so schema validation, JSON generation, and App SDK widgets stay in sync.
+    🤖 **Schema & transformer upgrades** – Core packages now ship with MCP SDK `1.24.3`, Zod 4, `vectoriadb@^2.0.1`, Hugging Face Transformers, and `zod-from-json-schema` so schema validation, JSON generation, and App SDK widgets stay in sync.
 
     **Fixes**
 
@@ -79,6 +79,8 @@ mode: 'center'
 
     🧱 **OpenAI resource widgets** – Added `/docs/ui/components/resource-widgets` to cover `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview`, plus escaping and HTMX best practices for App SDK layouts.
 
+    🖼️ **Reliable README logos** – The README now references GitHub-hosted logo URLs so the branding renders correctly on npm, pkg.go.dev, and other mirrors that strip relative asset paths.
+
     **Performance**
 
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
@@ -91,7 +93,9 @@ mode: 'center'
 
     ⚙️ **CUDA-free validators** – Release workflows skip CUDA downloads when installing ONNX validators so CPU-only runners stay fast and deterministic.
 
-    📦 **Dependency alignment** – Package manifests declare the Node 22 floor, add Hugging Face Transformers, and swap in `zod-from-json-schema` so installs remain consistent across workspaces.
+    📦 **Dependency alignment** – Package manifests align on `@modelcontextprotocol/sdk@1.24.3`, `vectoriadb@^2.0.1`, updated `esbuild`, and the patched Enclave/AST Guard stack so every install reuses the same vetted transitive versions.
+
+    🧰 **Slimmer CLI distribution** – The standalone `frontmcp` CLI now depends only on `tslib`, keeping `npx frontmcp` installs fast and preventing mismatched copies of the library packages from being bundled twice.
 
   </Card>
 </Update>
