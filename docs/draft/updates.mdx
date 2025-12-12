@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-11" tags={["Releases"]}>
+<Update label="draft" description="2025-12-12" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -29,7 +29,7 @@ mode: 'center'
 
     🚀 **CodeCall meta-API plugin** – Collapse sprawling tool lists into the new CodeCall plugin: models search, describe, and execute tools through AgentScript plans that run inside Enclave with AST Guard validation.
 
-    🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure.
+    🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure. Now backed by `vectoriadb@^2.0.1` so you automatically inherit the latest semantic tuning and storage adapter fixes.
 
     🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with new presets, tool-owner enforcement, and sandbox upgrades so risky scripts, rogue globals, and tampered call targets get blocked before execution.
 
@@ -47,7 +47,7 @@ mode: 'center'
 
     🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
 
-    🤖 **Schema & transformer upgrades** – Core packages now ship with MCP SDK `1.23.0`, Zod 4, Hugging Face Transformers, and `zod-from-json-schema` so schema validation, JSON generation, and App SDK widgets stay in sync.
+    🤖 **Schema & runtime upgrades** – Core packages now ship with MCP SDK `1.24.3`, Zod 4, Hugging Face Transformers `^3.2.2`, and `zod-from-json-schema`, keeping schema validation, JSON generation, and App SDK widgets in sync with the latest protocol changes.
 
     **Fixes**
 
@@ -87,11 +87,15 @@ mode: 'center'
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 
+    🧱 **CLI dependency cleanup** – The global CLI now bundles only `tslib` and always reuses the workspace versions of `@frontmcp/sdk`, adapters, and plugins, so globals stop drifting from your project's dependencies.
+
+    🧰 **Zod 4 scaffolding** – CLI generators write `zod@^4.0.0` into fresh `package.json` files, keeping newly scaffolded apps aligned with the runtime upgrade without manual edits.
+
     🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
 
     ⚙️ **CUDA-free validators** – Release workflows skip CUDA downloads when installing ONNX validators so CPU-only runners stay fast and deterministic.
 
-    📦 **Dependency alignment** – Package manifests declare the Node 22 floor, add Hugging Face Transformers, and swap in `zod-from-json-schema` so installs remain consistent across workspaces.
+    📦 **Dependency alignment** – Package manifests now pull in MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, esbuild `0.27.1`, and the shared Hugging Face Transformers/Zod stack so installs stay consistent across workspaces while honoring the Node 22 floor.
 
   </Card>
 </Update>
