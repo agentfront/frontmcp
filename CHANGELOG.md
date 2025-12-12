@@ -1,3 +1,19 @@
+## [v0.5.1] - 2025-12-12
+
+### feat
+
+- Scaffold new projects with `zod@^4.0.0` so freshly generated apps match the runtime upgrade without manual edits.
+
+### docs
+
+- Promote the tool UI metadata, resource widget guide, and VectoriaDB 2.x installation guidance to the live Mintlify docs and navigation.
+- Point README branding assets at absolute GitHub URLs so logos render reliably on npm and other mirrors.
+
+### build
+
+- Align every synchronized package with `@modelcontextprotocol/sdk 1.24.3`, `vectoriadb ^2.0.1`, `enclave-vm ^1.0.3`, and `esbuild 0.27.1` for consistent installs.
+- Trim the global `frontmcp` CLI dependencies down to `tslib` so it reuses your workspace SDK, adapter, and plugin versions.
+
 ## [v0.5.0] - 2025-12-11
 
 ### feat

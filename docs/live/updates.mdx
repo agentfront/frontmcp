@@ -5,9 +5,9 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="v0.5.0" description="2025-12-11" tags={["Releases"]}>
+<Update label="v0.5.x" description="2025-12-12" tags={["Releases"]}>
   <Card
-    title="FrontMCP v0.5.0: Tool UIs, orchestration, and security"
+    title="FrontMCP v0.5.1: Tool UIs, orchestration, and security"
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.5.0"
     cta="View full changlog"
   >
@@ -20,6 +20,14 @@ mode: 'center'
     🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool execution guards to keep automated code paths safe.
 
     🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23, Zod 4, Node 24, and refreshed transformer dependencies.
+
+    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity.
+
+    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your workspace SDK, adapter, and plugin versions so generators never ship stale dependencies.
+
+    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews.
+
+    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK expects the 2.x line, keeping semantic search upgrades drop-in.
 
   </Card>
 </Update>
@@ -174,7 +182,7 @@ mode: 'center'
         - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
         - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
         capabilities like caching.
-        - 🪝 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
+        - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
         transforms.
     </Card>
 
