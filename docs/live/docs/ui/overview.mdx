@@ -46,6 +46,9 @@ When your MCP tools return data, AI platforms typically display it as raw text o
   <Card title="HTMX Integration" icon="bolt">
     Add dynamic interactions without JavaScript using HTMX attributes for server-driven updates.
   </Card>
+  <Card title="OpenAI Resource Widgets" icon="panel-right" href="/docs/ui/components/resource-widgets">
+    Render App SDK-ready cards, lists, and previews for documents, tasks, and media without rebuilding layouts.
+  </Card>
 </CardGroup>
 
 ## Platform Support
@@ -81,6 +84,75 @@ The library automatically detects the platform and adjusts rendering accordingly
     │  Widget  │  │ Artifact │  │  Widget  │
     └──────────┘  └──────────┘  └──────────┘
 ```
+
+## Tool UI metadata at a glance
+
+Every `@Tool` exposes a `ui` block that describes how the widget should render across hosts. Configure these settings once and the renderer keeps your UX consistent everywhere.
+
+| Setting            | Controls                                                             | Use it when                                                                 |
+| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `displayMode`      | Whether the widget renders inline, fullscreen, or picture-in-picture | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
+| `servingMode`      | How the HTML is delivered (`inline`, `static`, `hybrid`, URL-based)  | Precompile heavy React widgets or reuse shells across multiple responses.   |
+| `widgetAccessible` | Allows widgets to call tools through the MCP Bridge                  | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
+| `csp`              | Allowed domains for scripts, images, fonts, and network calls        | Restrict remote dependencies per platform and satisfy Claude’s strict CSP.  |
+| `hydrate`          | Ships the React runtime for client-side interactivity                | Power forms, tabs, and charts that need local state or event handlers.      |
+
+<Tip>
+Pair metadata with a concise `widgetDescription` so clients can preview the UI before rendering it, just like Mintlify recommends leading with the most important context.
+</Tip>
+
+<Warning>
+Limit `csp.resourceDomains` and `csp.connectDomains` to only the hosts your widget truly needs—broad allowlists can leak data or be blocked entirely by conservative clients.
+</Warning>
+
+## OpenAI App SDK resource widgets
+
+Need a richer layout than a single card? `@frontmcp/ui` ships `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview` helpers so your responses match OpenAI Apps SDK expectations without manual HTML.
+
+```typescript
+import { resourceWidget } from '@frontmcp/ui';
+
+const widget = resourceWidget({
+  type: 'document',
+  title: ctx.output.title,
+  description: ctx.output.summary,
+  status: ctx.output.archived
+    ? { label: 'Archived', variant: 'secondary' }
+    : { label: 'Active', variant: 'success' },
+  meta: {
+    author: ctx.output.author,
+    updatedAt: ctx.output.updatedAt,
+    tags: ctx.output.tags,
+  },
+  actions: [
+    {
+      label: 'Open in CRM',
+      icon: '↗️',
+      href: `https://crm.example.com/notes/${ctx.output.id}`,
+      variant: 'primary',
+    },
+    {
+      label: 'Sync',
+      icon: '♻️',
+      htmx: {
+        post: `/api/notes/${ctx.output.id}/sync`,
+        target: '#note-sync',
+        swap: 'innerHTML',
+      },
+    },
+  ],
+});
+```
+
+<Tip>
+Combine `resourceList` with `showLoadMore` and HTMX actions to paginate large datasets without writing any client-side JavaScript.
+</Tip>
+
+<Warning>
+Escape every user-provided field via `escapeHtml` or `ctx.helpers.escapeHtml` before injecting it into widget helpers—App SDK platforms will reject or sanitize unsafe markup.
+</Warning>
+
+See `/docs/ui/components/resource-widgets` for the full API surface plus preview helpers.
 
 ## Quick Example
 

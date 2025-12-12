@@ -2,7 +2,7 @@
 title: Resource Widgets
 sidebarTitle: Resource Widgets
 icon: panel-right
-description: "@frontmcp/ui ships specialized helpers for OpenAI App SDK-style experiences. Use resourceWidget, resourceList, and resourceItem to present documents, tasks, and media with consistent metadata."
+description: "@frontmcp/ui ships specialized helpers for OpenAI App SDK-style experiences. Use resourceWidget, resourceList, resourceItem, codePreview, and imagePreview to present documents, tasks, and media with consistent metadata."
 ---
 
 ## Import
@@ -18,7 +18,7 @@ import {
 } from '@frontmcp/ui';
 ```
 
-## Resource Types
+## Resource types
 
 | Type       | Description                                  |
 | ---------- | -------------------------------------------- |
@@ -36,7 +36,7 @@ import {
 
 ## `resourceWidget()`
 
-Build a rich card with thumbnail/metadata/actions. Everything resolves to HTML, so you can stream it from a tool response or hydrate it later.
+`resourceWidget` renders an App SDK-ready card with iconography, metadata, tags, and action buttons. It returns a pure HTML string, so you can embed it directly inside a tool response or reuse it from a resource template.
 
 ```typescript
 const noteWidget = resourceWidget({
@@ -73,9 +73,9 @@ const noteWidget = resourceWidget({
 });
 ```
 
-### Metadata & Statuses
+### Metadata & statuses
 
-Use the `meta` object for timestamps, MIME types, and authors. Dates accept ISO strings or `Date` instances and are formatted automatically. Add status badges to show review states, SLA breaches, or completion.
+Use the `meta` object for timestamps, MIME types, sizes, authors, and tags. Dates accept ISO strings or `Date` objects and are formatted automatically. Add a status badge whenever you need to highlight SLA breaches, approvals, or lifecycle states.
 
 ```typescript
 const attachment = resourceWidget({
@@ -94,7 +94,7 @@ const attachment = resourceWidget({
 
 ### Actions
 
-Actions render as buttons. Combine `href` links with HTMX interactions for optimistic UI.
+Actions render as buttons with optional HTMX attributes for server-driven interactivity. Use them for quick approvals, assignments, or follow-up tool calls.
 
 ```typescript
 const actions = [
@@ -102,21 +102,30 @@ const actions = [
   {
     label: 'Assign',
     icon: '👤',
-    htmx: { post: `/api/tasks/${ctx.output.id}/assign`, target: '#task-status' },
+    htmx: {
+      post: `/api/tasks/${ctx.output.id}/assign`,
+      target: '#task-status',
+      swap: 'innerHTML',
+      confirm: 'Assign this task?',
+    },
   },
 ];
 ```
 
+<Warning>
+Always escape user-provided strings with `escapeHtml` or `ctx.helpers.escapeHtml` before passing them into `title`, `description`, `meta`, or custom markup.
+</Warning>
+
 ## `resourceList()`
 
-Render multiple widgets at once. Switch between list/grid layouts and optionally show a “Load more” button that hooks into HTMX.
+`resourceList` composes multiple widgets into a list or grid layout and can render an optional “Load more” button that wires into HTMX for infinite scroll.
 
 ```typescript
-const list = resourceList({
+const incidentList = resourceList({
   title: 'Active incidents',
   layout: 'grid',
   columns: 2,
-  resources: ctx.output.incidents map((incident) =>
+  resources: ctx.output.incidents.map((incident) =>
     resourceWidget({
       type: 'event',
       title: incident.title,
@@ -136,9 +145,13 @@ const list = resourceList({
 });
 ```
 
+<Tip>
+Pick `layout: 'grid'` with `columns: 1` for tight clients like Claude Artifacts, or switch to `'list'` when you want a vertically stacked newsfeed.
+</Tip>
+
 ## `resourceItem()`
 
-Use `resourceItem` for compact rows (sidebars, inline drawers, etc.).
+`resourceItem` renders a compact row that fits sidebars, drawers, or inline search results.
 
 ```typescript
 const upcoming = resourceItem({
@@ -155,7 +168,7 @@ const upcoming = resourceItem({
 
 ### `codePreview`
 
-Embed highlighted code with optional filenames, copy buttons, and line numbers.
+Embed highlighted code, diffs, or JSON with optional filenames, copy buttons, and line numbers.
 
 ```typescript
 const preview = codePreview({
@@ -170,7 +183,7 @@ const preview = codePreview({
 
 ### `imagePreview`
 
-Display images or screenshots with optional captions.
+Display screenshots or generated media with captions and optional click-through behavior.
 
 ```typescript
 const hero = imagePreview({
@@ -178,16 +191,18 @@ const hero = imagePreview({
   alt: ctx.output.description,
   caption: 'Latest marketing mockup',
   maxHeight: '420px',
+  clickable: true,
 });
 ```
 
 ## Best practices
 
-- Escape user-provided strings with `escapeHtml` (or `ctx.helpers.escapeHtml`) before injecting into descriptions or custom markup.
-- Keep action labels short (two words max) and prefer HTMX POSTs for mutating operations so you can reflect state in-page.
-- Set CSP/resource policies via the Tool UI `csp` option when your widget links to external domains.
-- Choose `layout: 'grid'` with `columns: 1` for clients like Claude Artifacts where horizontal space is limited.
+- Build data objects first, then pass only trusted fields into the widget helpers.
+- Combine `resourceWidget` with `card`, `badge`, or `button` helpers when you want additional layout control.
+- Use HTMX actions (`get`, `post`, `target`, `swap`) for mutations so your widget stays interactive without custom JavaScript.
+- Gate external network requests behind the tool’s `csp` configuration so hosts like Claude know which domains to allow.
+- Pair widgets with `widgetDescription` in the tool metadata so clients can explain the UI before rendering it.
 
-<Warning>
-Never trust raw tool output inside `resourceWidget`—escape it or whitelist the fields you pass into `title`, `description`, and `meta`.
-</Warning>
+<Info>
+Expose the same HTML via a static serving mode or resource template when you want to preload widgets outside of a tool response.
+</Info>
