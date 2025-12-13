@@ -305,6 +305,37 @@ export const transportConfigSchema = z.object({
    * @default true
    */
   requireSessionForStreamable: z.boolean().default(true),
+
+  /**
+   * Transport recreation configuration
+   * When enabled, sessions are persisted to Redis and transports can be recreated after server restart
+   */
+  recreation: z.lazy(() => transportRecreationConfigSchema).optional(),
+});
+
+/**
+ * Transport recreation configuration
+ * Enables session persistence to Redis and automatic transport recreation after server restart
+ */
+export const transportRecreationConfigSchema = z.object({
+  /**
+   * Enable transport recreation from Redis
+   * When enabled, sessions are persisted to Redis and transports can be recreated after restart
+   * @default false
+   */
+  enabled: z.boolean().default(false),
+
+  /**
+   * Redis configuration for session storage
+   * Required when enabled=true
+   */
+  redis: redisConfigSchema.optional(),
+
+  /**
+   * Default TTL for stored session metadata (milliseconds)
+   * @default 3600000 (1 hour)
+   */
+  defaultTtlMs: z.number().default(3600000),
 });
 
 // ============================================
@@ -647,6 +678,12 @@ export type ConsentConfigInput = z.input<typeof consentConfigSchema>;
  */
 export type TransportConfig = z.infer<typeof transportConfigSchema>;
 export type TransportConfigInput = z.input<typeof transportConfigSchema>;
+
+/**
+ * Transport recreation configuration
+ */
+export type TransportRecreationConfig = z.infer<typeof transportRecreationConfigSchema>;
+export type TransportRecreationConfigInput = z.input<typeof transportRecreationConfigSchema>;
 
 /**
  * Public mode options (output type with defaults applied)

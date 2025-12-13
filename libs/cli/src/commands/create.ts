@@ -53,6 +53,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
       build: 'frontmcp build',
       inspect: 'frontmcp inspector',
       doctor: 'frontmcp doctor',
+      test: 'frontmcp test',
       'test:e2e': 'jest --config jest.e2e.config.ts --runInBand',
     },
     engines: {
@@ -72,6 +73,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
       '@swc/core': '^1.11.29',
       '@swc/jest': '^0.2.37',
       jest: '^29.7.0',
+      '@types/jest': '^29.5.14',
       tsx: '^4.20.6',
       '@types/node': '^24.0.0',
       typescript: '^5.5.3',
@@ -97,6 +99,7 @@ async function upsertPackageJson(cwd: string, nameOverride: string | undefined, 
     build: existing.scripts?.build ?? base.scripts.build,
     inspect: existing.scripts?.inspect ?? base.scripts.inspect,
     doctor: existing.scripts?.doctor ?? base.scripts.doctor,
+    test: existing.scripts?.test ?? base.scripts.test,
     'test:e2e': existing.scripts?.['test:e2e'] ?? base.scripts['test:e2e'],
   };
 
@@ -207,6 +210,45 @@ test.describe('Server E2E', () => {
 });
 `;
 
+const TEMPLATE_GITIGNORE = `
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# FrontMCP development keys (contains private keys - never commit!)
+.frontmcp/
+
+# Coverage
+coverage/
+
+# Test output
+test-output/
+`;
+
 const TEMPLATE_JEST_E2E_CONFIG = `
 /* eslint-disable */
 export default {
@@ -299,6 +341,9 @@ export async function runCreate(projectArg?: string): Promise<void> {
   // E2E scaffolding
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.test.ts'), TEMPLATE_E2E_TEST_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
+
+  // Git configuration
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.gitignore'), TEMPLATE_GITIGNORE);
 
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);

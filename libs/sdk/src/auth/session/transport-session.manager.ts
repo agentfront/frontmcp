@@ -15,6 +15,7 @@ import {
 import { encryptJson } from './utils/session-id.utils';
 import { encryptAesGcm, decryptAesGcm, hkdfSha256 } from './session.crypto';
 import { getMachineId } from '../authorization/authorization.class';
+import { RedisSessionStore } from './redis-session.store';
 
 /**
  * In-memory session store implementation
@@ -111,11 +112,8 @@ export class TransportSessionManager {
     } else if (config.store === 'memory') {
       this.store = new InMemorySessionStore();
     } else if (config.store === 'redis') {
-      // Redis store would be instantiated here
-      // For now, fall back to in-memory
-      // TODO: Implement RedisSessionStore
-      console.warn('[TransportSessionManager] Redis store requested but not implemented - falling back to in-memory');
-      this.store = new InMemorySessionStore();
+      // Instantiate Redis session store
+      this.store = new RedisSessionStore(config.config);
     } else {
       this.store = new InMemorySessionStore();
     }

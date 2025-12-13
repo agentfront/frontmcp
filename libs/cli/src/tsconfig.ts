@@ -26,7 +26,7 @@ export const RECOMMENDED_TSCONFIG = {
     sourceMap: true,
     outDir: 'dist',
     rootDir: 'src',
-    types: ['node'],
+    types: ['node', '@types/jest', '@frontmcp/testing'],
   },
   include: ['src/**/*'],
 } as const;

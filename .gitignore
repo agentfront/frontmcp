@@ -51,6 +51,9 @@ test-output
 docs/docs.backup.json
 
 .claude/settings.local.json
+
+# FrontMCP development keys (contains private keys - never commit!)
+.frontmcp/
 /.cache/transformers/Xenova/
 /libs/ast-guard/coverage/
 

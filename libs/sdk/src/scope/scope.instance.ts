@@ -84,7 +84,9 @@ export class Scope extends ScopeEntry {
     this.scopeFlows = new FlowRegistry(scopeProviders, [HttpRequestFlow]);
     await this.scopeFlows.ready;
 
-    this.transportService = new TransportService(this);
+    // Pass transport recreation config to TransportService
+    const transportConfig = this.metadata.auth?.transport;
+    this.transportService = new TransportService(this, transportConfig?.recreation);
 
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth);
     await this.scopeAuth.ready;

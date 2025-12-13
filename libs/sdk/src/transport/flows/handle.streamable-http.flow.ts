@@ -17,6 +17,42 @@ import { ElicitResultSchema, RequestSchema } from '@modelcontextprotocol/sdk/typ
 import { Scope } from '../../scope';
 import { createSessionId } from '../../auth/session/utils/session-id.utils';
 
+/**
+ * Zod schema for validating mcp-session-id header format.
+ * Uses Zod's built-in validators to prevent ReDoS attacks and ensure safe validation.
+ *
+ * - Max length: 256 characters (session IDs are typically UUIDs or short tokens)
+ * - Only allows printable ASCII characters (0x20-0x7E)
+ * - Rejects control characters and null bytes
+ */
+const mcpSessionHeaderSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine(
+    (value) => {
+      // Check each character is printable ASCII (0x20-0x7E)
+      for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        if (code < 0x20 || code > 0x7e) {
+          return false;
+        }
+      }
+      return true;
+    },
+    { message: 'Session ID must contain only printable ASCII characters' },
+  );
+
+/**
+ * Validate mcp-session-id header using Zod schema.
+ * Returns undefined for invalid or missing values.
+ */
+function validateMcpSessionHeader(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const result = mcpSessionHeaderSchema.safeParse(value);
+  return result.success ? result.data : undefined;
+}
+
 export const plan = {
   pre: ['parseInput', 'router'],
   execute: ['onInitialize', 'onMessage', 'onElicitResult', 'onSseListener'],
@@ -87,7 +123,8 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     //             This is the ID the client received from initialize and is referencing.
     // Priority 2: Use session from authorization if header matches or is absent
     // Priority 3: Create new session (first request - no header, no authorization.session)
-    const mcpSessionHeader = request.headers?.['mcp-session-id'] as string | undefined;
+    const rawMcpSessionHeader = request.headers?.['mcp-session-id'] as string | undefined;
+    const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
 
     let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
 
@@ -193,10 +230,31 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
-    const transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 1. Try to get existing transport from memory
+    let transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 2. If not in memory, check if session exists in Redis and recreate
+    if (!transport) {
+      const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+      if (storedSession) {
+        logger.info('Recreating transport from Redis session', {
+          sessionId: session.id?.slice(0, 20),
+          createdAt: storedSession.createdAt,
+        });
+        transport = await transportService.recreateTransporter(
+          'streamable-http',
+          token,
+          session.id,
+          storedSession,
+          response,
+        );
+      }
+    }
+
     if (!transport) {
       // Check if session was ever created to differentiate error types per MCP Spec 2025-11-25
-      const wasCreated = transportService.wasSessionCreated('streamable-http', token, session.id);
+      const wasCreated = await transportService.wasSessionCreatedAsync('streamable-http', token, session.id);
       const body = request.body as Record<string, unknown> | undefined;
 
       if (wasCreated) {
@@ -247,12 +305,32 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   })
   async onSseListener() {
     const transportService = (this.scope as Scope).transportService;
+    const logger = this.scopeLogger.child('handle:streamable-http:onSseListener');
 
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
-    // Get existing transport for this session - SSE listener requires existing session
-    const transport = await transportService.getTransporter('streamable-http', token, session.id);
+    // 1. Try to get existing transport from memory
+    let transport = await transportService.getTransporter('streamable-http', token, session.id);
+
+    // 2. If not in memory, check if session exists in Redis and recreate
+    if (!transport) {
+      const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+      if (storedSession) {
+        logger.info('Recreating transport from Redis session for SSE listener', {
+          sessionId: session.id?.slice(0, 20),
+          createdAt: storedSession.createdAt,
+        });
+        transport = await transportService.recreateTransporter(
+          'streamable-http',
+          token,
+          session.id,
+          storedSession,
+          response,
+        );
+      }
+    }
+
     if (!transport) {
       this.respond(httpRespond.notFound('Session not found'));
       return;
