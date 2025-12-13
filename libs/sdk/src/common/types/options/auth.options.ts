@@ -317,26 +317,40 @@ export const transportConfigSchema = z.object({
  * Transport recreation configuration
  * Enables session persistence to Redis and automatic transport recreation after server restart
  */
-export const transportRecreationConfigSchema = z.object({
-  /**
-   * Enable transport recreation from Redis
-   * When enabled, sessions are persisted to Redis and transports can be recreated after restart
-   * @default false
-   */
-  enabled: z.boolean().default(false),
+export const transportRecreationConfigSchema = z
+  .object({
+    /**
+     * Enable transport recreation from Redis
+     * When enabled, sessions are persisted to Redis and transports can be recreated after restart
+     * @default false
+     */
+    enabled: z.boolean().default(false),
 
-  /**
-   * Redis configuration for session storage
-   * Required when enabled=true
-   */
-  redis: redisConfigSchema.optional(),
+    /**
+     * Redis configuration for session storage
+     * Required when enabled=true
+     */
+    redis: redisConfigSchema.optional(),
 
-  /**
-   * Default TTL for stored session metadata (milliseconds)
-   * @default 3600000 (1 hour)
-   */
-  defaultTtlMs: z.number().default(3600000),
-});
+    /**
+     * Default TTL for stored session metadata (milliseconds)
+     * @default 3600000 (1 hour)
+     */
+    defaultTtlMs: z.number().int().positive().default(3600000),
+  })
+  .refine(
+    (data) => {
+      // If enabled=true, redis must be provided
+      if (data.enabled && !data.redis) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Redis configuration is required when transport recreation is enabled',
+      path: ['redis'],
+    },
+  );
 
 // ============================================
 // PUBLIC MODE

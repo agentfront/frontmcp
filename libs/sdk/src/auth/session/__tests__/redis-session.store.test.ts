@@ -428,10 +428,13 @@ describe('RedisSessionStore', () => {
       expect(mockRedisInstance.getex).toHaveBeenCalledWith('mcp:session:session:with:colons', 'PX', expect.any(Number));
     });
 
-    it('should handle empty sessionId', async () => {
-      await store.get('');
-
-      expect(mockRedisInstance.getex).toHaveBeenCalledWith('mcp:session:', 'PX', expect.any(Number));
+    it('should reject empty sessionId', async () => {
+      await expect(store.get('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
+      await expect(store.set('', createValidStoredSession())).rejects.toThrow(
+        '[RedisSessionStore] sessionId cannot be empty',
+      );
+      await expect(store.delete('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
+      await expect(store.exists('')).rejects.toThrow('[RedisSessionStore] sessionId cannot be empty');
     });
 
     it('should handle very long sessionId', async () => {

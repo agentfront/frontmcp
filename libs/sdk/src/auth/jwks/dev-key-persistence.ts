@@ -124,6 +124,11 @@ function validateJwkStructure(data: unknown): { valid: boolean; error?: string }
     return { valid: false, error: 'Public and private key types do not match' };
   }
 
+  // Verify kid consistency between top-level and publicJwk
+  if (publicKey.kid !== parsed.kid) {
+    return { valid: false, error: 'kid mismatch between top-level and publicJwk' };
+  }
+
   // Verify createdAt is not in the future and not too old (100 years)
   const now = Date.now();
   const hundredYearsMs = 100 * 365 * 24 * 60 * 60 * 1000;

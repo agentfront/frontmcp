@@ -326,6 +326,17 @@ describe('Dev Key Persistence', () => {
       expect(result).toBeNull();
     });
 
+    it('should reject mismatched kid between top-level and publicJwk', async () => {
+      const keyPath = path.join(tempDir, 'mismatched-kid.json');
+      const validKey = createValidRsaKeyData();
+      // Modify publicJwk kid to be different from top-level kid
+      validKey.publicJwk.keys[0].kid = 'different-kid';
+      await fs.writeFile(keyPath, JSON.stringify(validKey));
+
+      const result = await loadDevKey({ keyPath });
+      expect(result).toBeNull();
+    });
+
     it('should reject RSA key missing n', async () => {
       const keyPath = path.join(tempDir, 'rsa-missing-n.json');
       const invalidKey = createValidRsaKeyData();
@@ -476,8 +487,10 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'overwrite-test.json');
       const key1 = createValidRsaKeyData();
       key1.kid = 'key-1';
+      key1.publicJwk.keys[0].kid = 'key-1'; // Must keep kid consistent
       const key2 = createValidRsaKeyData();
       key2.kid = 'key-2';
+      key2.publicJwk.keys[0].kid = 'key-2'; // Must keep kid consistent
 
       await saveDevKey(key1, { keyPath });
       await saveDevKey(key2, { keyPath });
@@ -554,8 +567,9 @@ describe('Dev Key Persistence', () => {
 // ============================================
 
 function createValidRsaKeyData(): DevKeyData {
+  const kid = 'test-kid-' + Date.now().toString(16);
   return {
-    kid: 'test-kid-' + Date.now().toString(16),
+    kid,
     alg: 'RS256',
     privateKey: {
       kty: 'RSA',
@@ -572,7 +586,7 @@ function createValidRsaKeyData(): DevKeyData {
       keys: [
         {
           kty: 'RSA',
-          kid: 'test-kid-' + Date.now().toString(16),
+          kid,
           alg: 'RS256',
           use: 'sig',
           n: 'sXch1QqFNGd9TFZL8VfpwNrFGPmITIm_DnR-OD7w8k0',
@@ -585,8 +599,9 @@ function createValidRsaKeyData(): DevKeyData {
 }
 
 function createValidEcKeyData(): DevKeyData {
+  const kid = 'test-ec-kid-' + Date.now().toString(16);
   return {
-    kid: 'test-ec-kid-' + Date.now().toString(16),
+    kid,
     alg: 'ES256',
     privateKey: {
       kty: 'EC',
@@ -599,7 +614,7 @@ function createValidEcKeyData(): DevKeyData {
       keys: [
         {
           kty: 'EC',
-          kid: 'test-ec-kid-' + Date.now().toString(16),
+          kid,
           alg: 'ES256',
           use: 'sig',
           crv: 'P-256',

@@ -65,15 +65,18 @@ export class TransportService {
 
     // Initialize Redis session store if recreation is enabled
     if (recreationConfig?.enabled && recreationConfig.redis) {
-      this.sessionStore = new RedisSessionStore({
-        host: recreationConfig.redis.host,
-        port: recreationConfig.redis.port,
-        password: recreationConfig.redis.password,
-        db: recreationConfig.redis.db,
-        tls: recreationConfig.redis.tls,
-        keyPrefix: recreationConfig.redis.keyPrefix ?? 'mcp:transport:',
-        defaultTtlMs: recreationConfig.defaultTtlMs ?? 3600000, // 1 hour default
-      });
+      this.sessionStore = new RedisSessionStore(
+        {
+          host: recreationConfig.redis.host,
+          port: recreationConfig.redis.port,
+          password: recreationConfig.redis.password,
+          db: recreationConfig.redis.db,
+          tls: recreationConfig.redis.tls,
+          keyPrefix: recreationConfig.redis.keyPrefix ?? 'mcp:transport:',
+          defaultTtlMs: recreationConfig.defaultTtlMs ?? 3600000, // 1 hour default
+        },
+        this.scope.logger.child('RedisSessionStore'),
+      );
       this.scope.logger.info('[TransportService] Redis session store initialized for transport recreation');
     }
 
@@ -182,7 +185,8 @@ export class TransportService {
     if (existing) return existing;
 
     // Use mutex to prevent concurrent recreation of the same transport
-    const mutexKey = `${type}:${key.tokenHash}:${sessionId}`;
+    // Use JSON encoding for mutex key (consistent with history key format, handles colons in sessionId)
+    const mutexKey = JSON.stringify({ t: type, h: key.tokenHash, s: sessionId });
     const pendingCreation = this.creationMutex.get(mutexKey);
     if (pendingCreation) {
       // Another request is already recreating this transport - wait for it
@@ -195,6 +199,13 @@ export class TransportService {
 
     try {
       return await recreationPromise;
+    } catch (error) {
+      // Log recreation errors for debugging
+      this.scope.logger.error('[TransportService] Failed to recreate transport from stored session', {
+        sessionId: sessionId.slice(0, 20),
+        error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+      });
+      throw error;
     } finally {
       this.creationMutex.delete(mutexKey);
     }
@@ -276,7 +287,8 @@ export class TransportService {
     if (existing) return existing;
 
     // Use mutex to prevent concurrent creation of the same transport
-    const mutexKey = `${type}:${key.tokenHash}:${sessionId}`;
+    // Use JSON encoding for mutex key (consistent with history key format, handles colons in sessionId)
+    const mutexKey = JSON.stringify({ t: type, h: key.tokenHash, s: sessionId });
     const pendingCreation = this.creationMutex.get(mutexKey);
     if (pendingCreation) {
       // Another request is already creating this transport - wait for it
@@ -575,6 +587,16 @@ export class TransportService {
           this.sessionHistory.delete(histKey);
           evicted++;
         }
+      }
+
+      // Log warning if we couldn't evict enough entries (all have active transports)
+      if (evicted < targetEvictions) {
+        this.scope.logger.warn('[TransportService] Session history eviction: unable to free target memory', {
+          targetEvictions,
+          actualEvictions: evicted,
+          currentSize: this.sessionHistory.size,
+          maxSize: this.MAX_SESSION_HISTORY,
+        });
       }
     }
   }

@@ -2,6 +2,7 @@
 import IoRedis, { Redis, RedisOptions } from 'ioredis';
 import { randomUUID } from 'crypto';
 import { SessionStore, StoredSession, RedisConfig, storedSessionSchema } from './transport-session.types';
+import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 
 /**
  * Redis-backed session store implementation
@@ -13,11 +14,16 @@ export class RedisSessionStore implements SessionStore {
   private readonly redis: Redis;
   private readonly keyPrefix: string;
   private readonly defaultTtlMs: number;
+  private readonly logger?: FrontMcpLogger;
   private externalInstance = false;
 
-  constructor(config: RedisConfig | { redis: Redis; keyPrefix?: string; defaultTtlMs?: number }) {
+  constructor(
+    config: RedisConfig | { redis: Redis; keyPrefix?: string; defaultTtlMs?: number },
+    logger?: FrontMcpLogger,
+  ) {
     // Default TTL of 1 hour for session extension on access
     this.defaultTtlMs = ('defaultTtlMs' in config ? config.defaultTtlMs : undefined) ?? 3600000;
+    this.logger = logger;
 
     if ('redis' in config && config.redis) {
       // Use provided Redis instance
@@ -45,8 +51,12 @@ export class RedisSessionStore implements SessionStore {
 
   /**
    * Get the full Redis key for a session ID
+   * @throws Error if sessionId is empty
    */
   private key(sessionId: string): string {
+    if (!sessionId || sessionId.trim() === '') {
+      throw new Error('[RedisSessionStore] sessionId cannot be empty');
+    }
     return `${this.keyPrefix}${sessionId}`;
   }
 
@@ -78,7 +88,7 @@ export class RedisSessionStore implements SessionStore {
       const result = storedSessionSchema.safeParse(parsed);
 
       if (!result.success) {
-        console.warn(`[RedisSessionStore] Invalid session format for ${sessionId}`);
+        this.logger?.warn('[RedisSessionStore] Invalid session format', { sessionId: sessionId.slice(0, 20) });
         // Delete invalid session data
         this.delete(sessionId).catch(() => void 0);
         return null;
@@ -106,7 +116,10 @@ export class RedisSessionStore implements SessionStore {
 
       return updatedSession;
     } catch (error) {
-      console.warn(`[RedisSessionStore] Failed to parse session ${sessionId}: ${(error as Error).message}`);
+      this.logger?.warn('[RedisSessionStore] Failed to parse session', {
+        sessionId: sessionId.slice(0, 20),
+        error: (error as Error).message,
+      });
       return null;
     }
   }
