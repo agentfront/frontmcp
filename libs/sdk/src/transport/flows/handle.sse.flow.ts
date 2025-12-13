@@ -86,8 +86,15 @@ export default class HandleSseFlow extends FlowBase<typeof name> {
     //             This is the ID the client received from initialize and is referencing.
     // Priority 2: Use session from authorization if header matches or is absent
     // Priority 3: Create new session (first request - no header, no authorization.session)
-    const rawMcpSessionHeader = request.headers?.['mcp-session-id'] as string | undefined;
+    const raw = request.headers?.['mcp-session-id'];
+    const rawMcpSessionHeader = typeof raw === 'string' ? raw : undefined;
     const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
+
+    // If client sent a header but validation failed, return 404
+    if (raw !== undefined && !mcpSessionHeader) {
+      this.respond(httpRespond.sessionNotFound('invalid session id'));
+      return;
+    }
 
     let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
 

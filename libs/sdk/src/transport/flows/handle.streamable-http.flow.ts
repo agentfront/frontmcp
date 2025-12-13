@@ -88,8 +88,15 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     //             This is the ID the client received from initialize and is referencing.
     // Priority 2: Use session from authorization if header matches or is absent
     // Priority 3: Create new session (first request - no header, no authorization.session)
-    const rawMcpSessionHeader = request.headers?.['mcp-session-id'] as string | undefined;
+    const raw = request.headers?.['mcp-session-id'];
+    const rawMcpSessionHeader = typeof raw === 'string' ? raw : undefined;
     const mcpSessionHeader = validateMcpSessionHeader(rawMcpSessionHeader);
+
+    // If client sent a header but validation failed, return 404
+    if (raw !== undefined && !mcpSessionHeader) {
+      this.respond(httpRespond.sessionNotFound('invalid session id'));
+      return;
+    }
 
     let session: { id: string; payload?: z.infer<typeof stateSchema>['session']['payload'] };
 
@@ -201,19 +208,27 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // 2. If not in memory, check if session exists in Redis and recreate
     if (!transport) {
-      const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
-      if (storedSession) {
-        logger.info('Recreating transport from Redis session', {
+      try {
+        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        if (storedSession) {
+          logger.info('Recreating transport from Redis session', {
+            sessionId: session.id?.slice(0, 20),
+            createdAt: storedSession.createdAt,
+          });
+          transport = await transportService.recreateTransporter(
+            'streamable-http',
+            token,
+            session.id,
+            storedSession,
+            response,
+          );
+        }
+      } catch (error) {
+        // Log and fall through to 404 logic - transport remains undefined
+        logger.warn('Failed to recreate transport from stored session', {
           sessionId: session.id?.slice(0, 20),
-          createdAt: storedSession.createdAt,
+          error: error instanceof Error ? error.message : String(error),
         });
-        transport = await transportService.recreateTransporter(
-          'streamable-http',
-          token,
-          session.id,
-          storedSession,
-          response,
-        );
       }
     }
 
@@ -280,19 +295,27 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
 
     // 2. If not in memory, check if session exists in Redis and recreate
     if (!transport) {
-      const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
-      if (storedSession) {
-        logger.info('Recreating transport from Redis session for SSE listener', {
+      try {
+        const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        if (storedSession) {
+          logger.info('Recreating transport from Redis session for SSE listener', {
+            sessionId: session.id?.slice(0, 20),
+            createdAt: storedSession.createdAt,
+          });
+          transport = await transportService.recreateTransporter(
+            'streamable-http',
+            token,
+            session.id,
+            storedSession,
+            response,
+          );
+        }
+      } catch (error) {
+        // Log and fall through to 404 logic - transport remains undefined
+        logger.warn('Failed to recreate transport from stored session for SSE listener', {
           sessionId: session.id?.slice(0, 20),
-          createdAt: storedSession.createdAt,
+          error: error instanceof Error ? error.message : String(error),
         });
-        transport = await transportService.recreateTransporter(
-          'streamable-http',
-          token,
-          session.id,
-          storedSession,
-          response,
-        );
       }
     }
 

@@ -494,14 +494,21 @@ describe('TransportService', () => {
     });
 
     it('should check Redis when not in local history', async () => {
-      mockRedisSessionStore.exists.mockResolvedValue(true);
+      // wasSessionCreatedAsync now uses getStoredSession() to verify token hash (security fix)
+      const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+      mockRedisSessionStore.get.mockResolvedValue({
+        authorizationId: tokenHash,
+        session: { id: 'redis-session', createdAt: Date.now() },
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      });
       const result = await service.wasSessionCreatedAsync('streamable-http', 'test-token', 'redis-session');
       expect(result).toBe(true);
-      expect(mockRedisSessionStore.exists).toHaveBeenCalledWith('redis-session');
+      expect(mockRedisSessionStore.get).toHaveBeenCalledWith('redis-session');
     });
 
     it('should return false when not in local history or Redis', async () => {
-      mockRedisSessionStore.exists.mockResolvedValue(false);
+      mockRedisSessionStore.get.mockResolvedValue(null);
       const result = await service.wasSessionCreatedAsync('streamable-http', 'test-token', 'nonexistent');
       expect(result).toBe(false);
     });

@@ -474,9 +474,11 @@ export class TransportService {
       return true;
     }
 
-    // Check Redis if available
+    // Check Redis if available - use getStoredSession() to verify token hash
+    // (sessionStore.exists() would leak session existence to unauthorized callers)
     if (this.sessionStore && type === 'streamable-http') {
-      return this.sessionStore.exists(sessionId);
+      const stored = await this.getStoredSession(type, token, sessionId);
+      return stored !== undefined;
     }
 
     return false;

@@ -23,6 +23,7 @@ const mockRedisInstance = {
   exists: jest.fn(),
   ping: jest.fn(),
   quit: jest.fn(),
+  pexpire: jest.fn(),
 };
 
 describe('RedisSessionStore', () => {
@@ -38,6 +39,7 @@ describe('RedisSessionStore', () => {
     mockRedisInstance.exists.mockResolvedValue(0);
     mockRedisInstance.ping.mockResolvedValue('PONG');
     mockRedisInstance.quit.mockResolvedValue('OK');
+    mockRedisInstance.pexpire.mockResolvedValue(1);
 
     store = new RedisSessionStore({
       host: 'localhost',

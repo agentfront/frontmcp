@@ -88,7 +88,10 @@ export class RedisSessionStore implements SessionStore {
       const result = storedSessionSchema.safeParse(parsed);
 
       if (!result.success) {
-        this.logger?.warn('[RedisSessionStore] Invalid session format', { sessionId: sessionId.slice(0, 20) });
+        this.logger?.warn('[RedisSessionStore] Invalid session format', {
+          sessionId: sessionId.slice(0, 20),
+          errors: result.error.issues.slice(0, 3).map((i) => ({ path: i.path, message: i.message })),
+        });
         // Delete invalid session data
         this.delete(sessionId).catch(() => void 0);
         return null;
@@ -103,6 +106,16 @@ export class RedisSessionStore implements SessionStore {
         // This prevents race conditions where another read might get the expired session
         await this.delete(sessionId);
         return null;
+      }
+
+      // Bound Redis TTL by session.expiresAt to avoid keeping expired sessions in Redis
+      // GETEX may have extended TTL beyond expiresAt, so we shorten it if needed
+      if (session.session.expiresAt) {
+        const ttlMs = Math.min(this.defaultTtlMs, session.session.expiresAt - Date.now());
+        if (ttlMs > 0 && ttlMs < this.defaultTtlMs) {
+          // Fire-and-forget - we're only optimizing cache eviction timing
+          this.redis.pexpire(key, ttlMs).catch(() => void 0);
+        }
       }
 
       // Update last accessed timestamp (in the returned object)

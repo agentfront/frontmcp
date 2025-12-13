@@ -24,7 +24,10 @@ export const mcpSessionHeaderSchema = z
       return true;
     },
     { message: 'Session ID must contain only printable ASCII characters' },
-  );
+  )
+  .refine((v) => v === v.trim(), {
+    message: 'Session ID must not have leading/trailing whitespace',
+  });
 
 /**
  * Validate mcp-session-id header using Zod schema.
