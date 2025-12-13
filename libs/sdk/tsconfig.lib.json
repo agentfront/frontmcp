@@ -5,7 +5,11 @@
     "declaration": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@frontmcp/ui": ["libs/ui/dist/src/index.d.ts"],
+      "@frontmcp/ui/*": ["libs/ui/dist/src/*/index.d.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": [
