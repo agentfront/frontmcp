@@ -7,7 +7,7 @@
 
 import { createOpenApiTool } from '../openapi.tool';
 import type { McpOpenAPITool, FrontMcpExtensionData } from 'mcp-from-openapi';
-import { spyOnConsole, createMockLogger } from './fixtures';
+import { createMockLogger } from './fixtures';
 
 // Mock mcp-from-openapi
 jest.mock('mcp-from-openapi', () => ({
@@ -65,15 +65,8 @@ function createMockTool(
 }
 
 describe('OpenapiAdapter - x-frontmcp Extension Support', () => {
-  let consoleSpy: ReturnType<typeof spyOnConsole>;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = spyOnConsole();
-  });
-
-  afterEach(() => {
-    consoleSpy.restore();
   });
 
   describe('Annotations', () => {

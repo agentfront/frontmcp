@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { basicOpenApiSpec, spyOnConsole, createMockLogger } from './fixtures';
+import { basicOpenApiSpec, createMockLogger } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({
@@ -22,15 +22,8 @@ jest.mock('mcp-from-openapi', () => ({
 }));
 
 describe('OpenapiAdapter - Loading', () => {
-  let consoleSpy: ReturnType<typeof spyOnConsole>;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    consoleSpy = spyOnConsole();
-  });
-
-  afterEach(() => {
-    consoleSpy.restore();
   });
 
   describe('Load from JSON', () => {

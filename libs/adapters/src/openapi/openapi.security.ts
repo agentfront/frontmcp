@@ -299,9 +299,7 @@ export async function resolveToolSecurity(
   // Check if this tool requires security
   // A tool requires security ONLY if a mapper has security with required=true
   // Optional security schemes (required=false or undefined) should not block requests
-  const hasSecurityScheme = tool.mapper.some((m) => m.security);
-  const hasRequiredSecurity = tool.mapper.some((m) => m.security && m.required === true);
-  const requiresSecurity = hasRequiredSecurity;
+  const requiresSecurity = tool.mapper.some((m) => m.security && m.required === true);
 
   if (requiresSecurity && !hasAuth) {
     // Extract required security scheme names for error message

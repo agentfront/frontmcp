@@ -11,8 +11,11 @@ import type {
   HTTPMethod,
   ParameterObject,
   SecurityRequirement,
-  SecuritySchemeObject,
   AuthType,
+  OperationObject,
+  OperationWithContext,
+  ToolMetadata,
+  ServerObject,
 } from './types';
 import { isReferenceObject } from './types';
 import { ParameterResolver } from './parameter-resolver';
@@ -216,8 +219,9 @@ export class OpenAPIToolGenerator {
         try {
           const tool = await this.generateTool(pathStr, method, options);
           tools.push(tool);
-        } catch (error: any) {
-          console.warn(`Failed to generate tool for ${method.toUpperCase()} ${pathStr}:`, error.message);
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.warn(`Failed to generate tool for ${method.toUpperCase()} ${pathStr}:`, errorMessage);
         }
       }
     }
@@ -295,7 +299,12 @@ export class OpenAPIToolGenerator {
   /**
    * Check if an operation should be included
    */
-  private shouldIncludeOperation(operation: any, path: string, method: string, options: GenerateOptions): boolean {
+  private shouldIncludeOperation(
+    operation: OperationObject,
+    path: string,
+    method: string,
+    options: GenerateOptions,
+  ): boolean {
     // Check deprecated
     if (operation.deprecated && !options.includeDeprecated) {
       return false;
@@ -320,7 +329,7 @@ export class OpenAPIToolGenerator {
         ...operation,
         path,
         method,
-      } as any);
+      } as OperationWithContext);
     }
 
     return true;
@@ -359,11 +368,11 @@ export class OpenAPIToolGenerator {
   private extractMetadata(
     path: string,
     method: HTTPMethod,
-    operation: any,
+    operation: OperationObject,
     document: OpenAPIDocument,
-    outputSchema?: any,
-  ): any {
-    const metadata: any = {
+    outputSchema?: unknown,
+  ): ToolMetadata {
+    const metadata: ToolMetadata = {
       path,
       method,
       operationId: operation.operationId,
@@ -375,12 +384,16 @@ export class OpenAPIToolGenerator {
 
     // Extract security requirements
     if (operation.security || document.security) {
-      metadata.security = this.extractSecurityRequirements(operation.security ?? document.security, document);
+      metadata.security = this.extractSecurityRequirements(
+        (operation.security ?? document.security) as Record<string, string[]>[],
+        document,
+      );
     }
 
     // Extract servers
-    if (operation.servers || document.servers) {
-      metadata.servers = (operation.servers ?? document.servers).map((server: any) => ({
+    const servers = (operation as { servers?: ServerObject[] }).servers ?? document.servers;
+    if (servers) {
+      metadata.servers = servers.map((server: ServerObject) => ({
         url: this.options.baseUrl || server.url,
         description: server.description,
         variables: server.variables,
@@ -390,19 +403,16 @@ export class OpenAPIToolGenerator {
     }
 
     // Extract response status codes (preserve 0 for default responses)
-    if (outputSchema && Array.isArray((outputSchema as any).oneOf)) {
-      const codes = (outputSchema as any).oneOf
-        .map((schema: any) => (schema as any)['x-status-code'])
-        .filter((code: unknown) => code !== undefined && code !== null);
+    const schemaObj = outputSchema as Record<string, unknown> | undefined;
+    if (schemaObj && Array.isArray(schemaObj['oneOf'])) {
+      const codes = (schemaObj['oneOf'] as Record<string, unknown>[])
+        .map((schema) => schema['x-status-code'])
+        .filter((code): code is number => code !== undefined && code !== null);
       if (codes.length > 0) {
         metadata.responseStatusCodes = codes;
       }
-    } else if (
-      outputSchema &&
-      (outputSchema as any)['x-status-code'] !== undefined &&
-      (outputSchema as any)['x-status-code'] !== null
-    ) {
-      metadata.responseStatusCodes = [(outputSchema as any)['x-status-code']];
+    } else if (schemaObj && schemaObj['x-status-code'] !== undefined && schemaObj['x-status-code'] !== null) {
+      metadata.responseStatusCodes = [schemaObj['x-status-code'] as number];
     }
 
     // External docs
@@ -411,8 +421,9 @@ export class OpenAPIToolGenerator {
     }
 
     // FrontMCP extension (x-frontmcp)
-    if (operation['x-frontmcp']) {
-      metadata.frontmcp = operation['x-frontmcp'];
+    const operationWithExt = operation as Record<string, unknown>;
+    if (operationWithExt['x-frontmcp']) {
+      metadata.frontmcp = operationWithExt['x-frontmcp'] as ToolMetadata['frontmcp'];
     }
 
     return metadata;

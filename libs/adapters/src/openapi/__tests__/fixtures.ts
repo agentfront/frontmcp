@@ -289,7 +289,8 @@ export const spyOnConsole = () => {
 };
 
 /**
- * Mock logger for testing
+ * Mock logger for testing - creates a fresh mock for each test
+ * Always use this factory function instead of a singleton to prevent test pollution
  */
 export const createMockLogger = () => ({
   verbose: jest.fn(),
@@ -299,5 +300,3 @@ export const createMockLogger = () => ({
   error: jest.fn(),
   child: jest.fn().mockReturnThis(),
 });
-
-export const mockLogger = createMockLogger();
