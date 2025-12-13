@@ -315,6 +315,16 @@ export interface ToolMetadata {
   operationId?: string;
 
   /**
+   * Operation summary from OpenAPI (short description)
+   */
+  operationSummary?: string;
+
+  /**
+   * Operation description from OpenAPI (detailed description)
+   */
+  operationDescription?: string;
+
+  /**
    * Tags from OpenAPI
    */
   tags?: string[];
@@ -343,6 +353,64 @@ export interface ToolMetadata {
    * External documentation
    */
   externalDocs?: ExternalDocumentationObject;
+
+  /**
+   * FrontMCP extension data from x-frontmcp in the OpenAPI operation.
+   * Contains annotations, cache config, codecall config, tags, etc.
+   */
+  frontmcp?: FrontMcpExtensionData;
+}
+
+/**
+ * FrontMCP extension data extracted from x-frontmcp in OpenAPI operations.
+ * This provides declarative configuration for tools directly in the OpenAPI spec.
+ */
+export interface FrontMcpExtensionData {
+  /**
+   * Tool annotations for AI behavior hints.
+   */
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+
+  /**
+   * Cache configuration for response caching.
+   */
+  cache?: {
+    ttl?: number;
+    slideWindow?: boolean;
+  };
+
+  /**
+   * CodeCall-specific configuration.
+   */
+  codecall?: {
+    enabledInCodeCall?: boolean;
+    visibleInListTools?: boolean;
+  };
+
+  /**
+   * Tags/labels for categorization.
+   */
+  tags?: string[];
+
+  /**
+   * If true, hide tool from discovery.
+   */
+  hideFromDiscovery?: boolean;
+
+  /**
+   * Usage examples.
+   */
+  examples?: Array<{
+    description: string;
+    input: Record<string, unknown>;
+    output?: unknown;
+  }>;
 }
 
 /**

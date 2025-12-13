@@ -182,7 +182,7 @@ describe('OpenapiAdapter - Utilities', () => {
 
       expect(() => {
         buildRequest(tool, input, security, 'https://api.example.com');
-      }).toThrow(/Required parameter.*id.*is missing/);
+      }).toThrow(/Required.*parameter.*'id'.*is missing/);
     });
 
     it('should throw error if path parameters are unresolved', () => {
@@ -300,32 +300,31 @@ describe('OpenapiAdapter - Utilities', () => {
         text: () => Promise.resolve('not valid json{'),
       } as Response;
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-
+      // Invalid JSON should be returned as text without logging to console
       const result = await parseResponse(response);
 
       expect(result).toEqual({ data: 'not valid json{' });
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to parse JSON'), expect.any(Error));
-
-      consoleSpy.mockRestore();
     });
 
     it('should throw error for HTTP errors', async () => {
       const response = await mockFetchError(404, 'Not Found');
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed.*404.*Not Found/);
+      // Note: statusText is NOT included in error message for security (could leak sensitive info)
+      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 404/);
     });
 
     it('should throw error for 401 Unauthorized', async () => {
       const response = await mockFetchError(401, 'Unauthorized');
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed.*401.*Unauthorized/);
+      // Note: statusText is NOT included in error message for security (could leak sensitive info)
+      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 401/);
     });
 
     it('should throw error for 500 Internal Server Error', async () => {
       const response = await mockFetchError(500, 'Internal Server Error');
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed.*500.*Internal Server Error/);
+      // Note: statusText is NOT included in error message for security (could leak sensitive info)
+      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 500/);
     });
   });
 });

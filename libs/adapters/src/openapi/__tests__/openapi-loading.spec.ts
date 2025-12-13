@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { basicOpenApiSpec, spyOnConsole } from './fixtures';
+import { basicOpenApiSpec, spyOnConsole, createMockLogger } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({
@@ -46,6 +46,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -56,7 +57,7 @@ describe('OpenapiAdapter - Loading', () => {
           baseUrl: 'https://api.example.com',
           validate: true,
           dereference: true,
-        })
+        }),
       );
       expect(OpenAPIToolGenerator.fromURL).not.toHaveBeenCalled();
     });
@@ -88,14 +89,12 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: complexSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
 
-      expect(OpenAPIToolGenerator.fromJSON).toHaveBeenCalledWith(
-        complexSpec,
-        expect.any(Object)
-      );
+      expect(OpenAPIToolGenerator.fromJSON).toHaveBeenCalledWith(complexSpec, expect.any(Object));
     });
   });
 
@@ -112,6 +111,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         url: 'https://api.example.com/openapi.json',
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -122,7 +122,7 @@ describe('OpenapiAdapter - Loading', () => {
           baseUrl: 'https://api.example.com',
           validate: true,
           dereference: true,
-        })
+        }),
       );
       expect(OpenAPIToolGenerator.fromJSON).not.toHaveBeenCalled();
     });
@@ -139,9 +139,10 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         url: 'https://api.example.com/openapi.json',
+        logger: createMockLogger(),
         loadOptions: {
           headers: {
-            'Authorization': 'Bearer spec-token',
+            Authorization: 'Bearer spec-token',
           },
           timeout: 60000,
           followRedirects: false,
@@ -154,25 +155,24 @@ describe('OpenapiAdapter - Loading', () => {
         'https://api.example.com/openapi.json',
         expect.objectContaining({
           headers: {
-            'Authorization': 'Bearer spec-token',
+            Authorization: 'Bearer spec-token',
           },
           timeout: 60000,
           followRedirects: false,
-        })
+        }),
       );
     });
 
     it('should handle URL loading errors', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
-      OpenAPIToolGenerator.fromURL.mockRejectedValue(
-        new Error('Failed to fetch OpenAPI spec')
-      );
+      OpenAPIToolGenerator.fromURL.mockRejectedValue(new Error('Failed to fetch OpenAPI spec'));
 
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         url: 'https://api.example.com/openapi.json',
+        logger: createMockLogger(),
       });
 
       await expect(adapter.fetch()).rejects.toThrow('Failed to fetch OpenAPI spec');
@@ -192,6 +192,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -200,7 +201,7 @@ describe('OpenapiAdapter - Loading', () => {
         basicOpenApiSpec,
         expect.objectContaining({
           validate: true,
-        })
+        }),
       );
     });
 
@@ -216,6 +217,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         loadOptions: {
           validate: false,
         },
@@ -227,7 +229,7 @@ describe('OpenapiAdapter - Loading', () => {
         basicOpenApiSpec,
         expect.objectContaining({
           validate: false,
-        })
+        }),
       );
     });
   });
@@ -245,6 +247,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -253,7 +256,7 @@ describe('OpenapiAdapter - Loading', () => {
         basicOpenApiSpec,
         expect.objectContaining({
           dereference: true,
-        })
+        }),
       );
     });
 
@@ -269,6 +272,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         loadOptions: {
           dereference: false,
         },
@@ -280,7 +284,7 @@ describe('OpenapiAdapter - Loading', () => {
         basicOpenApiSpec,
         expect.objectContaining({
           dereference: false,
-        })
+        }),
       );
     });
   });
@@ -298,6 +302,7 @@ describe('OpenapiAdapter - Loading', () => {
         name: 'test-api',
         baseUrl: 'https://custom.example.com/v2',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -306,7 +311,7 @@ describe('OpenapiAdapter - Loading', () => {
         basicOpenApiSpec,
         expect.objectContaining({
           baseUrl: 'https://custom.example.com/v2',
-        })
+        }),
       );
     });
   });

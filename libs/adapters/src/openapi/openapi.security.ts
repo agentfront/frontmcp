@@ -1,9 +1,4 @@
-import {
-  SecurityResolver,
-  createSecurityContext,
-  type McpOpenAPITool,
-  type SecurityContext,
-} from 'mcp-from-openapi';
+import { SecurityResolver, createSecurityContext, type McpOpenAPITool, type SecurityContext } from 'mcp-from-openapi';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { OpenApiAdapterOptions } from './openapi.types';
 
@@ -39,7 +34,7 @@ export interface SecurityValidationResult {
 export async function createSecurityContextFromAuth(
   tool: McpOpenAPITool,
   authInfo: AuthInfo,
-  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>
+  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>,
 ): Promise<SecurityContext> {
   // 1. Use custom security resolver if provided (highest priority)
   if (options.securityResolver) {
@@ -59,21 +54,77 @@ export async function createSecurityContextFromAuth(
     }
 
     // Map each security scheme to its auth provider
+    // Process all schemes - first matching token is used for jwt
     for (const scheme of securitySchemes) {
       const authExtractor = options.authProviderMapper[scheme];
       if (authExtractor) {
-        const token = authExtractor(authInfo);
-        if (token) {
-          // Store in jwt field for http bearer auth
-          // For other auth types, you can extend this logic
-          context.jwt = token;
-          break; // Use first matching provider
+        try {
+          const token = authExtractor(authInfo);
+
+          // Validate return type - must be string or undefined/null
+          if (token !== undefined && token !== null && typeof token !== 'string') {
+            throw new Error(
+              `authProviderMapper['${scheme}'] must return a string or undefined, ` + `but returned: ${typeof token}`,
+            );
+          }
+
+          // Reject empty string tokens explicitly - indicates misconfiguration
+          if (token === '') {
+            throw new Error(
+              `authProviderMapper['${scheme}'] returned empty string. ` +
+                `Return undefined/null if no token is available, or provide a valid token.`,
+            );
+          }
+
+          if (token) {
+            // Route token to correct context field based on scheme type
+            // Look up the scheme info from the mapper to determine type
+            const schemeMapper = tool.mapper.find((m) => m.security?.scheme === scheme);
+            const schemeType = schemeMapper?.security?.type?.toLowerCase();
+            const httpScheme = schemeMapper?.security?.httpScheme?.toLowerCase();
+
+            // Route based on security scheme type (first token for each type wins)
+            if (schemeType === 'apikey') {
+              if (!context.apiKey) {
+                context.apiKey = token;
+              }
+            } else if (schemeType === 'http' && httpScheme === 'basic') {
+              if (!context.basic) {
+                context.basic = token;
+              }
+            } else if (schemeType === 'oauth2') {
+              if (!context.oauth2Token) {
+                context.oauth2Token = token;
+              }
+            } else {
+              // Default to jwt for http bearer and unknown types
+              if (!context.jwt) {
+                context.jwt = token;
+              }
+            }
+            // Continue checking other schemes - don't break
+            // This allows validation to see all configured providers
+          }
+        } catch (err) {
+          // Re-throw validation errors as-is
+          if (err instanceof Error && err.message.includes('authProviderMapper')) {
+            throw err;
+          }
+          // Wrap other errors with context
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          throw new Error(`authProviderMapper['${scheme}'] threw an error: ${errorMessage}`);
         }
       }
     }
 
-    // If no provider matched but we have a default token, use it
-    if (!context.jwt && authInfo.token) {
+    // If no auth was set from providers, fall back to authInfo.token
+    // Only fall back if ALL auth fields are empty (not just jwt)
+    const hasAnyAuth = context.jwt || context.apiKey || context.basic || context.oauth2Token;
+    if (!hasAnyAuth && authInfo.token) {
+      // Validate type before assignment to prevent non-string values
+      if (typeof authInfo.token !== 'string') {
+        throw new Error(`authInfo.token must be a string, but got: ${typeof authInfo.token}`);
+      }
       context.jwt = authInfo.token;
     }
 
@@ -122,8 +173,8 @@ export function validateSecurityConfiguration(
   tools: McpOpenAPITool[],
   options: Pick<
     OpenApiAdapterOptions,
-    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'generateOptions'
-  >
+    'securityResolver' | 'authProviderMapper' | 'staticAuth' | 'generateOptions' | 'securitySchemesInInput'
+  >,
 ): SecurityValidationResult {
   const result: SecurityValidationResult = {
     valid: true,
@@ -141,7 +192,7 @@ export function validateSecurityConfiguration(
   if (includeSecurityInInput) {
     result.securityRiskScore = 'high';
     result.warnings.push(
-      'SECURITY WARNING: includeSecurityInInput is enabled. Users will provide authentication directly in tool inputs. This increases security risk as credentials may be logged or exposed.'
+      'SECURITY WARNING: includeSecurityInInput is enabled. Users will provide authentication directly in tool inputs. This increases security risk as credentials may be logged or exposed.',
     );
     // Don't validate mappings if security is in input
     return result;
@@ -151,7 +202,7 @@ export function validateSecurityConfiguration(
   if (options.securityResolver) {
     result.securityRiskScore = 'low';
     result.warnings.push(
-      'INFO: Using custom securityResolver. Ensure your resolver properly validates and secures credentials from context.'
+      'INFO: Using custom securityResolver. Ensure your resolver properly validates and secures credentials from context.',
     );
     return result;
   }
@@ -160,19 +211,34 @@ export function validateSecurityConfiguration(
   if (options.staticAuth && Object.keys(options.staticAuth).length > 0) {
     result.securityRiskScore = 'medium';
     result.warnings.push(
-      'SECURITY INFO: Using staticAuth with hardcoded credentials. Ensure credentials are stored securely (environment variables, secrets manager).'
+      'SECURITY INFO: Using staticAuth with hardcoded credentials. Ensure credentials are stored securely (environment variables, secrets manager).',
     );
     // If static auth is provided, assume it covers all schemes
     return result;
   }
 
-  // Check authProviderMapper (low risk - context-based auth)
-  if (options.authProviderMapper) {
-    result.securityRiskScore = 'low';
+  // Get schemes that will be provided via input (don't need mapping)
+  const schemesInInput = new Set(options.securitySchemesInInput || []);
 
-    // Validate that all schemes have mappings
+  // Check authProviderMapper (low risk - context-based auth)
+  if (options.authProviderMapper || schemesInInput.size > 0) {
+    result.securityRiskScore = schemesInInput.size > 0 ? 'medium' : 'low';
+
+    // Log info about per-scheme control
+    if (schemesInInput.size > 0) {
+      result.warnings.push(
+        `INFO: Per-scheme security control enabled. Schemes in input: ${Array.from(schemesInInput).join(', ')}`,
+      );
+    }
+
+    // Validate that all schemes have mappings (except those in input)
     for (const scheme of securitySchemes) {
-      if (!options.authProviderMapper[scheme]) {
+      // Skip schemes that will be provided via input
+      if (schemesInInput.has(scheme)) {
+        continue;
+      }
+      // Check if there's a mapping for this scheme
+      if (!options.authProviderMapper?.[scheme]) {
         result.valid = false;
         result.missingMappings.push(scheme);
       }
@@ -180,7 +246,7 @@ export function validateSecurityConfiguration(
 
     if (!result.valid) {
       result.warnings.push(
-        `ERROR: Missing auth provider mappings for security schemes: ${result.missingMappings.join(', ')}`
+        `ERROR: Missing auth provider mappings for security schemes: ${result.missingMappings.join(', ')}`,
       );
     }
 
@@ -192,10 +258,12 @@ export function validateSecurityConfiguration(
   if (securitySchemes.size > 0) {
     result.securityRiskScore = 'medium';
     result.warnings.push(
-      `INFO: No auth configuration provided. Using default ctx.authInfo.token for all security schemes: ${Array.from(securitySchemes).join(', ')}`
+      `INFO: No auth configuration provided. Using default ctx.authInfo.token for all security schemes: ${Array.from(
+        securitySchemes,
+      ).join(', ')}`,
     );
     result.warnings.push(
-      'RECOMMENDATION: For multiple auth providers, use authProviderMapper or securityResolver to map each security scheme to the correct auth provider.'
+      'RECOMMENDATION: For multiple auth providers, use authProviderMapper or securityResolver to map each security scheme to the correct auth provider.',
     );
   }
 
@@ -214,7 +282,7 @@ export function validateSecurityConfiguration(
 export async function resolveToolSecurity(
   tool: McpOpenAPITool,
   authInfo: AuthInfo,
-  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>
+  options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>,
 ) {
   const securityResolver = new SecurityResolver();
   const securityContext = await createSecurityContextFromAuth(tool, authInfo, options);
@@ -229,23 +297,29 @@ export async function resolveToolSecurity(
     (securityContext.customHeaders && Object.keys(securityContext.customHeaders).length > 0);
 
   // Check if this tool requires security
-  const requiresSecurity = tool.mapper.some((m) => m.security && m.required);
+  // A tool requires security ONLY if a mapper has security with required=true
+  // Optional security schemes (required=false or undefined) should not block requests
+  const hasSecurityScheme = tool.mapper.some((m) => m.security);
+  const hasRequiredSecurity = tool.mapper.some((m) => m.security && m.required === true);
+  const requiresSecurity = hasRequiredSecurity;
 
   if (requiresSecurity && !hasAuth) {
-    // Extract security scheme names
-    const schemes = tool.mapper
-      .filter((m) => m.security && m.required)
-      .map((m) => m.security?.scheme ?? 'unknown')
-      .join(', ');
+    // Extract required security scheme names for error message
+    const requiredSchemes = tool.mapper
+      .filter((m) => m.security && m.required === true)
+      .map((m) => m.security?.scheme ?? 'unknown');
+    const uniqueSchemes = [...new Set(requiredSchemes)];
+    const schemesStr = uniqueSchemes.join(', ') || 'unknown';
+    const firstScheme = uniqueSchemes[0] || 'BearerAuth';
 
     throw new Error(
       `Authentication required for tool '${tool.name}' but no auth configuration found.\n` +
-        `Required security schemes: ${schemes}\n` +
+        `Required security schemes: ${schemesStr}\n` +
         `Solutions:\n` +
-        `  1. Add authProviderMapper: { '${schemes.split(',')[0].trim()}': (authInfo) => authInfo.user?.token }\n` +
+        `  1. Add authProviderMapper: { '${firstScheme}': (authInfo) => authInfo.user?.token }\n` +
         `  2. Add securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })\n` +
         `  3. Add staticAuth: { jwt: process.env.API_TOKEN }\n` +
-        `  4. Set generateOptions.includeSecurityInInput: true (not recommended for production)`
+        `  4. Set generateOptions.includeSecurityInInput: true (not recommended for production)`,
     );
   }
 

@@ -79,8 +79,8 @@ export default class MyApiApp {}
   Base URL for API requests (e.g., `https://api.example.com/v1`).
 </ParamField>
 
-<ParamField path="spec" type="OpenAPIV3.Document">
-  In-memory OpenAPI specification object. Use either `spec` or `url`, not both.
+<ParamField path="spec" type="OpenAPIV3.Document | OpenAPIV3_1.Document | object">
+  In-memory OpenAPI specification object. Accepts typed documents or plain objects from JSON imports. Use either `spec` or `url`, not both.
 </ParamField>
 
 <ParamField path="url" type="string">
@@ -109,6 +109,22 @@ export default class MyApiApp {}
 
 <ParamField path="generateOptions" type="GenerateOptions">
   Options for tool generation. See [Advanced Features](#advanced-features) for details.
+</ParamField>
+
+<ParamField path="inputTransforms" type="InputTransformOptions">
+  Hide inputs from the schema and inject values at request time. Supports global, per-tool, and generator-based transforms. See [Input Schema Transforms](#input-schema-transforms).
+</ParamField>
+
+<ParamField path="toolTransforms" type="ToolTransformOptions">
+  Customize generated tools with annotations, tags, descriptions, and more. Supports global, per-tool, and generator-based transforms. See [Tool Transforms](#tool-transforms).
+</ParamField>
+
+<ParamField path="descriptionMode" type="'summaryOnly' | 'descriptionOnly' | 'combined' | 'full'">
+  How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
+</ParamField>
+
+<ParamField path="logger" type="FrontMcpLogger" required>
+  Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger. For standalone usage, you must provide a logger implementing the `FrontMcpLogger` interface.
 </ParamField>
 
 ## Authentication
@@ -344,6 +360,206 @@ OpenapiAdapter.init({
 });
 ```
 
+### Input Schema Transforms
+
+Hide inputs from AI/users and inject values server-side at request time. This is more powerful than `inputSchemaMapper` as it provides access to the authentication context.
+
+<CodeGroup>
+
+```ts Global transforms
+OpenapiAdapter.init({
+  name: 'tenant-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    global: [
+      // Hide tenant header from AI, inject from user context
+      { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+      // Add correlation ID to all requests
+      { inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() },
+    ],
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'audit-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    perTool: {
+      'createAuditLog': [
+        { inputKey: 'userId', inject: (ctx) => ctx.authInfo.user?.id },
+        { inputKey: 'timestamp', inject: () => new Date().toISOString() },
+      ],
+    },
+  },
+});
+```
+
+```ts Dynamic generator
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    generator: (tool) => {
+      // Add request ID to all mutating operations
+      if (['post', 'put', 'patch', 'delete'].includes(tool.metadata.method)) {
+        return [{ inputKey: 'X-Request-Id', inject: () => crypto.randomUUID() }];
+      }
+      return [];
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+<Check>
+  **Security Benefit:** Sensitive inputs like tenant IDs and user IDs are injected server-side, never exposed to MCP clients.
+</Check>
+
+### Tool Transforms
+
+Customize generated tools with annotations, tags, descriptions, and more.
+
+<CodeGroup>
+
+```ts Global transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    global: {
+      annotations: { openWorldHint: true },
+    },
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    perTool: {
+      'createUser': {
+        annotations: { destructiveHint: false },
+        tags: ['user-management'],
+      },
+      'deleteUser': {
+        annotations: { destructiveHint: true },
+        tags: ['user-management', 'dangerous'],
+      },
+    },
+  },
+});
+```
+
+```ts Dynamic generator
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    generator: (tool) => {
+      // Auto-annotate based on HTTP method
+      if (tool.metadata.method === 'get') {
+        return { annotations: { readOnlyHint: true, destructiveHint: false } };
+      }
+      if (tool.metadata.method === 'delete') {
+        return { annotations: { destructiveHint: true } };
+      }
+      return undefined;
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+**Available transform properties:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string \| function` | Override or transform the tool name |
+| `description` | `string \| function` | Override or transform the tool description |
+| `annotations` | `ToolAnnotations` | MCP tool behavior hints |
+| `tags` | `string[]` | Categorization tags |
+| `examples` | `ToolExample[]` | Usage examples |
+| `hideFromDiscovery` | `boolean` | Hide tool from listing |
+| `ui` | `ToolUIConfig` | UI configuration for tool forms |
+
+### x-frontmcp OpenAPI Extension
+
+Configure tool behavior directly in your OpenAPI spec using the `x-frontmcp` extension:
+
+```yaml openapi.yaml
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      x-frontmcp:
+        annotations:
+          readOnlyHint: true
+          idempotentHint: true
+        cache:
+          ttl: 300
+        tags:
+          - users
+          - public-api
+    delete:
+      operationId: deleteUser
+      summary: Delete a user
+      x-frontmcp:
+        annotations:
+          destructiveHint: true
+        tags:
+          - users
+          - dangerous
+```
+
+**Extension properties:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `annotations` | `object` | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
+| `cache` | `object` | Cache config: `ttl` (seconds), `slideWindow` (boolean) |
+| `codecall` | `object` | CodeCall config: `enabledInCodeCall`, `visibleInListTools` |
+| `tags` | `string[]` | Categorization tags |
+| `hideFromDiscovery` | `boolean` | Hide from tool listing |
+| `examples` | `array` | Usage examples with input/output |
+
+<Tip>
+  Use `x-frontmcp` in your OpenAPI spec for declarative configuration.
+  Use `toolTransforms` in adapter config to override spec values.
+</Tip>
+
+### Description Mode
+
+Control how tool descriptions are generated from OpenAPI operations:
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  descriptionMode: 'combined', // Default: 'summaryOnly'
+});
+```
+
+| Mode | Description |
+|------|-------------|
+| `'summaryOnly'` | Use only the OpenAPI summary (default) |
+| `'descriptionOnly'` | Use only the OpenAPI description |
+| `'combined'` | Summary followed by description |
+| `'full'` | Summary, description, and operation details |
+
 ### Load Options
 
 Configure how the OpenAPI spec is loaded.
@@ -513,6 +729,24 @@ The adapter automatically validates your security configuration and assigns a ri
 | **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
 | **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
 | **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
+
+## Built-in Security Protections
+
+Beyond authentication, the adapter includes defense-in-depth protections:
+
+| Protection | Description |
+|------------|-------------|
+| **SSRF Prevention** | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
+| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values |
+| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms |
+| **Request Size Limits** | Content-Length validation with integer overflow protection |
+| **Query Param Collision** | Detects conflicts between security and user input parameters |
+
+**Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
+
+<Tip>
+  These protections are automatic—no configuration required. See the [README](https://github.com/agentfront/frontmcp/tree/main/libs/adapters/src/openapi#security-protections) for implementation details.
+</Tip>
 
 ## Troubleshooting
 

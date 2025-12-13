@@ -336,6 +336,20 @@ OpenapiAdapter.init({
 
 You know **immediately** if your security config is wrong. No silent failures in production.
 
+### 4. Defense-in-depth security protections
+
+Beyond authentication, FrontMCP protects against common attack vectors:
+
+| Protection | What it prevents |
+|------------|------------------|
+| **SSRF Prevention** | Blocks dangerous protocols (`file://`, `javascript:`, `data:`) in server URLs |
+| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`) that could inject headers |
+| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`) in input transforms |
+| **Integer Overflow** | Content-Length validated with `isFinite()` to prevent size bypass |
+| **Query Param Collision** | Detects conflicts between security and user input parameters |
+
+These protections are automatic—you don't need to configure anything. See [`openapi.executor.ts`](https://github.com/agentfront/frontmcp/blob/main/libs/adapters/src/openapi/openapi.executor.ts) for implementation details.
+
 ### 5. Runs on YOUR infrastructure
 
 ```ts
@@ -492,7 +506,7 @@ console.log(`Warnings: ${validation.warnings.join('\n')}`);
 
 ## The comprehensive test suite
 
-We take security seriously. FrontMCP's OpenAPI adapter has **70 comprehensive tests** covering:
+We take security seriously. FrontMCP's OpenAPI adapter has **193 comprehensive tests** covering:
 
 - ✅ All authentication strategies
 - ✅ Request isolation
@@ -500,14 +514,15 @@ We take security seriously. FrontMCP's OpenAPI adapter has **70 comprehensive te
 - ✅ Security validation
 - ✅ Missing mappings detection
 - ✅ Headers and body mapping
+- ✅ Defense-in-depth protections (SSRF, header injection, prototype pollution)
 - ✅ Error handling
 - ✅ Edge cases
 
 ```bash
 npm test
 
-# Test Suites: 6 passed, 6 total
-# Tests:       70 passed, 70 total
+# Test Suites: 7 passed, 7 total
+# Tests:       193 passed, 193 total
 ```
 
 Every security feature is tested. Every edge case is covered.

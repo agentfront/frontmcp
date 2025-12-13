@@ -135,15 +135,25 @@ const resolved = resolver.resolve(tool.mapper, {
     }
 
     return undefined; // Fall back to standard resolution
-  }
+  },
 });
 ```
 
 ## Supported Authentication Types
 
+**Auth Type Routing:** Tokens are automatically routed to the correct context field based on the security scheme type:
+
+| Scheme Type    | Context Field |
+| -------------- | ------------- |
+| `http: bearer` | `jwt`         |
+| `apiKey`       | `apiKey`      |
+| `http: basic`  | `basic`       |
+| `oauth2`       | `oauth2Token` |
+
 ### 1. Bearer Tokens (JWT)
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   BearerAuth:
@@ -153,9 +163,10 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 resolver.resolve(tool.mapper, {
-  jwt: 'eyJhbGciOiJIUzI1NiIs...'
+  jwt: 'eyJhbGciOiJIUzI1NiIs...',
 });
 // → Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
@@ -163,6 +174,7 @@ resolver.resolve(tool.mapper, {
 ### 2. Basic Authentication
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   BasicAuth:
@@ -171,9 +183,10 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 resolver.resolve(tool.mapper, {
-  basic: btoa('username:password')  // base64 encoded
+  basic: btoa('username:password'), // base64 encoded
 });
 // → Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=
 ```
@@ -181,6 +194,7 @@ resolver.resolve(tool.mapper, {
 ### 3. API Key in Header
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   ApiKeyAuth:
@@ -190,9 +204,10 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 resolver.resolve(tool.mapper, {
-  apiKey: 'sk-1234567890'
+  apiKey: 'sk-1234567890',
 });
 // → X-API-Key: sk-1234567890
 ```
@@ -200,6 +215,7 @@ resolver.resolve(tool.mapper, {
 ### 4. API Key in Query
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   ApiKeyAuth:
@@ -209,9 +225,10 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolved = resolver.resolve(tool.mapper, {
-  apiKey: 'sk-1234567890'
+  apiKey: 'sk-1234567890',
 });
 // Add to URL: ?api_key=sk-1234567890
 const url = `${baseUrl}?${new URLSearchParams(resolved.query)}`;
@@ -220,6 +237,7 @@ const url = `${baseUrl}?${new URLSearchParams(resolved.query)}`;
 ### 5. OAuth2 / OpenID Connect
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   OAuth2:
@@ -234,9 +252,10 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 resolver.resolve(tool.mapper, {
-  oauth2Token: 'ya29.a0AfH6SMBx...'
+  oauth2Token: 'ya29.a0AfH6SMBx...',
 });
 // → Authorization: Bearer ya29.a0AfH6SMBx...
 ```
@@ -283,8 +302,8 @@ const tools = await generator.generateTools({
 // Security is in BOTH mapper AND inputSchema
 // Caller must provide auth explicitly
 await executeTool({
-  BearerAuth: 'my-token',  // ← Explicit parameter
-  userId: 123
+  BearerAuth: 'my-token', // ← Explicit parameter
+  userId: 123,
 });
 ```
 
@@ -330,7 +349,7 @@ const params = processParameters(tool.mapper, input);
 
 // Combine for final request
 fetch(url, {
-  headers: { ...security.headers, ...params.headers }
+  headers: { ...security.headers, ...params.headers },
 });
 ```
 
@@ -369,7 +388,7 @@ async function executeOpenAPITool(tool, input, context) {
   if (missing.length > 0) {
     throw new Error(
       `Missing authentication for ${tool.name}: ${missing.join(', ')}\n` +
-      `Please provide credentials via context or environment variables.`
+        `Please provide credentials via context or environment variables.`,
     );
   }
 
@@ -410,6 +429,7 @@ async function executeOpenAPITool(tool, input, context) {
 Resolves security parameters from mappers using the provided context.
 
 **Parameters:**
+
 - `mappers: ParameterMapper[]` - Parameter mappers from tool definition
 - `context: SecurityContext` - Security context with auth values
 
@@ -427,13 +447,15 @@ Checks which security requirements are missing from the context.
 
 ```typescript
 interface SecurityContext {
-  jwt?: string;
-  basic?: string;
-  apiKey?: string;
-  oauth2Token?: string;
+  jwt?: string; // Used for http:bearer schemes
+  basic?: string; // Used for http:basic schemes
+  apiKey?: string; // Used for apiKey schemes
+  oauth2Token?: string; // Used for oauth2 schemes
   customResolver?: (security: SecurityParameterInfo) => string | undefined;
 }
 ```
+
+**Note:** When using `authProviderMapper`, tokens are automatically routed to the correct field based on the security scheme type. See [Auth Type Routing](#supported-authentication-types) for details.
 
 #### `ResolvedSecurity`
 
@@ -467,9 +489,10 @@ interface SecurityParameterInfo {
 **Problem:** SecurityResolver reports missing auth.
 
 **Solution:** Check that you're providing the correct auth type:
+
 ```typescript
 // Check what auth is required
-tool.mapper.forEach(m => {
+tool.mapper.forEach((m) => {
   if (m.security) {
     console.log('Required:', m.security.type, m.security.httpScheme || m.security.scheme);
   }
@@ -481,6 +504,7 @@ tool.mapper.forEach(m => {
 **Problem:** Requests don't include authentication headers.
 
 **Solution:** Make sure you're using the resolved security:
+
 ```typescript
 const security = resolver.resolve(tool.mapper, context);
 // Must use security.headers in the request!
@@ -492,11 +516,12 @@ fetch(url, { headers: security.headers });
 **Problem:** Your API uses a non-standard auth method.
 
 **Solution:** Use a custom resolver:
+
 ```typescript
 const security = resolver.resolve(tool.mapper, {
   customResolver: (sec) => {
     return myCustomAuthLogic(sec);
-  }
+  },
 });
 ```
 
@@ -505,6 +530,7 @@ const security = resolver.resolve(tool.mapper, {
 ### 6. Digest Authentication
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   DigestAuth:
@@ -513,6 +539,7 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolved = await resolver.resolve(tool.mapper, {
   digest: {
@@ -521,8 +548,8 @@ const resolved = await resolver.resolve(tool.mapper, {
     realm: 'api@example.com',
     nonce: '...',
     uri: '/api/resource',
-    response: '...' // computed digest response
-  }
+    response: '...', // computed digest response
+  },
 });
 // → Authorization: Digest username="user", realm="api@example.com", nonce="...", ...
 ```
@@ -530,6 +557,7 @@ const resolved = await resolver.resolve(tool.mapper, {
 ### 7. Client Certificate Authentication (mTLS)
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   MutualTLS:
@@ -538,14 +566,15 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolved = await resolver.resolve(tool.mapper, {
   clientCertificate: {
     cert: fs.readFileSync('client-cert.pem', 'utf8'),
     key: fs.readFileSync('client-key.pem', 'utf8'),
     passphrase: 'optional-passphrase',
-    ca: fs.readFileSync('ca-cert.pem', 'utf8')
-  }
+    ca: fs.readFileSync('ca-cert.pem', 'utf8'),
+  },
 });
 
 // Use in fetch with certificate
@@ -554,7 +583,7 @@ fetch(url, {
   // In Node.js with https module:
   cert: resolved.clientCertificate.cert,
   key: resolved.clientCertificate.key,
-  ca: resolved.clientCertificate.ca
+  ca: resolved.clientCertificate.ca,
 });
 ```
 
@@ -563,6 +592,7 @@ fetch(url, {
 Some APIs require multiple keys for different purposes:
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   APIKey:
@@ -576,12 +606,13 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolved = await resolver.resolve(tool.mapper, {
   apiKeys: {
     'X-API-Key': 'sk-1234567890',
-    'X-Client-ID': 'client-abc123'
-  }
+    'X-Client-ID': 'client-abc123',
+  },
 });
 // → X-API-Key: sk-1234567890
 // → X-Client-ID: client-abc123
@@ -590,6 +621,7 @@ const resolved = await resolver.resolve(tool.mapper, {
 ### 9. Custom Headers (Proprietary Auth)
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   CustomAuth:
@@ -599,18 +631,20 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolved = await resolver.resolve(tool.mapper, {
   customHeaders: {
     'X-Custom-Auth': 'custom-token-format',
-    'X-Request-ID': 'uuid-123'
-  }
+    'X-Request-ID': 'uuid-123',
+  },
 });
 ```
 
 ### 10. Signature-Based Authentication (HMAC, AWS Signature V4)
 
 **OpenAPI Spec:**
+
 ```yaml
 securitySchemes:
   AWS4-HMAC-SHA256:
@@ -621,6 +655,7 @@ securitySchemes:
 ```
 
 **Usage:**
+
 ```typescript
 const resolver = new SecurityResolver();
 
@@ -630,13 +665,13 @@ const resolved = await resolver.resolve(tool.mapper, {
     accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
     secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
     region: 'us-east-1',
-    service: 's3'
+    service: 's3',
   },
   signatureGenerator: async (data, security) => {
     // Implement AWS Signature V4 or HMAC signing
     const signature = awsSign(data, awsCredentials);
     return `AWS4-HMAC-SHA256 Credential=..., SignedHeaders=..., Signature=${signature}`;
-  }
+  },
 });
 
 // 2. Check if signing is required
@@ -649,11 +684,11 @@ if (resolved.requiresSignature) {
       url: 'https://s3.amazonaws.com/bucket/key',
       headers: resolved.headers,
       body: requestBody,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     },
-    securityContext
+    securityContext,
   );
-  
+
   // 4. Use signed headers
   fetch(url, { headers: signedHeaders });
 }
@@ -669,35 +704,33 @@ const resolved = await resolver.resolve(tool.mapper, {
   signatureGenerator: async (data, security) => {
     // Create HMAC signature
     const stringToSign = `${data.method}\n${data.url}\n${data.timestamp}`;
-    const signature = crypto
-      .createHmac('sha256', hmacSecret)
-      .update(stringToSign)
-      .digest('base64');
-    
+    const signature = crypto.createHmac('sha256', hmacSecret).update(stringToSign).digest('base64');
+
     return `HMAC-SHA256 ${signature}`;
-  }
+  },
 });
 ```
 
 ### 12. Session Cookies
 
 **Usage:**
+
 ```typescript
 const resolved = await resolver.resolve(tool.mapper, {
   cookies: {
-    'session_id': 'sess_abc123',
-    'csrf_token': 'csrf_xyz789'
-  }
+    session_id: 'sess_abc123',
+    csrf_token: 'csrf_xyz789',
+  },
 });
 
 // Cookies are automatically included in resolved.cookies
 fetch(url, {
   headers: {
     ...resolved.headers,
-    'Cookie': Object.entries(resolved.cookies)
+    Cookie: Object.entries(resolved.cookies)
       .map(([k, v]) => `${k}=${v}`)
-      .join('; ')
-  }
+      .join('; '),
+  },
 });
 ```
 
@@ -712,19 +745,19 @@ const resolved = await resolver.resolve(tool.mapper, {
     if (security.scheme === 'AWS4-HMAC-SHA256') {
       return await generateAWSSignature();
     }
-    
+
     if (security.scheme === 'Custom-HMAC') {
       return await generateHMACSignature(security);
     }
-    
+
     if (security.scheme.startsWith('OAuth2-')) {
       const token = await refreshOAuth2Token(security.scopes);
       return `Bearer ${token}`;
     }
-    
+
     // Fall back to standard resolution
     return undefined;
-  }
+  },
 });
 ```
 
@@ -734,24 +767,24 @@ const resolved = await resolver.resolve(tool.mapper, {
 // FrontMCP with multiple auth types
 class FrontMCPSecurityContext {
   constructor(private context: FrontMcpContext) {}
-  
+
   async resolve(tool: McpOpenAPITool): Promise<ResolvedSecurity> {
     const resolver = new SecurityResolver();
-    
+
     return resolver.resolve(tool.mapper, {
       // Standard auth
       jwt: this.context.authInfo.jwt,
       apiKey: this.context.authInfo.apiKey,
-      
+
       // Multiple keys
       apiKeys: this.context.authInfo.apiKeys || {},
-      
+
       // Cookies
       cookies: this.context.authInfo.cookies || {},
-      
+
       // mTLS
       clientCertificate: this.context.authInfo.clientCertificate,
-      
+
       // Custom resolver for framework-specific logic
       customResolver: async (security) => {
         // Check framework-specific auth providers
@@ -761,7 +794,7 @@ class FrontMCPSecurityContext {
         }
         return undefined;
       },
-      
+
       // Signature generator
       signatureGenerator: async (data, security) => {
         const signer = this.context.signatureProviders.get(security.scheme);
@@ -769,7 +802,7 @@ class FrontMCPSecurityContext {
           return await signer.sign(data, security);
         }
         throw new Error(`No signature provider for ${security.scheme}`);
-      }
+      },
     });
   }
 }
@@ -777,19 +810,19 @@ class FrontMCPSecurityContext {
 
 ## Security Type Summary
 
-| Type | OpenAPI | Usage | Example |
-|------|---------|-------|---------|
-| Bearer Token | `http: bearer` | JWT, access tokens | `Authorization: Bearer eyJ...` |
-| Basic Auth | `http: basic` | Username:password | `Authorization: Basic dXNlcjpwYXNz` |
-| Digest Auth | `http: digest` | Challenge-response | `Authorization: Digest username="..."` |
-| API Key (Header) | `apiKey: header` | Simple keys | `X-API-Key: sk-123` |
-| API Key (Query) | `apiKey: query` | URL parameters | `?api_key=sk-123` |
-| OAuth2 | `oauth2` | OAuth 2.0 flows | `Authorization: Bearer ya29...` |
-| OpenID Connect | `openIdConnect` | OIDC tokens | `Authorization: Bearer eyJ...` |
-| mTLS | `mutualTLS` | Client certificates | TLS handshake |
-| HMAC | Custom `apiKey` | Signed requests | `Authorization: HMAC-SHA256 ...` |
-| AWS Signature V4 | Custom `apiKey` | AWS API requests | `Authorization: AWS4-HMAC-SHA256 ...` |
-| Custom Headers | `apiKey` | Proprietary | `X-Custom-Auth: value` |
-| Cookies | Context | Session management | `Cookie: session_id=...` |
+| Type             | OpenAPI          | Usage               | Example                                |
+| ---------------- | ---------------- | ------------------- | -------------------------------------- |
+| Bearer Token     | `http: bearer`   | JWT, access tokens  | `Authorization: Bearer eyJ...`         |
+| Basic Auth       | `http: basic`    | Username:password   | `Authorization: Basic dXNlcjpwYXNz`    |
+| Digest Auth      | `http: digest`   | Challenge-response  | `Authorization: Digest username="..."` |
+| API Key (Header) | `apiKey: header` | Simple keys         | `X-API-Key: sk-123`                    |
+| API Key (Query)  | `apiKey: query`  | URL parameters      | `?api_key=sk-123`                      |
+| OAuth2           | `oauth2`         | OAuth 2.0 flows     | `Authorization: Bearer ya29...`        |
+| OpenID Connect   | `openIdConnect`  | OIDC tokens         | `Authorization: Bearer eyJ...`         |
+| mTLS             | `mutualTLS`      | Client certificates | TLS handshake                          |
+| HMAC             | Custom `apiKey`  | Signed requests     | `Authorization: HMAC-SHA256 ...`       |
+| AWS Signature V4 | Custom `apiKey`  | AWS API requests    | `Authorization: AWS4-HMAC-SHA256 ...`  |
+| Custom Headers   | `apiKey`         | Proprietary         | `X-Custom-Auth: value`                 |
+| Cookies          | Context          | Session management  | `Cookie: session_id=...`               |
 
 All security types are handled automatically by the SecurityResolver based on the OpenAPI specification metadata!

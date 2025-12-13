@@ -4,6 +4,7 @@
 
 import { createOpenApiTool } from '../openapi.tool';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+import { createMockLogger } from './fixtures';
 
 // Mock mcp-from-openapi
 jest.mock('mcp-from-openapi', () => ({
@@ -49,11 +50,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
       expect(typeof tool).toBe('function');
@@ -92,11 +99,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
       expect(typeof tool).toBe('function');
@@ -134,11 +147,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -168,11 +187,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -205,11 +230,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -227,15 +258,21 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-        additionalHeaders: {
-          'X-API-Key': 'test-key',
-          'X-Client-ID': 'client-123',
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+          additionalHeaders: {
+            'X-API-Key': 'test-key',
+            'X-Client-ID': 'client-123',
+          },
         },
-      });
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -275,13 +312,19 @@ describe('OpenapiAdapter - Tool Creation', () => {
         createdBy: authInfo.user?.email,
       }));
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-        headersMapper,
-        bodyMapper,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+          headersMapper,
+          bodyMapper,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -334,11 +377,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });
@@ -356,11 +405,17 @@ describe('OpenapiAdapter - Tool Creation', () => {
         },
       };
 
-      const tool = createOpenApiTool(mockOpenApiTool, {
-        name: 'test-api',
-        baseUrl: 'https://api.example.com',
-        spec: {} as any,
-      });
+      const mockLogger = createMockLogger();
+      const tool = createOpenApiTool(
+        mockOpenApiTool,
+        {
+          name: 'test-api',
+          baseUrl: 'https://api.example.com',
+          spec: {} as any,
+          logger: mockLogger,
+        },
+        mockLogger,
+      );
 
       expect(tool).toBeDefined();
     });

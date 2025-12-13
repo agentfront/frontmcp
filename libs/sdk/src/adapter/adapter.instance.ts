@@ -1,11 +1,4 @@
-import {
-  AdapterEntry,
-  AdapterInterface,
-  AdapterKind,
-  AdapterRecord,
-  Ctor,
-  Reference,
-} from '../common';
+import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, Ctor, Reference, FrontMcpLogger } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
@@ -28,7 +21,6 @@ export class AdapterInstance extends AdapterEntry {
   }
 
   protected async initialize() {
-
     const depsTokens = [...this.deps];
     const depsInstances = await Promise.all(depsTokens.map((t) => this.globalProviders.resolveBootstrapDep(t)));
     const rec = this.record;
@@ -48,6 +40,12 @@ export class AdapterInstance extends AdapterEntry {
       adapter = rec.useValue;
     } else {
       throw Error('Invalid adapter kind');
+    }
+
+    // Inject logger if adapter supports it
+    if (typeof adapter.setLogger === 'function') {
+      const logger = this.globalProviders.get(FrontMcpLogger);
+      adapter.setLogger(logger.child(`adapter:${adapter.options.name}`));
     }
 
     const result = await adapter.fetch();
@@ -71,6 +69,5 @@ export class AdapterInstance extends AdapterEntry {
     // });
 
     await this.tools.ready;
-
   }
 }
