@@ -40,13 +40,28 @@ export class ExpressHostAdapter extends HostServerAdapter {
     };
   }
 
-  start(port: number) {
+  /**
+   * Prepares the Express app with routes but does NOT start the HTTP server.
+   * Used for serverless deployments (Vercel, AWS Lambda, etc.)
+   */
+  prepare(): void {
     this.app.use('/', this.router);
+  }
+
+  /**
+   * Returns the Express app for serverless exports.
+   * Call prepare() first to ensure routes are registered.
+   */
+  getHandler(): express.Application {
+    return this.app;
+  }
+
+  start(port: number) {
+    this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
     server.headersTimeout = 0;
     server.keepAliveTimeout = 75_000;
     server.listen(port, () => console.log(`MCP HTTP (Express) on ${port}`));
   }
-
 }

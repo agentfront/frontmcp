@@ -2,6 +2,13 @@ import 'reflect-metadata';
 import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance } from './front-mcp';
+export {
+  getServerlessHandler,
+  getServerlessHandlerAsync,
+  setServerlessHandler,
+  setServerlessHandlerPromise,
+  setServerlessHandlerError,
+} from './front-mcp/serverless-handler';
 export * from './common';
 
 // Tool change events for subscription
