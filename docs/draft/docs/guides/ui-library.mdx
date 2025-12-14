@@ -36,6 +36,28 @@ yarn add @frontmcp/ui
 
 </CodeGroup>
 
+### CommonJS and ESM builds
+
+`@frontmcp/ui@0.5.1` now publishes dual entry points so you can drop the library into plain Node scripts, Remix loaders, or Vite-powered UI bundles without shims. Node picks the CommonJS build (`dist/index.js`) when your package is marked `"type": "commonjs"`, while bundlers and native ESM grab `dist/esm/index.js`.
+
+| Runtime                     | Import style                                      | Notes                                                                                  |
+| --------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Node 22+ (CommonJS)         | `const { card } = require('@frontmcp/ui');`       | Uses the `require` condition and `dist/index.js`. Perfect for MCP servers and tests.   |
+| Native ESM / Vite / Next.js | `import { baseLayout } from '@frontmcp/ui';`      | Resolves the `import` condition to `dist/esm/index.js` with matching `.d.ts` files.    |
+| Deep module paths           | `import { card } from '@frontmcp/ui/components';` | The wildcard export map mirrors every submodule so tree-shaking bundlers keep working. |
+
+```ts CommonJS server
+const { baseLayout, consentPage } = require('@frontmcp/ui');
+```
+
+```ts Native ESM
+import { baseLayout, consentPage } from '@frontmcp/ui';
+```
+
+<Tip>Set `moduleResolution: 'node16' | 'nodenext' | 'bundler'` in your `tsconfig.json` so TypeScript follows the package export conditions automatically.</Tip>
+
+<Note>Legacy `@frontmcp/ui/esm` imports are deprecated—stick to the root package or the scoped path exports so you always receive the correct build.</Note>
+
 ## Compose a page layout
 
 Wrap content with `baseLayout`, then mix components such as `card` and `button`. Everything resolves to HTML strings you can hand to an MCP resource or auth callback.
