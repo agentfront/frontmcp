@@ -28,13 +28,20 @@ ${c('bold', 'Commands')}
   init                Create or fix a tsconfig.json suitable for FrontMCP
   doctor              Check Node/npm versions and tsconfig requirements
   inspector           Launch MCP Inspector (npx @modelcontextprotocol/inspector)
-  create <name>       Scaffold a new FrontMCP project in ./<name>
+  create [name]       Scaffold a new FrontMCP project (interactive if name omitted)
   template <type>     Scaffold a template by type (e.g., "3rd-party-integration")
   help                Show this help message
 
 ${c('bold', 'Options')}
   -o, --out-dir <dir>  Output directory (default: ./dist)
   -e, --entry <path>   Manually specify entry file path
+
+${c('bold', 'Create Options')}
+  -y, --yes            Use defaults (non-interactive mode)
+  --target <target>    Deployment target: node, vercel, lambda, cloudflare
+  --redis <setup>      Redis setup: docker, existing, none (node target only)
+  --cicd               Enable GitHub Actions CI/CD
+  --no-cicd            Disable GitHub Actions CI/CD
 
 ${c('bold', 'Test Options')}
   -i, --runInBand      Run tests sequentially (recommended for E2E)
@@ -49,7 +56,9 @@ ${c('bold', 'Examples')}
   frontmcp init
   frontmcp doctor
   frontmcp inspector
-  npx frontmcp create my-mcp
+  npx frontmcp create                          # Interactive mode
+  npx frontmcp create my-mcp --yes             # Use defaults
+  npx frontmcp create my-mcp --target vercel   # Vercel deployment
   npx frontmcp template marketplace-3rd-tools
 `);
 }
@@ -84,7 +93,12 @@ async function main(): Promise<void> {
         break;
       case 'create': {
         const projectName = parsed._[1];
-        await runCreate(projectName);
+        await runCreate(projectName, {
+          yes: parsed.yes,
+          target: parsed.target,
+          redis: parsed.redis,
+          cicd: parsed.cicd,
+        });
         break;
       }
       case 'template': {

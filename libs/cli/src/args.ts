@@ -11,6 +11,7 @@ export type Command =
   | 'test';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
+export type RedisSetupOption = 'docker' | 'existing' | 'none';
 
 export interface ParsedArgs {
   _: string[];
@@ -22,6 +23,11 @@ export interface ParsedArgs {
   verbose?: boolean;
   timeout?: number;
   adapter?: DeploymentAdapter;
+  // Create command flags
+  yes?: boolean;
+  target?: DeploymentAdapter;
+  redis?: RedisSetupOption;
+  cicd?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -38,7 +44,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--timeout' || a === '-t') {
       const parsed = parseInt(argv[++i], 10);
       out.timeout = Number.isNaN(parsed) ? undefined : parsed;
-    } else out._.push(a);
+    }
+    // Create command flags
+    else if (a === '--yes' || a === '-y') out.yes = true;
+    else if (a === '--target') out.target = argv[++i] as DeploymentAdapter;
+    else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
+    else if (a === '--cicd') out.cicd = true;
+    else if (a === '--no-cicd') out.cicd = false;
+    else out._.push(a);
   }
   return out;
 }
