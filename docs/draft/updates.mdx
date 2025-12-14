@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-14" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -16,6 +16,16 @@ mode: 'center'
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
     **Features**
+
+    ☁️ **Serverless build adapters** – Run `frontmcp build --adapter vercel|lambda|cloudflare` to emit ready-to-deploy handlers plus platform config files for Vercel, AWS Lambda, and Cloudflare Workers.
+
+    🧱 **Redis-backed transport recreation** – Keep Streamable HTTP sessions alive across restarts by enabling `auth.transport.recreation`, which persists session metadata to Redis and auto-rebuilds transports when clients reconnect.
+
+    🧰 **OpenAPI adapter transforms** – Inject context-only headers, retag tools, and pick description styles with the new `inputTransforms`, `toolTransforms`, `descriptionMode`, and `logger` options on `OpenapiAdapter`.
+
+    🛡️ **OpenAPI defense-in-depth** – SSRF, header injection, prototype pollution, and query parameter collisions are now blocked automatically while auth tokens route to the right context field.
+
+    🎨 **Dual-format UI kit** – `@frontmcp/ui` now ships both CommonJS and ESM entry points plus wildcard subpath exports so bundlers and runtimes always import the optimal build.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
@@ -59,6 +69,10 @@ mode: 'center'
 
     **Docs**
 
+    ☁️ **Serverless deployment guide** – Follow `/deployment/serverless` for Vercel, Lambda, and Cloudflare walkthroughs, generated configs, and troubleshooting tips.
+
+    📚 **OpenAPI transforms & security docs** – `/adapters/openapi-adapter` now covers `inputTransforms`, `toolTransforms`, `x-frontmcp`, description modes, logger injection, and the new security protections.
+
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
@@ -73,7 +87,7 @@ mode: 'center'
 
     🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
 
-    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
+    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles plus the Redis-backed `auth.transport.recreation` block so you know exactly when to enable streamable, stateless, stateful, or persisted sessions and SSE listeners.
 
     🎛️ **Tool UI metadata docs** – Refreshed `/docs/ui/overview` and `/docs/ui/integration/tools` with display modes, serving strategies, hydration, CSP guidance, and widget accessibility tips so templates behave predictably across platforms.
 

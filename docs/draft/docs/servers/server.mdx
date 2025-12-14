@@ -160,6 +160,51 @@ Leave `enableStatelessHttp` off in production unless you fully trust the client 
 
 You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
 
+### Transport recreation (Redis session store)
+
+Enable `auth.transport.recreation` when you need **session continuity across restarts**. Streamable HTTP sessions are persisted to Redis so that reconnecting clients keep their session IDs instead of receiving an immediate 404.
+
+```ts
+@FrontMcp({
+  auth: {
+    mode: 'orchestrated',
+    transport: {
+      recreation: {
+        enabled: true,
+        redis: {
+          host: process.env.REDIS_HOST!,
+          port: 6379,
+          keyPrefix: 'mcp:transport:',
+          tls: true,
+        },
+        defaultTtlMs: 1000 * 60 * 30, // keep sessions for 30 minutes
+      },
+    },
+  },
+});
+```
+
+| Option                                                                    | Description                                                                           | Default                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
+| `enabled`                                                                 | Persist `streamable-http` sessions to Redis and allow automatic transport recreation. | `false`                      |
+| `redis.host` / `redis.port` / `redis.password` / `redis.db` / `redis.tls` | Connection details for the dedicated session store.                                   | `6379`, `db=0`, TLS disabled |
+| `redis.keyPrefix`                                                         | Namespace for transport metadata. Use a distinct prefix from auth session data.       | `mcp:transport:`             |
+| `defaultTtlMs`                                                            | TTL for stored sessions. Expired entries force clients to re-run `initialize`.        | `3600000` (1 hour)           |
+
+How it works:
+
+1. When a streamable session is created, its metadata (session ID, protocol, hashed token) is saved to Redis.
+2. If a client reconnects after a restart, the flow checks Redis. When the token hash matches, FrontMCP rebuilds the transport and resumes streaming automatically.
+3. Session lookups fall back to `session expired` only when the Redis entry is gone or the authorization hash mismatches.
+
+<Tip>
+Redis connectivity is validated during bootstrap. If the session store is unavailable, the server logs the problem and falls back to in-memory transports so traffic continues, but clients must re-initialize after restarts.
+</Tip>
+
+<Note>
+Transport recreation currently applies to `streamable-http` sessions (and their SSE listener). Stateless and stateful HTTP requests still require a fresh initialization cycle.
+</Note>
+
 ---
 
 ## Sessions & Transport IDs
