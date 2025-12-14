@@ -1,0 +1,38 @@
+# Verdaccio configuration for E2E testing
+storage: ./storage
+auth:
+  htpasswd:
+    file: ./htpasswd
+    max_users: 1000
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: false
+
+packages:
+  # Local packages (our packages)
+  "@frontmcp/*":
+    access: $all
+    publish: $all
+    unpublish: $all
+
+  "frontmcp":
+    access: $all
+    publish: $all
+    unpublish: $all
+
+  # Proxy to npm for everything else
+  "**":
+    access: $all
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+logs:
+  - { type: stdout, format: pretty, level: warn }
