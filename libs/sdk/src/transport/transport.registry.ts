@@ -38,7 +38,7 @@ export class TransportService {
   private readonly MAX_SESSION_HISTORY = 10000;
 
   /**
-   * Redis session store for transport recreation
+   * Redis session store for transport persistence
    * Used to persist session metadata across server restarts
    */
   private sessionStore?: RedisSessionStore;
