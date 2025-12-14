@@ -43,12 +43,23 @@ yarn dev
 
 </CodeGroup>
 
+<Info>
+The `create` command is **interactive** by default. It will ask you about:
+- **Deployment target**: Node.js (Docker), Vercel, AWS Lambda, or Cloudflare Workers
+- **Redis setup**: Docker Compose, existing Redis, or none (Docker target only)
+- **GitHub Actions**: Enable CI/CD workflows
+
+Use `--yes` (or `-y`) to skip prompts and use defaults.
+</Info>
+
 The CLI creates a complete project structure with:
 
 - ✅ TypeScript configured
 - ✅ Sample server, app, and tool
 - ✅ Development scripts ready
 - ✅ Hot-reload enabled
+- ✅ Deployment configuration for your target platform
+- ✅ GitHub Actions CI/CD (optional)
 
 <Check>Your server is now running at `http://localhost:3000`!</Check>
 
@@ -89,16 +100,68 @@ The `init` command:
 
 After creating your project, you'll have:
 
-```
-my-mcp-server/
-├── src/
-│   ├── main.ts          # Server entry point
-│   ├── hello.app.ts     # App definition
-│   └── tools/
-│       └── greet.tool.ts # Sample tool
-├── package.json
-└── tsconfig.json
-```
+<Tabs>
+  <Tab title="Docker (default)">
+    ```
+    my-mcp-server/
+    ├── ci/
+    │   ├── Dockerfile
+    │   ├── docker-compose.yml
+    │   └── .env.docker
+    ├── .github/workflows/    # If CI/CD enabled
+    │   ├── ci.yml
+    │   ├── e2e.yml
+    │   └── deploy.yml
+    ├── src/
+    │   ├── main.ts
+    │   ├── hello.app.ts
+    │   └── tools/
+    │       └── greet.tool.ts
+    ├── package.json
+    └── tsconfig.json
+    ```
+  </Tab>
+  <Tab title="Vercel">
+    ```
+    my-mcp-server/
+    ├── vercel.json
+    ├── src/
+    │   ├── main.ts
+    │   ├── hello.app.ts
+    │   └── tools/
+    │       └── greet.tool.ts
+    ├── package.json
+    └── tsconfig.json
+    ```
+  </Tab>
+  <Tab title="Lambda">
+    ```
+    my-mcp-server/
+    ├── ci/
+    │   └── template.yaml    # AWS SAM template
+    ├── src/
+    │   ├── main.ts
+    │   ├── hello.app.ts
+    │   └── tools/
+    │       └── greet.tool.ts
+    ├── package.json
+    └── tsconfig.json
+    ```
+  </Tab>
+  <Tab title="Cloudflare">
+    ```
+    my-mcp-server/
+    ├── wrangler.toml
+    ├── src/
+    │   ├── main.ts
+    │   ├── hello.app.ts
+    │   └── tools/
+    │       └── greet.tool.ts
+    ├── package.json
+    └── tsconfig.json
+    ```
+  </Tab>
+</Tabs>
 
 ### Server Configuration
 
@@ -298,12 +361,22 @@ npm run doctor
 
 | Command                      | Description                      |
 | ---------------------------- | -------------------------------- |
-| `npx frontmcp create <name>` | Create a new FrontMCP project    |
+| `npx frontmcp create <name>` | Create a new FrontMCP project (interactive) |
+| `npx frontmcp create <name> --yes` | Create with defaults (non-interactive) |
 | `npx frontmcp init`          | Add FrontMCP to existing project |
 | `npm run dev`                | Start with hot-reload            |
 | `npm run build`              | Compile to production            |
 | `npm run inspect`            | Open MCP Inspector               |
 | `npm run doctor`             | Verify setup                     |
+
+### Create Command Flags
+
+| Flag | Description |
+| ---- | ----------- |
+| `--yes, -y` | Use defaults (non-interactive mode) |
+| `--target <type>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare` |
+| `--redis <setup>` | Redis setup: `docker`, `existing`, `none` |
+| `--cicd / --no-cicd` | Enable/disable GitHub Actions CI/CD |
 
 ---
 
