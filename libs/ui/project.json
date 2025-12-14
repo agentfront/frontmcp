@@ -5,19 +5,92 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
   "targets": {
-    "build-tsc": {
-      "executor": "@nx/js:tsc",
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/ui/dist",
         "main": "libs/ui/src/index.ts",
         "tsConfig": "libs/ui/tsconfig.lib.json",
-        "assets": ["libs/ui/README.md", "LICENSE"]
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/ui/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/ui/README.md", "LICENSE", "libs/ui/package.json"],
+        "additionalEntryPoints": [
+          "libs/ui/src/adapters/index.ts",
+          "libs/ui/src/base-template/index.ts",
+          "libs/ui/src/bridge/index.ts",
+          "libs/ui/src/build/index.ts",
+          "libs/ui/src/bundler/index.ts",
+          "libs/ui/src/components/index.ts",
+          "libs/ui/src/handlebars/index.ts",
+          "libs/ui/src/layouts/index.ts",
+          "libs/ui/src/pages/index.ts",
+          "libs/ui/src/react/index.ts",
+          "libs/ui/src/registry/index.ts",
+          "libs/ui/src/render/index.ts",
+          "libs/ui/src/renderers/index.ts",
+          "libs/ui/src/runtime/index.ts",
+          "libs/ui/src/styles/index.ts",
+          "libs/ui/src/theme/index.ts",
+          "libs/ui/src/tool-template/index.ts",
+          "libs/ui/src/types/index.ts",
+          "libs/ui/src/validation/index.ts",
+          "libs/ui/src/web-components/index.ts",
+          "libs/ui/src/widgets/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" }
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/ui/dist/esm",
+        "main": "libs/ui/src/index.ts",
+        "tsConfig": "libs/ui/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": true,
+        "declarationRootDir": "libs/ui/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": [
+          "libs/ui/src/adapters/index.ts",
+          "libs/ui/src/base-template/index.ts",
+          "libs/ui/src/bridge/index.ts",
+          "libs/ui/src/build/index.ts",
+          "libs/ui/src/bundler/index.ts",
+          "libs/ui/src/components/index.ts",
+          "libs/ui/src/handlebars/index.ts",
+          "libs/ui/src/layouts/index.ts",
+          "libs/ui/src/pages/index.ts",
+          "libs/ui/src/react/index.ts",
+          "libs/ui/src/registry/index.ts",
+          "libs/ui/src/render/index.ts",
+          "libs/ui/src/renderers/index.ts",
+          "libs/ui/src/runtime/index.ts",
+          "libs/ui/src/styles/index.ts",
+          "libs/ui/src/theme/index.ts",
+          "libs/ui/src/tool-template/index.ts",
+          "libs/ui/src/types/index.ts",
+          "libs/ui/src/validation/index.ts",
+          "libs/ui/src/web-components/index.ts",
+          "libs/ui/src/widgets/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" }
+        }
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-tsc"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/ui/dist/package.json"
       }
