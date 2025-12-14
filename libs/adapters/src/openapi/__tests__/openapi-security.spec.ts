@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { bearerAuthSpec, multiAuthSpec, mockAuthInfo, spyOnConsole } from './fixtures';
+import { bearerAuthSpec, multiAuthSpec, mockAuthInfo, spyOnConsole, createMockLogger } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
 // Mock the OpenAPIToolGenerator and security
@@ -75,10 +75,12 @@ describe('OpenapiAdapter - Security', () => {
       };
       OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
 
+      const mockLogger = createMockLogger();
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: multiAuthSpec,
+        logger: mockLogger,
         authProviderMapper: {
           GitHubAuth: (authInfo) => authInfo.user?.githubToken,
           SlackAuth: (authInfo) => authInfo.user?.slackToken,
@@ -88,12 +90,8 @@ describe('OpenapiAdapter - Security', () => {
       await adapter.fetch();
 
       // Should log LOW security risk
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Security Risk Score: LOW')
-      );
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Valid Configuration: YES')
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: LOW'));
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Valid Configuration: YES'));
     });
 
     it('should fail with missing auth provider mapping', async () => {
@@ -132,6 +130,7 @@ describe('OpenapiAdapter - Security', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: multiAuthSpec,
+        logger: createMockLogger(),
         authProviderMapper: {
           SlackAuth: (authInfo) => authInfo.user?.slackToken,
           // GitHubAuth is missing!
@@ -179,19 +178,19 @@ describe('OpenapiAdapter - Security', () => {
         jwt: authInfo.token,
       }));
 
+      const mockLogger = createMockLogger();
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: mockLogger,
         securityResolver: customResolver,
       });
 
       await adapter.fetch();
 
       // Should log LOW security risk (custom resolver)
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Security Risk Score: LOW')
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: LOW'));
     });
   });
 
@@ -228,10 +227,12 @@ describe('OpenapiAdapter - Security', () => {
       };
       OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
 
+      const mockLogger = createMockLogger();
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: mockLogger,
         staticAuth: {
           jwt: 'static-jwt-token',
         },
@@ -240,12 +241,8 @@ describe('OpenapiAdapter - Security', () => {
       await adapter.fetch();
 
       // Should log MEDIUM security risk (static auth)
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Security Risk Score: MEDIUM')
-      );
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Using staticAuth')
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: MEDIUM'));
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Using staticAuth'));
     });
   });
 
@@ -282,22 +279,20 @@ describe('OpenapiAdapter - Security', () => {
       };
       OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
 
+      const mockLogger = createMockLogger();
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: mockLogger,
         // No auth configuration
       });
 
       await adapter.fetch();
 
       // Should log MEDIUM security risk (default behavior)
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Security Risk Score: MEDIUM')
-      );
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('No auth configuration provided')
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: MEDIUM'));
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('No auth configuration provided'));
     });
   });
 
@@ -340,10 +335,12 @@ describe('OpenapiAdapter - Security', () => {
       };
       OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
 
+      const mockLogger = createMockLogger();
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: mockLogger,
         generateOptions: {
           includeSecurityInInput: true,
         },
@@ -352,15 +349,10 @@ describe('OpenapiAdapter - Security', () => {
       await adapter.fetch();
 
       // Should log HIGH security risk
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('Security Risk Score: HIGH')
-      );
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('SECURITY WARNING')
-      );
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('includeSecurityInInput is enabled')
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: HIGH'));
+      // SECURITY WARNING is logged via warn method
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('SECURITY WARNING'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('includeSecurityInInput is enabled'));
     });
   });
 
@@ -377,6 +369,7 @@ describe('OpenapiAdapter - Security', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: createMockLogger(),
         additionalHeaders: {
           'X-API-Key': 'test-key',
           'X-Custom-Header': 'custom-value',
@@ -410,6 +403,7 @@ describe('OpenapiAdapter - Security', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: createMockLogger(),
         headersMapper,
       });
 
@@ -437,12 +431,209 @@ describe('OpenapiAdapter - Security', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: bearerAuthSpec,
+        logger: createMockLogger(),
         bodyMapper,
       });
 
       await adapter.fetch();
 
       expect(adapter.options.bodyMapper).toBe(bodyMapper);
+    });
+  });
+
+  describe('securitySchemesInInput', () => {
+    it('should filter security schemes - keep only specified schemes in input', async () => {
+      const { OpenAPIToolGenerator } = require('mcp-from-openapi');
+
+      const mockTool: McpOpenAPITool = {
+        name: 'multiAuthTool',
+        description: 'Tool with multiple auth',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            GitHubAuth: { type: 'string' },
+            ApiKeyAuth: { type: 'string' },
+          },
+          required: ['GitHubAuth', 'ApiKeyAuth'],
+        },
+        mapper: [
+          {
+            inputKey: 'GitHubAuth',
+            type: 'header',
+            key: 'Authorization',
+            required: true,
+            security: { scheme: 'GitHubAuth', type: 'http', httpScheme: 'bearer' },
+          },
+          {
+            inputKey: 'ApiKeyAuth',
+            type: 'header',
+            key: 'X-API-Key',
+            required: true,
+            security: { scheme: 'ApiKeyAuth', type: 'apiKey', apiKeyIn: 'header', apiKeyName: 'X-API-Key' },
+          },
+        ],
+        metadata: {
+          path: '/multi-auth',
+          method: 'get',
+          servers: [{ url: 'https://api.example.com' }],
+        },
+      };
+
+      const mockGenerator = {
+        generateTools: jest.fn().mockResolvedValue([mockTool]),
+      };
+      OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
+
+      const mockLogger = createMockLogger();
+      const adapter = new OpenapiAdapter({
+        name: 'test-api',
+        baseUrl: 'https://api.example.com',
+        spec: multiAuthSpec,
+        logger: mockLogger,
+        // Only ApiKeyAuth should be in input
+        securitySchemesInInput: ['ApiKeyAuth'],
+        // GitHubAuth comes from context
+        authProviderMapper: {
+          GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+        },
+      });
+
+      const result = await adapter.fetch();
+
+      // Should have generated tool with filtered input schema
+      expect(result.tools).toHaveLength(1);
+
+      // Generator should have been called with includeSecurityInInput: true
+      expect(mockGenerator.generateTools).toHaveBeenCalledWith(
+        expect.objectContaining({
+          includeSecurityInInput: true,
+        }),
+      );
+
+      // Should log info about per-scheme control
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Per-scheme security control enabled'));
+    });
+
+    it('should validate only non-input schemes have mappings', async () => {
+      const { OpenAPIToolGenerator } = require('mcp-from-openapi');
+
+      const mockTool: McpOpenAPITool = {
+        name: 'multiAuthTool',
+        description: 'Tool with multiple auth',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            GitHubAuth: { type: 'string' },
+            SlackAuth: { type: 'string' },
+          },
+          required: ['GitHubAuth', 'SlackAuth'],
+        },
+        mapper: [
+          {
+            inputKey: 'GitHubAuth',
+            type: 'header',
+            key: 'Authorization',
+            required: true,
+            security: { scheme: 'GitHubAuth', type: 'http', httpScheme: 'bearer' },
+          },
+          {
+            inputKey: 'SlackAuth',
+            type: 'header',
+            key: 'X-Slack-Token',
+            required: true,
+            security: { scheme: 'SlackAuth', type: 'http', httpScheme: 'bearer' },
+          },
+        ],
+        metadata: {
+          path: '/multi-auth',
+          method: 'get',
+          servers: [{ url: 'https://api.example.com' }],
+        },
+      };
+
+      const mockGenerator = {
+        generateTools: jest.fn().mockResolvedValue([mockTool]),
+      };
+      OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
+
+      const mockLogger = createMockLogger();
+      const adapter = new OpenapiAdapter({
+        name: 'test-api',
+        baseUrl: 'https://api.example.com',
+        spec: multiAuthSpec,
+        logger: mockLogger,
+        // GitHubAuth in input (user provides)
+        securitySchemesInInput: ['GitHubAuth'],
+        // SlackAuth from context - but NO mapping provided -> should fail
+        // No authProviderMapper
+      });
+
+      // Should throw because SlackAuth has no mapping
+      await expect(adapter.fetch()).rejects.toThrow(/Missing auth provider mappings.*SlackAuth/);
+    });
+
+    it('should pass validation when all non-input schemes have mappings', async () => {
+      const { OpenAPIToolGenerator } = require('mcp-from-openapi');
+
+      const mockTool: McpOpenAPITool = {
+        name: 'multiAuthTool',
+        description: 'Tool with multiple auth',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            GitHubAuth: { type: 'string' },
+            SlackAuth: { type: 'string' },
+          },
+          required: ['GitHubAuth', 'SlackAuth'],
+        },
+        mapper: [
+          {
+            inputKey: 'GitHubAuth',
+            type: 'header',
+            key: 'Authorization',
+            required: true,
+            security: { scheme: 'GitHubAuth', type: 'http', httpScheme: 'bearer' },
+          },
+          {
+            inputKey: 'SlackAuth',
+            type: 'header',
+            key: 'X-Slack-Token',
+            required: true,
+            security: { scheme: 'SlackAuth', type: 'http', httpScheme: 'bearer' },
+          },
+        ],
+        metadata: {
+          path: '/multi-auth',
+          method: 'get',
+          servers: [{ url: 'https://api.example.com' }],
+        },
+      };
+
+      const mockGenerator = {
+        generateTools: jest.fn().mockResolvedValue([mockTool]),
+      };
+      OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
+
+      const mockLogger = createMockLogger();
+      const adapter = new OpenapiAdapter({
+        name: 'test-api',
+        baseUrl: 'https://api.example.com',
+        spec: multiAuthSpec,
+        logger: mockLogger,
+        // GitHubAuth in input (user provides)
+        securitySchemesInInput: ['GitHubAuth'],
+        // SlackAuth from context - mapping provided
+        authProviderMapper: {
+          SlackAuth: (authInfo) => authInfo.user?.slackToken,
+        },
+      });
+
+      // Should not throw
+      const result = await adapter.fetch();
+      expect(result.tools).toHaveLength(1);
+
+      // Security risk should be MEDIUM (per-scheme control)
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Security Risk Score: MEDIUM'));
     });
   });
 });

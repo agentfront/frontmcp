@@ -17,7 +17,7 @@ FrontMCP tools with full type safety, authentication support, and automatic requ
 
 ✅ **Custom Mappers** - Transform headers and body based on session data
 
-✅ **Production Ready** - Comprehensive error handling and validation
+✅ **Production Ready** - Comprehensive error handling, validation, and security protections
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ import spec from './openapi.json';
 
 const adapter = new OpenapiAdapter({
   name: 'my-api',
-  spec: spec,
+  spec: spec, // Accepts object, OpenAPIV3.Document, or OpenAPIV3_1.Document
   baseUrl: 'https://api.example.com',
 });
 ```
@@ -258,6 +258,7 @@ const adapter = new OpenapiAdapter({
 - The adapter looks up the scheme name in `authProviderMapper`
 - It calls the corresponding extractor to get the token from `authInfo.user`
 - Different tools automatically use different tokens based on their security requirements
+- **Note:** Empty string tokens throw a descriptive error. Return `undefined` if no token is available.
 
 #### Approach 2: Custom Security Resolver
 
@@ -315,14 +316,81 @@ const adapter = new OpenapiAdapter({
 });
 ```
 
+#### Approach 4: Hybrid Authentication (Per-Scheme Control)
+
+When you need some security schemes to be provided by the user in tool inputs while others are resolved from context (session/headers), use `securitySchemesInInput`:
+
+```typescript
+// OpenAPI spec with multiple security schemes
+{
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "User's OAuth token"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Server API key"
+      }
+    }
+  },
+  "paths": {
+    "/data": {
+      "get": {
+        "security": [
+          { "BearerAuth": [], "ApiKeyAuth": [] }
+        ]
+      }
+    }
+  }
+}
+
+// Adapter configuration
+const adapter = new OpenapiAdapter({
+  name: 'hybrid-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+
+  // Only these schemes appear in tool input schema (user provides)
+  securitySchemesInInput: ['BearerAuth'],
+
+  // Other schemes (ApiKeyAuth) resolved from context
+  authProviderMapper: {
+    ApiKeyAuth: (authInfo) => authInfo.user?.apiKey,
+  },
+});
+```
+
+**How it works:**
+
+- `securitySchemesInInput: ['BearerAuth']` - Only `BearerAuth` appears in the tool's input schema
+- User provides the Bearer token when calling the tool
+- `ApiKeyAuth` is automatically resolved from `authProviderMapper` (not visible to user)
+- This is useful when:
+  - Some credentials are user-specific (OAuth tokens) and must be provided per-call
+  - Other credentials are server-side secrets (API keys) managed by your application
+
+**Use cases:**
+
+1. **Multi-tenant with user OAuth**: Server API key for tenant access + user OAuth token for identity
+2. **Third-party integrations**: Your API key for rate limiting + user's token for their data
+3. **Hybrid auth flows**: Some endpoints need user tokens, others use service accounts
+
 ### Auth Resolution Priority
 
 The adapter resolves authentication in this order:
 
 1. **Custom `securityResolver`** (highest priority) - Full control per tool
-2. **`authProviderMapper`** - Map security schemes to auth providers
-3. **`staticAuth`** - Static credentials
-4. **Default** - Uses `ctx.authInfo.token` (lowest priority)
+2. **`authProviderMapper`** with `securitySchemesInInput` - Hybrid: some from input, some from context
+3. **`authProviderMapper`** - Map security schemes to auth providers
+4. **`staticAuth`** - Static credentials
+5. **Default** - Uses `ctx.authInfo.token` (lowest priority)
+
+**Note:** When using `securitySchemesInInput`, only the specified schemes appear in the tool's input schema. All other schemes must have mappings in `authProviderMapper` or will use the default resolution.
 
 ## Real-World Examples
 
@@ -448,6 +516,362 @@ const adapter = new OpenapiAdapter({
 - `stripe_getCustomers` tool → Uses Stripe key from `authInfo.user.integrations.stripe.apiKey`
 - Each tool automatically gets the correct authentication!
 
+## Input Schema Transforms
+
+Hide inputs from the AI/users and inject values at request time. This is useful for tenant headers, correlation IDs, and
+other server-side data that shouldn't be exposed to MCP clients.
+
+### Basic Usage
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  inputTransforms: {
+    // Global transforms applied to ALL tools
+    global: [
+      { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+      { inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() },
+    ],
+  },
+});
+```
+
+### Per-Tool Transforms
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  inputTransforms: {
+    perTool: {
+      createUser: [{ inputKey: 'createdBy', inject: (ctx) => ctx.authInfo.user?.email }],
+      updateUser: [{ inputKey: 'modifiedBy', inject: (ctx) => ctx.authInfo.user?.email }],
+    },
+  },
+});
+```
+
+### Dynamic Transforms with Generator
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  inputTransforms: {
+    generator: (tool) => {
+      // Add correlation ID to all mutating operations
+      if (['post', 'put', 'patch', 'delete'].includes(tool.metadata.method)) {
+        return [{ inputKey: 'X-Request-Id', inject: () => crypto.randomUUID() }];
+      }
+      return [];
+    },
+  },
+});
+```
+
+### Transform Context
+
+The `inject` function receives a context object with:
+
+- `authInfo` - Authentication info from the MCP session
+- `env` - Environment variables (`process.env`)
+- `tool` - The OpenAPI tool being executed (access metadata, name, etc.)
+
+## Tool Transforms
+
+Customize generated tools with annotations, tags, descriptions, and more. Tool transforms can be applied globally,
+per-tool, or dynamically using a generator function.
+
+### Basic Usage
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  toolTransforms: {
+    // Global transforms applied to ALL tools
+    global: {
+      annotations: { openWorldHint: true },
+    },
+  },
+});
+```
+
+### Per-Tool Transforms
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  toolTransforms: {
+    perTool: {
+      createUser: {
+        annotations: { destructiveHint: false },
+        tags: ['user-management'],
+      },
+      deleteUser: {
+        annotations: { destructiveHint: true },
+        tags: ['user-management', 'dangerous'],
+      },
+    },
+  },
+});
+```
+
+### Dynamic Transforms with Generator
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  toolTransforms: {
+    generator: (tool) => {
+      // Auto-annotate based on HTTP method
+      if (tool.metadata.method === 'get') {
+        return { annotations: { readOnlyHint: true, destructiveHint: false } };
+      }
+      if (tool.metadata.method === 'delete') {
+        return { annotations: { destructiveHint: true } };
+      }
+      return undefined;
+    },
+  },
+});
+```
+
+### Available Transform Properties
+
+| Property            | Type                 | Description                                  |
+| ------------------- | -------------------- | -------------------------------------------- |
+| `name`              | `string \| function` | Override or transform the tool name          |
+| `description`       | `string \| function` | Override or transform the tool description   |
+| `annotations`       | `ToolAnnotations`    | MCP tool behavior hints                      |
+| `tags`              | `string[]`           | Categorization tags                          |
+| `examples`          | `ToolExample[]`      | Usage examples                               |
+| `hideFromDiscovery` | `boolean`            | Hide tool from listing (can still be called) |
+| `ui`                | `ToolUIConfig`       | UI configuration for tool forms              |
+
+### Tool Annotations
+
+```typescript
+annotations: {
+  title: 'Human-readable title',
+  readOnlyHint: true,      // Tool doesn't modify state
+  destructiveHint: false,  // Tool doesn't delete data
+  idempotentHint: true,    // Repeated calls have same effect
+  openWorldHint: true,     // Tool interacts with external systems
+}
+```
+
+## Description Mode
+
+Control how tool descriptions are generated from OpenAPI operations:
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  descriptionMode: 'combined', // Default: 'summaryOnly'
+});
+```
+
+| Mode                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `'summaryOnly'`     | Use only the OpenAPI summary (default)      |
+| `'descriptionOnly'` | Use only the OpenAPI description            |
+| `'combined'`        | Summary followed by description             |
+| `'full'`            | Summary, description, and operation details |
+
+## x-frontmcp OpenAPI Extension
+
+Configure tool behavior directly in your OpenAPI spec using the `x-frontmcp` extension. This allows API designers to
+embed FrontMCP-specific configuration in the spec itself.
+
+### Basic Example
+
+```yaml
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      x-frontmcp:
+        annotations:
+          readOnlyHint: true
+          idempotentHint: true
+        cache:
+          ttl: 300
+        tags:
+          - users
+          - public-api
+```
+
+### Full Extension Schema
+
+```yaml
+x-frontmcp:
+  # Tool annotations (AI behavior hints)
+  annotations:
+    title: 'Human-readable title'
+    readOnlyHint: true
+    destructiveHint: false
+    idempotentHint: true
+    openWorldHint: true
+
+  # Cache configuration
+  cache:
+    ttl: 300 # Time-to-live in seconds
+    slideWindow: true # Slide cache window on access
+
+  # CodeCall plugin configuration
+  codecall:
+    enabledInCodeCall: true # Allow use via CodeCall
+    visibleInListTools: true # Show in list_tools when CodeCall active
+
+  # Categorization
+  tags:
+    - users
+    - public-api
+
+  # Hide from tool listing (can still be called directly)
+  hideFromDiscovery: false
+
+  # Usage examples
+  examples:
+    - description: Get all users
+      input: {}
+      output: { users: [], total: 0 }
+```
+
+### Extension Properties
+
+| Property            | Type       | Description                                         |
+| ------------------- | ---------- | --------------------------------------------------- |
+| `annotations`       | `object`   | Tool behavior hints (readOnlyHint, etc.)            |
+| `cache`             | `object`   | Cache config: `ttl` (seconds), `slideWindow`        |
+| `codecall`          | `object`   | CodeCall: `enabledInCodeCall`, `visibleInListTools` |
+| `tags`              | `string[]` | Categorization tags                                 |
+| `hideFromDiscovery` | `boolean`  | Hide from tool listing                              |
+| `examples`          | `array`    | Usage examples with input/output                    |
+
+### Priority: Spec vs Adapter
+
+When both `x-frontmcp` (in the OpenAPI spec) and `toolTransforms` (in adapter config) are used:
+
+1. `x-frontmcp` in OpenAPI spec is applied first (base layer)
+2. `toolTransforms` in adapter config overrides/extends spec values
+
+This allows API designers to set defaults in the spec, while adapter consumers can override as needed.
+
+### Complete Example
+
+```yaml
+openapi: '3.0.0'
+info:
+  title: User Management API
+  version: '1.0.0'
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      description: Returns a paginated list of users with optional filtering
+      x-frontmcp:
+        annotations:
+          title: List Users
+          readOnlyHint: true
+          idempotentHint: true
+        cache:
+          ttl: 60
+        tags:
+          - users
+          - public-api
+        examples:
+          - description: List all users
+            input: { limit: 10 }
+            output: { users: [{ id: '1', name: 'John' }], total: 1 }
+    post:
+      operationId: createUser
+      summary: Create a new user
+      x-frontmcp:
+        annotations:
+          destructiveHint: false
+          idempotentHint: false
+        tags:
+          - users
+          - admin
+    delete:
+      operationId: deleteUser
+      summary: Delete a user
+      x-frontmcp:
+        annotations:
+          destructiveHint: true
+        tags:
+          - users
+          - admin
+          - dangerous
+```
+
+## Logger Integration
+
+The adapter uses logging for diagnostics and security analysis. The logger is handled automatically:
+
+### Within FrontMCP Apps (Recommended)
+
+When using the adapter within a FrontMCP app, the SDK automatically injects the logger before `fetch()` is called:
+
+```typescript
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'my-api',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'my-api',
+      baseUrl: 'https://api.example.com',
+      spec: mySpec,
+      // logger is automatically injected by the SDK
+    }),
+  ],
+})
+export default class MyApiApp {}
+```
+
+### Standalone Usage
+
+For standalone usage (outside FrontMCP apps), the adapter automatically creates a console-based logger:
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  // Console logger is created automatically: [openapi:my-api] INFO: ...
+});
+```
+
+### Custom Logger
+
+You can provide a custom logger that implements `FrontMcpLogger`:
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  logger: myCustomLogger, // Optional - uses console fallback if not provided
+});
+```
+
 ## How It Works
 
 ### 1. Spec Loading & Validation
@@ -502,7 +926,14 @@ The adapter automatically builds requests using the parameter mapper:
 
 ### 4. Authentication Resolution
 
-Security is resolved automatically using the `SecurityResolver`:
+Security is resolved automatically using the `SecurityResolver`. Tokens are routed to the correct context field based on the security scheme type:
+
+| Scheme Type    | Context Field         |
+| -------------- | --------------------- |
+| `http: bearer` | `context.jwt`         |
+| `apiKey`       | `context.apiKey`      |
+| `http: basic`  | `context.basic`       |
+| `oauth2`       | `context.oauth2Token` |
 
 ```typescript
 // 1. Extract security from OpenAPI spec
@@ -518,6 +949,20 @@ fetch(url, {
   },
 });
 ```
+
+## Security Protections
+
+The adapter includes defense-in-depth security protections:
+
+| Protection            | Description                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| SSRF Prevention       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript:`, `data:`) |
+| Header Injection      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values          |
+| Prototype Pollution   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms |
+| Request Size Limits   | Content-Length validation with integer overflow protection (`isFinite()` check)       |
+| Query Param Collision | Detects conflicts between security and user input parameters                          |
+
+See [`openapi.executor.ts`](./openapi.executor.ts) for implementation details.
 
 ## Supported Authentication Types
 
@@ -554,11 +999,12 @@ When the adapter loads, it:
 
 ### Security Risk Scores
 
-| Score         | Configuration                              | Description                                   |
-| ------------- | ------------------------------------------ | --------------------------------------------- |
-| **LOW** ✅    | `authProviderMapper` or `securityResolver` | Auth from context - Production ready          |
-| **MEDIUM** ⚠️ | `staticAuth` or default                    | Static credentials - Secure but less flexible |
-| **HIGH** ❌   | `includeSecurityInInput: true`             | User provides auth - High security risk       |
+| Score         | Configuration                                      | Description                                   |
+| ------------- | -------------------------------------------------- | --------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`         | Auth from context - Production ready          |
+| **MEDIUM** ⚠️ | `securitySchemesInInput` with `authProviderMapper` | Hybrid: some user-provided, some from context |
+| **MEDIUM** ⚠️ | `staticAuth` or default                            | Static credentials - Secure but less flexible |
+| **HIGH** ❌   | `includeSecurityInInput: true`                     | User provides auth - High security risk       |
 
 ### Example: Missing Auth Configuration
 
@@ -736,11 +1182,27 @@ headersMapper: (authInfo, headers) => {
 - Ensure security is defined in OpenAPI spec
 - Verify `ctx.authInfo.token` is available
 - Add `additionalHeaders` if needed
+- Check auth type routing matches your scheme (Bearer → `jwt`, API Key → `apiKey`)
 
 ### Type errors
 
 - Ensure `dereference: true` to resolve `$ref` objects
 - Check that JSON schemas are valid
+
+### Empty string token error
+
+- `authProviderMapper` returned empty string instead of `undefined`
+- Return `undefined` or `null` when no token is available
+
+### Header injection error
+
+- Header values contain control characters (`\r`, `\n`, `\x00`)
+- Sanitize dynamic header values before passing to the adapter
+
+### Invalid base URL error
+
+- Server URL from OpenAPI spec failed SSRF validation
+- Only `http://` and `https://` protocols are allowed
 
 ## Links
 

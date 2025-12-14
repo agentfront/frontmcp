@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { basicOpenApiSpec, spyOnConsole } from './fixtures';
+import { basicOpenApiSpec, spyOnConsole, createMockLogger } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({
@@ -39,6 +39,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       expect(adapter).toBeDefined();
@@ -51,6 +52,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         url: 'https://api.example.com/openapi.json',
+        logger: createMockLogger(),
       });
 
       expect(adapter).toBeDefined();
@@ -62,6 +64,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         additionalHeaders: {
           'X-Custom-Header': 'value',
         },
@@ -80,6 +83,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         headersMapper,
         bodyMapper,
       });
@@ -97,6 +101,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       // Generator should not be called in constructor
@@ -117,6 +122,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       // First fetch - should initialize
@@ -142,6 +148,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         generateOptions: {
           includeDeprecated: true,
           includeSecurityInInput: true,
@@ -156,7 +163,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
           includeDeprecated: true,
           includeSecurityInInput: true,
           preferredStatusCodes: [200, 201],
-        })
+        }),
       );
     });
 
@@ -172,6 +179,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -182,7 +190,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
           includeDeprecated: false,
           includeAllResponses: true,
           includeSecurityInInput: false,
-        })
+        }),
       );
     });
   });
@@ -200,6 +208,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
         loadOptions: {
           validate: false,
           dereference: false,
@@ -214,7 +223,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
           baseUrl: 'https://api.example.com',
           validate: false,
           dereference: false,
-        })
+        }),
       );
     });
 
@@ -230,6 +239,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         name: 'test-api',
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
+        logger: createMockLogger(),
       });
 
       await adapter.fetch();
@@ -239,7 +249,7 @@ describe('OpenapiAdapter - Basic Functionality', () => {
         expect.objectContaining({
           validate: true,
           dereference: true,
-        })
+        }),
       );
     });
   });
@@ -249,11 +259,10 @@ describe('OpenapiAdapter - Basic Functionality', () => {
       const adapter = new OpenapiAdapter({
         name: 'test-api',
         baseUrl: 'https://api.example.com',
+        logger: createMockLogger(),
       } as any);
 
-      await expect(adapter.fetch()).rejects.toThrow(
-        'Either url or spec must be provided in OpenApiAdapterOptions'
-      );
+      await expect(adapter.fetch()).rejects.toThrow('Either url or spec must be provided in OpenApiAdapterOptions');
     });
   });
 });

@@ -15,6 +15,7 @@ export type {
   McpOpenAPITool,
   ParameterMapper,
   ToolMetadata,
+  FrontMcpExtensionData,
   SerializationInfo,
   SecurityRequirement,
   SecurityParameterInfo,

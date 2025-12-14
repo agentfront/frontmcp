@@ -287,3 +287,16 @@ export const spyOnConsole = () => {
     },
   };
 };
+
+/**
+ * Mock logger for testing - creates a fresh mock for each test
+ * Always use this factory function instead of a singleton to prevent test pollution
+ */
+export const createMockLogger = () => ({
+  verbose: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  child: jest.fn().mockReturnThis(),
+});
