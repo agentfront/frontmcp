@@ -328,19 +328,31 @@ volumes:
 `;
 
 const TEMPLATE_DOCKERFILE = `
-FROM node:22-alpine
+# Build stage
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install all dependencies (including devDependencies for build)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# Production stage
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Install production dependencies only
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy source
-COPY . .
-
-# Build
-RUN npm run build
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
@@ -441,7 +453,7 @@ Redis is **required** in production for:
 - Caching (performance optimization)
 - Rate limiting (if enabled)
 
-See the [Redis Setup Guide](https://docs.agentfront.dev/deployment/redis-setup) for production configuration.
+See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-setup) for production configuration.
 
 ## Scripts
 
