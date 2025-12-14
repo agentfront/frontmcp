@@ -11,8 +11,11 @@ import type {
   HTTPMethod,
   ParameterObject,
   SecurityRequirement,
-  SecuritySchemeObject,
   AuthType,
+  OperationObject,
+  OperationWithContext,
+  ToolMetadata,
+  ServerObject,
 } from './types';
 import { isReferenceObject } from './types';
 import { ParameterResolver } from './parameter-resolver';
@@ -46,10 +49,7 @@ export class OpenAPIToolGenerator {
   /**
    * Create generator from a URL
    */
-  static async fromURL(
-    url: string,
-    options: LoadOptions = {}
-  ): Promise<OpenAPIToolGenerator> {
+  static async fromURL(url: string, options: LoadOptions = {}): Promise<OpenAPIToolGenerator> {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeout ?? 30000);
@@ -63,10 +63,10 @@ export class OpenAPIToolGenerator {
       clearTimeout(timeout);
 
       if (!response.ok) {
-        throw new LoadError(
-          `Failed to fetch OpenAPI spec from URL: ${response.status} ${response.statusText}`,
-          { url, status: response.status }
-        );
+        throw new LoadError(`Failed to fetch OpenAPI spec from URL: ${response.status} ${response.statusText}`, {
+          url,
+          status: response.status,
+        });
       }
 
       const contentType = response.headers.get('content-type') || '';
@@ -95,10 +95,7 @@ export class OpenAPIToolGenerator {
   /**
    * Create generator from a file path
    */
-  static async fromFile(
-    filePath: string,
-    options: LoadOptions = {}
-  ): Promise<OpenAPIToolGenerator> {
+  static async fromFile(filePath: string, options: LoadOptions = {}): Promise<OpenAPIToolGenerator> {
     try {
       const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
       const content = await fs.readFile(absolutePath, 'utf-8');
@@ -131,10 +128,7 @@ export class OpenAPIToolGenerator {
   /**
    * Create generator from a YAML string
    */
-  static async fromYAML(
-    yamlString: string,
-    options: LoadOptions = {}
-  ): Promise<OpenAPIToolGenerator> {
+  static async fromYAML(yamlString: string, options: LoadOptions = {}): Promise<OpenAPIToolGenerator> {
     try {
       const document = yaml.parse(yamlString);
       return new OpenAPIToolGenerator(document, options);
@@ -149,10 +143,7 @@ export class OpenAPIToolGenerator {
   /**
    * Create generator from a JSON object
    */
-  static async fromJSON(
-    json: object,
-    options: LoadOptions = {}
-  ): Promise<OpenAPIToolGenerator> {
+  static async fromJSON(json: object, options: LoadOptions = {}): Promise<OpenAPIToolGenerator> {
     // Clone to avoid mutations
     const document = JSON.parse(JSON.stringify(json));
     return new OpenAPIToolGenerator(document, options);
@@ -187,7 +178,7 @@ export class OpenAPIToolGenerator {
     if (this.options.dereference && !this.dereferencedDocument) {
       try {
         this.dereferencedDocument = (await $RefParser.dereference(
-          JSON.parse(JSON.stringify(this.document))
+          JSON.parse(JSON.stringify(this.document)),
         )) as OpenAPIDocument;
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -228,8 +219,9 @@ export class OpenAPIToolGenerator {
         try {
           const tool = await this.generateTool(pathStr, method, options);
           tools.push(tool);
-        } catch (error: any) {
-          console.warn(`Failed to generate tool for ${method.toUpperCase()} ${pathStr}:`, error.message);
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.warn(`Failed to generate tool for ${method.toUpperCase()} ${pathStr}:`, errorMessage);
         }
       }
     }
@@ -240,11 +232,7 @@ export class OpenAPIToolGenerator {
   /**
    * Generate a specific tool for a path and method
    */
-  async generateTool(
-    pathStr: string,
-    method: string,
-    options: GenerateOptions = {}
-  ): Promise<McpOpenAPITool> {
+  async generateTool(pathStr: string, method: string, options: GenerateOptions = {}): Promise<McpOpenAPITool> {
     await this.initialize();
 
     const document = this.getDocument();
@@ -267,7 +255,7 @@ export class OpenAPIToolGenerator {
     let pathParameters: ParameterObject[] | undefined = undefined;
     if (pathItem.parameters) {
       pathParameters = pathItem.parameters.filter(
-        (p): p is ParameterObject => !isReferenceObject(p)
+        (p): p is ParameterObject => !isReferenceObject(p),
       ) as ParameterObject[];
     }
 
@@ -275,17 +263,14 @@ export class OpenAPIToolGenerator {
     let securityRequirements: SecurityRequirement[] | undefined = undefined;
     const securitySpec = operation.security ?? document.security;
     if (securitySpec) {
-      securityRequirements = this.extractSecurityRequirements(
-        securitySpec as Record<string, string[]>[],
-        document
-      );
+      securityRequirements = this.extractSecurityRequirements(securitySpec as Record<string, string[]>[], document);
     }
 
     const { inputSchema, mapper } = parameterResolver.resolve(
       operation,
       pathParameters,
       securityRequirements,
-      options.includeSecurityInInput
+      options.includeSecurityInInput,
     );
 
     // Build response schema
@@ -315,10 +300,10 @@ export class OpenAPIToolGenerator {
    * Check if an operation should be included
    */
   private shouldIncludeOperation(
-    operation: any,
+    operation: OperationObject,
     path: string,
     method: string,
-    options: GenerateOptions
+    options: GenerateOptions,
   ): boolean {
     // Check deprecated
     if (operation.deprecated && !options.includeDeprecated) {
@@ -343,8 +328,8 @@ export class OpenAPIToolGenerator {
       return options.filterFn({
         ...operation,
         path,
-        method
-      } as any);
+        method,
+      } as OperationWithContext);
     }
 
     return true;
@@ -357,7 +342,7 @@ export class OpenAPIToolGenerator {
     path: string,
     method: HTTPMethod,
     operationId?: string,
-    options: GenerateOptions = {}
+    options: GenerateOptions = {},
   ): string {
     if (options.namingStrategy?.toolNameGenerator) {
       return options.namingStrategy.toolNameGenerator(path, method, operationId);
@@ -383,14 +368,16 @@ export class OpenAPIToolGenerator {
   private extractMetadata(
     path: string,
     method: HTTPMethod,
-    operation: any,
+    operation: OperationObject,
     document: OpenAPIDocument,
-    outputSchema?: any
-  ): any {
-    const metadata: any = {
+    outputSchema?: unknown,
+  ): ToolMetadata {
+    const metadata: ToolMetadata = {
       path,
       method,
       operationId: operation.operationId,
+      operationSummary: operation.summary,
+      operationDescription: operation.description,
       tags: operation.tags,
       deprecated: operation.deprecated,
     };
@@ -398,14 +385,15 @@ export class OpenAPIToolGenerator {
     // Extract security requirements
     if (operation.security || document.security) {
       metadata.security = this.extractSecurityRequirements(
-        operation.security ?? document.security,
-        document
+        (operation.security ?? document.security) as Record<string, string[]>[],
+        document,
       );
     }
 
     // Extract servers
-    if (operation.servers || document.servers) {
-      metadata.servers = (operation.servers ?? document.servers).map((server: any) => ({
+    const servers = (operation as { servers?: ServerObject[] }).servers ?? document.servers;
+    if (servers) {
+      metadata.servers = servers.map((server: ServerObject) => ({
         url: this.options.baseUrl || server.url,
         description: server.description,
         variables: server.variables,
@@ -415,24 +403,27 @@ export class OpenAPIToolGenerator {
     }
 
     // Extract response status codes (preserve 0 for default responses)
-    if (outputSchema && Array.isArray((outputSchema as any).oneOf)) {
-      const codes = (outputSchema as any).oneOf
-        .map((schema: any) => (schema as any)['x-status-code'])
-        .filter((code: unknown) => code !== undefined && code !== null);
+    const schemaObj = outputSchema as Record<string, unknown> | undefined;
+    if (schemaObj && Array.isArray(schemaObj['oneOf'])) {
+      const codes = (schemaObj['oneOf'] as Record<string, unknown>[])
+        .map((schema) => schema['x-status-code'])
+        .filter((code): code is number => code !== undefined && code !== null);
       if (codes.length > 0) {
         metadata.responseStatusCodes = codes;
       }
-    } else if (
-      outputSchema &&
-      (outputSchema as any)['x-status-code'] !== undefined &&
-      (outputSchema as any)['x-status-code'] !== null
-    ) {
-      metadata.responseStatusCodes = [(outputSchema as any)['x-status-code']];
+    } else if (schemaObj && schemaObj['x-status-code'] !== undefined && schemaObj['x-status-code'] !== null) {
+      metadata.responseStatusCodes = [schemaObj['x-status-code'] as number];
     }
 
     // External docs
     if (operation.externalDocs) {
       metadata.externalDocs = operation.externalDocs;
+    }
+
+    // FrontMCP extension (x-frontmcp)
+    const operationWithExt = operation as Record<string, unknown>;
+    if (operationWithExt['x-frontmcp']) {
+      metadata.frontmcp = operationWithExt['x-frontmcp'] as ToolMetadata['frontmcp'];
     }
 
     return metadata;
@@ -443,7 +434,7 @@ export class OpenAPIToolGenerator {
    */
   private extractSecurityRequirements(
     security: Record<string, string[]>[],
-    document: OpenAPIDocument
+    document: OpenAPIDocument,
   ): SecurityRequirement[] {
     if (!security || !document.components?.securitySchemes) {
       return [];
@@ -464,9 +455,8 @@ export class OpenAPIToolGenerator {
           type: securityScheme.type as AuthType,
           scopes,
           name: 'name' in securityScheme ? securityScheme.name : undefined,
-          in: apiKeyIn && (apiKeyIn === 'query' || apiKeyIn === 'header' || apiKeyIn === 'cookie')
-            ? apiKeyIn
-            : undefined,
+          in:
+            apiKeyIn && (apiKeyIn === 'query' || apiKeyIn === 'header' || apiKeyIn === 'cookie') ? apiKeyIn : undefined,
         };
 
         // Add HTTP-specific metadata
@@ -479,7 +469,7 @@ export class OpenAPIToolGenerator {
         result.description = 'description' in securityScheme ? securityScheme.description : undefined;
 
         return result;
-      })
+      }),
     );
   }
 }

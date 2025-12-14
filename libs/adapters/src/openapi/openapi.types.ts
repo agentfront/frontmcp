@@ -1,6 +1,382 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { OpenAPIV3 } from 'openapi-types';
-import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext } from 'mcp-from-openapi';
+import { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
+import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext, ToolMetadata } from 'mcp-from-openapi';
+import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig } from '@frontmcp/sdk';
+
+// ============================================================================
+// Input Transform Types
+// ============================================================================
+
+/**
+ * Context available when injecting values at request time
+ */
+export interface InputTransformContext {
+  /** Authentication info from the MCP session */
+  authInfo: AuthInfo;
+  /** Environment variables */
+  env: NodeJS.ProcessEnv;
+  /** The OpenAPI tool being executed */
+  tool: McpOpenAPITool;
+}
+
+/**
+ * Single input transform configuration.
+ * Removes an input from the schema and injects its value at request time.
+ */
+export interface InputTransform {
+  /**
+   * The input key (property name in inputSchema) to transform.
+   * This input will be removed from the schema visible to AI/users.
+   */
+  inputKey: string;
+
+  /**
+   * Value injector function called at request time.
+   * Returns the value to inject for this input.
+   */
+  inject: (ctx: InputTransformContext) => unknown | Promise<unknown>;
+}
+
+/**
+ * Input transform configuration options.
+ * Supports global, per-tool, and dynamic transforms.
+ */
+export interface InputTransformOptions {
+  /**
+   * Global transforms applied to ALL tools.
+   * Use for common patterns like tenant headers.
+   */
+  global?: InputTransform[];
+
+  /**
+   * Per-tool transforms keyed by tool name.
+   * These are combined with global transforms.
+   */
+  perTool?: Record<string, InputTransform[]>;
+
+  /**
+   * Dynamic transform generator function.
+   * Called for each tool to generate transforms programmatically.
+   * Useful when transforms depend on tool metadata.
+   */
+  generator?: (tool: McpOpenAPITool) => InputTransform[];
+}
+
+// ============================================================================
+// OpenAPI Extension Types (x-frontmcp)
+// ============================================================================
+
+/**
+ * The OpenAPI extension key for FrontMCP metadata.
+ * Add this to operations in your OpenAPI spec to configure tool behavior.
+ *
+ * @example OpenAPI YAML
+ * ```yaml
+ * paths:
+ *   /users:
+ *     get:
+ *       operationId: listUsers
+ *       summary: List all users
+ *       x-frontmcp:
+ *         annotations:
+ *           readOnlyHint: true
+ *           idempotentHint: true
+ *         cache:
+ *           ttl: 300
+ *         tags:
+ *           - users
+ * ```
+ */
+export const FRONTMCP_EXTENSION_KEY = 'x-frontmcp';
+
+/**
+ * Cache configuration for tools.
+ */
+export interface FrontMcpCacheConfig {
+  /**
+   * Time-to-live in seconds for cached responses.
+   */
+  ttl?: number;
+
+  /**
+   * If true, cache window slides on each access.
+   * If false, cache expires at fixed time from first access.
+   */
+  slideWindow?: boolean;
+}
+
+/**
+ * CodeCall configuration for tools.
+ */
+export interface FrontMcpCodeCallConfig {
+  /**
+   * Whether this tool can be used via CodeCall.
+   * @default true
+   */
+  enabledInCodeCall?: boolean;
+
+  /**
+   * If true, this tool stays visible in `list_tools`
+   * even when CodeCall is hiding most tools.
+   * @default false
+   */
+  visibleInListTools?: boolean;
+}
+
+/**
+ * Tool annotations that hint at tool behavior.
+ * These map directly to MCP ToolAnnotations.
+ */
+export interface FrontMcpAnnotations {
+  /**
+   * A human-readable title for the tool.
+   */
+  title?: string;
+
+  /**
+   * If true, the tool does not modify its environment.
+   * @default false
+   */
+  readOnlyHint?: boolean;
+
+  /**
+   * If true, the tool may perform destructive updates.
+   * If false, the tool performs only additive updates.
+   * (Meaningful only when readOnlyHint == false)
+   * @default true
+   */
+  destructiveHint?: boolean;
+
+  /**
+   * If true, calling repeatedly with same args has no additional effect.
+   * (Meaningful only when readOnlyHint == false)
+   * @default false
+   */
+  idempotentHint?: boolean;
+
+  /**
+   * If true, tool may interact with external entities (open world).
+   * If false, tool's domain is closed (e.g., memory tool).
+   * @default true
+   */
+  openWorldHint?: boolean;
+}
+
+/**
+ * FrontMCP extension schema for OpenAPI operations.
+ * Add `x-frontmcp` to any operation to configure tool behavior.
+ *
+ * @example
+ * ```yaml
+ * x-frontmcp:
+ *   annotations:
+ *     readOnlyHint: true
+ *     idempotentHint: true
+ *   cache:
+ *     ttl: 300
+ *   codecall:
+ *     enabledInCodeCall: true
+ *     visibleInListTools: true
+ *   tags:
+ *     - users
+ *     - public-api
+ *   hideFromDiscovery: false
+ * ```
+ */
+export interface FrontMcpExtension {
+  /**
+   * Tool annotations for AI behavior hints.
+   */
+  annotations?: FrontMcpAnnotations;
+
+  /**
+   * Cache configuration for response caching.
+   */
+  cache?: FrontMcpCacheConfig;
+
+  /**
+   * CodeCall-specific configuration.
+   */
+  codecall?: FrontMcpCodeCallConfig;
+
+  /**
+   * Tags/labels for categorization and filtering.
+   */
+  tags?: string[];
+
+  /**
+   * If true, hide tool from discovery/listing.
+   * @default false
+   */
+  hideFromDiscovery?: boolean;
+
+  /**
+   * Usage examples for the tool.
+   */
+  examples?: Array<{
+    description: string;
+    input: Record<string, unknown>;
+    output?: unknown;
+  }>;
+}
+
+// ============================================================================
+// Tool Transform Types
+// ============================================================================
+
+/**
+ * How to generate tool descriptions from OpenAPI operations.
+ * - 'summaryOnly': Use only the operation summary (default, current behavior)
+ * - 'descriptionOnly': Use only the operation description
+ * - 'combined': Combine summary and description (summary first, then description)
+ * - 'full': Include summary, description, and operation ID
+ */
+export type DescriptionMode = 'summaryOnly' | 'descriptionOnly' | 'combined' | 'full';
+
+/**
+ * Transform configuration for modifying generated tools.
+ * Can override or augment any tool property.
+ */
+export interface ToolTransform {
+  /**
+   * Override or transform the tool name.
+   * - string: Replace the name entirely
+   * - function: Transform the existing name
+   */
+  name?: string | ((originalName: string, tool: McpOpenAPITool) => string);
+
+  /**
+   * Override or transform the tool description.
+   * - string: Replace the description entirely
+   * - function: Transform with access to original description and tool metadata
+   *
+   * @example
+   * ```typescript
+   * // Combine summary and description
+   * description: (original, tool) => {
+   *   const summary = tool.metadata.operationSummary || '';
+   *   const desc = tool.metadata.operationDescription || '';
+   *   return summary && desc ? `${summary}\n\n${desc}` : original;
+   * }
+   * ```
+   */
+  description?: string | ((originalDescription: string, tool: McpOpenAPITool) => string);
+
+  /**
+   * Annotations to add or merge with existing tool annotations.
+   * These hint at tool behavior for AI clients.
+   *
+   * @example
+   * ```typescript
+   * annotations: {
+   *   readOnlyHint: true,      // Tool doesn't modify state
+   *   openWorldHint: true,     // Tool interacts with external systems
+   *   destructiveHint: false,  // Tool doesn't delete data
+   *   idempotentHint: true,    // Repeated calls have same effect
+   * }
+   * ```
+   */
+  annotations?: ToolAnnotations;
+
+  /**
+   * UI configuration for the tool (forms, rendering hints).
+   */
+  ui?: ToolUIConfig;
+
+  /**
+   * If true, hide the tool from tool discovery/listing.
+   * The tool can still be called directly.
+   */
+  hideFromDiscovery?: boolean;
+
+  /**
+   * Tags to add to the tool for categorization.
+   */
+  tags?: string[];
+
+  /**
+   * Usage examples to add to the tool.
+   */
+  examples?: ToolExample[];
+}
+
+/**
+ * Tool transform configuration options.
+ * Supports global, per-tool, and dynamic transforms.
+ */
+export interface ToolTransformOptions {
+  /**
+   * Global transforms applied to ALL tools.
+   * Use for common patterns like adding readOnlyHint to all GET operations.
+   */
+  global?: ToolTransform;
+
+  /**
+   * Per-tool transforms keyed by tool name.
+   * Takes precedence over global transforms for overlapping properties.
+   */
+  perTool?: Record<string, ToolTransform>;
+
+  /**
+   * Dynamic transform generator function.
+   * Called for each tool to generate transforms programmatically.
+   * Useful when transforms depend on tool metadata (e.g., HTTP method).
+   *
+   * @example
+   * ```typescript
+   * generator: (tool) => {
+   *   // Mark all GET operations as read-only
+   *   if (tool.metadata.method === 'get') {
+   *     return {
+   *       annotations: { readOnlyHint: true, destructiveHint: false },
+   *     };
+   *   }
+   *   // Mark DELETE operations as destructive
+   *   if (tool.metadata.method === 'delete') {
+   *     return {
+   *       annotations: { destructiveHint: true },
+   *     };
+   *   }
+   *   return undefined;
+   * }
+   * ```
+   */
+  generator?: (tool: McpOpenAPITool) => ToolTransform | undefined;
+}
+
+// ============================================================================
+// Extended Metadata Types (internal)
+// ============================================================================
+
+/**
+ * Extended tool metadata that includes adapter-specific fields.
+ * This extends the base ToolMetadata from mcp-from-openapi with
+ * fields used for transforms and extensions.
+ */
+export interface ExtendedToolMetadata extends ToolMetadata {
+  /**
+   * Adapter-specific runtime configuration.
+   * Contains transforms and other metadata added during tool processing.
+   */
+  adapter?: {
+    /** Input transforms to apply at request time */
+    inputTransforms?: InputTransform[];
+    /** Tool transform configuration */
+    toolTransform?: ToolTransform;
+    /** Security schemes that are included in tool input (user provides) */
+    securitySchemesInInput?: string[];
+    /** Security schemes resolved from context (authProviderMapper, etc.) */
+    securitySchemesFromContext?: string[];
+  };
+}
+
+/**
+ * McpOpenAPITool with extended metadata type.
+ * Use this type when accessing adapter-extended metadata.
+ */
+export interface ExtendedMcpOpenAPITool extends Omit<McpOpenAPITool, 'metadata'> {
+  metadata: ExtendedToolMetadata;
+}
 
 interface BaseOptions {
   /**
@@ -74,10 +450,7 @@ interface BaseOptions {
    * }
    * ```
    */
-  securityResolver?: (
-    tool: McpOpenAPITool,
-    authInfo: AuthInfo
-  ) => SecurityContext | Promise<SecurityContext>;
+  securityResolver?: (tool: McpOpenAPITool, authInfo: AuthInfo) => SecurityContext | Promise<SecurityContext>;
 
   /**
    * Map security scheme names to auth provider extractors.
@@ -125,13 +498,167 @@ interface BaseOptions {
    * @see GenerateOptions from mcp-from-openapi
    */
   generateOptions?: GenerateOptions;
+
+  /**
+   * Specify which security schemes should be included in the tool's input schema.
+   * Use this for per-scheme control over authentication handling.
+   *
+   * - Schemes in this list → included in input (user/AI provides the value)
+   * - Schemes NOT in this list → resolved from context (authProviderMapper, staticAuth, etc.)
+   *
+   * This allows hybrid authentication where some schemes come from user input
+   * and others come from the session/context.
+   *
+   * @example
+   * ```typescript
+   * // OpenAPI spec has: GitHubAuth (Bearer), ApiKeyAuth (API key)
+   * // You want: GitHubAuth from session, ApiKeyAuth from user input
+   *
+   * const adapter = new OpenapiAdapter({
+   *   name: 'my-api',
+   *   baseUrl: 'https://api.example.com',
+   *   spec: mySpec,
+   *
+   *   // ApiKeyAuth will be in tool input schema
+   *   securitySchemesInInput: ['ApiKeyAuth'],
+   *
+   *   // GitHubAuth will be resolved from context
+   *   authProviderMapper: {
+   *     'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+   *   },
+   * });
+   * ```
+   */
+  securitySchemesInInput?: string[];
+
+  /**
+   * Input schema transforms for hiding inputs and injecting values at request time.
+   *
+   * Use cases:
+   * - Hide tenant headers from AI/users and inject from session
+   * - Hide internal correlation IDs and inject from environment
+   * - Remove API-internal fields that should be computed server-side
+   *
+   * @example
+   * ```typescript
+   * inputTransforms: {
+   *   global: [
+   *     { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+   *   ],
+   *   perTool: {
+   *     'createUser': [
+   *       { inputKey: 'createdBy', inject: (ctx) => ctx.authInfo.user?.email },
+   *     ],
+   *   },
+   *   generator: (tool) => {
+   *     if (['post', 'put', 'patch'].includes(tool.metadata.method)) {
+   *       return [{ inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() }];
+   *     }
+   *     return [];
+   *   },
+   * }
+   * ```
+   */
+  inputTransforms?: InputTransformOptions;
+
+  /**
+   * Tool transforms for modifying generated tools (description, annotations, UI, etc.).
+   *
+   * Use cases:
+   * - Add annotations (readOnlyHint, openWorldHint) based on HTTP method
+   * - Override tool descriptions with combined summary + description
+   * - Add UI configuration for tool forms
+   * - Hide internal tools from discovery
+   *
+   * @example
+   * ```typescript
+   * toolTransforms: {
+   *   global: {
+   *     annotations: { openWorldHint: true },
+   *   },
+   *   perTool: {
+   *     'createUser': {
+   *       annotations: { destructiveHint: false },
+   *       tags: ['user-management'],
+   *     },
+   *   },
+   *   generator: (tool) => {
+   *     if (tool.metadata.method === 'get') {
+   *       return { annotations: { readOnlyHint: true } };
+   *     }
+   *     if (tool.metadata.method === 'delete') {
+   *       return { annotations: { destructiveHint: true } };
+   *     }
+   *     return undefined;
+   *   },
+   * }
+   * ```
+   */
+  toolTransforms?: ToolTransformOptions;
+
+  /**
+   * How to generate tool descriptions from OpenAPI operations.
+   * - 'summaryOnly': Use only summary (default)
+   * - 'descriptionOnly': Use only description
+   * - 'combined': Summary followed by description
+   * - 'full': Summary, description, and operation details
+   *
+   * @default 'summaryOnly'
+   */
+  descriptionMode?: DescriptionMode;
+
+  /**
+   * Logger instance for adapter diagnostics.
+   * Optional - if not provided, the SDK will inject it automatically via setLogger().
+   */
+  logger?: FrontMcpLogger;
+
+  /**
+   * Timeout for HTTP requests in milliseconds.
+   * If a request takes longer than this, it will be aborted.
+   * @default 30000 (30 seconds)
+   */
+  requestTimeoutMs?: number;
+
+  /**
+   * Maximum request body size in bytes.
+   * Requests with bodies larger than this will be rejected before sending.
+   * @default 10485760 (10MB)
+   */
+  maxRequestSize?: number;
+
+  /**
+   * Maximum response size in bytes.
+   * Responses larger than this will be rejected.
+   * The check is performed first on Content-Length header (if present),
+   * then on actual response size.
+   * @default 10485760 (10MB)
+   */
+  maxResponseSize?: number;
 }
 
 interface SpecOptions extends BaseOptions {
   /**
-   * The OpenAPI specification the OpenAPI specification.
+   * The OpenAPI specification as a JSON object.
+   *
+   * Accepts:
+   * - `OpenAPIV3.Document` (typed)
+   * - `OpenAPIV3_1.Document` (typed)
+   * - Plain object from `import spec from './openapi.json'`
+   *
+   * @example
+   * ```typescript
+   * // From typed constant
+   * import { OpenAPIV3 } from 'openapi-types';
+   * const spec: OpenAPIV3.Document = { ... };
+   * new OpenapiAdapter({ spec, ... })
+   *
+   * // From JSON import
+   * import openapiJson from './my-openapi.json';
+   * new OpenapiAdapter({ spec: openapiJson, ... })
+   * ```
    */
-  spec: OpenAPIV3.Document;
+  spec: OpenAPIV3.Document | OpenAPIV3_1.Document | object;
 }
 
 interface UrlOptions extends BaseOptions {
