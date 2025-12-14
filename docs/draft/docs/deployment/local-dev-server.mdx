@@ -29,6 +29,10 @@ Creates a folder and scaffolds everything for you.
 
 </CodeGroup>
 
+<Info>
+The `create` command is interactive by default. Use `--yes` for non-interactive mode with defaults (Docker target, Redis via Docker Compose, GitHub Actions enabled).
+</Info>
+
 ### Option B — Existing project
 
 Install and initialize in your current repo:
@@ -58,6 +62,31 @@ After `create` or `init`, your `package.json` will include:
 - `frontmcp build` — compile to `./dist` (override with `--out-dir`)
 - `frontmcp inspector` — launches **@modelcontextprotocol/inspector** with zero setup
 - `frontmcp doctor` — verifies Node/npm versions and project configuration
+
+### Docker scripts (Docker target only)
+
+If you created your project with the Docker target (`--target node`), you'll also have:
+
+```json
+{
+  "scripts": {
+    "docker:up": "docker compose -f ci/docker-compose.yml up",
+    "docker:down": "docker compose -f ci/docker-compose.yml down",
+    "docker:build": "docker compose -f ci/docker-compose.yml build"
+  }
+}
+```
+
+```bash
+# Start the full stack (app + Redis if configured)
+npm run docker:up
+
+# Stop containers
+npm run docker:down
+
+# Rebuild the Docker image
+npm run docker:build
+```
 
 ---
 

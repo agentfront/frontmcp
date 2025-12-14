@@ -18,19 +18,22 @@ FrontMCP uses Redis for caching, session storage, and distributed state manageme
 
 ### Option 1: Docker Compose (Recommended)
 
-Projects created with `frontmcp create` include a `docker-compose.yml`:
+Projects created with `frontmcp create --target node` include Docker files in the `ci/` folder:
 
 ```bash
 # Start Redis
-docker compose up redis -d
+docker compose -f ci/docker-compose.yml up redis -d
 
 # Verify Redis is running
-docker compose exec redis redis-cli ping
+docker compose -f ci/docker-compose.yml exec redis redis-cli ping
+
+# Start the full stack (app + Redis)
+docker compose -f ci/docker-compose.yml up
 ```
 
 <Tip>
 When running inside Docker, use `redis` (the service name) as `REDIS_HOST`, not `localhost`.
-Projects created with `frontmcp create` include a `.env.docker` file with Docker-specific values.
+Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values.
 </Tip>
 
 ### Option 2: Local Installation

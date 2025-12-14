@@ -11,10 +11,27 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
 | Platform | Status | Module Format | Config File |
 |----------|--------|---------------|-------------|
 | Vercel | Stable | ESM | `vercel.json` |
-| AWS Lambda | Stable | ESM | User-managed |
+| AWS Lambda | Stable | ESM | `ci/template.yaml` (SAM) |
 | Cloudflare Workers | Experimental | CommonJS | `wrangler.toml` |
 
 ## Quick Start
+
+<Tip>
+**New project?** Use `frontmcp create` with the `--target` flag to scaffold a serverless-ready project:
+
+```bash
+# Vercel project
+npx frontmcp create my-app --target vercel
+
+# AWS Lambda project (generates SAM template)
+npx frontmcp create my-app --target lambda
+
+# Cloudflare Workers project
+npx frontmcp create my-app --target cloudflare
+```
+
+This generates the platform config files (`vercel.json`, `ci/template.yaml`, or `wrangler.toml`) automatically.
+</Tip>
 
 <Tabs>
   <Tab title="Vercel">
@@ -118,6 +135,13 @@ npm install @codegenie/serverless-express
 
 ### Setup
 
+<Tip>
+Projects created with `frontmcp create --target lambda` include a SAM template at `ci/template.yaml` and a deploy script:
+```bash
+npm run deploy  # Runs: cd ci && sam build && sam deploy
+```
+</Tip>
+
 1. Build your project:
    ```bash
    frontmcp build --adapter lambda
@@ -200,6 +224,13 @@ with streaming, certain middleware, and some response methods.
 
 For production Cloudflare deployments, consider using [Hono](https://hono.dev/) or native Workers APIs.
 </Warning>
+
+<Tip>
+Projects created with `frontmcp create --target cloudflare` include a `wrangler.toml` and a deploy script:
+```bash
+npm run deploy  # Runs: wrangler deploy
+```
+</Tip>
 
 ### Limitations
 
