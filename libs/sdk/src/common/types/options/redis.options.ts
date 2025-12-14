@@ -10,13 +10,13 @@ export const redisOptionsSchema = z.object({
   /**
    * Redis host
    */
-  host: z.string().min(1),
+  host: z.string().trim().min(1),
 
   /**
    * Redis port
    * @default 6379
    */
-  port: z.number().int().positive().optional().default(6379),
+  port: z.number().int().positive().max(65535).optional().default(6379),
 
   /**
    * Redis password (optional)
