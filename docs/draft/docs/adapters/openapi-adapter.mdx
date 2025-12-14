@@ -123,6 +123,10 @@ export default class MyApiApp {}
   How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
 </ParamField>
 
+<ParamField path="securitySchemesInInput" type="string[]">
+  Names of security schemes that should remain in the tool input schema so callers supply those credentials. Combine with `authProviderMapper` to keep the rest resolved from user context. See [Strategy 6: Hybrid Security Inputs](#strategy-6-hybrid-security-inputs-per-scheme-control).
+</ParamField>
+
 <ParamField path="logger" type="FrontMcpLogger">
   Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger via `setLogger()`. For standalone usage, you can optionally provide a logger implementing the `FrontMcpLogger` interface; if omitted, a console-based logger is created automatically.
 </ParamField>
@@ -286,6 +290,36 @@ OpenapiAdapter.init({
 <Warning>
   **Security Risk: MEDIUM** — Only works for single Bearer auth. For multiple auth providers, use `authProviderMapper`
   or `securityResolver`.
+</Warning>
+
+### Strategy 6: Hybrid Security Inputs (Per-Scheme Control)
+
+Best for: Hybrid workflows where some credentials must come from the end user (OAuth tokens) while others must stay in server-managed context (API keys, tenant secrets).
+
+```ts
+OpenapiAdapter.init({
+  name: 'hybrid-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  securitySchemesInInput: ['UserBearerAuth'],
+  authProviderMapper: {
+    ServiceApiKey: (authInfo) => authInfo.user?.apiKey,
+  },
+});
+```
+
+How it works:
+
+1. Only the schemes listed in `securitySchemesInInput` remain in the tool's input schema so callers can supply those credentials explicitly.
+2. All other schemes are resolved from `authProviderMapper`, `securityResolver`, or the default auth context and never surface to MCP clients.
+3. The adapter automatically removes filtered schemes from generated input schemas, preventing server secrets from leaking into prompts.
+
+<Tip>
+  Use this when endpoints need user-specific OAuth tokens alongside service accounts or tenant headers managed by your server.
+</Tip>
+
+<Warning>
+  Schemes omitted from `securitySchemesInInput` must have matching entries in `authProviderMapper` or custom `securityResolver` logic; otherwise the adapter falls back to `authInfo.token`.
 </Warning>
 
 ## Advanced Features
@@ -484,15 +518,15 @@ OpenapiAdapter.init({
 
 **Available transform properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string \| function` | Override or transform the tool name |
-| `description` | `string \| function` | Override or transform the tool description |
-| `annotations` | `ToolAnnotations` | MCP tool behavior hints |
-| `tags` | `string[]` | Categorization tags |
-| `examples` | `ToolExample[]` | Usage examples |
-| `hideFromDiscovery` | `boolean` | Hide tool from listing |
-| `ui` | `ToolUIConfig` | UI configuration for tool forms |
+| Property            | Type                 | Description                                |
+| ------------------- | -------------------- | ------------------------------------------ |
+| `name`              | `string \| function` | Override or transform the tool name        |
+| `description`       | `string \| function` | Override or transform the tool description |
+| `annotations`       | `ToolAnnotations`    | MCP tool behavior hints                    |
+| `tags`              | `string[]`           | Categorization tags                        |
+| `examples`          | `ToolExample[]`      | Usage examples                             |
+| `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
+| `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
 
 ### x-frontmcp OpenAPI Extension
 
@@ -526,14 +560,14 @@ paths:
 
 **Extension properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `annotations` | `object` | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
-| `cache` | `object` | Cache config: `ttl` (seconds), `slideWindow` (boolean) |
-| `codecall` | `object` | CodeCall config: `enabledInCodeCall`, `visibleInListTools` |
-| `tags` | `string[]` | Categorization tags |
-| `hideFromDiscovery` | `boolean` | Hide from tool listing |
-| `examples` | `array` | Usage examples with input/output |
+| Property            | Type       | Description                                                                               |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `annotations`       | `object`   | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
+| `cache`             | `object`   | Cache config: `ttl` (seconds), `slideWindow` (boolean)                                    |
+| `codecall`          | `object`   | CodeCall config: `enabledInCodeCall`, `visibleInListTools`                                |
+| `tags`              | `string[]` | Categorization tags                                                                       |
+| `hideFromDiscovery` | `boolean`  | Hide from tool listing                                                                    |
+| `examples`          | `array`    | Usage examples with input/output                                                          |
 
 <Tip>
   Use `x-frontmcp` in your OpenAPI spec for declarative configuration.
@@ -553,12 +587,12 @@ OpenapiAdapter.init({
 });
 ```
 
-| Mode | Description |
-|------|-------------|
-| `'summaryOnly'` | Use only the OpenAPI summary (default) |
-| `'descriptionOnly'` | Use only the OpenAPI description |
-| `'combined'` | Summary followed by description |
-| `'full'` | Summary, description, and operation details |
+| Mode                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `'summaryOnly'`     | Use only the OpenAPI summary (default)      |
+| `'descriptionOnly'` | Use only the OpenAPI description            |
+| `'combined'`        | Summary followed by description             |
+| `'full'`            | Summary, description, and operation details |
 
 ### Load Options
 
@@ -724,23 +758,23 @@ export default class ExpenseMcpApp {}
 
 The adapter automatically validates your security configuration and assigns a risk score:
 
-| Risk Level    | Configuration                                  | Description                                             |
-| ------------- | ---------------------------------------------- | ------------------------------------------------------- |
-| **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
-| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
-| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
+| Risk Level    | Configuration                                                           | Description                                                     |
+| ------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`                              | Auth resolved from user context, not exposed to clients         |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, `securitySchemesInInput`, or default | Static credentials or hybrid security (partially user-provided) |
+| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true`                          | Auth fields exposed to MCP clients (not recommended)            |
 
 ## Built-in Security Protections
 
 Beyond authentication, the adapter includes defense-in-depth protections:
 
-| Protection | Description |
-|------------|-------------|
-| **SSRF Prevention** | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
-| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values |
-| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms |
-| **Request Size Limits** | Content-Length validation with integer overflow protection |
-| **Query Param Collision** | Detects conflicts between security and user input parameters |
+| Protection                | Description                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
+| **Request Size Limits**   | Content-Length validation with integer overflow protection                              |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                            |
 
 **Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
 

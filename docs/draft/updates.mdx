@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-14" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -43,6 +43,14 @@ mode: 'center'
 
     🧠 **AI Scoring Gate** – A semantic scoring stage reviews every CodeCall plan for exfiltration patterns, bulk destructive actions, and sensitive field access, halting risky scripts before Enclave executes them.
 
+    🛡️ **Hybrid OpenAPI security** – Keep service-owned schemes hidden while prompting users only for the tokens you whitelist with `securitySchemesInInput`.
+
+    🧩 **OpenAPI tool customization** – Combine `inputTransforms`, `toolTransforms`, description modes, and the `x-frontmcp` spec extension to tag, annotate, and pre-populate every generated tool without manual rewrites.
+
+    📟 **Adapter-level logging** – Pass a `FrontMcpLogger` (or use the new console fallback) to stream validation output, warnings, and tool-transform diagnostics into your observability stack.
+
+    🧱 **Defensive OpenAPI runtime** – Automatic SSRF, header injection, prototype pollution, and request-size protections run for every call so spec changes can't bypass the guardrails.
+
     🧵 **Worker Pool adapter** – Opt into the new worker-pool runtime to execute CodeCall plans inside OS-isolated threads with queue backpressure, strict memory caps, and graceful restarts.
 
     🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
@@ -60,6 +68,8 @@ mode: 'center'
     **Docs**
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
+
+    📚 **OpenAPI adapter reference** – Documented hybrid security inputs, tool/input transforms, description modes, and the automatic guardrails so teams can enable the new adapter features without reading source.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
 
