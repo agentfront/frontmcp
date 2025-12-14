@@ -287,6 +287,24 @@ OpenapiAdapter.init({
 });
 ```
 
+### Hybrid Authentication (securitySchemesInInput)
+
+When part of your OpenAPI security model needs user-provided tokens (OAuth, PATs) and the rest should stay server-side, list the caller-owned schemes in `securitySchemesInInput` and map the rest via `authProviderMapper`.
+
+```ts
+OpenapiAdapter.init({
+  name: 'hybrid-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  securitySchemesInInput: ['UserToken'],
+  authProviderMapper: {
+    ServiceKey: (authInfo) => authInfo.user?.serviceApiKey,
+  },
+});
+```
+
+<Note>Only the schemes you list stay visible to MCP callers. Every other scheme must be fulfilled by `authProviderMapper`, `securityResolver`, or `staticAuth`.</Note>
+
 ---
 
 ## How It Works

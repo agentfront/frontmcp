@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-14" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -49,6 +49,18 @@ mode: 'center'
 
     🤖 **Schema & runtime upgrades** – Core packages now ship with MCP SDK `1.24.3`, Zod 4, Hugging Face Transformers `^3.2.2`, and `zod-from-json-schema`, keeping schema validation, JSON generation, and App SDK widgets in sync with the latest protocol changes.
 
+    🛡️ **Hybrid OpenAPI auth** – Decide which security schemes stay in tool inputs with `securitySchemesInInput` while the rest resolve from context, so you can mix user tokens with server secrets without leaking API keys.
+
+    🧰 **OpenAPI transforms** – Use `inputTransforms` and `toolTransforms` to hide injected headers, add annotations, tags, and UI metadata, and keep CodeCall hints synchronized across every generated tool.
+
+    🧩 **x-frontmcp-powered tooling** – Configure annotations, cache policies, CodeCall visibility, and discovery hints directly in your OpenAPI spec via the `x-frontmcp` extension, no adapter overrides required.
+
+    🧬 **Adaptive tool descriptions** – Switch `descriptionMode` between summary-only, combined, or full to give models richer context without hand-writing docstrings for hundreds of endpoints.
+
+    🔭 **Adapter observability** – Pass a custom `FrontMcpLogger` (or rely on the SDK-injected one) to capture structured security analysis, transform logs, and warnings instead of scraping console output.
+
+    🛡️ **Defense-in-depth defaults** – SSRF guards, header sanitization, reserved-key validation, and per-scheme routing now wrap every OpenAPI call automatically, dramatically reducing proto-pollution and header-injection risks.
+
     **Fixes**
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
@@ -56,6 +68,8 @@ mode: 'center'
     🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
 
     🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
+
+    🧰 **VectoriaDB sample fix** – The guide now calls `toolIndex.add()` in its try/catch snippet so copying the example no longer throws a syntax error.
 
     **Docs**
 
@@ -78,6 +92,10 @@ mode: 'center'
     🎛️ **Tool UI metadata docs** – Refreshed `/docs/ui/overview` and `/docs/ui/integration/tools` with display modes, serving strategies, hydration, CSP guidance, and widget accessibility tips so templates behave predictably across platforms.
 
     🧱 **OpenAI resource widgets** – Added `/docs/ui/components/resource-widgets` to cover `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview`, plus escaping and HTMX best practices for App SDK layouts.
+
+    📘 **OpenAPI adapter deep dive** – `/docs/adapters/openapi-adapter` now documents hybrid security schemes, transforms, description modes, x-frontmcp annotations, and logging hooks so you can adopt the new adapter features without spelunking the source.
+
+    🧭 **OpenAPI guide pointers** – The add-openapi guide links to the full reference and explains `securitySchemesInInput`, helping teams decide which credentials should come from users versus server context.
 
     🖼️ **Reliable README branding** – README logos now point at absolute GitHub URLs so they render on npm, CDN mirrors, and any docs preview without shipping extra assets.
 

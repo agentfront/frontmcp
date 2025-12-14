@@ -123,6 +123,10 @@ export default class MyApiApp {}
   How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
 </ParamField>
 
+<ParamField path="securitySchemesInInput" type="string[]">
+  Names of security schemes that should remain in the generated input schema. Pair with `authProviderMapper` to keep service credentials hidden while still prompting users for the schemes you list here.
+</ParamField>
+
 <ParamField path="logger" type="FrontMcpLogger">
   Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger via `setLogger()`. For standalone usage, you can optionally provide a logger implementing the `FrontMcpLogger` interface; if omitted, a console-based logger is created automatically.
 </ParamField>
@@ -269,6 +273,49 @@ OpenapiAdapter.init({
 ```
 
 <Check>**Security Risk: LOW** — User-specific data is injected server-side, hidden from MCP clients.</Check>
+
+### Hybrid Authentication: securitySchemesInInput (Medium Risk)
+
+Best for: Mixing user-provided OAuth tokens with server-held secrets. Use when you want models to supply certain credentials but still keep service accounts hidden behind `authProviderMapper`.
+
+<CodeGroup>
+
+```ts Hybrid tokens
+OpenapiAdapter.init({
+  name: 'hybrid-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  // Only the listed schemes stay in the tool input schema
+  securitySchemesInInput: ['UserToken'],
+  // Every other scheme is resolved from context
+  authProviderMapper: {
+    ServiceKey: (authInfo) => authInfo.user?.serviceApiKey,
+  },
+});
+```
+
+```yaml Spec excerpt
+components:
+  securitySchemes:
+    UserToken:
+      type: http
+      scheme: bearer
+    ServiceKey:
+      type: apiKey
+      in: header
+paths:
+  /records:
+    get:
+      security:
+        - UserToken: []
+          ServiceKey: []
+```
+
+</CodeGroup>
+
+<Info>
+  Only schemes listed in `securitySchemesInInput` remain visible to MCP callers. All other schemes must be satisfied by `authProviderMapper`, `securityResolver`, or `staticAuth`.
+</Info>
 
 ### Default Behavior (Medium Risk)
 
@@ -484,15 +531,15 @@ OpenapiAdapter.init({
 
 **Available transform properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string \| function` | Override or transform the tool name |
-| `description` | `string \| function` | Override or transform the tool description |
-| `annotations` | `ToolAnnotations` | MCP tool behavior hints |
-| `tags` | `string[]` | Categorization tags |
-| `examples` | `ToolExample[]` | Usage examples |
-| `hideFromDiscovery` | `boolean` | Hide tool from listing |
-| `ui` | `ToolUIConfig` | UI configuration for tool forms |
+| Property            | Type                 | Description                                |
+| ------------------- | -------------------- | ------------------------------------------ |
+| `name`              | `string \| function` | Override or transform the tool name        |
+| `description`       | `string \| function` | Override or transform the tool description |
+| `annotations`       | `ToolAnnotations`    | MCP tool behavior hints                    |
+| `tags`              | `string[]`           | Categorization tags                        |
+| `examples`          | `ToolExample[]`      | Usage examples                             |
+| `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
+| `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
 
 ### x-frontmcp OpenAPI Extension
 
@@ -526,14 +573,14 @@ paths:
 
 **Extension properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `annotations` | `object` | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
-| `cache` | `object` | Cache config: `ttl` (seconds), `slideWindow` (boolean) |
-| `codecall` | `object` | CodeCall config: `enabledInCodeCall`, `visibleInListTools` |
-| `tags` | `string[]` | Categorization tags |
-| `hideFromDiscovery` | `boolean` | Hide from tool listing |
-| `examples` | `array` | Usage examples with input/output |
+| Property            | Type       | Description                                                                               |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `annotations`       | `object`   | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
+| `cache`             | `object`   | Cache config: `ttl` (seconds), `slideWindow` (boolean)                                    |
+| `codecall`          | `object`   | CodeCall config: `enabledInCodeCall`, `visibleInListTools`                                |
+| `tags`              | `string[]` | Categorization tags                                                                       |
+| `hideFromDiscovery` | `boolean`  | Hide from tool listing                                                                    |
+| `examples`          | `array`    | Usage examples with input/output                                                          |
 
 <Tip>
   Use `x-frontmcp` in your OpenAPI spec for declarative configuration.
@@ -553,19 +600,50 @@ OpenapiAdapter.init({
 });
 ```
 
-| Mode | Description |
-|------|-------------|
-| `'summaryOnly'` | Use only the OpenAPI summary (default) |
-| `'descriptionOnly'` | Use only the OpenAPI description |
-| `'combined'` | Summary followed by description |
-| `'full'` | Summary, description, and operation details |
+| Mode                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `'summaryOnly'`     | Use only the OpenAPI summary (default)      |
+| `'descriptionOnly'` | Use only the OpenAPI description            |
+| `'combined'`        | Summary followed by description             |
+| `'full'`            | Summary, description, and operation details |
+
+### Adapter Logging
+
+When the adapter runs inside a FrontMCP app it inherits the app logger via `setLogger()`. If you bootstrap adapters manually (CLI scripts, tests, workers), pass any `FrontMcpLogger` implementation so structured security diagnostics still flow to your sinks.
+
+```ts
+import pino from 'pino';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+import type { FrontMcpLogger } from '@frontmcp/sdk';
+
+const baseLogger = pino({ name: 'openapi-adapter' });
+const adapterLogger: FrontMcpLogger = {
+  verbose: (msg, ...args) => baseLogger.debug({ args }, msg),
+  debug: (msg, ...args) => baseLogger.debug({ args }, msg),
+  info: (msg, ...args) => baseLogger.info({ args }, msg),
+  warn: (msg, ...args) => baseLogger.warn({ args }, msg),
+  error: (msg, ...args) => baseLogger.error({ args }, msg),
+  child: (scope) => baseLogger.child({ scope }),
+};
+
+OpenapiAdapter init({
+  name: 'standalone-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  logger: adapterLogger,
+});
+```
+
+<Tip>
+  Share a single logger instance across adapters so security warnings, transform diagnostics, and request metadata show up beside the rest of your platform logs.
+</Tip>
 
 ### Load Options
 
 Configure how the OpenAPI spec is loaded.
 
 ```ts
-OpenapiAdapter.init({
+OpenapiAdapter init({
   name: 'my-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
@@ -617,7 +695,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
     }),
 
     // Slack API
-    OpenapiAdapter.init({
+    OpenapiAdapter init({
       name: 'slack',
       url: 'https://api.slack.com/openapi.json',
       baseUrl: 'https://api.slack.com',
@@ -640,7 +718,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
   id: 'saas-app',
   name: 'SaaS Platform',
   adapters: [
-    OpenapiAdapter.init({
+    OpenapiAdapter init({
       name: 'backend:api',
       spec: require('./openapi.json'),
       baseUrl: process.env.API_BASE_URL!,
@@ -652,7 +730,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
 
         // Add user authorization
         if (authInfo.token) {
-          headers.set('authorization', `Bearer ${authInfo.token}`);
+          headers set('authorization', `Bearer ${authInfo.token}`);
         }
 
         return headers;
@@ -689,7 +767,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       headersMapper: (authInfo, headers) => {
         const token = authInfo.token;
         if (token) {
-          headers.set('authorization', `Bearer ${token}`);
+          headers set('authorization', `Bearer ${token}`);
         }
         return headers;
       },
@@ -710,6 +788,10 @@ export default class ExpenseMcpApp {}
   Always store credentials in environment variables or secrets manager. Never commit credentials to source control.
 </Card>
 
+<Card title="Expose Only Needed Schemes" icon="link">
+  Use `securitySchemesInInput` to prompt for user-owned tokens while keeping server secrets in `authProviderMapper`. Document which schemes belong to which side so operators know what gets logged.
+</Card>
+
 <Card title="Avoid includeSecurityInInput" icon="xmark">
   Setting `generateOptions.includeSecurityInInput: true` exposes auth fields to MCP clients (**HIGH risk**). Only use
   for development/testing.
@@ -724,23 +806,24 @@ export default class ExpenseMcpApp {}
 
 The adapter automatically validates your security configuration and assigns a risk score:
 
-| Risk Level    | Configuration                                  | Description                                             |
-| ------------- | ---------------------------------------------- | ------------------------------------------------------- |
-| **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
-| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
-| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
+| Risk Level    | Configuration                                   | Description                                                                                     |
+| ------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`      | Auth resolved from user context, not exposed to clients                                         |
+| **MEDIUM** ⚠️ | `securitySchemesInInput` + `authProviderMapper` | Hybrid flows where some credentials come from user input while service secrets stay server-side |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default   | Static credentials or default behavior                                                          |
+| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true`  | Auth fields exposed to MCP clients (not recommended)                                            |
 
 ## Built-in Security Protections
 
 Beyond authentication, the adapter includes defense-in-depth protections:
 
-| Protection | Description |
-|------------|-------------|
-| **SSRF Prevention** | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
-| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values |
-| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms |
-| **Request Size Limits** | Content-Length validation with integer overflow protection |
-| **Query Param Collision** | Detects conflicts between security and user input parameters |
+| Protection                | Description                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
+| **Request Size Limits**   | Content-Length validation with integer overflow protection                              |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                            |
 
 **Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
 
