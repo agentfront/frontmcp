@@ -24,7 +24,9 @@ describe('runCreate', () => {
     originalCwd = process.cwd();
 
     // Mock process.chdir to track directory changes
-    jest.spyOn(process, 'chdir').mockImplementation(() => {});
+    jest.spyOn(process, 'chdir').mockImplementation(() => {
+      // No-op for testing
+    });
 
     // Mock process.exit
     jest.spyOn(process, 'exit').mockImplementation((() => {
@@ -213,7 +215,9 @@ describe('helper functions', () => {
     beforeEach(() => {
       const tempDir = mkdtempSync(path.join(tmpdir(), 'cli-test-'));
       jest.spyOn(process, 'cwd').mockReturnValue(tempDir);
-      jest.spyOn(process, 'chdir').mockImplementation(() => {});
+      jest.spyOn(process, 'chdir').mockImplementation(() => {
+        // No-op for testing
+      });
       jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
         throw new Error(`process.exit(${code})`);
       }) as () => never);

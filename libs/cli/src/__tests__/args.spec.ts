@@ -1,4 +1,4 @@
-import { parseArgs, type ParsedArgs } from '../args';
+import { parseArgs } from '../args';
 
 describe('parseArgs', () => {
   describe('positional arguments', () => {
