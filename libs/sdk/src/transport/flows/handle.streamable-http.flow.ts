@@ -116,7 +116,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       // No session - create new one (initialize request)
       session = createSessionId('streamable-http', token, {
         userAgent: request.headers?.['user-agent'] as string | undefined,
-        platformDetectionConfig: (this.scope as Scope).metadata?.session?.platformDetection,
+        platformDetectionConfig: (this.scope as Scope).metadata.transport?.platformDetection,
       });
     }
 

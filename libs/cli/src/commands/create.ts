@@ -289,6 +289,207 @@ export default {
 };
 `;
 
+const TEMPLATE_DOCKER_COMPOSE = `
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '\${PORT:-3000}:3000'
+    environment:
+      - NODE_ENV=\${NODE_ENV:-development}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+    command: npm run dev
+
+volumes:
+  redis-data:
+`;
+
+const TEMPLATE_DOCKERFILE = `
+# Build stage
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Install all dependencies (including devDependencies for build)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# Production stage
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Install production dependencies only
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3000
+
+CMD ["node", "dist/main.js"]
+`;
+
+const TEMPLATE_ENV_EXAMPLE = `
+# Application
+PORT=3000
+NODE_ENV=development
+
+# Redis (recommended for development, required for production)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+# SECURITY: Set a strong password in production
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Optional: Redis TLS (enable for production)
+REDIS_TLS=false
+`;
+
+const TEMPLATE_ENV_DOCKER = `
+# Docker-specific environment
+# Copy this to .env when running with docker compose
+
+# Application
+PORT=3000
+NODE_ENV=development
+
+# Redis - use 'redis' (service name) as host inside Docker network
+REDIS_HOST=redis
+REDIS_PORT=6379
+# SECURITY: Set a strong password in production
+REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_TLS=false
+`;
+
+const TEMPLATE_README = `
+# FrontMCP Server
+
+A TypeScript MCP server built with [FrontMCP](https://github.com/agentfront/frontmcp).
+
+## Quick Start
+
+\`\`\`bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run MCP Inspector
+npm run inspect
+\`\`\`
+
+## Development with Docker
+
+### Prerequisites
+- Docker & Docker Compose installed
+
+### Quick Start
+
+\`\`\`bash
+# Start Redis and app in development mode
+docker compose up
+
+# Start only Redis (for local development)
+docker compose up redis -d
+
+# Stop all services
+docker compose down
+\`\`\`
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| \`PORT\` | 3000 | Application port |
+| \`NODE_ENV\` | development | Environment mode |
+| \`REDIS_HOST\` | localhost | Redis host (use \`redis\` in Docker) |
+| \`REDIS_PORT\` | 6379 | Redis port |
+
+## Redis Configuration
+
+### Development
+Redis is **recommended** for development to enable caching and session persistence.
+Use the included \`docker-compose.yml\` to run Redis locally:
+
+\`\`\`bash
+docker compose up redis -d
+\`\`\`
+
+### Production
+Redis is **required** in production for:
+- Session storage (multi-instance deployments)
+- Caching (performance optimization)
+- Rate limiting (if enabled)
+
+See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-setup) for production configuration.
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| \`npm run dev\` | Start development server with hot reload |
+| \`npm run build\` | Build for production |
+| \`npm run inspect\` | Launch MCP Inspector |
+| \`npm run doctor\` | Check project configuration |
+| \`npm run test\` | Run unit tests |
+| \`npm run test:e2e\` | Run E2E tests |
+
+## Project Structure
+
+\`\`\`
+├── .env.example       # Environment variables template
+├── .gitignore         # Git ignore rules
+├── docker-compose.yml # Docker services config
+├── Dockerfile         # Container build config
+├── e2e/               # E2E tests
+├── jest.e2e.config.ts # Jest E2E configuration
+├── package.json       # Dependencies and scripts
+├── src/
+│   ├── main.ts        # Server entry point
+│   ├── calc.app.ts    # Example app
+│   └── tools/
+│       └── add.tool.ts # Example tool
+└── tsconfig.json      # TypeScript config
+\`\`\`
+
+## Learn More
+
+- [FrontMCP Documentation](https://docs.agentfront.dev)
+- [MCP Specification](https://modelcontextprotocol.io)
+`;
+
 export async function runCreate(projectArg?: string): Promise<void> {
   if (!projectArg) {
     console.error(c('red', 'Error: project name is required.\n'));
@@ -345,6 +546,13 @@ export async function runCreate(projectArg?: string): Promise<void> {
   // Git configuration
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.gitignore'), TEMPLATE_GITIGNORE);
 
+  // Docker & Redis setup
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'docker-compose.yml'), TEMPLATE_DOCKER_COMPOSE);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'Dockerfile'), TEMPLATE_DOCKERFILE);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.env.example'), TEMPLATE_ENV_EXAMPLE);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.env.docker'), TEMPLATE_ENV_DOCKER);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'README.md'), TEMPLATE_README);
+
   console.log('\nNext steps:');
   console.log(`  1) cd ${folder}`);
   console.log('  2) npm install');
@@ -352,4 +560,8 @@ export async function runCreate(projectArg?: string): Promise<void> {
   console.log('  4) npm run inspect  ', c('gray', '# launch MCP Inspector'));
   console.log('  5) npm run build    ', c('gray', '# compile with tsc via frontmcp build'));
   console.log('  6) npm run test:e2e ', c('gray', '# run E2E tests'));
+  console.log('');
+  console.log(c('cyan', 'Docker:'));
+  console.log('  docker compose up redis -d  ', c('gray', '# start Redis for development'));
+  console.log('  docker compose up           ', c('gray', '# start full stack'));
 }

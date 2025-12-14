@@ -258,89 +258,23 @@ export const incrementalAuthConfigSchema = z.object({
 });
 
 // ============================================
-// TRANSPORT CONFIG
-// Protocol enablement and behavior settings
+// TRANSPORT CONFIG (DEPRECATED)
+// These schemas are kept for backward compatibility during migration.
+// Use top-level transport config instead.
+// DELETE after v1.0.0
 // ============================================
 
 /**
- * Transport protocol configuration
- * Controls which transport protocols are enabled and their behavior
- */
-export const transportConfigSchema = z.object({
-  /**
-   * Enable legacy SSE transport (old HTTP+SSE protocol)
-   * @default false
-   */
-  enableLegacySSE: z.boolean().default(false),
-
-  /**
-   * Enable SSE listener for server-initiated messages (GET /mcp with Accept: text/event-stream)
-   * @default true
-   */
-  enableSseListener: z.boolean().default(true),
-
-  /**
-   * Enable streamable HTTP transport (POST with SSE response)
-   * @default true
-   */
-  enableStreamableHttp: z.boolean().default(true),
-
-  /**
-   * Enable stateless HTTP mode (requests without session ID)
-   * When enabled, allows requests without prior initialize
-   * Uses shared singleton transport for anonymous, per-token singleton for authenticated
-   * @default false
-   */
-  enableStatelessHttp: z.boolean().default(false),
-
-  /**
-   * Enable stateful HTTP transport (JSON-only responses)
-   * @default false
-   */
-  enableStatefulHttp: z.boolean().default(false),
-
-  /**
-   * Require session ID for streamable HTTP (non-stateless mode)
-   * When false, streamable HTTP requests don't require prior initialize
-   * @default true
-   */
-  requireSessionForStreamable: z.boolean().default(true),
-
-  /**
-   * Transport recreation configuration
-   * When enabled, sessions are persisted to Redis and transports can be recreated after server restart
-   */
-  recreation: z.lazy(() => transportRecreationConfigSchema).optional(),
-});
-
-/**
- * Transport recreation configuration
- * Enables session persistence to Redis and automatic transport recreation after server restart
+ * @deprecated Use top-level transport config instead. This will be removed in v1.0.0.
  */
 export const transportRecreationConfigSchema = z
   .object({
-    /**
-     * Enable transport recreation from Redis
-     * When enabled, sessions are persisted to Redis and transports can be recreated after restart
-     * @default false
-     */
     enabled: z.boolean().default(false),
-
-    /**
-     * Redis configuration for session storage
-     * Required when enabled=true
-     */
     redis: redisConfigSchema.optional(),
-
-    /**
-     * Default TTL for stored session metadata (milliseconds)
-     * @default 3600000 (1 hour)
-     */
     defaultTtlMs: z.number().int().positive().default(3600000),
   })
   .refine(
     (data) => {
-      // If enabled=true, redis must be provided
       if (data.enabled && !data.redis) {
         return false;
       }
@@ -351,6 +285,19 @@ export const transportRecreationConfigSchema = z
       path: ['redis'],
     },
   );
+
+/**
+ * @deprecated Use top-level transport config instead. This will be removed in v1.0.0.
+ */
+export const transportConfigSchema = z.object({
+  enableLegacySSE: z.boolean().default(false),
+  enableSseListener: z.boolean().default(true),
+  enableStreamableHttp: z.boolean().default(true),
+  enableStatelessHttp: z.boolean().default(false),
+  enableStatefulHttp: z.boolean().default(false),
+  requireSessionForStreamable: z.boolean().default(true),
+  recreation: z.lazy(() => transportRecreationConfigSchema).optional(),
+});
 
 // ============================================
 // PUBLIC MODE
@@ -396,8 +343,7 @@ export const publicAuthOptionsSchema = z.object({
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
 
   /**
-   * Transport protocol configuration
-   * Controls which transports are enabled and their behavior
+   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
    */
   transport: transportConfigSchema.optional(),
 });
@@ -446,8 +392,7 @@ export const transparentAuthOptionsSchema = z.object({
   publicAccess: publicAccessConfigSchema.optional(),
 
   /**
-   * Transport protocol configuration
-   * Controls which transports are enabled and their behavior
+   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
    */
   transport: transportConfigSchema.optional(),
 });
@@ -527,8 +472,7 @@ export const orchestratedLocalSchema = z.object({
   incrementalAuth: incrementalAuthConfigSchema.optional(),
 
   /**
-   * Transport protocol configuration
-   * Controls which transports are enabled and their behavior
+   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
    */
   transport: transportConfigSchema.optional(),
 });
@@ -608,8 +552,7 @@ export const orchestratedRemoteSchema = z.object({
   incrementalAuth: incrementalAuthConfigSchema.optional(),
 
   /**
-   * Transport protocol configuration
-   * Controls which transports are enabled and their behavior
+   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
    */
   transport: transportConfigSchema.optional(),
 });
@@ -688,15 +631,21 @@ export type ConsentConfig = z.infer<typeof consentConfigSchema>;
 export type ConsentConfigInput = z.input<typeof consentConfigSchema>;
 
 /**
- * Transport protocol configuration
+ * @deprecated Use TransportOptions from transport.options.ts instead
  */
 export type TransportConfig = z.infer<typeof transportConfigSchema>;
+/**
+ * @deprecated Use TransportOptionsInput from transport.options.ts instead
+ */
 export type TransportConfigInput = z.input<typeof transportConfigSchema>;
 
 /**
- * Transport recreation configuration
+ * @deprecated Use TransportPersistenceConfig from transport.options.ts instead
  */
 export type TransportRecreationConfig = z.infer<typeof transportRecreationConfigSchema>;
+/**
+ * @deprecated Use TransportPersistenceConfigInput from transport.options.ts instead
+ */
 export type TransportRecreationConfigInput = z.input<typeof transportRecreationConfigSchema>;
 
 /**

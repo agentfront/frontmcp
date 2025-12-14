@@ -762,7 +762,7 @@ export class NotificationService {
 
     registered.clientInfo = clientInfo;
     // Use platform detection config from scope if available
-    const platformDetectionConfig = this.scope.metadata?.session?.platformDetection;
+    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
     registered.platformType = detectAIPlatform(clientInfo, platformDetectionConfig);
     this.logger.verbose(
       `Set client info for session ${sessionId.slice(0, 20)}...: name=${clientInfo.name}, version=${
