@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-14" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -15,13 +15,27 @@ mode: 'center'
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
+    ⚠️ **Unified transport config** – All transport toggles, session lifecycles, and Redis settings moved into the top-level `transport` and shared `redis` blocks, so migrate off legacy `auth.transport` / `session` before the next release.
+
     **Features**
+
+    🧑‍✈️ **Guided project scaffolding** – The `frontmcp create` wizard is now interactive by default, walking you through target platform, Redis, and CI/CD options with Docker Compose defaults while preserving any scripts you already defined (use `--yes` to skip prompts).
+
+    ☁️ **Serverless adapters** – Use `frontmcp build --adapter vercel|lambda|cloudflare` to emit handler wrappers, platform config files, and environment switches so you can deploy the same server to Vercel, AWS Lambda, or Cloudflare Workers in minutes.
+
+    🧊 **Redis session persistence** – Enable `transport.persistence` with the shared `redis` config to recover transports after restarts, coordinate clusters, and enforce TTLs for session storage.
+
+    🧩 **OpenAPI adapter transforms** – Hide sensitive inputs, tag tools, and rewrite descriptions with `inputTransforms`, `toolTransforms`, `descriptionMode`, per-scheme security filters, and custom loggers so your spec stays untouched.
+
+    🛡️ **Defense-in-depth defaults** – SSRF, header injection, prototype pollution, Content-Length overflow, and security mapper collisions are blocked automatically whenever OpenAPI-generated tools fire requests.
+
+    🧱 **ESM-ready UI components** – `@frontmcp/ui` now ships an ESM build plus updated TypeScript config so you can import the UI kit inside modern bundlers, workers, and browser-native environments without shims.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
     🧩 **Tool UI metadata & widgets** – Configure display modes, static/hybrid serving, CSP, hydration, and widget accessibility per tool while composing OpenAI App SDK-ready resource cards, lists, and previews without reimplementing layout glue.
 
-    📡 **Transport-aware auth** – Flip the new `auth.transport` switches per app (public, transparent, or orchestrated) to enable streamable, stateful, or stateless HTTP plus SSE listeners so production stays locked down while demos and CI can bypass the `initialize` handshake.
+    📡 **Transport-aware auth** – Flip the `transport` block switches per app (public, transparent, or orchestrated) to enable streamable, stateful, or stateless HTTP plus SSE listeners so production stays locked down while demos and CI can bypass the `initialize` handshake.
 
     🔐 **Authentication reference servers** – Boot `pnpm nx serve demo-public`, `demo-orchestrated-auth`, or `demo-transparent-auth` to see each mode with consent screens, incremental scopes, stateful/stateless session strategies, and transport presets before wiring your own app.
 
@@ -57,6 +71,8 @@ mode: 'center'
 
     🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
 
+    🧯 **Transport recreation stability** – Redis persistence now validates session IDs, purges corrupted payloads, and rejects reserved prototype keys so recreation stops flapping and pollution exploits never reach your handlers.
+
     **Docs**
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
@@ -73,7 +89,15 @@ mode: 'center'
 
     🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
 
-    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
+    ☁️ **Serverless deployment guide** – Added `/docs/deployment/serverless` covering the new adapters for Vercel, AWS Lambda, and Cloudflare plus generated config files and troubleshooting tips.
+
+    🧊 **Redis setup walkthrough** – `/docs/deployment/redis-setup` now documents Docker Compose defaults, managed services, security hardening, environment variables, and health checks so Redis is production ready.
+
+    🚀 **Getting started refresh** – Installation, quickstart, and local-dev guides explain the interactive `frontmcp create` prompts, CLI flags, Docker scripts, and the non-interactive `--yes` escape hatch.
+
+    🧩 **OpenAPI adapter deep dive** – `/docs/adapters/openapi-adapter` now walks through input/tool transforms, description modes, logger injection, x-frontmcp spec extensions, and the new security defenses with copy-pasteable samples.
+
+    🌐 **Transport reference overhaul** – `/docs/servers/server` documents the top-level `transport` and shared `redis` blocks, session persistence toggles, and the migration path away from `auth.transport` / `session`.
 
     🎛️ **Tool UI metadata docs** – Refreshed `/docs/ui/overview` and `/docs/ui/integration/tools` with display modes, serving strategies, hydration, CSP guidance, and widget accessibility tips so templates behave predictably across platforms.
 
@@ -92,6 +116,8 @@ mode: 'center'
     🧱 **CLI dependency cleanup** – The global CLI now bundles only `tslib` and always reuses the workspace versions of `@frontmcp/sdk`, adapters, and plugins, so globals stop drifting from your project's dependencies.
 
     🧰 **Zod 4 scaffolding** – CLI generators write `zod@^4.0.0` into fresh `package.json` files, keeping newly scaffolded apps aligned with the runtime upgrade without manual edits.
+
+    🧪 **CLI Verdaccio E2E suite** – A new Verdaccio-backed `npm run e2e` target exercises the CLI publish/install/scaffold flow so regressions surface before a release goes out.
 
     🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
 
