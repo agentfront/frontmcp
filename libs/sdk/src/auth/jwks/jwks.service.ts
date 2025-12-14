@@ -1,11 +1,14 @@
 // auth/jwks/jwks.service.ts
 import crypto from 'node:crypto';
-import {jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet} from 'jose';
-import {JwksServiceOptions, ProviderVerifyRef, VerifyResult} from './jwks.types';
-import {normalizeIssuer, trimSlash, decodeJwtPayloadSafe} from './jwks.utils';
+import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet } from 'jose';
+import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
+import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
+import { isDevKeyPersistenceEnabled, loadDevKey, saveDevKey, DevKeyData } from './dev-key-persistence';
 
 export class JwksService {
-  private readonly opts: Required<JwksServiceOptions>;
+  private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence'>> & {
+    devKeyPersistence?: JwksServiceOptions['devKeyPersistence'];
+  };
 
   // Orchestrator signing material
   private orchestratorKey!: {
@@ -18,12 +21,18 @@ export class JwksService {
   // Provider JWKS cache (providerId -> jwks + fetchedAt)
   private providerJwks = new Map<string, { jwks: JSONWebKeySet; fetchedAt: number }>();
 
+  // Track if key has been initialized (for async loading)
+  private keyInitialized = false;
+  // Promise guard to prevent concurrent key generation
+  private keyInitPromise: Promise<void> | undefined;
+
   constructor(opts?: JwksServiceOptions) {
     this.opts = {
       orchestratorAlg: opts?.orchestratorAlg ?? 'RS256',
       rotateDays: opts?.rotateDays ?? 30,
       providerJwksTtlMs: opts?.providerJwksTtlMs ?? 6 * 60 * 60 * 1000, // 6h
       networkTimeoutMs: opts?.networkTimeoutMs ?? 5000, // 5s
+      devKeyPersistence: opts?.devKeyPersistence,
     };
   }
 
@@ -32,7 +41,7 @@ export class JwksService {
   // ===========================================================================
 
   /** Gateway's public JWKS (publish at /.well-known/jwks.json when orchestrated). */
-  getPublicJwks(): JSONWebKeySet {
+  async getPublicJwks(): Promise<JSONWebKeySet> {
     return this.getOrchestratorJwks();
   }
 
@@ -63,8 +72,8 @@ export class JwksService {
       if (!payload) {
         return {
           ok: false,
-          error: 'invalid bearer token'
-        }
+          error: 'invalid bearer token',
+        };
       }
       return {
         ok: true,
@@ -72,9 +81,9 @@ export class JwksService {
         sub: payload['sub'] as string,
         payload,
         header: decodeProtectedHeader(token),
-      }
+      };
     } catch (err: any) {
-      return {ok: false, error: err?.message ?? 'verification_failed'};
+      return { ok: false, error: err?.message ?? 'verification_failed' };
     }
   }
 
@@ -83,7 +92,7 @@ export class JwksService {
    * Ensures JWKS are available (cached/TTL/AS discovery) per provider.
    */
   async verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult> {
-    if (!candidates?.length) return {ok: false, error: 'no_providers'};
+    if (!candidates?.length) return { ok: false, error: 'no_providers' };
 
     // Helpful only for error messages
     let kid: string | undefined;
@@ -101,10 +110,10 @@ export class JwksService {
         if (!jwks?.keys?.length) continue;
         const draftPayload = decodeJwtPayloadSafe(token);
         const JWKS = createLocalJWKSet(jwks);
-        const {payload, protectedHeader} = await jwtVerify(token, JWKS, {
-          issuer: [
-            normalizeIssuer(p.issuerUrl),
-          ].concat((draftPayload?.['iss'] ? [draftPayload['iss']] : []) as string[]), // used because current cloud gateway have invalid issuer
+        const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
+          issuer: [normalizeIssuer(p.issuerUrl)].concat(
+            (draftPayload?.['iss'] ? [draftPayload['iss']] : []) as string[],
+          ), // used because current cloud gateway have invalid issuer
         });
 
         return {
@@ -121,7 +130,7 @@ export class JwksService {
       }
     }
 
-    return {ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}`};
+    return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
   }
 
   // ===========================================================================
@@ -130,7 +139,7 @@ export class JwksService {
 
   /** Directly set provider JWKS (e.g., inline keys from config). */
   setProviderJwks(providerId: string, jwks: JSONWebKeySet) {
-    this.providerJwks.set(providerId, {jwks, fetchedAt: Date.now()});
+    this.providerJwks.set(providerId, { jwks, fetchedAt: Date.now() });
   }
 
   /**
@@ -176,15 +185,15 @@ export class JwksService {
   // ===========================================================================
 
   /** Return the orchestrator public JWKS (generates/rotates as needed). */
-  getOrchestratorJwks(): JSONWebKeySet {
-    this.ensureOrchestratorKey();
+  async getOrchestratorJwks(): Promise<JSONWebKeySet> {
+    await this.ensureOrchestratorKey();
     return this.orchestratorKey.publicJwk;
   }
 
   /** Return private signing key + kid for issuing orchestrator tokens. */
-  getOrchestratorSigningKey(): { kid: string; key: crypto.KeyObject; alg: string } {
-    this.ensureOrchestratorKey();
-    return {kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg};
+  async getOrchestratorSigningKey(): Promise<{ kid: string; key: crypto.KeyObject; alg: string }> {
+    await this.ensureOrchestratorKey();
+    return { kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg };
   }
 
   // ===========================================================================
@@ -218,7 +227,7 @@ export class JwksService {
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: {accept: 'application/json'},
+        headers: { accept: 'application/json' },
         signal: ctl?.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -228,27 +237,98 @@ export class JwksService {
     }
   }
 
-  private ensureOrchestratorKey() {
+  private async ensureOrchestratorKey() {
     const now = Date.now();
     const maxAge = this.opts.rotateDays * 24 * 60 * 60 * 1000;
-    if (!this.orchestratorKey || now - this.orchestratorKey.createdAt > maxAge) {
-      this.orchestratorKey = this.generateKey(this.opts.orchestratorAlg);
+
+    // If key exists and not expired, use it
+    if (this.orchestratorKey && now - this.orchestratorKey.createdAt <= maxAge) {
+      return;
+    }
+
+    // Use promise guard to prevent concurrent key generation (race condition fix)
+    if (this.keyInitPromise) {
+      await this.keyInitPromise;
+      return;
+    }
+
+    // Create promise guard and initialize key
+    this.keyInitPromise = this.initializeOrchestratorKey(now, maxAge);
+    try {
+      await this.keyInitPromise;
+    } finally {
+      // Clear promise guard after initialization to allow future rotation
+      this.keyInitPromise = undefined;
+    }
+  }
+
+  private async initializeOrchestratorKey(now: number, maxAge: number) {
+    // Try to load persisted key (in development mode)
+    if (isDevKeyPersistenceEnabled(this.opts.devKeyPersistence) && !this.keyInitialized) {
+      this.keyInitialized = true;
+      const loaded = await loadDevKey(this.opts.devKeyPersistence);
+
+      if (loaded && now - loaded.createdAt <= maxAge) {
+        // Validate algorithm matches config
+        if (loaded.alg !== this.opts.orchestratorAlg) {
+          console.warn(
+            `[JwksService] Persisted key algorithm (${loaded.alg}) doesn't match config (${this.opts.orchestratorAlg}), generating new key`,
+          );
+        } else {
+          // Reconstruct KeyObject from JWK
+          try {
+            // Cast to crypto.JsonWebKey to satisfy TypeScript
+            const privateKey = crypto.createPrivateKey({
+              key: loaded.privateKey as crypto.JsonWebKey,
+              format: 'jwk',
+            });
+            this.orchestratorKey = {
+              kid: loaded.kid,
+              privateKey,
+              publicJwk: loaded.publicJwk,
+              createdAt: loaded.createdAt,
+            };
+            return;
+          } catch (error) {
+            console.warn(`[JwksService] Failed to load persisted key: ${(error as Error).message}, generating new key`);
+          }
+        }
+      }
+    }
+
+    // Generate new key
+    this.orchestratorKey = this.generateKey(this.opts.orchestratorAlg);
+    this.keyInitialized = true;
+
+    // Save in development mode
+    if (isDevKeyPersistenceEnabled(this.opts.devKeyPersistence)) {
+      const keyData: DevKeyData = {
+        kid: this.orchestratorKey.kid,
+        privateKey: this.orchestratorKey.privateKey.export({ format: 'jwk' }) as JsonWebKey,
+        publicJwk: this.orchestratorKey.publicJwk,
+        createdAt: this.orchestratorKey.createdAt,
+        alg: this.opts.orchestratorAlg,
+      };
+      const saved = await saveDevKey(keyData, this.opts.devKeyPersistence);
+      if (!saved) {
+        console.warn('[JwksService] Failed to persist dev key - key will be regenerated on next restart');
+      }
     }
   }
 
   private generateKey(alg: 'RS256' | 'ES256') {
     if (alg === 'RS256') {
-      const {privateKey, publicKey} = crypto.generateKeyPairSync('rsa', {modulusLength: 2048});
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
       const kid = crypto.randomBytes(8).toString('hex');
-      const publicJwk = publicKey.export({format: 'jwk'});
-      Object.assign(publicJwk, {kid, alg: 'RS256', use: 'sig', kty: 'RSA'});
-      return {kid, privateKey, publicJwk: {keys: [publicJwk]}, createdAt: Date.now()};
+      const publicJwk = publicKey.export({ format: 'jwk' });
+      Object.assign(publicJwk, { kid, alg: 'RS256', use: 'sig', kty: 'RSA' });
+      return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };
     } else {
-      const {privateKey, publicKey} = crypto.generateKeyPairSync('ec', {namedCurve: 'P-256'});
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
       const kid = crypto.randomBytes(8).toString('hex');
-      const publicJwk = publicKey.export({format: 'jwk'});
-      Object.assign(publicJwk, {kid, alg: 'ES256', use: 'sig', kty: 'EC'});
-      return {kid, privateKey, publicJwk: {keys: [publicJwk]}, createdAt: Date.now()};
+      const publicJwk = publicKey.export({ format: 'jwk' });
+      Object.assign(publicJwk, { kid, alg: 'ES256', use: 'sig', kty: 'EC' });
+      return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };
     }
   }
 }

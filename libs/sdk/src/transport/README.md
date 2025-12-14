@@ -211,5 +211,170 @@ Create a server config block like:
 - Multiple concurrent **MCP sessions per Authorization** token (each with its own `Mcp-Session-Id`). ([Model Context
   Protocol][1])
 - Three transport modes, plus an **optional stateless** mode, all **behind a single MCP endpoint** and **config-gated**.
-- Cross-node delivery via **pub/sub** and **replay** via an **event store** when enabled, matching MCP’s
+- Cross-node delivery via **pub/sub** and **replay** via an **event store** when enabled, matching MCP's
   **resumability** and **multiple connections** guidance. ([Model Context Protocol][1])
+
+---
+
+# Transport Recreation with Redis
+
+## Why Transport Recreation is Needed
+
+The **Streamable HTTP** transport is **stateful** - the client establishes a session via `initialize`, receives a
+session ID, and uses it for subsequent requests. The server maintains an in-memory `LocalTransporter` object per
+session that:
+
+1. Tracks connection state
+2. Handles request/response routing
+3. Maintains the MCP protocol state machine
+
+**The problem**: In-memory transports are lost when:
+
+- Server restarts or deploys
+- Process crashes
+- Load balancer routes to a different node
+
+Without recreation, clients would receive 404 errors and need to re-initialize, losing their session context.
+
+## What Gets Stored in Redis
+
+The `StoredSession` persisted to Redis contains **metadata only**, not the actual transport object:
+
+```typescript
+interface StoredSession {
+  session: {
+    id: string; // Session ID
+    authorizationId: string; // Token hash (SHA-256, NOT the token itself)
+    protocol: 'streamable-http';
+    createdAt: number;
+    nodeId: string; // Which node created it
+  };
+  authorizationId: string; // Token hash for quick lookup verification
+  tokens?: Record<string, EncryptedBlob>; // Optional encrypted OAuth tokens (AES-256-GCM)
+  createdAt: number;
+  lastAccessedAt: number;
+}
+```
+
+## Why This is Safe to Store in Redis
+
+1. **No sensitive tokens in plaintext** - The `authorizationId` is a SHA-256 hash of the bearer token, not the token
+   itself. Provider tokens (if present) are encrypted with AES-256-GCM.
+
+2. **Token verification on recreation** - When recreating, the server verifies the request token matches:
+
+   ```typescript
+   if (stored.authorizationId !== sha256(requestToken)) {
+     // Reject - unauthorized access attempt
+     return undefined;
+   }
+   ```
+
+3. **Stateless transport object** - The `LocalTransporter` is effectively stateless from a persistence perspective. It
+   only needs:
+
+   - A session ID to identify the connection
+   - A response object to write to
+   - The scope for tool/resource access
+
+4. **No message queue persistence** - In-flight messages are not stored. If the server dies mid-request, that request
+   is lost (acceptable failure mode per MCP spec - client can retry).
+
+5. **TTL with expiration bounding** - Sessions auto-expire in Redis via TTL, and the TTL is bounded by any
+   application-level `expiresAt` timestamp.
+
+## The Recreation Flow
+
+```text
+Client Request with mcp-session-id: "abc123"
+                    │
+                    ▼
+    ┌─────────────────────────────────────────┐
+    │  1. Check in-memory transports          │
+    │     transport = getTransporter()        │
+    │     → null (not in memory)              │
+    └─────────────────────────────────────────┘
+                    │
+                    ▼
+    ┌─────────────────────────────────────────┐
+    │  2. Check Redis for stored session      │
+    │     storedSession = getStoredSession()  │
+    │     - Fetches session by ID             │
+    │     - Verifies token hash matches       │
+    │     → StoredSession found               │
+    └─────────────────────────────────────────┘
+                    │
+                    ▼
+    ┌─────────────────────────────────────────┐
+    │  3. Recreate transport in memory        │
+    │     recreateTransporter():              │
+    │     - Create new LocalTransporter       │
+    │     - Uses same session ID              │
+    │     - Associates with new response      │
+    │     - Updates lastAccessedAt            │
+    │     - Mutex prevents race conditions    │
+    └─────────────────────────────────────────┘
+                    │
+                    ▼
+            [Continue handling request normally]
+```
+
+## Configuration
+
+Enable transport recreation in your server configuration:
+
+```typescript
+const server = new McpServer({
+  transport: {
+    recreation: {
+      enabled: true,
+      redis: {
+        host: 'localhost',
+        port: 6379,
+        password: 'optional',
+        keyPrefix: 'mcp:session:', // Default prefix
+      },
+      defaultTtlMs: 3600000, // 1 hour default TTL
+    },
+  },
+});
+```
+
+## Security Measures
+
+| Measure                     | Description                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| **Token hash verification** | Only the original token holder can recreate their session                    |
+| **Mutex protection**        | Prevents race conditions during concurrent recreation attempts (per-process) |
+| **TTL expiration**          | Sessions auto-expire; TTL is bounded by `session.expiresAt` if set           |
+| **Cleanup on dispose**      | When transport closes, Redis entry is deleted                                |
+| **No plaintext secrets**    | Bearer tokens stored as SHA-256 hashes; OAuth tokens encrypted               |
+
+## What Cannot Be Recreated
+
+- **Long-running SSE connections** - The actual HTTP connection cannot be restored; client must reconnect
+- **In-flight messages** - Any pending request/response at crash time is lost
+- **Client-side state** - The client still needs to handle reconnection gracefully
+
+## Error Handling
+
+The recreation flow includes comprehensive error handling:
+
+1. **Redis lookup failure** - Logged as warning, falls through to 404 response
+2. **Token mismatch** - Returns undefined (unauthorized), results in 404
+3. **Transport creation failure** - Caught, logged, falls through to 404
+4. **Expired session** - Deleted from Redis, returns 404
+
+This ensures clients always receive appropriate HTTP status codes:
+
+- **404** - Session not found or expired (client should re-initialize)
+- **400** - Missing session header when required
+- **200/202** - Success (session recreated transparently)
+
+---
+
+<!-- Reference Links -->
+
+[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports
+[2]: https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization
+[3]: https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle

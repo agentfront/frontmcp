@@ -231,6 +231,8 @@ export interface RedisConfig {
   db?: number;
   tls?: boolean;
   keyPrefix?: string;
+  /** Default TTL in milliseconds for session extension on access (sliding expiration) */
+  defaultTtlMs?: number;
 }
 
 // ============================================
@@ -331,12 +333,13 @@ export const storedSessionSchema = z.object({
 });
 
 export const redisConfigSchema = z.object({
-  host: z.string(),
-  port: z.number().optional().default(6379),
+  host: z.string().min(1),
+  port: z.number().int().positive().optional().default(6379),
   password: z.string().optional(),
-  db: z.number().optional().default(0),
+  db: z.number().int().nonnegative().optional().default(0),
   tls: z.boolean().optional().default(false),
   keyPrefix: z.string().optional().default('mcp:session:'),
+  defaultTtlMs: z.number().int().positive().optional().default(3600000), // 1 hour default
 });
 
 // Stateful storage options (discriminated by store type)

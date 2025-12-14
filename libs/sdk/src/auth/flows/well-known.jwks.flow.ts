@@ -76,7 +76,7 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
 
     // Orchestrated gateway → serve own JWKS
     if (isOrchestrated) {
-      const keysDoc = jwksSvc.getPublicJwks();
+      const keysDoc = await jwksSvc.getPublicJwks();
       if (!keysDoc?.keys || !Array.isArray(keysDoc.keys)) {
         throw new Error('orchestrator jwks not available');
       }
@@ -95,7 +95,7 @@ export default class WellKnownJwksFlow extends FlowBase<typeof name> {
       }
     } else {
       // Public or orchestrated mode - serve local JWKS
-      const keysDoc = jwksSvc.getPublicJwks();
+      const keysDoc = await jwksSvc.getPublicJwks();
       if (keysDoc?.keys && Array.isArray(keysDoc.keys)) {
         this.respond(httpRespond.json(keysDoc));
       } else {
