@@ -72,6 +72,8 @@ export class TransportService {
           password: recreationConfig.redis.password,
           db: recreationConfig.redis.db,
           tls: recreationConfig.redis.tls,
+          // Note: Uses 'mcp:transport:' prefix (not 'mcp:session:') to separate transport
+          // recreation data from authentication session data in the auth module
           keyPrefix: recreationConfig.redis.keyPrefix ?? 'mcp:transport:',
           defaultTtlMs: recreationConfig.defaultTtlMs ?? 3600000, // 1 hour default
         },
