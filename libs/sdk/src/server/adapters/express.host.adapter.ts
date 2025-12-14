@@ -8,6 +8,7 @@ import { HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from 
 export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
   private router = express.Router();
+  private prepared = false;
 
   constructor() {
     super();
@@ -43,16 +44,20 @@ export class ExpressHostAdapter extends HostServerAdapter {
   /**
    * Prepares the Express app with routes but does NOT start the HTTP server.
    * Used for serverless deployments (Vercel, AWS Lambda, etc.)
+   * This method is idempotent - safe to call multiple times.
    */
   prepare(): void {
+    if (this.prepared) return;
+    this.prepared = true;
     this.app.use('/', this.router);
   }
 
   /**
    * Returns the Express app for serverless exports.
-   * Call prepare() first to ensure routes are registered.
+   * Automatically calls prepare() to ensure routes are registered.
    */
   getHandler(): express.Application {
+    this.prepare();
     return this.app;
   }
 

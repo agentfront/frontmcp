@@ -5,6 +5,7 @@ import { HostServerAdapter } from './adapters/base.host.adapter';
 export class FrontMcpServerInstance extends FrontMcpServer {
   config: HttpConfig;
   host: HostServerAdapter;
+  private healthRouteRegistered = false;
 
   constructor(httpConfig: HttpConfig) {
     super();
@@ -36,11 +37,12 @@ export class FrontMcpServerInstance extends FrontMcpServer {
   }
 
   prepare() {
-    this.registerRoute('GET', '/health', async (req, res) => {
-      res.status(200).json({
-        status: 'ok',
+    if (!this.healthRouteRegistered) {
+      this.healthRouteRegistered = true;
+      this.registerRoute('GET', '/health', async (req, res) => {
+        res.status(200).json({ status: 'ok' });
       });
-    });
+    }
     this.host.prepare();
   }
 
