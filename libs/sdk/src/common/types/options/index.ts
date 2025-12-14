@@ -3,8 +3,5 @@ export * from './session.options';
 export * from './http.options';
 export * from './auth.options';
 export * from './logging.options';
-
-
-
-
-
+export * from './redis.options';
+export * from './transport.options';

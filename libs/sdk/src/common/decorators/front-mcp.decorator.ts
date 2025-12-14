@@ -2,13 +2,16 @@ import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { FrontMcpInstance } from '../../front-mcp';
+import { applyMigration } from '../migrate';
 
 /**
  * Decorator that marks a class as a FrontMcp Server and provides metadata
  */
 export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
   return (target: Function) => {
-    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(providedMetadata);
+    // Apply migration for deprecated auth.transport and session configs
+    const migratedMetadata = applyMigration(providedMetadata);
+    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(migratedMetadata);
     if (error) {
       if (error.format().apps) {
         throw new Error(

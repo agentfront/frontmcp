@@ -7,7 +7,9 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   info: tokenFactory.meta('info'),
   apps: tokenFactory.meta('apps'),
   http: tokenFactory.meta('http'),
-  session: tokenFactory.meta('session'),
+  redis: tokenFactory.meta('redis'),
+  transport: tokenFactory.meta('transport'),
+  session: tokenFactory.meta('session'), // @deprecated - kept for backward compatibility
   serve: tokenFactory.meta('serve'),
   splitByApp: tokenFactory.meta('splitByApp'),
   auth: tokenFactory.meta('auth'),

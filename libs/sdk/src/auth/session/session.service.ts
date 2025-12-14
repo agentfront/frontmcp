@@ -9,13 +9,11 @@ import { ScopedInMemoryStore } from '../../store';
 import { encryptJson } from './utils/session-id.utils';
 
 export class SessionService {
-  private store = new ScopedInMemoryStore()
-
+  private store = new ScopedInMemoryStore();
 
   async keyOf(authorization: Authorization) {
-    const sessionKey = encryptJson({token:authorization.token});
-    if(authorization.session){
-
+    const sessionKey = encryptJson({ token: authorization.token });
+    if (authorization.session) {
     }
   }
 
@@ -32,7 +30,7 @@ export class SessionService {
   }
 
   private createOrchestratedSession(scope: Scope, args: CreateSessionArgs) {
-    const stateless = scope.metadata.session?.sessionMode === 'stateless';
+    const stateless = scope.metadata.transport?.sessionMode === 'stateless';
     if (stateless) {
       return new StatelessSession(args as any);
     } else {
@@ -92,8 +90,8 @@ export class SessionService {
       scopes = Array.isArray(rawScope)
         ? rawScope.map(String)
         : typeof rawScope === 'string'
-          ? rawScope.split(/[\s,]+/).filter(Boolean)
-          : [];
+        ? rawScope.split(/[\s,]+/).filter(Boolean)
+        : [];
     }
 
     return new TransparentSession({

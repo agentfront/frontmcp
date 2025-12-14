@@ -12,6 +12,10 @@ import {
   loggingOptionsSchema,
   RawZodShape,
   AuthOptionsInput,
+  RedisOptionsInput,
+  redisOptionsSchema,
+  TransportOptionsInput,
+  transportOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -25,10 +29,27 @@ export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
   apps: AppType[];
   http?: HttpOptions;
-  session?: SessionOptions;
   logging?: LoggingOptions;
 
   serve?: boolean; // default to true
+
+  /**
+   * Shared Redis configuration
+   * Used by transport persistence and auth token storage
+   */
+  redis?: RedisOptionsInput;
+
+  /**
+   * Transport and session lifecycle configuration
+   * Controls transport protocols, session management, and persistence
+   * @default {} (all transport options use their schema defaults)
+   */
+  transport?: TransportOptionsInput; // Optional in input, but always defined in output
+
+  /**
+   * @deprecated Use `transport` instead. Session config has been merged into transport.
+   */
+  session?: SessionOptions;
 
   /**
    * Additional providers that are available to all apps.
@@ -56,7 +77,9 @@ export const frontMcpBaseSchema = z.object({
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
   http: httpOptionsSchema.optional(),
-  session: sessionOptionsSchema.optional(),
+  redis: redisOptionsSchema.optional(),
+  transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
+  session: sessionOptionsSchema.optional(), // @deprecated - kept for backward compatibility
   logging: loggingOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 

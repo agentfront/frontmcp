@@ -1,6 +1,7 @@
 // auth/session/record/session.base.ts
 
 import type { ProviderSnapshot, SessionMode } from '../session.types';
+import type { TransportIdMode } from '../../../common';
 import { TransportIdGenerator } from '../session.transport';
 import { Scope } from '../../../scope';
 
@@ -78,7 +79,8 @@ export abstract class Session {
     this.user = ctx.user;
     this.claims = ctx.claims;
     // derive token expiration from JWT claims if present (exp in seconds)
-    const exp = (ctx.claims && typeof (ctx.claims as any)['exp'] === 'number') ? Number((ctx.claims as any)['exp']) : undefined;
+    const exp =
+      ctx.claims && typeof (ctx.claims as any)['exp'] === 'number' ? Number((ctx.claims as any)['exp']) : undefined;
     if (exp) {
       this.expiresAt = exp > 1e12 ? exp : exp * 1000;
     }
@@ -112,11 +114,13 @@ export abstract class Session {
 
   async getTransportSessionId(): Promise<string> {
     if (this.#activeTransportId) return this.#activeTransportId;
-    const mode = this.scope.metadata.session?.transportIdMode ?? 'uuid';
+    const mode = this.scope.metadata.transport?.transportIdMode ?? 'uuid';
     if (typeof mode === 'string') {
-      return TransportIdGenerator.createId(mode);
+      return TransportIdGenerator.createId(mode as TransportIdMode);
     } else {
-      const modeResult = await mode(this.issuer);
+      // Cast to proper function type since Zod's z.function() type is too generic
+      const modeFn = mode as (issuer: string) => Promise<TransportIdMode> | TransportIdMode;
+      const modeResult = await modeFn(this.issuer);
       return TransportIdGenerator.createId(modeResult);
     }
   }
