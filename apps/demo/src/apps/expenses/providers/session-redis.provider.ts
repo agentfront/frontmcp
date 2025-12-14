@@ -1,5 +1,5 @@
 import RedisProvider from './redis.provider';
-import { FrontMcpProvider, ProviderScope, SessionProvider } from '@frontmcp/sdk';
+import { FrontMcpProvider, ProviderScope, SessionKey } from '@frontmcp/sdk';
 
 @FrontMcpProvider({
   name: 'redis-session',
@@ -9,9 +9,8 @@ import { FrontMcpProvider, ProviderScope, SessionProvider } from '@frontmcp/sdk'
 export default class SessionRedisProvider {
   private readonly prefix: string;
 
-  constructor(private readonly redis: RedisProvider, private readonly sessionProvider: SessionProvider) {
-    const sid = sessionProvider.session!.id;
-    const safeSid = sid.trim().replace(/\s+/g, '_').replace(/:+/g, '_');
+  constructor(private readonly redis: RedisProvider, private readonly sessionKey: SessionKey) {
+    const safeSid = sessionKey.value.trim().replace(/\s+/g, '_').replace(/:+/g, '_');
     this.prefix = `:session:${safeSid}:`;
   }
 

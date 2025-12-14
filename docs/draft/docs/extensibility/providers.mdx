@@ -70,3 +70,189 @@ FrontMCP resolves providers for your executors and hooks. Keep your tool logic p
   Provider injection/consumption follows your runtime's DI rules. In general: register providers at the minimal scope
   and let the framework resolve them for tools and hooks at execution time.
 </Info>
+
+---
+
+## Request Context
+
+Every HTTP request creates a `RequestContext` that flows through the entire execution chain via AsyncLocalStorage. Access it via the `REQUEST_CONTEXT` token or the `requestContext` getter.
+
+### In Tools/Resources/Prompts
+
+```ts
+import { Tool, REQUEST_CONTEXT } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
+class MyTool {
+  async execute({ query }) {
+    // Via getter (recommended)
+    const ctx = this.requestContext;
+
+    // Via DI
+    const ctx2 = this.get(REQUEST_CONTEXT);
+
+    console.log(ctx.requestId, ctx.traceContext.traceId);
+    return `Processed: ${query}`;
+  }
+}
+```
+
+### In REQUEST-Scoped Providers
+
+REQUEST-scoped providers can access the current request context:
+
+```ts
+import { Provider, ProviderScope, REQUEST_CONTEXT, RequestContext } from '@frontmcp/sdk';
+
+@Provider({ scope: ProviderScope.REQUEST })
+class RequestScopedLogger {
+  private ctx: RequestContext;
+
+  constructor() {
+    // Note: Use factory provider to inject RequestContext
+  }
+
+  log(message: string) {
+    console.log(`[${this.ctx.requestId}] ${message}`);
+  }
+}
+
+// Or use a factory provider
+const requestLoggerProvider = {
+  provide: 'RequestLogger',
+  scope: ProviderScope.REQUEST,
+  factory: (ctx: RequestContext) => ({
+    log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
+  }),
+  inject: [REQUEST_CONTEXT],
+};
+```
+
+### RequestContext API
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `requestId` | `string` | Unique request identifier (UUID v4) |
+| `traceContext` | `TraceContext` | W3C Trace Context (traceId, parentId, traceFlags) |
+| `sessionId` | `string` | MCP session identifier |
+| `authInfo` | `Partial<AuthInfo>` | Authentication information |
+| `scopeId` | `string` | Current scope identifier |
+| `timestamp` | `number` | Request start timestamp |
+| `metadata` | `RequestMetadata` | Headers, user-agent, client IP |
+
+| Method | Description |
+|--------|-------------|
+| `mark(name)` | Record timing mark |
+| `elapsed(from?, to?)` | Get elapsed time between marks |
+| `set(key, value)` | Store request-scoped data |
+| `get(key)` | Retrieve request-scoped data |
+| `getLogger(parent)` | Get child logger with request context |
+
+<Tip>
+  See [Request Context](/docs/extensibility/request-context) for the complete guide including distributed tracing and migration from `authInfo`.
+</Tip>
+
+---
+
+## SESSION-Scoped Providers
+
+SESSION-scoped providers are created once per authenticated session and reused across all requests for that session. They're ideal for per-user credentials, token-bound API clients, or session-specific caches.
+
+### Accessing Session ID
+
+Inject the `SessionKey` class to get the session identifier during construction:
+
+```ts
+import { Provider, ProviderScope, SessionKey } from '@frontmcp/sdk';
+
+@Provider({ scope: ProviderScope.SESSION })
+class SessionCache {
+  private readonly cacheKey: string;
+
+  constructor(private readonly sessionKey: SessionKey) {
+    // sessionKey.value is available at construction time
+    this.cacheKey = `cache:${sessionKey.value}`;
+  }
+
+  async get(key: string) {
+    return redis.get(`${this.cacheKey}:${key}`);
+  }
+}
+```
+
+### Example: Session-Scoped Redis Provider
+
+```ts
+import { Provider, ProviderScope, SessionKey } from '@frontmcp/sdk';
+
+@Provider({ scope: ProviderScope.SESSION })
+class SessionRedisProvider {
+  private readonly prefix: string;
+
+  constructor(
+    private readonly redis: RedisProvider,
+    private readonly sessionKey: SessionKey,
+  ) {
+    const safeSid = sessionKey.value.replace(/[:\s]/g, '_');
+    this.prefix = `:session:${safeSid}:`;
+  }
+
+  async setValue<T>(key: string, value: T, ttl?: number) {
+    await this.redis.setValue(`${this.prefix}${key}`, value, ttl);
+  }
+
+  async getValue<T>(key: string): Promise<T | undefined> {
+    return this.redis.getValue(`${this.prefix}${key}`);
+  }
+}
+```
+
+### Multi-Pod Deployment Considerations
+
+<Warning>
+  SESSION-scoped providers are **pod-local** - each pod maintains its own in-memory cache of session providers.
+  They are NOT automatically shared across pods.
+</Warning>
+
+When running behind a load balancer:
+
+- Each pod builds its own provider instances when it first handles a session
+- Transport state (MCP protocol) is shared via Redis (if configured)
+- For cross-pod session data, use Redis or another distributed store
+
+```ts
+// Good: Use Redis for data that must be shared across pods
+@Provider({ scope: ProviderScope.SESSION })
+class CrossPodSessionData {
+  constructor(
+    private redis: RedisProvider,
+    private sessionKey: SessionKey,
+  ) {}
+
+  async setUserPreference(key: string, value: any) {
+    // Data is stored in Redis, accessible from any pod
+    await this.redis.setValue(`pref:${this.sessionKey.value}:${key}`, value);
+  }
+}
+```
+
+### Session Metadata
+
+Access additional session metadata (protocol, platform type) via `RequestContext`:
+
+```ts
+@Tool({ name: 'session-info', inputSchema: {} })
+class SessionInfoTool {
+  async execute() {
+    const ctx = this.requestContext;
+    const metadata = ctx.sessionMetadata;
+
+    return {
+      sessionId: ctx.sessionId,
+      protocol: metadata?.protocol,      // 'streamable-http', 'sse', etc.
+      platformType: metadata?.platform,  // 'openai', 'claude', etc.
+    };
+  }
+}
+```

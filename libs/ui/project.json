@@ -43,7 +43,8 @@
           "libs/ui/src/widgets/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" }
+          "outExtension": { ".js": ".js" },
+          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
         }
       }
     },
@@ -85,7 +86,8 @@
           "libs/ui/src/widgets/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" }
+          "outExtension": { ".js": ".js" },
+          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
         }
       }
     },

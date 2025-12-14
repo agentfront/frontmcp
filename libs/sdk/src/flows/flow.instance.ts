@@ -26,6 +26,9 @@ import { writeHttpResponse } from '../server/server.validation';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
+import { RequestContextStorage, REQUEST_CONTEXT } from '../context';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { randomUUID } from 'crypto';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
@@ -78,8 +81,18 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         const canActivate = await this.canActivate(request);
         if (!canActivate) return next();
 
+        // Get context storage to wrap entire flow in request context
+        const contextStorage = this.getContextStorage();
+
         try {
-          const result = await this.run({ request, response, next } as any, new Map());
+          // Use runWithContext to wrap entire flow execution in AsyncLocalStorage context
+          // This ensures all stages have access to RequestContext
+          const result = await this.runWithContext(
+            contextStorage,
+            request,
+            { request, response, next } as any,
+            new Map(),
+          );
           if (result) return writeHttpResponse(response, result);
         } catch (e) {
           if (e instanceof FlowControl) {
@@ -125,9 +138,93 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     return results.every((r) => r);
   }
 
+  /**
+   * Get RequestContextStorage from providers (with fallback).
+   * Returns undefined if not available (backward compatibility).
+   */
+  private getContextStorage(): RequestContextStorage | undefined {
+    try {
+      return this.globalProviders.get(RequestContextStorage);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Run flow wrapped in RequestContext.
+   * This ensures ALL stages have access to the context via AsyncLocalStorage.
+   *
+   * @param storage - RequestContextStorage instance
+   * @param request - The HTTP request
+   * @param input - Flow input
+   * @param deps - Flow dependencies
+   * @returns Flow output or undefined
+   */
+  private async runWithContext(
+    storage: RequestContextStorage | undefined,
+    request: ServerRequest,
+    input: FlowInputOf<Name>,
+    deps: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
+    // If no storage available, run without context (backward compatibility)
+    if (!storage) {
+      return this.run(input, deps);
+    }
+
+    // Extract context parameters from request
+    const headers = (request.headers ?? {}) as Record<string, unknown>;
+    // Generate unique ID for anonymous sessions to prevent session collision
+    // All unauthenticated requests previously shared 'anonymous', causing data leakage
+    const sessionId = (headers['mcp-session-id'] as string) ?? `anon:${randomUUID()}`;
+    const scope = this.globalProviders.getActiveScope();
+
+    // Wrap ENTIRE flow execution in AsyncLocalStorage context
+    return storage.runFromHeaders(
+      headers,
+      {
+        sessionId,
+        authInfo: {} as AuthInfo, // Will be updated after checkAuthorization
+        scopeId: scope.id,
+      },
+      async () => {
+        return this.run(input, deps);
+      },
+    );
+  }
+
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     const scope = this.globalProviders.getActiveScope();
     const { FlowClass, plan, name } = this;
+
+    // Build provider views for scoped DI
+    // This enables SESSION and REQUEST scoped providers to be resolved
+    const contextStorage = this.getContextStorage();
+    const currentContext = contextStorage?.getStore();
+    // Get session ID from context - should always be available since runWithContext wraps the entire flow
+    // If unavailable, it indicates a bug in context propagation (not a normal case)
+    const sessionKey = currentContext?.sessionId;
+    if (!sessionKey) {
+      // This should never happen since runWithContext wraps the entire flow execution
+      // If we reach here, there's a bug in context propagation
+      throw new Error('RequestContext unavailable - session ID required for provider resolution');
+    }
+
+    // Build views with current request context if available
+    const views = await this.globalProviders.buildViews(
+      sessionKey,
+      currentContext ? new Map([[REQUEST_CONTEXT, currentContext]]) : undefined,
+    );
+
+    // Merge scoped providers into deps for resolution by FlowClass
+    const mergedDeps = new Map(deps);
+    for (const [token, instance] of views.request) {
+      mergedDeps.set(token, instance as Type);
+    }
+    for (const [token, instance] of views.session) {
+      if (!mergedDeps.has(token)) {
+        mergedDeps.set(token, instance as Type);
+      }
+    }
 
     // Clone stages so we can merge injections safely per run.
     const baseStages = this.stages;
@@ -184,8 +281,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       await materializeAndMerge(hooks);
     };
 
-    // Construct flow instance
-    context = new FlowClass(this.metadata, input, scope, appendContextHooks, deps);
+    // Construct flow instance with merged dependencies (includes scoped providers)
+    context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize
     contextReady = true;

@@ -12,10 +12,10 @@ import {
   ProviderScope,
   ScopeEntry,
   ScopeRecord,
-  SessionProvider,
   Token,
   Type,
 } from '../common';
+import { RequestContextStorage, RequestContextProvider } from '../context';
 import AppRegistry from '../app/app.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import { AuthRegistry } from '../auth/auth.registry';
@@ -270,12 +270,16 @@ export class Scope extends ScopeEntry {
         provide: FrontMcpLogger,
         useValue: this.logger,
       },
+      // RequestContextStorage is GLOBAL because it manages the AsyncLocalStorage,
+      // not the per-request data. Access the actual RequestContext via REQUEST_CONTEXT token.
       {
-        scope: ProviderScope.SESSION,
-        name: 'SessionProvider',
-        provide: SessionProvider,
-        useClass: SessionProvider,
+        scope: ProviderScope.GLOBAL,
+        name: 'RequestContextStorage',
+        provide: RequestContextStorage,
+        useClass: RequestContextStorage,
       },
+      // RequestContextProvider is a factory that retrieves from AsyncLocalStorage
+      RequestContextProvider,
     ];
   }
 

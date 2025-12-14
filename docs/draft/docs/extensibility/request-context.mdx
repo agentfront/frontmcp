@@ -1,0 +1,293 @@
+---
+title: Request Context
+sidebarTitle: Request Context
+slug: extensibility/request-context
+icon: id-card
+---
+
+Request context provides per-request state that flows through the entire async execution chain. It enables distributed tracing, timing, and request-scoped data storage.
+
+## Overview
+
+Every HTTP request to your FrontMCP server creates a `RequestContext` that:
+- Propagates through all stages, tools, resources, and prompts via AsyncLocalStorage
+- Provides W3C Trace Context for distributed tracing
+- Stores authentication information after verification
+- Tracks timing marks for performance monitoring
+- Provides request-scoped key-value storage
+
+## Accessing Request Context
+
+### From Tools/Resources/Prompts
+
+Use the `requestContext` getter for convenient access:
+
+```ts
+import { Tool } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
+class MyTool {
+  async execute({ query }) {
+    const ctx = this.requestContext;
+    // or: const ctx = this.get(REQUEST_CONTEXT);
+
+    console.log(`Request ${ctx.requestId} from session ${ctx.sessionId}`);
+    return `Processed: ${query}`;
+  }
+}
+```
+
+### Safe Access
+
+Use `tryGetRequestContext()` when context may not be available (e.g., during initialization or in non-HTTP flows):
+
+```ts
+const ctx = this.tryGetRequestContext();
+if (ctx) {
+  console.log(ctx.requestId);
+} else {
+  console.log('No request context available');
+}
+```
+
+### From REQUEST-Scoped Providers
+
+REQUEST-scoped providers can receive RequestContext via factory injection:
+
+```ts
+import { ProviderScope, REQUEST_CONTEXT, RequestContext } from '@frontmcp/sdk';
+
+const requestLoggerProvider = {
+  provide: 'RequestLogger',
+  scope: ProviderScope.REQUEST,
+  factory: (ctx: RequestContext) => ({
+    log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
+  }),
+  inject: [REQUEST_CONTEXT],
+};
+```
+
+---
+
+## Distributed Tracing
+
+RequestContext automatically parses [W3C Trace Context](https://www.w3.org/TR/trace-context/) headers for distributed tracing compatibility.
+
+### Supported Headers
+
+| Header | Description |
+|--------|-------------|
+| `traceparent` | W3C standard: `{version}-{trace-id}-{parent-id}-{flags}` |
+| `tracestate` | Vendor-specific trace data |
+| `x-frontmcp-trace-id` | Fallback for non-W3C clients |
+
+### Using Trace Context
+
+```ts
+const ctx = this.requestContext;
+
+// Access trace identifiers
+const { traceId, parentId, traceFlags, traceState } = ctx.traceContext;
+
+console.log(`Trace: ${traceId}, Parent: ${parentId}, Flags: ${traceFlags}`);
+
+// Add to outgoing requests for distributed tracing
+const response = await fetch('https://api.example.com/data', {
+  headers: {
+    'traceparent': `00-${traceId}-${ctx.requestId.replace(/-/g, '').slice(0, 16)}-01`,
+  },
+});
+```
+
+### Integration with Observability Tools
+
+FrontMCP's trace context is compatible with:
+- OpenTelemetry
+- Datadog APM
+- AWS X-Ray
+- Jaeger
+- Zipkin
+
+---
+
+## Timing & Performance
+
+Track execution timing with marks for performance monitoring:
+
+```ts
+const ctx = this.requestContext;
+
+// Mark stages
+ctx.mark('validation-start');
+await this.validateInput();
+ctx.mark('validation-end');
+
+ctx.mark('db-query-start');
+await this.queryDatabase();
+ctx.mark('db-query-end');
+
+// Measure elapsed time
+console.log(`Validation: ${ctx.elapsed('validation-start', 'validation-end')}ms`);
+console.log(`DB Query: ${ctx.elapsed('db-query-start', 'db-query-end')}ms`);
+console.log(`Total: ${ctx.elapsed()}ms`); // From request start to now
+```
+
+### Performance Logging
+
+```ts
+// Log all timing marks at the end of request
+const marks = ctx.getMarks();
+for (const [name, timestamp] of marks) {
+  console.log(`${name}: ${timestamp - ctx.timestamp}ms from start`);
+}
+```
+
+---
+
+## Request-Scoped Storage
+
+Store and retrieve data that lives only for the duration of the request:
+
+```ts
+const ctx = this.requestContext;
+
+// Store data
+ctx.set('correlation-id', crypto.randomUUID());
+ctx.set('feature-flags', { newUI: true, betaFeatures: false });
+
+// Retrieve data (later in the same request)
+const correlationId = ctx.get<string>('correlation-id');
+const flags = ctx.get<{ newUI: boolean }>('feature-flags');
+
+// Check existence
+if (ctx.has('correlation-id')) {
+  // ...
+}
+
+// Delete data
+ctx.delete('feature-flags');
+```
+
+---
+
+## Request Metadata
+
+Access HTTP request metadata:
+
+```ts
+const ctx = this.requestContext;
+const { metadata } = ctx;
+
+console.log(`User-Agent: ${metadata.userAgent}`);
+console.log(`Client IP: ${metadata.clientIp}`);
+console.log(`Content-Type: ${metadata.contentType}`);
+console.log(`Accept: ${metadata.accept}`);
+
+// Custom x-frontmcp-* headers
+console.log(`Custom headers:`, metadata.customHeaders);
+```
+
+---
+
+## Authentication
+
+Access authentication information via the request context:
+
+```ts
+const ctx = this.requestContext;
+const { authInfo } = ctx;
+
+// JWT token
+if (authInfo.token) {
+  console.log(`Token present, expires: ${authInfo.expiresAt}`);
+}
+
+// User information
+if (authInfo.user) {
+  console.log(`User: ${authInfo.user.email}`);
+  console.log(`Tenant: ${authInfo.user.tenantId}`);
+}
+
+// Session information
+console.log(`Session: ${authInfo.sessionId}`);
+```
+
+<Warning>
+  `authInfo` is `Partial<AuthInfo>` because authentication information is progressively populated during the request lifecycle. Fields are fully populated after the authorization stage completes.
+</Warning>
+
+---
+
+## API Reference
+
+### RequestContext Class
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `requestId` | `string` | Unique request identifier (UUID v4) |
+| `traceContext` | `TraceContext` | W3C Trace Context data |
+| `sessionId` | `string` | MCP session identifier |
+| `authInfo` | `Partial<AuthInfo>` | Authentication information |
+| `scopeId` | `string` | Current scope identifier |
+| `timestamp` | `number` | Request start timestamp (ms since epoch) |
+| `metadata` | `RequestMetadata` | HTTP request metadata |
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `mark` | `mark(name: string): void` | Record a timing mark |
+| `elapsed` | `elapsed(from?: string, to?: string): number` | Get elapsed time in ms |
+| `getMarks` | `getMarks(): ReadonlyMap<string, number>` | Get all timing marks |
+| `set` | `set<T>(key: string \| symbol, value: T): void` | Store request-scoped data |
+| `get` | `get<T>(key: string \| symbol): T \| undefined` | Retrieve request-scoped data |
+| `has` | `has(key: string \| symbol): boolean` | Check if key exists |
+| `delete` | `delete(key: string \| symbol): boolean` | Delete a key |
+| `getLogger` | `getLogger(parent: FrontMcpLogger): FrontMcpLogger` | Get child logger with context |
+| `toLogContext` | `toLogContext(): Record<string, unknown>` | Get summary for logging |
+
+### TraceContext Interface
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `traceId` | `string` | 32-character hex trace identifier |
+| `parentId` | `string \| undefined` | 16-character hex parent span ID |
+| `traceFlags` | `number` | Trace flags (e.g., 1 for sampled) |
+| `traceState` | `string \| undefined` | Vendor-specific trace state |
+
+### RequestMetadata Interface
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `userAgent` | `string \| undefined` | User-Agent header |
+| `contentType` | `string \| undefined` | Content-Type header |
+| `accept` | `string \| undefined` | Accept header |
+| `clientIp` | `string \| undefined` | Client IP address |
+| `customHeaders` | `Record<string, string>` | Headers matching `x-frontmcp-*` |
+
+---
+
+## Migration from authInfo
+
+The `this.authInfo` property on execution contexts (tools, resources, prompts) is deprecated. Use `this.requestContext.authInfo` instead:
+
+```ts
+// Deprecated
+const token = this.authInfo.token;
+const user = this.authInfo.user;
+
+// Recommended
+const ctx = this.requestContext;
+const token = ctx.authInfo.token;
+const user = ctx.authInfo.user;
+```
+
+### Why Migrate?
+
+1. **Unified Context**: All request-scoped data in one place
+2. **Better Tracing**: Access trace IDs alongside auth info
+3. **Timing Integration**: Correlate auth with performance metrics
+4. **Future-Proof**: New features will be added to RequestContext
+
+<Tip>
+  The deprecated `this.authInfo` will continue to work for backward compatibility but will be removed in a future major version.
+</Tip>

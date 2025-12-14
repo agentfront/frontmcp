@@ -8,6 +8,7 @@ import { FlowControl } from './flow.interface';
 import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ScopeEntry } from '../entries';
+import { RequestContext, REQUEST_CONTEXT } from '../../context';
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -24,7 +25,11 @@ export type ExecutionContextBaseArgs = {
  */
 export abstract class ExecutionContextBase<Out = unknown> {
   private providers: ProviderRegistryInterface;
-  readonly authInfo: AuthInfo;
+
+  /**
+   * @deprecated Use `requestContext.authInfo` instead. Will be removed in v2.0.
+   */
+  private readonly _authInfo: AuthInfo;
 
   /** Unique identifier for this execution run */
   protected readonly runId: string;
@@ -41,7 +46,80 @@ export abstract class ExecutionContextBase<Out = unknown> {
     this.runId = randomUUID();
     this.providers = providers;
     this.logger = logger;
-    this.authInfo = authInfo;
+    this._authInfo = authInfo;
+  }
+
+  /**
+   * Get the current request context.
+   *
+   * Provides access to requestId, traceId, sessionId, authInfo,
+   * timing marks, and request metadata.
+   *
+   * @throws Error if called outside of a request scope
+   */
+  get requestContext(): RequestContext {
+    try {
+      return this.providers.get(REQUEST_CONTEXT as Token<RequestContext>);
+    } catch {
+      // Fallback: request context not available, likely called during initialization
+      throw new Error(
+        'RequestContext not available. Ensure execution runs within a request scope created by RequestContextStorage.run().',
+      );
+    }
+  }
+
+  /**
+   * Try to get the request context, returning undefined if not available.
+   *
+   * Use this when request context may not be available (e.g., during initialization).
+   */
+  tryGetRequestContext(): RequestContext | undefined {
+    try {
+      return this.providers.get(REQUEST_CONTEXT as Token<RequestContext>);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * @deprecated Use `requestContext.authInfo` instead. Will be removed in v2.0.
+   *
+   * Get authentication information for the current request.
+   */
+  get authInfo(): AuthInfo {
+    return this._authInfo;
+  }
+
+  /**
+   * Get authentication information for the current request.
+   *
+   * Prefers requestContext.authInfo when available (the recommended source),
+   * falls back to the legacy authInfo property for backward compatibility.
+   *
+   * By the time tools execute, authentication has been verified and
+   * all auth fields are populated.
+   */
+  getAuthInfo(): AuthInfo {
+    const requestCtx = this.tryGetRequestContext();
+    if (requestCtx) {
+      // Cast is safe: by tool execution time, auth verification is complete
+      return requestCtx.authInfo as AuthInfo;
+    }
+    return this._authInfo;
+  }
+
+  /**
+   * Get a child logger with request context attached.
+   *
+   * The logger includes requestId, traceId, and sessionId in its context.
+   */
+  protected get contextLogger(): FrontMcpLogger {
+    try {
+      return this.requestContext.getLogger(this.logger);
+    } catch {
+      // Fallback if request context not available
+      return this.logger;
+    }
   }
 
   /**

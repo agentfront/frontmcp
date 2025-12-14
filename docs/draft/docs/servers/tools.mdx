@@ -395,8 +395,8 @@ class ContextExampleTool {
     this.input;              // { query: 'value' }
     this.metadata;           // Tool metadata (name, description, etc.)
 
-    // Authentication
-    this.authInfo;           // Auth context from MCP session
+    // Authentication (prefer this.requestContext.authInfo)
+    this.authInfo;           // Auth context from MCP session (deprecated)
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -436,6 +436,52 @@ class CreateUserTool {
   }
 }
 ```
+
+### Request Context
+
+Class-based tools have access to the full request context including tracing, timing, and authentication:
+
+```ts
+@Tool({
+  name: 'traced-tool',
+  inputSchema: { query: z.string() },
+})
+class TracedTool {
+  async execute({ query }: { query: string }) {
+    // Full request context
+    const ctx = this.requestContext;
+
+    // Tracing (W3C Trace Context)
+    console.log(ctx.requestId);                    // Unique request ID
+    console.log(ctx.traceContext.traceId);         // W3C Trace ID
+    console.log(ctx.traceContext.parentId);        // Parent span ID (if present)
+
+    // Authentication (prefer over this.authInfo)
+    console.log(ctx.authInfo.token);               // JWT token
+    console.log(ctx.authInfo.user);                // User info
+
+    // Session
+    console.log(ctx.sessionId);                    // MCP session ID
+
+    // Timing marks for performance tracking
+    ctx.mark('db-query-start');
+    await this.queryDatabase();
+    ctx.mark('db-query-end');
+    console.log(ctx.elapsed('db-query-start', 'db-query-end')); // ms
+
+    // Request metadata
+    console.log(ctx.metadata.userAgent);
+    console.log(ctx.metadata.clientIp);
+
+    return `Processed: ${query}`;
+  }
+}
+```
+
+<Tip>
+  Use `this.requestContext.authInfo` instead of the deprecated `this.authInfo` for accessing authentication data.
+  See [Request Context](/docs/extensibility/request-context) for complete API reference.
+</Tip>
 
 ---
 

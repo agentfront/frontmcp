@@ -109,6 +109,7 @@
                 "icon": "puzzle-piece",
                 "pages": [
                   "docs/extensibility/providers",
+                  "docs/extensibility/request-context",
                   "docs/extensibility/plugins",
                   "docs/extensibility/adapters",
                   "docs/extensibility/logging"

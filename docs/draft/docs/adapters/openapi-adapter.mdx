@@ -184,6 +184,12 @@ OpenapiAdapter.init({
   **Security Risk: LOW** — Authentication is resolved from authenticated user context, not exposed to MCP clients.
 </Check>
 
+<Info>
+  The `authInfo` parameter in `authProviderMapper`, `headersMapper`, and `bodyMapper`
+  callbacks comes from the authenticated request context (`requestContext.authInfo`). By the time your tool executes,
+  authentication has been verified and all auth fields are populated.
+</Info>
+
 ### Strategy 3: Custom Security Resolver (Low Risk)
 
 Best for: Complex authentication logic or custom security requirements.

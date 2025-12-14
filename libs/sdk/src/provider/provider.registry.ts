@@ -22,6 +22,7 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
+import { SessionKey } from '../context/session-key.provider';
 
 export default class ProviderRegistry
   extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
@@ -36,6 +37,31 @@ export default class ProviderRegistry
   // private scoped = new Map<string, Map<Token, any>>();
 
   private registries: Map<RegistryKind, Set<RegistryType>> = new Map();
+
+  /** Session-scoped provider instance cache by sessionKey */
+  private sessionStores: Map<string, { providers: Map<Token, unknown>; lastAccess: number }> = new Map();
+
+  /** Locks to prevent concurrent session builds (race condition prevention) */
+  private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void; generation: number }> =
+    new Map();
+
+  /** Generation counter for lock versioning (prevents zombie lock releases after timeout) */
+  private lockGeneration = 0;
+
+  /** Maximum number of sessions to cache (LRU eviction) */
+  private static readonly MAX_SESSION_CACHE_SIZE = 10000;
+
+  /** Session cache TTL in milliseconds (1 hour) */
+  private static readonly SESSION_CACHE_TTL_MS = 3600000;
+
+  /** Cleanup interval in milliseconds (1 minute) */
+  private static readonly SESSION_CLEANUP_INTERVAL_MS = 60000;
+
+  /** Lock acquisition timeout in milliseconds (30 seconds) */
+  private static readonly SESSION_LOCK_TIMEOUT_MS = 30000;
+
+  /** Handle for the session cleanup interval */
+  private sessionCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(list: ProviderType[], private readonly parentProviders?: ProviderRegistry) {
     super('ProviderRegistry', parentProviders, list, false);
@@ -185,6 +211,14 @@ export default class ProviderRegistry
         console.error(`Failed instantiating:`, msg);
         throw new Error(`Failed constructing ${tokenName(token)}: ${msg}`);
       }
+    }
+
+    // Start background session cleanup after initialization
+    // This ensures expired sessions are periodically cleaned up (TTL enforcement)
+    // Only start for scope-level registries (those with parentProviders) since
+    // SESSION providers are stored in scope registries, not the global registry
+    if (this.parentProviders) {
+      this.startSessionCleanup();
     }
   }
 
@@ -633,17 +667,429 @@ export default class ProviderRegistry
     return this.getWithParents(FrontMcpServer);
   }
 
+  /* -------------------- Session Cache Management -------------------- */
+
   /**
-   * Build provider instance views for different scopes
-   * NOTE: This is currently a stub implementation returning empty maps.
-   * Actual view building logic is planned as part of the session management refactoring.
-   * See the ProviderRegistryInterface TODO for fixing the session type.
+   * Get or create a session provider store.
+   * Implements LRU eviction when cache exceeds MAX_SESSION_CACHE_SIZE.
    */
-  async buildViews(session: string): Promise<ProviderViews> {
+  private getOrCreateSessionStore(sessionKey: string): Map<Token, unknown> {
+    const existing = this.sessionStores.get(sessionKey);
+    if (existing) {
+      existing.lastAccess = Date.now();
+      return existing.providers;
+    }
+
+    // Evict oldest session if at capacity
+    if (this.sessionStores.size >= ProviderRegistry.MAX_SESSION_CACHE_SIZE) {
+      this.evictOldestSession();
+    }
+
+    const providers = new Map<Token, unknown>();
+    this.sessionStores.set(sessionKey, {
+      providers,
+      lastAccess: Date.now(),
+    });
+    return providers;
+  }
+
+  /**
+   * Evict the oldest session from the cache.
+   * Skips sessions with active locks to prevent evicting sessions being built.
+   */
+  private evictOldestSession(): void {
+    let oldestKey: string | undefined;
+    let oldestTime = Infinity;
+
+    for (const [key, entry] of this.sessionStores) {
+      // Skip sessions with active locks (currently being built)
+      // This prevents race condition where eviction removes a session mid-build
+      if (this.sessionBuildLocks.has(key)) continue;
+
+      if (entry.lastAccess < oldestTime) {
+        oldestTime = entry.lastAccess;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      this.sessionStores.delete(oldestKey);
+      // No need to cleanup lock - we skipped locked sessions
+    }
+  }
+
+  /**
+   * Clean up a specific session's provider cache.
+   * Call this when a session is terminated or expired.
+   *
+   * @param sessionKey - The session identifier to clean up
+   */
+  cleanupSession(sessionKey: string): void {
+    this.sessionStores.delete(sessionKey);
+    // Resolve any waiters before deleting the lock to prevent hung promises
+    const lock = this.sessionBuildLocks.get(sessionKey);
+    if (lock) {
+      lock.resolve();
+      this.sessionBuildLocks.delete(sessionKey);
+    }
+  }
+
+  /**
+   * Clean up expired sessions from the cache.
+   * Sessions older than SESSION_CACHE_TTL_MS are removed.
+   *
+   * @returns Number of sessions cleaned up
+   */
+  cleanupExpiredSessions(): number {
+    const now = Date.now();
+    const cutoff = now - ProviderRegistry.SESSION_CACHE_TTL_MS;
+    let cleaned = 0;
+
+    for (const [key, entry] of this.sessionStores) {
+      if (entry.lastAccess < cutoff) {
+        this.sessionStores.delete(key);
+        // Resolve any waiters before deleting the lock to prevent hung promises
+        const lock = this.sessionBuildLocks.get(key);
+        if (lock) {
+          lock.resolve();
+          this.sessionBuildLocks.delete(key);
+        }
+        cleaned++;
+      }
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Start the background session cleanup timer.
+   * This periodically removes expired sessions from the cache.
+   */
+  startSessionCleanup(): void {
+    // Only start if not already running
+    if (this.sessionCleanupInterval) {
+      return;
+    }
+
+    this.sessionCleanupInterval = setInterval(() => {
+      const cleaned = this.cleanupExpiredSessions();
+      if (cleaned > 0) {
+        // eslint-disable-next-line no-console
+        console.debug(`[ProviderRegistry] Cleaned up ${cleaned} expired sessions`);
+      }
+    }, ProviderRegistry.SESSION_CLEANUP_INTERVAL_MS);
+
+    // Allow the process to exit even if the interval is running
+    // This is important for graceful shutdown in serverless environments
+    if (this.sessionCleanupInterval.unref) {
+      this.sessionCleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Stop the background session cleanup timer.
+   * Call this when shutting down the server gracefully.
+   */
+  stopSessionCleanup(): void {
+    if (this.sessionCleanupInterval) {
+      clearInterval(this.sessionCleanupInterval);
+      this.sessionCleanupInterval = null;
+    }
+  }
+
+  /**
+   * Get session cache statistics for monitoring.
+   */
+  getSessionCacheStats(): { size: number; maxSize: number; ttlMs: number } {
     return {
-      global: new Map<Token, any>(),
-      session: new Map<Token, any>(),
-      request: new Map<Token, any>(),
+      size: this.sessionStores.size,
+      maxSize: ProviderRegistry.MAX_SESSION_CACHE_SIZE,
+      ttlMs: ProviderRegistry.SESSION_CACHE_TTL_MS,
     };
+  }
+
+  /**
+   * Acquire a lock for session building to prevent race conditions.
+   * If another request is building providers for the same session, wait for it.
+   *
+   * Uses a re-check loop to handle TOCTOU race conditions:
+   * After awaiting an existing lock, another request may have created a new lock.
+   * The loop ensures we don't overwrite an active lock.
+   *
+   * Includes a timeout to prevent infinite waits if a lock holder crashes.
+   *
+   * @returns The lock generation number for use in release (prevents zombie releases)
+   */
+  private async acquireSessionLock(sessionKey: string): Promise<number> {
+    const startTime = Date.now();
+
+    // Re-check loop to handle race between await and lock creation
+    while (true) {
+      const existing = this.sessionBuildLocks.get(sessionKey);
+      if (!existing) break; // No lock held, safe to proceed
+
+      // Check timeout before waiting
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= ProviderRegistry.SESSION_LOCK_TIMEOUT_MS) {
+        // Force-release stale lock and warn
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ProviderRegistry] Session lock timeout after ${elapsed}ms for ${sessionKey.slice(
+            0,
+            20,
+          )}..., force-releasing`,
+        );
+        // Resolve the stale lock's promise before deleting (prevents hung waiters)
+        existing.resolve();
+        this.sessionBuildLocks.delete(sessionKey);
+        break;
+      }
+
+      // Wait for existing lock with remaining timeout
+      const remaining = ProviderRegistry.SESSION_LOCK_TIMEOUT_MS - elapsed;
+      await Promise.race([existing.promise, new Promise<void>((resolve) => setTimeout(resolve, remaining))]);
+      // After await, loop back to re-check - another request may have created a new lock
+    }
+
+    // Now safe to create our lock with unique generation
+    // Overflow protection: reset counter if approaching MAX_SAFE_INTEGER
+    if (this.lockGeneration >= Number.MAX_SAFE_INTEGER - 1) {
+      // eslint-disable-next-line no-console
+      console.warn('[ProviderRegistry] Lock generation counter reset to prevent overflow');
+      this.lockGeneration = 0;
+    }
+    const myGeneration = ++this.lockGeneration;
+    let resolveFunc: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      resolveFunc = resolve;
+    });
+    this.sessionBuildLocks.set(sessionKey, { promise, resolve: resolveFunc, generation: myGeneration });
+    return myGeneration;
+  }
+
+  /**
+   * Release the session build lock.
+   *
+   * Only releases if the provided generation matches the current lock's generation.
+   * This prevents zombie releases where a timed-out lock holder tries to release
+   * a lock that has already been force-released and potentially re-acquired.
+   *
+   * @param sessionKey - The session identifier
+   * @param expectedGeneration - The generation returned from acquireSessionLock
+   */
+  private releaseSessionLock(sessionKey: string, expectedGeneration: number): void {
+    const lock = this.sessionBuildLocks.get(sessionKey);
+    if (lock && lock.generation === expectedGeneration) {
+      lock.resolve();
+      this.sessionBuildLocks.delete(sessionKey);
+    }
+    // If generation doesn't match, this is a zombie release after timeout - ignore silently
+  }
+
+  /* -------------------- Scoped Provider Views -------------------- */
+
+  /**
+   * Build provider instance views for different scopes.
+   *
+   * This method creates a complete view of providers across all scopes:
+   * - GLOBAL: Returns existing singleton instances (read-only)
+   * - SESSION: Gets/creates cached providers for the session (reused across requests)
+   * - REQUEST: Builds fresh providers for each request (never cached)
+   *
+   * @param sessionKey - Unique session identifier for SESSION-scoped providers
+   * @param requestProviders - Optional pre-built REQUEST-scoped providers (e.g., RequestContext)
+   * @returns ProviderViews with global, session, and request provider maps
+   */
+  async buildViews(sessionKey: string, requestProviders?: Map<Token, unknown>): Promise<ProviderViews> {
+    // Early validation BEFORE any cache operations or lock acquisition
+    // This prevents cache pollution with invalid session keys
+    SessionKey.validate(sessionKey);
+
+    // 1. Global providers - return existing singletons
+    const global = this.getAllSingletons();
+
+    // 2. Session providers - get from cache or build
+    // Acquire lock to prevent concurrent builds for the same session (race condition)
+    // Store the generation to pass to releaseSessionLock (prevents zombie releases)
+    const lockGeneration = await this.acquireSessionLock(sessionKey);
+
+    let sessionStore: Map<Token, unknown>;
+    try {
+      sessionStore = this.getOrCreateSessionStore(sessionKey);
+
+      // Inject SessionKey as first provider in session store
+      // This allows SESSION-scoped providers to inject the session ID via class token
+      if (!sessionStore.has(SessionKey)) {
+        sessionStore.set(SessionKey, new SessionKey(sessionKey));
+      }
+
+      // Build SESSION-scoped providers
+      for (const token of this.order) {
+        const rec = this.defs.get(token);
+        if (!rec) continue;
+        if (this.getProviderScope(rec) !== ProviderScope.SESSION) continue;
+        if (sessionStore.has(token)) continue;
+
+        await this.buildIntoStore(token, rec, sessionStore as Map<Token, any>, sessionKey);
+      }
+    } catch (error) {
+      // On error, cleanup partial session state to prevent inconsistent providers
+      // Only delete session store, NOT the lock - let finally block handle lock release
+      // This prevents a race where cleanupSession deletes the lock before releaseSessionLock
+      this.sessionStores.delete(sessionKey);
+      throw error;
+    } finally {
+      // Always release the lock with generation (prevents zombie releases after timeout)
+      this.releaseSessionLock(sessionKey, lockGeneration);
+    }
+
+    // 3. Request providers - always build fresh (no locking needed, they're per-request)
+    const request = new Map<Token, unknown>(requestProviders);
+
+    for (const token of this.order) {
+      const rec = this.defs.get(token);
+      if (!rec) continue;
+      if (this.getProviderScope(rec) !== ProviderScope.REQUEST) continue;
+
+      // Pass combined stores for dependency resolution
+      // Request providers can depend on session and global providers
+      await this.buildIntoStoreWithViews(token, rec, request, sessionKey, sessionStore, global);
+    }
+
+    return {
+      global,
+      session: sessionStore,
+      request,
+    };
+  }
+
+  /**
+   * Build a provider into a store, with access to session and global views for dependencies.
+   */
+  private async buildIntoStoreWithViews(
+    token: Token,
+    rec: ProviderRecord,
+    store: Map<Token, unknown>,
+    scopeKey: string,
+    sessionStore: Map<Token, unknown>,
+    globalStore: ReadonlyMap<Token, unknown>,
+  ): Promise<void> {
+    if (store.has(token)) return;
+
+    try {
+      switch (rec.kind) {
+        case ProviderKind.VALUE: {
+          store.set(token, (rec as any).useValue);
+          return;
+        }
+        case ProviderKind.FACTORY: {
+          const deps = this.invocationTokens(token, rec);
+          const args: any[] = [];
+          for (const d of deps) {
+            args.push(await this.resolveFromViews(d, store, sessionStore, globalStore, scopeKey));
+          }
+          const out = (rec as any).useFactory(...args);
+          const val = isPromise(out)
+            ? await this.withTimeout(out, this.asyncTimeoutMs, `${tokenName(token)}.useFactory(...)`)
+            : out;
+          store.set(token, val);
+          return;
+        }
+        case ProviderKind.CLASS:
+        case ProviderKind.CLASS_TOKEN: {
+          const depsTokens = this.invocationTokens(token, rec);
+          const deps: any[] = [];
+          for (const d of depsTokens) {
+            deps.push(await this.resolveFromViews(d, store, sessionStore, globalStore, scopeKey));
+          }
+          const klass = rec.kind === ProviderKind.CLASS ? (rec as any).useClass : (rec as any).provide;
+          if (hasAsyncWith(klass)) {
+            const out = (klass as any).with(...deps);
+            const val = isPromise(out)
+              ? await this.withTimeout(out, this.asyncTimeoutMs, `${klass.name}.with(...)`)
+              : out;
+            store.set(token, val);
+          } else {
+            const instance = new (klass as Ctor<any>)(...deps);
+            const init = (instance as any)?.init;
+            if (typeof init === 'function') {
+              const ret = init.call(instance);
+              if (isPromise(ret)) await this.withTimeout(ret, this.asyncTimeoutMs, `${klass.name}.init()`);
+            }
+            store.set(token, instance);
+          }
+          return;
+        }
+      }
+    } catch (e: any) {
+      const msg = e?.message ?? e;
+      console.error(`Failed constructing (request-scoped):`, msg);
+      throw new Error(`Failed constructing (request-scoped) ${tokenName(token)}: ${msg}`);
+    }
+  }
+
+  /**
+   * Resolve a dependency from the available views (request → session → global).
+   */
+  private async resolveFromViews(
+    token: Token,
+    requestStore: Map<Token, unknown>,
+    sessionStore: Map<Token, unknown>,
+    globalStore: ReadonlyMap<Token, unknown>,
+    scopeKey: string,
+  ): Promise<unknown> {
+    // Check stores in order: request -> session -> global -> instances
+    if (requestStore.has(token)) return requestStore.get(token);
+    if (sessionStore.has(token)) return sessionStore.get(token);
+    if (globalStore.has(token)) return globalStore.get(token);
+    if (this.instances.has(token)) return this.instances.get(token);
+
+    // Try to build if it's a registered provider
+    const rec = this.defs.get(token as any);
+    if (rec) {
+      const scope = this.getProviderScope(rec);
+      if (scope === ProviderScope.GLOBAL) {
+        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated`);
+      } else if (scope === ProviderScope.SESSION) {
+        await this.buildIntoStore(token, rec, sessionStore as Map<Token, any>, scopeKey);
+        return sessionStore.get(token);
+      } else {
+        // REQUEST scope - build into request store
+        await this.buildIntoStoreWithViews(token, rec, requestStore, scopeKey, sessionStore, globalStore);
+        return requestStore.get(token);
+      }
+    }
+
+    // Check parent hierarchy
+    const up = this.lookupDefInHierarchy(token);
+    if (up) {
+      const sc = up.registry.getProviderScope(up.rec);
+      if (sc === ProviderScope.GLOBAL) {
+        const v = up.registry.instances.get(token);
+        if (v !== undefined) return v;
+        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated in parent`);
+      }
+    }
+
+    throw new Error(`Cannot resolve dependency ${tokenName(token)} from views`);
+  }
+
+  /**
+   * Get a provider from the given views, checking request → session → global.
+   *
+   * @param token - The provider token to look up
+   * @param views - The provider views to search
+   * @returns The provider instance
+   * @throws Error if provider not found in any view
+   */
+  getScoped<T>(token: Token<T>, views: ProviderViews): T {
+    if (views.request.has(token)) return views.request.get(token) as T;
+    if (views.session.has(token)) return views.session.get(token) as T;
+    if (views.global.has(token)) return views.global.get(token) as T;
+
+    // Check instances as fallback for global providers
+    if (this.instances.has(token)) return this.instances.get(token) as T;
+
+    throw new Error(`Provider ${tokenName(token)} not found in views. Ensure it was built via buildViews().`);
   }
 }

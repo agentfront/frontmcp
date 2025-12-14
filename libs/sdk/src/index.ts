@@ -11,6 +11,20 @@ export {
 } from './front-mcp/serverless-handler';
 export * from './common';
 
+// Request context for production-ready request handling
+export {
+  RequestContext,
+  RequestContextArgs,
+  RequestMetadata,
+  RequestContextStorage,
+  REQUEST_CONTEXT,
+  TraceContext,
+  parseTraceContext,
+  generateTraceContext,
+  createChildSpanContext,
+  SessionKey,
+} from './context';
+
 // Tool change events for subscription
 export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 

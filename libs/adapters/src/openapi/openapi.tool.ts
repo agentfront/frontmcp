@@ -100,9 +100,12 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   }
 
   return tool(toolMetadata as unknown as Parameters<typeof tool>[0])(async (input, ctx) => {
+    // Get auth info using the SDK's unified method (prefers requestContext when available)
+    const authInfo = ctx.getAuthInfo();
+
     // 1. Inject transformed values (from inputTransforms)
     const transformContext: InputTransformContext = {
-      authInfo: ctx.authInfo,
+      authInfo,
       env: process.env,
       tool: openapiTool,
     };
@@ -113,7 +116,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     );
 
     // 2. Resolve security from context
-    const security = await resolveToolSecurity(openapiTool, ctx.authInfo, options);
+    const security = await resolveToolSecurity(openapiTool, authInfo, options);
 
     // 3. Build request from mapper (now uses injectedInput)
     const { url, headers, body: requestBody } = buildRequest(openapiTool, injectedInput, security, options.baseUrl);
@@ -124,7 +127,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     // 5. Apply custom headers mapper with error handling
     if (options.headersMapper) {
       try {
-        const mappedHeaders = options.headersMapper(ctx.authInfo, headers);
+        const mappedHeaders = options.headersMapper(authInfo, headers);
         if (mappedHeaders && typeof mappedHeaders.forEach === 'function') {
           mappedHeaders.forEach((value, key) => {
             headers.set(key, value);
@@ -140,7 +143,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     let finalBody = requestBody;
     if (options.bodyMapper && requestBody) {
       try {
-        finalBody = options.bodyMapper(ctx.authInfo, requestBody);
+        finalBody = options.bodyMapper(authInfo, requestBody);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         throw new Error(`bodyMapper failed for tool '${openapiTool.name}': ${errorMessage}`);
