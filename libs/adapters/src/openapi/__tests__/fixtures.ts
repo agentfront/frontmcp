@@ -300,5 +300,3 @@ export const createMockLogger = () => ({
   error: jest.fn(),
   child: jest.fn().mockReturnThis(),
 });
-
-export const mockLogger = createMockLogger();

@@ -49,7 +49,6 @@
     },
     "build-esm": {
       "executor": "@nx/esbuild:esbuild",
-      "dependsOn": ["build-cjs"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/ui/dist/esm",

@@ -7,8 +7,8 @@
     "experimentalDecorators": true,
     "types": ["node"],
     "paths": {
-      "@frontmcp/ui": ["libs/ui/dist/src/index.d.ts"],
-      "@frontmcp/ui/*": ["libs/ui/dist/src/*/index.d.ts"]
+      "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],
+      "@frontmcp/ui/*": ["libs/ui/dist/*/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],
