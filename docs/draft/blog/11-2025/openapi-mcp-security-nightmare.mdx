@@ -340,13 +340,13 @@ You know **immediately** if your security config is wrong. No silent failures in
 
 Beyond authentication, FrontMCP protects against common attack vectors:
 
-| Protection | What it prevents |
-|------------|------------------|
-| **SSRF Prevention** | Blocks dangerous protocols (`file://`, `javascript:`, `data:`) in server URLs |
-| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`) that could inject headers |
-| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`) in input transforms |
-| **Integer Overflow** | Content-Length validated with `isFinite()` to prevent size bypass |
-| **Query Param Collision** | Detects conflicts between security and user input parameters |
+| Protection                | What it prevents                                                              |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| **SSRF Prevention**       | Blocks dangerous protocols (`file://`, `javascript:`, `data:`) in server URLs |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`) that could inject headers     |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`) in input transforms      |
+| **Integer Overflow**      | Content-Length validated with `isFinite()` to prevent size bypass             |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                  |
 
 These protections are automatic—you don't need to configure anything. See [`openapi.executor.ts`](https://github.com/agentfront/frontmcp/blob/main/libs/adapters/src/openapi/openapi.executor.ts) for implementation details.
 

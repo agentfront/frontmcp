@@ -484,15 +484,15 @@ OpenapiAdapter.init({
 
 **Available transform properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `name` | `string \| function` | Override or transform the tool name |
-| `description` | `string \| function` | Override or transform the tool description |
-| `annotations` | `ToolAnnotations` | MCP tool behavior hints |
-| `tags` | `string[]` | Categorization tags |
-| `examples` | `ToolExample[]` | Usage examples |
-| `hideFromDiscovery` | `boolean` | Hide tool from listing |
-| `ui` | `ToolUIConfig` | UI configuration for tool forms |
+| Property            | Type                 | Description                                |
+| ------------------- | -------------------- | ------------------------------------------ |
+| `name`              | `string \| function` | Override or transform the tool name        |
+| `description`       | `string \| function` | Override or transform the tool description |
+| `annotations`       | `ToolAnnotations`    | MCP tool behavior hints                    |
+| `tags`              | `string[]`           | Categorization tags                        |
+| `examples`          | `ToolExample[]`      | Usage examples                             |
+| `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
+| `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
 
 ### x-frontmcp OpenAPI Extension
 
@@ -526,14 +526,14 @@ paths:
 
 **Extension properties:**
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `annotations` | `object` | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
-| `cache` | `object` | Cache config: `ttl` (seconds), `slideWindow` (boolean) |
-| `codecall` | `object` | CodeCall config: `enabledInCodeCall`, `visibleInListTools` |
-| `tags` | `string[]` | Categorization tags |
-| `hideFromDiscovery` | `boolean` | Hide from tool listing |
-| `examples` | `array` | Usage examples with input/output |
+| Property            | Type       | Description                                                                               |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `annotations`       | `object`   | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
+| `cache`             | `object`   | Cache config: `ttl` (seconds), `slideWindow` (boolean)                                    |
+| `codecall`          | `object`   | CodeCall config: `enabledInCodeCall`, `visibleInListTools`                                |
+| `tags`              | `string[]` | Categorization tags                                                                       |
+| `hideFromDiscovery` | `boolean`  | Hide from tool listing                                                                    |
+| `examples`          | `array`    | Usage examples with input/output                                                          |
 
 <Tip>
   Use `x-frontmcp` in your OpenAPI spec for declarative configuration.
@@ -553,12 +553,12 @@ OpenapiAdapter.init({
 });
 ```
 
-| Mode | Description |
-|------|-------------|
-| `'summaryOnly'` | Use only the OpenAPI summary (default) |
-| `'descriptionOnly'` | Use only the OpenAPI description |
-| `'combined'` | Summary followed by description |
-| `'full'` | Summary, description, and operation details |
+| Mode                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `'summaryOnly'`     | Use only the OpenAPI summary (default)      |
+| `'descriptionOnly'` | Use only the OpenAPI description            |
+| `'combined'`        | Summary followed by description             |
+| `'full'`            | Summary, description, and operation details |
 
 ### Load Options
 
@@ -734,13 +734,13 @@ The adapter automatically validates your security configuration and assigns a ri
 
 Beyond authentication, the adapter includes defense-in-depth protections:
 
-| Protection | Description |
-|------------|-------------|
-| **SSRF Prevention** | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
-| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values |
-| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms |
-| **Request Size Limits** | Content-Length validation with integer overflow protection |
-| **Query Param Collision** | Detects conflicts between security and user input parameters |
+| Protection                | Description                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
+| **Request Size Limits**   | Content-Length validation with integer overflow protection                              |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                            |
 
 **Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
 

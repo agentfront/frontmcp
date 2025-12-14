@@ -190,6 +190,46 @@ session: {
 
 ---
 
+### Transport recreation (Redis failover)
+
+Need to restart pods without forcing every MCP client to call `initialize` again? Turn on `auth.transport.recreation` so FrontMCP persists streamable HTTP session metadata into Redis, hashes the token, and recreates transports automatically the next time the client reconnects with the same `sessionId`. Only streamable HTTP sessions are persisted today; SSE support will land next.
+
+```ts
+@FrontMcp({
+  auth: {
+    transport: {
+      recreation: {
+        enabled: true,
+        redis: {
+          host: process.env.REDIS_HOST ?? '127.0.0.1',
+          port: Number(process.env.REDIS_PORT ?? 6379),
+          password: process.env.REDIS_PASSWORD,
+          tls: true,
+          keyPrefix: 'mcp:transport:',
+        },
+        defaultTtlMs: 60 * 60 * 1000, // keep sessions for 1 hour
+      },
+    },
+  },
+});
+```
+
+| Option         | Description                                                                                                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`      | Persists streamable HTTP session metadata to Redis so transports can be recreated after restarts or deploys.                                                                            |
+| `redis.*`      | Standard Redis connection options (`host`, `port`, `password`, `db`, `tls`, `keyPrefix`). `keyPrefix` defaults to `mcp:transport:` so transport data never collides with auth sessions. |
+| `defaultTtlMs` | Milliseconds to keep session metadata before eviction (defaults to 1 hour). Pick a value that matches your expected reconnect window.                                                   |
+
+Once enabled, the transport registry follows this flow:
+
+1. Store each successful session in Redis with a hashed authorization token and node ID.
+2. Cache the last 10k session IDs locally so HTTP 400 vs 404 responses follow the MCP spec even without Redis.
+3. On reconnect, verify the hashed token, recreate the transport in memory, and refresh the Redis TTL so long-lived jobs survive rolling deploys.
+
+<Check>FrontMCP pings Redis on boot and falls back to in-memory storage automatically if the connection fails, so a bad cache never bricks your transports.</Check>
+
+<Warning>Always enable TLS and authentication on production Redis clusters. Transport metadata includes authorization fingerprints; never run this feature against an unauthenticated or shared Redis instance.</Warning>
+
 ## Logging
 
 ```ts
