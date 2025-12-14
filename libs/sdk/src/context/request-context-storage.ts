@@ -131,30 +131,18 @@ export class RequestContextStorage {
   /**
    * Update the authInfo in the current context.
    *
-   * This is useful when auth info is populated after the initial context creation.
-   * Note: This creates a new context with updated authInfo.
+   * This mutates the existing context in place to preserve internal state
+   * (marks, store, sessionMetadata) while updating auth info.
    *
-   * @param authInfo - New auth info to set
-   * @param fn - Function to run with updated context
+   * @param authInfo - Auth info fields to set/update (merged with existing)
+   * @param fn - Function to run after update
    * @returns Result of the callback
    */
   updateAuthInfo<T>(authInfo: RequestContextArgs['authInfo'], fn: () => T | Promise<T>): T | Promise<T> {
-    const current = this.getStore();
-    if (!current) {
-      throw new Error('Cannot update authInfo: no RequestContext available');
-    }
-
-    const updated = new RequestContext({
-      requestId: current.requestId,
-      traceContext: current.traceContext,
-      sessionId: current.sessionId,
-      authInfo,
-      scopeId: current.scopeId,
-      timestamp: current.timestamp,
-      metadata: current.metadata,
-    });
-
-    return requestContextStorage.run(updated, fn);
+    const current = this.getStoreOrThrow();
+    // Mutate in place to preserve marks, store, and sessionMetadata
+    current.updateAuthInfo(authInfo);
+    return fn();
   }
 }
 
@@ -181,6 +169,7 @@ function extractMetadata(headers: Record<string, unknown>): RequestMetadata {
 
 /**
  * Extract client IP from headers.
+ * Handles both string and array header values (some adapters pass arrays).
  */
 function extractClientIp(headers: Record<string, unknown>): string | undefined {
   // x-forwarded-for can be comma-separated list; first is client IP
@@ -188,10 +177,17 @@ function extractClientIp(headers: Record<string, unknown>): string | undefined {
   if (typeof xff === 'string') {
     return xff.split(',')[0]?.trim();
   }
+  // Some adapters pass arrays for multi-value headers
+  if (Array.isArray(xff) && typeof xff[0] === 'string') {
+    return xff[0].split(',')[0]?.trim();
+  }
 
   const realIp = headers['x-real-ip'];
   if (typeof realIp === 'string') {
     return realIp;
+  }
+  if (Array.isArray(realIp) && typeof realIp[0] === 'string') {
+    return realIp[0];
   }
 
   return undefined;

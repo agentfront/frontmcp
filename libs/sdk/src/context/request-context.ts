@@ -5,7 +5,7 @@
  * chain via AsyncLocalStorage. Access via DI only using the REQUEST_CONTEXT token.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
@@ -98,7 +98,13 @@ export class RequestContext {
     this._authInfo = args.authInfo;
     this.scopeId = args.scopeId;
     this.timestamp = args.timestamp ?? Date.now();
-    this.metadata = args.metadata ?? { customHeaders: {} };
+    // Defensive normalization: ensure customHeaders is always an object
+    // even if args.metadata is partially defined at runtime (TS can't enforce this)
+    const metadata = args.metadata;
+    this.metadata = {
+      ...metadata,
+      customHeaders: metadata?.customHeaders ?? {},
+    };
 
     // Initial mark
     this.marks.set('init', this.timestamp);
@@ -243,6 +249,9 @@ export class RequestContext {
   /**
    * Get a summary of the context for logging.
    *
+   * Note: sessionId is hashed to prevent accidental exposure of user-identifying
+   * session identifiers in logs while still allowing correlation.
+   *
    * @returns Object with key context fields
    */
   toLogContext(): Record<string, unknown> {
@@ -250,7 +259,9 @@ export class RequestContext {
       requestId: this.requestId,
       traceId: this.traceContext.traceId,
       parentId: this.traceContext.parentId,
-      sessionId: this.sessionId?.slice(0, 20),
+      // Hash sessionId to prevent logging user-identifying information
+      // while preserving ability to correlate logs for the same session
+      sessionIdHash: createHash('sha256').update(this.sessionId).digest('hex').slice(0, 12),
       scopeId: this.scopeId,
       elapsed: this.elapsed(),
     };

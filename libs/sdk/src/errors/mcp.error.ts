@@ -359,6 +359,18 @@ export class InvalidHookFlowError extends InternalMcpError {
 }
 
 /**
+ * Request context not available error - thrown when code attempts to access
+ * RequestContext outside of a request scope (i.e., without AsyncLocalStorage context).
+ */
+export class RequestContextNotAvailableError extends InternalMcpError {
+  constructor(
+    message = 'RequestContext not available. Ensure execution runs within a request scope created by RequestContextStorage.run().',
+  ) {
+    super(message, 'REQUEST_CONTEXT_NOT_AVAILABLE');
+  }
+}
+
+/**
  * Auth configuration error - thrown when auth configuration is invalid
  * (e.g., transparent mode on parent with multiple child providers).
  */

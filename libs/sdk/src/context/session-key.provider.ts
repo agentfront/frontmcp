@@ -1,3 +1,5 @@
+import { InvalidInputError } from '../errors/mcp.error';
+
 /**
  * Session key wrapper for DI injection in SESSION-scoped providers.
  *
@@ -39,17 +41,17 @@ export class SessionKey {
    * Use this for early validation before cache operations.
    *
    * @param value - The session key string to validate
-   * @throws Error if validation fails (empty, too long, invalid characters)
+   * @throws InvalidInputError if validation fails (empty, too long, invalid characters)
    */
   static validate(value: string): void {
     if (!value || value.length === 0) {
-      throw new Error('SessionKey cannot be empty');
+      throw new InvalidInputError('SessionKey cannot be empty');
     }
     if (value.length > SessionKey.MAX_LENGTH) {
-      throw new Error(`SessionKey exceeds maximum length of ${SessionKey.MAX_LENGTH} characters`);
+      throw new InvalidInputError(`SessionKey exceeds maximum length of ${SessionKey.MAX_LENGTH} characters`);
     }
     if (!SessionKey.VALID_PATTERN.test(value)) {
-      throw new Error(
+      throw new InvalidInputError(
         'SessionKey contains invalid characters. Allowed: alphanumeric, hyphen, underscore, period, colon',
       );
     }

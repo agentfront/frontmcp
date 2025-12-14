@@ -27,7 +27,7 @@ import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
 import { RequestContextStorage, REQUEST_CONTEXT } from '../context';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { randomUUID } from 'crypto';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
@@ -175,7 +175,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const headers = (request.headers ?? {}) as Record<string, unknown>;
     // Generate unique ID for anonymous sessions to prevent session collision
     // All unauthenticated requests previously shared 'anonymous', causing data leakage
-    const sessionId = (headers['mcp-session-id'] as string) ?? `anon:${randomUUID()}`;
+    // Handle empty strings explicitly: '' ?? 'fallback' returns '', not 'fallback'
+    const headerSessionId = typeof headers['mcp-session-id'] === 'string' ? headers['mcp-session-id'].trim() : '';
+    const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
     const scope = this.globalProviders.getActiveScope();
 
     // Wrap ENTIRE flow execution in AsyncLocalStorage context
@@ -183,7 +185,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       headers,
       {
         sessionId,
-        authInfo: {} as AuthInfo, // Will be updated after checkAuthorization
+        authInfo: {}, // Partial<AuthInfo> - progressively populated after checkAuthorization
         scopeId: scope.id,
       },
       async () => {
@@ -206,7 +208,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     if (!sessionKey) {
       // This should never happen since runWithContext wraps the entire flow execution
       // If we reach here, there's a bug in context propagation
-      throw new Error('RequestContext unavailable - session ID required for provider resolution');
+      throw new RequestContextNotAvailableError(
+        'RequestContext unavailable - session ID required for provider resolution. Ensure flow is wrapped with runWithContext.',
+      );
     }
 
     // Build views with current request context if available

@@ -798,6 +798,29 @@ export default class ProviderRegistry
   }
 
   /**
+   * Dispose of the registry, cleaning up all resources.
+   * Call this when the registry/scope is being destroyed to prevent:
+   * - Memory leaks from retained interval handles
+   * - Orphaned session cleanup timers
+   *
+   * @example
+   * ```typescript
+   * // In scope teardown
+   * scope.providers.dispose();
+   * ```
+   */
+  dispose(): void {
+    this.stopSessionCleanup();
+    // Clear all session stores to help garbage collection
+    this.sessionStores.clear();
+    // Resolve any pending locks to prevent hung promises
+    for (const lock of this.sessionBuildLocks.values()) {
+      lock.resolve();
+    }
+    this.sessionBuildLocks.clear();
+  }
+
+  /**
    * Get session cache statistics for monitoring.
    */
   getSessionCacheStats(): { size: number; maxSize: number; ttlMs: number } {
@@ -846,8 +869,14 @@ export default class ProviderRegistry
       }
 
       // Wait for existing lock with remaining timeout
+      // Clear the timeout when existing.promise wins the race to prevent timer leaks
       const remaining = ProviderRegistry.SESSION_LOCK_TIMEOUT_MS - elapsed;
-      await Promise.race([existing.promise, new Promise<void>((resolve) => setTimeout(resolve, remaining))]);
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<void>((resolve) => {
+        timeoutHandle = setTimeout(resolve, remaining);
+      });
+      await Promise.race([existing.promise, timeoutPromise]);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
       // After await, loop back to re-check - another request may have created a new lock
     }
 

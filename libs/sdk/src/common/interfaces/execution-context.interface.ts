@@ -9,6 +9,7 @@ import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ScopeEntry } from '../entries';
 import { RequestContext, REQUEST_CONTEXT } from '../../context';
+import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -16,7 +17,7 @@ import { RequestContext, REQUEST_CONTEXT } from '../../context';
 export type ExecutionContextBaseArgs = {
   providers: ProviderRegistryInterface;
   logger: FrontMcpLogger;
-  authInfo: AuthInfo;
+  authInfo: Partial<AuthInfo>;
 };
 
 /**
@@ -29,7 +30,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /**
    * @deprecated Use `requestContext.authInfo` instead. Will be removed in v2.0.
    */
-  private readonly _authInfo: AuthInfo;
+  private readonly _authInfo: Partial<AuthInfo>;
 
   /** Unique identifier for this execution run */
   protected readonly runId: string;
@@ -55,16 +56,14 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Provides access to requestId, traceId, sessionId, authInfo,
    * timing marks, and request metadata.
    *
-   * @throws Error if called outside of a request scope
+   * @throws RequestContextNotAvailableError if called outside of a request scope
    */
   get requestContext(): RequestContext {
     try {
       return this.providers.get(REQUEST_CONTEXT as Token<RequestContext>);
     } catch {
       // Fallback: request context not available, likely called during initialization
-      throw new Error(
-        'RequestContext not available. Ensure execution runs within a request scope created by RequestContextStorage.run().',
-      );
+      throw new RequestContextNotAvailableError();
     }
   }
 
@@ -86,7 +85,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    *
    * Get authentication information for the current request.
    */
-  get authInfo(): AuthInfo {
+  get authInfo(): Partial<AuthInfo> {
     return this._authInfo;
   }
 
@@ -96,14 +95,13 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * Prefers requestContext.authInfo when available (the recommended source),
    * falls back to the legacy authInfo property for backward compatibility.
    *
-   * By the time tools execute, authentication has been verified and
-   * all auth fields are populated.
+   * Returns Partial<AuthInfo> because auth info is progressively populated
+   * during the request lifecycle. Callers should check for required fields.
    */
-  getAuthInfo(): AuthInfo {
+  getAuthInfo(): Partial<AuthInfo> {
     const requestCtx = this.tryGetRequestContext();
     if (requestCtx) {
-      // Cast is safe: by tool execution time, auth verification is complete
-      return requestCtx.authInfo as AuthInfo;
+      return requestCtx.authInfo;
     }
     return this._authInfo;
   }

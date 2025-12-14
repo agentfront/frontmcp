@@ -19,6 +19,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
+import { randomUUID } from 'node:crypto';
 
 const plan = {
   pre: [
@@ -108,7 +109,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
 
     // Get context from AsyncLocalStorage (already initialized by FlowInstance.runWithContext)
     const ctx = this.tryGetRequestContext();
-    this.requestId = ctx?.requestId ?? `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Use randomUUID() for fallback instead of Math.random() to avoid collisions under load
+    this.requestId = ctx?.requestId ?? `req-${randomUUID()}`;
 
     // Extract request details for logging
     const headers = request.headers ?? {};
@@ -177,7 +179,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
             token,
             clientId: user.sub,
             scopes: [],
-            expiresAt: user.exp,
+            // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
+            expiresAt: user.exp ? user.exp * 1000 : undefined,
             extra: {
               user,
               sessionId: session?.id,
@@ -228,7 +231,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         // Update RequestContext with verified auth info and session metadata
         const ctx = this.tryGetRequestContext();
         if (ctx) {
-          ctx.updateAuthInfo(authorization);
+          // Map authorization to AuthInfo shape (consistent with checkAuthorization)
+          ctx.updateAuthInfo({
+            token: authorization.token,
+            clientId: authorization.user?.sub,
+            scopes: [],
+            // JWT exp is in seconds, SDK uses milliseconds throughout
+            expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
+            extra: {
+              user: authorization.user,
+              sessionId: authorization.session?.id,
+              sessionPayload: authorization.session?.payload,
+            },
+          });
           if (authorization.session?.payload) {
             ctx.updateSessionMetadata(authorization.session.payload);
           }
