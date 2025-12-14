@@ -4,18 +4,10 @@ import { StatefulSession } from './record/session.stateful';
 import { Scope } from '../../scope';
 import { CreateSessionArgs } from './session.types';
 import { TransparentSession } from './record/session.transparent';
-import { Authorization } from '../../common';
 import { ScopedInMemoryStore } from '../../store';
-import { encryptJson } from './utils/session-id.utils';
 
 export class SessionService {
   private store = new ScopedInMemoryStore();
-
-  async keyOf(authorization: Authorization) {
-    const sessionKey = encryptJson({ token: authorization.token });
-    if (authorization.session) {
-    }
-  }
 
   /**
    * Create and persist a new Session from verified auth data.

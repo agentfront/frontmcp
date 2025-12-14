@@ -11,7 +11,7 @@ import {
 } from './transport.types';
 import { RemoteTransporter } from './transport.remote';
 import { LocalTransporter } from './transport.local';
-import { ServerResponse, TransportRecreationConfigInput } from '../common';
+import { ServerResponse, TransportPersistenceConfigInput } from '../common';
 import { Scope } from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
@@ -44,9 +44,9 @@ export class TransportService {
   private sessionStore?: RedisSessionStore;
 
   /**
-   * Transport recreation configuration
+   * Transport persistence configuration
    */
-  private recreationConfig?: TransportRecreationConfigInput;
+  private persistenceConfig?: TransportPersistenceConfigInput;
 
   /**
    * Mutex map for preventing concurrent transport creation for the same key.
@@ -54,32 +54,32 @@ export class TransportService {
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 
-  constructor(scope: Scope, recreationConfig?: TransportRecreationConfigInput) {
+  constructor(scope: Scope, persistenceConfig?: TransportPersistenceConfigInput) {
     this.scope = scope;
-    this.recreationConfig = recreationConfig;
+    this.persistenceConfig = persistenceConfig;
     this.distributed = false; // get from scope metadata
     this.bus = undefined; // get from scope metadata
     if (this.distributed && !this.bus) {
       throw new Error('TransportRegistry: distributed=true requires a TransportBus implementation.');
     }
 
-    // Initialize Redis session store if recreation is enabled
-    if (recreationConfig?.enabled && recreationConfig.redis) {
+    // Initialize Redis session store if persistence is enabled
+    if (persistenceConfig?.enabled && persistenceConfig.redis) {
       this.sessionStore = new RedisSessionStore(
         {
-          host: recreationConfig.redis.host,
-          port: recreationConfig.redis.port,
-          password: recreationConfig.redis.password,
-          db: recreationConfig.redis.db,
-          tls: recreationConfig.redis.tls,
+          host: persistenceConfig.redis.host,
+          port: persistenceConfig.redis.port,
+          password: persistenceConfig.redis.password,
+          db: persistenceConfig.redis.db,
+          tls: persistenceConfig.redis.tls,
           // Note: Uses 'mcp:transport:' prefix (not 'mcp:session:') to separate transport
-          // recreation data from authentication session data in the auth module
-          keyPrefix: recreationConfig.redis.keyPrefix ?? 'mcp:transport:',
-          defaultTtlMs: recreationConfig.defaultTtlMs ?? 3600000, // 1 hour default
+          // persistence data from authentication session data in the auth module
+          keyPrefix: persistenceConfig.redis.keyPrefix ?? 'mcp:transport:',
+          defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
         },
         this.scope.logger.child('RedisSessionStore'),
       );
-      this.scope.logger.info('[TransportService] Redis session store initialized for transport recreation');
+      this.scope.logger.info('[TransportService] Redis session store initialized for transport persistence');
     }
 
     this.ready = this.initialize();
@@ -237,7 +237,7 @@ export class TransportService {
     this.sessionHistory.set(historyKey, storedSession.createdAt);
 
     const sessionStore = this.sessionStore;
-    const recreationConfig = this.recreationConfig;
+    const persistenceConfig = this.persistenceConfig;
 
     // Create new transport
     const transporter = new LocalTransporter(this.scope, key, res, () => {
@@ -261,7 +261,7 @@ export class TransportService {
         ...storedSession,
         lastAccessedAt: Date.now(),
       };
-      sessionStore.set(sessionId, updatedSession, recreationConfig?.defaultTtlMs).catch((err) => {
+      sessionStore.set(sessionId, updatedSession, persistenceConfig?.defaultTtlMs).catch((err) => {
         this.scope.logger.warn('[TransportService] Failed to update session in Redis', {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),
@@ -322,7 +322,7 @@ export class TransportService {
     if (existing) return existing;
 
     const sessionStore = this.sessionStore;
-    const recreationConfig = this.recreationConfig;
+    const persistenceConfig = this.persistenceConfig;
 
     const transporter = new LocalTransporter(this.scope, key, res, () => {
       key.sessionId = sessionId;
@@ -340,7 +340,7 @@ export class TransportService {
 
     this.insertLocal(key, transporter);
 
-    // Persist session to Redis for recreation (streamable-http only for now)
+    // Persist session to Redis (streamable-http only for now)
     if (sessionStore && type === 'streamable-http') {
       const storedSession: StoredSession = {
         session: {
@@ -354,7 +354,7 @@ export class TransportService {
         createdAt: Date.now(),
         lastAccessedAt: Date.now(),
       };
-      sessionStore.set(sessionId, storedSession, recreationConfig?.defaultTtlMs).catch((err) => {
+      sessionStore.set(sessionId, storedSession, persistenceConfig?.defaultTtlMs).catch((err) => {
         this.scope.logger.warn('[TransportService] Failed to persist session to Redis', {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),

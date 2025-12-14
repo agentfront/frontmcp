@@ -54,7 +54,7 @@ CachePlugin.init({
   type: 'redis',
   config: {
     host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
+    port: Number(process.env.REDIS_PORT || 6379),
     password: process.env.REDIS_PASSWORD,
     db: parseInt(process.env.REDIS_DB || '0'),
     tls: process.env.REDIS_TLS === 'true',
@@ -122,7 +122,7 @@ import { CachePlugin } from '@frontmcp/plugins';
       type: 'redis',
       config: {
         host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT || '6379'),
+        port: Number(process.env.REDIS_PORT || 6379),
         password: process.env.REDIS_PASSWORD,
         tls: process.env.REDIS_TLS === 'true',
       },
@@ -151,7 +151,7 @@ import Redis from 'ioredis';
 async function checkRedisHealth(): Promise<boolean> {
   const redis = new Redis({
     host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT || '6379'),
+    port: Number(process.env.REDIS_PORT || 6379),
     password: process.env.REDIS_PASSWORD,
     lazyConnect: true,
   });

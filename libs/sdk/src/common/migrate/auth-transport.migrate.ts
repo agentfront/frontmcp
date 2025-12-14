@@ -74,7 +74,7 @@ function showDeprecationWarning(hasOldTransport: boolean, hasOldSession: boolean
     '\n[DEPRECATION WARNING] FrontMCP config structure has changed:\n' +
       warnings.join('\n') +
       '\n  - For Redis config, use top-level "redis" instead\n' +
-      '\nSee migration guide: https://docs.frontmcp.dev/migrate/transport-config\n',
+      '\nSee documentation: https://docs.agentfront.dev/docs/servers/server\n',
   );
 }
 

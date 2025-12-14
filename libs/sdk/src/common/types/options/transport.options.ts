@@ -22,38 +22,27 @@ export type { SessionMode, TransportIdMode, PlatformMappingEntry, PlatformDetect
  * Transport persistence configuration
  * Enables session persistence to Redis and automatic transport recreation after server restart
  */
-export const transportPersistenceConfigSchema = z
-  .object({
-    /**
-     * Enable transport persistence to Redis
-     * When enabled, sessions are persisted to Redis and transports can be recreated after restart
-     * @default false
-     */
-    enabled: z.boolean().default(false),
+export const transportPersistenceConfigSchema = z.object({
+  /**
+   * Enable transport persistence to Redis
+   * When enabled, sessions are persisted to Redis and transports can be recreated after restart
+   * @default false
+   */
+  enabled: z.boolean().default(false),
 
-    /**
-     * Redis configuration for session storage
-     * If omitted when enabled=true, uses top-level redis config
-     */
-    redis: redisOptionsSchema.optional(),
+  /**
+   * Redis configuration for session storage
+   * If omitted when enabled=true, uses top-level redis config
+   * Note: Validation for redis presence happens at runtime when persistence is used
+   */
+  redis: redisOptionsSchema.optional(),
 
-    /**
-     * Default TTL for stored session metadata (milliseconds)
-     * @default 3600000 (1 hour)
-     */
-    defaultTtlMs: z.number().int().positive().default(3600000),
-  })
-  .refine(
-    (data) => {
-      // Redis config is optional here - can use top-level redis
-      // The validation for redis presence happens at runtime when persistence is used
-      return true;
-    },
-    {
-      message: 'Redis configuration is required when transport persistence is enabled',
-      path: ['redis'],
-    },
-  );
+  /**
+   * Default TTL for stored session metadata (milliseconds)
+   * @default 3600000 (1 hour)
+   */
+  defaultTtlMs: z.number().int().positive().default(3600000),
+});
 
 // ============================================
 // TRANSPORT OPTIONS (unified config)

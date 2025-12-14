@@ -194,7 +194,7 @@ The `transport` config controls session lifecycle, protocol switches, and sessio
 | ------------------ | ------------ | --------------------------------------------------------------------------------- |
 | `sessionMode`      | `'stateful'` | `'stateful'` (server-side store) or `'stateless'` (JWT-based)                     |
 | `transportIdMode`  | `'uuid'`     | `'uuid'` (per-node identity) or `'jwt'` (signed, distributed)                     |
-| `platformDetection`| `{}`         | Platform detection config; set `customOnly: true` to skip built-in mappings      |
+| `platformDetection`| `undefined`  | Platform detection config; set `customOnly: true` to skip built-in mappings      |
 
 <CodeGroup>
 ```ts Stateful Sessions

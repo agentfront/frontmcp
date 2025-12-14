@@ -304,9 +304,7 @@ describe('auth-transport migration', () => {
       const metadata: any = { session: { sessionMode: 'stateful' } };
       migrateAuthTransportConfig(metadata);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('https://docs.frontmcp.dev/migrate/transport-config'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('https://docs.agentfront.dev/docs/servers/server'));
     });
 
     it('should mention auth.transport deprecation when applicable', () => {
