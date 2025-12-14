@@ -10,6 +10,8 @@ export type Command =
   | 'version'
   | 'test';
 
+export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
+
 export interface ParsedArgs {
   _: string[];
   outDir?: string;
@@ -19,6 +21,7 @@ export interface ParsedArgs {
   watch?: boolean;
   verbose?: boolean;
   timeout?: number;
+  adapter?: DeploymentAdapter;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -27,6 +30,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const a = argv[i];
     if (a === '--out-dir' || a === '-o') out.outDir = argv[++i];
     else if (a === '--entry' || a === '-e') out.entry = argv[++i];
+    else if (a === '--adapter' || a === '-a') out.adapter = argv[++i] as DeploymentAdapter;
     else if (a === '--help' || a === '-h') out.help = true;
     else if (a === '--runInBand' || a === '-i') out.runInBand = true;
     else if (a === '--watch' || a === '-w') out.watch = true;

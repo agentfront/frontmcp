@@ -8,6 +8,7 @@ import { HttpMethod, ServerRequest, ServerRequestHandler, ServerResponse } from 
 export class ExpressHostAdapter extends HostServerAdapter {
   private app = express();
   private router = express.Router();
+  private prepared = false;
 
   constructor() {
     super();
@@ -40,13 +41,32 @@ export class ExpressHostAdapter extends HostServerAdapter {
     };
   }
 
-  start(port: number) {
+  /**
+   * Prepares the Express app with routes but does NOT start the HTTP server.
+   * Used for serverless deployments (Vercel, AWS Lambda, etc.)
+   * This method is idempotent - safe to call multiple times.
+   */
+  prepare(): void {
+    if (this.prepared) return;
+    this.prepared = true;
     this.app.use('/', this.router);
+  }
+
+  /**
+   * Returns the Express app for serverless exports.
+   * Automatically calls prepare() to ensure routes are registered.
+   */
+  getHandler(): express.Application {
+    this.prepare();
+    return this.app;
+  }
+
+  start(port: number) {
+    this.prepare();
     const server = http.createServer(this.app);
     server.requestTimeout = 0;
     server.headersTimeout = 0;
     server.keepAliveTimeout = 75_000;
     server.listen(port, () => console.log(`MCP HTTP (Express) on ${port}`));
   }
-
 }

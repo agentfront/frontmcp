@@ -42,7 +42,33 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       Reflect.defineMetadata(FrontMcpTokens[property] ?? property, metadata[property], target);
     }
 
-    if (metadata.serve) {
+    // Safe check for serverless mode - process.env may not exist in Cloudflare Workers
+    const isServerless = typeof process !== 'undefined' && process.env?.['FRONTMCP_SERVERLESS'] === '1';
+
+    if (isServerless) {
+      // Serverless mode: bootstrap, prepare (no listen), store handler globally
+      const sdk = '@frontmcp/sdk';
+      import(sdk)
+        .then(({ FrontMcpInstance, setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError }) => {
+          if (!FrontMcpInstance) {
+            throw new Error(
+              `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
+            );
+          }
+
+          const handlerPromise = FrontMcpInstance.createHandler(metadata);
+          setServerlessHandlerPromise(handlerPromise);
+          handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            setServerlessHandlerError(e);
+            console.error('[FrontMCP] Serverless initialization failed:', e);
+          });
+        })
+        .catch((err: unknown) => {
+          console.error('[FrontMCP] Failed to import @frontmcp/sdk for serverless init:', err);
+        });
+    } else if (metadata.serve) {
+      // Normal mode: bootstrap and start server
       const sdk = '@frontmcp/sdk';
       import(sdk).then(({ FrontMcpInstance }) => {
         if (!FrontMcpInstance) {

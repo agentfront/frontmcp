@@ -30,7 +30,6 @@ export type NextFn = () => Promise<void> | void;
 export type ServerRequestHandler = (req: ServerRequest, res: ServerResponse, next: NextFn) => Promise<void> | void;
 
 export abstract class FrontMcpServer {
-
   /**
    * Register a middleware handler for a specific entry path.
    * @param entryPath - e.g. '' or '/mcp'
@@ -55,6 +54,16 @@ export abstract class FrontMcpServer {
     handler: ServerRequestHandler,
   ): (req: any, res: any, next: () => any) => Promise<void> | void;
 
+  /**
+   * Prepares the server routes without starting the HTTP listener.
+   * Used for serverless deployments (Vercel, AWS Lambda, etc.)
+   */
+  abstract prepare(): void;
+
+  /**
+   * Returns the underlying HTTP handler for serverless exports.
+   */
+  abstract getHandler(): unknown;
 
   /**
    *  Start the server on the specified port
