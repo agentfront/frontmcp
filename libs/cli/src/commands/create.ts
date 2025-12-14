@@ -28,6 +28,19 @@ export interface CreateFlags {
   cicd?: boolean;
 }
 
+interface PackageJson {
+  name?: string;
+  version?: string;
+  private?: boolean;
+  type?: string;
+  main?: string;
+  scripts?: Record<string, string>;
+  engines?: { node?: string; npm?: string };
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
+}
+
 // =============================================================================
 // Interactive Prompt Utility
 // =============================================================================
@@ -57,7 +70,7 @@ function createPrompt() {
         rl.question(`${c('gray', `Select [1-${options.length}]:`)} `, resolve),
       );
       const idx = parseInt(answer.trim(), 10) - 1;
-      if (idx >= 0 && idx < options.length) return options[idx].value;
+      if (!isNaN(idx) && idx >= 0 && idx < options.length) return options[idx].value;
       return options[defaultIndex].value;
     },
 
@@ -1316,8 +1329,8 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
       console.log(c('gray', 'Pick a different name or start with an empty folder.'));
       process.exit(1);
     }
-  } catch (e: any) {
-    if (e?.code === 'ENOENT') {
+  } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT') {
       await ensureDir(targetDir);
     } else {
       throw e;
@@ -1428,7 +1441,7 @@ async function upsertPackageJsonWithTarget(
   deploymentTarget: DeploymentTarget,
 ) {
   const pkgPath = path.join(cwd, 'package.json');
-  const existing = await readJSON<Record<string, any>>(pkgPath);
+  const existing = await readJSON<PackageJson>(pkgPath);
 
   const frontmcpLibRange = `~${selfVersion}`;
 
@@ -1493,7 +1506,7 @@ async function upsertPackageJsonWithTarget(
     return;
   }
 
-  const merged: any = { ...base, ...existing };
+  const merged: PackageJson = { ...base, ...existing };
 
   merged.name = existing.name || base.name;
   merged.main = existing.main || base.main;
