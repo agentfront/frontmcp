@@ -1512,17 +1512,11 @@ async function upsertPackageJsonWithTarget(
   merged.main = existing.main || base.main;
   merged.type = existing.type || base.type;
 
+  // Preserve user scripts, add base scripts only if missing
   merged.scripts = {
-    ...base.scripts,
+    ...baseScripts,
     ...(existing.scripts || {}),
   };
-
-  // Ensure our scripts take precedence for frontmcp commands
-  for (const key of Object.keys(baseScripts)) {
-    if (!existing.scripts?.[key]) {
-      merged.scripts[key] = baseScripts[key];
-    }
-  }
 
   merged.engines = {
     ...(existing.engines || {}),
