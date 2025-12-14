@@ -54,7 +54,7 @@ export async function createSecurityContextFromAuth(
     }
 
     // Map each security scheme to its auth provider
-    // Process all schemes - first matching token is used for jwt
+    // Process all schemes - first matching token for each auth type (jwt, apiKey, basic, oauth2Token)
     for (const scheme of securitySchemes) {
       const authExtractor = options.authProviderMapper[scheme];
       if (authExtractor) {

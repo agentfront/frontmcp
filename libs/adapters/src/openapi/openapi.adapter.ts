@@ -4,6 +4,9 @@ import { OpenAPIToolGenerator, McpOpenAPITool } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
 import { validateSecurityConfiguration } from './openapi.security';
 
+/** Reserved keys that cannot be used as inputKey (prototype pollution protection) */
+const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
 /**
  * Creates a simple console-based logger for use outside the SDK context.
  */
@@ -353,6 +356,16 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   private applyInputTransforms(tool: McpOpenAPITool): McpOpenAPITool {
     const transforms = this.collectTransformsForTool(tool);
     if (transforms.length === 0) return tool;
+
+    // Validate input keys against reserved keys (prototype pollution protection)
+    for (const transform of transforms) {
+      if (RESERVED_KEYS.includes(transform.inputKey)) {
+        throw new Error(
+          `Invalid inputKey '${transform.inputKey}' in tool '${tool.name}': ` +
+            `reserved keys (${RESERVED_KEYS.join(', ')}) cannot be used`,
+        );
+      }
+    }
 
     const transformedInputKeys = new Set(transforms.map((t) => t.inputKey));
 
