@@ -36,6 +36,29 @@ yarn add @frontmcp/ui
 
 </CodeGroup>
 
+### Module formats
+
+<Info>
+`@frontmcp/ui` now ships dual bundles: CommonJS at `dist/index.js` and ESM at `dist/esm/index.js`, so you can adopt the same component APIs in Node scripts, serverless handlers, and bundler-based apps with zero config.
+</Info>
+
+<CodeGroup>
+```ts CommonJS
+const { card, button } = require('@frontmcp/ui');
+```
+
+```ts ESM
+import { card, button } from '@frontmcp/ui';
+```
+
+```ts Deep import
+import { buttonGroup } from '@frontmcp/ui/components';
+```
+
+</CodeGroup>
+
+<Check>Wildcard exports (`@frontmcp/ui/*`) keep tree-shaking intact for bundlers while Node resolves the CommonJS entry automatically.</Check>
+
 ## Compose a page layout
 
 Wrap content with `baseLayout`, then mix components such as `card` and `button`. Everything resolves to HTML strings you can hand to an MCP resource or auth callback.

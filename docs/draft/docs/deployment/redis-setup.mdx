@@ -9,10 +9,10 @@ FrontMCP uses Redis for caching, session storage, and distributed state manageme
 
 ## Requirements
 
-| Environment | Redis | Notes |
-|-------------|-------|-------|
-| Development | Recommended | Enables full feature testing |
-| Production | **Required** | Essential for multi-instance deployments |
+| Environment | Redis        | Notes                                    |
+| ----------- | ------------ | ---------------------------------------- |
+| Development | Recommended  | Enables full feature testing             |
+| Production  | **Required** | Essential for multi-instance deployments |
 
 ## Development Setup
 
@@ -72,13 +72,13 @@ Redis is **required** in production. Without Redis, session data will be lost on
 
 ### Managed Redis Services (Recommended)
 
-| Provider | Service |
-|----------|---------|
-| AWS | ElastiCache for Redis |
-| GCP | Memorystore for Redis |
-| Azure | Azure Cache for Redis |
-| Upstash | Serverless Redis |
-| Redis Cloud | Redis Enterprise |
+| Provider    | Service               |
+| ----------- | --------------------- |
+| AWS         | ElastiCache for Redis |
+| GCP         | Memorystore for Redis |
+| Azure       | Azure Cache for Redis |
+| Upstash     | Serverless Redis      |
+| Redis Cloud | Redis Enterprise      |
 
 ### Self-Hosted Production
 
@@ -134,14 +134,14 @@ export default class Server {}
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `REDIS_HOST` | Yes | `localhost` | Redis server hostname |
-| `REDIS_PORT` | No | `6379` | Redis server port |
-| `REDIS_PASSWORD` | Prod only | - | Redis authentication password |
-| `REDIS_DB` | No | `0` | Redis database number |
-| `REDIS_TLS` | No | `false` | Enable TLS encryption |
-| `REDIS_KEY_PREFIX` | No | `mcp:` | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
+| Variable           | Required  | Default     | Description                                                                    |
+| ------------------ | --------- | ----------- | ------------------------------------------------------------------------------ |
+| `REDIS_HOST`       | Yes       | `localhost` | Redis server hostname                                                          |
+| `REDIS_PORT`       | No        | `6379`      | Redis server port                                                              |
+| `REDIS_PASSWORD`   | Prod only | -           | Redis authentication password                                                  |
+| `REDIS_DB`         | No        | `0`         | Redis database number                                                          |
+| `REDIS_TLS`        | No        | `false`     | Enable TLS encryption                                                          |
+| `REDIS_KEY_PREFIX` | No        | `mcp:`      | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
 
 ## Health Checks
 

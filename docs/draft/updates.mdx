@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-14" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -18,6 +18,12 @@ mode: 'center'
     **Features**
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
+
+    ☁️ **Serverless deployment adapters** – Run `frontmcp build --adapter vercel|lambda|cloudflare` to generate platform-specific handlers plus config files, then deploy straight to Vercel, AWS Lambda, or Cloudflare Workers without hand-rolled wrappers.
+
+    🧵 **Redis session recovery** – Toggle `transport.persistence` and the server now validates Redis up front, stores streamable HTTP sessions, and recreates transports across restarts or failovers so long-lived connections survive deploys.
+
+    🛠️ **OpenAPI adapter transforms** – Hide auth-only inputs, annotate/tag generated tools, choose `descriptionMode` presets, and plug in a `FrontMcpLogger` while built-in SSRF, header injection, and prototype-pollution guards keep specs safe.
 
     🧩 **Tool UI metadata & widgets** – Configure display modes, static/hybrid serving, CSP, hydration, and widget accessibility per tool while composing OpenAI App SDK-ready resource cards, lists, and previews without reimplementing layout glue.
 
@@ -63,6 +69,10 @@ mode: 'center'
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
 
+    ☁️ **Serverless deployment guide** – New `/docs/deployment/serverless` walkthrough covers build flags, generated config, and current limitations across Vercel, AWS Lambda, and Cloudflare Workers.
+
+    🧱 **Redis setup reference** – `/docs/deployment/redis-setup` now spells out Docker Compose recipes, managed-service options, security hardening, env vars, and health checks for production caches and session stores.
+
     🛰️ **Discovery reference** – Added `/docs/servers/discovery` to explain `prompts/list`, `prompts/get`, and `resources/templates/list` responses plus the new `list_changed` notifications.
 
     📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
@@ -73,7 +83,9 @@ mode: 'center'
 
     🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
 
-    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
+    🌐 **Transport controls reference** – `/docs/servers/server` now documents the top-level `transport` block, Redis-backed persistence, and per-app overrides so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
+
+    📘 **OpenAPI adapter deep dive** – `/docs/adapters/openapi-adapter` explains input/tool transforms, `descriptionMode`, the `x-frontmcp` extension, logger injection, and the built-in security protections.
 
     🎛️ **Tool UI metadata docs** – Refreshed `/docs/ui/overview` and `/docs/ui/integration/tools` with display modes, serving strategies, hydration, CSP guidance, and widget accessibility tips so templates behave predictably across platforms.
 
@@ -86,6 +98,8 @@ mode: 'center'
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
+
+    🧩 **Dual-module UI builds** – `@frontmcp/ui` now publishes CommonJS + ESM bundles with wildcard exports, so bundlers, Node services, and serverless handlers all load the right format without custom shims.
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 

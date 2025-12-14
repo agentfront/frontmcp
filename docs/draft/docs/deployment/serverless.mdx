@@ -8,11 +8,11 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
 
 ## Supported Platforms
 
-| Platform | Status | Module Format | Config File |
-|----------|--------|---------------|-------------|
-| Vercel | Stable | ESM | `vercel.json` |
-| AWS Lambda | Stable | ESM | User-managed |
-| Cloudflare Workers | Experimental | CommonJS | `wrangler.toml` |
+| Platform           | Status       | Module Format | Config File     |
+| ------------------ | ------------ | ------------- | --------------- |
+| Vercel             | Stable       | ESM           | `vercel.json`   |
+| AWS Lambda         | Stable       | ESM           | User-managed    |
+| Cloudflare Workers | Experimental | CommonJS      | `wrangler.toml` |
 
 ## Quick Start
 
@@ -25,6 +25,7 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
     # Deploy
     vercel deploy
     ```
+
   </Tab>
   <Tab title="AWS Lambda">
     ```bash
@@ -36,6 +37,7 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
 
     # Deploy with your preferred tool (SAM, CDK, Serverless Framework)
     ```
+
   </Tab>
   <Tab title="Cloudflare">
     ```bash
@@ -45,6 +47,7 @@ Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and
     # Deploy
     wrangler deploy
     ```
+
   </Tab>
 </Tabs>
 
@@ -55,11 +58,13 @@ Vercel is a popular platform for deploying serverless functions with excellent D
 ### Setup
 
 1. Build your project:
+
    ```bash
    frontmcp build --adapter vercel
    ```
 
 2. This generates:
+
    ```
    dist/
      main.js      # Your compiled server
@@ -89,6 +94,7 @@ You can customize this file after generation. The build command will not overwri
 ### How It Works
 
 The generated `index.js` wrapper:
+
 1. Sets `FRONTMCP_SERVERLESS=1` environment variable
 2. Imports your compiled `main.js` (which runs the `@FrontMcp` decorator)
 3. Exports an async handler that retrieves the Express app and forwards requests
@@ -112,6 +118,7 @@ Deploy to AWS Lambda using the Serverless Express adapter.
 ### Prerequisites
 
 Install the required dependency:
+
 ```bash
 npm install @codegenie/serverless-express
 ```
@@ -119,11 +126,13 @@ npm install @codegenie/serverless-express
 ### Setup
 
 1. Build your project:
+
    ```bash
    frontmcp build --adapter lambda
    ```
 
 2. This generates:
+
    ```
    dist/
      main.js      # Your compiled server
@@ -182,6 +191,7 @@ AWS Lambda with ESM requires one of:
 - Configuring your deployment tool for ESM
 
 The generated `dist/index.js` uses ESM syntax (`import`/`export`).
+
 </Note>
 
 ### Cold Start Optimization
@@ -199,6 +209,7 @@ Cloudflare Workers support is **experimental**. The Express-to-Workers adapter h
 with streaming, certain middleware, and some response methods.
 
 For production Cloudflare deployments, consider using [Hono](https://hono.dev/) or native Workers APIs.
+
 </Warning>
 
 ### Limitations
@@ -211,11 +222,13 @@ For production Cloudflare deployments, consider using [Hono](https://hono.dev/) 
 ### Setup
 
 1. Build your project:
+
    ```bash
    frontmcp build --adapter cloudflare
    ```
 
 2. This generates:
+
    ```
    dist/
      main.js      # Your compiled server
@@ -293,16 +306,19 @@ Error: Serverless handler not initialized. Ensure @FrontMcp decorator ran and FR
 ```
 
 **Causes:**
+
 - The `@FrontMcp` decorator wasn't executed before the handler was called
 - `FRONTMCP_SERVERLESS=1` is not set in the entry point
 
 **Solutions:**
+
 - Ensure your main.ts/main.js has the `@FrontMcp` decorator on a class
 - Verify the generated `index.js` sets the environment variable before importing main.js
 
 ### "Module not found: @codegenie/serverless-express"
 
 The Lambda adapter requires an additional dependency:
+
 ```bash
 npm install @codegenie/serverless-express
 ```
@@ -311,15 +327,16 @@ npm install @codegenie/serverless-express
 
 First requests may be slow due to initialization. Strategies:
 
-| Platform | Solution |
-|----------|----------|
-| Lambda | Provisioned Concurrency, smaller bundles |
-| Vercel | Edge Functions (if applicable) |
+| Platform   | Solution                                 |
+| ---------- | ---------------------------------------- |
+| Lambda     | Provisioned Concurrency, smaller bundles |
+| Vercel     | Edge Functions (if applicable)           |
 | Cloudflare | Workers are generally fast to cold start |
 
 ### TypeScript Compilation Errors
 
 If you see module-related errors:
+
 - The adapter sets the correct module format automatically
 - `--module esnext` for Vercel/Lambda
 - `--module commonjs` for Node.js/Cloudflare

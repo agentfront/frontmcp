@@ -214,6 +214,25 @@ pnpm add @frontmcp/ui
   If you only use HTML templates, React is optional.
 </Info>
 
+### CommonJS + ESM ready
+
+<Info>
+This draft release ships both the CommonJS `main` build and an ESM `module` build (plus wildcard exports), so bundlers and Node 22+ scripts load the right format automatically without custom shims.
+</Info>
+
+<CodeGroup>
+```ts CommonJS
+const { card, badge } = require('@frontmcp/ui');
+```
+
+```ts ESM
+import { card, badge } from '@frontmcp/ui';
+```
+
+</CodeGroup>
+
+<Tip>Need only a specific module? Import directly from `@frontmcp/ui/components`, `@frontmcp/ui/layouts`, or any other subpath thanks to the wildcard exports.</Tip>
+
 ## Next Steps
 
 <CardGroup cols={2}>
