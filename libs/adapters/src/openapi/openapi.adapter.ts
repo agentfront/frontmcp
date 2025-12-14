@@ -4,6 +4,9 @@ import { OpenAPIToolGenerator, McpOpenAPITool } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
 import { validateSecurityConfiguration } from './openapi.security';
 
+/** Reserved keys that cannot be used as inputKey (prototype pollution protection) */
+const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
 /**
  * Creates a simple console-based logger for use outside the SDK context.
  */
@@ -191,7 +194,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
           description = summary || opDescription || `${method.toUpperCase()} ${path}`;
         }
         break;
-      case 'full':
+      case 'full': {
         const parts: string[] = [];
         if (summary) parts.push(summary);
         if (opDescription && opDescription !== summary) parts.push(opDescription);
@@ -199,6 +202,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         parts.push(`${method.toUpperCase()} ${path}`);
         description = parts.join('\n\n');
         break;
+      }
       default:
         // 'summaryOnly' - use existing description
         return tool;
@@ -300,6 +304,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     this.logger.debug(`Applied tool transforms to '${tool.name}'`);
 
+    const metadataRecord = tool.metadata as unknown as Record<string, unknown>;
+    const existingAdapter = metadataRecord['adapter'] as Record<string, unknown> | undefined;
     return {
       ...tool,
       name: newName,
@@ -307,7 +313,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       metadata: {
         ...tool.metadata,
         adapter: {
-          ...((tool.metadata as any).adapter || {}),
+          ...(existingAdapter || {}),
           toolTransform: transforms,
         },
       },
@@ -351,6 +357,16 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     const transforms = this.collectTransformsForTool(tool);
     if (transforms.length === 0) return tool;
 
+    // Validate input keys against reserved keys (prototype pollution protection)
+    for (const transform of transforms) {
+      if (RESERVED_KEYS.includes(transform.inputKey)) {
+        throw new Error(
+          `Invalid inputKey '${transform.inputKey}' in tool '${tool.name}': ` +
+            `reserved keys (${RESERVED_KEYS.join(', ')}) cannot be used`,
+        );
+      }
+    }
+
     const transformedInputKeys = new Set(transforms.map((t) => t.inputKey));
 
     // Clone and modify inputSchema to remove transformed keys
@@ -369,6 +385,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     this.logger.debug(`Applied ${transforms.length} input transforms to tool '${tool.name}'`);
 
+    const metadataRecord = tool.metadata as unknown as Record<string, unknown>;
+    const existingAdapter = metadataRecord['adapter'] as Record<string, unknown> | undefined;
     return {
       ...tool,
       inputSchema: {
@@ -380,7 +398,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       metadata: {
         ...tool.metadata,
         adapter: {
-          ...((tool.metadata as any).adapter || {}),
+          ...(existingAdapter || {}),
           inputTransforms: transforms,
         },
       },
@@ -430,6 +448,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         }`,
     );
 
+    const metadataRecord = tool.metadata as unknown as Record<string, unknown>;
+    const existingAdapter = metadataRecord['adapter'] as Record<string, unknown> | undefined;
     return {
       ...tool,
       inputSchema: {
@@ -441,7 +461,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       metadata: {
         ...tool.metadata,
         adapter: {
-          ...((tool.metadata as any).adapter || {}),
+          ...(existingAdapter || {}),
           securitySchemesInInput: Array.from(allowedSchemes),
           securitySchemesFromContext: Array.from(schemesToRemove),
         },

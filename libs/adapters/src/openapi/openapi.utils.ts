@@ -249,9 +249,14 @@ export async function parseResponse(response: Response, options?: ParseResponseO
   }
 
   // Read response body
+  // NOTE: This size check occurs AFTER loading the full response into memory.
+  // For responses without Content-Length headers, this provides defense-in-depth
+  // (detecting oversized responses) but does not protect against memory exhaustion.
+  // A streaming approach would be required for true memory protection, but adds
+  // complexity. The Content-Length check above handles the common case.
   const text = await response.text();
 
-  // Also check actual byte size (Content-Length may be missing or incorrect)
+  // Check actual byte size (Content-Length may be missing or incorrect)
   const byteSize = new TextEncoder().encode(text).length;
   if (byteSize > maxSize) {
     throw new Error(`Response size (${byteSize} bytes) exceeds maximum allowed (${maxSize} bytes)`);

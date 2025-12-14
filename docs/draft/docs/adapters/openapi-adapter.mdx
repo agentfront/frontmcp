@@ -123,8 +123,8 @@ export default class MyApiApp {}
   How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
 </ParamField>
 
-<ParamField path="logger" type="FrontMcpLogger" required>
-  Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger. For standalone usage, you must provide a logger implementing the `FrontMcpLogger` interface.
+<ParamField path="logger" type="FrontMcpLogger">
+  Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger via `setLogger()`. For standalone usage, you can optionally provide a logger implementing the `FrontMcpLogger` interface; if omitted, a console-based logger is created automatically.
 </ParamField>
 
 ## Authentication
