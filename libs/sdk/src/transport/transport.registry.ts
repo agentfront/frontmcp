@@ -50,7 +50,7 @@ export class TransportService {
 
   /**
    * Mutex map for preventing concurrent transport creation for the same key.
-   * Key: `${type}:${tokenHash}:${sessionId}`, Value: Promise that resolves when creation completes
+   * Key: JSON-encoded {t: type, h: tokenHash, s: sessionId}, Value: Promise that resolves when creation completes
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 

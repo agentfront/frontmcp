@@ -162,11 +162,13 @@ describe('RedisSessionStore', () => {
       expect(mockRedisInstance.get).toHaveBeenCalled();
     });
 
-    it('should return null for corrupted JSON', async () => {
+    it('should return null and delete corrupted JSON', async () => {
       mockRedisInstance.getex.mockResolvedValue('not valid json {{{');
 
       const result = await store.get('test-session-id');
       expect(result).toBeNull();
+      // Corrupted data should be deleted to prevent repeated failures (poison pill prevention)
+      expect(mockRedisInstance.del).toHaveBeenCalledWith('mcp:session:test-session-id');
     });
 
     it('should return null for invalid schema', async () => {

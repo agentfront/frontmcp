@@ -133,6 +133,8 @@ export class RedisSessionStore implements SessionStore {
         sessionId: sessionId.slice(0, 20),
         error: (error as Error).message,
       });
+      // Delete corrupted session payloads to prevent repeated failures
+      this.delete(sessionId).catch(() => void 0);
       return null;
     }
   }

@@ -285,7 +285,7 @@ interface StoredSession {
 
 ## The Recreation Flow
 
-```
+```text
 Client Request with mcp-session-id: "abc123"
                     │
                     ▼
@@ -342,13 +342,13 @@ const server = new McpServer({
 
 ## Security Measures
 
-| Measure                     | Description                                                        |
-| --------------------------- | ------------------------------------------------------------------ |
-| **Token hash verification** | Only the original token holder can recreate their session          |
-| **Mutex protection**        | Prevents race conditions during concurrent recreation attempts     |
-| **TTL expiration**          | Sessions auto-expire; TTL is bounded by `session.expiresAt` if set |
-| **Cleanup on dispose**      | When transport closes, Redis entry is deleted                      |
-| **No plaintext secrets**    | Bearer tokens stored as SHA-256 hashes; OAuth tokens encrypted     |
+| Measure                     | Description                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| **Token hash verification** | Only the original token holder can recreate their session                    |
+| **Mutex protection**        | Prevents race conditions during concurrent recreation attempts (per-process) |
+| **TTL expiration**          | Sessions auto-expire; TTL is bounded by `session.expiresAt` if set           |
+| **Cleanup on dispose**      | When transport closes, Redis entry is deleted                                |
+| **No plaintext secrets**    | Bearer tokens stored as SHA-256 hashes; OAuth tokens encrypted               |
 
 ## What Cannot Be Recreated
 
@@ -370,3 +370,11 @@ This ensures clients always receive appropriate HTTP status codes:
 - **404** - Session not found or expired (client should re-initialize)
 - **400** - Missing session header when required
 - **200/202** - Success (session recreated transparently)
+
+---
+
+<!-- Reference Links -->
+
+[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports
+[2]: https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization
+[3]: https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle
