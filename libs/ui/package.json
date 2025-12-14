@@ -30,106 +30,35 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js"
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      }
     },
-    "./types": {
-      "development": "./src/types/index.ts",
-      "types": "./dist/src/types/index.d.ts",
-      "import": "./dist/src/types/index.js",
-      "default": "./dist/src/types/index.js"
+    "./*": {
+      "development": "./src/*/index.ts",
+      "require": {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/*/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/*/index.d.ts",
+        "default": "./dist/esm/*/index.js"
+      }
     },
-    "./adapters": {
-      "development": "./src/adapters/index.ts",
-      "types": "./dist/src/adapters/index.d.ts",
-      "import": "./dist/src/adapters/index.js",
-      "default": "./dist/src/adapters/index.js"
-    },
-    "./build": {
-      "development": "./src/build/index.ts",
-      "types": "./dist/src/build/index.d.ts",
-      "import": "./dist/src/build/index.js",
-      "default": "./dist/src/build/index.js"
-    },
-    "./renderers": {
-      "development": "./src/renderers/index.ts",
-      "types": "./dist/src/renderers/index.d.ts",
-      "import": "./dist/src/renderers/index.js",
-      "default": "./dist/src/renderers/index.js"
-    },
-    "./components": {
-      "development": "./src/components/index.ts",
-      "types": "./dist/src/components/index.d.ts",
-      "import": "./dist/src/components/index.js",
-      "default": "./dist/src/components/index.js"
-    },
-    "./runtime": {
-      "development": "./src/runtime/index.ts",
-      "types": "./dist/src/runtime/index.d.ts",
-      "import": "./dist/src/runtime/index.js",
-      "default": "./dist/src/runtime/index.js"
-    },
-    "./theme": {
-      "development": "./src/theme/index.ts",
-      "types": "./dist/src/theme/index.d.ts",
-      "import": "./dist/src/theme/index.js",
-      "default": "./dist/src/theme/index.js"
-    },
-    "./bridge": {
-      "development": "./src/bridge/index.ts",
-      "types": "./dist/src/bridge/index.d.ts",
-      "import": "./dist/src/bridge/index.js",
-      "default": "./dist/src/bridge/index.js"
-    },
-    "./web-components": {
-      "development": "./src/web-components/index.ts",
-      "types": "./dist/src/web-components/index.d.ts",
-      "import": "./dist/src/web-components/index.js",
-      "default": "./dist/src/web-components/index.js"
-    },
-    "./react": {
-      "development": "./src/react/index.ts",
-      "types": "./dist/src/react/index.d.ts",
-      "import": "./dist/src/react/index.js",
-      "default": "./dist/src/react/index.js"
-    },
-    "./render": {
-      "development": "./src/render/index.ts",
-      "types": "./dist/src/render/index.d.ts",
-      "import": "./dist/src/render/index.js",
-      "default": "./dist/src/render/index.js"
-    },
-    "./styles": {
-      "development": "./src/styles/index.ts",
-      "types": "./dist/src/styles/index.d.ts",
-      "import": "./dist/src/styles/index.js",
-      "default": "./dist/src/styles/index.js"
-    },
-    "./bundler": {
-      "development": "./src/bundler/index.ts",
-      "types": "./dist/src/bundler/index.d.ts",
-      "import": "./dist/src/bundler/index.js",
-      "default": "./dist/src/bundler/index.js"
-    },
-    "./handlebars": {
-      "development": "./src/handlebars/index.ts",
-      "types": "./dist/src/handlebars/index.d.ts",
-      "import": "./dist/src/handlebars/index.js",
-      "default": "./dist/src/handlebars/index.js"
-    },
-    "./registry": {
-      "development": "./src/registry/index.ts",
-      "types": "./dist/src/registry/index.d.ts",
-      "import": "./dist/src/registry/index.js",
-      "default": "./dist/src/registry/index.js"
-    }
+    "./esm": null
   },
   "dependencies": {
     "@swc/core": "^1.5.0",
