@@ -4,7 +4,7 @@ import { taskStore, TaskPriority } from '../data/task.store';
 
 const inputSchema = z
   .object({
-    priority: z.enum(['low', 'medium', 'high', 'all']).optional().default('all').describe('Filter by priority'),
+    priority: z.enum(['low', 'medium', 'high', 'all']).default('all').describe('Filter by priority'),
   })
   .strict();
 
@@ -33,8 +33,8 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class ListTasksTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: Input): Promise<Output> {
-    const store = taskStore;
-    let tasks = input.priority === 'all' ? store.getAll() : store.getByPriority(input.priority as TaskPriority);
+    const tasks =
+      input.priority === 'all' ? taskStore.getAll() : taskStore.getByPriority(input.priority as TaskPriority);
 
     return {
       tasks: tasks.map((t) => ({

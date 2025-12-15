@@ -7,9 +7,11 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  success: z.boolean(),
-});
+const outputSchema = z
+  .object({
+    success: z.boolean(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

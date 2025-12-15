@@ -27,8 +27,7 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class ListNotesTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(_input: Input): Promise<Output> {
-    const store = noteStore;
-    const notes = store.getAll();
+    const notes = noteStore.getAll();
 
     return {
       notes: notes.map((n) => ({

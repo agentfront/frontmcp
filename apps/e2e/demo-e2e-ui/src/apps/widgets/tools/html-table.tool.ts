@@ -9,12 +9,14 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  uiType: z.literal('html'),
-  html: z.string(),
-  rowCount: z.number(),
-  columnCount: z.number(),
-});
+const outputSchema = z
+  .object({
+    uiType: z.literal('html'),
+    html: z.string(),
+    rowCount: z.number(),
+    columnCount: z.number(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
@@ -27,7 +29,7 @@ type Output = z.infer<typeof outputSchema>;
   ui: {
     uiType: 'html',
     template: (ctx) => {
-      const { headers, rows, title } = ctx.input as unknown as { headers: string[]; rows: string[][]; title?: string };
+      const { headers, rows, title } = ctx.input as Input;
       const escapeHtml = ctx.helpers.escapeHtml;
 
       const headerCells = headers

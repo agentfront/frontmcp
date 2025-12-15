@@ -4,14 +4,16 @@ import { z } from 'zod';
 const inputSchema = z
   .object({
     value: z.string().describe('Value to validate'),
-    minLength: z.number().optional().default(5).describe('Minimum length required'),
+    minLength: z.number().int().min(1).default(5).describe('Minimum length required'),
   })
   .strict();
 
-const outputSchema = z.object({
-  valid: z.boolean(),
-  value: z.string(),
-});
+const outputSchema = z
+  .object({
+    valid: z.boolean(),
+    value: z.string(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

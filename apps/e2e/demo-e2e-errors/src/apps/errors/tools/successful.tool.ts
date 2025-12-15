@@ -3,14 +3,16 @@ import { z } from 'zod';
 
 const inputSchema = z
   .object({
-    message: z.string().optional().default('Success').describe('Success message'),
+    message: z.string().default('Success').describe('Success message'),
   })
   .strict();
 
-const outputSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
+const outputSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

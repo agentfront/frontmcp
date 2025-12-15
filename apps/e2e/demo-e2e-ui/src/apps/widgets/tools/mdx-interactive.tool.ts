@@ -9,12 +9,14 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  uiType: z.literal('mdx'),
-  topic: z.string(),
-  points: z.array(z.string()),
-  hasCode: z.boolean(),
-});
+const outputSchema = z
+  .object({
+    uiType: z.literal('mdx'),
+    topic: z.string(),
+    points: z.array(z.string()),
+    hasCode: z.boolean(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

@@ -7,10 +7,12 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  found: z.boolean(),
-  resourceId: z.string(),
-});
+const outputSchema = z
+  .object({
+    found: z.boolean(),
+    resourceId: z.string(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

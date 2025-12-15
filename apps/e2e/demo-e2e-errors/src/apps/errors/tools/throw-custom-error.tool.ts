@@ -5,13 +5,16 @@ const inputSchema = z
   .object({
     errorCode: z.string().describe('Custom error code'),
     errorMessage: z.string().describe('Custom error message'),
-    statusCode: z.number().optional().default(400).describe('HTTP status code'),
+    statusCode: z.number().default(400).describe('HTTP status code'),
+    trigger: z.boolean().default(true).describe('Whether to trigger the custom error'),
   })
   .strict();
 
-const outputSchema = z.object({
-  success: z.boolean(),
-});
+const outputSchema = z
+  .object({
+    success: z.boolean(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
@@ -24,6 +27,9 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class ThrowCustomErrorTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: Input): Promise<Output> {
-    throw new PublicMcpError(input.errorMessage, input.errorCode, input.statusCode);
+    if (input.trigger) {
+      throw new PublicMcpError(input.errorMessage, input.errorCode, input.statusCode);
+    }
+    return { success: true };
   }
 }

@@ -17,12 +17,14 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  uiType: z.literal('markdown'),
-  title: z.string(),
-  findingCount: z.number(),
-  markdown: z.string(),
-});
+const outputSchema = z
+  .object({
+    uiType: z.literal('markdown'),
+    title: z.string(),
+    findingCount: z.number(),
+    markdown: z.string(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

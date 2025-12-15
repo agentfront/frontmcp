@@ -6,15 +6,17 @@ const inputSchema = z
   .object({
     key: z.string().describe('Key to store'),
     value: z.string().describe('Value to store'),
-    ttlSeconds: z.number().optional().describe('Time to live in seconds'),
+    ttlSeconds: z.number().int().positive().optional().describe('Time to live in seconds'),
   })
   .strict();
 
-const outputSchema = z.object({
-  success: z.boolean(),
-  key: z.string(),
-  message: z.string(),
-});
+const outputSchema = z
+  .object({
+    success: z.boolean(),
+    key: z.string(),
+    message: z.string(),
+  })
+  .strict();
 
 @Tool({
   name: 'set-session-data',
