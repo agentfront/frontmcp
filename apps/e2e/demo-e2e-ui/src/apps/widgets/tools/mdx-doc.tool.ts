@@ -1,0 +1,61 @@
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const inputSchema = {
+  title: z.string().describe('Document title'),
+  sections: z
+    .array(
+      z.object({
+        heading: z.string(),
+        content: z.string(),
+      }),
+    )
+    .describe('Document sections'),
+};
+
+const outputSchema = z.object({
+  uiType: z.literal('mdx'),
+  title: z.string(),
+  sectionCount: z.number(),
+  mdxContent: z.string(),
+});
+
+type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Output = z.infer<typeof outputSchema>;
+
+@Tool({
+  name: 'mdx-doc',
+  description: 'Generate an MDX document with sections',
+  inputSchema,
+  outputSchema,
+  ui: {
+    uiType: 'mdx',
+    template: (ctx) => {
+      const { title, sectionCount, mdxContent } = ctx.output as unknown as Output;
+
+      return `
+# ${title}
+
+*${sectionCount} sections*
+
+${mdxContent}
+
+---
+
+<Note>This document was generated using MDX rendering.</Note>
+      `;
+    },
+  },
+})
+export default class MdxDocTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
+  async execute(input: Input): Promise<Output> {
+    const mdxContent = input.sections.map((section) => `## ${section.heading}\n\n${section.content}`).join('\n\n');
+
+    return {
+      uiType: 'mdx',
+      title: input.title,
+      sectionCount: input.sections.length,
+      mdxContent,
+    };
+  }
+}

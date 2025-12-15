@@ -23,6 +23,9 @@ export {
   isPublicError,
   toMcpError,
   formatMcpErrorResponse,
+  // Error codes
+  MCP_ERROR_CODES,
+  type McpErrorCode,
 } from './mcp.error';
 
 // Export authorization required error for progressive auth

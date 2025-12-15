@@ -1,0 +1,39 @@
+{
+  "name": "demo-e2e-transparent",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "webpack-cli build",
+        "args": ["--node-env=production"],
+        "cwd": "apps/e2e/demo-e2e-transparent"
+      },
+      "configurations": {
+        "development": {
+          "args": ["--node-env=development"]
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "build",
+        "watch": true
+      }
+    },
+    "test": {
+      "options": {
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node ../../../libs/cli/dist/src/cli.js test --runInBand",
+        "cwd": "apps/e2e/demo-e2e-transparent"
+      },
+      "dependsOn": ["^build"]
+    }
+  }
+}
