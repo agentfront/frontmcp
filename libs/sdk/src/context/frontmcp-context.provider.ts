@@ -6,7 +6,7 @@
  */
 
 import { ProviderScope } from '../common/metadata';
-import { ProviderFactoryType } from '../common/interfaces/provider.interface';
+import { AsyncProvider } from '../common/interfaces/provider.interface';
 import { FrontMcpContext } from './frontmcp-context';
 import { FrontMcpContextStorage } from './frontmcp-context-storage';
 
@@ -44,7 +44,7 @@ export const REQUEST_CONTEXT = FRONTMCP_CONTEXT;
  * Note: This provider will throw if called outside of a context scope
  * (i.e., without first calling FrontMcpContextStorage.run or runFromHeaders).
  */
-export const FrontMcpContextProvider: ProviderFactoryType<FrontMcpContext, readonly [typeof FrontMcpContextStorage]> = {
+export const FrontMcpContextProvider = AsyncProvider({
   provide: FRONTMCP_CONTEXT,
   inject: () => [FrontMcpContextStorage] as const,
   useFactory: (storage: FrontMcpContextStorage): FrontMcpContext => {
@@ -55,7 +55,7 @@ export const FrontMcpContextProvider: ProviderFactoryType<FrontMcpContext, reado
     description: 'Current unified context from AsyncLocalStorage',
     scope: ProviderScope.CONTEXT,
   },
-} as any; // Type assertion needed: ProviderFactoryType cannot infer readonly tuple from inject()
+} as any); // Type assertion needed: normalizeProvider expects nested metadata structure
 
 /**
  * @deprecated Use FrontMcpContextProvider instead

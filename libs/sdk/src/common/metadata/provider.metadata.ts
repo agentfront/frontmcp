@@ -16,8 +16,8 @@ export interface ProviderMetadata {
  *
  * - GLOBAL: Singleton, shared across all requests
  * - CONTEXT: Per-context instance (combines session + request data)
- * - SESSION: @deprecated Use CONTEXT instead
- * - REQUEST: @deprecated Use CONTEXT instead
+ * - SESSION: deprecated Use CONTEXT instead
+ * - REQUEST: deprecated Use CONTEXT instead
  */
 export enum ProviderScope {
   /** Singleton, shared across all requests */
