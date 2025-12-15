@@ -137,12 +137,15 @@ test.describe('Error Handling E2E', () => {
 
       const message = result.messages[0];
       expect(message.role).toBe('user');
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('MCP Error Codes Reference');
         // Verify all standard error codes are documented
         expect(message.content.text).toContain('INVALID_PARAMS');
         expect(message.content.text).toContain('RESOURCE_NOT_FOUND');
         expect(message.content.text).toContain('INTERNAL_ERROR');
+      } else {
+        throw new Error(`Expected text content type but got: ${message.content.type}`);
       }
     });
 
@@ -156,9 +159,12 @@ test.describe('Error Handling E2E', () => {
 
       const message = result.messages[0];
       expect(message.role).toBe('user');
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('Internal Error');
         expect(message.content.text).toContain('-32603');
+      } else {
+        throw new Error(`Expected text content type but got: ${message.content.type}`);
       }
     });
   });

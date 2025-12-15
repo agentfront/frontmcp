@@ -63,8 +63,7 @@ test.describe('UI Tools E2E', () => {
 
       expect(result).toBeSuccessful();
       // Verify script tags are escaped or not present in raw form
-      const content = JSON.stringify(result);
-      expect(content).not.toContain('<script>alert');
+      expect(result).not.toHaveTextContent('<script>alert');
     });
   });
 
@@ -191,6 +190,7 @@ test.describe('UI Tools E2E', () => {
       expect(result.messages.length).toBeGreaterThan(0);
 
       const message = result.messages[0];
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('UI Tools Showcase');
         expect(message.content.text).toContain('HTML Type');
@@ -198,6 +198,21 @@ test.describe('UI Tools E2E', () => {
         expect(message.content.text).toContain('MDX Type');
         expect(message.content.text).toContain('Markdown Type');
       }
+    });
+  });
+
+  test.describe('Error Handling', () => {
+    test('should reject HTML table with missing headers', async ({ mcp }) => {
+      const result = await mcp.tools.call('html-table', {
+        rows: [['Alice', '30']],
+        title: 'No Headers',
+      });
+      expect(result).toBeError();
+    });
+
+    test('should reject non-existent prompt', async ({ mcp }) => {
+      const result = await mcp.prompts.get('non-existent-prompt', {});
+      expect(result).toBeError();
     });
   });
 

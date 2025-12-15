@@ -81,7 +81,9 @@ test.describe('Redis Session E2E (Mocked)', () => {
   });
 
   test.describe('TTL Expiration', () => {
-    test('should store data with TTL', async ({ mcp }) => {
+    test('should store data with TTL parameter (expiration not verified)', async ({ mcp }) => {
+      // Note: Actual TTL expiration cannot be tested without real time delays
+      // This test only verifies TTL parameter is accepted
       const result = await mcp.tools.call('set-session-data', {
         key: 'ttl-key',
         value: 'ttl-value',
@@ -125,9 +127,29 @@ test.describe('Redis Session E2E (Mocked)', () => {
 
       // Verify message content with proper type narrowing
       const message = result.messages[0];
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('session');
       }
+    });
+  });
+
+  test.describe('Error Handling', () => {
+    test('should error on missing key parameter', async ({ mcp }) => {
+      const result = await mcp.tools.call('set-session-data', {
+        value: 'test-value',
+        // key missing
+      });
+      expect(result).toBeError();
+    });
+
+    test('should error on negative TTL', async ({ mcp }) => {
+      const result = await mcp.tools.call('set-session-data', {
+        key: 'bad-ttl',
+        value: 'value',
+        ttlSeconds: -1,
+      });
+      expect(result).toBeError();
     });
   });
 });

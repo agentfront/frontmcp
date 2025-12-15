@@ -1,39 +1,52 @@
 {
   "name": "demo-e2e-ui",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-ui/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:ui"],
   "targets": {
     "build": {
-      "executor": "nx:run-commands",
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
       "options": {
-        "command": "webpack-cli build",
-        "args": ["--node-env=production"],
-        "cwd": "apps/e2e/demo-e2e-ui"
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-ui",
+        "main": "apps/e2e/demo-e2e-ui/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-ui/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-ui/webpack.config.js",
+        "generatePackageJson": true
       },
       "configurations": {
-        "development": {
-          "args": ["--node-env=development"]
+        "development": {},
+        "production": {
+          "optimization": true
         }
       }
     },
     "serve": {
       "executor": "@nx/js:node",
-      "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "build",
-        "watch": true
+        "buildTarget": "demo-e2e-ui:build"
       }
     },
     "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-ui"],
       "options": {
+        "jestConfig": "apps/e2e/demo-e2e-ui/jest.e2e.config.ts",
         "passWithNoTests": true
       }
     },
     "test:e2e": {
-      "executor": "nx:run-commands",
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-ui-e2e"],
       "options": {
-        "command": "node ../../../libs/cli/dist/src/cli.js test --runInBand",
-        "cwd": "apps/e2e/demo-e2e-ui"
-      },
-      "dependsOn": ["^build"]
+        "jestConfig": "apps/e2e/demo-e2e-ui/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
     }
   }
 }

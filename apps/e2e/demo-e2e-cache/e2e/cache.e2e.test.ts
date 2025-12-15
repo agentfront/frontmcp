@@ -163,9 +163,12 @@ test.describe('Cache E2E', () => {
       expect(result.messages.length).toBeGreaterThan(0);
 
       const message = result.messages[0];
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('Execution Statistics');
         expect(message.content.text).toContain('expensive-operation');
+      } else {
+        throw new Error(`Expected text content type but got: ${message.content.type}`);
       }
     });
   });

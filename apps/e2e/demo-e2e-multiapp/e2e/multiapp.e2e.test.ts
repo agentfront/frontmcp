@@ -54,6 +54,13 @@ test.describe('Multi-App Server E2E', () => {
       expect(result).toBeSuccessful();
       expect(result.messages.length).toBeGreaterThan(0);
     });
+
+    test('should reject note with missing title', async ({ mcp }) => {
+      const result = await mcp.tools.call('create-note', {
+        content: 'Content without title',
+      });
+      expect(result).toBeError();
+    });
   });
 
   test.describe('Tasks App', () => {
@@ -168,6 +175,16 @@ test.describe('Multi-App Server E2E', () => {
 
       expect(result).toBeSuccessful();
       expect(result.messages.length).toBeGreaterThan(0);
+    });
+
+    test('should reject event with invalid time range', async ({ mcp }) => {
+      const now = Date.now();
+      const result = await mcp.tools.call('create-event', {
+        title: 'Invalid Event',
+        startTime: now + 3600000, // Start after end
+        endTime: now,
+      });
+      expect(result).toBeError();
     });
   });
 

@@ -6,6 +6,7 @@ export default {
   testTimeout: 60000,
   maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],
+  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   transform: {
     '^.+\\.[tj]s$': [
       '@swc/jest',
@@ -18,6 +19,7 @@ export default {
           transform: {
             decoratorMetadata: true,
           },
+          target: 'es2022',
         },
       },
     ],
