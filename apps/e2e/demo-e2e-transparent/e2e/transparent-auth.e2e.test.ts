@@ -10,7 +10,7 @@ import { test, expect, httpMock } from '@frontmcp/testing';
 
 test.describe('Transparent Auth Mode E2E', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-transparent/src/main.ts',
     publicMode: false,
   });
 

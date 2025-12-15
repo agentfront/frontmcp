@@ -10,7 +10,7 @@ const API_BASE = 'https://frontmcp-test.proxy.beeceptor.com';
 
 test.describe('OpenAPI Adapter E2E', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-openapi/src/main.ts',
     publicMode: true,
   });
 

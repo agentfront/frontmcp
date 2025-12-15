@@ -10,7 +10,7 @@ import { test, expect } from '@frontmcp/testing';
 
 test.describe('Public Auth Mode E2E', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-public/src/main.ts',
     publicMode: true,
   });
 

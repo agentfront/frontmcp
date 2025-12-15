@@ -11,7 +11,7 @@ import { test, expect } from '@frontmcp/testing';
 
 test.describe('UI Tools E2E', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-ui/src/main.ts',
     publicMode: true,
   });
 

@@ -35,7 +35,7 @@
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-multiapp"],
       "options": {
-        "jestConfig": "apps/e2e/demo-e2e-multiapp/jest.config.ts",
+        "jestConfig": "apps/e2e/demo-e2e-multiapp/jest.e2e.config.ts",
         "passWithNoTests": true
       }
     },

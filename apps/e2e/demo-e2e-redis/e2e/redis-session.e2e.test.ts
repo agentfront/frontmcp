@@ -10,7 +10,7 @@ import { test, expect } from '@frontmcp/testing';
 
 test.describe('Redis Session E2E (Mocked)', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-redis/src/main.ts',
     publicMode: true,
   });
 

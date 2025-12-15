@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   displayName: 'json-schema-to-zod-v3',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',

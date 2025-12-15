@@ -1,5 +1,5 @@
 /* eslint-disable */
-export default {
+module.exports = {
   displayName: '@frontmcp/react-demo',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',

@@ -1,4 +1,4 @@
-import { AsyncProvider, ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 
 /**
  * Token for the RequestLoggerProvider
@@ -52,17 +52,22 @@ class RequestLoggerImpl implements RequestLogger {
 
 /**
  * CONTEXT scope provider - new instance created per request.
- * Demonstrates AsyncProvider factory pattern with dependency injection.
+ * Demonstrates AsyncProvider factory pattern.
+ *
+ * Note: We don't inject FRONTMCP_CONTEXT here since it's not available at
+ * initialization time. Instead, the tool using this provider will have access
+ * to context through its scope.
  */
 export const RequestLoggerProvider = AsyncProvider({
   name: 'RequestLoggerProvider',
   provide: REQUEST_LOGGER_TOKEN,
   scope: ProviderScope.CONTEXT,
-  inject: () => [FRONTMCP_CONTEXT] as const,
-  useFactory: async (ctx): Promise<RequestLogger> => {
-    const frontMcpContext = ctx as FrontMcpContext;
-    const requestId = frontMcpContext.requestId || 'unknown';
-    const sessionId = frontMcpContext.sessionId || 'unknown';
+  inject: () => [] as const,
+  useFactory: async (): Promise<RequestLogger> => {
+    // Generate unique IDs for this request instance
+    // In a real implementation, this would receive context from the tool
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const sessionId = `sess-${Math.random().toString(36).substring(2, 10)}`;
     return new RequestLoggerImpl(requestId, sessionId);
   },
 });

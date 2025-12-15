@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   displayName: '@frontmcp/cli',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',

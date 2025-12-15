@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   displayName: 'mcp-from-openapi',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',

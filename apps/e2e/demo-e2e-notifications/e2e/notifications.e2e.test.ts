@@ -10,7 +10,7 @@ import { test, expect } from '@frontmcp/testing';
 
 test.describe('Notification System E2E', () => {
   test.use({
-    server: './src/main.ts',
+    server: 'apps/e2e/demo-e2e-notifications/src/main.ts',
     publicMode: true,
   });
 

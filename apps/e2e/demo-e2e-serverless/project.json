@@ -35,7 +35,7 @@
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-serverless"],
       "options": {
-        "jestConfig": "apps/e2e/demo-e2e-serverless/jest.config.ts",
+        "jestConfig": "apps/e2e/demo-e2e-serverless/jest.e2e.config.ts",
         "passWithNoTests": true
       }
     },
