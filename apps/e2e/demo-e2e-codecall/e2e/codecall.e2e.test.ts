@@ -20,7 +20,10 @@ const SEED_ACTIVITY_STATS = {
   byUser: { 'user-1': 2, 'user-2': 1 },
 };
 
-// Type for codecall:execute result
+/**
+ * Response type from codecall:execute tool.
+ * Defined locally because @frontmcp/plugins only exports CodeCallExecuteInput, not the result type.
+ */
 interface CodeCallExecuteResult<T> {
   status: 'ok' | 'error' | 'timeout' | 'runtime_error' | 'syntax_error' | 'tool_error' | 'illegal_access';
   result?: T;
@@ -28,7 +31,11 @@ interface CodeCallExecuteResult<T> {
   logs?: string[];
 }
 
-// Type for codecall:search result
+/**
+ * Response type from codecall:search tool.
+ * Defined locally because the exported CodeCallSearchResult has different fields
+ * (internal API uses 'score' while tool response uses 'relevanceScore' and includes 'matchedQueries').
+ */
 interface CodeCallSearchResult {
   tools: Array<{
     name: string;

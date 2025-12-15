@@ -90,6 +90,16 @@ test.describe('Multi-App Server E2E', () => {
 
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent('high');
+      expect(result).not.toHaveTextContent('"priority":"low"');
+    });
+
+    test('should reject task with invalid priority', async ({ mcp }) => {
+      const result = await mcp.tools.call('create-task', {
+        title: 'Test Task',
+        priority: 'invalid-priority',
+      });
+
+      expect(result).toBeError();
     });
 
     test('should read tasks resource', async ({ mcp }) => {
@@ -187,6 +197,7 @@ test.describe('Multi-App Server E2E', () => {
       );
 
       expect(appTools.length).toBe(6);
+      expect(tools.length).toBeGreaterThanOrEqual(6);
     });
   });
 

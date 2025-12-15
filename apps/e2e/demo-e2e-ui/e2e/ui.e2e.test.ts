@@ -42,6 +42,30 @@ test.describe('UI Tools E2E', () => {
       expect(result).toHaveTextContent('html');
       expect(result).toHaveTextContent('Welcome');
     });
+
+    test('should handle empty rows gracefully', async ({ mcp }) => {
+      const result = await mcp.tools.call('html-table', {
+        headers: ['Name', 'Age'],
+        rows: [],
+        title: 'Empty Table',
+      });
+
+      expect(result).toBeSuccessful();
+      expect(result).toHaveTextContent('rowCount');
+    });
+
+    test('should escape HTML content in table cells', async ({ mcp }) => {
+      const result = await mcp.tools.call('html-table', {
+        headers: ['Name'],
+        rows: [['<script>alert("xss")</script>']],
+        title: 'XSS Test',
+      });
+
+      expect(result).toBeSuccessful();
+      // Verify script tags are escaped or not present in raw form
+      const content = JSON.stringify(result);
+      expect(content).not.toContain('<script>alert');
+    });
   });
 
   test.describe('React UI Tools', () => {

@@ -170,6 +170,19 @@ test.describe('Cache E2E', () => {
     });
   });
 
+  test.describe('Error Scenarios', () => {
+    test('should handle missing required operationId', async ({ mcp }) => {
+      // This tests Zod validation for required fields
+      const result = await mcp.tools.call('expensive-operation', {
+        complexity: 5,
+        // operationId missing
+      });
+
+      // Should fail validation
+      expect(result).toBeError(-32602); // INVALID_PARAMS
+    });
+  });
+
   test.describe('Tool Discovery', () => {
     test('should list all cache tools', async ({ mcp }) => {
       const tools = await mcp.tools.list();

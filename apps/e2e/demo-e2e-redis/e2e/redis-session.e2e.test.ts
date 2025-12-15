@@ -122,6 +122,12 @@ test.describe('Redis Session E2E (Mocked)', () => {
 
       expect(result).toBeSuccessful();
       expect(result.messages.length).toBeGreaterThan(0);
+
+      // Verify message content with proper type narrowing
+      const message = result.messages[0];
+      if (message.content.type === 'text') {
+        expect(message.content.text).toContain('session');
+      }
     });
   });
 });

@@ -91,6 +91,8 @@ test.describe('Error Handling E2E', () => {
       // Custom errors should still be proper MCP errors
       expect(result).toBeError();
       expect(result).toHaveTextContent('custom error');
+      // Assert errorCode is present in response
+      expect(result).toHaveTextContent('CUSTOM_ERROR');
     });
   });
 
@@ -134,8 +136,13 @@ test.describe('Error Handling E2E', () => {
       expect(result.messages.length).toBeGreaterThan(0);
 
       const message = result.messages[0];
+      expect(message.role).toBe('user');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('MCP Error Codes Reference');
+        // Verify all standard error codes are documented
+        expect(message.content.text).toContain('INVALID_PARAMS');
+        expect(message.content.text).toContain('RESOURCE_NOT_FOUND');
+        expect(message.content.text).toContain('INTERNAL_ERROR');
       }
     });
 
@@ -145,11 +152,13 @@ test.describe('Error Handling E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages.length).toBe(1);
 
       const message = result.messages[0];
+      expect(message.role).toBe('user');
       if (message.content.type === 'text') {
         expect(message.content.text).toContain('Internal Error');
+        expect(message.content.text).toContain('-32603');
       }
     });
   });
