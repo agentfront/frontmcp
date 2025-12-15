@@ -1,5 +1,5 @@
 import { SecurityResolver, createSecurityContext, type McpOpenAPITool, type SecurityContext } from 'mcp-from-openapi';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { FrontMcpContext } from '@frontmcp/sdk';
 import type { OpenApiAdapterOptions } from './openapi.types';
 
 /**
@@ -24,21 +24,21 @@ export interface SecurityValidationResult {
 }
 
 /**
- * Resolve security context from FrontMCP auth info with support for multiple auth providers
+ * Resolve security context from FrontMCP context with support for multiple auth providers
  *
  * @param tool - OpenAPI tool to resolve security for
- * @param authInfo - FrontMCP authentication info
+ * @param ctx - FrontMCP request context with authInfo, sessionId, traceId, etc.
  * @param options - Adapter options with auth configuration
  * @returns Security context for resolver
  */
 export async function createSecurityContextFromAuth(
   tool: McpOpenAPITool,
-  authInfo: AuthInfo,
+  ctx: FrontMcpContext,
   options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>,
 ): Promise<SecurityContext> {
   // 1. Use custom security resolver if provided (highest priority)
   if (options.securityResolver) {
-    return await options.securityResolver(tool, authInfo);
+    return await options.securityResolver(tool, ctx);
   }
 
   // 2. Use auth provider mapper if provided
@@ -59,7 +59,7 @@ export async function createSecurityContextFromAuth(
       const authExtractor = options.authProviderMapper[scheme];
       if (authExtractor) {
         try {
-          const token = authExtractor(authInfo);
+          const token = authExtractor(ctx);
 
           // Validate return type - must be string or undefined/null
           if (token !== undefined && token !== null && typeof token !== 'string') {
@@ -117,15 +117,16 @@ export async function createSecurityContextFromAuth(
       }
     }
 
-    // If no auth was set from providers, fall back to authInfo.token
+    // If no auth was set from providers, fall back to ctx.authInfo.token
     // Only fall back if ALL auth fields are empty (not just jwt)
     const hasAnyAuth = context.jwt || context.apiKey || context.basic || context.oauth2Token;
-    if (!hasAnyAuth && authInfo.token) {
+    const authToken = ctx.authInfo.token;
+    if (!hasAnyAuth && authToken) {
       // Validate type before assignment to prevent non-string values
-      if (typeof authInfo.token !== 'string') {
-        throw new Error(`authInfo.token must be a string, but got: ${typeof authInfo.token}`);
+      if (typeof authToken !== 'string') {
+        throw new Error(`authInfo.token must be a string, but got: ${typeof authToken}`);
       }
-      context.jwt = authInfo.token;
+      context.jwt = authToken;
     }
 
     return context;
@@ -138,7 +139,7 @@ export async function createSecurityContextFromAuth(
 
   // 4. Default: use main JWT token from auth context
   return createSecurityContext({
-    jwt: authInfo?.token,
+    jwt: ctx.authInfo.token,
   });
 }
 
@@ -274,18 +275,18 @@ export function validateSecurityConfiguration(
  * Resolve security for an OpenAPI tool with validation
  *
  * @param tool - OpenAPI tool with mapper
- * @param authInfo - FrontMCP authentication info
+ * @param ctx - FrontMCP request context with authInfo, sessionId, traceId, etc.
  * @param options - Adapter options with auth configuration
  * @returns Resolved security (headers, query params, etc.)
  * @throws Error if security cannot be resolved
  */
 export async function resolveToolSecurity(
   tool: McpOpenAPITool,
-  authInfo: AuthInfo,
+  ctx: FrontMcpContext,
   options: Pick<OpenApiAdapterOptions, 'securityResolver' | 'authProviderMapper' | 'staticAuth'>,
 ) {
   const securityResolver = new SecurityResolver();
-  const securityContext = await createSecurityContextFromAuth(tool, authInfo, options);
+  const securityContext = await createSecurityContextFromAuth(tool, ctx, options);
 
   // Validate that we have auth for this tool
   const hasAuth =
@@ -314,8 +315,8 @@ export async function resolveToolSecurity(
       `Authentication required for tool '${tool.name}' but no auth configuration found.\n` +
         `Required security schemes: ${schemesStr}\n` +
         `Solutions:\n` +
-        `  1. Add authProviderMapper: { '${firstScheme}': (authInfo) => authInfo.user?.token }\n` +
-        `  2. Add securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })\n` +
+        `  1. Add authProviderMapper: { '${firstScheme}': (ctx) => ctx.authInfo.user?.token }\n` +
+        `  2. Add securityResolver: (tool, ctx) => ({ jwt: ctx.authInfo.token })\n` +
         `  3. Add staticAuth: { jwt: process.env.API_TOKEN }\n` +
         `  4. Set generateOptions.includeSecurityInInput: true (not recommended for production)`,
     );

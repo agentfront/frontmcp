@@ -26,7 +26,7 @@ import { writeHttpResponse } from '../server/server.validation';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
-import { RequestContextStorage, REQUEST_CONTEXT } from '../context';
+import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { randomUUID } from 'crypto';
 
@@ -81,12 +81,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         const canActivate = await this.canActivate(request);
         if (!canActivate) return next();
 
-        // Get context storage to wrap entire flow in request context
+        // Get context storage to wrap entire flow in FrontMcpContext
         const contextStorage = this.getContextStorage();
 
         try {
           // Use runWithContext to wrap entire flow execution in AsyncLocalStorage context
-          // This ensures all stages have access to RequestContext
+          // This ensures all stages have access to FrontMcpContext
           const result = await this.runWithContext(
             contextStorage,
             request,
@@ -139,29 +139,29 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   }
 
   /**
-   * Get RequestContextStorage from providers (with fallback).
+   * Get FrontMcpContextStorage from providers (with fallback).
    * Returns undefined if not available (backward compatibility).
    */
-  private getContextStorage(): RequestContextStorage | undefined {
+  private getContextStorage(): FrontMcpContextStorage | undefined {
     try {
-      return this.globalProviders.get(RequestContextStorage);
+      return this.globalProviders.get(FrontMcpContextStorage);
     } catch {
       return undefined;
     }
   }
 
   /**
-   * Run flow wrapped in RequestContext.
+   * Run flow wrapped in FrontMcpContext.
    * This ensures ALL stages have access to the context via AsyncLocalStorage.
    *
-   * @param storage - RequestContextStorage instance
+   * @param storage - FrontMcpContextStorage instance
    * @param request - The HTTP request
    * @param input - Flow input
    * @param deps - Flow dependencies
    * @returns Flow output or undefined
    */
   private async runWithContext(
-    storage: RequestContextStorage | undefined,
+    storage: FrontMcpContextStorage | undefined,
     request: ServerRequest,
     input: FlowInputOf<Name>,
     deps: Map<Token, Type>,
@@ -185,7 +185,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       headers,
       {
         sessionId,
-        authInfo: {}, // Partial<AuthInfo> - progressively populated after checkAuthorization
         scopeId: scope.id,
       },
       async () => {
@@ -199,7 +198,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const { FlowClass, plan, name } = this;
 
     // Build provider views for scoped DI
-    // This enables SESSION and REQUEST scoped providers to be resolved
+    // This enables CONTEXT scoped providers to be resolved
     const contextStorage = this.getContextStorage();
     const currentContext = contextStorage?.getStore();
     // Get session ID from context - should always be available since runWithContext wraps the entire flow
@@ -209,25 +208,20 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       // This should never happen since runWithContext wraps the entire flow execution
       // If we reach here, there's a bug in context propagation
       throw new RequestContextNotAvailableError(
-        'RequestContext unavailable - session ID required for provider resolution. Ensure flow is wrapped with runWithContext.',
+        'FrontMcpContext unavailable - session ID required for provider resolution. Ensure flow is wrapped with runWithContext.',
       );
     }
 
-    // Build views with current request context if available
+    // Build views with current context if available
     const views = await this.globalProviders.buildViews(
       sessionKey,
-      currentContext ? new Map([[REQUEST_CONTEXT, currentContext]]) : undefined,
+      currentContext ? new Map([[FRONTMCP_CONTEXT, currentContext]]) : undefined,
     );
 
-    // Merge scoped providers into deps for resolution by FlowClass
+    // Merge context-scoped providers into deps for resolution by FlowClass
     const mergedDeps = new Map(deps);
-    for (const [token, instance] of views.request) {
+    for (const [token, instance] of views.context) {
       mergedDeps.set(token, instance as Type);
-    }
-    for (const [token, instance] of views.session) {
-      if (!mergedDeps.has(token)) {
-        mergedDeps.set(token, instance as Type);
-      }
     }
 
     // Clone stages so we can merge injections safely per run.

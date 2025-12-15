@@ -94,12 +94,12 @@ export default class MyApiApp {}
   Static headers applied to every request. Useful for API keys or static authentication tokens.
 </ParamField>
 
-<ParamField path="headersMapper" type="(authInfo: AuthInfo, headers: Headers) => Headers">
-  Function to dynamically set headers based on authenticated user context. Headers set here are hidden from MCP clients.
+<ParamField path="headersMapper" type="(ctx: FrontMcpContext, headers: Headers) => Headers">
+  Function to dynamically set headers based on request context. Access `ctx.authInfo`, `ctx.sessionId`, `ctx.traceContext`, etc. Headers set here are hidden from MCP clients.
 </ParamField>
 
-<ParamField path="bodyMapper" type="(authInfo: AuthInfo, body: any) => any">
-  Function to transform or augment the request body before sending. Useful for adding tenant IDs or user-specific data.
+<ParamField path="bodyMapper" type="(ctx: FrontMcpContext, body: any) => any">
+  Function to transform or augment the request body before sending. Access `ctx.authInfo`, `ctx.sessionId`, etc. Useful for adding tenant IDs or user-specific data.
 </ParamField>
 
 <ParamField path="loadOptions" type="LoadOptions">
@@ -162,13 +162,13 @@ OpenapiAdapter.init({
   baseUrl: 'https://api.example.com',
   authProviderMapper: {
     // Map security scheme 'GitHubAuth' to GitHub token from user context
-    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+    GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
 
     // Map security scheme 'SlackAuth' to Slack token from user context
-    SlackAuth: (authInfo) => authInfo.user?.slackToken,
+    SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
 
     // Map security scheme 'ApiKeyAuth' to API key from user context
-    ApiKeyAuth: (authInfo) => authInfo.user?.apiKey,
+    ApiKeyAuth: (ctx) => ctx.authInfo.user?.apiKey,
   },
 });
 ```
@@ -177,17 +177,17 @@ OpenapiAdapter.init({
 
 1. Extracts security scheme names from OpenAPI spec (e.g., `GitHubAuth`, `SlackAuth`)
 2. For each tool, looks up the required security scheme
-3. Calls the corresponding extractor function to get the token from `authInfo`
+3. Calls the corresponding extractor function to get the token from `ctx.authInfo`
 4. Applies the token to the request
 
 <Check>
-  **Security Risk: LOW** — Authentication is resolved from authenticated user context, not exposed to MCP clients.
+  **Security Risk: LOW** — Authentication is resolved from the request context, not exposed to MCP clients.
 </Check>
 
 <Info>
-  The `authInfo` parameter in `authProviderMapper`, `headersMapper`, and `bodyMapper`
-  callbacks comes from the authenticated request context (`requestContext.authInfo`). By the time your tool executes,
-  authentication has been verified and all auth fields are populated.
+  The `ctx` parameter in `authProviderMapper`, `headersMapper`, `bodyMapper`, and `securityResolver`
+  callbacks is the `FrontMcpContext` containing `authInfo`, `sessionId`, `traceContext`, and more. By the time your tool executes,
+  authentication has been verified and auth fields are populated.
 </Info>
 
 ### Strategy 3: Custom Security Resolver (Low Risk)
@@ -199,7 +199,9 @@ OpenapiAdapter.init({
   name: 'custom-auth-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  securityResolver: (tool, authInfo) => {
+  securityResolver: (tool, ctx) => {
+    const authInfo = ctx.authInfo;
+
     // Use GitHub token for GitHub API tools
     if (tool.name.startsWith('github_')) {
       return { jwt: authInfo.user?.githubToken };
@@ -221,7 +223,7 @@ OpenapiAdapter.init({
 });
 ```
 
-<Check>**Security Risk: LOW** — Full control over authentication resolution from user context.</Check>
+<Check>**Security Risk: LOW** — Full control over authentication resolution from request context.</Check>
 
 ### Strategy 4: Static Auth (Medium Risk)
 
@@ -250,7 +252,9 @@ OpenapiAdapter.init({
   name: 'tenant-api',
   url: 'https://api.example.com/openapi.json',
   baseUrl: 'https://api.example.com',
-  headersMapper: (authInfo, headers) => {
+  headersMapper: (ctx, headers) => {
+    const authInfo = ctx.authInfo;
+
     // Add authorization header
     if (authInfo.token) {
       headers.set('authorization', `Bearer ${authInfo.token}`);
@@ -261,9 +265,14 @@ OpenapiAdapter.init({
       headers.set('x-tenant-id', authInfo.user.tenantId);
     }
 
+    // Add trace ID for distributed tracing
+    headers.set('x-trace-id', ctx.traceContext.traceId);
+
     return headers;
   },
-  bodyMapper: (authInfo, body) => {
+  bodyMapper: (ctx, body) => {
+    const authInfo = ctx.authInfo;
+
     // Add user ID to all request bodies
     return {
       ...body,
@@ -618,7 +627,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       url: 'https://api.github.com/openapi.json',
       baseUrl: 'https://api.github.com',
       authProviderMapper: {
-        GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+        GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
       },
     }),
 
@@ -628,7 +637,7 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       url: 'https://api.slack.com/openapi.json',
       baseUrl: 'https://api.slack.com',
       authProviderMapper: {
-        SlackAuth: (authInfo) => authInfo.user?.slackToken,
+        SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
       },
     }),
   ],
@@ -764,8 +773,8 @@ Beyond authentication, the adapter includes defense-in-depth protections:
 
     ```ts
     authProviderMapper: {
-      'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
-      'SlackAuth': (authInfo) => authInfo.user?.slackToken,
+      'GitHubAuth': (ctx) => ctx.authInfo.user?.githubToken,
+      'SlackAuth': (ctx) => ctx.authInfo.user?.slackToken,
       // Add all security schemes from your spec
     }
     ```

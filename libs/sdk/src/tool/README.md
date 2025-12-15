@@ -131,7 +131,7 @@ Key members:
 
 - Identity: toolId, toolName, sessionId, requestId.
 - User: user with at least id.
-- Providers: request/session/global views; resolution order: request → session → global.
+- Providers: context/global views; resolution order: context → global.
 - Payloads and history:
   - ctx.input (get/set) records input history
   - ctx.output (get/set) records output history
@@ -144,7 +144,7 @@ Key members:
 
 Provider binding rules:
 
-- bindProvider(token, instance, scope='request')
+- bindProvider(token, instance, scope='context')
 - bindProviders([[token, instance], ...], scope)
 - Global scope is immutable at invoke-time
 
@@ -180,8 +180,7 @@ High-level steps:
 
 1. Construct ProviderViews using ProviderRegistry:
    - global: registry.getAllSingletons() (read-only)
-   - session: registry.sessionMap(sessionId) (mutable per session)
-   - request: new Map() (mutable per request)
+   - context: new Map() (mutable per request, unified session+request)
 2. Create ToolInvokeContext with identity, user, input, and providers.
 3. willBindProvidersStage: collect hooks for willBindProviders and let them bind providers via ctx.bindProvider(s).
    Return values from hook are also supported (Map/Array/object) for convenience.
@@ -239,7 +238,7 @@ import { ToolHookStage } from './tool.hook';
 
 const registry = new ProviderRegistry();
 // registry.registerSingletons(...)
-// registry.registerSessionProviders(...)
+// registry.registerContextProviders(...)
 
 const result = await invokeTool({
   tool: SumTool,
@@ -258,8 +257,7 @@ const result = await invokeTool({
 ## Provider Integration
 
 - Provider views are composed once per invocation:
-  - requestMap (new Map per request) → mutable
-  - sessionMap (Map per session) → mutable, shared by session
+  - contextMap (new Map per request) → mutable, unified session+request data
   - globalMap (singleton Map) → read-only from context
 - Hooks can bind providers via ctx.bindProvider(token, instance, scope?), for example credentials, clients, or feature
   flags.

@@ -8,7 +8,7 @@ import { FlowControl } from './flow.interface';
 import { URL } from 'url';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ScopeEntry } from '../entries';
-import { RequestContext, REQUEST_CONTEXT } from '../../context';
+import { FrontMcpContext, FRONTMCP_CONTEXT } from '../../context';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 
 /**
@@ -28,7 +28,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
   private providers: ProviderRegistryInterface;
 
   /**
-   * @deprecated Use `requestContext.authInfo` instead. Will be removed in v2.0.
+   * @deprecated Use `context.authInfo` instead. Will be removed in v2.0.
    */
   private readonly _authInfo: Partial<AuthInfo>;
 
@@ -51,37 +51,37 @@ export abstract class ExecutionContextBase<Out = unknown> {
   }
 
   /**
-   * Get the current request context.
+   * Get the current FrontMcpContext.
    *
    * Provides access to requestId, traceId, sessionId, authInfo,
-   * timing marks, and request metadata.
+   * timing marks, request metadata, transport, and context-aware fetch.
    *
-   * @throws RequestContextNotAvailableError if called outside of a request scope
+   * @throws RequestContextNotAvailableError if called outside of a context scope
    */
-  get requestContext(): RequestContext {
+  get context(): FrontMcpContext {
     try {
-      return this.providers.get(REQUEST_CONTEXT as Token<RequestContext>);
+      return this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
     } catch {
-      // Fallback: request context not available, likely called during initialization
+      // Fallback: context not available, likely called during initialization
       throw new RequestContextNotAvailableError();
     }
   }
 
   /**
-   * Try to get the request context, returning undefined if not available.
+   * Try to get the context, returning undefined if not available.
    *
-   * Use this when request context may not be available (e.g., during initialization).
+   * Use this when context may not be available (e.g., during initialization).
    */
-  tryGetRequestContext(): RequestContext | undefined {
+  tryGetContext(): FrontMcpContext | undefined {
     try {
-      return this.providers.get(REQUEST_CONTEXT as Token<RequestContext>);
+      return this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
     } catch {
       return undefined;
     }
   }
 
   /**
-   * @deprecated Use `requestContext.authInfo` instead. Will be removed in v2.0.
+   * @deprecated Use `context.authInfo` instead. Will be removed in v2.0.
    *
    * Get authentication information for the current request.
    */
@@ -92,16 +92,16 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /**
    * Get authentication information for the current request.
    *
-   * Prefers requestContext.authInfo when available (the recommended source),
+   * Prefers context.authInfo when available (the recommended source),
    * falls back to the legacy authInfo property for backward compatibility.
    *
    * Returns Partial<AuthInfo> because auth info is progressively populated
    * during the request lifecycle. Callers should check for required fields.
    */
   getAuthInfo(): Partial<AuthInfo> {
-    const requestCtx = this.tryGetRequestContext();
-    if (requestCtx) {
-      return requestCtx.authInfo;
+    const ctx = this.tryGetContext();
+    if (ctx) {
+      return ctx.authInfo;
     }
     return this._authInfo;
   }
@@ -113,9 +113,9 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   protected get contextLogger(): FrontMcpLogger {
     try {
-      return this.requestContext.getLogger(this.logger);
+      return this.context.getLogger(this.logger);
     } catch {
-      // Fallback if request context not available
+      // Fallback if context not available
       return this.logger;
     }
   }
@@ -164,9 +164,21 @@ export abstract class ExecutionContextBase<Out = unknown> {
   }
 
   /**
-   * Fetch a URL using the standard fetch API.
+   * Fetch a URL with context-aware header injection.
+   *
+   * When FrontMcpContext is available, delegates to ctx.fetch() which:
+   * - Auto-injects Authorization header (if authInfo.token is available)
+   * - Auto-injects W3C traceparent header for distributed tracing
+   * - Auto-injects x-request-id header
+   * - Auto-injects custom headers from request metadata
+   *
+   * Falls back to standard fetch if context is not available.
    */
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const ctx = this.tryGetContext();
+    if (ctx) {
+      return ctx.fetch(input, init);
+    }
     return fetch(input, init);
   }
 

@@ -107,8 +107,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     const { request } = this.rawInput;
     this.requestStartTime = Date.now();
 
-    // Get context from AsyncLocalStorage (already initialized by FlowInstance.runWithContext)
-    const ctx = this.tryGetRequestContext();
+    // Get FrontMcpContext from AsyncLocalStorage (already initialized by FlowInstance.runWithContext)
+    const ctx = this.tryGetContext();
     // Use randomUUID() for fallback instead of Math.random() to avoid collisions under load
     this.requestId = ctx?.requestId ?? `req-${randomUUID()}`;
 
@@ -167,10 +167,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         verifyResult: result,
       });
 
-      // Update RequestContext with verified auth info if available
+      // Update FrontMcpContext with verified auth info if available
       // This allows all subsequent stages to access the auth info via context
       if (result.kind === 'authorized' && result.authorization) {
-        const ctx = this.tryGetRequestContext();
+        const ctx = this.tryGetContext();
         if (ctx) {
           // Build AuthInfo from the authorization object
           // AuthInfo is the MCP SDK's auth type with token, clientId, scopes, etc.
@@ -228,8 +228,8 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         const { authorization } = verifyResult;
         request[ServerRequestTokens.auth] = authorization;
 
-        // Update RequestContext with verified auth info and session metadata
-        const ctx = this.tryGetRequestContext();
+        // Update FrontMcpContext with verified auth info and session metadata
+        const ctx = this.tryGetContext();
         if (ctx) {
           // Map authorization to AuthInfo shape (consistent with checkAuthorization)
           ctx.updateAuthInfo({

@@ -236,8 +236,27 @@ export default class ProviderRegistry
     return providerInvocationTokens(rec, (k, phase) => depsOfClass(k, phase));
   }
 
+  /**
+   * Normalize deprecated scopes to their modern equivalents.
+   *
+   * - SESSION → CONTEXT (deprecated)
+   * - REQUEST → CONTEXT (deprecated)
+   *
+   * This enables backwards compatibility while unifying the scope model.
+   */
+  private normalizeScope(scope: ProviderScope): ProviderScope {
+    switch (scope) {
+      case ProviderScope.SESSION:
+      case ProviderScope.REQUEST:
+        return ProviderScope.CONTEXT;
+      default:
+        return scope;
+    }
+  }
+
   getProviderScope(rec: ProviderRecord): ProviderScope {
-    return rec.metadata?.scope ?? ProviderScope.GLOBAL;
+    const rawScope = rec.metadata?.scope ?? ProviderScope.GLOBAL;
+    return this.normalizeScope(rawScope);
   }
 
   getScope(): ScopeEntry {
@@ -922,14 +941,17 @@ export default class ProviderRegistry
    *
    * This method creates a complete view of providers across all scopes:
    * - GLOBAL: Returns existing singleton instances (read-only)
-   * - SESSION: Gets/creates cached providers for the session (reused across requests)
-   * - REQUEST: Builds fresh providers for each request (never cached)
+   * - CONTEXT: Builds per-context providers (unified session + request)
    *
-   * @param sessionKey - Unique session identifier for SESSION-scoped providers
-   * @param requestProviders - Optional pre-built REQUEST-scoped providers (e.g., RequestContext)
-   * @returns ProviderViews with global, session, and request provider maps
+   * Note: For backwards compatibility, SESSION and REQUEST scopes are normalized
+   * to CONTEXT. The returned views include `session` and `request` aliases that
+   * both point to the `context` store.
+   *
+   * @param sessionKey - Unique context/session identifier for CONTEXT-scoped providers
+   * @param contextProviders - Optional pre-built CONTEXT-scoped providers (e.g., FrontMcpContext)
+   * @returns ProviderViews with global and context provider maps (session/request as aliases)
    */
-  async buildViews(sessionKey: string, requestProviders?: Map<Token, unknown>): Promise<ProviderViews> {
+  async buildViews(sessionKey: string, contextProviders?: Map<Token, unknown>): Promise<ProviderViews> {
     // Early validation BEFORE any cache operations or lock acquisition
     // This prevents cache pollution with invalid session keys
     SessionKey.validate(sessionKey);
@@ -937,70 +959,48 @@ export default class ProviderRegistry
     // 1. Global providers - return existing singletons
     const global = this.getAllSingletons();
 
-    // 2. Session providers - get from cache or build
-    // Acquire lock to prevent concurrent builds for the same session (race condition)
-    // Store the generation to pass to releaseSessionLock (prevents zombie releases)
-    const lockGeneration = await this.acquireSessionLock(sessionKey);
+    // 2. Context providers - build per-context (unified session+request)
+    // Note: We don't cache context providers because they're per-request.
+    // The unified context model means all non-global providers are fresh per-request.
+    const contextStore = new Map<Token, unknown>(contextProviders);
 
-    let sessionStore: Map<Token, unknown>;
-    try {
-      sessionStore = this.getOrCreateSessionStore(sessionKey);
-
-      // Inject SessionKey as first provider in session store
-      // This allows SESSION-scoped providers to inject the session ID via class token
-      if (!sessionStore.has(SessionKey)) {
-        sessionStore.set(SessionKey, new SessionKey(sessionKey));
-      }
-
-      // Build SESSION-scoped providers
-      for (const token of this.order) {
-        const rec = this.defs.get(token);
-        if (!rec) continue;
-        if (this.getProviderScope(rec) !== ProviderScope.SESSION) continue;
-        if (sessionStore.has(token)) continue;
-
-        await this.buildIntoStore(token, rec, sessionStore as Map<Token, any>, sessionKey);
-      }
-    } catch (error) {
-      // On error, cleanup partial session state to prevent inconsistent providers
-      // Only delete session store, NOT the lock - let finally block handle lock release
-      // This prevents a race where cleanupSession deletes the lock before releaseSessionLock
-      this.sessionStores.delete(sessionKey);
-      throw error;
-    } finally {
-      // Always release the lock with generation (prevents zombie releases after timeout)
-      this.releaseSessionLock(sessionKey, lockGeneration);
+    // Inject SessionKey for backwards compatibility with providers that depend on it
+    // @deprecated - Providers should migrate to using FRONTMCP_CONTEXT instead
+    if (!contextStore.has(SessionKey)) {
+      contextStore.set(SessionKey, new SessionKey(sessionKey));
     }
 
-    // 3. Request providers - always build fresh (no locking needed, they're per-request)
-    const request = new Map<Token, unknown>(requestProviders);
-
+    // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)
     for (const token of this.order) {
       const rec = this.defs.get(token);
       if (!rec) continue;
-      if (this.getProviderScope(rec) !== ProviderScope.REQUEST) continue;
+      // getProviderScope() already normalizes SESSION/REQUEST → CONTEXT
+      if (this.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      if (contextStore.has(token)) continue;
 
-      // Pass combined stores for dependency resolution
-      // Request providers can depend on session and global providers
-      await this.buildIntoStoreWithViews(token, rec, request, sessionKey, sessionStore, global);
+      await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
     }
 
+    // Return views with backwards-compatible aliases
+    // All three (context, session, request) point to the same map
     return {
       global,
-      session: sessionStore,
-      request,
+      context: contextStore,
+      // Backwards compatibility aliases
+      session: contextStore,
+      request: contextStore,
     };
   }
 
   /**
-   * Build a provider into a store, with access to session and global views for dependencies.
+   * Build a provider into a store, with access to context and global views for dependencies.
    */
   private async buildIntoStoreWithViews(
     token: Token,
     rec: ProviderRecord,
     store: Map<Token, unknown>,
     scopeKey: string,
-    sessionStore: Map<Token, unknown>,
+    contextStore: Map<Token, unknown>,
     globalStore: ReadonlyMap<Token, unknown>,
   ): Promise<void> {
     if (store.has(token)) return;
@@ -1015,7 +1015,7 @@ export default class ProviderRegistry
           const deps = this.invocationTokens(token, rec);
           const args: any[] = [];
           for (const d of deps) {
-            args.push(await this.resolveFromViews(d, store, sessionStore, globalStore, scopeKey));
+            args.push(await this.resolveFromViews(d, contextStore, globalStore, scopeKey));
           }
           const out = (rec as any).useFactory(...args);
           const val = isPromise(out)
@@ -1029,7 +1029,7 @@ export default class ProviderRegistry
           const depsTokens = this.invocationTokens(token, rec);
           const deps: any[] = [];
           for (const d of depsTokens) {
-            deps.push(await this.resolveFromViews(d, store, sessionStore, globalStore, scopeKey));
+            deps.push(await this.resolveFromViews(d, contextStore, globalStore, scopeKey));
           }
           const klass = rec.kind === ProviderKind.CLASS ? (rec as any).useClass : (rec as any).provide;
           if (hasAsyncWith(klass)) {
@@ -1052,24 +1052,22 @@ export default class ProviderRegistry
       }
     } catch (e: any) {
       const msg = e?.message ?? e;
-      console.error(`Failed constructing (request-scoped):`, msg);
-      throw new Error(`Failed constructing (request-scoped) ${tokenName(token)}: ${msg}`);
+      console.error(`Failed constructing (context-scoped):`, msg);
+      throw new Error(`Failed constructing (context-scoped) ${tokenName(token)}: ${msg}`);
     }
   }
 
   /**
-   * Resolve a dependency from the available views (request → session → global).
+   * Resolve a dependency from the available views (context → global).
    */
   private async resolveFromViews(
     token: Token,
-    requestStore: Map<Token, unknown>,
-    sessionStore: Map<Token, unknown>,
+    contextStore: Map<Token, unknown>,
     globalStore: ReadonlyMap<Token, unknown>,
     scopeKey: string,
   ): Promise<unknown> {
-    // Check stores in order: request -> session -> global -> instances
-    if (requestStore.has(token)) return requestStore.get(token);
-    if (sessionStore.has(token)) return sessionStore.get(token);
+    // Check stores in order: context -> global -> instances
+    if (contextStore.has(token)) return contextStore.get(token);
     if (globalStore.has(token)) return globalStore.get(token);
     if (this.instances.has(token)) return this.instances.get(token);
 
@@ -1079,13 +1077,10 @@ export default class ProviderRegistry
       const scope = this.getProviderScope(rec);
       if (scope === ProviderScope.GLOBAL) {
         throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated`);
-      } else if (scope === ProviderScope.SESSION) {
-        await this.buildIntoStore(token, rec, sessionStore as Map<Token, any>, scopeKey);
-        return sessionStore.get(token);
       } else {
-        // REQUEST scope - build into request store
-        await this.buildIntoStoreWithViews(token, rec, requestStore, scopeKey, sessionStore, globalStore);
-        return requestStore.get(token);
+        // CONTEXT scope - build into context store
+        await this.buildIntoStoreWithViews(token, rec, contextStore, scopeKey, contextStore, globalStore);
+        return contextStore.get(token);
       }
     }
 
@@ -1104,7 +1099,7 @@ export default class ProviderRegistry
   }
 
   /**
-   * Get a provider from the given views, checking request → session → global.
+   * Get a provider from the given views, checking context → global.
    *
    * @param token - The provider token to look up
    * @param views - The provider views to search
@@ -1112,8 +1107,8 @@ export default class ProviderRegistry
    * @throws Error if provider not found in any view
    */
   getScoped<T>(token: Token<T>, views: ProviderViews): T {
-    if (views.request.has(token)) return views.request.get(token) as T;
-    if (views.session.has(token)) return views.session.get(token) as T;
+    // Check context first (unified session+request store)
+    if (views.context.has(token)) return views.context.get(token) as T;
     if (views.global.has(token)) return views.global.get(token) as T;
 
     // Check instances as fallback for global providers

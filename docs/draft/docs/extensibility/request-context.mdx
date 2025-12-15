@@ -1,26 +1,28 @@
 ---
-title: Request Context
-sidebarTitle: Request Context
+title: Context
+sidebarTitle: Context
 slug: extensibility/request-context
 icon: id-card
 ---
 
-Request context provides per-request state that flows through the entire async execution chain. It enables distributed tracing, timing, and request-scoped data storage.
+FrontMcpContext provides per-request state that flows through the entire async execution chain. It enables distributed tracing, timing, request-scoped data storage, context-aware fetch, and transport access.
 
 ## Overview
 
-Every HTTP request to your FrontMCP server creates a `RequestContext` that:
+Every HTTP request to your FrontMCP server creates a `FrontMcpContext` that:
 - Propagates through all stages, tools, resources, and prompts via AsyncLocalStorage
 - Provides W3C Trace Context for distributed tracing
 - Stores authentication information after verification
 - Tracks timing marks for performance monitoring
 - Provides request-scoped key-value storage
+- Offers context-aware fetch with auto-injection
+- Enables transport access for elicit requests
 
-## Accessing Request Context
+## Accessing Context
 
 ### From Tools/Resources/Prompts
 
-Use the `requestContext` getter for convenient access:
+Use the `context` getter for convenient access:
 
 ```ts
 import { Tool } from '@frontmcp/sdk';
@@ -29,8 +31,8 @@ import { z } from 'zod';
 @Tool({ name: 'my-tool', inputSchema: { query: z.string() } })
 class MyTool {
   async execute({ query }) {
-    const ctx = this.requestContext;
-    // or: const ctx = this.get(REQUEST_CONTEXT);
+    const ctx = this.context;
+    // or: const ctx = this.get(FRONTMCP_CONTEXT);
 
     console.log(`Request ${ctx.requestId} from session ${ctx.sessionId}`);
     return `Processed: ${query}`;
@@ -40,39 +42,109 @@ class MyTool {
 
 ### Safe Access
 
-Use `tryGetRequestContext()` when context may not be available (e.g., during initialization or in non-HTTP flows):
+Use `tryGetContext()` when context may not be available (e.g., during initialization or in non-HTTP flows):
 
 ```ts
-const ctx = this.tryGetRequestContext();
+const ctx = this.tryGetContext();
 if (ctx) {
   console.log(ctx.requestId);
 } else {
-  console.log('No request context available');
+  console.log('No context available');
 }
 ```
 
-### From REQUEST-Scoped Providers
+### From CONTEXT-Scoped Providers
 
-REQUEST-scoped providers can receive RequestContext via factory injection:
+CONTEXT-scoped providers can receive FrontMcpContext via factory injection:
 
 ```ts
-import { ProviderScope, REQUEST_CONTEXT, RequestContext } from '@frontmcp/sdk';
+import { ProviderScope, FRONTMCP_CONTEXT, FrontMcpContext } from '@frontmcp/sdk';
 
 const requestLoggerProvider = {
   provide: 'RequestLogger',
-  scope: ProviderScope.REQUEST,
-  factory: (ctx: RequestContext) => ({
+  scope: ProviderScope.CONTEXT,
+  factory: (ctx: FrontMcpContext) => ({
     log: (msg: string) => console.log(`[${ctx.requestId}] ${msg}`),
   }),
-  inject: [REQUEST_CONTEXT],
+  inject: [FRONTMCP_CONTEXT],
 };
+```
+
+---
+
+## Context-Aware Fetch
+
+FrontMcpContext provides a `fetch()` method that automatically injects headers:
+
+```ts
+const ctx = this.context;
+
+// Automatically injects:
+// - Authorization: Bearer <token> (if authInfo.token is available)
+// - traceparent: <W3C trace context>
+// - x-request-id: <request ID>
+// - Custom x-frontmcp-* headers from request metadata
+const response = await ctx.fetch('https://api.example.com/data');
+```
+
+### Configuration
+
+Configure fetch behavior via context config:
+
+```ts
+// In FrontMcpContextArgs
+{
+  config: {
+    autoInjectAuthHeaders: true,       // Default: true
+    autoInjectTracingHeaders: true,    // Default: true
+    requestTimeout: 30000,             // Default: 30000ms
+  }
+}
+```
+
+### Custom Headers
+
+Additional headers can be passed and will be merged:
+
+```ts
+const response = await ctx.fetch('https://api.example.com/data', {
+  headers: {
+    'X-Custom-Header': 'value',
+  },
+});
+```
+
+---
+
+## Transport Access (Elicit)
+
+Access the transport for interactive prompts:
+
+```ts
+const ctx = this.context;
+
+if (ctx.transport?.supportsElicit) {
+  const result = await ctx.transport.elicit('Please confirm your action', schema);
+
+  switch (result.action) {
+    case 'accept':
+      console.log('User accepted:', result.content);
+      break;
+    case 'decline':
+      console.log('User declined');
+      break;
+    case 'cancel':
+      console.log('User cancelled');
+      break;
+  }
+}
 ```
 
 ---
 
 ## Distributed Tracing
 
-RequestContext automatically parses [W3C Trace Context](https://www.w3.org/TR/trace-context/) headers for distributed tracing compatibility.
+FrontMcpContext automatically parses [W3C Trace Context](https://www.w3.org/TR/trace-context/) headers for distributed tracing compatibility.
 
 ### Supported Headers
 
@@ -85,19 +157,15 @@ RequestContext automatically parses [W3C Trace Context](https://www.w3.org/TR/tr
 ### Using Trace Context
 
 ```ts
-const ctx = this.requestContext;
+const ctx = this.context;
 
 // Access trace identifiers
 const { traceId, parentId, traceFlags, traceState } = ctx.traceContext;
 
 console.log(`Trace: ${traceId}, Parent: ${parentId}, Flags: ${traceFlags}`);
 
-// Add to outgoing requests for distributed tracing
-const response = await fetch('https://api.example.com/data', {
-  headers: {
-    'traceparent': `00-${traceId}-${ctx.requestId.replace(/-/g, '').slice(0, 16)}-01`,
-  },
-});
+// Use ctx.fetch() for automatic trace propagation
+const response = await ctx.fetch('https://api.example.com/data');
 ```
 
 ### Integration with Observability Tools
@@ -116,7 +184,7 @@ FrontMCP's trace context is compatible with:
 Track execution timing with marks for performance monitoring:
 
 ```ts
-const ctx = this.requestContext;
+const ctx = this.context;
 
 // Mark stages
 ctx.mark('validation-start');
@@ -145,12 +213,12 @@ for (const [name, timestamp] of marks) {
 
 ---
 
-## Request-Scoped Storage
+## Context-Scoped Storage
 
 Store and retrieve data that lives only for the duration of the request:
 
 ```ts
-const ctx = this.requestContext;
+const ctx = this.context;
 
 // Store data
 ctx.set('correlation-id', crypto.randomUUID());
@@ -176,7 +244,7 @@ ctx.delete('feature-flags');
 Access HTTP request metadata:
 
 ```ts
-const ctx = this.requestContext;
+const ctx = this.context;
 const { metadata } = ctx;
 
 console.log(`User-Agent: ${metadata.userAgent}`);
@@ -192,10 +260,10 @@ console.log(`Custom headers:`, metadata.customHeaders);
 
 ## Authentication
 
-Access authentication information via the request context:
+Access authentication information via the context:
 
 ```ts
-const ctx = this.requestContext;
+const ctx = this.context;
 const { authInfo } = ctx;
 
 // JWT token
@@ -219,9 +287,34 @@ console.log(`Session: ${authInfo.sessionId}`);
 
 ---
 
+## Logging
+
+Get a child logger with context attached:
+
+```ts
+const ctx = this.context;
+const logger = ctx.getLogger(this.logger);
+
+// Logger includes requestId and traceId prefix
+logger.info('Processing request'); // [abc12345:def67890] Processing request
+
+// Get summary for structured logging
+const logContext = ctx.toLogContext();
+// {
+//   requestId: 'abc12345-...',
+//   traceId: 'def67890...',
+//   sessionIdHash: 'a1b2c3d4e5f6', // Hashed for privacy
+//   scopeId: 'main',
+//   flowName: 'tools/call',
+//   elapsed: 123,
+// }
+```
+
+---
+
 ## API Reference
 
-### RequestContext Class
+### FrontMcpContext Class
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -232,18 +325,26 @@ console.log(`Session: ${authInfo.sessionId}`);
 | `scopeId` | `string` | Current scope identifier |
 | `timestamp` | `number` | Request start timestamp (ms since epoch) |
 | `metadata` | `RequestMetadata` | HTTP request metadata |
+| `config` | `FrontMcpContextConfig` | Context configuration |
+| `transport` | `TransportAccessor \| undefined` | Transport for elicit requests |
+| `flow` | `FlowBaseRef \| undefined` | Current flow reference |
+| `scope` | `ScopeRef \| undefined` | Current scope reference |
+| `sessionMetadata` | `SessionIdPayload \| undefined` | Session metadata (protocol, platform) |
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `mark` | `mark(name: string): void` | Record a timing mark |
 | `elapsed` | `elapsed(from?: string, to?: string): number` | Get elapsed time in ms |
 | `getMarks` | `getMarks(): ReadonlyMap<string, number>` | Get all timing marks |
-| `set` | `set<T>(key: string \| symbol, value: T): void` | Store request-scoped data |
-| `get` | `get<T>(key: string \| symbol): T \| undefined` | Retrieve request-scoped data |
+| `set` | `set<T>(key: string \| symbol, value: T): void` | Store context-scoped data |
+| `get` | `get<T>(key: string \| symbol): T \| undefined` | Retrieve context-scoped data |
 | `has` | `has(key: string \| symbol): boolean` | Check if key exists |
 | `delete` | `delete(key: string \| symbol): boolean` | Delete a key |
 | `getLogger` | `getLogger(parent: FrontMcpLogger): FrontMcpLogger` | Get child logger with context |
 | `toLogContext` | `toLogContext(): Record<string, unknown>` | Get summary for logging |
+| `fetch` | `fetch(input: RequestInfo \| URL, init?: RequestInit): Promise<Response>` | Context-aware fetch |
+| `updateAuthInfo` | `updateAuthInfo(authInfo: Partial<AuthInfo>): void` | Update auth info (internal) |
+| `updateSessionMetadata` | `updateSessionMetadata(metadata: SessionIdPayload): void` | Update session metadata (internal) |
 
 ### TraceContext Interface
 
@@ -253,6 +354,7 @@ console.log(`Session: ${authInfo.sessionId}`);
 | `parentId` | `string \| undefined` | 16-character hex parent span ID |
 | `traceFlags` | `number` | Trace flags (e.g., 1 for sampled) |
 | `traceState` | `string \| undefined` | Vendor-specific trace state |
+| `raw` | `string` | Raw traceparent header value |
 
 ### RequestMetadata Interface
 
@@ -264,30 +366,20 @@ console.log(`Session: ${authInfo.sessionId}`);
 | `clientIp` | `string \| undefined` | Client IP address |
 | `customHeaders` | `Record<string, string>` | Headers matching `x-frontmcp-*` |
 
+### TransportAccessor Interface
+
+| Property/Method | Type | Description |
+|-----------------|------|-------------|
+| `supportsElicit` | `boolean` | Whether transport supports elicit |
+| `elicit` | `<T>(message: string, schema: T): Promise<ElicitResult>` | Send elicit request |
+
 ---
 
-## Migration from authInfo
-
-The `this.authInfo` property on execution contexts (tools, resources, prompts) is deprecated. Use `this.requestContext.authInfo` instead:
-
-```ts
-// Deprecated
-const token = this.authInfo.token;
-const user = this.authInfo.user;
-
-// Recommended
-const ctx = this.requestContext;
-const token = ctx.authInfo.token;
-const user = ctx.authInfo.user;
-```
-
-### Why Migrate?
+## Key Features
 
 1. **Unified Context**: All request-scoped data in one place
 2. **Better Tracing**: Access trace IDs alongside auth info
-3. **Timing Integration**: Correlate auth with performance metrics
-4. **Future-Proof**: New features will be added to RequestContext
-
-<Tip>
-  The deprecated `this.authInfo` will continue to work for backward compatibility but will be removed in a future major version.
-</Tip>
+3. **Context-Aware Fetch**: Auto-inject headers in outgoing requests
+4. **Transport Access**: Use elicit directly from context
+5. **Timing Integration**: Correlate auth with performance metrics
+6. **Future-Proof**: New features will be added to FrontMcpContext

@@ -1,7 +1,7 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
 import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext, ToolMetadata } from 'mcp-from-openapi';
-import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig } from '@frontmcp/sdk';
+import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig, FrontMcpContext } from '@frontmcp/sdk';
 
 // ============================================================================
 // Input Transform Types
@@ -11,8 +11,8 @@ import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig } from 
  * Context available when injecting values at request time
  */
 export interface InputTransformContext {
-  /** Authentication info from the MCP session */
-  authInfo: AuthInfo;
+  /** FrontMCP request context with authInfo, sessionId, traceId, etc. */
+  ctx: FrontMcpContext;
   /** Environment variables */
   env: NodeJS.ProcessEnv;
   /** The OpenAPI tool being executed */
@@ -408,10 +408,10 @@ interface BaseOptions {
    * For example, mapping tenantId from authenticated session payload to
    * a specific header, this key will be hidden to mcp clients
    * and filled by the adapter before sending the request to the API.
-   * @param authInfo
+   * @param ctx - FrontMCP request context with authInfo, sessionId, traceId, etc.
    * @param headers
    */
-  headersMapper?: (authInfo: AuthInfo, headers: Headers) => Headers;
+  headersMapper?: (ctx: FrontMcpContext, headers: Headers) => Headers;
 
   /**
    * This can be used to map request information to specific
@@ -420,10 +420,10 @@ interface BaseOptions {
    * a specific property in the body, this key will be hidden to mcp clients
    * and filled by the adapter before sending the request to the API.
    *
-   * @param authInfo
+   * @param ctx - FrontMCP request context with authInfo, sessionId, traceId, etc.
    * @param body
    */
-  bodyMapper?: (authInfo: AuthInfo, body: Record<string, unknown>) => Record<string, unknown>;
+  bodyMapper?: (ctx: FrontMcpContext, body: Record<string, unknown>) => Record<string, unknown>;
 
   /**
    * Custom security resolver for resolving authentication from context.
@@ -436,7 +436,8 @@ interface BaseOptions {
    *
    * @example
    * ```typescript
-   * securityResolver: (tool, authInfo) => {
+   * securityResolver: (tool, ctx) => {
+   *   const authInfo = ctx.authInfo;
    *   // Use GitHub token for GitHub API tools
    *   if (tool.name.startsWith('github_')) {
    *     return { jwt: authInfo.user?.githubToken };
@@ -450,7 +451,7 @@ interface BaseOptions {
    * }
    * ```
    */
-  securityResolver?: (tool: McpOpenAPITool, authInfo: AuthInfo) => SecurityContext | Promise<SecurityContext>;
+  securityResolver?: (tool: McpOpenAPITool, ctx: FrontMcpContext) => SecurityContext | Promise<SecurityContext>;
 
   /**
    * Map security scheme names to auth provider extractors.
@@ -463,15 +464,15 @@ interface BaseOptions {
    * ```typescript
    * authProviderMapper: {
    *   // GitHub OAuth security scheme
-   *   'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+   *   'GitHubAuth': (ctx) => ctx.authInfo.user?.githubToken,
    *   // Google OAuth security scheme
-   *   'GoogleAuth': (authInfo) => authInfo.user?.googleToken,
+   *   'GoogleAuth': (ctx) => ctx.authInfo.user?.googleToken,
    *   // API Key security scheme
-   *   'ApiKeyAuth': (authInfo) => authInfo.user?.apiKey,
+   *   'ApiKeyAuth': (ctx) => ctx.authInfo.user?.apiKey,
    * }
    * ```
    */
-  authProviderMapper?: Record<string, (authInfo: AuthInfo) => string | undefined>;
+  authProviderMapper?: Record<string, (ctx: FrontMcpContext) => string | undefined>;
 
   /**
    * Static authentication configuration when not using dynamic auth from context.

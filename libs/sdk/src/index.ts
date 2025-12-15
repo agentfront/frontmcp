@@ -11,18 +11,25 @@ export {
 } from './front-mcp/serverless-handler';
 export * from './common';
 
-// Request context for production-ready request handling
+// Unified context for production-ready request handling
 export {
-  RequestContext,
-  RequestContextArgs,
+  // Primary exports (new unified context)
+  FrontMcpContext,
+  Context,
+  FrontMcpContextArgs,
+  FrontMcpContextConfig,
+  FrontMcpContextStorage,
+  ContextStorage,
+  FRONTMCP_CONTEXT,
+  FrontMcpContextProvider,
+  // Request metadata
   RequestMetadata,
-  RequestContextStorage,
-  REQUEST_CONTEXT,
+  TransportAccessor,
+  // Trace context
   TraceContext,
   parseTraceContext,
   generateTraceContext,
   createChildSpanContext,
-  SessionKey,
 } from './context';
 
 // Tool change events for subscription
