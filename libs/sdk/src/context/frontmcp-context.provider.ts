@@ -55,7 +55,7 @@ export const FrontMcpContextProvider: ProviderFactoryType<FrontMcpContext, reado
     description: 'Current unified context from AsyncLocalStorage',
     scope: ProviderScope.CONTEXT,
   },
-} as any; // Type assertion needed due to ProviderFactoryType limitations
+} as any; // Type assertion needed: ProviderFactoryType cannot infer readonly tuple from inject()
 
 /**
  * @deprecated Use FrontMcpContextProvider instead

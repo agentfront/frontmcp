@@ -228,23 +228,10 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         const { authorization } = verifyResult;
         request[ServerRequestTokens.auth] = authorization;
 
-        // Update FrontMcpContext with verified auth info and session metadata
-        const ctx = this.tryGetContext();
-        if (ctx) {
-          // Map authorization to AuthInfo shape (consistent with checkAuthorization)
-          ctx.updateAuthInfo({
-            token: authorization.token,
-            clientId: authorization.user?.sub,
-            scopes: [],
-            // JWT exp is in seconds, SDK uses milliseconds throughout
-            expiresAt: authorization.user?.exp ? authorization.user.exp * 1000 : undefined,
-            extra: {
-              user: authorization.user,
-              sessionId: authorization.session?.id,
-              sessionPayload: authorization.session?.payload,
-            },
-          });
-          if (authorization.session?.payload) {
+        // Update FrontMcpContext session metadata (auth info already set in checkAuthorization)
+        if (authorization.session?.payload) {
+          const ctx = this.tryGetContext();
+          if (ctx) {
             ctx.updateSessionMetadata(authorization.session.payload);
           }
         }

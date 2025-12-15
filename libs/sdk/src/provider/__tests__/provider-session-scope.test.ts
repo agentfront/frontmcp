@@ -40,11 +40,6 @@ class SessionService {
 }
 
 describe('ProviderRegistry - Context Scope', () => {
-  // Helper to access private members for testing
-  const getPrivate = (registry: ProviderRegistry, prop: string) => {
-    return (registry as any)[prop];
-  };
-
   describe('buildViews', () => {
     it('should validate sessionKey early', async () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);

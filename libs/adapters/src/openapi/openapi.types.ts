@@ -525,7 +525,7 @@ interface BaseOptions {
    *
    *   // GitHubAuth will be resolved from context
    *   authProviderMapper: {
-   *     'GitHubAuth': (authInfo) => authInfo.user?.githubToken,
+   *     'GitHubAuth': (ctx) => ctx.authInfo?.user?.githubToken,
    *   },
    * });
    * ```

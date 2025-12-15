@@ -42,11 +42,7 @@ export default class ProviderRegistry
   private sessionStores: Map<string, { providers: Map<Token, unknown>; lastAccess: number }> = new Map();
 
   /** Locks to prevent concurrent session builds (race condition prevention) */
-  private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void; generation: number }> =
-    new Map();
-
-  /** Generation counter for lock versioning (prevents zombie lock releases after timeout) */
-  private lockGeneration = 0;
+  private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void }> = new Map();
 
   /** Maximum number of sessions to cache (LRU eviction) */
   private static readonly MAX_SESSION_CACHE_SIZE = 10000;
@@ -56,9 +52,6 @@ export default class ProviderRegistry
 
   /** Cleanup interval in milliseconds (1 minute) */
   private static readonly SESSION_CLEANUP_INTERVAL_MS = 60000;
-
-  /** Lock acquisition timeout in milliseconds (30 seconds) */
-  private static readonly SESSION_LOCK_TIMEOUT_MS = 30000;
 
   /** Handle for the session cleanup interval */
   private sessionCleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -689,55 +682,6 @@ export default class ProviderRegistry
   /* -------------------- Session Cache Management -------------------- */
 
   /**
-   * Get or create a session provider store.
-   * Implements LRU eviction when cache exceeds MAX_SESSION_CACHE_SIZE.
-   */
-  private getOrCreateSessionStore(sessionKey: string): Map<Token, unknown> {
-    const existing = this.sessionStores.get(sessionKey);
-    if (existing) {
-      existing.lastAccess = Date.now();
-      return existing.providers;
-    }
-
-    // Evict oldest session if at capacity
-    if (this.sessionStores.size >= ProviderRegistry.MAX_SESSION_CACHE_SIZE) {
-      this.evictOldestSession();
-    }
-
-    const providers = new Map<Token, unknown>();
-    this.sessionStores.set(sessionKey, {
-      providers,
-      lastAccess: Date.now(),
-    });
-    return providers;
-  }
-
-  /**
-   * Evict the oldest session from the cache.
-   * Skips sessions with active locks to prevent evicting sessions being built.
-   */
-  private evictOldestSession(): void {
-    let oldestKey: string | undefined;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.sessionStores) {
-      // Skip sessions with active locks (currently being built)
-      // This prevents race condition where eviction removes a session mid-build
-      if (this.sessionBuildLocks.has(key)) continue;
-
-      if (entry.lastAccess < oldestTime) {
-        oldestTime = entry.lastAccess;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      this.sessionStores.delete(oldestKey);
-      // No need to cleanup lock - we skipped locked sessions
-    }
-  }
-
-  /**
    * Clean up a specific session's provider cache.
    * Call this when a session is terminated or expired.
    *
@@ -848,90 +792,6 @@ export default class ProviderRegistry
       maxSize: ProviderRegistry.MAX_SESSION_CACHE_SIZE,
       ttlMs: ProviderRegistry.SESSION_CACHE_TTL_MS,
     };
-  }
-
-  /**
-   * Acquire a lock for session building to prevent race conditions.
-   * If another request is building providers for the same session, wait for it.
-   *
-   * Uses a re-check loop to handle TOCTOU race conditions:
-   * After awaiting an existing lock, another request may have created a new lock.
-   * The loop ensures we don't overwrite an active lock.
-   *
-   * Includes a timeout to prevent infinite waits if a lock holder crashes.
-   *
-   * @returns The lock generation number for use in release (prevents zombie releases)
-   */
-  private async acquireSessionLock(sessionKey: string): Promise<number> {
-    const startTime = Date.now();
-
-    // Re-check loop to handle race between await and lock creation
-    while (true) {
-      const existing = this.sessionBuildLocks.get(sessionKey);
-      if (!existing) break; // No lock held, safe to proceed
-
-      // Check timeout before waiting
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= ProviderRegistry.SESSION_LOCK_TIMEOUT_MS) {
-        // Force-release stale lock and warn
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[ProviderRegistry] Session lock timeout after ${elapsed}ms for ${sessionKey.slice(
-            0,
-            20,
-          )}..., force-releasing`,
-        );
-        // Resolve the stale lock's promise before deleting (prevents hung waiters)
-        existing.resolve();
-        this.sessionBuildLocks.delete(sessionKey);
-        break;
-      }
-
-      // Wait for existing lock with remaining timeout
-      // Clear the timeout when existing.promise wins the race to prevent timer leaks
-      const remaining = ProviderRegistry.SESSION_LOCK_TIMEOUT_MS - elapsed;
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<void>((resolve) => {
-        timeoutHandle = setTimeout(resolve, remaining);
-      });
-      await Promise.race([existing.promise, timeoutPromise]);
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-      // After await, loop back to re-check - another request may have created a new lock
-    }
-
-    // Now safe to create our lock with unique generation
-    // Overflow protection: reset counter if approaching MAX_SAFE_INTEGER
-    if (this.lockGeneration >= Number.MAX_SAFE_INTEGER - 1) {
-      // eslint-disable-next-line no-console
-      console.warn('[ProviderRegistry] Lock generation counter reset to prevent overflow');
-      this.lockGeneration = 0;
-    }
-    const myGeneration = ++this.lockGeneration;
-    let resolveFunc: () => void = () => {};
-    const promise = new Promise<void>((resolve) => {
-      resolveFunc = resolve;
-    });
-    this.sessionBuildLocks.set(sessionKey, { promise, resolve: resolveFunc, generation: myGeneration });
-    return myGeneration;
-  }
-
-  /**
-   * Release the session build lock.
-   *
-   * Only releases if the provided generation matches the current lock's generation.
-   * This prevents zombie releases where a timed-out lock holder tries to release
-   * a lock that has already been force-released and potentially re-acquired.
-   *
-   * @param sessionKey - The session identifier
-   * @param expectedGeneration - The generation returned from acquireSessionLock
-   */
-  private releaseSessionLock(sessionKey: string, expectedGeneration: number): void {
-    const lock = this.sessionBuildLocks.get(sessionKey);
-    if (lock && lock.generation === expectedGeneration) {
-      lock.resolve();
-      this.sessionBuildLocks.delete(sessionKey);
-    }
-    // If generation doesn't match, this is a zombie release after timeout - ignore silently
   }
 
   /* -------------------- Scoped Provider Views -------------------- */

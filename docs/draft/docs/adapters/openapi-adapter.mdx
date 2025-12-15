@@ -659,25 +659,25 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       name: 'backend:api',
       spec: require('./openapi.json'),
       baseUrl: process.env.API_BASE_URL!,
-      headersMapper: (authInfo, headers) => {
+      headersMapper: (ctx, headers) => {
         // Add tenant ID to all requests
-        if (authInfo.user?.tenantId) {
-          headers.set('x-tenant-id', authInfo.user.tenantId);
+        if (ctx.authInfo?.user?.tenantId) {
+          headers.set('x-tenant-id', ctx.authInfo.user.tenantId);
         }
 
         // Add user authorization
-        if (authInfo.token) {
-          headers.set('authorization', `Bearer ${authInfo.token}`);
+        if (ctx.authInfo?.token) {
+          headers.set('authorization', `Bearer ${ctx.authInfo.token}`);
         }
 
         return headers;
       },
-      bodyMapper: (authInfo, body) => {
+      bodyMapper: (ctx, body) => {
         // Add user context to all mutations
         return {
           ...body,
-          tenantId: authInfo.user?.tenantId,
-          userId: authInfo.user?.id,
+          tenantId: ctx.authInfo?.user?.tenantId,
+          userId: ctx.authInfo?.user?.id,
           timestamp: new Date().toISOString(),
         };
       },
@@ -701,8 +701,8 @@ import { OpenapiAdapter } from '@frontmcp/adapters';
       name: 'backend:api',
       url: process.env.OPENAPI_SPEC_URL!,
       baseUrl: process.env.API_BASE_URL!,
-      headersMapper: (authInfo, headers) => {
-        const token = authInfo.token;
+      headersMapper: (ctx, headers) => {
+        const token = ctx.authInfo?.token;
         if (token) {
           headers.set('authorization', `Bearer ${token}`);
         }

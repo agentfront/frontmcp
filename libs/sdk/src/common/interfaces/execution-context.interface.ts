@@ -62,7 +62,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
     try {
       return this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
     } catch {
-      // Fallback: context not available, likely called during initialization
+      // Context not available (likely called during initialization or outside request scope)
       throw new RequestContextNotAvailableError();
     }
   }

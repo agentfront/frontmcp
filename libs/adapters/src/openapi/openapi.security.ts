@@ -120,7 +120,7 @@ export async function createSecurityContextFromAuth(
     // If no auth was set from providers, fall back to ctx.authInfo.token
     // Only fall back if ALL auth fields are empty (not just jwt)
     const hasAnyAuth = context.jwt || context.apiKey || context.basic || context.oauth2Token;
-    const authToken = ctx.authInfo.token;
+    const authToken = ctx.authInfo?.token;
     if (!hasAnyAuth && authToken) {
       // Validate type before assignment to prevent non-string values
       if (typeof authToken !== 'string') {
@@ -139,7 +139,7 @@ export async function createSecurityContextFromAuth(
 
   // 4. Default: use main JWT token from auth context
   return createSecurityContext({
-    jwt: ctx.authInfo.token,
+    jwt: ctx.authInfo?.token,
   });
 }
 

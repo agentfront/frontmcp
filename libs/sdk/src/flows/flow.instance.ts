@@ -3,6 +3,7 @@
 
 import 'reflect-metadata';
 import {
+  FlowBase,
   FlowControl,
   FlowCtxOf,
   FlowEntry,
@@ -243,7 +244,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         FlowCtxOf<Name>
       >[]) ?? [];
 
-    let context: any;
+    // FlowClass generic type is erased at runtime, so we use FlowBase<any>
+    // to avoid complex type gymnastics while maintaining basic type safety
+    let context: FlowBase<any>;
     let contextReady = false;
 
     const materializeAndMerge = async (

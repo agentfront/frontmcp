@@ -24,6 +24,7 @@ import { ProviderScope } from '../common/metadata';
 import { FrontMcpContext, FrontMcpContextArgs, RequestMetadata } from './frontmcp-context';
 import { parseTraceContext } from './trace-context';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { RequestContextNotAvailableError } from '../errors/mcp.error';
 
 /**
  * Module-level AsyncLocalStorage instance.
@@ -114,7 +115,9 @@ export class FrontMcpContextStorage {
   getStoreOrThrow(): FrontMcpContext {
     const ctx = this.getStore();
     if (!ctx) {
-      throw new Error('FrontMcpContext not available. Ensure operation runs within context scope.');
+      throw new RequestContextNotAvailableError(
+        'FrontMcpContext not available. Ensure operation runs within context scope.',
+      );
     }
     return ctx;
   }
