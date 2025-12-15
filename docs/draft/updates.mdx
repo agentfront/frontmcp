@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-15" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -15,7 +15,21 @@ mode: 'center'
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
+    ♻️ **Context scope migration** – `ProviderScope.SESSION` and `ProviderScope.REQUEST` now resolve through the unified CONTEXT scope. Audit custom providers for deprecated scope names before upgrading.
+
     **Features**
+
+    🧠 **Unified request context** – Access `ctx.authInfo`, tracing, and session metadata everywhere with the upgraded `FrontMcpContext` plus automatic provider injection—no more juggling request vs session scopes.
+
+    🧪 **Scaffolded E2E suites** – `frontmcp create` now writes a ready-to-run `e2e/` folder, Jest config, and `npm run test:e2e` script powered by `@frontmcp/testing`, so every new project ships with regression coverage.
+
+    🧲 **Redis session recovery** – Enable `transport.persistence` to persist Streamable HTTP transports in Redis with token-hash validation, mutexed recreation, and health checks that gracefully degrade if Redis is unavailable.
+
+    ☁️ **Serverless presets** – Pick Vercel, AWS Lambda, or Cloudflare during `frontmcp create` to get the right adapters, config files, and deploy scripts with idempotent safety checks baked in.
+
+    🧾 **Context-first OpenAPI adapter** – `authProviderMapper`, `headersMapper`, and `bodyMapper` now receive `FrontMcpContext` plus new input/tool transforms, logger injection, and 193 security tests guarding SSRF, header injection, and prototype pollution.
+
+    🎨 **Dual-mode UI library** – `@frontmcp/ui` ships synchronized CommonJS and native ESM bundles with matching types so HTML, React, and MDX widgets load in any bundler without adhoc `esm/` paths.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
@@ -59,6 +73,12 @@ mode: 'center'
 
     **Docs**
 
+    🧰 **Project scaffolding guide** – `/docs/getting-started/installation` now details the interactive `frontmcp create` prompts, new `ci/` folder layout, and generated `npm run test:e2e` workflow.
+
+    📦 **Redis persistence guide** – `/docs/deployment/redis-setup` covers enabling `redis` + `transport.persistence`, connection health checks, and how session recreation protects long-lived transports.
+
+    🧾 **OpenAPI adapter tutorial** – `/docs/guides/add-openapi-adapter` walks through the new context-based callbacks, logging, and schema transforms so you can migrate off `authInfo` helpers with confidence.
+
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
@@ -86,6 +106,8 @@ mode: 'center'
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
+
+    🧪 **CLI release E2E** – Verdaccio-backed CLI tests now publish the workspace packages locally and run `npx frontmcp create` end-to-end before every release, preventing regressions in new-project scaffolding.
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 

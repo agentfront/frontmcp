@@ -27,6 +27,22 @@ pnpm add @frontmcp/ui
 
 </CodeGroup>
 
+## Module formats & bundlers
+
+`@frontmcp/ui` now ships synchronized CommonJS (`dist/index.js`) and native ESM (`dist/esm/index.js`) builds plus a single type definition tree. Node, Vite, Next.js, and TS configs automatically pick the right artifact—no custom aliases required.
+
+```ts title="ESM / TypeScript"
+import { card } from '@frontmcp/ui';
+```
+
+```ts title="CommonJS"
+const { card } = require('@frontmcp/ui');
+```
+
+<Info>Both entry points share the same `index.d.ts`, so your IDE sees identical types regardless of module system.</Info>
+
+<Warning>The legacy `@frontmcp/ui/esm` path has been removed. Import from `@frontmcp/ui` and let Node pick the correct format.</Warning>
+
 ## Step 1: Add UI Config to Your Tool
 
 The simplest way to add a widget is with an HTML template function:
@@ -203,7 +219,7 @@ const outputSchema = z.object({
         foggy: '🌫️',
       };
 
-      const icon = weatherIcons[output.conditions.toLowerCase()] || '🌤️';
+      const icon = weatherIcons[output conditions.toLowerCase()] || '🌤️';
 
       return card(`
         <div class="text-center">

@@ -9,10 +9,10 @@ FrontMCP uses Redis for caching, session storage, and distributed state manageme
 
 ## Requirements
 
-| Environment | Redis | Notes |
-|-------------|-------|-------|
-| Development | Recommended | Enables full feature testing |
-| Production | **Required** | Essential for multi-instance deployments |
+| Environment | Redis        | Notes                                    |
+| ----------- | ------------ | ---------------------------------------- |
+| Development | Recommended  | Enables full feature testing             |
+| Production  | **Required** | Essential for multi-instance deployments |
 
 ## Development Setup
 
@@ -75,13 +75,13 @@ Redis is **required** in production. Without Redis, session data will be lost on
 
 ### Managed Redis Services (Recommended)
 
-| Provider | Service |
-|----------|---------|
-| AWS | ElastiCache for Redis |
-| GCP | Memorystore for Redis |
-| Azure | Azure Cache for Redis |
-| Upstash | Serverless Redis |
-| Redis Cloud | Redis Enterprise |
+| Provider    | Service               |
+| ----------- | --------------------- |
+| AWS         | ElastiCache for Redis |
+| GCP         | Memorystore for Redis |
+| Azure       | Azure Cache for Redis |
+| Upstash     | Serverless Redis      |
+| Redis Cloud | Redis Enterprise      |
 
 ### Self-Hosted Production
 
@@ -135,16 +135,62 @@ import { CachePlugin } from '@frontmcp/plugins';
 export default class Server {}
 ```
 
+## Session persistence & recovery
+
+Redis now powers long-lived Streamable HTTP sessions via `transport.persistence`. Configure Redis once and enable persistence to survive process restarts or horizontal scaling.
+
+### Configuration
+
+```ts title="src/main.ts"
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    host: process.env.REDIS_HOST!,
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    keyPrefix: 'mcp:transport:',
+    defaultTtlMs: 3600000,
+  },
+  transport: {
+    persistence: {
+      enabled: true,
+      defaultTtlMs: 3600000, // Override per environment
+    },
+  },
+})
+```
+
+1. **Configure `redis`** once at the server level. The same connection is reused for auth token storage and persistence.
+2. **Enable `transport.persistence`** to persist Streamable HTTP sessions. TTL defaults to one hour—tune it based on how long clients stay connected.
+
+<Warning>Transport persistence currently targets Streamable HTTP. SSE/stateful HTTP traffic continues to use in-memory transports.</Warning>
+
+### Health checks and graceful degradation
+
+FrontMCP now pings Redis during boot. If the connection fails, the session store is disabled and the server falls back to in-memory transports instead of crashing. Successful pings log `Redis connection validated successfully`; failures log a warning explaining that persistence was skipped.
+
+<Tip>Watch for `[TransportService] Redis session store initialized` when enabling persistence. If you change Redis credentials, restart the server so the health check runs again.</Tip>
+
+### Recovery flow
+
+When persistence is enabled:
+
+- **Creation**: Every Streamable HTTP transport stores an authorization hash, protocol, and timestamps inside Redis.
+- **Lookup**: Incoming requests call `wasSessionCreatedAsync()` which now checks Redis via `getStoredSession()` before deciding whether to recreate or reject the session.
+- **Recreation**: If a matching session exists, `recreateTransporter()` acquires a mutex, rebuilds the transport, and updates `lastAccessedAt`. If the token hash mismatches, the session is dropped and a warning is logged.
+
+This allows users to refresh a client after a deploy without breaking long-running conversations, while still enforcing token integrity.
+
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `REDIS_HOST` | Yes | `localhost` | Redis server hostname |
-| `REDIS_PORT` | No | `6379` | Redis server port |
-| `REDIS_PASSWORD` | Prod only | - | Redis authentication password |
-| `REDIS_DB` | No | `0` | Redis database number |
-| `REDIS_TLS` | No | `false` | Enable TLS encryption |
-| `REDIS_KEY_PREFIX` | No | `mcp:` | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
+| Variable           | Required  | Default     | Description                                                                    |
+| ------------------ | --------- | ----------- | ------------------------------------------------------------------------------ |
+| `REDIS_HOST`       | Yes       | `localhost` | Redis server hostname                                                          |
+| `REDIS_PORT`       | No        | `6379`      | Redis server port                                                              |
+| `REDIS_PASSWORD`   | Prod only | -           | Redis authentication password                                                  |
+| `REDIS_DB`         | No        | `0`         | Redis database number                                                          |
+| `REDIS_TLS`        | No        | `false`     | Enable TLS encryption                                                          |
+| `REDIS_KEY_PREFIX` | No        | `mcp:`      | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
 
 ## Health Checks
 

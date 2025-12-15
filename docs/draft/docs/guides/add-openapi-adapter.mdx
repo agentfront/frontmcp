@@ -251,15 +251,17 @@ OpenapiAdapter.init({
   name: 'user-api',
   baseUrl: 'https://api.example.com',
   url: 'https://api.example.com/openapi.json',
-  headersMapper: (authInfo, headers) => {
+  headersMapper: (ctx, headers) => {
     // Add user's token to API requests
-    if (authInfo.token) {
-      headers.set('authorization', `Bearer ${authInfo.token}`);
+    if (ctx.authInfo.token) {
+      headers.set('authorization', `Bearer ${ctx.authInfo.token}`);
     }
     return headers;
   },
 });
 ```
+
+<Info>Callbacks receive the full `FrontMcpContext`, so reach for `ctx.authInfo`, `ctx.sessionId`, or tracing data instead of legacy `authInfo` helpers.</Info>
 
 ### Multi-Tenant Setup
 
@@ -270,18 +272,18 @@ OpenapiAdapter.init({
   name: 'tenant-api',
   baseUrl: 'https://api.example.com',
   url: 'https://api.example.com/openapi.json',
-  headersMapper: (authInfo, headers) => {
+  headersMapper: (ctx, headers) => {
     // Add tenant ID header
-    if (authInfo.user?.tenantId) {
-      headers.set('x-tenant-id', authInfo.user.tenantId);
+    if (ctx.authInfo.user?.tenantId) {
+      headers set('x-tenant-id', ctx.authInfo.user.tenantId);
     }
     return headers;
   },
-  bodyMapper: (authInfo, body) => {
+  bodyMapper: (ctx, body) => {
     // Add tenant ID to all request bodies
     return {
       ...body,
-      tenantId: authInfo.user?.tenantId,
+      tenantId: ctx.authInfo.user?.tenantId,
     };
   },
 });
@@ -328,12 +330,12 @@ OpenapiAdapter.init({
       id: 'integrations',
       name: 'Third-Party Integrations',
       adapters: [
-        OpenapiAdapter.init({
+        OpenapiAdapter init({
           name: 'github',
           baseUrl: 'https://api.github.com',
           url: 'https://api.github.com/openapi.json',
         }),
-        OpenapiAdapter.init({
+        OpenapiAdapter init({
           name: 'slack',
           baseUrl: 'https://api.slack.com',
           url: 'https://api.slack.com/openapi.json',
@@ -413,7 +415,7 @@ OpenapiAdapter.init({
 
     **Solutions:**
     - Verify `additionalHeaders` or `headersMapper` configuration
-    - Check that `authInfo.token` contains the expected value
+    - Check that `ctx.authInfo.token` contains the expected value
     - Test the API directly with curl/Postman first
 
   </Accordion>
@@ -489,23 +491,23 @@ import CachePlugin from '@frontmcp/plugins/cache';
       name: 'expense-api',
       baseUrl: process.env.API_BASE_URL!,
       url: process.env.OPENAPI_SPEC_URL!,
-      headersMapper: (authInfo, headers) => {
+      headersMapper: (ctx, headers) => {
         // Add user's JWT token
-        if (authInfo.token) {
-          headers.set('authorization', `Bearer ${authInfo.token}`);
+        if (ctx.authInfo.token) {
+          headers.set('authorization', `Bearer ${ctx.authInfo.token}`);
         }
         // Add tenant ID
-        if (authInfo.user?.tenantId) {
-          headers.set('x-tenant-id', authInfo.user.tenantId);
+        if (ctx.authInfo.user?.tenantId) {
+          headers set('x-tenant-id', ctx.authInfo.user.tenantId);
         }
         return headers;
       },
-      bodyMapper: (authInfo, body) => {
+      bodyMapper: (ctx, body) => {
         // Add user context to mutations
         return {
           ...body,
-          createdBy: authInfo.user?.id,
-          tenantId: authInfo.user?.tenantId,
+          createdBy: ctx.authInfo.user?.id,
+          tenantId: ctx.authInfo.user?.tenantId,
         };
       },
       generateOptions: {

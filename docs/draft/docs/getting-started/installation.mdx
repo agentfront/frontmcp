@@ -54,14 +54,15 @@ Use `--yes` (or `-y`) to skip prompts and use defaults.
 
 ### CLI Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--yes, -y` | Use defaults (non-interactive) | - |
-| `--target <type>` | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node` |
-| `--redis <setup>` | Redis: `docker`, `existing`, `none` | `docker` |
-| `--cicd / --no-cicd` | Enable GitHub Actions | `--cicd` |
+| Flag                 | Description                                          | Default  |
+| -------------------- | ---------------------------------------------------- | -------- |
+| `--yes, -y`          | Use defaults (non-interactive)                       | -        |
+| `--target <type>`    | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node`   |
+| `--redis <setup>`    | Redis: `docker`, `existing`, `none`                  | `docker` |
+| `--cicd / --no-cicd` | Enable GitHub Actions                                | `--cicd` |
 
 **Examples:**
+
 ```bash
 # Interactive mode (default)
 npx frontmcp create my-app
@@ -84,6 +85,8 @@ This will:
 - create deployment configuration for your target (Dockerfile, vercel.json, etc.)
 - generate GitHub Actions workflows (if enabled)
 - install required dev dependencies (e.g. TypeScript, tsx, zod, reflect-metadata)
+- scaffold a `ci/` folder with Dockerfile, `docker-compose.yml`, and `.env.docker` when you choose the Node (Docker) target
+- create an `e2e/` suite plus `jest.e2e.config.ts` powered by `@frontmcp/testing`, so `npm run test:e2e` works immediately
 
 ---
 
@@ -129,7 +132,9 @@ After `create` or `init`, you’ll have these scripts:
     "dev": "frontmcp dev",
     "build": "frontmcp build",
     "inspect": "frontmcp inspector",
-    "doctor": "frontmcp doctor"
+    "doctor": "frontmcp doctor",
+    "test": "frontmcp test",
+    "test:e2e": "jest --config jest.e2e.config.ts --runInBand"
   }
 }
 ```
@@ -140,6 +145,27 @@ After `create` or `init`, you’ll have these scripts:
 - `frontmcp build` — compile your entry with TypeScript (outputs to `./dist` by default)
 - `frontmcp inspector` — launch the MCP Inspector (`npx @modelcontextprotocol/inspector`)
 - `frontmcp doctor` — validate Node/npm versions, tsconfig, and project setup
+- `frontmcp test` — run your workspace tests with the same tsconfig the CLI validated
+- `npm run test:e2e` — execute the generated Jest suite powered by `@frontmcp/testing`
+
+## End-to-end tests on day one
+
+Every scaffolded project now includes:
+
+```
+├── e2e/
+│   └── server.e2e.test.ts      # Smoke tests using @frontmcp/testing
+├── jest.e2e.config.ts         # Preconfigured Jest runner
+└── package.json               # Adds "test" and "test:e2e" scripts
+```
+
+Run the suite anytime with:
+
+```bash
+npm run test:e2e
+```
+
+<Info>Update `test.use({ server: './src/main.ts' })` inside `e2e/server.e2e.test.ts` if you rename your entry file or need a different port.</Info>
 
 ---
 
