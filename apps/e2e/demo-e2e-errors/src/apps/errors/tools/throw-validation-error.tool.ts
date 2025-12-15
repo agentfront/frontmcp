@@ -1,10 +1,12 @@
 import { Tool, ToolContext, InvalidInputError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  value: z.string().describe('Value to validate'),
-  minLength: z.number().optional().default(5).describe('Minimum length required'),
-};
+const inputSchema = z
+  .object({
+    value: z.string().describe('Value to validate'),
+    minLength: z.number().optional().default(5).describe('Minimum length required'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   valid: z.boolean(),

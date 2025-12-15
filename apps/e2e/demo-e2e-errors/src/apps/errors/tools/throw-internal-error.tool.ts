@@ -1,9 +1,11 @@
 import { Tool, ToolContext, InternalMcpError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  trigger: z.boolean().default(true).describe('Whether to trigger the internal error'),
-};
+const inputSchema = z
+  .object({
+    trigger: z.boolean().default(true).describe('Whether to trigger the internal error'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   success: z.boolean(),

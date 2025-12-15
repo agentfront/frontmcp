@@ -42,7 +42,7 @@ test.describe('Public Auth Mode E2E', () => {
       const result = await mcp.tools.call('list-notes', {});
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent();
+      expect(result).toHaveTextContent('notes');
     });
 
     test('should create and retrieve notes anonymously', async ({ mcp }) => {

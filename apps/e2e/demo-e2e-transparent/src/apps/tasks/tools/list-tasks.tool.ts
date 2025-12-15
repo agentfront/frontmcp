@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { tasksStore } from '../data/tasks.store';
 
-const inputSchema = {
-  onlyMine: z.boolean().optional().describe('Only show tasks created by current user'),
-};
+const inputSchema = z
+  .object({
+    onlyMine: z.boolean().optional().describe('Only show tasks created by current user'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   tasks: z.array(

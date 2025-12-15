@@ -181,8 +181,8 @@ test.describe('Multi-App Server E2E', () => {
     test('should have 6 tools total (2 per app)', async ({ mcp }) => {
       const tools = await mcp.tools.list();
 
-      // Count tools from our three apps
-      const appTools = tools.tools.filter((t) =>
+      // Count tools from our three apps - tools is an array directly
+      const appTools = tools.filter((t) =>
         ['create-note', 'list-notes', 'create-task', 'list-tasks', 'create-event', 'list-events'].includes(t.name),
       );
 

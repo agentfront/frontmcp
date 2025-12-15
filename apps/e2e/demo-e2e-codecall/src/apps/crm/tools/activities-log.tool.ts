@@ -2,11 +2,13 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = {
-  userId: z.string().describe('User ID for the activity'),
-  type: z.enum(['call', 'email', 'meeting', 'note']).describe('Activity type'),
-  description: z.string().describe('Activity description'),
-};
+const inputSchema = z
+  .object({
+    userId: z.string().describe('User ID for the activity'),
+    type: z.enum(['call', 'email', 'meeting', 'note']).describe('Activity type'),
+    description: z.string().describe('Activity description'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   activity: z.object({

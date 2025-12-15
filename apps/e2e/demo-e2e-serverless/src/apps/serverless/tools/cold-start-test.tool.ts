@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { deploymentTracker } from '../data/deployment-tracker';
 
-const inputSchema = {
-  simulateColdStart: z.boolean().optional().default(false).describe('Simulate a cold start for testing'),
-};
+const inputSchema = z
+  .object({
+    simulateColdStart: z.boolean().optional().default(false).describe('Simulate a cold start for testing'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   isColdStart: z.boolean(),

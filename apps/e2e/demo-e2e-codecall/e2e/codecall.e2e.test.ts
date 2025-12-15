@@ -86,8 +86,8 @@ test.describe('CodeCall Plugin E2E', () => {
       // Verify users-list is found with relevance score
       const usersList = searchResult.tools.find((t) => t.name === 'users-list');
       expect(usersList).toBeDefined();
-      expect(usersList!.relevanceScore).toBeGreaterThan(0);
-      expect(usersList!.matchedQueries).toContain('list users');
+      expect(usersList?.relevanceScore).toBeGreaterThan(0);
+      expect(usersList?.matchedQueries).toContain('list users');
     });
 
     test('should search for activity tools with multiple queries', async ({ mcp }) => {
@@ -125,7 +125,7 @@ test.describe('CodeCall Plugin E2E', () => {
       const searchResult = result.json<CodeCallSearchResult>();
       const usersCreate = searchResult.tools.find((t) => t.name === 'users-create');
       expect(usersCreate).toBeDefined();
-      expect(usersCreate!.description).toContain('Create');
+      expect(usersCreate?.description).toContain('Create');
     });
   });
 
@@ -273,12 +273,11 @@ test.describe('CodeCall Plugin E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      const execResult =
-        result.json<
-          CodeCallExecuteResult<{
-            user: { id: string; name: string; email: string; company: string; role: string; createdAt: string };
-          }>
-        >();
+      const execResult = result.json<
+        CodeCallExecuteResult<{
+          user: { id: string; name: string; email: string; company: string; role: string; createdAt: string };
+        }>
+      >();
       expect(execResult.status).toBe('ok');
 
       const data = execResult.result!;
@@ -299,13 +298,12 @@ test.describe('CodeCall Plugin E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      const execResult =
-        result.json<
-          CodeCallExecuteResult<{
-            activities: Array<{ id: string; userId: string; type: string; description: string }>;
-            count: number;
-          }>
-        >();
+      const execResult = result.json<
+        CodeCallExecuteResult<{
+          activities: Array<{ id: string; userId: string; type: string; description: string }>;
+          count: number;
+        }>
+      >();
       expect(execResult.status).toBe('ok');
 
       const data = execResult.result!;

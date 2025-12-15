@@ -137,6 +137,16 @@ class CrmStore {
       byUser,
     };
   }
+
+  /**
+   * Reset the store to its initial seed data state.
+   * Useful for test isolation.
+   */
+  reset(): void {
+    this.users.clear();
+    this.activities = [];
+    this.seedData();
+  }
 }
 
 export const crmStore = new CrmStore();

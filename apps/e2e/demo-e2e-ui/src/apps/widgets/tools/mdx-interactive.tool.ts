@@ -1,11 +1,13 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  topic: z.string().describe('Interactive topic'),
-  points: z.array(z.string()).describe('Key points to display'),
-  codeExample: z.string().optional().describe('Optional code example'),
-};
+const inputSchema = z
+  .object({
+    topic: z.string().describe('Interactive topic'),
+    points: z.array(z.string()).describe('Key points to display'),
+    codeExample: z.string().optional().describe('Optional code example'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('mdx'),

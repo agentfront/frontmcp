@@ -2,11 +2,13 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { tasksStore } from '../data/tasks.store';
 
-const inputSchema = {
-  title: z.string().describe('Title of the task'),
-  description: z.string().describe('Description of the task'),
-  priority: z.enum(['low', 'medium', 'high']).optional().describe('Task priority'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().describe('Title of the task'),
+    description: z.string().describe('Description of the task'),
+    priority: z.enum(['low', 'medium', 'high']).optional().describe('Task priority'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   id: z.string(),

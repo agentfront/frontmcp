@@ -2,10 +2,12 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { noteStore } from '../data/note.store';
 
-const inputSchema = {
-  title: z.string().min(1).describe('Note title'),
-  content: z.string().min(1).describe('Note content'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().min(1).describe('Note title'),
+    content: z.string().min(1).describe('Note content'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   id: z.string(),

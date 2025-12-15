@@ -1,11 +1,13 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  title: z.string().describe('Card title'),
-  content: z.string().describe('Card content'),
-  footer: z.string().optional().describe('Optional card footer'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().describe('Card title'),
+    content: z.string().describe('Card content'),
+    footer: z.string().optional().describe('Optional card footer'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('html'),
@@ -47,7 +49,7 @@ export default class HtmlCardTool extends ToolContext<typeof inputSchema, typeof
   async execute(input: Input): Promise<Output> {
     return {
       uiType: 'html',
-      html: `<div class="card">${input.title}</div>`,
+      html: `<div class="card">${this.helpers.escapeHtml(input.title)}</div>`,
       title: input.title,
     };
   }

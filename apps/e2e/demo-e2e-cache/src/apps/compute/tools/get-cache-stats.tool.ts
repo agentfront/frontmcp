@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { executionTracker } from '../data/execution-tracker';
 
-const inputSchema = {
-  _dummy: z.string().optional().describe('Unused'),
-};
+const inputSchema = z
+  .object({
+    _dummy: z.string().optional().describe('Unused'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   executionCounts: z.record(z.string(), z.number()),

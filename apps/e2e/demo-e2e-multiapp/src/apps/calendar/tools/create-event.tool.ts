@@ -2,13 +2,15 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { eventStore } from '../data/event.store';
 
-const inputSchema = {
-  title: z.string().min(1).describe('Event title'),
-  description: z.string().optional().default('').describe('Event description'),
-  startTime: z.number().describe('Event start time (Unix timestamp in ms)'),
-  endTime: z.number().describe('Event end time (Unix timestamp in ms)'),
-  location: z.string().optional().describe('Event location'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().min(1).describe('Event title'),
+    description: z.string().optional().default('').describe('Event description'),
+    startTime: z.number().describe('Event start time (Unix timestamp in ms)'),
+    endTime: z.number().describe('Event end time (Unix timestamp in ms)'),
+    location: z.string().optional().describe('Event location'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   id: z.string(),

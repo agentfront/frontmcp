@@ -15,12 +15,10 @@ test.describe('Hooks E2E', () => {
   });
 
   test.describe('Hook Execution', () => {
-    test.beforeEach(async ({ mcp }) => {
-      // Clear audit log before each test
-      await mcp.tools.call('clear-audit-log', {});
-    });
-
     test('should execute will hooks before tool execution', async ({ mcp }) => {
+      // Clear audit log first
+      await mcp.tools.call('clear-audit-log', {});
+
       // Call the audited tool
       await mcp.tools.call('audited-tool', { message: 'test message' });
 
@@ -35,6 +33,7 @@ test.describe('Hooks E2E', () => {
     });
 
     test('should execute did hooks after tool execution', async ({ mcp }) => {
+      await mcp.tools.call('clear-audit-log', {});
       await mcp.tools.call('audited-tool', { message: 'test message' });
 
       const result = await mcp.tools.call('get-audit-log', { toolName: 'audited-tool' });
@@ -47,6 +46,7 @@ test.describe('Hooks E2E', () => {
     });
 
     test('should execute hooks in priority order', async ({ mcp }) => {
+      await mcp.tools.call('clear-audit-log', {});
       await mcp.tools.call('audited-tool', { message: 'test' });
 
       const result = await mcp.tools.call('get-audit-log', {});
@@ -65,23 +65,33 @@ test.describe('Hooks E2E', () => {
     });
 
     test('should track execution order correctly', async ({ mcp }) => {
+      await mcp.tools.call('clear-audit-log', {});
       await mcp.tools.call('audited-tool', { message: 'first' });
       await mcp.tools.call('audited-tool', { message: 'second' });
 
-      const result = await mcp.tools.call('get-audit-log', {});
+      // Get audit log filtered by tool name to get accurate count
+      const result = await mcp.tools.call('get-audit-log', { toolName: 'audited-tool' });
 
       expect(result).toBeSuccessful();
 
-      const content = JSON.stringify(result);
+      // Parse the data to verify entries count
+      const data = result.json<{ entries: Array<{ hookType: string }> }>();
+      expect(data).toBeDefined();
+      expect(data.entries).toBeDefined();
 
-      // Should have stats showing multiple executions
-      // 2 tool calls x 4 hooks each = 8 total entries
-      expect(content).toContain('"total":8');
-      expect(content).toContain('"willCount":4');
-      expect(content).toContain('"didCount":4');
+      // Should have 8 entries for audited-tool
+      // 2 audited-tool calls x 4 hooks each = 8 filtered entries
+      expect(data.entries).toHaveLength(8);
+
+      // Check will/did distribution
+      const willEntries = data.entries.filter((e) => e.hookType === 'will');
+      const didEntries = data.entries.filter((e) => e.hookType === 'did');
+      expect(willEntries).toHaveLength(4);
+      expect(didEntries).toHaveLength(4);
     });
 
     test('should capture duration in did hooks', async ({ mcp }) => {
+      await mcp.tools.call('clear-audit-log', {});
       await mcp.tools.call('audited-tool', {
         message: 'delayed',
         delay: 50, // Small delay to ensure measurable duration
@@ -98,10 +108,6 @@ test.describe('Hooks E2E', () => {
   });
 
   test.describe('Resource Access', () => {
-    test.beforeEach(async ({ mcp }) => {
-      await mcp.tools.call('clear-audit-log', {});
-    });
-
     test('should list audit log resource', async ({ mcp }) => {
       const resources = await mcp.resources.list();
       expect(resources).toContainResource('audit://log');

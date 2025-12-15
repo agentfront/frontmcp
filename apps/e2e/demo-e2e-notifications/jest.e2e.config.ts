@@ -1,18 +1,33 @@
 export default {
-  displayName: 'demo-e2e-notifications-e2e',
+  displayName: 'demo-e2e-notifications',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
-  transform: {
-    '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.app.json' }],
-  },
-  moduleFileExtensions: ['ts', 'js', 'html'],
   testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
-  coverageDirectory: '../../../coverage/apps/e2e/demo-e2e-notifications-e2e',
+  testTimeout: 60000,
+  maxWorkers: 1,
+  setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],
+  transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
+  transform: {
+    '^.+\\.[tj]s$': [
+      '@swc/jest',
+      {
+        jsc: {
+          parser: {
+            syntax: 'typescript',
+            decorators: true,
+          },
+          transform: {
+            decoratorMetadata: true,
+          },
+          target: 'es2022',
+        },
+      },
+    ],
+  },
   moduleNameMapper: {
-    '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
     '^@frontmcp/testing$': '<rootDir>/../../../libs/testing/src/index.ts',
+    '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
-  setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/jest-setup.ts'],
 };

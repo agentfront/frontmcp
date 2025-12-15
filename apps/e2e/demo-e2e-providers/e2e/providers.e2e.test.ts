@@ -35,12 +35,14 @@ test.describe('Providers E2E', () => {
       const content2 = JSON.stringify(result2);
 
       // Both should have the same structure and instance ID
-      const instanceIdMatch1 = content1.match(/"instanceId":"([^"]+)"/);
-      const instanceIdMatch2 = content2.match(/"instanceId":"([^"]+)"/);
+      const instanceIdMatch1 = content1.match(/"instanceId":"([a-f0-9\-]+)"/);
+      const instanceIdMatch2 = content2.match(/"instanceId":"([a-f0-9\-]+)"/);
 
       expect(instanceIdMatch1).not.toBeNull();
       expect(instanceIdMatch2).not.toBeNull();
-      expect(instanceIdMatch1![1]).toBe(instanceIdMatch2![1]);
+      if (instanceIdMatch1 && instanceIdMatch2) {
+        expect(instanceIdMatch1[1]).toBe(instanceIdMatch2[1]);
+      }
     });
 
     test('should have consistent startedAt timestamp', async ({ mcp }) => {
@@ -51,12 +53,14 @@ test.describe('Providers E2E', () => {
       const content2 = JSON.stringify(result2);
 
       // Both should have the same startedAt timestamp
-      const startedAtMatch1 = content1.match(/"startedAt":"([^"]+)"/);
-      const startedAtMatch2 = content2.match(/"startedAt":"([^"]+)"/);
+      const startedAtMatch1 = content1.match(/"startedAt":"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z)"/);
+      const startedAtMatch2 = content2.match(/"startedAt":"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z)"/);
 
       expect(startedAtMatch1).not.toBeNull();
       expect(startedAtMatch2).not.toBeNull();
-      expect(startedAtMatch1![1]).toBe(startedAtMatch2![1]);
+      if (startedAtMatch1 && startedAtMatch2) {
+        expect(startedAtMatch1[1]).toBe(startedAtMatch2[1]);
+      }
     });
   });
 
@@ -79,13 +83,15 @@ test.describe('Providers E2E', () => {
       const content1 = JSON.stringify(result1);
       const content2 = JSON.stringify(result2);
 
-      const instanceIdMatch1 = content1.match(/"instanceId":"([^"]+)"/);
-      const instanceIdMatch2 = content2.match(/"instanceId":"([^"]+)"/);
+      const instanceIdMatch1 = content1.match(/"instanceId":"([a-f0-9\-]+)"/);
+      const instanceIdMatch2 = content2.match(/"instanceId":"([a-f0-9\-]+)"/);
 
       expect(instanceIdMatch1).not.toBeNull();
       expect(instanceIdMatch2).not.toBeNull();
       // CONTEXT scope creates new instance per request
-      expect(instanceIdMatch1![1]).not.toBe(instanceIdMatch2![1]);
+      if (instanceIdMatch1 && instanceIdMatch2) {
+        expect(instanceIdMatch1[1]).not.toBe(instanceIdMatch2[1]);
+      }
     });
 
     test('should log messages within request context', async ({ mcp }) => {

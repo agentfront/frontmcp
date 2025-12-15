@@ -2,12 +2,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = {
-  name: z.string().describe('User name'),
-  email: z.string().email().describe('User email'),
-  company: z.string().describe('Company name'),
-  role: z.string().describe('User role'),
-};
+const inputSchema = z
+  .object({
+    name: z.string().describe('User name'),
+    email: z.string().email().describe('User email'),
+    company: z.string().describe('Company name'),
+    role: z.string().describe('User role'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   user: z.object({

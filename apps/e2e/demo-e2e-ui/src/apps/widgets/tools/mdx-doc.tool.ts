@@ -1,17 +1,19 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  title: z.string().describe('Document title'),
-  sections: z
-    .array(
-      z.object({
-        heading: z.string(),
-        content: z.string(),
-      }),
-    )
-    .describe('Document sections'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().describe('Document title'),
+    sections: z
+      .array(
+        z.object({
+          heading: z.string(),
+          content: z.string(),
+        }),
+      )
+      .describe('Document sections'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('mdx'),

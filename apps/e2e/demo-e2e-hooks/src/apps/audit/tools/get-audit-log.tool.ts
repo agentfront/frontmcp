@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { auditLog, AuditEntry } from '../data/audit-log';
 
-const inputSchema = {
-  toolName: z.string().optional().describe('Filter by tool name'),
-};
+const inputSchema = z
+  .object({
+    toolName: z.string().optional().describe('Filter by tool name'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   entries: z.array(

@@ -2,10 +2,12 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { notificationLogStore } from '../data/notification-log.store';
 
-const inputSchema = {
-  steps: z.number().min(1).max(10).optional().default(5).describe('Number of steps to simulate'),
-  delayMs: z.number().min(10).max(1000).optional().default(100).describe('Delay between steps in milliseconds'),
-};
+const inputSchema = z
+  .object({
+    steps: z.number().min(1).max(10).optional().default(5).describe('Number of steps to simulate'),
+    delayMs: z.number().min(10).max(1000).optional().default(100).describe('Delay between steps in milliseconds'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   success: z.boolean(),

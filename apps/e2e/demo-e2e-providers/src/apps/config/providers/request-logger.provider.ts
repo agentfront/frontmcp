@@ -55,6 +55,7 @@ class RequestLoggerImpl implements RequestLogger {
  * Demonstrates AsyncProvider factory pattern with dependency injection.
  */
 export const RequestLoggerProvider = AsyncProvider({
+  name: 'RequestLoggerProvider',
   provide: REQUEST_LOGGER_TOKEN,
   scope: ProviderScope.CONTEXT,
   inject: () => [FRONTMCP_CONTEXT] as const,
@@ -63,4 +64,4 @@ export const RequestLoggerProvider = AsyncProvider({
     const sessionId = ctx.sessionId || 'unknown';
     return new RequestLoggerImpl(requestId, sessionId);
   },
-} as any);
+});

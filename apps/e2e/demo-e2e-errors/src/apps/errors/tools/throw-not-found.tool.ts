@@ -1,9 +1,11 @@
 import { Tool, ToolContext, ResourceNotFoundError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  resourceId: z.string().describe('Resource ID to look up'),
-};
+const inputSchema = z
+  .object({
+    resourceId: z.string().describe('Resource ID to look up'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   found: z.boolean(),

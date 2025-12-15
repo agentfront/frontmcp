@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { deploymentTracker } from '../data/deployment-tracker';
 
-const inputSchema = {
-  _dummy: z.string().optional().describe('Unused parameter'),
-};
+const inputSchema = z
+  .object({
+    _dummy: z.string().optional().describe('Unused parameter'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   platform: z.string(),

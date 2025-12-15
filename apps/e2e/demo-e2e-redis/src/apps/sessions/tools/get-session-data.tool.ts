@@ -1,10 +1,13 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import { getSessionStore } from '../data/session.store';
 
-const inputSchema = {
-  key: z.string().describe('Key to retrieve'),
-};
+const inputSchema = z
+  .object({
+    key: z.string().describe('Key to retrieve'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   found: z.boolean(),
@@ -20,7 +23,7 @@ const outputSchema = z.object({
 })
 export default class GetSessionDataTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
-    const sessionId = 'mock-session-' + Date.now();
+    const sessionId = 'mock-session-' + randomUUID();
     const store = getSessionStore(sessionId);
 
     const value = store.get(input.key);

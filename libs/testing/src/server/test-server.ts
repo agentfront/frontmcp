@@ -278,6 +278,11 @@ export class TestServer {
       this._info.pid = this.process.pid;
     }
 
+    // Track process exit for early failure detection
+    let processExited = false;
+    let exitCode: number | null = null;
+    let exitError: Error | null = null;
+
     // Capture stdout
     this.process.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
@@ -299,18 +304,75 @@ export class TestServer {
     // Handle spawn errors to prevent unhandled error events
     this.process.on('error', (err) => {
       this.logs.push(`[SPAWN ERROR] ${err.message}`);
+      exitError = err;
       if (this.options.debug) {
         console.error('[SERVER SPAWN ERROR]', err);
       }
     });
 
-    // Handle process exit - use once() to avoid memory leak from listener not being cleaned up
+    // Handle process exit - track early failures
     this.process.once('exit', (code) => {
+      processExited = true;
+      exitCode = code;
       this.log(`Server process exited with code ${code}`);
     });
 
-    // Wait for server to be ready
-    await this.waitForReady();
+    // Wait for server to be ready, but detect early process exit
+    await this.waitForReadyWithExitDetection(() => {
+      if (exitError) {
+        return { exited: true, error: exitError };
+      }
+      if (processExited) {
+        const recentLogs = this.logs.slice(-10).join('\n');
+        return {
+          exited: true,
+          error: new Error(`Server process exited unexpectedly with code ${exitCode}.\n\nRecent logs:\n${recentLogs}`),
+        };
+      }
+      return { exited: false };
+    });
+  }
+
+  /**
+   * Wait for server to be ready, but also detect early process exit
+   */
+  private async waitForReadyWithExitDetection(checkExit: () => { exited: boolean; error?: Error }): Promise<void> {
+    const timeoutMs = this.options.startupTimeout;
+    const deadline = Date.now() + timeoutMs;
+    const checkInterval = 100;
+
+    while (Date.now() < deadline) {
+      // Check if process has exited before continuing to poll
+      const exitStatus = checkExit();
+      if (exitStatus.exited) {
+        throw exitStatus.error ?? new Error('Server process exited unexpectedly');
+      }
+
+      try {
+        const response = await fetch(`${this._info.baseUrl}${this.options.healthCheckPath}`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(1000),
+        });
+
+        if (response.ok || response.status === 404) {
+          // 404 is okay - it means the server is running but might not have a health endpoint
+          this.log('Server is ready');
+          return;
+        }
+      } catch {
+        // Server not ready yet
+      }
+
+      await sleep(checkInterval);
+    }
+
+    // Final check before throwing timeout error
+    const finalExitStatus = checkExit();
+    if (finalExitStatus.exited) {
+      throw finalExitStatus.error ?? new Error('Server process exited unexpectedly');
+    }
+
+    throw new Error(`Server did not become ready within ${timeoutMs}ms`);
   }
 
   private log(message: string): void {

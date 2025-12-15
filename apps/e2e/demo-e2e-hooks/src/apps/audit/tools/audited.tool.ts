@@ -1,10 +1,12 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  message: z.string().describe('Message to process'),
-  delay: z.number().optional().default(0).describe('Optional delay in ms to simulate work'),
-};
+const inputSchema = z
+  .object({
+    message: z.string().describe('Message to process'),
+    delay: z.number().optional().default(0).describe('Optional delay in ms to simulate work'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   processed: z.boolean(),

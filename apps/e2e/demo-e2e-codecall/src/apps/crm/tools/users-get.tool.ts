@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = {
-  id: z.string().describe('User ID'),
-};
+const inputSchema = z
+  .object({
+    id: z.string().describe('User ID'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   user: z

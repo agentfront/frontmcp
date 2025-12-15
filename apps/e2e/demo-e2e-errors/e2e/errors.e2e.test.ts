@@ -22,7 +22,8 @@ test.describe('Error Handling E2E', () => {
         minLength: 5,
       });
 
-      expect(result.isError).toBe(true);
+      // Validate both error state and MCP error code for INVALID_PARAMS
+      expect(result).toBeError(-32602);
       expect(result).toHaveTextContent('at least 5 characters');
     });
 
@@ -43,7 +44,8 @@ test.describe('Error Handling E2E', () => {
         resourceId: 'non-existent',
       });
 
-      expect(result.isError).toBe(true);
+      // Validate both error state and MCP error code for RESOURCE_NOT_FOUND
+      expect(result).toBeError(-32002);
       expect(result).toHaveTextContent('not found');
     });
 
@@ -63,7 +65,8 @@ test.describe('Error Handling E2E', () => {
         trigger: true,
       });
 
-      expect(result.isError).toBe(true);
+      // Validate both error state and MCP error code for INTERNAL_ERROR
+      expect(result).toBeError(-32603);
       // Internal errors should have error ID for support
       expect(result).toHaveTextContent('error');
     });
@@ -85,7 +88,8 @@ test.describe('Error Handling E2E', () => {
         statusCode: 400,
       });
 
-      expect(result.isError).toBe(true);
+      // Custom errors should still be proper MCP errors
+      expect(result).toBeError();
       expect(result).toHaveTextContent('custom error');
     });
   });

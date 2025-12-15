@@ -13,7 +13,7 @@ export * from './common';
 export * from './errors';
 
 // Re-export MCP types commonly needed
-export { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
+export type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Unified context for production-ready request handling
 export {

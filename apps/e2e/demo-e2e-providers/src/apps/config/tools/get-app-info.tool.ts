@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { AppConfigProvider, AppConfig } from '../providers/app-config.provider';
 
-const inputSchema = {
-  _dummy: z.string().optional().describe('Unused'),
-};
+const inputSchema = z
+  .object({
+    _dummy: z.string().optional().describe('Unused'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   appName: z.string(),

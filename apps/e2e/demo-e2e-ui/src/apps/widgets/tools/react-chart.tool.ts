@@ -1,17 +1,19 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  data: z
-    .array(
-      z.object({
-        label: z.string(),
-        value: z.number(),
-      }),
-    )
-    .describe('Chart data points'),
-  title: z.string().optional().describe('Chart title'),
-};
+const inputSchema = z
+  .object({
+    data: z
+      .array(
+        z.object({
+          label: z.string(),
+          value: z.number(),
+        }),
+      )
+      .describe('Chart data points'),
+    title: z.string().optional().describe('Chart title'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('react'),

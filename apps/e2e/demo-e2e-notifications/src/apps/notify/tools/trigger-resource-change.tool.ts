@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { notificationLogStore } from '../data/notification-log.store';
 
-const inputSchema = {
-  uri: z.string().optional().describe('Resource URI that changed'),
-};
+const inputSchema = z
+  .object({
+    uri: z.string().optional().describe('Resource URI that changed'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   success: z.boolean(),

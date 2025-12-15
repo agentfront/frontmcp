@@ -2,10 +2,12 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { executionTracker } from '../data/execution-tracker';
 
-const inputSchema = {
-  operationId: z.string().describe('Unique operation identifier'),
-  complexity: z.number().optional().default(1).describe('Complexity factor (1-10)'),
-};
+const inputSchema = z
+  .object({
+    operationId: z.string().describe('Unique operation identifier'),
+    complexity: z.number().optional().default(1).describe('Complexity factor (1-10)'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   operationId: z.string(),

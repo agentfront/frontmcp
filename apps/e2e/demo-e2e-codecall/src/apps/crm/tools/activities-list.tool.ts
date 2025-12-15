@@ -2,9 +2,11 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { crmStore } from '../data/crm.store';
 
-const inputSchema = {
-  userId: z.string().optional().describe('Filter by user ID'),
-};
+const inputSchema = z
+  .object({
+    userId: z.string().optional().describe('Filter by user ID'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   activities: z.array(

@@ -1,11 +1,13 @@
 import { Tool, ToolContext, PublicMcpError } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  errorCode: z.string().describe('Custom error code'),
-  errorMessage: z.string().describe('Custom error message'),
-  statusCode: z.number().optional().default(400).describe('HTTP status code'),
-};
+const inputSchema = z
+  .object({
+    errorCode: z.string().describe('Custom error code'),
+    errorMessage: z.string().describe('Custom error message'),
+    statusCode: z.number().optional().default(400).describe('HTTP status code'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   success: z.boolean(),

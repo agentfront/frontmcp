@@ -1,19 +1,21 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  fields: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: z.enum(['text', 'email', 'number', 'textarea']),
-        label: z.string(),
-        required: z.boolean().optional(),
-      }),
-    )
-    .describe('Form fields configuration'),
-  submitLabel: z.string().optional().describe('Submit button text'),
-};
+const inputSchema = z
+  .object({
+    fields: z
+      .array(
+        z.object({
+          name: z.string(),
+          type: z.enum(['text', 'email', 'number', 'textarea']),
+          label: z.string(),
+          required: z.boolean().optional(),
+        }),
+      )
+      .describe('Form fields configuration'),
+    submitLabel: z.string().optional().describe('Submit button text'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('react'),

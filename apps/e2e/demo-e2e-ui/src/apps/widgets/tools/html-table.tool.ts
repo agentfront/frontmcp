@@ -1,11 +1,13 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  headers: z.array(z.string()).describe('Table column headers'),
-  rows: z.array(z.array(z.string())).describe('Table row data'),
-  title: z.string().optional().describe('Optional table title'),
-};
+const inputSchema = z
+  .object({
+    headers: z.array(z.string()).describe('Table column headers'),
+    rows: z.array(z.array(z.string())).describe('Table row data'),
+    title: z.string().optional().describe('Optional table title'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('html'),

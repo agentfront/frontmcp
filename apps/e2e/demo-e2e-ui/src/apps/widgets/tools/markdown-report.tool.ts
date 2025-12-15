@@ -1,19 +1,21 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  title: z.string().describe('Report title'),
-  summary: z.string().describe('Executive summary'),
-  findings: z
-    .array(
-      z.object({
-        title: z.string(),
-        description: z.string(),
-        severity: z.enum(['low', 'medium', 'high']),
-      }),
-    )
-    .describe('Report findings'),
-};
+const inputSchema = z
+  .object({
+    title: z.string().describe('Report title'),
+    summary: z.string().describe('Executive summary'),
+    findings: z
+      .array(
+        z.object({
+          title: z.string(),
+          description: z.string(),
+          severity: z.enum(['low', 'medium', 'high']),
+        }),
+      )
+      .describe('Report findings'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   uiType: z.literal('markdown'),

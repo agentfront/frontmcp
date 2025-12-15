@@ -1,9 +1,11 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
-const inputSchema = {
-  message: z.string().optional().default('Success').describe('Success message'),
-};
+const inputSchema = z
+  .object({
+    message: z.string().optional().default('Success').describe('Success message'),
+  })
+  .strict();
 
 const outputSchema = z.object({
   success: z.boolean(),
