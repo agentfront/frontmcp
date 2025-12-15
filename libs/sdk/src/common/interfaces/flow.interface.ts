@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { HookEntry, ScopeEntry } from '../entries';
 import { FlowState, FlowStateOf } from './internal/flow.utils';
 import { FrontMcpLogger } from './logger.interface';
+import type { FrontMcpContext } from '../../context/frontmcp-context';
+import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
 
 export type FlowInputOf<N extends FlowName> = z.infer<ExtendFlows[N]['input']>;
 export type FlowOutputOf<N extends FlowName> = z.infer<ExtendFlows[N]['output']>;
@@ -80,6 +82,30 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
 
   protected handled() {
     throw FlowControl.handled();
+  }
+
+  /**
+   * Get the current FrontMcpContext from AsyncLocalStorage.
+   * Available in all stages after context initialization.
+   *
+   * @throws Error if not in a context scope
+   */
+  protected get context(): FrontMcpContext {
+    const storage = this.scope.providers.get(FrontMcpContextStorage);
+    return storage.getStoreOrThrow();
+  }
+
+  /**
+   * Safely try to get FrontMcpContext (returns undefined if not available).
+   * Use this when context might not be available (e.g., non-HTTP flows).
+   */
+  protected tryGetContext(): FrontMcpContext | undefined {
+    try {
+      const storage = this.scope.providers.get(FrontMcpContextStorage);
+      return storage.getStore();
+    } catch {
+      return undefined;
+    }
   }
 }
 

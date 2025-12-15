@@ -5,6 +5,7 @@
 import { createSecurityContextFromAuth } from '../openapi.security';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { FrontMcpContext } from '@frontmcp/sdk';
 
 // Mock mcp-from-openapi
 jest.mock('mcp-from-openapi', () => ({
@@ -23,6 +24,16 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
     token: 'test-token',
     clientId: 'test-client',
     scopes: [],
+  };
+
+  // Helper to create a mock FrontMcpContext with given authInfo
+  const createMockContext = (authInfo: Partial<AuthInfo>): FrontMcpContext => {
+    return {
+      authInfo,
+      requestId: 'test-request-id',
+      sessionId: 'test-session-id',
+      scopeId: 'test-scope',
+    } as FrontMcpContext;
   };
 
   const createMockTool = (scheme: string): McpOpenAPITool => ({
@@ -54,7 +65,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => 12345 as any, // Returns number instead of string
           },
@@ -66,7 +77,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => ({ token: 'abc' } as any), // Returns object instead of string
           },
@@ -78,7 +89,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => ['token1', 'token2'] as any, // Returns array instead of string
           },
@@ -90,7 +101,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => true as any, // Returns boolean instead of string
           },
@@ -102,7 +113,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => {
               throw new Error('Custom auth extraction failed');
@@ -116,7 +127,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => {
               throw 'string error'; // Throwing a non-Error
@@ -129,7 +140,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
     it('should accept valid string return from authProviderMapper', async () => {
       const tool = createMockTool('BearerAuth');
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BearerAuth: () => 'valid-token-string',
         },
@@ -142,7 +153,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       // Should not throw - undefined is allowed
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BearerAuth: () => undefined,
         },
@@ -156,7 +167,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       // Should not throw - null is allowed
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BearerAuth: () => null as any,
         },
@@ -171,7 +182,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
 
       const result = await createSecurityContextFromAuth(
         tool,
-        { ...mockAuthInfo, token: 'fallback-token' },
+        createMockContext({ ...mockAuthInfo, token: 'fallback-token' }),
         {
           authProviderMapper: {
             BearerAuth: () => undefined,
@@ -210,7 +221,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       };
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           Scheme1: () => 'token-from-scheme1',
           Scheme2: () => 'token-from-scheme2',
@@ -226,14 +237,15 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
     it('should use custom securityResolver when provided (highest priority)', async () => {
       const tool = createMockTool('BearerAuth');
       const customResolver = jest.fn().mockResolvedValue({ jwt: 'custom-token' });
+      const ctx = createMockContext(mockAuthInfo);
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, ctx, {
         securityResolver: customResolver,
         authProviderMapper: { BearerAuth: () => 'mapper-token' },
         staticAuth: { jwt: 'static-token' },
       });
 
-      expect(customResolver).toHaveBeenCalledWith(tool, mockAuthInfo);
+      expect(customResolver).toHaveBeenCalledWith(tool, ctx);
       expect(result).toEqual({ jwt: 'custom-token' });
     });
 
@@ -241,7 +253,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const { createSecurityContext } = require('mcp-from-openapi');
       const tool = createMockTool('BearerAuth');
 
-      await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         staticAuth: { jwt: 'static-token' },
       });
 
@@ -252,7 +264,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const { createSecurityContext } = require('mcp-from-openapi');
       const tool = createMockTool('BearerAuth');
 
-      await createSecurityContextFromAuth(tool, { ...mockAuthInfo, token: 'default-token' }, {});
+      await createSecurityContextFromAuth(tool, createMockContext({ ...mockAuthInfo, token: 'default-token' }), {});
 
       expect(createSecurityContext).toHaveBeenCalledWith({ jwt: 'default-token' });
     });
@@ -263,7 +275,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => '', // Returns empty string
           },
@@ -275,7 +287,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       const tool = createMockTool('BearerAuth');
 
       await expect(
-        createSecurityContextFromAuth(tool, mockAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => '',
           },
@@ -306,7 +318,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       };
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           ApiKeyAuth: () => 'my-api-key',
         },
@@ -337,7 +349,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       };
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BasicAuth: () => 'dXNlcjpwYXNz', // base64 encoded user:pass
         },
@@ -368,7 +380,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       };
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           OAuth2Auth: () => 'oauth2-access-token',
         },
@@ -381,7 +393,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
     it('should route http bearer scheme to context.jwt field', async () => {
       const tool = createMockTool('BearerAuth'); // Uses http bearer by default
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BearerAuth: () => 'bearer-jwt-token',
         },
@@ -418,7 +430,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
         },
       };
 
-      const result = await createSecurityContextFromAuth(tool, mockAuthInfo, {
+      const result = await createSecurityContextFromAuth(tool, createMockContext(mockAuthInfo), {
         authProviderMapper: {
           BearerAuth: () => 'my-jwt',
           ApiKeyAuth: () => 'my-api-key',
@@ -439,7 +451,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       };
 
       await expect(
-        createSecurityContextFromAuth(tool, invalidAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(invalidAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => undefined, // Returns undefined to trigger fallback
           },
@@ -455,7 +467,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
       };
 
       await expect(
-        createSecurityContextFromAuth(tool, invalidAuthInfo, {
+        createSecurityContextFromAuth(tool, createMockContext(invalidAuthInfo), {
           authProviderMapper: {
             BearerAuth: () => undefined,
           },
@@ -468,7 +480,7 @@ describe('OpenapiAdapter - Security Unit Tests', () => {
 
       const result = await createSecurityContextFromAuth(
         tool,
-        { ...mockAuthInfo, token: 'valid-fallback-token' },
+        createMockContext({ ...mockAuthInfo, token: 'valid-fallback-token' }),
         {
           authProviderMapper: {
             BearerAuth: () => undefined, // Returns undefined to trigger fallback

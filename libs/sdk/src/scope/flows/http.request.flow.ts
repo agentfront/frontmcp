@@ -19,6 +19,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
+import { randomUUID } from 'node:crypto';
 
 const plan = {
   pre: [
@@ -105,17 +106,25 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
   async traceRequest() {
     const { request } = this.rawInput;
     this.requestStartTime = Date.now();
-    this.requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Extract useful tracing info
-    const userAgent = request.headers?.['user-agent'] as string | undefined;
-    const sessionId = request.headers?.['mcp-session-id'] as string | undefined;
-    const contentType = request.headers?.['content-type'] as string | undefined;
-    const accept = request.headers?.['accept'] as string | undefined;
+    // Get FrontMcpContext from AsyncLocalStorage (already initialized by FlowInstance.runWithContext)
+    const ctx = this.tryGetContext();
+    // Use randomUUID() for fallback instead of Math.random() to avoid collisions under load
+    this.requestId = ctx?.requestId ?? `req-${randomUUID()}`;
 
+    // Extract request details for logging
+    const headers = request.headers ?? {};
     const body = request.body as Record<string, unknown> | undefined;
+    const userAgent = headers['user-agent'] as string | undefined;
+    const contentType = headers['content-type'] as string | undefined;
+    const accept = headers['accept'] as string | undefined;
+    // Use sessionId from context (which generates unique anon IDs) or header
+    // 'no-session' is a logging fallback only, not used for SESSION providers
+    const sessionId = ctx?.sessionId ?? (headers['mcp-session-id'] as string) ?? 'no-session';
+
     this.logger.info(`[${this.requestId}] ▶ ${request.method} ${request.path}`, {
       requestId: this.requestId,
+      traceId: ctx?.traceContext.traceId?.slice(0, 16),
       method: request.method,
       path: request.path,
       userAgent: userAgent?.slice(0, 50),
@@ -127,7 +136,6 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     });
 
     // Log sanitized headers for debugging connection issues
-    const headers = request.headers ?? {};
     const sanitizedHeaders = Object.fromEntries(
       Object.entries(headers).map(([key, value]) => {
         // Redact clearly sensitive headers
@@ -158,6 +166,29 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       this.state.set({
         verifyResult: result,
       });
+
+      // Update FrontMcpContext with verified auth info if available
+      // This allows all subsequent stages to access the auth info via context
+      if (result.kind === 'authorized' && result.authorization) {
+        const ctx = this.tryGetContext();
+        if (ctx) {
+          // Build AuthInfo from the authorization object
+          // AuthInfo is the MCP SDK's auth type with token, clientId, scopes, etc.
+          const { token, user, session } = result.authorization;
+          ctx.updateAuthInfo({
+            token,
+            clientId: user.sub,
+            scopes: [],
+            // JWT exp is in seconds, SDK uses milliseconds throughout (e.g., Date.now())
+            expiresAt: user.exp ? user.exp * 1000 : undefined,
+            extra: {
+              user,
+              sessionId: session?.id,
+              sessionPayload: session?.payload,
+            },
+          });
+        }
+      }
     } catch (error) {
       // FlowControl is expected control flow, not an error
       if (!(error instanceof FlowControl)) {
@@ -196,6 +227,15 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       if (verifyResult.kind === 'authorized') {
         const { authorization } = verifyResult;
         request[ServerRequestTokens.auth] = authorization;
+
+        // Update FrontMcpContext session metadata (auth info already set in checkAuthorization)
+        if (authorization.session?.payload) {
+          const ctx = this.tryGetContext();
+          if (ctx) {
+            ctx.updateSessionMetadata(authorization.session.payload);
+          }
+        }
+
         if (authorization.session) {
           const sessionId = authorization.session.id;
           request[ServerRequestTokens.sessionId] = sessionId;

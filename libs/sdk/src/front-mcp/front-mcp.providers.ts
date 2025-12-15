@@ -1,6 +1,7 @@
 import { FrontMcpConfigType, ProviderScope, FrontMcpServer, ProviderValueType, AsyncProvider } from '../common';
 import { FrontMcpServerInstance } from '../server/server.instance';
 import { FrontMcpConfig } from './front-mcp.tokens';
+import { FrontMcpContextStorage } from '../context';
 
 const frontMcpConfig = {
   with: (metadata: FrontMcpConfigType): ProviderValueType<FrontMcpConfigType> => ({
@@ -24,5 +25,5 @@ const frontMcpServer = AsyncProvider({
 });
 
 export function createMcpGlobalProviders(metadata: FrontMcpConfigType) {
-  return [frontMcpConfig.with(metadata), frontMcpServer];
+  return [frontMcpConfig.with(metadata), frontMcpServer, FrontMcpContextStorage];
 }

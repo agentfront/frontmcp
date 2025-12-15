@@ -22,6 +22,7 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
+import { SessionKey } from '../context/session-key.provider';
 
 export default class ProviderRegistry
   extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
@@ -36,6 +37,24 @@ export default class ProviderRegistry
   // private scoped = new Map<string, Map<Token, any>>();
 
   private registries: Map<RegistryKind, Set<RegistryType>> = new Map();
+
+  /** Session-scoped provider instance cache by sessionKey */
+  private sessionStores: Map<string, { providers: Map<Token, unknown>; lastAccess: number }> = new Map();
+
+  /** Locks to prevent concurrent session builds (race condition prevention) */
+  private sessionBuildLocks: Map<string, { promise: Promise<void>; resolve: () => void }> = new Map();
+
+  /** Maximum number of sessions to cache (LRU eviction) */
+  private static readonly MAX_SESSION_CACHE_SIZE = 10000;
+
+  /** Session cache TTL in milliseconds (1 hour) */
+  private static readonly SESSION_CACHE_TTL_MS = 3600000;
+
+  /** Cleanup interval in milliseconds (1 minute) */
+  private static readonly SESSION_CLEANUP_INTERVAL_MS = 60000;
+
+  /** Handle for the session cleanup interval */
+  private sessionCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(list: ProviderType[], private readonly parentProviders?: ProviderRegistry) {
     super('ProviderRegistry', parentProviders, list, false);
@@ -186,6 +205,14 @@ export default class ProviderRegistry
         throw new Error(`Failed constructing ${tokenName(token)}: ${msg}`);
       }
     }
+
+    // Start background session cleanup after initialization
+    // This ensures expired sessions are periodically cleaned up (TTL enforcement)
+    // Only start for scope-level registries (those with parentProviders) since
+    // SESSION providers are stored in scope registries, not the global registry
+    if (this.parentProviders) {
+      this.startSessionCleanup();
+    }
   }
 
   /* -------------------- Views & session stores -------------------- */
@@ -202,8 +229,27 @@ export default class ProviderRegistry
     return providerInvocationTokens(rec, (k, phase) => depsOfClass(k, phase));
   }
 
+  /**
+   * Normalize deprecated scopes to their modern equivalents.
+   *
+   * - SESSION → CONTEXT (deprecated)
+   * - REQUEST → CONTEXT (deprecated)
+   *
+   * This enables backwards compatibility while unifying the scope model.
+   */
+  private normalizeScope(scope: ProviderScope): ProviderScope {
+    switch (scope) {
+      case ProviderScope.SESSION:
+      case ProviderScope.REQUEST:
+        return ProviderScope.CONTEXT;
+      default:
+        return scope;
+    }
+  }
+
   getProviderScope(rec: ProviderRecord): ProviderScope {
-    return rec.metadata?.scope ?? ProviderScope.GLOBAL;
+    const rawScope = rec.metadata?.scope ?? ProviderScope.GLOBAL;
+    return this.normalizeScope(rawScope);
   }
 
   getScope(): ScopeEntry {
@@ -633,17 +679,301 @@ export default class ProviderRegistry
     return this.getWithParents(FrontMcpServer);
   }
 
+  /* -------------------- Session Cache Management -------------------- */
+
   /**
-   * Build provider instance views for different scopes
-   * NOTE: This is currently a stub implementation returning empty maps.
-   * Actual view building logic is planned as part of the session management refactoring.
-   * See the ProviderRegistryInterface TODO for fixing the session type.
+   * Clean up a specific session's provider cache.
+   * Call this when a session is terminated or expired.
+   *
+   * @param sessionKey - The session identifier to clean up
    */
-  async buildViews(session: string): Promise<ProviderViews> {
+  cleanupSession(sessionKey: string): void {
+    this.sessionStores.delete(sessionKey);
+    // Resolve any waiters before deleting the lock to prevent hung promises
+    const lock = this.sessionBuildLocks.get(sessionKey);
+    if (lock) {
+      lock.resolve();
+      this.sessionBuildLocks.delete(sessionKey);
+    }
+  }
+
+  /**
+   * Clean up expired sessions from the cache.
+   * Sessions older than SESSION_CACHE_TTL_MS are removed.
+   *
+   * @returns Number of sessions cleaned up
+   */
+  cleanupExpiredSessions(): number {
+    const now = Date.now();
+    const cutoff = now - ProviderRegistry.SESSION_CACHE_TTL_MS;
+    let cleaned = 0;
+
+    for (const [key, entry] of this.sessionStores) {
+      if (entry.lastAccess < cutoff) {
+        this.sessionStores.delete(key);
+        // Resolve any waiters before deleting the lock to prevent hung promises
+        const lock = this.sessionBuildLocks.get(key);
+        if (lock) {
+          lock.resolve();
+          this.sessionBuildLocks.delete(key);
+        }
+        cleaned++;
+      }
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Start the background session cleanup timer.
+   * This periodically removes expired sessions from the cache.
+   */
+  startSessionCleanup(): void {
+    // Only start if not already running
+    if (this.sessionCleanupInterval) {
+      return;
+    }
+
+    this.sessionCleanupInterval = setInterval(() => {
+      const cleaned = this.cleanupExpiredSessions();
+      if (cleaned > 0) {
+        // eslint-disable-next-line no-console
+        console.debug(`[ProviderRegistry] Cleaned up ${cleaned} expired sessions`);
+      }
+    }, ProviderRegistry.SESSION_CLEANUP_INTERVAL_MS);
+
+    // Allow the process to exit even if the interval is running
+    // This is important for graceful shutdown in serverless environments
+    if (this.sessionCleanupInterval.unref) {
+      this.sessionCleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Stop the background session cleanup timer.
+   * Call this when shutting down the server gracefully.
+   */
+  stopSessionCleanup(): void {
+    if (this.sessionCleanupInterval) {
+      clearInterval(this.sessionCleanupInterval);
+      this.sessionCleanupInterval = null;
+    }
+  }
+
+  /**
+   * Dispose of the registry, cleaning up all resources.
+   * Call this when the registry/scope is being destroyed to prevent:
+   * - Memory leaks from retained interval handles
+   * - Orphaned session cleanup timers
+   *
+   * @example
+   * ```typescript
+   * // In scope teardown
+   * scope.providers.dispose();
+   * ```
+   */
+  dispose(): void {
+    this.stopSessionCleanup();
+    // Clear all session stores to help garbage collection
+    this.sessionStores.clear();
+    // Resolve any pending locks to prevent hung promises
+    for (const lock of this.sessionBuildLocks.values()) {
+      lock.resolve();
+    }
+    this.sessionBuildLocks.clear();
+  }
+
+  /**
+   * Get session cache statistics for monitoring.
+   */
+  getSessionCacheStats(): { size: number; maxSize: number; ttlMs: number } {
     return {
-      global: new Map<Token, any>(),
-      session: new Map<Token, any>(),
-      request: new Map<Token, any>(),
+      size: this.sessionStores.size,
+      maxSize: ProviderRegistry.MAX_SESSION_CACHE_SIZE,
+      ttlMs: ProviderRegistry.SESSION_CACHE_TTL_MS,
     };
+  }
+
+  /* -------------------- Scoped Provider Views -------------------- */
+
+  /**
+   * Build provider instance views for different scopes.
+   *
+   * This method creates a complete view of providers across all scopes:
+   * - GLOBAL: Returns existing singleton instances (read-only)
+   * - CONTEXT: Builds per-context providers (unified session + request)
+   *
+   * Note: For backwards compatibility, SESSION and REQUEST scopes are normalized
+   * to CONTEXT. The returned views include `session` and `request` aliases that
+   * both point to the `context` store.
+   *
+   * @param sessionKey - Unique context/session identifier for CONTEXT-scoped providers
+   * @param contextProviders - Optional pre-built CONTEXT-scoped providers (e.g., FrontMcpContext)
+   * @returns ProviderViews with global and context provider maps (session/request as aliases)
+   */
+  async buildViews(sessionKey: string, contextProviders?: Map<Token, unknown>): Promise<ProviderViews> {
+    // Early validation BEFORE any cache operations or lock acquisition
+    // This prevents cache pollution with invalid session keys
+    SessionKey.validate(sessionKey);
+
+    // 1. Global providers - return existing singletons
+    const global = this.getAllSingletons();
+
+    // 2. Context providers - build per-context (unified session+request)
+    // Note: We don't cache context providers because they're per-request.
+    // The unified context model means all non-global providers are fresh per-request.
+    const contextStore = new Map<Token, unknown>(contextProviders);
+
+    // Inject SessionKey for backwards compatibility with providers that depend on it
+    // @deprecated - Providers should migrate to using FRONTMCP_CONTEXT instead
+    if (!contextStore.has(SessionKey)) {
+      contextStore.set(SessionKey, new SessionKey(sessionKey));
+    }
+
+    // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)
+    for (const token of this.order) {
+      const rec = this.defs.get(token);
+      if (!rec) continue;
+      // getProviderScope() already normalizes SESSION/REQUEST → CONTEXT
+      if (this.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      if (contextStore.has(token)) continue;
+
+      await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
+    }
+
+    // Return views with backwards-compatible aliases
+    // All three (context, session, request) point to the same map
+    return {
+      global,
+      context: contextStore,
+      // Backwards compatibility aliases
+      session: contextStore,
+      request: contextStore,
+    };
+  }
+
+  /**
+   * Build a provider into a store, with access to context and global views for dependencies.
+   */
+  private async buildIntoStoreWithViews(
+    token: Token,
+    rec: ProviderRecord,
+    store: Map<Token, unknown>,
+    scopeKey: string,
+    contextStore: Map<Token, unknown>,
+    globalStore: ReadonlyMap<Token, unknown>,
+  ): Promise<void> {
+    if (store.has(token)) return;
+
+    try {
+      switch (rec.kind) {
+        case ProviderKind.VALUE: {
+          store.set(token, (rec as any).useValue);
+          return;
+        }
+        case ProviderKind.FACTORY: {
+          const deps = this.invocationTokens(token, rec);
+          const args: any[] = [];
+          for (const d of deps) {
+            args.push(await this.resolveFromViews(d, contextStore, globalStore, scopeKey));
+          }
+          const out = (rec as any).useFactory(...args);
+          const val = isPromise(out)
+            ? await this.withTimeout(out, this.asyncTimeoutMs, `${tokenName(token)}.useFactory(...)`)
+            : out;
+          store.set(token, val);
+          return;
+        }
+        case ProviderKind.CLASS:
+        case ProviderKind.CLASS_TOKEN: {
+          const depsTokens = this.invocationTokens(token, rec);
+          const deps: any[] = [];
+          for (const d of depsTokens) {
+            deps.push(await this.resolveFromViews(d, contextStore, globalStore, scopeKey));
+          }
+          const klass = rec.kind === ProviderKind.CLASS ? (rec as any).useClass : (rec as any).provide;
+          if (hasAsyncWith(klass)) {
+            const out = (klass as any).with(...deps);
+            const val = isPromise(out)
+              ? await this.withTimeout(out, this.asyncTimeoutMs, `${klass.name}.with(...)`)
+              : out;
+            store.set(token, val);
+          } else {
+            const instance = new (klass as Ctor<any>)(...deps);
+            const init = (instance as any)?.init;
+            if (typeof init === 'function') {
+              const ret = init.call(instance);
+              if (isPromise(ret)) await this.withTimeout(ret, this.asyncTimeoutMs, `${klass.name}.init()`);
+            }
+            store.set(token, instance);
+          }
+          return;
+        }
+      }
+    } catch (e: any) {
+      const msg = e?.message ?? e;
+      console.error(`Failed constructing (context-scoped):`, msg);
+      throw new Error(`Failed constructing (context-scoped) ${tokenName(token)}: ${msg}`);
+    }
+  }
+
+  /**
+   * Resolve a dependency from the available views (context → global).
+   */
+  private async resolveFromViews(
+    token: Token,
+    contextStore: Map<Token, unknown>,
+    globalStore: ReadonlyMap<Token, unknown>,
+    scopeKey: string,
+  ): Promise<unknown> {
+    // Check stores in order: context -> global -> instances
+    if (contextStore.has(token)) return contextStore.get(token);
+    if (globalStore.has(token)) return globalStore.get(token);
+    if (this.instances.has(token)) return this.instances.get(token);
+
+    // Try to build if it's a registered provider
+    const rec = this.defs.get(token as any);
+    if (rec) {
+      const scope = this.getProviderScope(rec);
+      if (scope === ProviderScope.GLOBAL) {
+        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated`);
+      } else {
+        // CONTEXT scope - build into context store
+        await this.buildIntoStoreWithViews(token, rec, contextStore, scopeKey, contextStore, globalStore);
+        return contextStore.get(token);
+      }
+    }
+
+    // Check parent hierarchy
+    const up = this.lookupDefInHierarchy(token);
+    if (up) {
+      const sc = up.registry.getProviderScope(up.rec);
+      if (sc === ProviderScope.GLOBAL) {
+        const v = up.registry.instances.get(token);
+        if (v !== undefined) return v;
+        throw new Error(`GLOBAL dependency ${tokenName(token)} is not instantiated in parent`);
+      }
+    }
+
+    throw new Error(`Cannot resolve dependency ${tokenName(token)} from views`);
+  }
+
+  /**
+   * Get a provider from the given views, checking context → global.
+   *
+   * @param token - The provider token to look up
+   * @param views - The provider views to search
+   * @returns The provider instance
+   * @throws Error if provider not found in any view
+   */
+  getScoped<T>(token: Token<T>, views: ProviderViews): T {
+    // Check context first (unified session+request store)
+    if (views.context.has(token)) return views.context.get(token) as T;
+    if (views.global.has(token)) return views.global.get(token) as T;
+
+    // Check instances as fallback for global providers
+    if (this.instances.has(token)) return this.instances.get(token) as T;
+
+    throw new Error(`Provider ${tokenName(token)} not found in views. Ensure it was built via buildViews().`);
   }
 }

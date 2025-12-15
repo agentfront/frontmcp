@@ -415,6 +415,11 @@ export class NotificationService {
     // First unregister the server (cleans up subscriptions, log levels, etc.)
     const wasRegistered = this.unregisterServer(sessionId);
 
+    // Cleanup SESSION-scoped providers to prevent memory leak
+    // This is critical: without cleanup, terminated session providers remain cached forever
+    this.scope.providers.cleanupSession(sessionId);
+    this.logger.verbose(`Cleaned up provider cache for terminated session: ${sessionId.slice(0, 20)}...`);
+
     // Add to terminated sessions set (even if not registered, to handle edge cases)
     // Implement LRU-style eviction to prevent unbounded memory growth
     if (this.terminatedSessions.size >= NotificationService.MAX_TERMINATED_SESSIONS) {

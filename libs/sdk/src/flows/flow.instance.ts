@@ -3,6 +3,7 @@
 
 import 'reflect-metadata';
 import {
+  FlowBase,
   FlowControl,
   FlowCtxOf,
   FlowEntry,
@@ -26,6 +27,9 @@ import { writeHttpResponse } from '../server/server.validation';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
+import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
+import { RequestContextNotAvailableError } from '../errors/mcp.error';
+import { randomUUID } from 'crypto';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
@@ -78,8 +82,18 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         const canActivate = await this.canActivate(request);
         if (!canActivate) return next();
 
+        // Get context storage to wrap entire flow in FrontMcpContext
+        const contextStorage = this.getContextStorage();
+
         try {
-          const result = await this.run({ request, response, next } as any, new Map());
+          // Use runWithContext to wrap entire flow execution in AsyncLocalStorage context
+          // This ensures all stages have access to FrontMcpContext
+          const result = await this.runWithContext(
+            contextStorage,
+            request,
+            { request, response, next } as any,
+            new Map(),
+          );
           if (result) return writeHttpResponse(response, result);
         } catch (e) {
           if (e instanceof FlowControl) {
@@ -125,9 +139,91 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     return results.every((r) => r);
   }
 
+  /**
+   * Get FrontMcpContextStorage from providers (with fallback).
+   * Returns undefined if not available (backward compatibility).
+   */
+  private getContextStorage(): FrontMcpContextStorage | undefined {
+    try {
+      return this.globalProviders.get(FrontMcpContextStorage);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Run flow wrapped in FrontMcpContext.
+   * This ensures ALL stages have access to the context via AsyncLocalStorage.
+   *
+   * @param storage - FrontMcpContextStorage instance
+   * @param request - The HTTP request
+   * @param input - Flow input
+   * @param deps - Flow dependencies
+   * @returns Flow output or undefined
+   */
+  private async runWithContext(
+    storage: FrontMcpContextStorage | undefined,
+    request: ServerRequest,
+    input: FlowInputOf<Name>,
+    deps: Map<Token, Type>,
+  ): Promise<FlowOutputOf<Name> | undefined> {
+    // If no storage available, run without context (backward compatibility)
+    if (!storage) {
+      return this.run(input, deps);
+    }
+
+    // Extract context parameters from request
+    const headers = (request.headers ?? {}) as Record<string, unknown>;
+    // Generate unique ID for anonymous sessions to prevent session collision
+    // All unauthenticated requests previously shared 'anonymous', causing data leakage
+    // Handle empty strings explicitly: '' ?? 'fallback' returns '', not 'fallback'
+    const headerSessionId = typeof headers['mcp-session-id'] === 'string' ? headers['mcp-session-id'].trim() : '';
+    const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
+    const scope = this.globalProviders.getActiveScope();
+
+    // Wrap ENTIRE flow execution in AsyncLocalStorage context
+    return storage.runFromHeaders(
+      headers,
+      {
+        sessionId,
+        scopeId: scope.id,
+      },
+      async () => {
+        return this.run(input, deps);
+      },
+    );
+  }
+
   async run(input: FlowInputOf<Name>, deps: Map<Token, Type>): Promise<FlowOutputOf<Name> | undefined> {
     const scope = this.globalProviders.getActiveScope();
     const { FlowClass, plan, name } = this;
+
+    // Build provider views for scoped DI
+    // This enables CONTEXT scoped providers to be resolved
+    const contextStorage = this.getContextStorage();
+    const currentContext = contextStorage?.getStore();
+    // Get session ID from context - should always be available since runWithContext wraps the entire flow
+    // If unavailable, it indicates a bug in context propagation (not a normal case)
+    const sessionKey = currentContext?.sessionId;
+    if (!sessionKey) {
+      // This should never happen since runWithContext wraps the entire flow execution
+      // If we reach here, there's a bug in context propagation
+      throw new RequestContextNotAvailableError(
+        'FrontMcpContext unavailable - session ID required for provider resolution. Ensure flow is wrapped with runWithContext.',
+      );
+    }
+
+    // Build views with current context if available
+    const views = await this.globalProviders.buildViews(
+      sessionKey,
+      currentContext ? new Map([[FRONTMCP_CONTEXT, currentContext]]) : undefined,
+    );
+
+    // Merge context-scoped providers into deps for resolution by FlowClass
+    const mergedDeps = new Map(deps);
+    for (const [token, instance] of views.context) {
+      mergedDeps.set(token, instance as Type);
+    }
 
     // Clone stages so we can merge injections safely per run.
     const baseStages = this.stages;
@@ -148,7 +244,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         FlowCtxOf<Name>
       >[]) ?? [];
 
-    let context: any;
+    // FlowClass generic type is erased at runtime, so we use FlowBase<any>
+    // to avoid complex type gymnastics while maintaining basic type safety
+    let context: FlowBase<any>;
     let contextReady = false;
 
     const materializeAndMerge = async (
@@ -184,8 +282,8 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       await materializeAndMerge(hooks);
     };
 
-    // Construct flow instance
-    context = new FlowClass(this.metadata, input, scope, appendContextHooks, deps);
+    // Construct flow instance with merged dependencies (includes scoped providers)
+    context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize
     contextReady = true;
