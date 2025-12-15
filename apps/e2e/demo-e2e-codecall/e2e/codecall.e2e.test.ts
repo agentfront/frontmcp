@@ -182,9 +182,9 @@ test.describe('CodeCall Plugin E2E', () => {
       expect(result).toBeSuccessful();
       const execResult = result.json<CodeCallExecuteResult<{ users: typeof SEED_USERS; count: number }>>();
       expect(execResult.status).toBe('ok');
-      expect(execResult.result).toBeDefined();
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const data = execResult.result!;
+      const data = execResult.result;
       expect(data.count).toBe(3);
       expect(data.users).toHaveLength(3);
       expect(data.users[0].name).toBe('John Doe');
@@ -204,8 +204,9 @@ test.describe('CodeCall Plugin E2E', () => {
       expect(result).toBeSuccessful();
       const execResult = result.json<CodeCallExecuteResult<typeof SEED_ACTIVITY_STATS>>();
       expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const stats = execResult.result!;
+      const stats = execResult.result;
       expect(stats.total).toBe(3);
       expect(stats.byType.call).toBe(1);
       expect(stats.byType.email).toBe(1);
@@ -231,8 +232,9 @@ test.describe('CodeCall Plugin E2E', () => {
       const execResult =
         result.json<CodeCallExecuteResult<{ userCount: number; totalActivities: number; userNames: string[] }>>();
       expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const data = execResult.result!;
+      const data = execResult.result;
       expect(data.userCount).toBe(3);
       expect(data.totalActivities).toBe(3);
       expect(data.userNames).toContain('John Doe');
@@ -251,8 +253,9 @@ test.describe('CodeCall Plugin E2E', () => {
       expect(result).toBeSuccessful();
       const execResult = result.json<CodeCallExecuteResult<{ user: (typeof SEED_USERS)[0] }>>();
       expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const data = execResult.result!;
+      const data = execResult.result;
       expect(data.user.id).toBe('user-1');
       expect(data.user.name).toBe('John Doe');
       expect(data.user.company).toBe('Acme Inc');
@@ -279,8 +282,9 @@ test.describe('CodeCall Plugin E2E', () => {
         }>
       >();
       expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const data = execResult.result!;
+      const data = execResult.result;
       expect(data.user.name).toBe('Test User');
       expect(data.user.email).toBe('test@example.com');
       expect(data.user.company).toBe('Test Corp');
@@ -305,8 +309,9 @@ test.describe('CodeCall Plugin E2E', () => {
         }>
       >();
       expect(execResult.status).toBe('ok');
+      if (!execResult.result) throw new Error('Expected result to be defined');
 
-      const data = execResult.result!;
+      const data = execResult.result;
       expect(data.count).toBe(2); // user-1 has 2 activities in seed data
       expect(data.activities.every((a) => a.userId === 'user-1')).toBe(true);
     });

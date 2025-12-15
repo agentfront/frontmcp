@@ -20,7 +20,7 @@ const outputSchema = z.object({
   createdAt: z.string(),
 });
 
-type CreateTaskInput = z.infer<z.ZodObject<typeof inputSchema>>;
+type CreateTaskInput = z.infer<typeof inputSchema>;
 type CreateTaskOutput = z.infer<typeof outputSchema>;
 
 @Tool({

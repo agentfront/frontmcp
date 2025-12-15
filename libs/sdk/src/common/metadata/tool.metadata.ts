@@ -155,7 +155,7 @@ export type ToolSingleOutputType =
  * Default default tool schema is {}
  */
 export type ToolOutputType = ToolSingleOutputType | ToolSingleOutputType[] | undefined;
-export type ToolInputType = z.ZodRawShape;
+export type ToolInputType = z.ZodRawShape | z.ZodObject<any>;
 
 /**
  * Declarative metadata describing what an McpTool contributes.

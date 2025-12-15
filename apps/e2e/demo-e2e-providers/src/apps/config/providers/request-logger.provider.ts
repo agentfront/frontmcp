@@ -59,9 +59,10 @@ export const RequestLoggerProvider = AsyncProvider({
   provide: REQUEST_LOGGER_TOKEN,
   scope: ProviderScope.CONTEXT,
   inject: () => [FRONTMCP_CONTEXT] as const,
-  useFactory: async (ctx: FrontMcpContext): Promise<RequestLogger> => {
-    const requestId = ctx.requestId || 'unknown';
-    const sessionId = ctx.sessionId || 'unknown';
+  useFactory: async (ctx): Promise<RequestLogger> => {
+    const frontMcpContext = ctx as FrontMcpContext;
+    const requestId = frontMcpContext.requestId || 'unknown';
+    const sessionId = frontMcpContext.sessionId || 'unknown';
     return new RequestLoggerImpl(requestId, sessionId);
   },
 });

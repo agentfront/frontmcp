@@ -16,7 +16,7 @@ const outputSchema = z.object({
   logId: z.string(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({
@@ -28,9 +28,9 @@ type Output = z.infer<typeof outputSchema>;
 export default class TriggerProgressTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: Input): Promise<Output> {
     // Send log message notification
-    this.scope.notifications.sendLogMessage(input.level, 'notify-app', {
+    this.scope.notifications.sendLogMessage(input.level ?? 'info', 'notify-app', {
       message: input.message,
-      ...input.data,
+      ...(input.data ?? {}),
     });
 
     // Log the notification locally

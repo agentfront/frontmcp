@@ -1,6 +1,18 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
+/**
+ * Escape HTML special characters to prevent XSS
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 const inputSchema = z
   .object({
     title: z.string().describe('Card title'),
@@ -15,7 +27,7 @@ const outputSchema = z.object({
   title: z.string(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({
@@ -49,7 +61,7 @@ export default class HtmlCardTool extends ToolContext<typeof inputSchema, typeof
   async execute(input: Input): Promise<Output> {
     return {
       uiType: 'html',
-      html: `<div class="card">${this.helpers.escapeHtml(input.title)}</div>`,
+      html: `<div class="card">${escapeHtml(input.title)}</div>`,
       title: input.title,
     };
   }

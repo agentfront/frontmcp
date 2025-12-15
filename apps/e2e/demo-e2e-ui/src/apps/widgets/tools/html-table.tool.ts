@@ -16,7 +16,7 @@ const outputSchema = z.object({
   columnCount: z.number(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({
@@ -27,7 +27,7 @@ type Output = z.infer<typeof outputSchema>;
   ui: {
     uiType: 'html',
     template: (ctx) => {
-      const { headers, rows, title } = ctx.output as unknown as { headers: string[]; rows: string[][]; title?: string };
+      const { headers, rows, title } = ctx.input as unknown as { headers: string[]; rows: string[][]; title?: string };
       const escapeHtml = ctx.helpers.escapeHtml;
 
       const headerCells = headers

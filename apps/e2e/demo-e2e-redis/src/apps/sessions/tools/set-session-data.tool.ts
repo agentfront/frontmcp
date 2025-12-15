@@ -1,6 +1,5 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
 import { getSessionStore } from '../data/session.store';
 
 const inputSchema = z
@@ -24,8 +23,9 @@ const outputSchema = z.object({
   outputSchema,
 })
 export default class SetSessionDataTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: z.infer<z.ZodObject<typeof inputSchema>>): Promise<z.infer<typeof outputSchema>> {
-    const sessionId = 'mock-session-' + randomUUID();
+  async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
+    // Use shared context session ID so data persists across tool calls
+    const sessionId = this.authInfo.sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 
     store.set(input.key, input.value, input.ttlSeconds);

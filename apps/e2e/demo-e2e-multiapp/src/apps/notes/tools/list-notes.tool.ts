@@ -2,11 +2,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { noteStore } from '../data/note.store';
 
-const inputSchema = z
-  .object({
-    _dummy: z.string().optional().describe('Unused parameter'),
-  })
-  .strict();
+const inputSchema = z.object({}).strict();
 
 const outputSchema = z.object({
   notes: z.array(
@@ -20,7 +16,7 @@ const outputSchema = z.object({
   count: z.number(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

@@ -2,18 +2,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { executionTracker } from '../data/execution-tracker';
 
-const inputSchema = z
-  .object({
-    _dummy: z.string().optional().describe('Unused'),
-  })
-  .strict();
+const inputSchema = z.object({}).strict();
 
 const outputSchema = z.object({
   executionCounts: z.record(z.string(), z.number()),
   message: z.string(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

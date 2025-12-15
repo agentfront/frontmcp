@@ -2,18 +2,14 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { auditLog } from '../data/audit-log';
 
-const inputSchema = z
-  .object({
-    _dummy: z.string().optional().describe('Unused'),
-  })
-  .strict();
+const inputSchema = z.object({}).strict();
 
 const outputSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({

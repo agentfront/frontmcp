@@ -30,7 +30,7 @@ const outputSchema = z.object({
   fieldCount: z.number(),
 });
 
-type Input = z.infer<z.ZodObject<typeof inputSchema>>;
+type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
 
 @Tool({
@@ -41,6 +41,9 @@ type Output = z.infer<typeof outputSchema>;
   ui: {
     uiType: 'react',
     template: (ctx) => {
+      if (!ctx.output || !ctx.input) {
+        throw new Error('Template context is missing required properties');
+      }
       const { fields } = ctx.output as unknown as Output;
       const submitLabel = (ctx.input as unknown as Input).submitLabel || 'Submit';
 
