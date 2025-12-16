@@ -1,12 +1,11 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-config.provider.test.ts
 
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import { BaseConfig } from '../../../../sdk/src/common/providers/base-config.provider';
-import { codeCallPluginOptionsSchema, CodeCallPluginOptions } from '../codecall.types';
+import { BaseConfig } from '@frontmcp/sdk';
+import { codeCallPluginOptionsSchema, CodeCallPluginOptions, CodeCallPluginOptionsInput } from '../codecall.types';
 
 // Create a test implementation that extends BaseConfig (without decorator for testing)
 class CodeCallConfigProvider extends BaseConfig<CodeCallPluginOptions> {
-  constructor(options: Partial<CodeCallPluginOptions> = {}) {
+  constructor(options: CodeCallPluginOptionsInput = {}) {
     const parsedConfig = codeCallPluginOptionsSchema.parse(options);
     super(parsedConfig);
   }

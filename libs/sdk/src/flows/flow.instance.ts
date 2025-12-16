@@ -418,7 +418,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           } finally {
             await runFinalizeStage();
           }
-          if (post.outcome === 'fail') throw post.control!;
           throw post.control!;
         }
         if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
@@ -434,7 +433,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        if (pre.outcome === 'fail') throw pre.control!;
         throw pre.control!;
       }
       if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
@@ -454,7 +452,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        if (exec.outcome === 'fail') throw exec.control!;
         throw exec.control!;
       } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
         await runFinalizeStage();
@@ -471,7 +468,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        if (post.outcome === 'fail') throw post.control!;
         throw post.control!;
       }
       if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {

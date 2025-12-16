@@ -173,26 +173,26 @@ export const codeCallEmbeddingOptionsSchema = z
      * - 'ml': ML-based semantic search using transformers.js (better quality, requires model download)
      * @default 'tfidf'
      */
-    strategy: embeddingStrategySchema,
+    strategy: embeddingStrategySchema.optional(),
 
     /**
      * Model name for ML-based embeddings (only used when strategy='ml')
      * @default 'Xenova/all-MiniLM-L6-v2'
      */
-    modelName: z.string().default('Xenova/all-MiniLM-L6-v2'),
+    modelName: z.string().optional(),
 
     /**
      * Cache directory for ML models (only used when strategy='ml')
      * @default './.cache/transformers'
      */
-    cacheDir: z.string().default('./.cache/transformers'),
+    cacheDir: z.string().optional(),
 
     /**
      * Enable HNSW index for faster search (only used when strategy='ml')
      * When enabled, provides O(log n) search instead of O(n) brute-force
      * @default false
      */
-    useHNSW: z.boolean().default(false),
+    useHNSW: z.boolean().optional(),
 
     /**
      * Synonym expansion configuration for TF-IDF search.
@@ -201,12 +201,16 @@ export const codeCallEmbeddingOptionsSchema = z
      * Set to false to disable, or provide a config object to customize.
      * @default { enabled: true }
      */
-    synonymExpansion: z
-      .union([z.literal(false), synonymExpansionConfigSchema])
-      .optional()
-      .default({ enabled: true, replaceDefaults: false, maxExpansionsPerTerm: 5 }),
+    synonymExpansion: z.union([z.literal(false), synonymExpansionConfigSchema]).optional(),
   })
-  .default(DEFAULT_EMBEDDING_OPTIONS);
+  .optional()
+  .transform((opts) => ({
+    strategy: opts?.strategy ?? DEFAULT_EMBEDDING_OPTIONS.strategy,
+    modelName: opts?.modelName ?? DEFAULT_EMBEDDING_OPTIONS.modelName,
+    cacheDir: opts?.cacheDir ?? DEFAULT_EMBEDDING_OPTIONS.cacheDir,
+    useHNSW: opts?.useHNSW ?? DEFAULT_EMBEDDING_OPTIONS.useHNSW,
+    synonymExpansion: opts?.synonymExpansion ?? DEFAULT_EMBEDDING_OPTIONS.synonymExpansion,
+  }));
 
 export const codeCallSidecarOptionsSchema = z
   .object({

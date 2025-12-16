@@ -2,6 +2,7 @@
 
 import SearchTool from '../tools/search.tool';
 import type { SearchToolOutput } from '../tools/search.schema';
+import { searchToolInputSchema } from '../tools/search.schema';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
@@ -529,8 +530,6 @@ describe('SearchTool', () => {
   describe('Input Schema Validation', () => {
     // Note: The SDK's Tool decorator handles input validation at runtime.
     // These tests validate the schema directly since the mock bypasses the decorator.
-
-    const { searchToolInputSchema } = require('../tools/search.schema');
 
     it('should reject query string below minimum length', () => {
       const result = searchToolInputSchema.safeParse({
