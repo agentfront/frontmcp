@@ -499,11 +499,11 @@ describe('getOutputModeForClient', () => {
     expect(getOutputModeForClient({ name: 'Cursor' })).toBe('code-only');
   });
 
-  it('should return full-ssr for Claude (sandboxed artifacts block external network)', () => {
-    expect(getOutputModeForClient({ name: 'Claude' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'claude-desktop' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'Claude Desktop' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'Anthropic Claude' })).toBe('full-ssr');
+  it('should return dual-payload for Claude (JSON + markdown-wrapped HTML)', () => {
+    expect(getOutputModeForClient({ name: 'Claude' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'claude-desktop' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'Claude Desktop' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'Anthropic Claude' })).toBe('dual-payload');
   });
 
   it('should return full-ssr for unknown clients', () => {

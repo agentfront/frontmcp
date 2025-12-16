@@ -80,6 +80,7 @@ export type TemplateBuilderFn<In, Out> = (ctx: TemplateContext<In, Out>) => stri
  * Widget serving mode determines how the widget HTML is delivered to the client.
  */
 export type WidgetServingMode =
+  | 'auto' // Automatically select based on client capabilities (default)
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, via ui:// resource URI (MCP resources/read)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response

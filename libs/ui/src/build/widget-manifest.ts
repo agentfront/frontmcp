@@ -842,13 +842,12 @@ export function getOutputModeForClient(clientInfo?: {
     return 'code-only';
   }
 
-  // Claude: Sandboxed artifacts block external network requests
-  // - Cannot load scripts from CDN
-  // - Cannot load stylesheets from CDN
-  // - Cannot make fetch/XHR requests to external URLs
-  // Must embed everything in the HTML document
+  // Claude: Uses dual-payload format for Artifacts
+  // - Block 0: Pure JSON stringified data (for programmatic parsing)
+  // - Block 1: Markdown-wrapped HTML (```html...```) for visual rendering
+  // - Uses Cloudflare CDN (cdnjs.cloudflare.com) which is trusted by Claude sandbox
   if (name.includes('claude')) {
-    return 'full-ssr';
+    return 'dual-payload';
   }
 
   // Default to full SSR for unknown clients

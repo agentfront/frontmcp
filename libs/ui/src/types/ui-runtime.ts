@@ -138,6 +138,11 @@ export type ResourceMode = 'cdn' | 'inline';
  *   Self-contained output for limited/unknown MCP clients.
  *   Includes FrontMCP Bridge, scripts, and all necessary runtime.
  *
+ * - `'dual-payload'`: Return TWO TextContent blocks for Claude Artifacts.
+ *   Block 0: Pure JSON stringified data (for programmatic parsing).
+ *   Block 1: Markdown-wrapped HTML (```html...```) for visual rendering.
+ *   Uses cloudflare CDN for all resources (Claude sandbox restriction).
+ *
  * @example
  * ```typescript
  * // For OpenAI - just return the rendered content
@@ -157,9 +162,21 @@ export type ResourceMode = 'cdn' | 'inline';
  *   output: { temperature: 72 },
  * });
  * // result.html = '<!DOCTYPE html>...'
+ *
+ * // For Claude - return dual-payload
+ * const result = await buildWidgetOutput({
+ *   uiConfig,
+ *   toolName: 'weather',
+ *   outputMode: 'dual-payload',
+ *   output: { temperature: 72 },
+ * });
+ * // result.content = [
+ * //   { type: 'text', text: '{"temperature":72}' },
+ * //   { type: 'text', text: 'Here is the weather:\n\n```html\n<!DOCTYPE html>...\n```' }
+ * // ]
  * ```
  */
-export type OutputMode = 'code-only' | 'full-ssr';
+export type OutputMode = 'code-only' | 'full-ssr' | 'dual-payload';
 
 /**
  * Display mode for widget presentation.

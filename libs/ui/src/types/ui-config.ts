@@ -110,8 +110,26 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
 
 /**
  * Widget serving mode determines how the widget HTML is delivered to the client.
+ *
+ * - `'auto'` (default): Automatically select mode based on client capabilities.
+ *   For OpenAI/ext-apps: uses 'inline'. For Claude: uses 'inline' with dual-payload.
+ *   For unsupported clients (e.g., Gemini): skips UI entirely (returns JSON only).
+ *
+ * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
+ *   Works on all platforms including network-blocked ones.
+ *
+ * - `'static'`: Pre-compiled at startup, resolved via `tools/list` (ui:// resource URI).
+ *   Widget is fetched via MCP `resources/read`.
+ *
+ * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
+ *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
+ *
+ * - `'direct-url'`: HTTP endpoint on MCP server.
+ *
+ * - `'custom-url'`: Custom URL (CDN or external hosting).
  */
 export type WidgetServingMode =
+  | 'auto' // Automatically select based on client capabilities (default)
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
@@ -224,7 +242,12 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * How the widget HTML should be served to the client.
    *
-   * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`
+   * - `'auto'` (default): Automatically select mode based on client capabilities.
+   *   For OpenAI/ext-apps clients: uses `'inline'` with `_meta`.
+   *   For Claude clients: uses `'inline'` with dual-payload format.
+   *   For unsupported clients (Gemini, unknown): skips UI (returns JSON only).
+   *
+   * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
    *   Best for small widgets, works on all platforms including network-blocked ones.
    *
    * - `'static'`: Widget pre-compiled at server startup, registered as MCP resource with `ui://` URI.
@@ -240,7 +263,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'custom-url'`: Served from a custom URL (CDN, external hosting).
    *   Requires `customWidgetUrl` to be set.
    *
-   * Default: `'inline'`
+   * @default 'auto'
    */
   servingMode?: WidgetServingMode;
 
@@ -419,6 +442,41 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
       highlightTheme?: string;
     };
   };
+
+  // ============================================
+  // Dual-Payload Options (Claude Artifacts)
+  // ============================================
+
+  /**
+   * Prefix text shown before HTML in dual-payload responses (Claude).
+   *
+   * When the output mode is `'dual-payload'` (auto-detected for Claude clients),
+   * the tool response contains two TextContent blocks:
+   * 1. Pure JSON data: `{"temperature": 72, ...}`
+   * 2. Markdown-wrapped HTML: `{prefix}:\n\n```html\n<!DOCTYPE html>...\n```
+   *
+   * This field controls the prefix text in block 2.
+   *
+   * @default 'Here is the visual result'
+   *
+   * @example
+   * ```typescript
+   * // Weather tool
+   * ui: {
+   *   template: WeatherWidget,
+   *   htmlResponsePrefix: 'Here is the weather dashboard',
+   * }
+   * // Output block 2: "Here is the weather dashboard:\n\n```html\n..."
+   *
+   * // Stock tool
+   * ui: {
+   *   template: StockWidget,
+   *   htmlResponsePrefix: 'Here is the stock information',
+   * }
+   * // Output block 2: "Here is the stock information:\n\n```html\n..."
+   * ```
+   */
+  htmlResponsePrefix?: string;
 }
 
 /**

@@ -651,6 +651,8 @@ export {
   HANDLEBARS_CDN,
   MDX_RUNTIME_CDN,
   TAILWIND_CDN,
+  // Cloudflare CDN (Claude-compatible)
+  CLOUDFLARE_CDN,
   // Helper Functions
   getDefaultAssets,
   buildCDNScriptTag,
@@ -658,8 +660,12 @@ export {
   buildTailwindScriptTag,
   hasInlineScripts,
   getURLsToPreFetch,
+  // Platform-aware Tailwind
+  getTailwindForPlatform,
+  buildCloudflareStylesheetTag,
+  buildCloudflareScriptTag,
   // CDN Info for tools/list _meta
   buildCDNInfoForUIType,
 } from './cdn-resources';
 
-export type { CDNInfo } from './cdn-resources';
+export type { CDNInfo, CDNPlatform } from './cdn-resources';
