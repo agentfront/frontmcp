@@ -146,12 +146,11 @@ jobs:
         with:
           name: dist
 
+      - name: Set Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
       - name: Run E2E tests (batch 1)
-        run: |
-          npx jest apps/e2e/demo-e2e-public --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-transparent --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-openapi --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-codecall --runInBand --no-cache
+        run: npx nx run-many -t test --projects=demo-e2e-public,demo-e2e-transparent,demo-e2e-openapi,demo-e2e-codecall
 
   e2e-batch-2:
     needs: [setup, build]
@@ -178,12 +177,11 @@ jobs:
         with:
           name: dist
 
+      - name: Set Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
       - name: Run E2E tests (batch 2)
-        run: |
-          npx jest apps/e2e/demo-e2e-redis --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-providers --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-cache --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-ui --runInBand --no-cache
+        run: npx nx run-many -t test --projects=demo-e2e-redis,demo-e2e-providers,demo-e2e-cache,demo-e2e-ui
 
   e2e-batch-3:
     needs: [setup, build]
@@ -210,10 +208,8 @@ jobs:
         with:
           name: dist
 
+      - name: Set Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
       - name: Run E2E tests (batch 3)
-        run: |
-          npx jest apps/e2e/demo-e2e-hooks --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-errors --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-notifications --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-serverless --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-multiapp --runInBand --no-cache
+        run: npx nx run-many -t test --projects=demo-e2e-hooks,demo-e2e-errors,demo-e2e-notifications,demo-e2e-serverless,demo-e2e-multiapp
