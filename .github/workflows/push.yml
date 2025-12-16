@@ -146,10 +146,10 @@ jobs:
 
       - name: Run E2E tests (batch 1)
         run: |
-          npx jest apps/e2e/demo-e2e-public --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-transparent --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-openapi --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-codecall --runInBand --no-cache
+          npx jest apps/e2e/demo-e2e-public --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-transparent --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-openapi --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-codecall --runInBand --no-cache --forceExit
 
   e2e-batch-2:
     needs: [setup, build]
@@ -178,10 +178,10 @@ jobs:
 
       - name: Run E2E tests (batch 2)
         run: |
-          npx jest apps/e2e/demo-e2e-redis --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-providers --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-cache --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-ui --runInBand --no-cache
+          npx jest apps/e2e/demo-e2e-redis --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-providers --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-cache --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-ui --runInBand --no-cache --forceExit
 
   e2e-batch-3:
     needs: [setup, build]
@@ -210,8 +210,8 @@ jobs:
 
       - name: Run E2E tests (batch 3)
         run: |
-          npx jest apps/e2e/demo-e2e-hooks --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-errors --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-notifications --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-serverless --runInBand --no-cache
-          npx jest apps/e2e/demo-e2e-multiapp --runInBand --no-cache
+          npx jest apps/e2e/demo-e2e-hooks --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-errors --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-notifications --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-serverless --runInBand --no-cache --forceExit
+          npx jest apps/e2e/demo-e2e-multiapp --runInBand --no-cache --forceExit
