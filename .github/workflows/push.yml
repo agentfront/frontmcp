@@ -9,6 +9,7 @@ concurrency:
 jobs:
   # Shared setup job that other jobs can reference
   setup:
+    name: "Setup"
     runs-on: ubuntu-latest
     outputs:
       node-version: ${{ steps.node-version.outputs.version }}
@@ -22,6 +23,7 @@ jobs:
 
   # Lint and format checks (fast, independent)
   lint:
+    name: "Lint & Format Checks"
     needs: setup
     runs-on: ubuntu-latest
     env:
@@ -53,6 +55,7 @@ jobs:
 
   # Build all libraries
   build:
+    name: "Build Libraries"
     needs: setup
     runs-on: ubuntu-latest
     env:
@@ -89,6 +92,7 @@ jobs:
 
   # Unit tests (depends on build)
   unit-tests:
+    name: "Unit Tests"
     needs: [setup, build]
     runs-on: ubuntu-latest
     env:
@@ -121,6 +125,7 @@ jobs:
 
   # E2E tests - matrix strategy for parallelization
   e2e-tests:
+    name: "E2E Tests (${{ matrix.project }})"
     needs: [setup, build]
     runs-on: ubuntu-latest
     strategy:
