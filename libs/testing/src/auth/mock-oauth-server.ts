@@ -70,6 +70,7 @@ export class MockOAuthServer {
   private readonly options: MockOAuthServerOptions;
   private server: Server | null = null;
   private _info: MockOAuthServerInfo | null = null;
+  private connections: Set<import('net').Socket> = new Set();
 
   constructor(tokenFactory: TestTokenFactory, options: MockOAuthServerOptions = {}) {
     this.tokenFactory = tokenFactory;
@@ -88,6 +89,12 @@ export class MockOAuthServer {
 
     return new Promise((resolve, reject) => {
       this.server = createServer(this.handleRequest.bind(this));
+
+      // Track connections for proper cleanup
+      this.server.on('connection', (socket) => {
+        this.connections.add(socket);
+        socket.on('close', () => this.connections.delete(socket));
+      });
 
       this.server.on('error', (err) => {
         this.log(`Server error: ${err.message}`);
@@ -124,6 +131,12 @@ export class MockOAuthServer {
     if (!this.server) {
       return;
     }
+
+    // Destroy all active connections to allow server.close() to complete
+    for (const socket of this.connections) {
+      socket.destroy();
+    }
+    this.connections.clear();
 
     return new Promise((resolve, reject) => {
       this.server!.close((err) => {

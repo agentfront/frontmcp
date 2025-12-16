@@ -6,6 +6,7 @@ const config: Config.InitialOptions = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/e2e/**/*.e2e.test.ts'],
   testTimeout: 60000,
+  forceExit: true,
   maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/../../../libs/testing/src/setup.ts'],
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
