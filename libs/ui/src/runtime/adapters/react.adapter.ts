@@ -14,7 +14,7 @@ import type { UIType } from '../../types/ui-runtime';
  * React runtime interface.
  * Uses permissive types to support various React versions.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 interface ReactRuntime {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   createElement: (...args: any[]) => any;
@@ -26,7 +26,7 @@ interface ReactRuntime {
  * ReactDOM runtime interface.
  * Uses permissive types to support React 17 and 18+.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 interface ReactDOMRuntime {
   createRoot?: (container: Element) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

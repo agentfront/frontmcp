@@ -29,7 +29,7 @@ export function createHookMetadata(overrides: Partial<HookMetadata> = {}): HookM
 /**
  * Creates a "will" stage hook metadata
  */
-export function createWillHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
+export function createWillHookMetadata(flow = 'CallToolFlow', stage = 'execute'): HookMetadata {
   return {
     type: 'will',
     flow: flow as any,
@@ -43,7 +43,7 @@ export function createWillHookMetadata(flow: string = 'CallToolFlow', stage: str
 /**
  * Creates a "did" stage hook metadata
  */
-export function createDidHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
+export function createDidHookMetadata(flow = 'CallToolFlow', stage = 'execute'): HookMetadata {
   return {
     type: 'did',
     flow: flow as any,
@@ -57,7 +57,7 @@ export function createDidHookMetadata(flow: string = 'CallToolFlow', stage: stri
 /**
  * Creates an "around" stage hook metadata
  */
-export function createAroundHookMetadata(flow: string = 'CallToolFlow', stage: string = 'execute'): HookMetadata {
+export function createAroundHookMetadata(flow = 'CallToolFlow', stage = 'execute'): HookMetadata {
   return {
     type: 'around',
     flow: flow as any,

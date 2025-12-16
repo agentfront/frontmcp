@@ -199,7 +199,7 @@ export class PendingMetadataRegistry<T> {
   /**
    * Resolve all pending metadata for a class by scanning its prototype and static members
    */
-  resolveForClass(ctor: Function, consume: boolean = true): T[] {
+  resolveForClass(ctor: Function, consume = true): T[] {
     const resolved: T[] = [];
 
     // Scan instance methods on prototype

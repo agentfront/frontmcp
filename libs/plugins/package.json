@@ -35,9 +35,9 @@
   "dependencies": {
     "ioredis": "^5.8.0",
     "@frontmcp/sdk": "0.5.1",
-    "ast-guard": "^1.1.1",
     "enclave-vm": "^1.0.3",
     "vectoriadb": "^2.0.1",
-    "piscina": "^4.7.0"
+    "zod": "^4.0.0",
+    "@modelcontextprotocol/sdk": "1.24.3"
   }
 }

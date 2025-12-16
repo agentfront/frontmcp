@@ -1,7 +1,8 @@
 import { Session, type BaseCreateCtx } from './session.base';
 import { TokenVault } from '../token.vault';
+import { InternalMcpError } from '../../../errors/mcp.error';
 
-export type StatefulCreateCtx = BaseCreateCtx & {};
+export type StatefulCreateCtx = BaseCreateCtx & Record<string, never>;
 
 /**
  * Represents a **stateful session (non-refreshable)** where nested OAuth
@@ -18,12 +19,13 @@ export class StatelessSession extends Session {
    * Used to encrypt/decrypt nested provider tokens in #store.
    * @private
    */
+  // eslint-disable-next-line no-unused-private-class-members
   #vault: TokenVault;
   constructor(ctx: StatefulCreateCtx) {
-    super(ctx as any);
-    throw new Error('Method not implemented.');
+    super(ctx as BaseCreateCtx);
+    throw new InternalMcpError('StatelessSession not yet implemented', 'NOT_IMPLEMENTED');
   }
-  override getToken(providerId?: string): Promise<string> | string {
-    throw new Error('Method not implemented.');
+  override getToken(_providerId?: string): Promise<string> | string {
+    throw new InternalMcpError('Token refresh not supported in stateless mode', 'NOT_IMPLEMENTED');
   }
 }

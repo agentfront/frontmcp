@@ -9,6 +9,7 @@ concurrency:
 jobs:
   # Shared setup job that other jobs can reference
   setup:
+    name: "Setup"
     runs-on: ubuntu-latest
     outputs:
       node-version: ${{ steps.node-version.outputs.version }}
@@ -22,6 +23,7 @@ jobs:
 
   # Lint and format checks (fast, independent)
   lint:
+    name: "Lint & Format Checks"
     needs: setup
     runs-on: ubuntu-latest
     env:
@@ -46,7 +48,6 @@ jobs:
 
       - name: Run linter
         run: npx nx affected -t lint
-        continue-on-error: true
 
       - name: Run prettier
         run: npx prettier --check .
@@ -54,6 +55,7 @@ jobs:
 
   # Build all libraries
   build:
+    name: "Build Libraries"
     needs: setup
     runs-on: ubuntu-latest
     env:
@@ -90,6 +92,7 @@ jobs:
 
   # Unit tests (depends on build)
   unit-tests:
+    name: "Unit Tests"
     needs: [setup, build]
     runs-on: ubuntu-latest
     env:
@@ -120,10 +123,28 @@ jobs:
       - name: Run unit tests
         run: npx nx affected -t test --passWithNoTests --exclude='demo-e2e-*'
 
-  # E2E tests - split into batches for parallelization
-  e2e-batch-1:
+  # E2E tests - matrix strategy for parallelization
+  e2e-tests:
+    name: "E2E Tests (${{ matrix.project }})"
     needs: [setup, build]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - demo-e2e-public
+          - demo-e2e-transparent
+          - demo-e2e-openapi
+          - demo-e2e-codecall
+          - demo-e2e-redis
+          - demo-e2e-providers
+          - demo-e2e-cache
+          - demo-e2e-ui
+          - demo-e2e-hooks
+          - demo-e2e-errors
+          - demo-e2e-notifications
+          - demo-e2e-serverless
+          - demo-e2e-multiapp
     env:
       NX_DAEMON: "false"
     steps:
@@ -149,67 +170,5 @@ jobs:
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
-      - name: Run E2E tests (batch 1)
-        run: npx nx run-many -t test --projects=demo-e2e-public,demo-e2e-transparent,demo-e2e-openapi,demo-e2e-codecall
-
-  e2e-batch-2:
-    needs: [setup, build]
-    runs-on: ubuntu-latest
-    env:
-      NX_DAEMON: "false"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-
-      - name: Set Nx SHAs
-        uses: nrwl/nx-set-shas@v4
-
-      - name: Run E2E tests (batch 2)
-        run: npx nx run-many -t test --projects=demo-e2e-redis,demo-e2e-providers,demo-e2e-cache,demo-e2e-ui
-
-  e2e-batch-3:
-    needs: [setup, build]
-    runs-on: ubuntu-latest
-    env:
-      NX_DAEMON: "false"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ needs.setup.outputs.node-version }}
-          cache: "yarn"
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-
-      - name: Set Nx SHAs
-        uses: nrwl/nx-set-shas@v4
-
-      - name: Run E2E tests (batch 3)
-        run: npx nx run-many -t test --projects=demo-e2e-hooks,demo-e2e-errors,demo-e2e-notifications,demo-e2e-serverless,demo-e2e-multiapp
+      - name: Run E2E tests (${{ matrix.project }})
+        run: npx nx run ${{ matrix.project }}:test

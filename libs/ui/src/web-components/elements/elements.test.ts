@@ -41,7 +41,7 @@ class MockCustomEvent<T = unknown> {
  */
 class MockHTMLElement {
   private _attributes: Map<string, string> = new Map();
-  private _innerHTML: string = '';
+  private _innerHTML = '';
   private _eventListeners: Map<string, ((e: unknown) => void)[]> = new Map();
   firstElementChild: Element | null = null;
 
@@ -160,7 +160,7 @@ afterAll(() => {
  */
 function createElement<
   T extends { connectedCallback(): void; innerHTML: string; setAttribute(n: string, v: string): void },
->(ElementClass: new () => T, attributes: Record<string, string> = {}, content: string = ''): T {
+>(ElementClass: new () => T, attributes: Record<string, string> = {}, content = ''): T {
   const el = new ElementClass();
   (el as unknown as { innerHTML: string }).innerHTML = content;
 

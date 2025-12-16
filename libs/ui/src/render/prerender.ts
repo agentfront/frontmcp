@@ -23,6 +23,7 @@
  * @module @frontmcp/ui/render
  */
 
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./react-dom-static.d.ts" />
 import type { ReactElement } from 'react';
 
@@ -78,7 +79,7 @@ export async function renderToString(element: ReactElement): Promise<string> {
  */
 export function renderToStringSync(element: ReactElement): string {
   // Use dynamic require to handle optional react-dom dependency
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const ReactDOMServer = require('react-dom/server');
   return ReactDOMServer.renderToStaticMarkup(element);
 }

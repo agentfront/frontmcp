@@ -1,4 +1,3 @@
-/* eslint-disable */
 module.exports = {
   displayName: '@frontmcp/testing',
   preset: '../../jest.preset.js',

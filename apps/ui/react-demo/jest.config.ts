@@ -1,4 +1,3 @@
-/* eslint-disable */
 module.exports = {
   displayName: '@frontmcp/react-demo',
   preset: '../../../jest.preset.js',

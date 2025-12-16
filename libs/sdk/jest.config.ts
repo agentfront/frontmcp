@@ -1,4 +1,3 @@
-/* eslint-disable */
 const { readFileSync } = require('fs');
 
 // Reading the SWC compilation config for the spec files

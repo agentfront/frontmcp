@@ -117,7 +117,7 @@ export abstract class FmcpElement<TOptions> extends HTMLElementBase {
   protected _options: Partial<TOptions> = {};
 
   /** Content passed as children (captured on connect) */
-  protected _content: string = '';
+  protected _content = '';
 
   /** Whether component has been connected to DOM */
   private _connected = false;

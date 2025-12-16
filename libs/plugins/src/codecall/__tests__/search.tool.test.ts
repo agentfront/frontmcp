@@ -2,6 +2,8 @@
 
 import SearchTool from '../tools/search.tool';
 import type { SearchToolOutput } from '../tools/search.schema';
+import { searchToolInputSchema } from '../tools/search.schema';
+import { ToolSearchService } from '../services';
 
 // Mock the SDK
 jest.mock('@frontmcp/sdk', () => ({
@@ -44,7 +46,7 @@ describe('SearchTool', () => {
     jest.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tool = new (SearchTool as any)();
-    tool.setService(require('../services').ToolSearchService, mockSearchService);
+    tool.setService(ToolSearchService, mockSearchService);
 
     // Default mock implementations
     mockSearchService.hasTool.mockReturnValue(true);
@@ -529,8 +531,6 @@ describe('SearchTool', () => {
   describe('Input Schema Validation', () => {
     // Note: The SDK's Tool decorator handles input validation at runtime.
     // These tests validate the schema directly since the mock bypasses the decorator.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { searchToolInputSchema } = require('../tools/search.schema');
 
     it('should reject query string below minimum length', () => {
       const result = searchToolInputSchema.safeParse({

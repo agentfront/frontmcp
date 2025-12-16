@@ -47,7 +47,7 @@ class MockCustomEvent<T = unknown> {
  */
 class MockHTMLElement {
   private _attributes: Map<string, string> = new Map();
-  private _innerHTML: string = '';
+  private _innerHTML = '';
   private _eventListeners: Map<string, ((e: unknown) => void)[]> = new Map();
   firstElementChild: Element | null = null;
 
@@ -189,7 +189,7 @@ class TestElement extends FmcpElement<TestOptions> {
 /**
  * Helper to create and connect a test element
  */
-function createTestElement(attributes: Record<string, string> = {}, content: string = ''): TestElement {
+function createTestElement(attributes: Record<string, string> = {}, content = ''): TestElement {
   const el = new TestElement();
 
   // Set initial content

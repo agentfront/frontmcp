@@ -737,7 +737,6 @@ export default class ProviderRegistry
     this.sessionCleanupInterval = setInterval(() => {
       const cleaned = this.cleanupExpiredSessions();
       if (cleaned > 0) {
-        // eslint-disable-next-line no-console
         console.debug(`[ProviderRegistry] Cleaned up ${cleaned} expired sessions`);
       }
     }, ProviderRegistry.SESSION_CLEANUP_INTERVAL_MS);

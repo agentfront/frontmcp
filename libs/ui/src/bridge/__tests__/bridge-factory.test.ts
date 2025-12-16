@@ -80,15 +80,27 @@ class MockAdapter implements PlatformAdapter {
   async sendMessage(): Promise<void> {
     throw new Error('Not implemented');
   }
-  async openLink(): Promise<void> {}
-  async requestDisplayMode(): Promise<void> {}
-  async requestClose(): Promise<void> {}
-  setWidgetState(): void {}
+  async openLink(): Promise<void> {
+    /* noop */
+  }
+  async requestDisplayMode(): Promise<void> {
+    /* noop */
+  }
+  async requestClose(): Promise<void> {
+    /* noop */
+  }
+  setWidgetState(): void {
+    /* noop */
+  }
   onContextChange(): () => void {
-    return () => {};
+    return () => {
+      /* noop */
+    };
   }
   onToolResult(): () => void {
-    return () => {};
+    return () => {
+      /* noop */
+    };
   }
 }
 

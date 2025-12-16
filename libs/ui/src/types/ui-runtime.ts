@@ -674,7 +674,6 @@ export interface RuntimePayload {
 export type WidgetTemplate =
   | string
   | ((ctx: WidgetTemplateContext) => string)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | React.ComponentType<WidgetTemplateContext>;
 
 /**
@@ -1233,6 +1232,7 @@ export const DEFAULT_RENDERER_ASSETS: Record<UIType, Partial<RendererAssets>> = 
  * React namespace declaration for type safety.
  * This allows React.ComponentType to work without importing React.
  */
+// eslint-disable-next-line @typescript-eslint/no-namespace
 declare namespace React {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type ComponentType<P = any> = (props: P) => any;

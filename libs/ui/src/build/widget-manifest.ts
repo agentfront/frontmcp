@@ -808,6 +808,11 @@ export function buildToolResponseMeta(options: BuildMetaOptions): ToolResponseMe
 /**
  * Determine the appropriate output mode based on client info.
  *
+ * Platform capabilities:
+ * - OpenAI/ChatGPT/Cursor: Can load CDN scripts, use 'code-only' (smaller payload)
+ * - Claude: Sandboxed artifacts block ALL external requests, MUST use 'full-ssr' (embedded HTML)
+ * - Unknown: Default to 'full-ssr' for maximum compatibility
+ *
  * @param clientInfo - MCP client information
  * @returns Recommended output mode
  *
@@ -828,14 +833,22 @@ export function getOutputModeForClient(clientInfo?: {
 
   const name = clientInfo.name.toLowerCase();
 
-  // Capable clients that provide their own runtime
+  // OpenAI/ChatGPT/Cursor: Can fetch CDN resources, provide their own runtime
   if (
     name.includes('openai') ||
     name.includes('chatgpt') ||
-    name.includes('cursor') ||
-    name.includes('claude') // Claude Desktop might support code-only in future
+    name.includes('cursor')
   ) {
     return 'code-only';
+  }
+
+  // Claude: Sandboxed artifacts block external network requests
+  // - Cannot load scripts from CDN
+  // - Cannot load stylesheets from CDN
+  // - Cannot make fetch/XHR requests to external URLs
+  // Must embed everything in the HTML document
+  if (name.includes('claude')) {
+    return 'full-ssr';
   }
 
   // Default to full SSR for unknown clients
