@@ -55,7 +55,7 @@ jobs:
           echo "Alpha version: $ALPHA_VERSION"
 
       - name: Update package versions with Nx
-        run: npx nx release version ${{ steps.version.outputs.version }} --skip-lockfile-update
+        run: npx nx release version ${{ steps.version.outputs.version }}
 
       - name: Build all packages
         run: npx nx run-many --targets=build --projects="${{ steps.libs.outputs.projects }}" --parallel
