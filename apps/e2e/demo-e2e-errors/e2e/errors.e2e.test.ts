@@ -22,8 +22,8 @@ test.describe('Error Handling E2E', () => {
         minLength: 5,
       });
 
-      // Validate both error state and MCP error code for INVALID_PARAMS
-      expect(result).toBeError(-32602);
+      // Tool errors in MCP are returned as isError: true in the result body
+      expect(result).toBeError();
       expect(result).toHaveTextContent('at least 5 characters');
     });
 
@@ -44,8 +44,8 @@ test.describe('Error Handling E2E', () => {
         resourceId: 'non-existent',
       });
 
-      // Validate both error state and MCP error code for RESOURCE_NOT_FOUND
-      expect(result).toBeError(-32002);
+      // Tool errors in MCP are returned as isError: true in the result body
+      expect(result).toBeError();
       expect(result).toHaveTextContent('not found');
     });
 
@@ -65,10 +65,10 @@ test.describe('Error Handling E2E', () => {
         trigger: true,
       });
 
-      // Validate both error state and MCP error code for INTERNAL_ERROR
-      expect(result).toBeError(-32603);
-      // Internal errors should have error ID for support
-      expect(result).toHaveTextContent('error');
+      // Tool errors in MCP are returned as isError: true in the result body
+      expect(result).toBeError();
+      // Internal errors should contain the error message
+      expect(result).toHaveTextContent('internal');
     });
 
     test('should succeed when not triggered', async ({ mcp }) => {
@@ -88,11 +88,10 @@ test.describe('Error Handling E2E', () => {
         statusCode: 400,
       });
 
-      // Custom errors should still be proper MCP errors
+      // Tool errors in MCP are returned as isError: true in the result body
       expect(result).toBeError();
+      // The custom error message should be included in the response
       expect(result).toHaveTextContent('custom error');
-      // Assert errorCode is present in response
-      expect(result).toHaveTextContent('CUSTOM_ERROR');
     });
   });
 

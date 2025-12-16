@@ -13,7 +13,7 @@ const outputSchema = z.object({
 });
 
 @Resource({
-  uri: 'ui://templates',
+  uri: 'widgets://templates',
   name: 'UI Templates',
   description: 'Available UI template types and tools',
   mimeType: 'application/json',

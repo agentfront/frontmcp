@@ -162,11 +162,11 @@ test.describe('UI Tools E2E', () => {
   test.describe('Resource Access', () => {
     test('should list ui templates resource', async ({ mcp }) => {
       const resources = await mcp.resources.list();
-      expect(resources).toContainResource('ui://templates');
+      expect(resources).toContainResource('widgets://templates');
     });
 
     test('should read ui templates', async ({ mcp }) => {
-      const content = await mcp.resources.read('ui://templates');
+      const content = await mcp.resources.read('widgets://templates');
 
       expect(content).toBeSuccessful();
       expect(content).toHaveTextContent('uiTypes');

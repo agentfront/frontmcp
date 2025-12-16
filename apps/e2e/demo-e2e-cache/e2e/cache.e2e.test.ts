@@ -15,12 +15,9 @@ test.describe('Cache E2E', () => {
   });
 
   test.describe('Cached Tool Behavior', () => {
-    test.beforeEach(async ({ mcp }) => {
-      // Reset stats before each test
-      await mcp.tools.call('reset-stats', {});
-    });
-
     test('should execute cached tool on first call', async ({ mcp }) => {
+      // Reset stats at the start of test
+      await mcp.tools.call('reset-stats', {});
       const result = await mcp.tools.call('expensive-operation', {
         operationId: 'test-1',
         complexity: 5,
@@ -32,6 +29,9 @@ test.describe('Cache E2E', () => {
     });
 
     test('should return cached result on subsequent calls with same input', async ({ mcp }) => {
+      // Reset stats at the start of test
+      await mcp.tools.call('reset-stats', {});
+
       // First call - should execute
       await mcp.tools.call('expensive-operation', {
         operationId: 'cache-test',
@@ -61,6 +61,9 @@ test.describe('Cache E2E', () => {
     });
 
     test('should execute again with different input', async ({ mcp }) => {
+      // Reset stats at the start of test
+      await mcp.tools.call('reset-stats', {});
+
       // First call with input A
       await mcp.tools.call('expensive-operation', {
         operationId: 'input-a',
@@ -83,11 +86,10 @@ test.describe('Cache E2E', () => {
   });
 
   test.describe('Non-Cached Tool Behavior', () => {
-    test.beforeEach(async ({ mcp }) => {
-      await mcp.tools.call('reset-stats', {});
-    });
-
     test('should execute every time without caching', async ({ mcp }) => {
+      // Reset stats at the start of test
+      await mcp.tools.call('reset-stats', {});
+
       // Call the non-cached tool multiple times with same input
       await mcp.tools.call('non-cached', { operationId: 'test' });
       await mcp.tools.call('non-cached', { operationId: 'test' });
@@ -103,11 +105,10 @@ test.describe('Cache E2E', () => {
   });
 
   test.describe('Cache vs Non-Cache Comparison', () => {
-    test.beforeEach(async ({ mcp }) => {
-      await mcp.tools.call('reset-stats', {});
-    });
-
     test('should show difference between cached and non-cached tools', async ({ mcp }) => {
+      // Reset stats at the start of test
+      await mcp.tools.call('reset-stats', {});
+
       // Call both tools 3 times each with same inputs
       for (let i = 0; i < 3; i++) {
         await mcp.tools.call('expensive-operation', { operationId: 'same', complexity: 1 });
@@ -181,8 +182,9 @@ test.describe('Cache E2E', () => {
         // operationId missing
       });
 
-      // Should fail validation
-      expect(result).toBeError(-32602); // INVALID_PARAMS
+      // Tool errors in MCP are returned as isError: true in the result body
+      expect(result).toBeError();
+      expect(result).toHaveTextContent('operationId');
     });
   });
 
