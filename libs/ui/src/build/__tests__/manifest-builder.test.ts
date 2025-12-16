@@ -499,6 +499,13 @@ describe('getOutputModeForClient', () => {
     expect(getOutputModeForClient({ name: 'Cursor' })).toBe('code-only');
   });
 
+  it('should return full-ssr for Claude (sandboxed artifacts block external network)', () => {
+    expect(getOutputModeForClient({ name: 'Claude' })).toBe('full-ssr');
+    expect(getOutputModeForClient({ name: 'claude-desktop' })).toBe('full-ssr');
+    expect(getOutputModeForClient({ name: 'Claude Desktop' })).toBe('full-ssr');
+    expect(getOutputModeForClient({ name: 'Anthropic Claude' })).toBe('full-ssr');
+  });
+
   it('should return full-ssr for unknown clients', () => {
     expect(getOutputModeForClient({ name: 'SomeUnknownClient' })).toBe('full-ssr');
     expect(getOutputModeForClient({})).toBe('full-ssr');
