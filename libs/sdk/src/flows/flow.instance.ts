@@ -28,7 +28,7 @@ import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
 import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
-import { RequestContextNotAvailableError } from '../errors/mcp.error';
+import { RequestContextNotAvailableError, InternalMcpError } from '../errors/mcp.error';
 import { randomUUID } from 'crypto';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
@@ -418,11 +418,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           } finally {
             await runFinalizeStage();
           }
-          throw post.control ?? new Error('Internal: missing control for fail/error outcome');
+          throw post.control ?? new InternalMcpError('Missing control for fail/error outcome');
         }
         if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
           await runFinalizeStage();
-          throw post.control as FlowControl;
+          if (!(post.control instanceof FlowControl)) {
+            throw new InternalMcpError('Expected FlowControl but received different error type');
+          }
+          throw post.control;
         }
         await runFinalizeStage();
         return responded;
@@ -433,11 +436,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw pre.control ?? new Error('Internal: missing control for fail/error outcome');
+        throw pre.control ?? new InternalMcpError('Missing control for fail/error outcome');
       }
       if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
         await runFinalizeStage();
-        throw pre.control as FlowControl;
+        if (!(pre.control instanceof FlowControl)) {
+          throw new InternalMcpError('Expected FlowControl but received different error type');
+        }
+        throw pre.control;
       }
     }
 
@@ -452,10 +458,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw exec.control ?? new Error('Internal: missing control for fail/error outcome');
+        throw exec.control ?? new InternalMcpError('Missing control for fail/error outcome');
       } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
         await runFinalizeStage();
-        throw exec.control as FlowControl;
+        if (!(exec.control instanceof FlowControl)) {
+          throw new InternalMcpError('Expected FlowControl but received different error type');
+        }
+        throw exec.control;
       }
     }
 
@@ -468,11 +477,14 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw post.control ?? new Error('Internal: missing control for fail/error outcome');
+        throw post.control ?? new InternalMcpError('Missing control for fail/error outcome');
       }
       if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
         await runFinalizeStage();
-        throw post.control as FlowControl;
+        if (!(post.control instanceof FlowControl)) {
+          throw new InternalMcpError('Expected FlowControl but received different error type');
+        }
+        throw post.control;
       }
     }
 
