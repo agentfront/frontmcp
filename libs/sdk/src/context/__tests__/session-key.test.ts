@@ -19,16 +19,16 @@ describe('SessionKey', () => {
       expect(key.value).toBe('a');
     });
 
-    it('should accept exactly 256 characters', () => {
-      const maxLengthKey = 'a'.repeat(256);
+    it('should accept exactly 2048 characters', () => {
+      const maxLengthKey = 'a'.repeat(2048);
       const key = new SessionKey(maxLengthKey);
       expect(key.value).toBe(maxLengthKey);
-      expect(key.value.length).toBe(256);
+      expect(key.value.length).toBe(2048);
     });
 
-    it('should reject 257 characters', () => {
-      const tooLongKey = 'a'.repeat(257);
-      expect(() => new SessionKey(tooLongKey)).toThrow('SessionKey exceeds maximum length of 256 characters');
+    it('should reject 2049 characters', () => {
+      const tooLongKey = 'a'.repeat(2049);
+      expect(() => new SessionKey(tooLongKey)).toThrow('SessionKey exceeds maximum length of 2048 characters');
     });
 
     it('should reject special characters (@#$%^&*)', () => {
@@ -93,7 +93,9 @@ describe('SessionKey', () => {
     });
 
     it('should throw for too long key', () => {
-      expect(() => SessionKey.validate('a'.repeat(257))).toThrow('SessionKey exceeds maximum length of 256 characters');
+      expect(() => SessionKey.validate('a'.repeat(2049))).toThrow(
+        'SessionKey exceeds maximum length of 2048 characters',
+      );
     });
 
     it('should throw for invalid characters', () => {
@@ -106,8 +108,8 @@ describe('SessionKey', () => {
   });
 
   describe('static constants', () => {
-    it('should have MAX_LENGTH of 256', () => {
-      expect(SessionKey.MAX_LENGTH).toBe(256);
+    it('should have MAX_LENGTH of 2048', () => {
+      expect(SessionKey.MAX_LENGTH).toBe(2048);
     });
 
     it('should have VALID_PATTERN matching expected characters', () => {

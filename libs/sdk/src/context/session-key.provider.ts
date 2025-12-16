@@ -26,7 +26,7 @@ import { InvalidInputError } from '../errors/mcp.error';
  */
 export class SessionKey {
   /** Maximum allowed length for session keys */
-  static readonly MAX_LENGTH = 256;
+  static readonly MAX_LENGTH = 2048;
 
   /**
    * Valid characters for session keys:

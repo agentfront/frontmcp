@@ -20,30 +20,36 @@ describe('Transparent Auth Mode E2E', () => {
   let server: TestServer;
 
   beforeAll(async () => {
-    // Create token factory and mock OAuth server
+    // Create initial token factory - issuer will be updated after mock server starts
     tokenFactory = new TestTokenFactory({
-      issuer: 'http://localhost', // Will be updated after mock server starts
+      issuer: 'http://localhost',
       audience: 'frontmcp-test',
     });
 
+    // Create and start mock OAuth server to get the actual port
     mockOAuth = new MockOAuthServer(tokenFactory, { debug: false });
     const oauthInfo = await mockOAuth.start();
 
-    // Update token factory with actual issuer URL
+    // Stop the initial server - we'll restart with the correct token factory
+    await mockOAuth.stop();
+
+    // Create token factory with the actual issuer URL (now that we know the port)
     tokenFactory = new TestTokenFactory({
       issuer: oauthInfo.issuer,
       audience: oauthInfo.issuer,
     });
-    mockOAuth = new MockOAuthServer(tokenFactory, { debug: false });
-    await mockOAuth.stop();
-    const newOauthInfo = await mockOAuth.start();
+
+    // Recreate mock OAuth server with the updated token factory
+    // IMPORTANT: Use the same port to ensure issuer consistency!
+    mockOAuth = new MockOAuthServer(tokenFactory, { debug: false, port: oauthInfo.port });
+    const finalOauthInfo = await mockOAuth.start();
 
     // Start MCP server pointing to mock OAuth
     server = await TestServer.start({
       command: 'npx tsx apps/e2e/demo-e2e-transparent/src/main.ts',
       env: {
-        IDP_PROVIDER_URL: newOauthInfo.baseUrl,
-        IDP_EXPECTED_AUDIENCE: newOauthInfo.issuer,
+        IDP_PROVIDER_URL: finalOauthInfo.baseUrl,
+        IDP_EXPECTED_AUDIENCE: finalOauthInfo.issuer,
       },
       startupTimeout: 30000,
       debug: false,
@@ -191,12 +197,7 @@ describe('Transparent Auth Mode E2E', () => {
     });
   });
 
-  // Note: The following tests are skipped because there's an SDK issue with
-  // handling subsequent requests after initialize in transparent auth mode.
-  // The session validation/decryption appears to fail with HTTP 500.
-  // TODO: Re-enable these tests after fixing the SDK session handling issue.
-
-  describe.skip('Authenticated Access (SDK session issue - skipped)', () => {
+  describe('Authenticated Access', () => {
     it('should allow authenticated users to list tools', async () => {
       const token = await tokenFactory.createTestToken({
         sub: 'user-456',
@@ -258,6 +259,10 @@ describe('Transparent Auth Mode E2E', () => {
         }),
       });
 
+      if (!toolsResponse.ok) {
+        console.log('DEBUG: toolsResponse.status =', toolsResponse.status);
+        console.log('DEBUG: toolsResponse body =', await toolsResponse.clone().text());
+      }
       expect(toolsResponse.ok).toBe(true);
       const toolsText = await toolsResponse.text();
       expect(toolsText).toContain('create-task');
@@ -265,7 +270,7 @@ describe('Transparent Auth Mode E2E', () => {
     });
   });
 
-  describe.skip('Tool Execution with Auth (SDK session issue - skipped)', () => {
+  describe('Tool Execution with Auth', () => {
     it('should execute tools with authenticated requests', async () => {
       const token = await tokenFactory.createTestToken({
         sub: 'user-exec',
@@ -339,7 +344,7 @@ describe('Transparent Auth Mode E2E', () => {
     });
   });
 
-  describe.skip('Resource Access with Auth (SDK session issue - skipped)', () => {
+  describe('Resource Access with Auth', () => {
     it('should list resources with authenticated requests', async () => {
       const token = await tokenFactory.createTestToken({
         sub: 'user-resources',
@@ -406,7 +411,7 @@ describe('Transparent Auth Mode E2E', () => {
     });
   });
 
-  describe.skip('Prompt Access with Auth (SDK session issue - skipped)', () => {
+  describe('Prompt Access with Auth', () => {
     it('should list prompts with authenticated requests', async () => {
       const token = await tokenFactory.createTestToken({
         sub: 'user-prompts',
