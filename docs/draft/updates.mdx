@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-16" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -15,7 +15,25 @@ mode: 'center'
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
+    🧭 **Context-only providers** – Legacy `ProviderScope.SESSION` / `REQUEST` scopes are now normalized to `ProviderScope.CONTEXT`, and session IDs must satisfy the new validator before tools run. Update custom providers to read `ctx.sessionId` (or inject `SessionKey`) before upgrading.
+
     **Features**
+
+    ☁️ **Serverless deployment adapters** – Build once with `frontmcp build --adapter vercel|lambda|cloudflare` and deploy using the generated wrappers plus CLI-supplied configs; each target ships with matching GitHub Actions workflows.
+
+    🧊 **Redis transport persistence** – Wire `transport.persistence` to the new top-level `redis` block to recreate Streamable HTTP sessions across restarts, rotate TTLs, and keep session IDs consistent across nodes.
+
+    🧵 **Unified request context** – AsyncLocalStorage now carries sanitized session IDs, platform metadata, and context-scoped providers so tools, prompts, and plugins can call `ctx.sessionId`, `SessionKey`, and transport helpers without juggling session/request scopes.
+
+    🛠️ **Scaffolded CLI projects** – `frontmcp create` now adds Docker Compose, `.verdaccio/config.yml`, a ready-to-run `test:e2e` Jest target, and CI workflows while preserving custom scripts when you re-run the generator.
+
+    🎭 **Dual-module UI builds** – `@frontmcp/ui` publishes both CJS and ESM bundles with updated type metadata so React/MDX widgets tree-shake cleanly in bundlers and serverless environments.
+
+    📟 **OpenAPI adapter logging** – Provide a logger (or rely on the built-in) to capture authentication decisions, security resolver output, and body/header transforms for every generated tool.
+
+    🧱 **Redis session store** – The transport registry now persists session snapshots with longer IDs and safe prefixes so SSE + Streamable sessions can be recreated across worker restarts or failovers.
+
+    🧪 **Reference E2E servers** – New Nx apps under `apps/e2e/demo-e2e-{cache,codecall,errors,hooks}` showcase cache validation, CodeCall orchestration, error surfaces, and hooks with runnable Jest suites.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
@@ -51,6 +69,8 @@ mode: 'center'
 
     **Fixes**
 
+    🪪 **Session key validation** – Session IDs now enforce a 2048-character limit and strict allowed characters, preventing delimiter exploits and ensuring provider caches remain collision-free.
+
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
 
     🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
@@ -58,6 +78,12 @@ mode: 'center'
     🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
 
     **Docs**
+
+    📘 **Request context guide** – `/docs/extensibility/request-context` now covers session ID validation, SessionKey injection, and migration tips for context-scoped providers.
+
+    🧰 **Installation guide refresh** – `/docs/getting-started/installation` documents the new Docker Compose, Verdaccio, and `test:e2e` scaffolding that `frontmcp create` drops into every project.
+
+    🧪 **Testing overview expansion** – `/docs/testing/overview` highlights the new cache, CodeCall, error, and hooks demo servers plus the Nx commands to run their suites.
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
@@ -86,6 +112,8 @@ mode: 'center'
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
+
+    🧪 **Deterministic Jest configs** – All demo and e2e apps now ship Jest presets with SWC transforms, `maxWorkers: 1`, and `forceExit: true` so `npm run test:e2e` never hangs in CI.
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 

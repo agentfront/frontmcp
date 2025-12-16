@@ -54,14 +54,15 @@ Use `--yes` (or `-y`) to skip prompts and use defaults.
 
 ### CLI Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--yes, -y` | Use defaults (non-interactive) | - |
-| `--target <type>` | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node` |
-| `--redis <setup>` | Redis: `docker`, `existing`, `none` | `docker` |
-| `--cicd / --no-cicd` | Enable GitHub Actions | `--cicd` |
+| Flag                 | Description                                          | Default  |
+| -------------------- | ---------------------------------------------------- | -------- |
+| `--yes, -y`          | Use defaults (non-interactive)                       | -        |
+| `--target <type>`    | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node`   |
+| `--redis <setup>`    | Redis: `docker`, `existing`, `none`                  | `docker` |
+| `--cicd / --no-cicd` | Enable GitHub Actions                                | `--cicd` |
 
 **Examples:**
+
 ```bash
 # Interactive mode (default)
 npx frontmcp create my-app
@@ -84,6 +85,17 @@ This will:
 - create deployment configuration for your target (Dockerfile, vercel.json, etc.)
 - generate GitHub Actions workflows (if enabled)
 - install required dev dependencies (e.g. TypeScript, tsx, zod, reflect-metadata)
+
+### Scaffolded infrastructure & tests
+
+- `ci/docker-compose.yml` + `ci/.env.docker` spin up Redis, Verdaccio, and the app container with `npm run docker:up`.
+- `.verdaccio/config.yml` (plus the `nx verdaccio` target) lets you run a private npm registry for full-fidelity CLI/e2e tests.
+- `e2e/` and `jest.e2e.config.ts` are prewired with `npm run test:e2e` (uses `--forceExit` and `maxWorkers=1` for deterministic suites).
+- When `--cicd` is enabled, the repo includes `ci.yml`, `e2e.yml`, and `deploy.yml` GitHub Actions so you can ship build, test, and Docker pushes on day 0.
+
+<Tip>
+Need HTTPS or extra services (Postgres, workers)? Extend `ci/docker-compose.yml` and reuse the generated `.env.docker` to keep local dev and CI in sync.
+</Tip>
 
 ---
 

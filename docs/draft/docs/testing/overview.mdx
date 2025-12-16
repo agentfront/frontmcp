@@ -243,6 +243,23 @@ test.describe.skip('Tools', () => {
 
 ---
 
+## Feature-focused demo servers
+
+In addition to `apps/demo-showcase`, the repo now ships specialized Nx apps under `apps/e2e/**` so you can copy battle-tested patterns straight into your own suites. Each project exposes a `test:e2e` target and ships with a dedicated Jest config.
+
+| App                  | Located at                   | What it covers                                                                                                                                    | Sample command                       |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Cache hits vs misses | `apps/e2e/demo-e2e-cache`    | Exercises the Cache plugin with memory + Redis stores, includes an execution tracker tool and prompt for validating hit ratios.                   | `pnpm nx test:e2e demo-e2e-cache`    |
+| CodeCall CRM         | `apps/e2e/demo-e2e-codecall` | Full CRM data store powered by the CodeCall plugin, covering search/describe/execute flows across eight CRUD tools.                               | `pnpm nx test:e2e demo-e2e-codecall` |
+| Error surfaces       | `apps/e2e/demo-e2e-errors`   | Purpose-built tools for `InvalidInputError`, `ResourceNotFoundError`, custom Public errors, and success baselines to validate transport handling. | `pnpm nx test:e2e demo-e2e-errors`   |
+| Lifecycle hooks      | `apps/e2e/demo-e2e-hooks`    | Demonstrates before/after hooks, provider injection, and log capture so you can assert against request metadata.                                  | `pnpm nx test:e2e demo-e2e-hooks`    |
+
+<Tip>
+Need to run everything at once? Use `pnpm nx run-many --target test:e2e --projects demo-e2e-cache,demo-e2e-codecall,...` to parallelize suites while Nx handles port assignment.
+</Tip>
+
+---
+
 ## Next Steps
 
 <Columns cols={2}>
