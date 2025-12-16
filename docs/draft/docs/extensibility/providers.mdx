@@ -120,24 +120,24 @@ const requestLoggerProvider = {
 
 ### FrontMcpContext API
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `requestId` | `string` | Unique request identifier (UUID v4) |
-| `traceContext` | `TraceContext` | W3C Trace Context (traceId, parentId, traceFlags) |
-| `sessionId` | `string` | MCP session identifier |
-| `authInfo` | `Partial<AuthInfo>` | Authentication information |
-| `scopeId` | `string` | Current scope identifier |
-| `timestamp` | `number` | Request start timestamp |
-| `metadata` | `RequestMetadata` | Headers, user-agent, client IP |
-| `transport` | `TransportAccessor \| undefined` | Transport for elicit requests |
+| Property       | Type                | Description                                       |
+| -------------- | ------------------- | ------------------------------------------------- | ----------------------------- |
+| `requestId`    | `string`            | Unique request identifier (UUID v4)               |
+| `traceContext` | `TraceContext`      | W3C Trace Context (traceId, parentId, traceFlags) |
+| `sessionId`    | `string`            | MCP session identifier                            |
+| `authInfo`     | `Partial<AuthInfo>` | Authentication information                        |
+| `scopeId`      | `string`            | Current scope identifier                          |
+| `timestamp`    | `number`            | Request start timestamp                           |
+| `metadata`     | `RequestMetadata`   | Headers, user-agent, client IP                    |
+| `transport`    | `TransportAccessor  | undefined`                                        | Transport for elicit requests |
 
-| Method | Description |
-|--------|-------------|
-| `mark(name)` | Record timing mark |
-| `elapsed(from?, to?)` | Get elapsed time between marks |
-| `set(key, value)` | Store context-scoped data |
-| `get(key)` | Retrieve context-scoped data |
-| `getLogger(parent)` | Get child logger with context |
+| Method                | Description                             |
+| --------------------- | --------------------------------------- |
+| `mark(name)`          | Record timing mark                      |
+| `elapsed(from?, to?)` | Get elapsed time between marks          |
+| `set(key, value)`     | Store context-scoped data               |
+| `get(key)`            | Retrieve context-scoped data            |
+| `getLogger(parent)`   | Get child logger with context           |
 | `fetch(input, init?)` | Context-aware fetch with auto-injection |
 
 ### Context-Aware Fetch
@@ -275,3 +275,40 @@ class SessionInfoTool {
   }
 }
 ```
+
+### Session Keys & Validation
+
+FrontMCP now validates session identifiers **before** any CONTEXT-scoped provider is constructed. A request is accepted only if its session ID:
+
+| Rule               | Description                                                  |
+| ------------------ | ------------------------------------------------------------ |
+| Non-empty          | Empty strings are rejected.                                  |
+| Length             | Maximum 2,048 characters.                                    |
+| Allowed characters | `a-z`, `A-Z`, `0-9`, `-`, `_`, `.`, `:`. No spaces or emoji. |
+
+<Warning>
+  If you generate custom session keys (for example, by forwarding IDs from another system), strip whitespace and unicode characters first. Invalid keys now throw `InvalidInputError` before the request reaches your tool, preventing cache pollution and log injection.
+</Warning>
+
+Prefer `ctx.sessionId` (or `ctx.sessionMetadata`) whenever you need the current request/session identifier—it is already sanitized and scoped to the request.
+
+#### Legacy `SessionKey` injection
+
+FrontMCP keeps injecting `SessionKey` for providers that previously relied on `ProviderScope.SESSION`. The scope is normalized to CONTEXT, but you can still receive the sanitized ID via DI:
+
+```ts
+import { Provider, ProviderScope, SessionKey } from '@frontmcp/sdk';
+
+@Provider({ provide: 'LegacySessionCache', scope: ProviderScope.CONTEXT })
+export class LegacySessionCache {
+  constructor(private readonly sessionKey: SessionKey) {}
+
+  async setValue(redis: RedisProvider, key: string, value: unknown) {
+    await redis.setValue(`${this.sessionKey.value}:${key}`, value);
+  }
+}
+```
+
+<Tip>
+  New code should inject `FRONTMCP_CONTEXT` instead of `SessionKey`. The compatibility shim exists so you can migrate providers incrementally.
+</Tip>
