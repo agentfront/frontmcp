@@ -287,7 +287,6 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     };
 
     // Construct flow instance with merged dependencies (includes scoped providers)
-    // eslint-disable-next-line prefer-const
     context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize
@@ -418,7 +417,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           } finally {
             await runFinalizeStage();
           }
-          throw post.control!;
+          throw post.control ?? new Error('Internal: missing control for fail/error outcome');
         }
         if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
           await runFinalizeStage();
@@ -433,7 +432,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw pre.control!;
+        throw pre.control ?? new Error('Internal: missing control for fail/error outcome');
       }
       if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
         await runFinalizeStage();
@@ -452,7 +451,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw exec.control!;
+        throw exec.control ?? new Error('Internal: missing control for fail/error outcome');
       } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
         await runFinalizeStage();
         throw exec.control as FlowControl;
@@ -468,7 +467,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         } finally {
           await runFinalizeStage();
         }
-        throw post.control!;
+        throw post.control ?? new Error('Internal: missing control for fail/error outcome');
       }
       if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
         await runFinalizeStage();
