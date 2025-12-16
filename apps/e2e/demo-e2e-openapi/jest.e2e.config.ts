@@ -1,4 +1,6 @@
-export default {
+import type { Config } from '@jest/types';
+
+const config: Config.InitialOptions = {
   displayName: 'demo-e2e-openapi',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
@@ -32,3 +34,5 @@ export default {
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
 };
+
+export default config;

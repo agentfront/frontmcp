@@ -88,21 +88,22 @@ export class MockOAuthServer {
     const port = this.options.port ?? 0; // 0 = random available port
 
     return new Promise((resolve, reject) => {
-      this.server = createServer(this.handleRequest.bind(this));
+      const server = createServer(this.handleRequest.bind(this));
+      this.server = server;
 
       // Track connections for proper cleanup
-      this.server.on('connection', (socket) => {
+      server.on('connection', (socket) => {
         this.connections.add(socket);
         socket.on('close', () => this.connections.delete(socket));
       });
 
-      this.server.on('error', (err) => {
+      server.on('error', (err) => {
         this.log(`Server error: ${err.message}`);
         reject(err);
       });
 
-      this.server.listen(port, () => {
-        const address = this.server!.address();
+      server.listen(port, () => {
+        const address = server.address();
         if (!address || typeof address === 'string') {
           reject(new Error('Failed to get server address'));
           return;
@@ -128,7 +129,8 @@ export class MockOAuthServer {
    * Stop the mock OAuth server
    */
   async stop(): Promise<void> {
-    if (!this.server) {
+    const server = this.server;
+    if (!server) {
       return;
     }
 
@@ -139,7 +141,7 @@ export class MockOAuthServer {
     this.connections.clear();
 
     return new Promise((resolve, reject) => {
-      this.server!.close((err) => {
+      server.close((err) => {
         if (err) {
           reject(err);
         } else {
