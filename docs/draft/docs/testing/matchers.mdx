@@ -76,20 +76,18 @@ expect(result).toBeError(-32602); // Invalid params
 
 ### toHaveTextContent
 
-Check if a result contains text content:
+Check if a tool result or resource read exposes text content. The matcher inspects the wrapper's `text()` helper, so it works with both `ToolResultWrapper` (from `mcp.tools.call`) and `ResourceContentWrapper` (from `mcp.resources.read`).
 
 ```ts
 const result = await mcp.tools.call('echo', { message: 'hello' });
+const resource = await mcp.resources.read('notes://note/123');
 
-// Has any text content
-expect(result).toHaveTextContent();
-
-// Has specific text content
-expect(result).toHaveTextContent('hello');
-
-// With partial match
-expect(result).toHaveTextContent('ell');
+expect(result).toHaveTextContent(); // Any text content
+expect(result).toHaveTextContent('hello'); // Exact match
+expect(resource).toHaveTextContent('Meeting summary'); // Works on resources too
 ```
+
+<Note>The matcher performs a substring search when you provide text. Pass a full string for strict matches or smaller fragments to check for partial renders.</Note>
 
 ### toHaveImageContent
 

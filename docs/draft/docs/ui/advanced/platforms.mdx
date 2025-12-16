@@ -34,6 +34,31 @@ if (platform.scripts === 'inline') {
 }
 ```
 
+## Output Modes & Rendering Strategies
+
+FrontMCP UI ships multiple rendering strategies so widgets stay portable across hosts with different sandboxes. Use `getOutputModeForClient()` to choose the safest option for the current MCP client.
+
+| Client hint             | Output mode | When it's picked                                                                                                                                     |
+| ----------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI, ChatGPT, Cursor | `code-only` | These clients can load runtime bundles from the CDN and hydrate widgets themselves, so FrontMCP ships only HTML + metadata for minimum payload size. |
+| Claude                  | `full-ssr`  | Claude Artifacts block all external network calls, so scripts, styles, and assets must be fully inlined to render correctly.                         |
+| Unknown / custom        | `full-ssr`  | When the client name isn't recognized, the renderer errs on the side of `full-ssr` for maximum compatibility.                                        |
+
+```typescript
+import { getOutputModeForClient } from '@frontmcp/ui';
+
+const mode = getOutputModeForClient({
+  name: ctx.transport?.clientName ?? 'unknown',
+});
+
+return buildWidget({
+  ...ctx,
+  outputMode: mode,
+});
+```
+
+<Tip>Prefer `full-ssr` whenever you inline Tailwind/HTMX bundles or render inside Claude Artifacts. `code-only` keeps OpenAI and Cursor responses lean, but those clients still honor `full-ssr` if you need a single code path.</Tip>
+
 ## OpenAI
 
 OpenAI's Apps SDK provides full widget capabilities:

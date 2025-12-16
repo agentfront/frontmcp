@@ -1,0 +1,124 @@
+---
+title: Mock Servers
+sidebarTitle: Mock Servers
+slug: testing/mock-servers
+icon: tower-broadcast
+description: Spin up mock OAuth and HTTP APIs so @frontmcp/testing suites stay hermetic.
+---
+
+Front-end transport tests often need cooperating services: an IdP that issues signed tokens or an API that backs the OpenAPI adapter. `@frontmcp/testing` now ships lightweight mock servers you can boot alongside `TestServer` to keep those dependencies local and deterministic.
+
+## When to use mock servers
+
+- **Transparent auth demos** – Provide JWKS, metadata, and token endpoints without pointing to a real IdP.
+- **OpenAPI adapter suites** – Serve the OpenAPI document and mocked REST responses over HTTP so generated tools have something to call.
+- **End-to-end regression tests** – Share the same fixtures across Playwright-style suites in CI without extra docker-compose stacks.
+
+<Tip>Mock servers run inside your Jest process, which keeps setup fast and avoids the flakiness that comes from hitting remote staging systems.</Tip>
+
+## MockOAuthServer (transparent auth)
+
+`MockOAuthServer` exposes JWKS, OpenID metadata, and a minimal `/oauth/token` endpoint that all reuse a shared `TestTokenFactory`. Point your FrontMCP server's transparent auth config at the mock issuer and generate the same tokens inside your test.
+
+```ts
+import { TestServer, TestTokenFactory, MockOAuthServer, expect } from '@frontmcp/testing';
+
+describe('transparent auth', () => {
+  const tokenFactory = new TestTokenFactory();
+  const mockOAuth = new MockOAuthServer(tokenFactory);
+  const server = new TestServer({
+    entry: require.resolve('../../src/main.ts'),
+    env: () => ({
+      OAUTH_ISSUER_URL: mockOAuth.info.issuer,
+      OAUTH_JWKS_URL: mockOAuth.info.jwksUrl,
+    }),
+  });
+
+  beforeAll(async () => {
+    await mockOAuth.start();
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+    await mockOAuth.stop();
+  });
+
+  it('accepts tokens from the mock issuer', async () => {
+    const token = await tokenFactory.createTestToken({ sub: 'user-123' });
+    await server.mcp.authenticate(token);
+    const tools = await server.mcp.tools.list();
+    expect(tools).toContainTool('notes:list');
+  });
+});
+```
+
+<Warning>Always call `mockOAuth.stop()` in `afterAll()` (or `afterEach()` when you start per test) so ports are released between suites.</Warning>
+
+### Configuration fields
+
+| Option   | Description                                                       |
+| -------- | ----------------------------------------------------------------- |
+| `port`   | Force a specific port (defaults to `0` for an ephemeral port).    |
+| `issuer` | Override the issuer URL if your server expects a static hostname. |
+| `debug`  | Enable verbose request logging for tricky setups.                 |
+
+Use `mockOAuth.info` to access the resolved `baseUrl`, `issuer`, `jwksUrl`, and port once the server starts.
+
+## MockAPIServer (OpenAPI adapter)
+
+`MockAPIServer` serves both the OpenAPI spec (`/openapi.json`) and any number of mock REST routes so your generated tools hit predictable responses.
+
+```ts
+import { TestServer, MockAPIServer } from '@frontmcp/testing';
+
+describe('openapi integration', () => {
+  let mockApi: MockAPIServer;
+  let server: TestServer;
+
+  beforeAll(async () => {
+    mockApi = new MockAPIServer({
+      openApiSpec: require('../fixtures/ecommerce.openapi.json'),
+      routes: [
+        {
+          method: 'GET',
+          path: '/products',
+          response: { body: [{ id: 'sku-1', name: 'Widget' }] },
+        },
+      ],
+    });
+    await mockApi.start();
+
+    server = new TestServer({
+      entry: require.resolve('../../src/main.ts'),
+      env: () => ({
+        OPENAPI_SPEC_URL: mockApi.info.specUrl,
+        API_BASE_URL: mockApi.info.baseUrl,
+      }),
+    });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+    await mockApi.stop();
+  });
+
+  it('returns mocked catalog data', async () => {
+    const result = await server.mcp.tools.call('ecommerce:listProducts', {});
+    expect(result).toBeSuccessful();
+    expect(result.json().items).toHaveLength(1);
+  });
+});
+```
+
+Add or update routes at runtime with `mockApi.addRoute()` / `mockApi.clearRoutes()` to cover error paths without reloading the server.
+
+## Cleanup checklist
+
+1. Start mocks before `TestServer.start()` so environment variables point at real URLs.
+2. Stop mocks in `afterAll()` to free ports and avoid leaking sockets.
+3. Share the same `TestTokenFactory` between `MockOAuthServer` and your tests to keep signatures aligned.
+4. Wrap setup in helpers if multiple suites need the same mock infrastructure.
+
+<Check>Following this pattern keeps your suites hermetic and fast, and mirrors Mintlify's recommendation to document reusable procedures with clear prerequisites and teardown steps.</Check>
