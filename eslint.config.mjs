@@ -14,6 +14,14 @@ export default [
       '@typescript-eslint/no-empty-function': 'warn',
       '@typescript-eslint/no-empty-interface': 'warn',
       '@typescript-eslint/no-empty-object-type': 'warn',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       '@nx/enforce-module-boundaries': [
         'error',
         {
@@ -45,11 +53,11 @@ export default [
   },
   {
     // Relax rules for test files
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/__test-utils__/**/*.ts', '**/fixtures/**/*.ts', '**/mocks/**/*.ts'],
+    files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/__test-utils__/**/*.ts', '**/fixtures/**/*.ts', '**/mocks/**/*.ts', '**/*.mock.ts'],
     rules: {
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': 'off',
       'no-unused-private-class-members': 'off',
     },
   },
