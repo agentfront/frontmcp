@@ -53,9 +53,9 @@ describe('ProviderRegistry - Context Scope', () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
-      const tooLongKey = 'a'.repeat(257);
+      const tooLongKey = 'a'.repeat(2049);
       await expect(registry.buildViews(tooLongKey)).rejects.toThrow(
-        'SessionKey exceeds maximum length of 256 characters',
+        'SessionKey exceeds maximum length of 2048 characters',
       );
     });
 
