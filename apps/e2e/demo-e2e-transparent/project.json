@@ -1,0 +1,52 @@
+{
+  "name": "demo-e2e-transparent",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-transparent/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:transparent"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-transparent",
+        "main": "apps/e2e/demo-e2e-transparent/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-transparent/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-transparent/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "demo-e2e-transparent:build"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transparent"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-transparent/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transparent-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-transparent/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

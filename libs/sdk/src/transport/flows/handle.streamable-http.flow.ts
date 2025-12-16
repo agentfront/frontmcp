@@ -78,7 +78,18 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
   async parseInput() {
     const { request } = this.rawInput;
 
+    console.log('[DEBUG] parseInput: starting');
     const authorization = request[ServerRequestTokens.auth] as Authorization;
+    console.log(
+      '[DEBUG] parseInput: authorization =',
+      authorization
+        ? {
+            hasToken: !!authorization.token,
+            hasSession: !!authorization.session,
+            sessionId: authorization.session?.id?.slice(0, 30),
+          }
+        : 'undefined',
+    );
     const { token } = authorization;
 
     // CRITICAL: The mcp-session-id header is the client's reference to their session.

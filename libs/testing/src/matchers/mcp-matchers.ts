@@ -115,20 +115,26 @@ const toBeError: MatcherFunction<[expectedCode?: number]> = function (received, 
 };
 
 /**
- * Check if tool result has text content, optionally containing specific text
+ * Check if tool result or resource content has text content, optionally containing specific text
+ * Works with both ToolResultWrapper and ResourceContentWrapper
  */
 const toHaveTextContent: MatcherFunction<[expectedText?: string]> = function (received, expectedText) {
-  const result = received as ToolResultWrapper;
+  const result = received as ToolResultWrapper | ResourceContentWrapper;
 
-  if (typeof result !== 'object' || result === null || !('hasTextContent' in result)) {
+  // Check if it's a valid wrapper object with text() method
+  if (typeof result !== 'object' || result === null || !('text' in result)) {
     return {
       pass: false,
-      message: () => `Expected a ToolResultWrapper object with hasTextContent method`,
+      message: () => `Expected a ToolResultWrapper or ResourceContentWrapper object with text method`,
     };
   }
 
-  const hasText = result.hasTextContent();
+  // Get text content - works for both wrapper types
   const text = result.text();
+
+  // Check if has text content - ToolResultWrapper has hasTextContent, ResourceContentWrapper uses text() !== undefined
+  const hasText = 'hasTextContent' in result ? result.hasTextContent() : text !== undefined;
+
   let pass = hasText;
 
   if (pass && expectedText !== undefined) {

@@ -110,8 +110,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
                 return writeHttpResponse(response, e.output as any);
             }
           }
-          // Skip console.error due to Node.js 24 util.inspect bug with Zod validation errors
-          // The error will be returned to the client as a 500 response
+          // Log unhandled errors for visibility (non-FlowControl errors indicate bugs)
+          // Note: Using structured logging to avoid Node.js util.inspect issues with Zod errors
+          console.error('[FlowInstance] Unhandled error:', {
+            name: e instanceof Error ? e.name : 'UnknownError',
+            message: e instanceof Error ? e.message : String(e),
+          });
           return writeHttpResponse(response, {
             kind: 'text',
             status: 500,

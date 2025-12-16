@@ -1,0 +1,52 @@
+{
+  "name": "demo-e2e-hooks",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-hooks/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:hooks"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-hooks",
+        "main": "apps/e2e/demo-e2e-hooks/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-hooks/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-hooks/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "demo-e2e-hooks:build"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-hooks"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-hooks/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-hooks-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-hooks/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

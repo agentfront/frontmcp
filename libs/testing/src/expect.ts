@@ -18,34 +18,35 @@
  */
 
 import { expect as jestExpect } from '@jest/globals';
+import type { Matchers } from 'expect';
 import type { McpMatchers } from './matchers/matcher-types';
 
 /**
  * Extended Jest matchers interface that includes MCP matchers
  */
-type McpExpectMatchers<R = void> = jest.Matchers<R> &
+type McpExpectMatchers<R extends void | Promise<void>, T = unknown> = Matchers<R, T> &
   McpMatchers<R> & {
     /**
      * Inverts the matchers that follow
      */
-    not: jest.Matchers<R> & McpMatchers<R>;
+    not: Matchers<R, T> & McpMatchers<R>;
 
     /**
      * Used to access matchers that are resolved asynchronously
      */
-    resolves: jest.Matchers<Promise<R>> & McpMatchers<Promise<R>>;
+    resolves: Matchers<Promise<void>, T> & McpMatchers<Promise<void>>;
 
     /**
      * Used to access matchers that are rejected asynchronously
      */
-    rejects: jest.Matchers<Promise<R>> & McpMatchers<Promise<R>>;
+    rejects: Matchers<Promise<void>, T> & McpMatchers<Promise<void>>;
   };
 
 /**
  * Extended expect interface with MCP matchers
  */
 interface McpExpect {
-  <T = unknown>(actual: T): McpExpectMatchers<T>;
+  <T = unknown>(actual: T): McpExpectMatchers<void, T>;
 
   // Asymmetric matchers
   anything(): ReturnType<typeof jestExpect.anything>;

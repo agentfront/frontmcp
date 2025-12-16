@@ -96,7 +96,7 @@ type TransportRef = { sendElicitRequest: TransportAccessor['elicit']; readonly t
 /**
  * Session key validation rules.
  */
-const SESSION_KEY_MAX_LENGTH = 256;
+const SESSION_KEY_MAX_LENGTH = 2048;
 const SESSION_KEY_VALID_PATTERN = /^[a-zA-Z0-9\-_.:]+$/;
 
 /**

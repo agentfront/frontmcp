@@ -4,14 +4,15 @@ import { z } from 'zod';
  * Zod schema for validating mcp-session-id header format.
  * Uses Zod's built-in validators to prevent ReDoS attacks and ensure safe validation.
  *
- * - Max length: 256 characters (session IDs are typically UUIDs or short tokens)
+ * - Max length: 2048 characters (encrypted session IDs can be 460-700+ characters
+ *   due to AES-256-GCM encryption producing base64url format: iv.tag.ciphertext)
  * - Only allows printable ASCII characters (0x20-0x7E)
  * - Rejects control characters and null bytes
  */
 export const mcpSessionHeaderSchema = z
   .string()
   .min(1)
-  .max(256)
+  .max(2048)
   .refine(
     (value) => {
       // Check each character is printable ASCII (0x20-0x7E)
