@@ -72,7 +72,21 @@ jobs:
           VERDACCIO_TOKEN: ${{ secrets.VERDACCIO_TOKEN }}
 
       - name: Publish to Verdaccio
-        run: npx nx release publish --registry=${{ secrets.VERDACCIO_REGISTRY_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Publishing packages from dist folders to Verdaccio..."
+
+          IFS=',' read -ra PROJECTS <<< "${{ steps.libs.outputs.projects }}"
+          for project in "${PROJECTS[@]}"; do
+            DIST_PATH="libs/$project/dist"
+            if [ -d "$DIST_PATH" ]; then
+              echo "Publishing $project from $DIST_PATH..."
+              npm publish "$DIST_PATH" --access public --tag alpha --registry="${{ secrets.VERDACCIO_REGISTRY_URL }}"
+            else
+              echo "Warning: $DIST_PATH does not exist, skipping $project"
+            fi
+          done
 
       - name: Summary
         run: |
