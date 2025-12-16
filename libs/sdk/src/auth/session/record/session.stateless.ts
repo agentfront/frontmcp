@@ -18,6 +18,7 @@ export class StatelessSession extends Session {
    * Used to encrypt/decrypt nested provider tokens in #store.
    * @private
    */
+  // eslint-disable-next-line no-unused-private-class-members
   #vault: TokenVault;
   constructor(ctx: StatefulCreateCtx) {
     super(ctx as any);

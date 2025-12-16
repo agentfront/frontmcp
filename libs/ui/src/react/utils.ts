@@ -20,7 +20,6 @@ let cachedReactDOMServer: typeof import('react-dom/server') | null = null;
 function getReactDOMServer(): typeof import('react-dom/server') | null {
   if (!cachedReactDOMServer) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       cachedReactDOMServer = require('react-dom/server');
     } catch {
       return null;

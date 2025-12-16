@@ -305,21 +305,20 @@ export interface McpMatchers<R = unknown> {
 // ═══════════════════════════════════════════════════════════════════
 
 /* eslint-disable @typescript-eslint/no-namespace */
-/* eslint-disable @typescript-eslint/no-empty-object-type */
+
 declare global {
   namespace jest {
     // Extend expect matchers
-    interface Matchers<R> extends McpMatchers<R> {}
+    type Matchers<R> = McpMatchers<R>;
 
     // Extend asymmetric matchers (for expect.toContainTool etc.)
-    interface Expect extends McpMatchers<void> {}
+    type Expect = McpMatchers<void>;
 
     // Extend inverse matchers (for expect.not.toContainTool etc.)
-    interface InverseAsymmetricMatchers extends McpMatchers<void> {}
+    type InverseAsymmetricMatchers = McpMatchers<void>;
   }
 }
 /* eslint-enable @typescript-eslint/no-namespace */
-/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 // This export is needed to make this a module
 export {};

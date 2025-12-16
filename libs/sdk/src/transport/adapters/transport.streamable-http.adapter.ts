@@ -66,6 +66,7 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
       return originalWrite.call(this, chunk, encodingOrCb, cb);
     } as typeof res.write;
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const adapter = this;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     res.end = function (this: ServerResponse, chunk?: any, encodingOrCb?: any, cb?: any): ServerResponse {

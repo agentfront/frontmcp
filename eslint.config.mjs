@@ -11,11 +11,14 @@ export default [
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-empty-function': 'warn',
+      '@typescript-eslint/no-empty-interface': 'warn',
+      '@typescript-eslint/no-empty-object-type': 'warn',
       '@nx/enforce-module-boundaries': [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk'],
           depConstraints: [
             {
               sourceTag: '*',
@@ -38,6 +41,16 @@ export default [
     // Override or add rules here
     rules: {
       '@typescript-eslint/no-unsafe-function-type': 'off',
+    },
+  },
+  {
+    // Relax rules for test files
+    files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/__test-utils__/**/*.ts', '**/fixtures/**/*.ts', '**/mocks/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-empty-function': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      'no-unused-private-class-members': 'off',
     },
   },
 ];

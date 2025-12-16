@@ -320,17 +320,39 @@ export async function executeCode<T = unknown>(
     debug: (...args: unknown[]) => {
       consoleOutput.push(`[DEBUG] ${args.map(String).join(' ')}`);
     },
-    trace: () => {},
-    dir: () => {},
-    table: () => {},
-    group: () => {},
-    groupEnd: () => {},
-    time: () => {},
-    timeEnd: () => {},
-    assert: () => {},
-    clear: () => {},
-    count: () => {},
-    countReset: () => {},
+    trace: () => {
+      /* noop */
+    },
+    dir: () => {
+      /* noop */
+    },
+    table: () => {
+      /* noop */
+    },
+    group: () => {
+      /* noop */
+    },
+    groupEnd: () => {
+      /* noop */
+    },
+    time: () => {
+      /* noop */
+    },
+    timeEnd: () => {
+      /* noop */
+    },
+    assert: () => {
+      /* noop */
+    },
+    clear: () => {
+      /* noop */
+    },
+    count: () => {
+      /* noop */
+    },
+    countReset: () => {
+      /* noop */
+    },
   };
 
   // Add require function

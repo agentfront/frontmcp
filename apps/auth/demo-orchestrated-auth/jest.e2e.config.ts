@@ -1,4 +1,3 @@
-/* eslint-disable */
 export default {
   displayName: 'demo-orchestrated-auth-e2e',
   preset: '../../../jest.preset.js',

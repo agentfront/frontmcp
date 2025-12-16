@@ -15,7 +15,6 @@ import type { UIType } from '../../types/ui-runtime';
  * Uses permissive types to support various @mdx-js versions.
  */
 interface MDXRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   run: (code: string, options: Record<string, unknown>) => Promise<{ default: unknown }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   compile?: (source: string, options?: Record<string, unknown>) => Promise<any>;

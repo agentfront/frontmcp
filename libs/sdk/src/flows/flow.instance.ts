@@ -231,7 +231,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // Clone stages so we can merge injections safely per run.
     const baseStages = this.stages;
-    let stages: StageMap<any> = cloneStageMap(baseStages);
+    const stages: StageMap<any> = cloneStageMap(baseStages);
 
     // Compute next order base after any class-defined entries.
     let orderBase = Math.max(0, ...Object.values(stages).flatMap((list) => list.map((e: any) => e._order ?? 0))) + 1;
@@ -265,7 +265,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           metas.push(h.metadata);
         } catch (e) {
           // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
-          // eslint-disable-next-line no-console
+
           console.warn(
             '[flow] Ignoring injected hook that failed to materialize:',
             e instanceof Error ? e.message : 'Unknown error',
@@ -287,6 +287,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     };
 
     // Construct flow instance with merged dependencies (includes scoped providers)
+    // eslint-disable-next-line prefer-const
     context = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
 
     // Now injections can materialize
@@ -406,64 +407,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       await runStageGroup((plan as any).finalize, false);
     };
 
-    try {
-      // ---------- PRE ----------
-      {
-        const pre = await runStageGroup((plan as any).pre, true);
-        if (pre.outcome === 'respond') {
-          const post = await runStageGroup((plan as any).post, false);
-          if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
-            try {
-              await runErrorStage();
-            } finally {
-              await runFinalizeStage();
-            }
-            if (post.outcome === 'fail') throw post.control!;
-            throw post.control!;
-          }
-          if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
-            await runFinalizeStage();
-            throw post.control as FlowControl;
-          }
-          await runFinalizeStage();
-          return responded;
-        }
-        if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
-          try {
-            await runErrorStage();
-          } finally {
-            await runFinalizeStage();
-          }
-          if (pre.outcome === 'fail') throw pre.control!;
-          throw pre.control!;
-        }
-        if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
-          await runFinalizeStage();
-          throw pre.control as FlowControl;
-        }
-      }
-
-      // ---------- EXECUTE ----------
-      if (!responded) {
-        const exec = await runStageGroup((plan as any).execute, true);
-        if (exec.outcome === 'respond') {
-          // continue to post + finalize
-        } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
-          try {
-            await runErrorStage();
-          } finally {
-            await runFinalizeStage();
-          }
-          if (exec.outcome === 'fail') throw exec.control!;
-          throw exec.control!;
-        } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
-          await runFinalizeStage();
-          throw exec.control as FlowControl;
-        }
-      }
-
-      // ---------- POST ----------
-      {
+    // ---------- PRE ----------
+    {
+      const pre = await runStageGroup((plan as any).pre, true);
+      if (pre.outcome === 'respond') {
         const post = await runStageGroup((plan as any).post, false);
         if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
           try {
@@ -478,14 +425,64 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           await runFinalizeStage();
           throw post.control as FlowControl;
         }
+        await runFinalizeStage();
+        return responded;
       }
-
-      // ---------- FINALIZE ----------
-      await runFinalizeStage();
-
-      return responded;
-    } catch (e) {
-      throw e;
+      if (pre.outcome === 'unknown_error' || pre.outcome === 'fail') {
+        try {
+          await runErrorStage();
+        } finally {
+          await runFinalizeStage();
+        }
+        if (pre.outcome === 'fail') throw pre.control!;
+        throw pre.control!;
+      }
+      if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
+        await runFinalizeStage();
+        throw pre.control as FlowControl;
+      }
     }
+
+    // ---------- EXECUTE ----------
+    if (!responded) {
+      const exec = await runStageGroup((plan as any).execute, true);
+      if (exec.outcome === 'respond') {
+        // continue to post + finalize
+      } else if (exec.outcome === 'unknown_error' || exec.outcome === 'fail') {
+        try {
+          await runErrorStage();
+        } finally {
+          await runFinalizeStage();
+        }
+        if (exec.outcome === 'fail') throw exec.control!;
+        throw exec.control!;
+      } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
+        await runFinalizeStage();
+        throw exec.control as FlowControl;
+      }
+    }
+
+    // ---------- POST ----------
+    {
+      const post = await runStageGroup((plan as any).post, false);
+      if (post.outcome === 'unknown_error' || post.outcome === 'fail') {
+        try {
+          await runErrorStage();
+        } finally {
+          await runFinalizeStage();
+        }
+        if (post.outcome === 'fail') throw post.control!;
+        throw post.control!;
+      }
+      if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
+        await runFinalizeStage();
+        throw post.control as FlowControl;
+      }
+    }
+
+    // ---------- FINALIZE ----------
+    await runFinalizeStage();
+
+    return responded;
   }
 }

@@ -115,6 +115,7 @@ declare global {
   }
 
   // JSX namespace for React/Preact
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       'fmcp-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & FmcpButtonProps, HTMLElement>;

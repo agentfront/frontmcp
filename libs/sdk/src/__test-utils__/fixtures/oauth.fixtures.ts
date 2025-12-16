@@ -61,7 +61,7 @@ const PKCE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567
  * const challenge = generatePkceChallenge(verifier);
  * ```
  */
-export function generateCodeVerifier(length: number = 64): string {
+export function generateCodeVerifier(length = 64): string {
   if (length < 43 || length > 128) {
     throw new Error('Code verifier length must be between 43 and 128 characters');
   }

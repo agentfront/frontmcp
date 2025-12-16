@@ -42,7 +42,6 @@ describe('extractResultFromCallToolResult', () => {
     });
 
     it('should throw generic error when content is undefined', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mcpResult: CallToolResult = {
         isError: true,
       } as any;
@@ -76,7 +75,6 @@ describe('extractResultFromCallToolResult', () => {
     });
 
     it('should return undefined for null/undefined content', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mcpResult: CallToolResult = {
         isError: false,
       } as any;

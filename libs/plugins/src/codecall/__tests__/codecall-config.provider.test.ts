@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-config.provider.test.ts
 
-// Import BaseConfig directly from source to avoid Jest parsing issues with full SDK imports
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { BaseConfig } from '../../../../sdk/src/common/providers/base-config.provider';
 import { codeCallPluginOptionsSchema, CodeCallPluginOptions } from '../codecall.types';
 

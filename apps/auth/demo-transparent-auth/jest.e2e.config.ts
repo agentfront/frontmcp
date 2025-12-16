@@ -1,4 +1,3 @@
-/* eslint-disable */
 export default {
   displayName: 'demo-transparent-auth-e2e',
   preset: '../../../jest.preset.js',

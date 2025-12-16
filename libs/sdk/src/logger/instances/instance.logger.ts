@@ -52,7 +52,7 @@ export class LoggerInstance extends FrontMcpLogger {
       } catch (err) {
         // Never throw from logging
         // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
-        // eslint-disable-next-line no-console
+
         console.error('[Logger] Transport error:', err instanceof Error ? err.message : 'Unknown error');
       }
     }

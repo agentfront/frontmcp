@@ -54,7 +54,7 @@ export function createMockHookRegistry(overrides: Partial<any> = {}) {
 /**
  * Creates a mock hook entry
  */
-export function createMockHookEntry(flowName: string, stage: string, priority: number = 0): HookMetadata {
+export function createMockHookEntry(flowName: string, stage: string, priority = 0): HookMetadata {
   return {
     type: 'stage',
     flow: flowName as any,

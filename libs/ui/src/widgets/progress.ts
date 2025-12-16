@@ -468,7 +468,7 @@ export function skeleton(options: SkeletonOptions = {}): string {
       </div>`;
 
     case 'text':
-    default:
+    default: {
       const linesHtml = Array(lines)
         .fill(0)
         .map((_, i) => {
@@ -480,6 +480,7 @@ export function skeleton(options: SkeletonOptions = {}): string {
       return `<div class="${animateClass} space-y-2 ${className}" style="width: ${width || '100%'}">
         ${linesHtml}
       </div>`;
+    }
   }
 }
 

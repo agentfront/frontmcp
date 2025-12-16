@@ -939,7 +939,7 @@ function minifyJS(code: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
     .replace(/\/\/.*$/gm, '') // Remove line comments
     .replace(/\s+/g, ' ') // Collapse whitespace
-    .replace(/\s*([{};,:()\[\]])\s*/g, '$1') // Remove space around punctuation
+    .replace(/\s*([{};,:()[\]])\s*/g, '$1') // Remove space around punctuation
     .replace(/;\}/g, '}') // Remove trailing semicolons before }
     .trim();
 }

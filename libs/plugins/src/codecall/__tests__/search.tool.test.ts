@@ -529,7 +529,7 @@ describe('SearchTool', () => {
   describe('Input Schema Validation', () => {
     // Note: The SDK's Tool decorator handles input validation at runtime.
     // These tests validate the schema directly since the mock bypasses the decorator.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const { searchToolInputSchema } = require('../tools/search.schema');
 
     it('should reject query string below minimum length', () => {
