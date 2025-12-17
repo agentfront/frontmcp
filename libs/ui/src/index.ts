@@ -270,3 +270,79 @@ export {
   getUIResourceMimeType,
   type ParsedWidgetUri,
 } from './registry';
+
+// ============================================
+// Dependency Resolution Module
+// ============================================
+// The dependency module provides CDN dependency resolution, import parsing,
+// and file-based component bundling support for FrontMCP UI widgets.
+//
+// For full access, import from '@frontmcp/ui/dependency':
+// import { DependencyResolver, parseImports, DEFAULT_CDN_REGISTRY } from '@frontmcp/ui/dependency';
+//
+// Core dependency exports:
+export {
+  // Types
+  type CDNProvider,
+  type CDNPlatformType,
+  type CDNDependency,
+  type FileBundleOptions,
+  type ImportMap,
+  type ResolvedDependency,
+  type ComponentBuildManifest,
+  type CDNRegistryEntry,
+  type CDNRegistry,
+  type ParsedImport,
+  type ParsedImportResult,
+  type TemplateMode,
+  detectTemplateMode,
+  // CDN Registry
+  DEFAULT_CDN_REGISTRY,
+  lookupPackage,
+  getPackageCDNUrl,
+  isPackageRegistered,
+  // Import Parser
+  parseImports,
+  extractExternalPackages,
+  getPackageName,
+  // Dependency Resolver
+  DependencyResolver,
+  createResolver,
+  createClaudeResolver,
+  createOpenAIResolver,
+  resolveDependencies,
+  generateImportMapForPackages,
+  // Import Map Generator
+  createImportMap,
+  generateImportMapScriptTag,
+  generateDependencyHTML,
+  generateUMDShim,
+} from './dependency';
+
+// ============================================
+// File-Based Component Caching
+// ============================================
+// The file-cache module provides SHA-based caching for file-based
+// UI component builds, with filesystem (dev) and Redis (prod) storage.
+//
+// For full access, import from '@frontmcp/ui/bundler/file-cache':
+// import { ComponentBuilder, FilesystemStorage, RedisStorage } from '@frontmcp/ui/bundler/file-cache';
+//
+// Core file-cache exports:
+export {
+  // Component Builder
+  ComponentBuilder,
+  createFilesystemBuilder,
+  createRedisBuilder,
+  type ComponentBuildOptions,
+  type ComponentBuildResult,
+  // Storage
+  FilesystemStorage,
+  RedisStorage,
+  type BuildCacheStorage,
+  // Hash Calculator
+  sha256,
+  calculateComponentHash,
+  calculateQuickHash,
+  generateBuildId,
+} from './bundler/file-cache';

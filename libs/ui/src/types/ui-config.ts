@@ -8,6 +8,8 @@
  * @packageDocumentation
  */
 
+import type { CDNDependency, FileBundleOptions } from '../dependency/types';
+
 // ============================================
 // Content Security Policy
 // ============================================
@@ -477,6 +479,109 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * ```
    */
   htmlResponsePrefix?: string;
+
+  // ============================================
+  // File-Based Template Options (NEW)
+  // ============================================
+
+  /**
+   * Packages to load from CDN instead of bundling.
+   *
+   * When `template` is a file path (e.g., `'./chart-widget.tsx'`), imports
+   * of these packages will be excluded from the bundle and loaded at runtime
+   * via CDN import maps.
+   *
+   * Package names should match npm package names. The CDN URL is resolved
+   * from the built-in CDN registry or from explicit `dependencies` overrides.
+   *
+   * **Platform considerations:**
+   * - Claude only allows `cdnjs.cloudflare.com` (blocked network)
+   * - OpenAI/Cursor/other platforms can use any CDN
+   *
+   * @example
+   * ```typescript
+   * // Auto-resolved from CDN registry
+   * ui: {
+   *   template: './chart-widget.tsx',
+   *   externals: ['chart.js', 'react-chartjs-2'],
+   * }
+   *
+   * // With explicit override
+   * ui: {
+   *   template: './chart-widget.tsx',
+   *   externals: ['chart.js'],
+   *   dependencies: {
+   *     'chart.js': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+   *       integrity: 'sha512-...',
+   *       global: 'Chart',
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  externals?: string[];
+
+  /**
+   * Explicit CDN dependency overrides for external packages.
+   *
+   * Use this to specify custom CDN URLs or override the default CDN registry
+   * entries for packages listed in `externals`.
+   *
+   * Keys are npm package names. Values specify the CDN URL, integrity hash,
+   * and other loading options.
+   *
+   * @example
+   * ```typescript
+   * ui: {
+   *   template: './dashboard.tsx',
+   *   externals: ['d3', 'lodash'],
+   *   dependencies: {
+   *     'd3': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js',
+   *       integrity: 'sha512-...',
+   *       global: 'd3',
+   *     },
+   *     'lodash': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
+   *       global: '_',
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  dependencies?: Record<string, CDNDependency>;
+
+  /**
+   * Bundle options for file-based templates.
+   *
+   * Controls how the file-based template is compiled and bundled.
+   * These options are only used when `template` is a file path.
+   *
+   * @example
+   * ```typescript
+   * // Development mode
+   * ui: {
+   *   template: './debug-widget.tsx',
+   *   bundleOptions: {
+   *     minify: false,
+   *     sourceMaps: true,
+   *     target: 'esnext',
+   *   },
+   * }
+   *
+   * // Production mode (defaults)
+   * ui: {
+   *   template: './widget.tsx',
+   *   bundleOptions: {
+   *     minify: true,
+   *     treeShake: true,
+   *     target: 'es2020',
+   *   },
+   * }
+   * ```
+   */
+  fileBundleOptions?: FileBundleOptions;
 }
 
 /**

@@ -261,6 +261,8 @@ describe('buildToolResponseContent', () => {
 
     it('should handle circular references in rawOutput gracefully', () => {
       const circular: Record<string, unknown> = { name: 'test' };
+      // eslint-disable-next-line
+      // @ts-ignore
       circular.self = circular;
 
       const result = buildToolResponseContent(

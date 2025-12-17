@@ -11,16 +11,16 @@ uplinks:
     cache: false
 
 packages:
-  # Local packages (our packages)
+  # Local packages (our packages) - allow anonymous publish for e2e testing
   "@frontmcp/*":
     access: $all
-    publish: $all
-    unpublish: $all
+    publish: $anonymous
+    unpublish: $anonymous
 
   "frontmcp":
     access: $all
-    publish: $all
-    unpublish: $all
+    publish: $anonymous
+    unpublish: $anonymous
 
   # Proxy to npm for everything else
   "**":
@@ -34,5 +34,7 @@ middlewares:
   audit:
     enabled: true
 
-logs:
-  - { type: stdout, format: pretty, level: warn }
+log:
+  type: stdout
+  format: pretty
+  level: warn

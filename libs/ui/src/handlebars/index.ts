@@ -428,5 +428,24 @@ export {
   type HelperFunction,
 } from './helpers';
 
+// ============================================
+// Expression Extraction
+// ============================================
+
+export {
+  extractExpressions,
+  extractVariablePaths,
+  extractOutputPaths,
+  extractInputPaths,
+  extractStructuredContentPaths,
+  extractAll,
+  hasVariablePaths,
+  getExpressionAt,
+  normalizePath,
+  type ExtractedExpression,
+  type ExtractionResult,
+  type ExpressionType,
+} from './expression-extractor';
+
 // Handlebars types
 type HandlebarsTemplateDelegate = ReturnType<typeof import('handlebars')['compile']>;

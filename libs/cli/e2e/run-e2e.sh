@@ -11,7 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 E2E_DIR="$SCRIPT_DIR"
-VERDACCIO_PORT=4873
+VERDACCIO_PORT=14873
 VERDACCIO_URL="http://localhost:$VERDACCIO_PORT"
 TEST_DIR=$(mktemp -d)
 VERDACCIO_PID=""
@@ -23,6 +23,7 @@ cleanup() {
   fi
   rm -rf "$TEST_DIR"
   rm -rf "$E2E_DIR/storage"
+  rm -f "$ROOT_DIR/.npmrc.e2e"
   echo "✅ Cleanup complete"
 }
 
@@ -59,33 +60,37 @@ if ! curl -s "$VERDACCIO_URL" > /dev/null 2>&1; then
   exit 1
 fi
 
-# Set npm registry to local Verdaccio
+# Set npm registry and auth for local Verdaccio
 export npm_config_registry="$VERDACCIO_URL"
 
-# Create a test user for publishing
-echo "👤 Creating test user..."
-npm adduser --registry "$VERDACCIO_URL" <<EOF
-test
-test@test.com
-test123
-EOF
-echo ""
+# Create a local .npmrc with auth token for publishing
+echo "//localhost:$VERDACCIO_PORT/:_authToken=fake-token-for-e2e" > "$ROOT_DIR/.npmrc.e2e"
+export NPM_CONFIG_USERCONFIG="$ROOT_DIR/.npmrc.e2e"
 
 # Build all packages
 echo "🔨 Building packages..."
 cd "$ROOT_DIR"
-npx nx run-many -t build --projects=sdk,adapters,plugins,testing,cli --parallel=5
+npx nx run-many -t build --projects=sdk,ui,adapters,plugins,testing,cli --parallel=5
+
+# Clean old storage to avoid version conflicts
+rm -rf "$E2E_DIR/storage"
 
 # Publish packages to local registry
 echo "📤 Publishing packages to local registry..."
 
-PACKAGES=("sdk" "adapters" "plugins" "testing" "cli")
+PACKAGES=("sdk" "ui" "adapters" "plugins" "testing" "cli")
 for pkg in "${PACKAGES[@]}"; do
   echo "  Publishing $pkg..."
   if [ -d "libs/$pkg/dist" ]; then
     cd "libs/$pkg/dist"
-    npm publish --registry "$VERDACCIO_URL" --access public 2>/dev/null || echo "    (may already exist)"
+    if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+      echo "    ✅ Published successfully"
+    else
+      echo "    ⚠️  Publish failed (may already exist or missing dependency)"
+    fi
     cd "$ROOT_DIR"
+  else
+    echo "    ⚠️  No dist folder found for $pkg"
   fi
 done
 

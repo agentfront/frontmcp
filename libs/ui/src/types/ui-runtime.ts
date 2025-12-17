@@ -17,6 +17,7 @@
 
 // Import types from ui-config for use in this file
 import type { WidgetServingMode as _WidgetServingMode } from './ui-config';
+import type { ZodTypeAny } from 'zod';
 
 // Re-export shared types from ui-config for backwards compatibility
 export type {
@@ -1138,6 +1139,31 @@ export interface BuildManifestOptions<Input = Record<string, unknown>, Output = 
    * Used during pre-compilation.
    */
   sampleOutput?: Output;
+
+  /**
+   * Zod schema for output validation.
+   *
+   * When provided in development mode (NODE_ENV !== 'production'),
+   * the template will be validated against this schema to catch
+   * Handlebars expressions referencing non-existent fields.
+   *
+   * @example
+   * ```typescript
+   * outputSchema: z.object({
+   *   temperature: z.number(),
+   *   conditions: z.string(),
+   * })
+   * ```
+   */
+  outputSchema?: ZodTypeAny;
+
+  /**
+   * Zod schema for input validation.
+   *
+   * When provided in development mode (NODE_ENV !== 'production'),
+   * the template will also validate {{input.*}} expressions.
+   */
+  inputSchema?: ZodTypeAny;
 }
 
 // ============================================

@@ -95,11 +95,24 @@ function decryptSessionId(sessionId: string, sig: string): SessionIdPayload | nu
 
 /**
  * Decrypt a public session ID without signature verification.
- * Public sessions use authSig: 'public' and isPublic: true
+ * Public sessions use authSig: 'public' and isPublic: true.
+ * First checks the cache for potentially updated payload (e.g., platformType).
  */
 export function decryptPublicSession(sessionId: string): SessionIdPayload | null {
+  // Check cache first - may have updated fields like platformType
+  const cached = cache.get(sessionId);
+  if (cached && isValidPublicSessionPayload(cached)) {
+    return cached;
+  }
+
+  // Fall back to decrypting from the encrypted session ID
   const dec = safeDecrypt(sessionId);
-  return isValidPublicSessionPayload(dec) ? dec : null;
+  if (isValidPublicSessionPayload(dec)) {
+    // Cache the decrypted payload for future requests
+    cache.set(sessionId, dec as SessionIdPayload);
+    return dec as SessionIdPayload;
+  }
+  return null;
 }
 
 /**
@@ -201,4 +214,38 @@ export function extractSessionFromCookie(cookie?: string): string | undefined {
   if (!cookie) return undefined;
   const m = cookie.match(/(^|;)\s*mcp_session_id\s*=\s*([^;]*)/);
   return m ? m[2] : undefined;
+}
+
+/**
+ * Update a cached session payload with new data.
+ * This is used to persist changes like platformType detection that happen
+ * after the initial session creation.
+ *
+ * @param sessionId - The session ID to update
+ * @param updates - Partial payload updates to merge
+ * @returns true if the session was found and updated, false otherwise
+ */
+export function updateSessionPayload(sessionId: string, updates: Partial<SessionIdPayload>): boolean {
+  const existing = cache.get(sessionId);
+  if (existing) {
+    // Merge updates into existing payload
+    Object.assign(existing, updates);
+    // Re-set to refresh TTL
+    cache.set(sessionId, existing);
+    return true;
+  }
+
+  // Try to decrypt and update if not in cache
+  const decrypted = safeDecrypt(sessionId);
+  if (
+    isValidSessionPayload(decrypted, (decrypted as SessionIdPayload)?.authSig || '') ||
+    isValidPublicSessionPayload(decrypted)
+  ) {
+    const payload = decrypted as SessionIdPayload;
+    Object.assign(payload, updates);
+    cache.set(sessionId, payload);
+    return true;
+  }
+
+  return false;
 }

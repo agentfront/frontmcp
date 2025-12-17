@@ -134,7 +134,11 @@ export interface ServerFixture {
   /**
    * Create an additional MCP client connected to this server
    */
-  createClient(options?: { transport?: 'sse' | 'streamable-http'; token?: string }): Promise<McpTestClient>;
+  createClient(options?: {
+    transport?: 'sse' | 'streamable-http';
+    token?: string;
+    clientInfo?: { name: string; version: string };
+  }): Promise<McpTestClient>;
 
   /**
    * Restart the server

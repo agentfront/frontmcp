@@ -91,3 +91,43 @@ export { validateSource, validateImports, validateSize, mergePolicy, throwOnViol
 export { executeCode, executeDefault, isExecutionError } from './sandbox/executor';
 
 export type { ExecutionContext, ExecutionResult } from './sandbox/executor';
+
+// ============================================
+// File-Based Component Caching
+// ============================================
+
+export {
+  // Storage
+  type BuildCacheStorage,
+  type StorageOptions,
+  type CacheEntry as FileCacheEntry,
+  type CacheEntryMetadata,
+  DEFAULT_STORAGE_OPTIONS,
+  calculateManifestSize,
+  // Filesystem
+  FilesystemStorage,
+  createFilesystemStorage,
+  type FilesystemStorageOptions,
+  // Redis
+  RedisStorage,
+  createRedisStorage,
+  type RedisStorageOptions,
+  type RedisClient,
+  // Hash Calculator
+  sha256,
+  sha256Buffer,
+  hashFile,
+  hashFiles,
+  calculateComponentHash,
+  calculateQuickHash,
+  generateBuildId,
+  buildIdFromHash,
+  type ComponentHashOptions,
+  type ComponentHashResult,
+  // Component Builder
+  ComponentBuilder,
+  createFilesystemBuilder,
+  createRedisBuilder,
+  type ComponentBuildOptions,
+  type ComponentBuildResult,
+} from './file-cache';

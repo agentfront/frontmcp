@@ -35,9 +35,55 @@ import { wrapToolUIUniversal } from '../runtime/wrapper';
 import { rendererRegistry } from '../renderers/registry';
 import { detectTemplateType, reactRenderer, mdxRenderer } from '../renderers';
 
+// File-based template support
+import { detectTemplateMode, detectFormatFromPath } from '../dependency/types';
+
+// Template validation
+import { validateTemplate, logValidationWarnings } from '../validation';
+import type {
+  CDNPlatformType,
+  ComponentBuildManifest,
+  ResolvedDependency,
+  TemplateFormat,
+} from '../dependency/types';
+import { resolveTemplate, detectTemplateSource } from '../dependency/template-loader';
+import { processTemplate } from '../dependency/template-processor';
+import { generateDependencyHTML, generateImportMapScriptTag } from '../dependency/import-map';
+
 // ============================================
 // UI Type Detection
 // ============================================
+
+/**
+ * Check if a template is a file path.
+ *
+ * @param template - Widget template
+ * @returns true if the template is a file path
+ */
+export function isFilePathTemplate(template: unknown): template is string {
+  return detectTemplateMode(template) === 'file-path';
+}
+
+/**
+ * Check if a template is a URL.
+ *
+ * @param template - Widget template
+ * @returns true if the template is a URL
+ */
+export function isUrlTemplate(template: unknown): template is string {
+  return detectTemplateMode(template) === 'url';
+}
+
+/**
+ * Check if a template is file-based (either file path or URL).
+ *
+ * @param template - Widget template
+ * @returns true if the template is file-based
+ */
+export function isFileBasedTemplate(template: unknown): template is string {
+  const mode = detectTemplateMode(template);
+  return mode === 'file-path' || mode === 'url';
+}
 
 /**
  * Detect the UI type from a template.
@@ -46,6 +92,13 @@ import { detectTemplateType, reactRenderer, mdxRenderer } from '../renderers';
  * @returns Detected UI type
  */
 export function detectUIType(template: WidgetConfig['template']): UIType {
+  // Check for file-based templates first (file paths or URLs)
+  if (isFileBasedTemplate(template)) {
+    // Detect based on file extension using the shared utility
+    const format = detectFormatFromPath(template);
+    return templateFormatToUIType(format);
+  }
+
   const detection = detectTemplateType(template);
 
   switch (detection.type) {
@@ -60,6 +113,26 @@ export function detectUIType(template: WidgetConfig['template']): UIType {
       return 'html';
     default:
       return 'auto';
+  }
+}
+
+/**
+ * Convert a TemplateFormat to UIType.
+ *
+ * @param format - Template format
+ * @returns Corresponding UI type
+ */
+function templateFormatToUIType(format: TemplateFormat): UIType {
+  switch (format) {
+    case 'react':
+      return 'react';
+    case 'mdx':
+      return 'mdx';
+    case 'markdown':
+      return 'html'; // Markdown renders to HTML
+    case 'html':
+    default:
+      return 'html';
   }
 }
 
@@ -231,7 +304,7 @@ export async function buildToolWidgetManifest<
   Input = Record<string, unknown>,
   Output = unknown,
 >(options: BuildManifestOptions<Input, Output>): Promise<BuildManifestResult> {
-  const { toolName, uiConfig, schema, theme, sampleInput, sampleOutput } = options;
+  const { toolName, uiConfig, schema, theme, sampleInput, sampleOutput, outputSchema, inputSchema } = options;
 
   // Resolve UI type
   // Use type assertion to handle complex generic template types
@@ -250,6 +323,30 @@ export async function buildToolWidgetManifest<
     ? uiConfig.resourceMode
     : 'cdn';
 
+  // ============================================
+  // Template Validation (Development Mode Only)
+  // ============================================
+
+  // Validate Handlebars expressions against output schema when provided
+  if (outputSchema && process.env['NODE_ENV'] !== 'production') {
+    const template = uiConfig.template;
+
+    // Only validate string templates (inline HTML/MDX with Handlebars)
+    if (typeof template === 'string') {
+      const validation = validateTemplate(template, outputSchema, {
+        inputSchema,
+        warnOnOptional: true,
+        suggestSimilar: true,
+        toolName,
+      });
+
+      if (!validation.valid || validation.warnings.length > 0) {
+        logValidationWarnings(validation, toolName);
+      }
+    }
+    // For file-based templates, validation happens during template loading
+  }
+
   // Build CSP
   const csp = buildCSPForType(uiType, uiConfig.csp);
 
@@ -263,6 +360,9 @@ export async function buildToolWidgetManifest<
     input: (sampleInput ?? {}) as Record<string, unknown>,
     output: (sampleOutput ?? {}) as unknown,
     uiType,
+    outputSchema,
+    inputSchema,
+    toolName,
   });
 
   // Generate component code for client-side rendering (React/MDX only)
@@ -456,9 +556,12 @@ async function renderTemplate(
     input: Record<string, unknown>;
     output: unknown;
     uiType: UIType;
+    outputSchema?: import('zod').ZodTypeAny;
+    inputSchema?: import('zod').ZodTypeAny;
+    toolName?: string;
   }
 ): Promise<string> {
-  const { input, output, uiType } = options;
+  const { input, output, uiType, outputSchema, inputSchema, toolName } = options;
   const template = uiConfig.template;
 
   // Ensure renderers are available
@@ -485,7 +588,48 @@ async function renderTemplate(
     },
   };
 
-  // Try to render using the registry
+  // Handle file-based templates (file paths or URLs)
+  if (typeof template === 'string' && isFileBasedTemplate(template)) {
+    try {
+      // Resolve template from file path or URL
+      const resolved = await resolveTemplate(template);
+
+      // React templates need bundling, return the code for client-side rendering
+      if (resolved.format === 'react') {
+        // React templates are bundled separately, return placeholder
+        return `<div id="frontmcp-react-root" data-component="${template}">Loading...</div>`;
+      }
+
+      // Process non-React templates (HTML, Markdown, MDX) with Handlebars
+      const processed = await processTemplate(resolved, {
+        context: {
+          input,
+          output,
+          structuredContent: undefined,
+        },
+        outputSchema,
+        inputSchema,
+        toolName,
+      });
+
+      // Return the processed HTML (HTML, Markdown, MDX all produce html)
+      if ('html' in processed && processed.html) {
+        return processed.html;
+      }
+
+      // Fallback for code output (shouldn't happen for non-React since we handled it above)
+      if ('code' in processed && processed.code) {
+        return processed.code;
+      }
+
+      return resolved.content;
+    } catch (error) {
+      console.warn('[FrontMCP] File-based template rendering failed:', error);
+      return `<div class="error">Template loading failed: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
+    }
+  }
+
+  // Try to render using the registry for inline templates
   try {
     // Use the detected uiType to render with the correct renderer
     if (uiType === 'react' && rendererRegistry.has('react')) {
@@ -852,4 +996,239 @@ export function getOutputModeForClient(clientInfo?: {
 
   // Default to full SSR for unknown clients
   return 'full-ssr';
+}
+
+// ============================================
+// File-Based Template Building
+// ============================================
+
+/**
+ * Options for building a file-based UI component.
+ */
+export interface FileComponentBuildOptions {
+  /**
+   * File path to the component entry point.
+   * @example './widgets/chart.tsx'
+   */
+  entryPath: string;
+
+  /**
+   * Tool name for this component.
+   */
+  toolName: string;
+
+  /**
+   * Packages to load from CDN.
+   */
+  externals?: string[];
+
+  /**
+   * Explicit CDN dependency overrides.
+   */
+  dependencies?: Record<string, import('../dependency/types').CDNDependency>;
+
+  /**
+   * Bundle options.
+   */
+  bundleOptions?: import('../dependency/types').FileBundleOptions;
+
+  /**
+   * Target platform for CDN selection.
+   * @default 'unknown'
+   */
+  platform?: CDNPlatformType;
+
+  /**
+   * Whether to skip cache lookup.
+   * @default false
+   */
+  skipCache?: boolean;
+}
+
+/**
+ * Result of a file-based component build.
+ */
+export interface FileComponentBuildResult {
+  /**
+   * The build manifest.
+   */
+  manifest: ComponentBuildManifest;
+
+  /**
+   * Complete HTML with dependencies and component code.
+   */
+  html: string;
+
+  /**
+   * Whether the result came from cache.
+   */
+  cached: boolean;
+
+  /**
+   * Build time in milliseconds.
+   */
+  buildTimeMs: number;
+}
+
+// Lazy-loaded component builder (to avoid circular dependencies)
+let componentBuilderPromise: Promise<import('../bundler/file-cache').ComponentBuilder> | null = null;
+
+/**
+ * Get or create the component builder instance.
+ */
+async function getComponentBuilder(): Promise<import('../bundler/file-cache').ComponentBuilder> {
+  if (!componentBuilderPromise) {
+    componentBuilderPromise = (async () => {
+      const { createFilesystemBuilder } = await import('../bundler/file-cache/component-builder.js');
+      return createFilesystemBuilder();
+    })();
+  }
+  return componentBuilderPromise;
+}
+
+/**
+ * Build a file-based UI component.
+ *
+ * This function handles the complete build pipeline for file-based templates:
+ * 1. Check cache for existing build
+ * 2. Parse entry file for imports
+ * 3. Resolve external dependencies to CDN URLs
+ * 4. Bundle the component with esbuild
+ * 5. Generate import map for CDN dependencies
+ * 6. Store result in cache
+ *
+ * @param options - Build options
+ * @returns Build result with manifest and HTML
+ *
+ * @example
+ * ```typescript
+ * const result = await buildFileComponent({
+ *   entryPath: './widgets/chart.tsx',
+ *   toolName: 'chart_display',
+ *   externals: ['chart.js', 'react-chartjs-2'],
+ *   platform: 'claude',
+ * });
+ *
+ * // Use the HTML in tool response
+ * return {
+ *   content: [{ type: 'text', text: 'Chart rendered' }],
+ *   _meta: {
+ *     'ui/html': result.html,
+ *     'ui/hash': result.manifest.contentHash,
+ *   },
+ * };
+ * ```
+ */
+export async function buildFileComponent(
+  options: FileComponentBuildOptions
+): Promise<FileComponentBuildResult> {
+  const {
+    entryPath,
+    toolName,
+    externals = [],
+    dependencies = {},
+    bundleOptions = {},
+    platform = 'unknown',
+    skipCache = false,
+  } = options;
+
+  const startTime = performance.now();
+
+  // Get the component builder
+  const builder = await getComponentBuilder();
+
+  // Build the component
+  const buildResult = await builder.build({
+    entryPath,
+    toolName,
+    externals,
+    dependencies,
+    bundleOptions,
+    platform,
+    skipCache,
+  });
+
+  // Generate the complete HTML
+  const html = builder.generateHTML(buildResult.manifest, process.env['NODE_ENV'] === 'production');
+
+  return {
+    manifest: buildResult.manifest,
+    html,
+    cached: buildResult.cached,
+    buildTimeMs: performance.now() - startTime,
+  };
+}
+
+/**
+ * Build multiple file-based components.
+ *
+ * @param options - Array of build options
+ * @returns Array of build results
+ */
+export async function buildFileComponents(
+  options: FileComponentBuildOptions[]
+): Promise<FileComponentBuildResult[]> {
+  return Promise.all(options.map(buildFileComponent));
+}
+
+/**
+ * Check if a file-based component needs rebuilding.
+ *
+ * @param options - Build options (without skipCache)
+ * @returns true if the component needs rebuilding
+ */
+export async function needsFileComponentRebuild(
+  options: Omit<FileComponentBuildOptions, 'skipCache'>
+): Promise<boolean> {
+  const builder = await getComponentBuilder();
+  return builder.needsRebuild({
+    entryPath: options.entryPath,
+    externals: options.externals,
+    dependencies: options.dependencies,
+    bundleOptions: options.bundleOptions,
+  });
+}
+
+/**
+ * Get a cached file-based component build.
+ *
+ * @param options - Build options
+ * @returns Cached manifest or undefined
+ */
+export async function getCachedFileComponent(
+  options: Omit<FileComponentBuildOptions, 'skipCache' | 'toolName'>
+): Promise<ComponentBuildManifest | undefined> {
+  const builder = await getComponentBuilder();
+  return builder.getCached({
+    entryPath: options.entryPath,
+    externals: options.externals,
+    dependencies: options.dependencies,
+    bundleOptions: options.bundleOptions,
+  });
+}
+
+/**
+ * Map MCP client info to platform type.
+ *
+ * @param clientInfo - MCP client information
+ * @returns Platform type for CDN selection
+ */
+export function getPlatformFromClientInfo(clientInfo?: {
+  name?: string;
+  version?: string;
+}): CDNPlatformType {
+  if (!clientInfo?.name) {
+    return 'unknown';
+  }
+
+  const name = clientInfo.name.toLowerCase();
+
+  if (name.includes('claude')) return 'claude';
+  if (name.includes('openai') || name.includes('chatgpt')) return 'openai';
+  if (name.includes('cursor')) return 'cursor';
+  if (name.includes('gemini')) return 'gemini';
+  if (name.includes('continue')) return 'continue';
+  if (name.includes('cody')) return 'cody';
+
+  return 'unknown';
 }

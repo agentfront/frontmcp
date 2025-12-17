@@ -595,17 +595,31 @@ export {
   batchBuildWidgets,
   // Detection utilities
   detectUIType,
+  isFilePathTemplate,
   // CSP utilities
   buildCSPForType,
   buildCSPMetaContent,
   // Asset utilities
   getRendererAssets,
-  // _meta field builders (NEW)
+  // _meta field builders
   buildToolResponseMeta,
   getOutputModeForClient,
+  // File-based component building
+  buildFileComponent,
+  buildFileComponents,
+  needsFileComponentRebuild,
+  getCachedFileComponent,
+  getPlatformFromClientInfo,
 } from './widget-manifest';
 
-export type { BatchBuildOptions, BatchBuildResult, BuildMetaOptions } from './widget-manifest';
+export type {
+  BatchBuildOptions,
+  BatchBuildResult,
+  BuildMetaOptions,
+  // File-based component types
+  FileComponentBuildOptions,
+  FileComponentBuildResult,
+} from './widget-manifest';
 
 // Re-export runtime types for convenience
 export type {

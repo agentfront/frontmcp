@@ -1,240 +1,195 @@
 /**
- * E2E Tests for UI Tools
+ * UI Tools E2E Integration Tests
  *
- * Tests UI tool rendering across 4 types:
- * - HTML: html-table, html-card
- * - React: react-chart, react-form
- * - MDX: mdx-doc, mdx-interactive
- * - Markdown: markdown-report, markdown-list
+ * This is the main integration test file that provides quick smoke tests
+ * for all UI tool types. For detailed tests, see:
+ * - html-tools.e2e.test.ts
+ * - react-tools.e2e.test.ts
+ * - mdx-tools.e2e.test.ts
+ * - markdown-tools.e2e.test.ts
+ * - platform-detection.e2e.test.ts
+ * - discovery-and-metadata.e2e.test.ts
  */
 import { test, expect } from '@frontmcp/testing';
 
-test.describe('UI Tools E2E', () => {
+test.describe('UI Tools E2E Integration', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-ui/src/main.ts',
     publicMode: true,
   });
 
-  test.describe('HTML UI Tools', () => {
+  test.describe('Smoke Tests - All Tool Types', () => {
     test('should generate HTML table', async ({ mcp }) => {
       const result = await mcp.tools.call('html-table', {
-        headers: ['Name', 'Age', 'City'],
-        rows: [
-          ['Alice', '30', 'NYC'],
-          ['Bob', '25', 'LA'],
-        ],
-        title: 'User Data',
+        headers: ['Name', 'Age'],
+        rows: [['Alice', '30']],
+        title: 'Users',
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('html');
       expect(result).toHaveTextContent('rowCount');
     });
 
     test('should generate HTML card', async ({ mcp }) => {
       const result = await mcp.tools.call('html-card', {
         title: 'Welcome',
-        content: 'This is a card component',
-        footer: 'Footer text',
+        content: 'Hello World',
       });
 
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent('html');
-      expect(result).toHaveTextContent('Welcome');
     });
 
-    test('should handle empty rows gracefully', async ({ mcp }) => {
-      const result = await mcp.tools.call('html-table', {
-        headers: ['Name', 'Age'],
-        rows: [],
-        title: 'Empty Table',
-      });
-
-      expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('rowCount');
-    });
-
-    test('should escape HTML content in table cells', async ({ mcp }) => {
-      const result = await mcp.tools.call('html-table', {
-        headers: ['Name'],
-        rows: [['<script>alert("xss")</script>']],
-        title: 'XSS Test',
-      });
-
-      expect(result).toBeSuccessful();
-      // Verify script tags are escaped or not present in raw form
-      expect(result).not.toHaveTextContent('<script>alert');
-    });
-  });
-
-  test.describe('React UI Tools', () => {
     test('should generate React chart', async ({ mcp }) => {
       const result = await mcp.tools.call('react-chart', {
-        data: [
-          { label: 'Jan', value: 100 },
-          { label: 'Feb', value: 150 },
-          { label: 'Mar', value: 120 },
-        ],
-        title: 'Monthly Sales',
+        data: [{ label: 'Jan', value: 100 }],
+        title: 'Sales',
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('react');
       expect(result).toHaveTextContent('maxValue');
     });
 
     test('should generate React form', async ({ mcp }) => {
       const result = await mcp.tools.call('react-form', {
-        fields: [
-          { name: 'email', type: 'email', label: 'Email', required: true },
-          { name: 'message', type: 'textarea', label: 'Message' },
-        ],
-        submitLabel: 'Send',
+        fields: [{ name: 'email', type: 'email', label: 'Email' }],
+        submitLabel: 'Submit',
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('react');
       expect(result).toHaveTextContent('fieldCount');
     });
-  });
 
-  test.describe('MDX UI Tools', () => {
     test('should generate MDX document', async ({ mcp }) => {
       const result = await mcp.tools.call('mdx-doc', {
-        title: 'API Documentation',
-        sections: [
-          { heading: 'Getting Started', content: 'Install the package...' },
-          { heading: 'Authentication', content: 'Use an API key...' },
-        ],
+        title: 'Documentation',
+        sections: [{ heading: 'Intro', content: 'Welcome' }],
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('mdx');
       expect(result).toHaveTextContent('sectionCount');
     });
 
     test('should generate interactive MDX', async ({ mcp }) => {
       const result = await mcp.tools.call('mdx-interactive', {
-        topic: 'TypeScript Tips',
-        points: ['Use strict mode', 'Prefer interfaces', 'Avoid any'],
-        codeExample: 'const x: string = "hello";',
+        topic: 'Tips',
+        points: ['Tip 1', 'Tip 2'],
       });
 
       expect(result).toBeSuccessful();
       expect(result).toHaveTextContent('mdx');
-      expect(result).toHaveTextContent('hasCode');
     });
-  });
 
-  test.describe('Markdown UI Tools', () => {
     test('should generate markdown report', async ({ mcp }) => {
       const result = await mcp.tools.call('markdown-report', {
-        title: 'Security Audit',
-        summary: 'Overall security posture is good',
-        findings: [
-          { title: 'Missing HTTPS', description: 'Enable HTTPS', severity: 'high' },
-          { title: 'Weak Password', description: 'Improve policy', severity: 'medium' },
-        ],
+        title: 'Report',
+        summary: 'Summary',
+        findings: [{ title: 'Issue', description: 'Desc', severity: 'low' }],
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('markdown');
       expect(result).toHaveTextContent('findingCount');
     });
 
     test('should generate markdown list', async ({ mcp }) => {
       const result = await mcp.tools.call('markdown-list', {
-        title: 'Todo List',
-        items: [
-          { text: 'Review PR', completed: true },
-          { text: 'Write tests', completed: false },
-          { text: 'Deploy', completed: false },
-        ],
-        ordered: true,
+        title: 'Tasks',
+        items: [{ text: 'Task 1', completed: true }],
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('markdown');
       expect(result).toHaveTextContent('completedCount');
     });
   });
 
-  test.describe('Resource Access', () => {
-    test('should list ui templates resource', async ({ mcp }) => {
+  test.describe('Quick Discovery Tests', () => {
+    test('should list all 8 UI tools', async ({ mcp }) => {
+      const tools = await mcp.tools.list();
+
+      expect(tools).toContainTool('html-table');
+      expect(tools).toContainTool('html-card');
+      expect(tools).toContainTool('react-chart');
+      expect(tools).toContainTool('react-form');
+      expect(tools).toContainTool('mdx-doc');
+      expect(tools).toContainTool('mdx-interactive');
+      expect(tools).toContainTool('markdown-report');
+      expect(tools).toContainTool('markdown-list');
+    });
+
+    test('should list resources', async ({ mcp }) => {
       const resources = await mcp.resources.list();
       expect(resources).toContainResource('widgets://templates');
     });
 
-    test('should read ui templates', async ({ mcp }) => {
-      const content = await mcp.resources.read('widgets://templates');
-
-      expect(content).toBeSuccessful();
-      expect(content).toHaveTextContent('uiTypes');
-      expect(content).toHaveTextContent('html');
-      expect(content).toHaveTextContent('react');
-      expect(content).toHaveTextContent('mdx');
-      expect(content).toHaveTextContent('markdown');
-    });
-  });
-
-  test.describe('Prompt Access', () => {
-    test('should list ui-showcase prompt', async ({ mcp }) => {
+    test('should list prompts', async ({ mcp }) => {
       const prompts = await mcp.prompts.list();
       expect(prompts).toContainPrompt('ui-showcase');
     });
-
-    test('should get ui showcase prompt', async ({ mcp }) => {
-      const result = await mcp.prompts.get('ui-showcase', {});
-
-      expect(result).toBeSuccessful();
-      expect(result.messages.length).toBeGreaterThan(0);
-
-      const message = result.messages[0];
-      expect(message.content.type).toBe('text');
-      if (message.content.type === 'text') {
-        expect(message.content.text).toContain('UI Tools Showcase');
-        expect(message.content.text).toContain('HTML Type');
-        expect(message.content.text).toContain('React Type');
-        expect(message.content.text).toContain('MDX Type');
-        expect(message.content.text).toContain('Markdown Type');
-      }
-    });
   });
 
-  test.describe('Error Handling', () => {
-    test('should reject HTML table with missing headers', async ({ mcp }) => {
+  test.describe('Quick Error Handling Tests', () => {
+    test('should reject invalid tool call', async ({ mcp }) => {
       const result = await mcp.tools.call('html-table', {
-        rows: [['Alice', '30']],
-        title: 'No Headers',
+        // Missing required headers
+        rows: [['1']],
       });
       expect(result).toBeError();
     });
 
     test('should reject non-existent prompt', async ({ mcp }) => {
-      const result = await mcp.prompts.get('non-existent-prompt', {});
+      const result = await mcp.prompts.get('non-existent', {});
       expect(result).toBeError();
     });
   });
 
-  test.describe('Tool Discovery', () => {
-    test('should list all UI tools', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
+  test.describe('Quick Platform Tests', () => {
+    test('should return UI for OpenAI client', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+      });
 
-      // HTML tools
-      expect(tools).toContainTool('html-table');
-      expect(tools).toContainTool('html-card');
+      const result = await client.tools.call('html-card', {
+        title: 'Test',
+        content: 'Content',
+      });
 
-      // React tools
-      expect(tools).toContainTool('react-chart');
-      expect(tools).toContainTool('react-form');
+      expect(result).toBeSuccessful();
+      expect(result.hasToolUI()).toBe(true);
 
-      // MDX tools
-      expect(tools).toContainTool('mdx-doc');
-      expect(tools).toContainTool('mdx-interactive');
+      await client.disconnect();
+    });
 
-      // Markdown tools
-      expect(tools).toContainTool('markdown-report');
-      expect(tools).toContainTool('markdown-list');
+    test('should handle Claude client', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'Claude Desktop', version: '1.0.0' },
+      });
+
+      const result = await client.tools.call('html-card', {
+        title: 'Test',
+        content: 'Content',
+      });
+
+      expect(result).toBeSuccessful();
+
+      await client.disconnect();
+    });
+  });
+
+  test.describe('Concurrent Operations', () => {
+    test('should handle concurrent tool calls', async ({ mcp }) => {
+      const results = await Promise.all([
+        mcp.tools.call('html-table', { headers: ['A'], rows: [['1']] }),
+        mcp.tools.call('html-card', { title: 'Card', content: 'Content' }),
+        mcp.tools.call('react-chart', { data: [{ label: 'X', value: 10 }] }),
+        mcp.tools.call('markdown-list', { title: 'List', items: [{ text: 'Item', completed: true }] }),
+      ]);
+
+      expect(results).toHaveLength(4);
+      results.forEach((result) => {
+        expect(result).toBeSuccessful();
+      });
     });
   });
 });
