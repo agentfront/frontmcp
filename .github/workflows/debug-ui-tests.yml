@@ -1,0 +1,74 @@
+name: Debug UI E2E Tests
+
+on:
+  push:
+    branches:
+      - fix-frontmcp-ui
+
+concurrency:
+  group: debug-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug-ui-tests:
+    name: "Debug UI E2E Tests"
+    runs-on: ubuntu-latest
+    env:
+      NX_DAEMON: "false"
+      # Set MACHINE_ID for consistent session handling
+      MACHINE_ID: "ci-debug-machine-001"
+      CI: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build dependencies
+        run: |
+          echo "Building UI library..."
+          npx nx run ui:build
+          echo "Building SDK library..."
+          npx nx run sdk:build
+          echo "Building Testing library..."
+          npx nx run testing:build
+
+      - name: Show environment info
+        run: |
+          echo "=== Environment Info ==="
+          echo "Platform: $(uname -s)"
+          echo "Arch: $(uname -m)"
+          echo "Node: $(node --version)"
+          echo "NPM: $(npm --version)"
+          echo "Yarn: $(yarn --version)"
+          echo "MACHINE_ID: $MACHINE_ID"
+          echo "CI: $CI"
+          echo "========================"
+
+      - name: Run platform detection tests
+        run: |
+          echo "Running platform detection tests..."
+          npx nx run demo-e2e-ui:test -- \
+            --testPathPattern="platform-detection" \
+            --verbose
+
+      - name: Cleanup orphan processes
+        if: always()
+        run: |
+          echo "=== Cleaning up orphan processes ==="
+          pkill -f "tsx.*demo-e2e-ui" || true
+          pkill -f "node.*demo-e2e-ui" || true
+          sleep 2
+          echo "=== Remaining node processes ==="
+          ps aux | grep -E "node|tsx" | grep -v grep || echo "No node processes found"
