@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-17" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -16,6 +16,10 @@ mode: 'center'
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
     **Features**
+
+    🧪 **Template-aware UI linting** – `@frontmcp/ui/validation` now ships `validateTemplate`, `assertTemplateValid`, and typo suggestions so bad Handlebars bindings never reach end users.
+
+    🧱 **Modular demo + e2e stack** – The retiring auth demos are replaced with a single `apps/demo` playground plus scenario-focused Nx projects under `apps/e2e/*` for UI, CodeCall, cache, Redis, OpenAPI, and serverless flows.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
@@ -37,7 +41,7 @@ mode: 'center'
 
     🧪 **@frontmcp/testing** – Author Jest-based end-to-end suites with fixture injection, HTTP mocking, request interceptors, and custom MCP matchers while the runner boots your server automatically via `test.use()`.
 
-    🗃️ **Demo Showcase server** – Boot the new `apps/demo-showcase` notes app to exercise tools, resources, prompts, and OpenAPI adapters in one place, complete with sample `apps/demo-showcase/e2e` suites you can copy into your own repo.
+    🗃️ **Demo playground server** – Boot `pnpm nx serve demo` to explore the weather, CRM, expenses, calculator, and employee-time apps in one place, then copy the matching `apps/e2e/**/e2e/*.e2e.test.ts` suite into your workspace.
 
     🧰 **Layer 0 pre-scanner** – AgentScript now runs through a pre-parser `ast-guard` scan that blocks ReDoS payloads, Trojan Source characters, deep nesting, and oversize inputs before the AST is even built.
 
@@ -58,6 +62,10 @@ mode: 'center'
     🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
 
     **Docs**
+
+    🧠 **Template validation docs** – `/docs/ui/integration/validation` now explains how to run `validateTemplate`, surface warnings, and block CI when widgets drift from their schemas.
+
+    🧪 **Demo stack reference** – `/docs/testing/overview` now points to `apps/demo` and every `apps/e2e/**` suite so teams can copy realistic fixtures instead of reverse-engineering deprecated paths.
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
@@ -86,6 +94,10 @@ mode: 'center'
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
+
+    🧱 **Nx 22.2 upgrade** – Workspace tooling is now pinned to Nx 22.2.3, unlocking the latest release commands and aligning plugin APIs across packages.
+
+    🚢 **Hardened publish flow** – Releases iterate each dist folder, drop `.npmrc` from source control, and no longer skip lockfile updates, keeping Verdaccio publishes reproducible and secret-safe.
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 

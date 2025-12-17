@@ -179,7 +179,7 @@ describe('button validation', () => {
   });
 
   it('should return error box for unknown properties', () => {
-    const html = button('Test', { unknownProp: true } as any);
+    const html = button('Test', { unknownProp: true } as any });
     expect(html).toContain('validation-error');
   });
 
@@ -269,3 +269,91 @@ function card(content: string, options: CardOptions = {}): string {
 3. **Test validation** - Ensure error handling works correctly
 4. **Keep schemas close to components** - Colocate in `.schema.ts` files
 5. **Export types** - Let consumers use TypeScript inference
+
+## Template validation for UI widgets
+
+Components are only half the story—Handlebars/HTML templates can still reference fields that no longer exist in your tool's Zod schemas. `@frontmcp/ui/validation` now ships a schema-aware template validator so you can lint widgets the same way you lint TypeScript.
+
+```typescript title="validateTemplate.ts"
+import { validateTemplate } from '@frontmcp/ui/validation';
+import { z } from 'zod';
+
+const outputSchema = z.object({
+  location: z.string(),
+  temperature: z.number(),
+  forecast: z.object({ summary: z.string().optional() }),
+});
+
+const inputSchema = z.object({ units: z.enum(['celsius', 'fahrenheit']).optional() });
+
+const template = `
+  <div>
+    {{output.location}}
+    {{output.temperature}}
+    {{output.forecast.summary}}
+    {{input.units}}
+    {{output.forecst.icon}}
+  </div>
+`;
+
+const result = validateTemplate(template, outputSchema, {
+  inputSchema,
+  warnOnOptional: true,
+  suggestSimilar: true,
+  toolName: 'get_weather',
+});
+```
+
+`result` reports every path the template tried to render:
+
+- `result.valid` – `false` when any fields are missing.
+- `result.errors` – detailed objects with the failing `path`, `line`, `column`, and typo suggestions (`output.forecst.icon` above recommends `output.forecast.summary`).
+- `result.warnings` – non-blocking hints such as “accessing optional field without a guard.”
+- `result.templatePaths` / `result.schemaPaths` – quick lists you can dump into CI logs or docs.
+
+### Options reference
+
+| Option                                     | Description                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `inputSchema`                              | Validate `{{input.*}}` paths alongside `output.*` so prompts and widgets stay in sync.       |
+| `warnOnOptional`                           | Emits warnings whenever an optional field is rendered without a surrounding `{{#if}}` guard. |
+| `suggestSimilar` + `maxSuggestionDistance` | Controls typo suggestions using Levenshtein distance.                                        |
+| `toolName`                                 | Annotates log output so CI errors point back to the problematic tool.                        |
+
+<Note>
+Mintlify recommends surfacing actionable guidance inside docs. Mirror that in CI: pipe `result.errors` into your test output so contributors immediately see suggested field names instead of digging through schemas manually.
+</Note>
+
+### Fail builds early with `assertTemplateValid`
+
+For critical widgets, throw immediately instead of manually checking `result.valid`:
+
+```typescript title="weather.tool.spec.ts"
+import { assertTemplateValid } from '@frontmcp/ui/validation';
+import template from '../templates/weather.handlebars';
+import { WeatherOutputSchema } from '../schemas/weather.schema';
+
+describe('weather template', () => {
+  it('matches the output schema', () => {
+    expect(() =>
+      assertTemplateValid(template, WeatherOutputSchema, 'get_weather'),
+    ).not.toThrow();
+  });
+});
+```
+
+### Surface warnings while developing
+
+`formatValidationWarnings(result, toolName)` turns the error objects into a ready-to-log string, and `logValidationWarnings` automatically calls `console.warn`. Use them in dev servers so engineers get immediate feedback before opening a PR.
+
+```typescript
+templateValidator.logValidationWarnings(result, 'get_weather');
+```
+
+### Quick checks and missing fields
+
+Need a lightweight guard for scripts? `isTemplateValid(template, schema)` returns a boolean, while `getMissingFields(template, schema)` hands back just the failing paths—perfect for custom lint rules or editor diagnostics.
+
+<Warning>
+Template validation complements, not replaces, escaping. Continue to run `ctx.helpers.escapeHtml` for user-provided fields even when validators pass; you are checking schema parity, not sanitizing strings.
+</Warning>

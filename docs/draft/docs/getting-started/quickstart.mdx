@@ -50,6 +50,7 @@ The `create` command is **interactive** by default. It will ask you about:
 - **GitHub Actions**: Enable CI/CD workflows
 
 Use `--yes` (or `-y`) to skip prompts and use defaults.
+
 </Info>
 
 The CLI creates a complete project structure with:
@@ -359,24 +360,24 @@ npm run doctor
 
 ## Common Commands Reference
 
-| Command                      | Description                      |
-| ---------------------------- | -------------------------------- |
-| `npx frontmcp create <name>` | Create a new FrontMCP project (interactive) |
-| `npx frontmcp create <name> --yes` | Create with defaults (non-interactive) |
-| `npx frontmcp init`          | Add FrontMCP to existing project |
-| `npm run dev`                | Start with hot-reload            |
-| `npm run build`              | Compile to production            |
-| `npm run inspect`            | Open MCP Inspector               |
-| `npm run doctor`             | Verify setup                     |
+| Command                            | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `npx frontmcp create <name>`       | Create a new FrontMCP project (interactive) |
+| `npx frontmcp create <name> --yes` | Create with defaults (non-interactive)      |
+| `npx frontmcp init`                | Add FrontMCP to existing project            |
+| `npm run dev`                      | Start with hot-reload                       |
+| `npm run build`                    | Compile to production                       |
+| `npm run inspect`                  | Open MCP Inspector                          |
+| `npm run doctor`                   | Verify setup                                |
 
 ### Create Command Flags
 
-| Flag | Description |
-| ---- | ----------- |
-| `--yes, -y` | Use defaults (non-interactive mode) |
-| `--target <type>` | Deployment target: `node`, `vercel`, `lambda`, `cloudflare` |
-| `--redis <setup>` | Redis setup: `docker`, `existing`, `none` |
-| `--cicd / --no-cicd` | Enable/disable GitHub Actions CI/CD |
+| Flag                 | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| `--yes, -y`          | Use defaults (non-interactive mode)                         |
+| `--target <type>`    | Deployment target: `node`, `vercel`, `lambda`, `cloudflare` |
+| `--redis <setup>`    | Redis setup: `docker`, `existing`, `none`                   |
+| `--cicd / --no-cicd` | Enable/disable GitHub Actions CI/CD                         |
 
 ---
 
