@@ -24,6 +24,7 @@ import {
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/ui/adapters';
+import { isUIRenderFailure } from '@frontmcp/ui/registry';
 import { safeStringify } from '@frontmcp/ui/utils';
 
 const inputSchema = z.object({
@@ -460,8 +461,20 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           platformType,
         });
 
-        htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
-        uiMeta = uiRenderResult.meta || {};
+        // Handle graceful degradation: rendering failed in production
+        if (isUIRenderFailure(uiRenderResult)) {
+          this.logger.warn('applyUI: UI rendering failed (graceful degradation)', {
+            tool: tool.metadata.name,
+            reason: uiRenderResult.reason,
+            platform: platformType,
+          });
+          // Proceed without UI - tool result will not have ui/html metadata
+          htmlContent = undefined;
+          uiMeta = {};
+        } else {
+          htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
+          uiMeta = uiRenderResult.meta || {};
+        }
       }
 
       // Build the response content using the extracted utility

@@ -60,6 +60,39 @@ export interface UIRenderResult {
 }
 
 /**
+ * Result when UI rendering fails in production (graceful degradation).
+ * The caller should proceed without UI metadata.
+ */
+export interface UIRenderFailure {
+  /** Indicates rendering failed */
+  success: false;
+  /** Reason for failure (for logging, not exposed to client) */
+  reason: string;
+}
+
+/**
+ * Type guard to check if a render result is a failure.
+ *
+ * @param result - The result to check
+ * @returns true if the result is a UIRenderFailure
+ *
+ * @example
+ * ```typescript
+ * const result = await registry.renderAndRegisterAsync(options);
+ * if (isUIRenderFailure(result)) {
+ *   // Handle graceful degradation - proceed without UI
+ *   console.log('UI rendering failed:', result.reason);
+ *   return;
+ * }
+ * // result is UIRenderResult, has html and meta
+ * const { html, meta } = result;
+ * ```
+ */
+export function isUIRenderFailure(result: UIRenderResult | UIRenderFailure): result is UIRenderFailure {
+  return 'success' in result && result.success === false;
+}
+
+/**
  * ToolUIRegistry manages UI template rendering for tool responses.
  *
  * It provides:
@@ -232,6 +265,14 @@ export class ToolUIRegistry {
       structuredContent: undefined,
       mdxComponents: uiConfig.mdxComponents,
     });
+
+    // Handle graceful degradation: rendering failed in production
+    // For static compilation, we still cache an empty widget with an error message
+    if (ssrContent === null) {
+      console.warn('[ToolUIRegistry] Static widget compilation failed (graceful degradation)', { toolName });
+      // Don't cache anything - the tool will work without UI
+      return;
+    }
 
     // Wrap in a complete HTML document with FrontMCP Bridge
     // The Bridge will read data from window.openai.toolOutput at runtime
@@ -441,10 +482,14 @@ export default ${safeName};
    * FrontMCP hooks/components. This provides the same rendering capability as
    * static mode, but with data embedded in each response.
    *
+   * Error handling:
+   * - **Production**: Returns `UIRenderFailure` on error (graceful degradation)
+   * - **Development/Test**: Throws error for visibility and debugging
+   *
    * @param options - Rendering options
-   * @returns Promise resolving to render result with HTML and metadata
+   * @returns Promise resolving to render result with HTML and metadata, or failure on error
    */
-  async renderAndRegisterAsync(options: RenderOptions): Promise<UIRenderResult> {
+  async renderAndRegisterAsync(options: RenderOptions): Promise<UIRenderResult | UIRenderFailure> {
     const { toolName, input, output, structuredContent, uiConfig, platformType, token, directUrl } = options;
 
     // Detect if this is a React component
@@ -485,6 +530,12 @@ export default ${safeName};
         structuredContent,
         mdxComponents: uiConfig.mdxComponents,
       });
+
+      // Check for graceful degradation (production error case)
+      if (ssrContent === null) {
+        console.warn('[ToolUIRegistry] React SSR returned null (graceful degradation)', { toolName, platformType });
+        return { success: false, reason: 'React SSR rendering failed' };
+      }
 
       // [DIAG] Log SSR result for React components
       if (toolName.includes('react')) {
@@ -541,6 +592,15 @@ export default ${safeName};
         structuredContent,
         mdxComponents: uiConfig.mdxComponents,
       });
+
+      // Check for graceful degradation (production error case)
+      if (renderedContent === null) {
+        console.warn('[ToolUIRegistry] HTML template rendering returned null (graceful degradation)', {
+          toolName,
+          platformType,
+        });
+        return { success: false, reason: 'HTML template rendering failed' };
+      }
 
       // 2. Wrap in a complete HTML document with FrontMCP Bridge runtime.
       // For OpenAI platform, we skip the CSP meta tag because OpenAI handles CSP
