@@ -42,6 +42,7 @@ type Output = z.infer<typeof outputSchema>;
     widgetDescription: 'Displays a service status card with hybrid rendering.',
     template: (ctx) => {
       const { serviceName, status, statusColor, uptime, lastCheck, isHealthy } = ctx.output as unknown as Output;
+      const escapeHtml = ctx.helpers.escapeHtml;
 
       const statusBgColors: Record<string, string> = {
         green: 'bg-green-500',
@@ -54,9 +55,9 @@ type Output = z.infer<typeof outputSchema>;
       return `
 <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
   <div class="flex items-center justify-between">
-    <h3 class="text-lg font-semibold text-gray-900">${serviceName}</h3>
+    <h3 class="text-lg font-semibold text-gray-900">${escapeHtml(serviceName)}</h3>
     <span class="inline-flex items-center rounded-full ${bgColor} px-2.5 py-0.5 text-xs font-medium text-white">
-      ${status.toUpperCase()}
+      ${escapeHtml(status.toUpperCase())}
     </span>
   </div>
   <div class="mt-3 grid grid-cols-2 gap-4 text-sm">
@@ -66,7 +67,7 @@ type Output = z.infer<typeof outputSchema>;
     </div>
     <div>
       <span class="text-gray-500">Last Check</span>
-      <p class="font-medium text-gray-900">${lastCheck}</p>
+      <p class="font-medium text-gray-900">${escapeHtml(lastCheck)}</p>
     </div>
   </div>
   ${

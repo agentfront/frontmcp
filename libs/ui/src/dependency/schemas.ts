@@ -191,7 +191,20 @@ export const importMapSchema = z
     /**
      * Scoped mappings.
      */
-    scopes: z.record(z.string().min(1), z.record(z.string().min(1), z.string().url())).optional(),
+    scopes: z
+      .record(
+        z.string().min(1),
+        z.record(
+          z.string().min(1),
+          z
+            .string()
+            .url()
+            .refine((url) => url.startsWith('https://'), {
+              message: 'Scoped import URLs must use HTTPS',
+            }),
+        ),
+      )
+      .optional(),
 
     /**
      * Integrity hashes.

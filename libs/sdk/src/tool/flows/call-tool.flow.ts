@@ -23,12 +23,7 @@ import {
 } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
-import {
-  resolveServingMode,
-  buildToolResponseContent,
-  platformSupportsWidgets,
-  type ToolResponseContent,
-} from '@frontmcp/ui/adapters';
+import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/ui/adapters';
 import { safeStringify } from '@frontmcp/ui/utils';
 
 const inputSchema = z.object({
@@ -460,7 +455,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
               ? (input.arguments as Record<string, unknown>)
               : {},
           output: rawOutput,
-          structuredContent: undefined, // Will be added in finalize
+          structuredContent: undefined,
           uiConfig: tool.metadata.ui,
           platformType,
         });

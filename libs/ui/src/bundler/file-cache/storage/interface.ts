@@ -180,5 +180,10 @@ export const DEFAULT_STORAGE_OPTIONS: Required<StorageOptions> = {
  */
 export function calculateManifestSize(manifest: ComponentBuildManifest): number {
   // Approximate size by serializing to JSON
-  return Buffer.byteLength(JSON.stringify(manifest), 'utf8');
+  try {
+    return Buffer.byteLength(JSON.stringify(manifest), 'utf8');
+  } catch {
+    // Fallback for circular references or BigInt values
+    return 0;
+  }
 }

@@ -24,7 +24,8 @@ import {
   resolveAllDependencies,
   mergeRegistries,
 } from './cdn-registry';
-import { parseImports, getPackageName } from './import-parser';
+import { parseImports } from './import-parser';
+import { createImportMap } from './import-map';
 
 // ============================================
 // Resolver Errors
@@ -97,13 +98,14 @@ export class DependencyResolver {
    *
    * @param packageName - NPM package name
    * @param override - Optional explicit CDN dependency override
-   * @returns Resolved dependency
-   * @throws DependencyResolutionError if package cannot be resolved
+   * @returns Resolved dependency, or null in non-strict mode if package is not found (should be bundled)
+   * @throws DependencyResolutionError if package cannot be resolved in strict mode
    */
-  resolve(packageName: string, override?: CDNDependency): ResolvedDependency {
+  resolve(packageName: string, override?: CDNDependency): ResolvedDependency | null {
     // Use explicit override if provided
     if (override) {
-      return this.createResolvedDependency(packageName, override, 'cloudflare');
+      // Use 'custom' as provider for overrides since it's user-defined, not from a specific CDN
+      return this.createResolvedDependency(packageName, override, 'custom' as CDNProvider);
     }
 
     // Look up in registry
@@ -115,8 +117,8 @@ export class DependencyResolver {
           'Package not found in CDN registry. Add it to "dependencies" for explicit CDN configuration.',
         );
       }
-      // Non-strict mode: return undefined to bundle instead
-      throw new DependencyResolutionError(packageName, 'Package not in registry (non-strict mode should bundle)');
+      // Non-strict mode: return null to signal package should be bundled instead of loaded from CDN
+      return null;
     }
 
     // Find provider based on platform priority
@@ -155,7 +157,10 @@ export class DependencyResolver {
       try {
         const override = overrides?.[pkgName];
         const dep = this.resolve(pkgName, override);
-        resolved.push(dep);
+        if (dep) {
+          resolved.push(dep);
+        }
+        // If dep is null, the package will be bundled instead (non-strict mode)
       } catch (error) {
         if (this.options.strictMode) {
           throw error;
@@ -198,21 +203,7 @@ export class DependencyResolver {
    * @returns Browser import map
    */
   generateImportMap(dependencies: ResolvedDependency[]): ImportMap {
-    const imports: Record<string, string> = {};
-    const integrity: Record<string, string> = {};
-
-    for (const dep of dependencies) {
-      imports[dep.packageName] = dep.cdnUrl;
-
-      if (dep.integrity) {
-        integrity[dep.cdnUrl] = dep.integrity;
-      }
-    }
-
-    return {
-      imports,
-      integrity: Object.keys(integrity).length > 0 ? integrity : undefined,
-    };
+    return createImportMap(dependencies);
   }
 
   /**
@@ -223,8 +214,8 @@ export class DependencyResolver {
    */
   canResolve(packageName: string): boolean {
     try {
-      this.resolve(packageName);
-      return true;
+      const result = this.resolve(packageName);
+      return result !== null;
     } catch {
       return false;
     }
@@ -240,7 +231,7 @@ export class DependencyResolver {
   getUrl(packageName: string, override?: CDNDependency): string | undefined {
     try {
       const resolved = this.resolve(packageName, override);
-      return resolved.cdnUrl;
+      return resolved?.cdnUrl;
     } catch {
       return undefined;
     }

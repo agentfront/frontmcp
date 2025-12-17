@@ -151,6 +151,7 @@ import { test, expect, TestServer } from '@frontmcp/testing';
 let serverProcess;
 
 test.beforeAll(async () => {
+  // Use port 4001 to avoid conflicts with default demo server ports (3003, 3004, 3005)
   serverProcess = await TestServer.startNx('demo-e2e-public', { port: 4001 });
 });
 

@@ -23,7 +23,6 @@ import type {
 import type { BuildCacheStorage } from './storage/interface';
 import { calculateComponentHash, generateBuildId } from './hash-calculator';
 import { DependencyResolver } from '../../dependency/resolver';
-import { parseImports } from '../../dependency/import-parser';
 import { createImportMap, generateDependencyHTML } from '../../dependency/import-map';
 
 // ============================================
@@ -81,6 +80,31 @@ export interface ComponentBuildOptions {
    * SSR context data.
    */
   ssrContext?: Record<string, unknown>;
+
+  /**
+   * Custom code execution function for SSR.
+   * Allows different strategies for Node.js vs browser environments.
+   * If not provided, uses `new Function()` which works in both environments.
+   *
+   * @example
+   * ```typescript
+   * // Custom execution with vm module
+   * import { createContext, runInContext } from 'vm';
+   *
+   * const options = {
+   *   executeCode: (code, exports, module, React) => {
+   *     const context = createContext({ exports, module, React });
+   *     runInContext(code, context);
+   *   }
+   * };
+   * ```
+   */
+  executeCode?: (
+    code: string,
+    exports: Record<string, unknown>,
+    module: { exports: Record<string, unknown> },
+    React: unknown,
+  ) => void;
 }
 
 /**
@@ -159,6 +183,7 @@ export class ComponentBuilder {
       skipCache = false,
       ssr = false,
       ssrContext = {},
+      executeCode,
     } = options;
 
     // Resolve absolute path
@@ -191,9 +216,6 @@ export class ComponentBuilder {
     // Read entry file
     const source = await readFile(absoluteEntryPath, 'utf8');
 
-    // Parse imports
-    const parseResult = parseImports(source);
-
     // Resolve external dependencies
     const resolver = new DependencyResolver({ platform });
     const resolvedDeps: ResolvedDependency[] = [];
@@ -202,7 +224,10 @@ export class ComponentBuilder {
       try {
         const override = dependencies[pkg];
         const resolved = resolver.resolve(pkg, override);
-        resolvedDeps.push(resolved);
+        if (resolved) {
+          resolvedDeps.push(resolved);
+        }
+        // If resolved is null, package will be bundled instead of loaded from CDN
       } catch (error) {
         // Log warning but continue - package will be bundled instead
         console.warn(`Failed to resolve external "${pkg}": ${error}`);
@@ -222,7 +247,9 @@ export class ComponentBuilder {
               try {
                 const peerOverride = dependencies[peer];
                 const resolved = resolver.resolve(peer, peerOverride);
-                resolvedDeps.push(resolved);
+                if (resolved) {
+                  resolvedDeps.push(resolved);
+                }
               } catch {
                 // Ignore - peer may not be needed
               }
@@ -246,7 +273,7 @@ export class ComponentBuilder {
     // Optionally perform SSR
     let ssrHtml: string | undefined;
     if (ssr) {
-      ssrHtml = await this.renderSSR(bundleResult.code, ssrContext, resolvedDeps);
+      ssrHtml = await this.renderSSR(bundleResult.code, ssrContext, resolvedDeps, executeCode);
     }
 
     // Create manifest
@@ -402,6 +429,12 @@ export class ComponentBuilder {
     code: string,
     context: Record<string, unknown>,
     dependencies: ResolvedDependency[],
+    executeCode?: (
+      code: string,
+      exports: Record<string, unknown>,
+      module: { exports: Record<string, unknown> },
+      React: unknown,
+    ) => void,
   ): Promise<string | undefined> {
     // SSR requires React
     const hasReact = dependencies.some((d) => d.packageName === 'react');
@@ -419,10 +452,15 @@ export class ComponentBuilder {
       const exports: Record<string, unknown> = {};
       const module = { exports };
 
-      // Execute the bundled code
-      // Note: This is a simplified approach - production should use vm or a more secure sandbox
-      const fn = new Function('exports', 'module', 'React', code);
-      fn(exports, module, React);
+      // Execute the bundled code using custom executor or default new Function()
+      // Note: new Function() works in both Node.js and browser environments.
+      // For stricter sandboxing in Node.js, provide a custom executeCode using the vm module.
+      if (executeCode) {
+        executeCode(code, exports, module, React);
+      } else {
+        const fn = new Function('exports', 'module', 'React', code);
+        fn(exports, module, React);
+      }
 
       // Get the default export
       const Component = (module.exports as { default?: unknown }).default || module.exports;
@@ -460,12 +498,12 @@ export async function createFilesystemBuilder(cacheDir = '.frontmcp-cache/builds
  * Create a component builder with Redis storage.
  */
 export async function createRedisBuilder(
-  redisClient: unknown,
+  redisClient: import('./storage/redis.js').RedisClient,
   keyPrefix = 'frontmcp:ui:build:',
 ): Promise<ComponentBuilder> {
   const { RedisStorage } = await import('./storage/redis.js');
   const storage = new RedisStorage({
-    client: redisClient as import('./storage/redis.js').RedisClient,
+    client: redisClient,
     keyPrefix,
   });
   await storage.initialize();

@@ -56,45 +56,8 @@ test.describe('Discovery and Metadata E2E', () => {
       }
     });
 
-    test('should list html-table tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('html-table');
-    });
-
-    test('should list html-card tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('html-card');
-    });
-
-    test('should list react-chart tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('react-chart');
-    });
-
-    test('should list react-form tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('react-form');
-    });
-
-    test('should list mdx-doc tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('mdx-doc');
-    });
-
-    test('should list mdx-interactive tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('mdx-interactive');
-    });
-
-    test('should list markdown-report tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('markdown-report');
-    });
-
-    test('should list markdown-list tool', async ({ mcp }) => {
-      const tools = await mcp.tools.list();
-      expect(tools).toContainTool('markdown-list');
-    });
+    // Note: Individual tool listing tests removed as they're already covered
+    // by the comprehensive test above (lines 39-57)
 
     test('should not list non-existent tool', async ({ mcp }) => {
       const tools = await mcp.tools.list();

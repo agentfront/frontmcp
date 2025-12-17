@@ -710,7 +710,8 @@ export function resolveAllDependencies(
   const queue = [...packageNames];
 
   while (queue.length > 0) {
-    const packageName = queue.shift()!;
+    const packageName = queue.shift();
+    if (!packageName) continue; // Type guard - queue.length check guarantees this won't happen
     if (resolved.has(packageName)) continue;
 
     resolved.add(packageName);

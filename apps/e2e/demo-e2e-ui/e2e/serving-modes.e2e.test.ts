@@ -46,6 +46,7 @@ test.describe('Serving Modes E2E', () => {
         expect(result).toBeSuccessful();
         // Static mode: UI is served via resource URL, not in response
         // So hasToolUI() is false, but JSON data is returned
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ label: string; value: string; color: string }>();
         expect(json.label).toBe('Status');
         expect(json.value).toBe('Active');
@@ -67,6 +68,7 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ label: string; value: string; color: string }>();
         expect(json.label).toBe('Build');
         expect(json.value).toBe('Passing');
@@ -88,6 +90,7 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ label: string; value: string; color: string }>();
         expect(json.label).toBe('Version');
         expect(json.value).toBe('2.0.0');
@@ -285,6 +288,8 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        // Claude uses dual-payload mode (not widget), so hasToolUI is false for hybrid
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ serviceName: string; status: string }>();
         expect(json.serviceName).toBe('Claude Service');
         expect(json.status).toBe('healthy');
@@ -304,6 +309,7 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ serviceName: string }>();
         expect(json.serviceName).toBe('Continue Service');
 
@@ -322,8 +328,28 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ serviceName: string }>();
         expect(json.serviceName).toBe('Generic Service');
+
+        await client.disconnect();
+      });
+
+      test('Gemini should skip UI for hybrid mode tool', async ({ server }) => {
+        const client = await server.createClient({
+          transport: 'streamable-http',
+          clientInfo: { name: 'Gemini', version: '1.0.0' },
+        });
+
+        const result = await client.tools.call('hybrid-status', {
+          serviceName: 'Gemini Service',
+          status: 'healthy',
+        });
+
+        expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
+        const json = result.json<{ serviceName: string }>();
+        expect(json.serviceName).toBe('Gemini Service');
 
         await client.disconnect();
       });
@@ -340,6 +366,7 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(false);
         const json = result.json<{ serviceName: string; status: string }>();
         expect(json.serviceName).toBe('Unknown Service');
         expect(json.status).toBe('down');

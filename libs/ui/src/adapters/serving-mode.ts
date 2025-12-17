@@ -261,5 +261,6 @@ export function platformUsesDualPayload(platformType: AIPlatformType): boolean {
  * formatted data since the widget handles display.
  */
 export function platformSupportsWidgets(platformType: AIPlatformType): boolean {
-  return platformType === 'openai' || platformType === 'ext-apps' || platformType === 'cursor';
+  const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
+  return capabilities.supportsWidgets;
 }

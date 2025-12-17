@@ -292,6 +292,12 @@ export async function readTemplateFromFile(filePath: string, options: ReadTempla
   // Resolve to absolute path
   const absolutePath = isAbsolute(filePath) ? filePath : resolvePath(basePath, filePath);
 
+  // Prevent path traversal attacks - ensure resolved path stays within base directory
+  const normalizedBase = resolvePath(basePath);
+  if (!absolutePath.startsWith(normalizedBase + '/') && absolutePath !== normalizedBase) {
+    throw new Error(`Template path escapes base directory: ${filePath}`);
+  }
+
   try {
     return await fs.readFile(absolutePath, encoding);
   } catch (error) {
@@ -431,6 +437,13 @@ export async function resolveTemplate(
 }
 
 /**
+ * Default TTL for URL cache entries without ETag support.
+ * CDNs that don't provide ETags need a fallback TTL.
+ * 5 minutes provides a balance between freshness and reducing unnecessary requests.
+ */
+const URL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
  * Check if a resolved template needs re-fetching based on cache state.
  * Only applicable for URL templates.
  *
@@ -448,8 +461,20 @@ export function needsRefetch(resolved: ResolvedTemplate): boolean {
   }
 
   // If we have an ETag, we can validate with conditional request
-  // Otherwise, we rely on application-level TTL
-  return !cached.etag;
+  if (cached.etag) {
+    return false;
+  }
+
+  // For CDNs without ETag support, use TTL-based fallback
+  // Check if the cache entry has expired based on fetchedAt timestamp
+  if (cached.fetchedAt) {
+    const fetchedTime = new Date(cached.fetchedAt).getTime();
+    const age = Date.now() - fetchedTime;
+    return age > URL_CACHE_TTL_MS;
+  }
+
+  // No ETag and no timestamp - needs refetch
+  return true;
 }
 
 /**

@@ -4,6 +4,12 @@
  * Parses JavaScript/TypeScript source code to extract import statements.
  * Identifies external (npm) vs relative (local) imports.
  *
+ * **Known Limitations:**
+ * - Regex-based parsing may produce incorrect results for imports inside comments or strings
+ * - Multi-line import statements with unusual formatting may not be detected
+ * - Template literal imports (e.g., `import(\`${path}\`)`) are not supported
+ * - For caching purposes, false positives are preferred over false negatives
+ *
  * @packageDocumentation
  */
 
@@ -281,6 +287,7 @@ export function parseImports(source: string): ParsedImportResult {
     const [statement, specifier] = match;
 
     // Skip if this is part of another import pattern (has 'from' before it)
+    // 50-char lookback is sufficient to capture the 'from' keyword in typical import statements
     const beforeMatch = source.slice(Math.max(0, match.index - 50), match.index);
     if (beforeMatch.includes('from')) continue;
 

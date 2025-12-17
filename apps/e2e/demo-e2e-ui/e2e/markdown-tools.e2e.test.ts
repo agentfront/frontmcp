@@ -283,6 +283,57 @@ test.describe('Markdown Tools E2E', () => {
       });
     });
 
+    test.describe('XSS Injection Prevention', () => {
+      test('should safely handle script tags in title', async ({ mcp }) => {
+        const result = await mcp.tools.call('markdown-report', {
+          title: '<script>alert("xss")</script>',
+          summary: 'Summary',
+          findings: [{ title: 'Finding', description: 'Desc', severity: 'low' }],
+        });
+
+        expect(result).toBeSuccessful();
+        const json = result.json<{ title: string; markdown: string }>();
+        // The title should be preserved but rendered safely in markdown output
+        expect(json.title).toBe('<script>alert("xss")</script>');
+      });
+
+      test('should safely handle script tags in findings', async ({ mcp }) => {
+        const result = await mcp.tools.call('markdown-report', {
+          title: 'XSS Test Report',
+          summary: 'Testing XSS prevention',
+          findings: [
+            {
+              title: '<img src=x onerror=alert(1)>',
+              description: '<script>document.cookie</script>',
+              severity: 'high',
+            },
+          ],
+        });
+
+        expect(result).toBeSuccessful();
+      });
+
+      test('should safely handle javascript protocol in links', async ({ mcp }) => {
+        const result = await mcp.tools.call('markdown-report', {
+          title: 'Link Injection Test',
+          summary: '[Click me](javascript:alert(1))',
+          findings: [{ title: 'Finding', description: 'Desc', severity: 'low' }],
+        });
+
+        expect(result).toBeSuccessful();
+      });
+
+      test('should safely handle event handlers in content', async ({ mcp }) => {
+        const result = await mcp.tools.call('markdown-report', {
+          title: '<div onmouseover="alert(1)">Hover</div>',
+          summary: '<img onload="alert(1)" src="valid.jpg">',
+          findings: [{ title: 'F', description: 'D', severity: 'low' }],
+        });
+
+        expect(result).toBeSuccessful();
+      });
+    });
+
     test.describe('Error Handling', () => {
       test('should reject missing title', async ({ mcp }) => {
         const result = await mcp.tools.call('markdown-report', {

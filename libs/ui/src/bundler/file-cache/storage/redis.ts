@@ -158,9 +158,15 @@ export class RedisStorage implements BuildCacheStorage {
       await this.persistStats();
 
       return entry.data;
-    } catch {
+    } catch (error) {
+      // Log for debugging but still return undefined for cache miss
+      console.warn?.(`Redis cache get failed for key "${key}": ${error}`);
       this.localStats.misses++;
       this.updateHitRate();
+      // Persist stats on error path too for consistency
+      await this.persistStats().catch(() => {
+        /* Ignore stats persistence errors in error path */
+      });
       return undefined;
     }
   }

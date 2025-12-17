@@ -58,11 +58,12 @@ describe('DependencyResolver', () => {
       expect(() => resolver.resolve('unknown-package-xyz')).toThrow(DependencyResolutionError);
     });
 
-    it('should also throw for unknown package when strict mode is off (resolve still throws)', () => {
-      // Note: resolve() always throws for unknown packages
-      // strictMode affects resolveMany() which skips errors
+    it('should return null for unknown package when strict mode is off', () => {
+      // In non-strict mode, resolve() returns null for unknown packages
+      // This allows them to be bundled instead of loaded from CDN
       const resolver = new DependencyResolver({ strictMode: false });
-      expect(() => resolver.resolve('unknown-package-xyz')).toThrow(DependencyResolutionError);
+      const result = resolver.resolve('unknown-package-xyz');
+      expect(result).toBeNull();
     });
 
     it('should use override when provided', () => {

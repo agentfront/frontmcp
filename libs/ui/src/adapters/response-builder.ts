@@ -145,17 +145,9 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
   }
 
   // Inline mode: determine format based on platform capabilities
-  const supportsWidgets = platformSupportsWidgets(platformType);
 
-  if (supportsWidgets) {
-    // Widget platforms: clear content, widget reads from _meta['ui/html']
-    return {
-      content: [],
-      contentCleared: true,
-      format: 'widget',
-    };
-  }
-
+  // Check dual-payload FIRST (Claude) - it takes precedence over widget format
+  // because Claude has supportsWidgets=true but uses a different rendering approach
   if (useDualPayload) {
     // Claude dual-payload format:
     // Block 0: Pure JSON data (for programmatic parsing)
@@ -178,6 +170,16 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
       content: [{ type: 'text', text: safeStringify(rawOutput) }],
       contentCleared: false,
       format: 'json-only',
+    };
+  }
+
+  // Widget platforms (OpenAI, etc.): clear content, widget reads from _meta['ui/html']
+  const supportsWidgets = platformSupportsWidgets(platformType);
+  if (supportsWidgets) {
+    return {
+      content: [],
+      contentCleared: true,
+      format: 'widget',
     };
   }
 

@@ -17,11 +17,6 @@ test.describe('Platform Detection E2E', () => {
     publicMode: true,
   });
 
-  // Warm-up: ensure server session handling is ready
-  test.beforeAll(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  });
-
   test.describe('OpenAI Platform', () => {
     test('should return UI HTML for ChatGPT client', async ({ server }) => {
       const client = await server.createClient({
@@ -93,8 +88,10 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
+      // Verify dual-payload structure for Claude (markdown-wrapped HTML)
       const text = result.text();
       expect(text).toBeDefined();
+      expect(text).toContain('```html');
 
       await client.disconnect();
     });
@@ -270,6 +267,44 @@ test.describe('Platform Detection E2E', () => {
 
       expect(result).toBeSuccessful();
       expect(result.hasToolUI()).toBe(true);
+
+      await client.disconnect();
+    });
+  });
+
+  test.describe('Gemini Platform', () => {
+    test('should return JSON-only for Gemini client (no UI support)', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'Gemini', version: '1.0.0' },
+      });
+
+      const result = await client.tools.call('html-card', {
+        title: 'Gemini Test',
+        content: 'Testing Gemini platform detection',
+      });
+
+      expect(result).toBeSuccessful();
+      // Gemini doesn't support widgets, UI should be skipped
+      expect(result.hasToolUI()).toBe(false);
+
+      await client.disconnect();
+    });
+
+    test('should handle tool calls from Google AI client', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'Google AI', version: '2.0.0' },
+      });
+
+      const result = await client.tools.call('react-chart', {
+        data: [{ label: 'A', value: 10 }],
+        title: 'Google AI Chart',
+      });
+
+      expect(result).toBeSuccessful();
+      const json = result.json<{ maxValue: number }>();
+      expect(json.maxValue).toBe(10);
 
       await client.disconnect();
     });

@@ -96,6 +96,37 @@ describe('Dual-Payload Builder', () => {
       expect(parsed.metadata.source).toBe('market-api');
     });
 
+    it('should safely handle XSS attempts in HTML content', () => {
+      const xssHtml = '<div><script>alert("xss")</script><img src=x onerror=alert(1)></div>';
+      const result = buildDualPayload({
+        data: { message: 'test' },
+        html: xssHtml,
+      });
+
+      // The HTML is wrapped in code fence for display, not direct execution
+      expect(result.content[1].text).toContain('```html');
+      // Script tag should be preserved in code fence (display only)
+      expect(result.content[1].text).toContain('<script>');
+      // The HTML block should end with code fence closing
+      expect(result.content[1].text).toMatch(/\n```$/);
+    });
+
+    it('should safely handle XSS attempts in data', () => {
+      const xssData = {
+        title: '<script>alert("xss")</script>',
+        content: '<img src=x onerror="alert(1)">',
+      };
+      const result = buildDualPayload({
+        data: xssData,
+        html: '<html></html>',
+      });
+
+      // JSON encoding safely escapes special characters
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.title).toBe('<script>alert("xss")</script>');
+      expect(parsed.content).toBe('<img src=x onerror="alert(1)">');
+    });
+
     it('should handle null/undefined data gracefully', () => {
       const resultNull = buildDualPayload({
         data: null,
@@ -145,7 +176,9 @@ describe('Dual-Payload Builder', () => {
       // Extract HTML from result
       const match = result.content[1].text.match(/```html\n([\s\S]*?)\n```/);
       expect(match).toBeTruthy();
-      expect(match![1]).toBe(html);
+      if (match) {
+        expect(match[1]).toBe(html);
+      }
     });
   });
 

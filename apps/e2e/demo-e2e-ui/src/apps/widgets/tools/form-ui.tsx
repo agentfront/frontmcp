@@ -115,7 +115,7 @@ export function FormCardWithHooks({
   const input = ssrInput ?? hookInput;
 
   const theme = useTheme();
-  const [sendMessage, { loading: sending }] = useSendMessage();
+  const [sendMessage] = useSendMessage();
 
   // Form state
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -171,8 +171,8 @@ export function FormCardWithHooks({
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4 py-2">
-        {fields.map((field, index) => (
-          <div key={index} className="space-y-1">
+        {fields.map((field) => (
+          <div key={field.name} className="space-y-1">
             <label className="block text-sm font-medium text-text-primary">
               {field.label}
               {field.required && <span className="text-danger ml-1">*</span>}

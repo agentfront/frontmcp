@@ -180,7 +180,8 @@ describe('buildToolResponseContent', () => {
   });
 
   describe('inline mode - markdown fallback', () => {
-    const nonWidgetPlatforms: AIPlatformType[] = ['gemini', 'unknown', 'continue', 'cody', 'generic-mcp'];
+    // Only gemini and unknown don't support widgets in PLATFORM_CAPABILITIES
+    const nonWidgetPlatforms: AIPlatformType[] = ['gemini', 'unknown'];
 
     nonWidgetPlatforms.forEach((platform) => {
       it(`should return markdown format for ${platform} platform with HTML`, () => {
@@ -219,6 +220,51 @@ describe('buildToolResponseContent', () => {
       expect(result.content).toHaveLength(1);
       // Pretty printed with 2 spaces for non-widget fallback
       expect(result.content[0].text).toContain('  "temperature"');
+    });
+  });
+
+  describe('XSS prevention', () => {
+    it('should safely handle script tags in htmlContent for Claude', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'claude',
+          useDualPayload: true,
+          htmlContent: '<div><script>alert("xss")</script></div>',
+        }),
+      );
+
+      expect(result.format).toBe('dual-payload');
+      // HTML should be included as-is in the code fence (rendering is client-side)
+      expect(result.content[1].text).toContain('<script>');
+    });
+
+    it('should safely handle event handlers in htmlContent for non-widget platforms', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'gemini',
+          htmlContent: '<img src=x onerror="alert(1)">',
+        }),
+      );
+
+      expect(result.format).toBe('markdown');
+      // Content is displayed in markdown code fence
+      expect(result.content[0].text).toContain('onerror');
+    });
+
+    it('should safely handle script tags in rawOutput', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          rawOutput: { html: '<script>evil()</script>' },
+          servingMode: 'static',
+        }),
+      );
+
+      expect(result.format).toBe('json-only');
+      // JSON encoding safely escapes the content
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.html).toBe('<script>evil()</script>');
     });
   });
 

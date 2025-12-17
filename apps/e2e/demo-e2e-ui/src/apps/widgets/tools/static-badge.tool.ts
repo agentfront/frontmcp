@@ -39,6 +39,7 @@ type Output = z.infer<typeof outputSchema>;
     widgetDescription: 'Displays a pre-rendered badge that does not make additional server calls.',
     template: (ctx) => {
       const { label, value, color } = ctx.output as unknown as Output;
+      const escapeHtml = ctx.helpers.escapeHtml;
 
       const colorClasses: Record<string, string> = {
         green: 'bg-green-100 text-green-800 border-green-200',
@@ -52,8 +53,8 @@ type Output = z.infer<typeof outputSchema>;
 
       return `
 <div class="inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${classes}">
-  <span class="font-semibold">${label}:</span>
-  <span class="ml-1">${value}</span>
+  <span class="font-semibold">${escapeHtml(label)}:</span>
+  <span class="ml-1">${escapeHtml(value)}</span>
 </div>
       `.trim();
     },

@@ -15,6 +15,46 @@ import type { ComponentBuildManifest, CacheStats } from '../../../dependency/typ
 import type { BuildCacheStorage, StorageOptions, CacheEntry, CacheEntryMetadata } from './interface';
 import { DEFAULT_STORAGE_OPTIONS, calculateManifestSize } from './interface';
 
+// ============================================
+// Error Classes
+// ============================================
+
+/**
+ * Error thrown when cache storage fails to initialize.
+ */
+export class CacheInitializationError extends Error {
+  override readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'CacheInitializationError';
+    this.cause = cause;
+  }
+}
+
+/**
+ * Error thrown when a cache operation fails.
+ */
+export class CacheOperationError extends Error {
+  override readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'CacheOperationError';
+    this.cause = cause;
+  }
+}
+
+/**
+ * Error thrown when storage is accessed before initialization.
+ */
+export class StorageNotInitializedError extends Error {
+  constructor() {
+    super('Storage not initialized. Call initialize() first.');
+    this.name = 'StorageNotInitializedError';
+  }
+}
+
 /**
  * Options specific to filesystem storage.
  */
@@ -98,7 +138,7 @@ export class FilesystemStorage implements BuildCacheStorage {
       await this.loadStats();
       this.initialized = true;
     } catch (error) {
-      throw new Error(`Failed to initialize cache directory: ${error}`);
+      throw new CacheInitializationError(`Failed to initialize cache directory: ${error}`, error);
     }
   }
 
@@ -133,7 +173,12 @@ export class FilesystemStorage implements BuildCacheStorage {
       entry.metadata.accessCount++;
 
       // Write back updated metadata (async, don't await)
-      this.writeEntry(filePath, entry).catch(() => {});
+      this.writeEntry(filePath, entry).catch((err) => {
+        // Fire-and-forget write - log at debug level for visibility
+        if (process.env['DEBUG']) {
+          console.debug(`[FilesystemStorage] Failed to update cache metadata for ${key}: ${err}`);
+        }
+      });
 
       this.stats.hits++;
       this.updateHitRate();
@@ -246,7 +291,7 @@ export class FilesystemStorage implements BuildCacheStorage {
         hitRate: 0,
       };
     } catch (error) {
-      throw new Error(`Failed to clear cache: ${error}`);
+      throw new CacheOperationError(`Failed to clear cache: ${error}`, error);
     }
   }
 
@@ -325,7 +370,7 @@ export class FilesystemStorage implements BuildCacheStorage {
    */
   private ensureInitialized(): void {
     if (!this.initialized) {
-      throw new Error('Storage not initialized. Call initialize() first.');
+      throw new StorageNotInitializedError();
     }
   }
 

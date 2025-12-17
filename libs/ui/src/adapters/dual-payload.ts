@@ -12,6 +12,8 @@
  * @packageDocumentation
  */
 
+import { safeStringify } from '../utils/safe-stringify';
+
 // ============================================
 // Types
 // ============================================
@@ -124,7 +126,7 @@ export function buildDualPayload(options: DualPayloadOptions): DualPayloadResult
   // This is for programmatic parsing by Claude or other systems
   const dataBlock: TextContent = {
     type: 'text',
-    text: safeStringify(data),
+    text: data === undefined || data === null ? '{}' : safeStringify(data),
   };
 
   // Block B (index 1): Markdown-wrapped HTML
@@ -144,23 +146,6 @@ export function buildDualPayload(options: DualPayloadOptions): DualPayloadResult
 // ============================================
 // Helper Functions
 // ============================================
-
-/**
- * Safely stringify data to JSON.
- * Returns '{}' for undefined/null, handles circular references gracefully.
- */
-function safeStringify(data: unknown): string {
-  if (data === undefined || data === null) {
-    return '{}';
-  }
-
-  try {
-    return JSON.stringify(data);
-  } catch {
-    // Handle circular references or other stringify errors
-    return '{"error":"Unable to serialize data"}';
-  }
-}
 
 /**
  * Escape backticks in HTML to prevent breaking the markdown code fence.

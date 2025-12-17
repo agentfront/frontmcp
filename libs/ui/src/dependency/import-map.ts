@@ -236,6 +236,16 @@ export function generateUMDShim(dependencies: ResolvedDependency[], options: UMD
 }
 
 /**
+ * Escape special characters for HTML attribute values.
+ *
+ * @param str - String to escape
+ * @returns Escaped string safe for HTML attributes
+ */
+function escapeHtmlAttr(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+/**
  * Generate CDN script tags for non-ESM dependencies.
  *
  * @param dependencies - Resolved dependencies
@@ -245,10 +255,10 @@ export function generateCDNScriptTags(dependencies: ResolvedDependency[]): strin
   return dependencies
     .filter((dep) => !dep.esm)
     .map((dep) => {
-      const attrs: string[] = [`src="${dep.cdnUrl}"`];
+      const attrs: string[] = [`src="${escapeHtmlAttr(dep.cdnUrl)}"`];
 
       if (dep.integrity) {
-        attrs.push(`integrity="${dep.integrity}"`);
+        attrs.push(`integrity="${escapeHtmlAttr(dep.integrity)}"`);
       }
 
       attrs.push('crossorigin="anonymous"');
@@ -267,10 +277,10 @@ export function generateESMScriptTags(dependencies: ResolvedDependency[]): strin
   return dependencies
     .filter((dep) => dep.esm)
     .map((dep) => {
-      const attrs: string[] = ['type="module"', `src="${dep.cdnUrl}"`];
+      const attrs: string[] = ['type="module"', `src="${escapeHtmlAttr(dep.cdnUrl)}"`];
 
       if (dep.integrity) {
-        attrs.push(`integrity="${dep.integrity}"`);
+        attrs.push(`integrity="${escapeHtmlAttr(dep.integrity)}"`);
       }
 
       attrs.push('crossorigin="anonymous"');

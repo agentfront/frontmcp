@@ -21,6 +21,40 @@ import { HandlebarsRenderer, containsHandlebars, type RenderContext, type Helper
 import { mdxRenderer } from '../renderers/mdx.renderer';
 import type { TemplateContext } from '../runtime/types';
 import { validateTemplate, logValidationWarnings } from '../validation';
+import { escapeHtml } from '../layouts/base';
+
+// ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Safely convert context.input to a Record, handling non-object values.
+ */
+function safeInputToRecord(input: unknown): Record<string, unknown> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  return {};
+}
+
+/**
+ * Default template helpers.
+ * Reused across different template processors to avoid duplication.
+ */
+const defaultHelpers = {
+  escapeHtml,
+  formatDate: (date: Date | string, format?: string) => {
+    const d = date instanceof Date ? date : new Date(date);
+    if (format === 'iso') return d.toISOString();
+    if (format === 'time') return d.toLocaleTimeString();
+    return d.toLocaleDateString();
+  },
+  formatCurrency: (amount: number, currency = 'USD') =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount),
+  uniqueId: (prefix = 'id') => `${prefix}-${Math.random().toString(36).substring(2, 9)}`,
+  jsonEmbed: (data: unknown) =>
+    JSON.stringify(data).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026'),
+};
 
 /**
  * Get a human-readable name from a template source.
@@ -47,20 +81,27 @@ function getSourceName(source: TemplateSource): string {
 let handlebarsRenderer: HandlebarsRenderer | null = null;
 
 /**
- * Get or create the shared Handlebars renderer.
+ * Get or create a Handlebars renderer.
+ *
+ * When customHelpers are provided, returns a fresh instance to avoid
+ * cross-contamination of helpers between different templates.
+ * When no custom helpers, returns the shared singleton for performance.
  */
 async function getHandlebarsRenderer(
   customHelpers?: Record<string, (...args: unknown[]) => unknown>,
 ): Promise<HandlebarsRenderer> {
-  if (!handlebarsRenderer) {
-    handlebarsRenderer = new HandlebarsRenderer();
+  // If custom helpers provided, create a fresh instance to avoid cross-contamination
+  if (customHelpers) {
+    const freshRenderer = new HandlebarsRenderer();
+    for (const [name, fn] of Object.entries(customHelpers)) {
+      freshRenderer.registerHelper(name, fn as HelperFunction);
+    }
+    return freshRenderer;
   }
 
-  // Register any custom helpers
-  if (customHelpers) {
-    for (const [name, fn] of Object.entries(customHelpers)) {
-      handlebarsRenderer.registerHelper(name, fn as HelperFunction);
-    }
+  // Use shared singleton when no custom helpers
+  if (!handlebarsRenderer) {
+    handlebarsRenderer = new HandlebarsRenderer();
   }
 
   return handlebarsRenderer;
@@ -107,7 +148,6 @@ async function loadMarked(): Promise<MarkedModule> {
   try {
     // Use a variable to prevent TypeScript from checking the module at compile time
     const moduleName = 'marked';
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     markedModule = (await import(/* webpackIgnore: true */ moduleName)) as unknown as MarkedModule;
     return markedModule;
   } catch {
@@ -212,7 +252,7 @@ export async function processTemplate(
     const hbs = await getHandlebarsRenderer(handlebarsHelpers);
 
     const renderContext: RenderContext = {
-      input: context.input as Record<string, unknown>,
+      input: safeInputToRecord(context.input),
       output: context.output,
       structuredContent: context.structuredContent,
     };
@@ -243,36 +283,7 @@ export async function processTemplate(
         input: context.input,
         output: context.output,
         structuredContent: context.structuredContent,
-        helpers: {
-          // Default helpers matching TemplateHelpers interface
-          escapeHtml: (str: string) => {
-            return str
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
-          },
-          formatDate: (date: Date | string, format?: string) => {
-            const d = date instanceof Date ? date : new Date(date);
-            if (format === 'iso') return d.toISOString();
-            if (format === 'time') return d.toLocaleTimeString();
-            return d.toLocaleDateString();
-          },
-          formatCurrency: (amount: number, currency = 'USD') => {
-            return new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency,
-            }).format(amount);
-          },
-          uniqueId: (prefix = 'id') => {
-            return `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
-          },
-          jsonEmbed: (data: unknown) => {
-            // Safely embed JSON in HTML (escapes script-breaking characters)
-            return JSON.stringify(data).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
-          },
-        },
+        helpers: defaultHelpers,
       };
 
       const html = await mdxRenderer.render(processedContent, templateContext);
@@ -357,7 +368,7 @@ export async function processHtmlTemplate(
   const hbs = await getHandlebarsRenderer(helpers);
 
   const renderContext: RenderContext = {
-    input: context.input as Record<string, unknown>,
+    input: safeInputToRecord(context.input),
     output: context.output,
     structuredContent: context.structuredContent,
   };
@@ -384,7 +395,7 @@ export async function processMarkdownTemplate(
     const hbs = await getHandlebarsRenderer(helpers);
 
     const renderContext: RenderContext = {
-      input: context.input as Record<string, unknown>,
+      input: safeInputToRecord(context.input),
       output: context.output,
       structuredContent: context.structuredContent,
     };
@@ -416,7 +427,7 @@ export async function processMdxTemplate(
     const hbs = await getHandlebarsRenderer(helpers);
 
     const renderContext: RenderContext = {
-      input: context.input as Record<string, unknown>,
+      input: safeInputToRecord(context.input),
       output: context.output,
       structuredContent: context.structuredContent,
     };
@@ -429,26 +440,7 @@ export async function processMdxTemplate(
     input: context.input,
     output: context.output,
     structuredContent: context.structuredContent,
-    helpers: {
-      escapeHtml: (str: string) =>
-        str
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;'),
-      formatDate: (date: Date | string, format?: string) => {
-        const d = date instanceof Date ? date : new Date(date);
-        if (format === 'iso') return d.toISOString();
-        if (format === 'time') return d.toLocaleTimeString();
-        return d.toLocaleDateString();
-      },
-      formatCurrency: (amount: number, currency = 'USD') =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount),
-      uniqueId: (prefix = 'id') => `${prefix}-${Math.random().toString(36).substring(2, 9)}`,
-      jsonEmbed: (data: unknown) =>
-        JSON.stringify(data).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026'),
-    },
+    helpers: defaultHelpers,
   };
 
   return mdxRenderer.render(processed, templateContext);

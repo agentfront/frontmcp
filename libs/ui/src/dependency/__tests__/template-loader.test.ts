@@ -252,11 +252,11 @@ describe('needsRefetch', () => {
     expect(needsRefetch(resolved)).toBe(false);
   });
 
-  it('should return true when URL in cache without ETag', () => {
+  it('should return false when URL in cache without ETag but within TTL', () => {
     const cache = getUrlCache();
     cache.set('https://cdn.example.com/widget.html', {
       content: '<div>test</div>',
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString(), // Fresh entry
     });
 
     const resolved: ResolvedTemplate = {
@@ -265,6 +265,26 @@ describe('needsRefetch', () => {
       content: '<div>test</div>',
       hash: 'abc123',
     };
+    // Fresh entries without ETag don't need refetch until TTL expires
+    expect(needsRefetch(resolved)).toBe(false);
+  });
+
+  it('should return true when URL in cache without ETag and TTL expired', () => {
+    const cache = getUrlCache();
+    // Create a timestamp 6 minutes ago (beyond the 5-min TTL)
+    const expiredTime = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+    cache.set('https://cdn.example.com/expired-widget.html', {
+      content: '<div>expired</div>',
+      fetchedAt: expiredTime,
+    });
+
+    const resolved: ResolvedTemplate = {
+      source: { type: 'url', url: 'https://cdn.example.com/expired-widget.html' },
+      format: 'html',
+      content: '<div>expired</div>',
+      hash: 'def456',
+    };
+    // Expired entries without ETag need refetch
     expect(needsRefetch(resolved)).toBe(true);
   });
 });

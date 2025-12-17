@@ -701,15 +701,23 @@ export function detectTemplateMode(template: unknown): TemplateMode {
     }
 
     // Check for file path patterns
-    if (
+    // Paths typically don't have spaces, newlines, or are very long
+    const looksLikeFilePath =
+      // Relative paths
       template.startsWith('./') ||
       template.startsWith('../') ||
+      // Absolute paths (Unix)
       template.startsWith('/') ||
-      // Windows-style paths
+      // Windows-style paths (C:\, D:\, etc.)
       /^[A-Za-z]:\\/.test(template) ||
-      // File extensions
-      /\.(tsx?|jsx?|mdx?)$/i.test(template)
-    ) {
+      // File extensions (must not contain spaces to avoid false positives)
+      (/\.(tsx?|jsx?|mdx?)$/i.test(template) && !template.includes(' '));
+
+    // Additional heuristics to reduce false positives:
+    // - File paths are usually short (< 500 chars)
+    // - File paths don't contain newlines
+    // - File paths don't contain HTML-like content
+    if (looksLikeFilePath && template.length < 500 && !template.includes('\n') && !template.includes('<')) {
       return 'file-path';
     }
   }

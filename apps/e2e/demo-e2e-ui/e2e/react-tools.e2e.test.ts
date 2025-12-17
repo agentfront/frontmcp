@@ -577,6 +577,40 @@ test.describe('React Tools E2E', () => {
         expect(result).toBeError();
       });
     });
+
+    test.describe('Special Character Handling', () => {
+      // Note: React tools return structured JSON data. XSS prevention is handled
+      // by React's JSX rendering, not by the tool output. These tests verify
+      // the tool gracefully handles inputs with special characters.
+      test('should handle script tags in field labels', async ({ mcp }) => {
+        const result = await mcp.tools.call('react-form', {
+          fields: [{ name: 'safe_name', type: 'text', label: '<script>alert("xss")</script>' }],
+          submitLabel: '<img src=x onerror=alert(1)>',
+        });
+
+        // Tool should process the input successfully
+        expect(result).toBeSuccessful();
+        const json = result.json<{ fields: Array<{ label: string }>; fieldCount: number }>();
+        // The label is passed through to React, which handles escaping during render
+        expect(json.fields[0].label).toBe('<script>alert("xss")</script>');
+        expect(json.fieldCount).toBe(1);
+      });
+
+      test('should handle HTML entities in field values', async ({ mcp }) => {
+        const result = await mcp.tools.call('react-form', {
+          fields: [
+            { name: 'test', type: 'text', label: '&lt;test&gt;' },
+            { name: 'quotes', type: 'text', label: '"double" & \'single\'' },
+          ],
+          submitLabel: 'Submit',
+        });
+
+        expect(result).toBeSuccessful();
+        const json = result.json<{ fields: Array<{ label: string }> }>();
+        expect(json.fields[0].label).toBe('&lt;test&gt;');
+        expect(json.fields[1].label).toBe('"double" & \'single\'');
+      });
+    });
   });
 
   test.describe('Concurrent React Tool Calls', () => {

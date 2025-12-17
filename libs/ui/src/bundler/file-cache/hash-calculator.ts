@@ -193,7 +193,7 @@ export async function calculateComponentHash(options: ComponentHashOptions): Pro
   const files = new Set<string>();
   const fileHashes: Record<string, string> = {};
 
-  await collectLocalDependencies(absoluteEntryPath, baseDir, externals, files, maxDepth, 0);
+  await collectLocalDependencies(absoluteEntryPath, baseDir, files, maxDepth, 0);
 
   // Calculate hashes for all files
   for (const file of files) {
@@ -258,7 +258,6 @@ export async function calculateQuickHash(entryPath: string, bundleOptions?: File
 async function collectLocalDependencies(
   filePath: string,
   baseDir: string,
-  externals: string[],
   collected: Set<string>,
   maxDepth: number,
   currentDepth: number,
@@ -283,7 +282,7 @@ async function collectLocalDependencies(
       // Resolve the import path
       const resolvedPath = resolveImportPath(importPath, dirname(filePath));
       if (resolvedPath && existsSync(resolvedPath)) {
-        await collectLocalDependencies(resolvedPath, baseDir, externals, collected, maxDepth, currentDepth + 1);
+        await collectLocalDependencies(resolvedPath, baseDir, collected, maxDepth, currentDepth + 1);
       }
     }
   } catch {
