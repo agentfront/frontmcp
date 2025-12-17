@@ -59,9 +59,7 @@ jobs:
       - name: Run platform detection tests
         run: |
           echo "Running platform detection tests..."
-          npx nx run demo-e2e-ui:test -- \
-            --testPathPattern="platform-detection" \
-            --verbose
+          npx nx run demo-e2e-ui:test --testPathPatterns="platform-detection" --verbose
 
       - name: Cleanup orphan processes
         if: always()
