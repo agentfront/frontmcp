@@ -3,7 +3,8 @@
 ## Repository Structure
 
 - **Monorepo**: Nx-based monorepo managing multiple TypeScript libraries
-- **Libraries Location**: `/libs/*` - each library is independent and publishable
+- **Libraries Location**: `/libs/*`
+- each library is independent and publishable
 
 ### Primary Libraries (scoped under `@frontmcp/*`)
 

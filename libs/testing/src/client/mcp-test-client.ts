@@ -887,7 +887,9 @@ export class McpTestClient {
     // Check for Tool UI response - has UI metadata in _meta
     // inline mode uses ui/html, hybrid mode uses ui/component
     const meta = raw._meta as Record<string, unknown> | undefined;
+    console.log(`[PLATFORM_DEBUG] Response _meta: ${JSON.stringify(meta)}`);
     const hasUI = meta?.['ui/html'] !== undefined || meta?.['ui/component'] !== undefined;
+    console.log(`[PLATFORM_DEBUG] hasToolUI will return: ${hasUI}`);
     const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
 
     return {

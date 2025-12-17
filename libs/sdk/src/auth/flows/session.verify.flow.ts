@@ -110,6 +110,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     const token = extractBearerToken(authorizationHeader);
     const userAgent = (request.headers?.['user-agent'] as string | undefined) ?? undefined;
+    console.log(`[PLATFORM_DEBUG] Server received User-Agent: "${userAgent}"`);
 
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
     const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
@@ -187,8 +188,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const uuid = crypto.randomUUID();
 
     // Detect platform from User-Agent header for UI rendering support
+    console.log(`[PLATFORM_DEBUG] Creating public session with userAgent: "${this.state.userAgent}"`);
     const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
     const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
+    console.log(
+      `[PLATFORM_DEBUG] Detected platform: ${platformType}, included in payload: ${platformType !== 'unknown'}`,
+    );
 
     // Create a valid session payload matching the SessionIdPayload schema
     // Include platformType if detected (non-unknown) for Tool UI support

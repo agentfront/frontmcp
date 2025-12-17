@@ -179,7 +179,9 @@ function defaultPlatformDetection(identifier: string): AIPlatformType {
  * @returns The detected platform type
  */
 export function detectPlatformFromUserAgent(userAgent?: string, config?: PlatformDetectionConfig): AIPlatformType {
+  console.log(`[PLATFORM_DEBUG] detectPlatformFromUserAgent input: "${userAgent}"`);
   if (!userAgent) {
+    console.log(`[PLATFORM_DEBUG] No userAgent - returning 'unknown'`);
     return 'unknown';
   }
 
@@ -195,7 +197,9 @@ export function detectPlatformFromUserAgent(userAgent?: string, config?: Platfor
   }
 
   // Use default detection on user-agent
-  return defaultPlatformDetection(userAgent);
+  const result = defaultPlatformDetection(userAgent);
+  console.log(`[PLATFORM_DEBUG] defaultPlatformDetection result: ${result}`);
+  return result;
 }
 
 /**

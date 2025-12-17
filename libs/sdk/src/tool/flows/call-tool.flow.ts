@@ -386,10 +386,19 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Get platform type: first check sessionIdPayload (detected from user-agent),
       // then fall back to notification service (detected from MCP clientInfo),
       // finally default to 'unknown' (conservative: skip UI for unknown clients)
+      console.log(
+        `[PLATFORM_DEBUG] applyUI - sessionIdPayload.platformType: ${authInfo?.sessionIdPayload?.platformType}`,
+      );
+      console.log(
+        `[PLATFORM_DEBUG] applyUI - notifications.getPlatformType: ${
+          sessionId ? scope.notifications.getPlatformType(sessionId) : 'no-session'
+        }`,
+      );
       const platformType =
         authInfo?.sessionIdPayload?.platformType ??
         (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
         'unknown';
+      console.log(`[PLATFORM_DEBUG] applyUI - final platformType: ${platformType}`);
 
       // Resolve the effective serving mode based on configuration and client capabilities
       // Default is 'auto' which selects the best mode for the platform
@@ -398,6 +407,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         configuredMode,
         platformType,
       });
+      console.log(`[PLATFORM_DEBUG] applyUI - supportsUI: ${resolvedMode.supportsUI}, reason: ${resolvedMode.reason}`);
 
       // If client doesn't support UI (e.g., Gemini, unknown, or forced mode not available)
       // skip UI rendering entirely
