@@ -138,6 +138,74 @@ describe('Import Parser', () => {
       const result = parseImports(source);
       expect(result.imports).toEqual([]);
     });
+
+    it('should parse re-exports with named exports', () => {
+      const source = `export { foo, bar } from 'lodash';`;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(1);
+      expect(result.imports[0].specifier).toBe('lodash');
+      expect(result.imports[0].type).toBe('named');
+      expect(result.externalPackages).toContain('lodash');
+    });
+
+    it('should parse re-export all', () => {
+      const source = `export * from 'utils';`;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(1);
+      expect(result.imports[0].specifier).toBe('utils');
+      expect(result.imports[0].type).toBe('namespace');
+      expect(result.externalPackages).toContain('utils');
+    });
+
+    it('should parse mixed imports and re-exports', () => {
+      const source = `
+        import React from 'react';
+        export { default as Button } from './button';
+        export * from './utils';
+        import { lodash } from 'lodash';
+      `;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(4);
+      expect(result.externalPackages).toContain('react');
+      expect(result.externalPackages).toContain('lodash');
+      expect(result.relativeImports.length).toBe(2);
+    });
+
+    it('should parse combined default and named imports', () => {
+      const source = `import React, { useState, useEffect } from 'react';`;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(1);
+      expect(result.imports[0].specifier).toBe('react');
+      expect(result.imports[0].type).toBe('default');
+      expect(result.imports[0].defaultImport).toBe('React');
+      expect(result.imports[0].namedImports).toContain('useState');
+      expect(result.imports[0].namedImports).toContain('useEffect');
+    });
+
+    it('should parse combined default and namespace imports', () => {
+      const source = `import React, * as ReactHelpers from 'react';`;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(1);
+      expect(result.imports[0].specifier).toBe('react');
+      expect(result.imports[0].defaultImport).toBe('React');
+      expect(result.imports[0].namespaceImport).toBe('ReactHelpers');
+    });
+
+    it('should handle hash imports (subpath imports)', () => {
+      const source = `import { foo } from '#internal/utils';`;
+      const result = parseImports(source);
+
+      expect(result.imports.length).toBe(1);
+      expect(result.imports[0].specifier).toBe('#internal/utils');
+      // Hash imports are neither external nor relative
+      expect(result.externalImports.length).toBe(0);
+      expect(result.relativeImports.length).toBe(0);
+    });
   });
 
   describe('extractExternalPackages', () => {

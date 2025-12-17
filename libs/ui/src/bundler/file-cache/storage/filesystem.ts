@@ -7,12 +7,13 @@
  * @packageDocumentation
  */
 
-import { mkdir, readFile, writeFile, readdir, unlink, stat, rm } from 'fs/promises';
+import { mkdir, readFile, writeFile, readdir, unlink, rm } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
+import { createHash } from 'crypto';
 
 import type { ComponentBuildManifest, CacheStats } from '../../../dependency/types';
-import type { BuildCacheStorage, StorageOptions, CacheEntry, CacheEntryMetadata } from './interface';
+import type { BuildCacheStorage, StorageOptions, CacheEntry } from './interface';
 import { DEFAULT_STORAGE_OPTIONS, calculateManifestSize } from './interface';
 
 // ============================================
@@ -350,11 +351,12 @@ export class FilesystemStorage implements BuildCacheStorage {
 
   /**
    * Get the file path for a cache key.
+   * Uses SHA-256 hash to avoid collisions from key sanitization.
    */
   private getFilePath(key: string): string {
-    // Sanitize key for use as filename
-    const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return join(this.options.cacheDir, `${safeKey}${this.options.extension}`);
+    // Use hash to avoid collisions - different keys always produce different filenames
+    const hash = createHash('sha256').update(key).digest('hex').slice(0, 16);
+    return join(this.options.cacheDir, `${hash}${this.options.extension}`);
   }
 
   /**
@@ -376,6 +378,7 @@ export class FilesystemStorage implements BuildCacheStorage {
 
   /**
    * Load stats from existing cache files.
+   * Reads entry metadata to get accurate manifest sizes.
    */
   private async loadStats(): Promise<void> {
     try {
@@ -389,11 +392,12 @@ export class FilesystemStorage implements BuildCacheStorage {
         const filePath = join(this.options.cacheDir, file);
 
         try {
-          const fileStat = await stat(filePath);
+          const content = await readFile(filePath, 'utf8');
+          const entry: CacheEntry = JSON.parse(content);
           entries++;
-          totalSize += fileStat.size;
+          totalSize += entry.metadata.size;
         } catch {
-          // Skip unreadable files
+          // Skip unreadable or corrupted files
         }
       }
 
@@ -426,8 +430,9 @@ export class FilesystemStorage implements BuildCacheStorage {
   private async evictLRU(): Promise<boolean> {
     try {
       const files = await readdir(this.options.cacheDir);
-      let oldestFile: string | null = null;
+      let oldestKey: string | null = null;
       let oldestTime = Infinity;
+      let corruptedFile: string | null = null;
 
       for (const file of files) {
         if (!file.endsWith(this.options.extension)) continue;
@@ -440,18 +445,28 @@ export class FilesystemStorage implements BuildCacheStorage {
 
           if (entry.metadata.lastAccessedAt < oldestTime) {
             oldestTime = entry.metadata.lastAccessedAt;
-            oldestFile = file;
+            oldestKey = entry.metadata.key;
           }
         } catch {
-          // Corrupted file, make it a candidate for removal
-          oldestFile = file;
-          break;
+          // Corrupted file, mark for direct removal
+          corruptedFile = filePath;
         }
       }
 
-      if (oldestFile) {
-        const key = oldestFile.slice(0, -this.options.extension.length);
-        return await this.delete(key);
+      // Remove corrupted file directly if found
+      if (corruptedFile) {
+        try {
+          await unlink(corruptedFile);
+          this.stats.entries = Math.max(0, this.stats.entries - 1);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      // Delete oldest entry using the key from metadata
+      if (oldestKey) {
+        return await this.delete(oldestKey);
       }
 
       return false;

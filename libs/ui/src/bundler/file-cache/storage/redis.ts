@@ -139,7 +139,8 @@ export class RedisStorage implements BuildCacheStorage {
         return undefined;
       }
 
-      const entry: CacheEntry = this.options.json ? JSON.parse(data) : data;
+      // CacheEntry must always be JSON parsed to access metadata structure
+      const entry: CacheEntry = JSON.parse(data);
 
       // Update access metadata
       entry.metadata.lastAccessedAt = Date.now();
@@ -225,7 +226,8 @@ export class RedisStorage implements BuildCacheStorage {
     try {
       const data = await this.options.client.get(redisKey);
       if (data) {
-        const entry: CacheEntry = this.options.json ? JSON.parse(data) : data;
+        // CacheEntry must always be JSON parsed to access metadata structure
+        const entry: CacheEntry = JSON.parse(data);
         this.localStats.totalSize = Math.max(0, this.localStats.totalSize - entry.metadata.size);
       }
     } catch {
@@ -298,7 +300,8 @@ export class RedisStorage implements BuildCacheStorage {
       try {
         const data = await this.options.client.get(key);
         if (data) {
-          const entry: CacheEntry = this.options.json ? JSON.parse(data) : data;
+          // CacheEntry must always be JSON parsed to access metadata structure
+          const entry: CacheEntry = JSON.parse(data);
           totalSize += entry.metadata.size;
         }
       } catch {
