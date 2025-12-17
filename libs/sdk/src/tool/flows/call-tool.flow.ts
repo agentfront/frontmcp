@@ -383,6 +383,20 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const sessionId = authInfo?.sessionId;
       const requestId: string = randomUUID();
 
+      // [DIAG] Log applyUI context for CI debugging
+      const sessionPayloadPlatform = authInfo?.sessionIdPayload?.platformType;
+      const notificationPlatform = sessionId ? scope.notifications.getPlatformType(sessionId) : undefined;
+
+      console.log('[DIAG:call-tool.applyUI] platform detection context', {
+        toolName: tool.metadata.name,
+        sessionId: sessionId?.slice(0, 20),
+        hasAuthInfo: !!authInfo,
+        hasSessionIdPayload: !!authInfo?.sessionIdPayload,
+        sessionPayloadPlatform,
+        notificationPlatform,
+        platform: process.platform,
+      });
+
       // Get platform type: first check sessionIdPayload (detected from user-agent),
       // then fall back to notification service (detected from MCP clientInfo),
       // finally default to 'unknown' (conservative: skip UI for unknown clients)
@@ -391,12 +405,35 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
         'unknown';
 
+      // [DIAG] Log final platform type determination
+      console.log('[DIAG:call-tool.applyUI] platform type resolved', {
+        toolName: tool.metadata.name,
+        sessionId: sessionId?.slice(0, 20),
+        finalPlatformType: platformType,
+        source: sessionPayloadPlatform
+          ? 'sessionIdPayload'
+          : notificationPlatform
+          ? 'notificationService'
+          : 'fallback(unknown)',
+      });
+
       // Resolve the effective serving mode based on configuration and client capabilities
       // Default is 'auto' which selects the best mode for the platform
       const configuredMode = tool.metadata.ui.servingMode ?? 'auto';
       const resolvedMode = resolveServingMode({
         configuredMode,
         platformType,
+      });
+
+      // [DIAG] Log serving mode resolution
+      console.log('[DIAG:call-tool.applyUI] serving mode resolved', {
+        toolName: tool.metadata.name,
+        configuredMode,
+        platformType,
+        supportsUI: resolvedMode.supportsUI,
+        effectiveMode: resolvedMode.effectiveMode,
+        useDualPayload: resolvedMode.useDualPayload,
+        reason: resolvedMode.reason,
       });
 
       // If client doesn't support UI (e.g., Gemini, unknown, or forced mode not available)
@@ -408,6 +445,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           configuredMode,
           reason: resolvedMode.reason,
         });
+
+        // [DIAG] Log UI skip reason
+        console.log('[DIAG:call-tool.applyUI] UI SKIPPED', {
+          toolName: tool.metadata.name,
+          platformType,
+          supportsUI: resolvedMode.supportsUI,
+          effectiveMode: resolvedMode.effectiveMode,
+          reason: resolvedMode.reason,
+        });
+
         return;
       }
 
@@ -477,6 +524,20 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Store UI result and metadata in state for finalize stage
       this.state.set('uiResult', uiResult);
       this.state.set('uiMeta', uiMeta);
+
+      // [DIAG] Log UI result and metadata for CI debugging
+      console.log('[DIAG:call-tool.applyUI] UI result stored', {
+        toolName: tool.metadata.name,
+        platformType,
+        servingMode,
+        useDualPayload,
+        format: uiResult.format,
+        contentCleared: uiResult.contentCleared,
+        hasHtmlContent: !!htmlContent,
+        uiMetaKeys: Object.keys(uiMeta),
+        hasUiHtml: 'ui/html' in uiMeta,
+        hasUiComponent: 'ui/component' in uiMeta,
+      });
 
       this.logger.verbose('applyUI: UI processed', {
         tool: tool.metadata.name,
@@ -559,6 +620,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         result._meta = { ...result._meta, ...uiMeta };
       }
     }
+
+    // [DIAG] Log final response metadata for CI debugging
+    console.log('[DIAG:call-tool.finalize] final response', {
+      toolName: tool.metadata.name,
+      hasUiResult: !!uiResult,
+      hasUiMeta: !!uiMeta,
+      resultMetaKeys: result._meta ? Object.keys(result._meta) : [],
+      hasUiHtml: result._meta?.['ui/html'] !== undefined,
+      hasUiComponent: result._meta?.['ui/component'] !== undefined,
+      contentLength: Array.isArray(result.content) ? result.content.length : 0,
+    });
 
     // Log the final result being sent
     this.logger.info('finalize: sending response', {

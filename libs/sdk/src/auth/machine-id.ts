@@ -10,6 +10,11 @@ import { randomUUID } from 'crypto';
  *
  * All session-related modules should import getMachineId from this module
  * to ensure consistency across the application.
+ *
+ * IMPORTANT: If MACHINE_ID env var is not set, a random UUID is generated
+ * on each restart, invalidating all existing sessions. In production with
+ * multiple instances, set MACHINE_ID to enable session portability across
+ * nodes, or use instance-specific IDs to enforce session affinity.
  */
 const MACHINE_ID = (() => {
   // Prefer an injected env (stable across restarts) if you have one; else random per launch

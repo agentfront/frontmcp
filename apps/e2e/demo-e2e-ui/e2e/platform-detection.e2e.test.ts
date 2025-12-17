@@ -11,10 +11,33 @@
  */
 import { test, expect } from '@frontmcp/testing';
 
+// [DIAG] Log environment info at module load time
+console.log('[DIAG:test-env] Module loaded', {
+  platform: process.platform,
+  nodeVersion: process.version,
+  ci: process.env['CI'],
+  machineIdSet: !!process.env['MACHINE_ID'],
+  cwd: process.cwd(),
+  timestamp: new Date().toISOString(),
+});
+
 test.describe('Platform Detection E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-ui/src/main.ts',
     publicMode: true,
+  });
+
+  // [DIAG] Log environment info before all tests
+  test.beforeAll(async () => {
+    console.log('[DIAG:test-env] beforeAll hook', {
+      platform: process.platform,
+      arch: process.arch,
+      nodeVersion: process.version,
+      ci: process.env['CI'],
+      machineIdEnv: process.env['MACHINE_ID'] ? 'set' : 'not set',
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   test.describe('OpenAI Platform', () => {
@@ -554,6 +577,136 @@ test.describe('Platform Detection E2E', () => {
 
         await client.disconnect();
       }
+    });
+  });
+
+  // =========================================================================
+  // DIAGNOSTIC TESTS - For CI debugging
+  // These tests provide detailed logging to trace platform detection issues
+  // =========================================================================
+  test.describe('Diagnostic: Platform Detection Chain', () => {
+    test('should trace full platform detection flow for OpenAI', async ({ server }) => {
+      console.log('[DIAG:diagnostic-test] Starting OpenAI platform trace test');
+
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'OpenAI', version: '1.0.0' },
+      });
+
+      console.log('[DIAG:diagnostic-test] Client created', {
+        sessionId: client.sessionId?.slice(0, 20),
+        clientInfo: { name: 'OpenAI', version: '1.0.0' },
+      });
+
+      const result = await client.tools.call('html-card', {
+        title: 'Diagnostic Test',
+        content: 'Testing platform detection chain',
+      });
+
+      console.log('[DIAG:diagnostic-test] Tool result received', {
+        isSuccess: result.isSuccess,
+        hasToolUI: result.hasToolUI(),
+        rawMetaKeys: result.raw._meta ? Object.keys(result.raw._meta) : [],
+        contentLength: result.raw.content?.length ?? 0,
+      });
+
+      // Detailed assertions with helpful error messages
+      expect(result.isSuccess).toBe(true);
+
+      if (!result.hasToolUI()) {
+        console.error('[DIAG:diagnostic-test] FAILURE: hasToolUI() returned false', {
+          rawMeta: result.raw._meta,
+          rawContent: result.raw.content,
+        });
+      }
+
+      expect(result.hasToolUI()).toBe(true);
+
+      await client.disconnect();
+      console.log('[DIAG:diagnostic-test] OpenAI platform trace test completed');
+    });
+
+    test('should preserve platformType across multiple requests', async ({ server }) => {
+      console.log('[DIAG:diagnostic-test] Starting platformType persistence test');
+
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'Cursor', version: '1.0.0' },
+      });
+
+      console.log('[DIAG:diagnostic-test] Client created for persistence test', {
+        sessionId: client.sessionId?.slice(0, 20),
+      });
+
+      // First tool call
+      const result1 = await client.tools.call('html-card', {
+        title: 'First Call',
+        content: 'Testing persistence',
+      });
+
+      console.log('[DIAG:diagnostic-test] First call result', {
+        hasToolUI: result1.hasToolUI(),
+        metaKeys: result1.raw._meta ? Object.keys(result1.raw._meta) : [],
+      });
+
+      // Second tool call - should still have platformType
+      const result2 = await client.tools.call('html-table', {
+        headers: ['A'],
+        rows: [['1']],
+      });
+
+      console.log('[DIAG:diagnostic-test] Second call result', {
+        hasToolUI: result2.hasToolUI(),
+        metaKeys: result2.raw._meta ? Object.keys(result2.raw._meta) : [],
+      });
+
+      expect(result1.hasToolUI()).toBe(true);
+      expect(result2.hasToolUI()).toBe(true);
+
+      await client.disconnect();
+      console.log('[DIAG:diagnostic-test] Persistence test completed');
+    });
+
+    test('should handle concurrent tool calls from same client', async ({ server }) => {
+      console.log('[DIAG:diagnostic-test] Starting concurrent calls test');
+
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'Continue', version: '1.0.0' },
+      });
+
+      console.log('[DIAG:diagnostic-test] Client created for concurrent test', {
+        sessionId: client.sessionId?.slice(0, 20),
+      });
+
+      // Fire multiple tool calls concurrently
+      const promises = [
+        client.tools.call('html-card', { title: 'Concurrent 1', content: 'C1' }),
+        client.tools.call('html-table', { headers: ['A'], rows: [['1']] }),
+        client.tools.call('react-chart', { data: [{ label: 'X', value: 10 }] }),
+      ];
+
+      const results = await Promise.all(promises);
+
+      results.forEach((result, i) => {
+        console.log(`[DIAG:diagnostic-test] Concurrent result ${i}`, {
+          hasToolUI: result.hasToolUI(),
+          metaKeys: result.raw._meta ? Object.keys(result.raw._meta) : [],
+        });
+      });
+
+      // All should have UI
+      results.forEach((result, i) => {
+        if (!result.hasToolUI()) {
+          console.error(`[DIAG:diagnostic-test] FAILURE: Concurrent call ${i} hasToolUI() = false`, {
+            rawMeta: result.raw._meta,
+          });
+        }
+        expect(result.hasToolUI()).toBe(true);
+      });
+
+      await client.disconnect();
+      console.log('[DIAG:diagnostic-test] Concurrent calls test completed');
     });
   });
 });

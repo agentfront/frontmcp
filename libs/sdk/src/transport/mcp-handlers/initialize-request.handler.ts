@@ -35,6 +35,16 @@ export default function initializeRequestHandler({
         sessionId: ctx.authInfo?.sessionId?.slice(0, 20),
       });
 
+      // [DIAG] Log initialize request context for CI debugging
+      console.log('[DIAG:initialize] request received', {
+        clientInfo: request.params.clientInfo,
+        hasCapabilities: !!request.params.capabilities,
+        sessionId: ctx.authInfo?.sessionId?.slice(0, 20),
+        hasSessionIdPayload: !!ctx.authInfo?.sessionIdPayload,
+        existingPlatformType: ctx.authInfo?.sessionIdPayload?.platformType,
+        platform: process.platform,
+      });
+
       guardClientVersion(request.params.protocolVersion);
 
       // Store client capabilities and client info from the initialize request
@@ -56,6 +66,13 @@ export default function initializeRequestHandler({
 
           // Try to detect platform from capabilities first (e.g., MCP Apps extension)
           detectedPlatform = detectPlatformFromCapabilities(clientCapabilities);
+
+          // [DIAG] Log capability-based platform detection
+          console.log('[DIAG:initialize] capability-based detection', {
+            sessionId: sessionId.slice(0, 20),
+            hasExperimental: !!clientCapabilities.experimental,
+            detectedPlatform,
+          });
         }
 
         // Store client info (name/version) for platform detection
@@ -75,6 +92,17 @@ export default function initializeRequestHandler({
           // Prefer capability-based detection (ext-apps) over client info detection
           const finalPlatform = detectedPlatform ?? clientInfoPlatform;
 
+          // [DIAG] Log clientInfo-based platform detection
+          console.log('[DIAG:initialize] clientInfo platform detection', {
+            sessionId: sessionId.slice(0, 20),
+            clientName: request.params.clientInfo.name,
+            clientVersion: request.params.clientInfo.version,
+            clientInfoPlatform,
+            capabilityPlatform: detectedPlatform,
+            finalPlatform,
+            hasPlatformDetectionConfig: !!platformDetectionConfig,
+          });
+
           // Update the session payload with the detected platform type
           // This makes platformType available via ctx.authInfo.sessionIdPayload.platformType
           if (finalPlatform && ctx.authInfo?.sessionIdPayload) {
@@ -83,6 +111,21 @@ export default function initializeRequestHandler({
             // Persist the platformType to the session cache so subsequent requests can access it
             // This is critical for HTTP transports where sessions are parsed from encrypted headers
             updateSessionPayload(sessionId, { platformType: finalPlatform });
+
+            // [DIAG] Log session payload update
+            console.log('[DIAG:initialize] session payload updated', {
+              sessionId: sessionId.slice(0, 20),
+              platformType: finalPlatform,
+              payloadPlatformTypeAfterUpdate: ctx.authInfo.sessionIdPayload.platformType,
+            });
+          } else {
+            // [DIAG] Log why platform wasn't updated
+            console.log('[DIAG:initialize] session payload NOT updated', {
+              sessionId: sessionId.slice(0, 20),
+              finalPlatform,
+              hasSessionIdPayload: !!ctx.authInfo?.sessionIdPayload,
+              reason: !finalPlatform ? 'no platform detected' : 'no sessionIdPayload',
+            });
           }
         } else if (detectedPlatform && ctx.authInfo?.sessionIdPayload) {
           // Update platform even without client info if detected from capabilities
@@ -90,7 +133,19 @@ export default function initializeRequestHandler({
 
           // Persist to session cache
           updateSessionPayload(sessionId, { platformType: detectedPlatform });
+
+          // [DIAG] Log capability-only platform update
+          console.log('[DIAG:initialize] session payload updated (capability-only)', {
+            sessionId: sessionId.slice(0, 20),
+            platformType: detectedPlatform,
+          });
         }
+      } else {
+        // [DIAG] Log missing session ID
+        console.log('[DIAG:initialize] no sessionId available', {
+          hasAuthInfo: !!ctx.authInfo,
+          clientInfo: request.params.clientInfo,
+        });
       }
 
       // MCP Protocol Version Negotiation (per spec):
