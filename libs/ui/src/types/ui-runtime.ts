@@ -17,6 +17,7 @@
 
 // Import types from ui-config for use in this file
 import type { WidgetServingMode as _WidgetServingMode } from './ui-config';
+import type { ZodTypeAny } from 'zod';
 
 // Re-export shared types from ui-config for backwards compatibility
 export type {
@@ -138,6 +139,11 @@ export type ResourceMode = 'cdn' | 'inline';
  *   Self-contained output for limited/unknown MCP clients.
  *   Includes FrontMCP Bridge, scripts, and all necessary runtime.
  *
+ * - `'dual-payload'`: Return TWO TextContent blocks for Claude Artifacts.
+ *   Block 0: Pure JSON stringified data (for programmatic parsing).
+ *   Block 1: Markdown-wrapped HTML (```html...```) for visual rendering.
+ *   Uses cloudflare CDN for all resources (Claude sandbox restriction).
+ *
  * @example
  * ```typescript
  * // For OpenAI - just return the rendered content
@@ -157,9 +163,21 @@ export type ResourceMode = 'cdn' | 'inline';
  *   output: { temperature: 72 },
  * });
  * // result.html = '<!DOCTYPE html>...'
+ *
+ * // For Claude - return dual-payload
+ * const result = await buildWidgetOutput({
+ *   uiConfig,
+ *   toolName: 'weather',
+ *   outputMode: 'dual-payload',
+ *   output: { temperature: 72 },
+ * });
+ * // result.content = [
+ * //   { type: 'text', text: '{"temperature":72}' },
+ * //   { type: 'text', text: 'Here is the weather:\n\n```html\n<!DOCTYPE html>...\n```' }
+ * // ]
  * ```
  */
-export type OutputMode = 'code-only' | 'full-ssr';
+export type OutputMode = 'code-only' | 'full-ssr' | 'dual-payload';
 
 /**
  * Display mode for widget presentation.
@@ -1121,6 +1139,31 @@ export interface BuildManifestOptions<Input = Record<string, unknown>, Output = 
    * Used during pre-compilation.
    */
   sampleOutput?: Output;
+
+  /**
+   * Zod schema for output validation.
+   *
+   * When provided in development mode (NODE_ENV !== 'production'),
+   * the template will be validated against this schema to catch
+   * Handlebars expressions referencing non-existent fields.
+   *
+   * @example
+   * ```typescript
+   * outputSchema: z.object({
+   *   temperature: z.number(),
+   *   conditions: z.string(),
+   * })
+   * ```
+   */
+  outputSchema?: ZodTypeAny;
+
+  /**
+   * Zod schema for input validation.
+   *
+   * When provided in development mode (NODE_ENV !== 'production'),
+   * the template will also validate {{input.*}} expressions.
+   */
+  inputSchema?: ZodTypeAny;
 }
 
 // ============================================

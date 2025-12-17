@@ -8,6 +8,8 @@
  * @packageDocumentation
  */
 
+import type { CDNDependency, FileBundleOptions } from '../dependency/types';
+
 // ============================================
 // Content Security Policy
 // ============================================
@@ -110,8 +112,26 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
 
 /**
  * Widget serving mode determines how the widget HTML is delivered to the client.
+ *
+ * - `'auto'` (default): Automatically select mode based on client capabilities.
+ *   For OpenAI/ext-apps: uses 'inline'. For Claude: uses 'inline' with dual-payload.
+ *   For unsupported clients (e.g., Gemini): skips UI entirely (returns JSON only).
+ *
+ * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
+ *   Works on all platforms including network-blocked ones.
+ *
+ * - `'static'`: Pre-compiled at startup, resolved via `tools/list` (ui:// resource URI).
+ *   Widget is fetched via MCP `resources/read`.
+ *
+ * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
+ *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
+ *
+ * - `'direct-url'`: HTTP endpoint on MCP server.
+ *
+ * - `'custom-url'`: Custom URL (CDN or external hosting).
  */
 export type WidgetServingMode =
+  | 'auto' // Automatically select based on client capabilities (default)
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
@@ -224,7 +244,12 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * How the widget HTML should be served to the client.
    *
-   * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`
+   * - `'auto'` (default): Automatically select mode based on client capabilities.
+   *   For OpenAI/ext-apps clients: uses `'inline'` with `_meta`.
+   *   For Claude clients: uses `'inline'` with dual-payload format.
+   *   For unsupported clients (Gemini, unknown): skips UI (returns JSON only).
+   *
+   * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
    *   Best for small widgets, works on all platforms including network-blocked ones.
    *
    * - `'static'`: Widget pre-compiled at server startup, registered as MCP resource with `ui://` URI.
@@ -240,7 +265,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'custom-url'`: Served from a custom URL (CDN, external hosting).
    *   Requires `customWidgetUrl` to be set.
    *
-   * Default: `'inline'`
+   * @default 'auto'
    */
   servingMode?: WidgetServingMode;
 
@@ -419,6 +444,144 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
       highlightTheme?: string;
     };
   };
+
+  // ============================================
+  // Dual-Payload Options (Claude Artifacts)
+  // ============================================
+
+  /**
+   * Prefix text shown before HTML in dual-payload responses (Claude).
+   *
+   * When the output mode is `'dual-payload'` (auto-detected for Claude clients),
+   * the tool response contains two TextContent blocks:
+   * 1. Pure JSON data: `{"temperature": 72, ...}`
+   * 2. Markdown-wrapped HTML: `{prefix}:\n\n```html\n<!DOCTYPE html>...\n```
+   *
+   * This field controls the prefix text in block 2.
+   *
+   * @default 'Here is the visual result'
+   *
+   * @example
+   * ```typescript
+   * // Weather tool
+   * ui: {
+   *   template: WeatherWidget,
+   *   htmlResponsePrefix: 'Here is the weather dashboard',
+   * }
+   * // Output block 2: "Here is the weather dashboard:\n\n```html\n..."
+   *
+   * // Stock tool
+   * ui: {
+   *   template: StockWidget,
+   *   htmlResponsePrefix: 'Here is the stock information',
+   * }
+   * // Output block 2: "Here is the stock information:\n\n```html\n..."
+   * ```
+   */
+  htmlResponsePrefix?: string;
+
+  // ============================================
+  // File-Based Template Options (NEW)
+  // ============================================
+
+  /**
+   * Packages to load from CDN instead of bundling.
+   *
+   * When `template` is a file path (e.g., `'./chart-widget.tsx'`), imports
+   * of these packages will be excluded from the bundle and loaded at runtime
+   * via CDN import maps.
+   *
+   * Package names should match npm package names. The CDN URL is resolved
+   * from the built-in CDN registry or from explicit `dependencies` overrides.
+   *
+   * **Platform considerations:**
+   * - Claude only allows `cdnjs.cloudflare.com` (blocked network)
+   * - OpenAI/Cursor/other platforms can use any CDN
+   *
+   * @example
+   * ```typescript
+   * // Auto-resolved from CDN registry
+   * ui: {
+   *   template: './chart-widget.tsx',
+   *   externals: ['chart.js', 'react-chartjs-2'],
+   * }
+   *
+   * // With explicit override
+   * ui: {
+   *   template: './chart-widget.tsx',
+   *   externals: ['chart.js'],
+   *   dependencies: {
+   *     'chart.js': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+   *       integrity: 'sha512-...',
+   *       global: 'Chart',
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  externals?: string[];
+
+  /**
+   * Explicit CDN dependency overrides for external packages.
+   *
+   * Use this to specify custom CDN URLs or override the default CDN registry
+   * entries for packages listed in `externals`.
+   *
+   * Keys are npm package names. Values specify the CDN URL, integrity hash,
+   * and other loading options.
+   *
+   * @example
+   * ```typescript
+   * ui: {
+   *   template: './dashboard.tsx',
+   *   externals: ['d3', 'lodash'],
+   *   dependencies: {
+   *     'd3': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js',
+   *       integrity: 'sha512-...',
+   *       global: 'd3',
+   *     },
+   *     'lodash': {
+   *       url: 'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js',
+   *       global: '_',
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  dependencies?: Record<string, CDNDependency>;
+
+  /**
+   * Bundle options for file-based templates.
+   *
+   * Controls how the file-based template is compiled and bundled.
+   * These options are only used when `template` is a file path.
+   *
+   * @example
+   * ```typescript
+   * // Development mode
+   * ui: {
+   *   template: './debug-widget.tsx',
+   *   bundleOptions: {
+   *     minify: false,
+   *     sourceMaps: true,
+   *     target: 'esnext',
+   *   },
+   * }
+   *
+   * // Production mode (defaults)
+   * ui: {
+   *   template: './widget.tsx',
+   *   bundleOptions: {
+   *     minify: true,
+   *     treeShake: true,
+   *     target: 'es2020',
+   *   },
+   * }
+   * ```
+   */
+  fileBundleOptions?: FileBundleOptions;
 }
 
 /**

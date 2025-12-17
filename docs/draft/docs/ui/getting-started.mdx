@@ -263,35 +263,25 @@ export class GetWeatherTool extends ToolContext {
   - `pip` - Picture-in-picture mode (OpenAI only)
 </Tip>
 
-## Try the Weather UI demos
+## Try the UI Demo
 
 <Steps>
-<Step title="Spin up the React demo">
+<Step title="Spin up the UI demo server">
 
 ```bash
-pnpm nx serve react-demo --port 3003
+pnpm nx serve demo-e2e-ui --port 3003
 ```
 
-This server exposes the `get_weather` tool with a React-based widget, transparent auth defaults, and `publicMode`-friendly settings so you can hit it from the MCP Inspector.
-
-</Step>
-<Step title="Spin up the MDX demo">
-
-```bash
-pnpm nx serve mdx-demo --port 3004
-```
-
-The MDX demo renders the same weather tool with Markdown + JSX templates. Use it to compare HTML vs MDX fallbacks or to verify that custom components compile correctly.
+This server exposes multiple tools with different UI types (React, MDX, HTML, Markdown), transparent auth defaults, and `publicMode`-friendly settings so you can hit it from the MCP Inspector.
 
 </Step>
 <Step title="Run the UI regression tests">
 
 ```bash
-pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
-pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+pnpm nx test demo-e2e-ui
 ```
 
-Both suites rely on `@frontmcp/testing`’s `UIAssertions` helpers (`toHaveRenderedHtml`, `toNotContainRawContent`, `assertValidUI`) so you can copy/paste the assertions into your own projects.
+The test suite relies on `@frontmcp/testing`'s `UIAssertions` helpers (`toHaveRenderedHtml`, `toNotContainRawContent`, `assertValidUI`) so you can copy/paste the assertions into your own projects.
 
 <Check>
 The Jest output should confirm every test as passing and report that rendered HTML contains widget metadata instead of the `mdx-fallback`.

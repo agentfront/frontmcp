@@ -595,17 +595,31 @@ export {
   batchBuildWidgets,
   // Detection utilities
   detectUIType,
+  isFilePathTemplate,
   // CSP utilities
   buildCSPForType,
   buildCSPMetaContent,
   // Asset utilities
   getRendererAssets,
-  // _meta field builders (NEW)
+  // _meta field builders
   buildToolResponseMeta,
   getOutputModeForClient,
+  // File-based component building
+  buildFileComponent,
+  buildFileComponents,
+  needsFileComponentRebuild,
+  getCachedFileComponent,
+  getPlatformFromClientInfo,
 } from './widget-manifest';
 
-export type { BatchBuildOptions, BatchBuildResult, BuildMetaOptions } from './widget-manifest';
+export type {
+  BatchBuildOptions,
+  BatchBuildResult,
+  BuildMetaOptions,
+  // File-based component types
+  FileComponentBuildOptions,
+  FileComponentBuildResult,
+} from './widget-manifest';
 
 // Re-export runtime types for convenience
 export type {
@@ -651,6 +665,8 @@ export {
   HANDLEBARS_CDN,
   MDX_RUNTIME_CDN,
   TAILWIND_CDN,
+  // Cloudflare CDN (Claude-compatible)
+  CLOUDFLARE_CDN,
   // Helper Functions
   getDefaultAssets,
   buildCDNScriptTag,
@@ -658,8 +674,12 @@ export {
   buildTailwindScriptTag,
   hasInlineScripts,
   getURLsToPreFetch,
+  // Platform-aware Tailwind
+  getTailwindForPlatform,
+  buildCloudflareStylesheetTag,
+  buildCloudflareScriptTag,
   // CDN Info for tools/list _meta
   buildCDNInfoForUIType,
 } from './cdn-resources';
 
-export type { CDNInfo } from './cdn-resources';
+export type { CDNInfo, CDNPlatform } from './cdn-resources';

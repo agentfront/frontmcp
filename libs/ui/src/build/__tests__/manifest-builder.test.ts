@@ -13,9 +13,19 @@ describe('detectUIType', () => {
       expect(detectUIType('<div>Hello</div>')).toBe('html');
     });
 
-    it('should detect html for file paths (treated as strings)', () => {
-      // File paths without JSX indicators are treated as plain strings
-      expect(detectUIType('./components/Weather.tsx')).toBe('html');
+    it('should detect react for .tsx file paths (file-based templates)', () => {
+      // File paths ending in .tsx are detected as file-based React templates
+      expect(detectUIType('./components/Weather.tsx')).toBe('react');
+    });
+
+    it('should detect html for .html file paths', () => {
+      // File paths ending in .html are detected as file-based HTML templates
+      expect(detectUIType('./components/Weather.html')).toBe('html');
+    });
+
+    it('should detect html for plain string paths without extension', () => {
+      // Plain strings without recognized extensions are treated as HTML
+      expect(detectUIType('./components/Weather')).toBe('html');
     });
   });
 
@@ -499,11 +509,11 @@ describe('getOutputModeForClient', () => {
     expect(getOutputModeForClient({ name: 'Cursor' })).toBe('code-only');
   });
 
-  it('should return full-ssr for Claude (sandboxed artifacts block external network)', () => {
-    expect(getOutputModeForClient({ name: 'Claude' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'claude-desktop' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'Claude Desktop' })).toBe('full-ssr');
-    expect(getOutputModeForClient({ name: 'Anthropic Claude' })).toBe('full-ssr');
+  it('should return dual-payload for Claude (JSON + markdown-wrapped HTML)', () => {
+    expect(getOutputModeForClient({ name: 'Claude' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'claude-desktop' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'Claude Desktop' })).toBe('dual-payload');
+    expect(getOutputModeForClient({ name: 'Anthropic Claude' })).toBe('dual-payload');
   });
 
   it('should return full-ssr for unknown clients', () => {

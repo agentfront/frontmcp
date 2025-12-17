@@ -27,7 +27,9 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
   ui: {
-    uiType: 'html',
+    servingMode: 'auto',
+    displayMode: 'inline',
+    widgetDescription: 'Displays a formatted HTML table with headers and rows.',
     template: (ctx) => {
       const { headers, rows, title } = ctx.input as Input;
       const escapeHtml = ctx.helpers.escapeHtml;

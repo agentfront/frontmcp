@@ -38,6 +38,7 @@
           "libs/ui/src/theme/index.ts",
           "libs/ui/src/tool-template/index.ts",
           "libs/ui/src/types/index.ts",
+          "libs/ui/src/utils/index.ts",
           "libs/ui/src/validation/index.ts",
           "libs/ui/src/web-components/index.ts",
           "libs/ui/src/widgets/index.ts"
@@ -81,6 +82,7 @@
           "libs/ui/src/theme/index.ts",
           "libs/ui/src/tool-template/index.ts",
           "libs/ui/src/types/index.ts",
+          "libs/ui/src/utils/index.ts",
           "libs/ui/src/validation/index.ts",
           "libs/ui/src/web-components/index.ts",
           "libs/ui/src/widgets/index.ts"

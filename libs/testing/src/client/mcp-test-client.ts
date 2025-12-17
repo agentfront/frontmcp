@@ -94,14 +94,9 @@ export class McpTestClient {
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
     };
 
-    // In public mode, user is always anonymous (no token authentication)
-    if (config.publicMode) {
-      this._authState = {
-        isAnonymous: true,
-        scopes: [],
-      };
-    } else if (config.auth?.token) {
-      // Parse auth state from config
+    // If a token is provided, user is authenticated (even in public mode)
+    // Public mode just means anonymous access is allowed, not that tokens are ignored
+    if (config.auth?.token) {
       this._authState = {
         isAnonymous: false,
         token: config.auth.token,
@@ -109,6 +104,7 @@ export class McpTestClient {
         user: this.parseUserFromToken(config.auth.token),
       };
     }
+    // Otherwise, user is anonymous (default _authState is already { isAnonymous: true, scopes: [] })
 
     // Initialize interceptor chain
     this._interceptors = new DefaultInterceptorChain();
@@ -887,9 +883,10 @@ export class McpTestClient {
     const raw = response.data ?? { content: [] };
     const isError = !response.success || raw.isError === true;
 
-    // Check for Tool UI response - has structuredContent and ui/html in _meta
+    // Check for Tool UI response - has UI metadata in _meta
+    // inline mode uses ui/html, hybrid mode uses ui/component
     const meta = raw._meta as Record<string, unknown> | undefined;
-    const hasUI = meta?.['ui/html'] !== undefined;
+    const hasUI = meta?.['ui/html'] !== undefined || meta?.['ui/component'] !== undefined;
     const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
 
     return {

@@ -6,8 +6,9 @@
     "moduleResolution": "NodeNext",
     "types": ["node"],
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "jsx": "react-jsx"
   },
   "exclude": ["jest.config.ts", "jest.e2e.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts", "e2e/**/*.ts"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

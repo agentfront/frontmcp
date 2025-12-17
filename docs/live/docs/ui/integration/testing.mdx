@@ -372,17 +372,18 @@ test.describe('Weather Tool UI', () => {
 ## Reference suites in the repo
 
 <Note>
-Use the weather demos under `apps/ui/**` as golden tests before copying patterns into your own workspace. They exercise every matcher in this guide, including `toHaveRenderedHtml`, `toNotContainRawContent`, and the `UIAssertions` helpers.
+Use the UI demo under `apps/e2e/demo-e2e-ui` as golden tests before copying patterns into your own workspace. It exercises every matcher in this guide, including `toHaveRenderedHtml`, `toNotContainRawContent`, and the `UIAssertions` helpers.
 </Note>
 
-- `apps/ui/react-demo/e2e/weather.e2e.ts` verifies the React renderer, CDN-based serving mode, and transparent auth defaults.
-- `apps/ui/mdx-demo/e2e/weather.e2e.ts` ensures the MDX renderer compiles markdown + JSX without falling back to escaped content.
+- `apps/e2e/demo-e2e-ui/e2e/react-tools.e2e.test.ts` verifies the React renderer, CDN-based serving mode, and custom components.
+- `apps/e2e/demo-e2e-ui/e2e/mdx-tools.e2e.test.ts` ensures the MDX renderer compiles markdown + JSX with custom `mdxComponents`.
+- `apps/e2e/demo-e2e-ui/e2e/html-tools.e2e.test.ts` tests HTML template rendering.
+- `apps/e2e/demo-e2e-ui/e2e/markdown-tools.e2e.test.ts` tests Markdown template rendering.
 
 Run them directly when updating the UI runtime:
 
 ```bash
-pnpm jest apps/ui/react-demo/e2e/weather.e2e.ts
-pnpm jest apps/ui/mdx-demo/e2e/weather.e2e.ts
+pnpm nx test demo-e2e-ui
 ```
 
 <Tip>

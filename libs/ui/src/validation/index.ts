@@ -1,16 +1,51 @@
 /**
- * @file index.ts
- * @description Validation module exports for @frontmcp/ui.
+ * Validation Module
  *
- * Provides Zod-based input validation utilities for UI components.
- * All components use these utilities to validate options at runtime
- * and display user-friendly error boxes on invalid input.
+ * Component input validation and template validation against Zod schemas
+ * for FrontMCP UI widgets.
  *
- * @module @frontmcp/ui/validation
+ * @packageDocumentation
  */
 
-// Error box component
+// ============================================
+// Component Validation (existing)
+// ============================================
+
 export { validationErrorBox, type ValidationErrorBoxOptions } from './error-box';
 
-// Validation wrapper utilities
-export { validateOptions, withValidation, type ValidationConfig, type ValidationResult } from './wrapper';
+export { validateOptions, type ValidationConfig, type ValidationResult } from './wrapper';
+
+// ============================================
+// Schema Path Extraction (new)
+// ============================================
+
+export {
+  extractSchemaPaths,
+  getSchemaPathStrings,
+  isValidSchemaPath,
+  getTypeAtPath,
+  getPathInfo,
+  getRootFieldNames,
+  getTypeDescription,
+  type SchemaPath,
+  type ExtractPathsOptions,
+} from './schema-paths';
+
+// ============================================
+// Template Validation (new)
+// ============================================
+
+export {
+  validateTemplate,
+  formatValidationWarnings,
+  logValidationWarnings,
+  assertTemplateValid,
+  isTemplateValid,
+  getMissingFields,
+  type TemplateValidationResult,
+  type TemplateValidationError,
+  type TemplateValidationWarning,
+  type ValidateTemplateOptions,
+  type ValidationErrorType,
+  type ValidationWarningType,
+} from './template-validator';

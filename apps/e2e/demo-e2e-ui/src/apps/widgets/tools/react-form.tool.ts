@@ -1,24 +1,30 @@
+/**
+ * React Form Tool with React UI
+ *
+ * Demonstrates how to use React components for Tool UI templates.
+ * The UI is defined as a React component and rendered via the React renderer.
+ */
+
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+import FormCard from './form-ui';
 
-const inputSchema = z
-  .object({
-    fields: z
-      .array(
-        z.object({
-          name: z.string(),
-          type: z.enum(['text', 'email', 'number', 'textarea']),
-          label: z.string(),
-          required: z.boolean().optional(),
-        }),
-      )
-      .describe('Form fields configuration'),
-    submitLabel: z.string().optional().describe('Submit button text'),
-  })
-  .strict();
+// Define input/output schemas
+const inputSchema = {
+  fields: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.enum(['text', 'email', 'number', 'textarea']),
+        label: z.string(),
+        required: z.boolean().optional(),
+      }),
+    )
+    .describe('Form fields configuration'),
+  submitLabel: z.string().optional().describe('Submit button text'),
+};
 
 const outputSchema = z.object({
-  uiType: z.literal('react'),
   fields: z.array(
     z.object({
       name: z.string(),
@@ -30,75 +36,32 @@ const outputSchema = z.object({
   fieldCount: z.number(),
 });
 
-type Input = z.infer<typeof inputSchema>;
-type Output = z.infer<typeof outputSchema>;
+// Infer types from schemas
+type FormInput = z.infer<z.ZodObject<typeof inputSchema>>;
+type FormOutput = z.infer<typeof outputSchema>;
 
 @Tool({
   name: 'react-form',
-  description: 'Generate a React form component',
+  description: 'Generate a dynamic React form component. Returns interactive form with configurable fields.',
   inputSchema,
   outputSchema,
+  annotations: {
+    title: 'Dynamic Form',
+    readOnlyHint: false,
+    openWorldHint: true,
+  },
   ui: {
-    uiType: 'react',
-    template: (ctx) => {
-      if (!ctx.output || !ctx.input) {
-        throw new Error('Template context is missing required properties');
-      }
-      const { fields } = ctx.output as unknown as Output;
-      const submitLabel = (ctx.input as unknown as Input).submitLabel || 'Submit';
-
-      return `
-        function DynamicForm() {
-          const fields = ${JSON.stringify(fields)};
-          const submitLabel = ${JSON.stringify(submitLabel)};
-
-          return (
-            <form style={{ fontFamily: 'sans-serif', maxWidth: '400px', padding: '16px' }}>
-              {fields.map((field, i) => (
-                <div key={i} style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-                    {field.label}{field.required && <span style={{ color: 'red' }}>*</span>}
-                  </label>
-                  {field.type === 'textarea' ? (
-                    <textarea
-                      name={field.name}
-                      required={field.required}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '80px' }}
-                    />
-                  ) : (
-                    <input
-                      type={field.type}
-                      name={field.name}
-                      required={field.required}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
-                  )}
-                </div>
-              ))}
-              <button
-                type="submit"
-                style={{
-                  background: '#4A90D9',
-                  color: 'white',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                {submitLabel}
-              </button>
-            </form>
-          );
-        }
-      `;
-    },
+    template: FormCard,
+    widgetDescription: 'Displays a dynamic form with configurable fields and validation.',
+    displayMode: 'inline',
+    widgetAccessible: true,
+    servingMode: 'auto',
+    resourceMode: 'cdn',
   },
 })
 export default class ReactFormTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: Input): Promise<Output> {
+  async execute(input: FormInput): Promise<FormOutput> {
     return {
-      uiType: 'react',
       fields: input.fields,
       fieldCount: input.fields.length,
     };

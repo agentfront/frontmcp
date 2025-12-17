@@ -23,6 +23,8 @@ import {
 } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
+import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/ui/adapters';
+import { safeStringify } from '@frontmcp/ui/utils';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -45,6 +47,10 @@ const stateSchema = z.object({
   output: outputSchema,
   // Tool owner ID for hook filtering (set during parseInput)
   _toolOwnerId: z.string().optional(),
+  // UI result from applyUI stage (if UI config exists)
+  uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
+  // UI metadata from rendering (merged into _meta)
+  uiMeta: z.record(z.string(), z.unknown()).optional(),
 });
 
 const plan = {
@@ -57,7 +63,7 @@ const plan = {
     'acquireSemaphore',
   ],
   execute: ['validateInput', 'execute', 'validateOutput'],
-  finalize: ['releaseSemaphore', 'releaseQuota', 'finalize'],
+  finalize: ['releaseSemaphore', 'releaseQuota', 'applyUI', 'finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -74,29 +80,6 @@ declare global {
 
 const name = 'tools:call-tool' as const;
 const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
-
-/**
- * Safely stringify a value, handling circular references and other edge cases.
- * This prevents tool calls from failing due to serialization errors.
- */
-const safeStringify = (value: unknown, space?: number): string => {
-  const seen = new WeakSet<object>();
-  try {
-    return JSON.stringify(
-      value,
-      (_key, val) => {
-        if (typeof val === 'object' && val !== null) {
-          if (seen.has(val)) return '[Circular]';
-          seen.add(val);
-        }
-        return val;
-      },
-      space,
-    );
-  } catch {
-    return JSON.stringify({ error: 'Output could not be serialized' });
-  }
-};
 
 @Flow({
   name,
@@ -375,10 +358,176 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('releaseQuota:done');
   }
 
+  /**
+   * Apply UI rendering to the tool response.
+   * This stage handles all UI-related logic including platform detection,
+   * serving mode resolution, and content formatting.
+   */
+  @Stage('applyUI')
+  async applyUI() {
+    this.logger.verbose('applyUI:start');
+    const { tool, rawOutput, input } = this.state;
+
+    // Skip if no tool or no UI config
+    if (!tool || !hasUIConfig(tool.metadata)) {
+      this.logger.verbose('applyUI:skip (no UI config)');
+      return;
+    }
+
+    try {
+      // Cast scope to Scope to access toolUI and notifications
+      const scope = this.scope as Scope;
+
+      // Get session info for platform detection from authInfo (already in state from parseInput)
+      const { authInfo } = this.state;
+      const sessionId = authInfo?.sessionId;
+      const requestId: string = randomUUID();
+
+      // Get platform type: first check sessionIdPayload (detected from user-agent),
+      // then fall back to notification service (detected from MCP clientInfo),
+      // finally default to 'unknown' (conservative: skip UI for unknown clients)
+      const platformType =
+        authInfo?.sessionIdPayload?.platformType ??
+        (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
+        'unknown';
+
+      // Resolve the effective serving mode based on configuration and client capabilities
+      // Default is 'auto' which selects the best mode for the platform
+      const configuredMode = tool.metadata.ui.servingMode ?? 'auto';
+      const resolvedMode = resolveServingMode({
+        configuredMode,
+        platformType,
+      });
+
+      // If client doesn't support UI (e.g., Gemini, unknown, or forced mode not available)
+      // skip UI rendering entirely
+      if (!resolvedMode.supportsUI || resolvedMode.effectiveMode === null) {
+        this.logger.verbose('applyUI: Skipping UI (client does not support it)', {
+          tool: tool.metadata.name,
+          platform: platformType,
+          configuredMode,
+          reason: resolvedMode.reason,
+        });
+        return;
+      }
+
+      const servingMode = resolvedMode.effectiveMode;
+      const useDualPayload = resolvedMode.useDualPayload;
+      let htmlContent: string | undefined;
+      let uiMeta: Record<string, unknown> = {};
+
+      if (servingMode === 'static') {
+        // For static mode: no additional rendering needed
+        // Widget was already registered at server startup
+        this.logger.verbose('applyUI: UI using static mode (structured data only)', {
+          tool: tool.metadata.name,
+          platform: platformType,
+        });
+      } else if (servingMode === 'hybrid') {
+        // For hybrid mode: build the component payload
+        const componentPayload = scope.toolUI.buildHybridComponentPayload({
+          toolName: tool.metadata.name,
+          template: tool.metadata.ui.template,
+          uiConfig: tool.metadata.ui,
+        });
+
+        if (componentPayload) {
+          uiMeta = {
+            'ui/component': componentPayload,
+            'ui/type': componentPayload.type,
+          };
+        }
+
+        this.logger.verbose('applyUI: UI using hybrid mode (structured data + component)', {
+          tool: tool.metadata.name,
+          platform: platformType,
+          hasComponent: !!componentPayload,
+          componentType: componentPayload?.type,
+          componentHash: componentPayload?.hash,
+        });
+      } else {
+        // For inline mode (default): render HTML with data embedded
+        const uiRenderResult = await scope.toolUI.renderAndRegisterAsync({
+          toolName: tool.metadata.name,
+          requestId,
+          input:
+            input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+              ? (input.arguments as Record<string, unknown>)
+              : {},
+          output: rawOutput,
+          structuredContent: undefined,
+          uiConfig: tool.metadata.ui,
+          platformType,
+        });
+
+        htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
+        uiMeta = uiRenderResult.meta || {};
+      }
+
+      // Build the response content using the extracted utility
+      const uiResult = buildToolResponseContent({
+        rawOutput,
+        htmlContent,
+        htmlPrefix: tool.metadata.ui?.htmlResponsePrefix,
+        servingMode,
+        useDualPayload,
+        platformType,
+      });
+
+      // Store UI result and metadata in state for finalize stage
+      this.state.set('uiResult', uiResult);
+      this.state.set('uiMeta', uiMeta);
+
+      this.logger.verbose('applyUI: UI processed', {
+        tool: tool.metadata.name,
+        platform: platformType,
+        servingMode,
+        useDualPayload,
+        format: uiResult.format,
+        contentCleared: uiResult.contentCleared,
+      });
+    } catch (error) {
+      // UI rendering failure should not fail the tool call
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const uiConfig = tool.metadata.ui;
+
+      this.logger.error('applyUI: UI rendering failed', {
+        tool: tool.metadata.name,
+        error: errorMessage,
+        stack: errorStack,
+        templateType: uiConfig?.template
+          ? typeof uiConfig.template === 'function'
+            ? 'react-component'
+            : typeof uiConfig.template === 'string'
+            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
+              ? 'react-file'
+              : 'html-file'
+            : 'unknown'
+          : 'none',
+      });
+
+      // In debug mode, also log to console for immediate visibility
+      if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
+        console.error('[FrontMCP] UI Rendering Error:', {
+          tool: tool.metadata.name,
+          error: errorMessage,
+          stack: errorStack,
+        });
+      }
+    }
+
+    this.logger.verbose('applyUI:done');
+  }
+
+  /**
+   * Finalize the tool response.
+   * Validates output, applies UI result from applyUI stage, and sends the response.
+   */
   @Stage('finalize')
   async finalize() {
     this.logger.verbose('finalize:start');
-    const { tool, rawOutput, input } = this.state;
+    const { tool, rawOutput, uiResult, uiMeta } = this.state;
 
     if (!tool) {
       this.logger.error('finalize: tool not found in state');
@@ -394,206 +543,20 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const parseResult = tool.safeParseOutput(rawOutput);
 
     if (!parseResult.success) {
-      // add support for request id in error messages
       this.logger.error('finalize: output validation failed', {
         tool: tool.metadata.name,
         errors: parseResult.error,
       });
-
-      // Use InvalidOutputError, which hides internal details in production
       throw new InvalidOutputError();
     }
 
     const result = parseResult.data;
 
-    // If tool has UI config, render and add to _meta
-    if (hasUIConfig(tool.metadata)) {
-      try {
-        // Cast scope to Scope to access toolUI and notifications
-        const scope = this.scope as Scope;
-
-        // Get session info for platform detection from authInfo (already in state from parseInput)
-        const { authInfo } = this.state;
-        const sessionId = authInfo?.sessionId;
-        const requestId: string = randomUUID();
-
-        // Get platform type: first check sessionIdPayload (detected from user-agent),
-        // then fall back to notification service (detected from MCP clientInfo),
-        // finally default to 'openai'
-        const platformType =
-          authInfo?.sessionIdPayload?.platformType ??
-          (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
-          'openai';
-
-        // Get the serving mode (default to 'inline' for backward compatibility)
-        const servingMode = tool.metadata.ui.servingMode ?? 'inline';
-
-        if (servingMode === 'static') {
-          // For static mode: return ONLY structured data
-          // The static widget was already registered at server startup and advertised in tools/list
-          // Widget reads tool output from platform context (e.g., window.openai.toolOutput)
-          // NO UI _meta fields needed - the client uses the outputTemplate URI from tools/list
-
-          // Return structured data as JSON text content
-          result.content = [
-            {
-              type: 'text',
-              text: safeStringify(rawOutput),
-            },
-          ];
-
-          // Do NOT add any UI _meta fields - widget reads from platform context
-          // The outputTemplate URI (ui://widget/{toolName}.html) was already provided in tools/list
-
-          this.logger.verbose('finalize: UI using static mode (structured data only)', {
-            tool: tool.metadata.name,
-            platform: platformType,
-            outputKeys:
-              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
-          });
-        } else if (servingMode === 'hybrid') {
-          // For hybrid mode: return structured data + transpiled component code
-          // The hybrid shell (React runtime + renderer) was pre-compiled at server startup
-          // and advertised via outputTemplate URI in tools/list.
-          // The shell dynamically imports the component code from _meta['ui/component']
-          // and renders it with toolOutput data from the platform context.
-
-          // Build the component payload with transpiled code
-          const componentPayload = scope.toolUI.buildHybridComponentPayload({
-            toolName: tool.metadata.name,
-            template: tool.metadata.ui.template,
-            uiConfig: tool.metadata.ui,
-          });
-
-          // Return structured data as JSON text content
-          result.content = [
-            {
-              type: 'text',
-              text: safeStringify(rawOutput),
-            },
-          ];
-
-          // Add component payload to _meta for the hybrid shell's dynamic renderer
-          if (componentPayload) {
-            result._meta = {
-              ...result._meta,
-              'ui/component': componentPayload,
-              'ui/type': componentPayload.type,
-            };
-          }
-
-          this.logger.verbose('finalize: UI using hybrid mode (structured data + component)', {
-            tool: tool.metadata.name,
-            platform: platformType,
-            hasComponent: !!componentPayload,
-            componentType: componentPayload?.type,
-            componentHash: componentPayload?.hash,
-            outputKeys:
-              rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput) ? Object.keys(rawOutput) : [],
-          });
-        } else {
-          // For inline mode (default): render HTML with data embedded in each response
-          // Use async version to support React component templates via SSR
-          const uiResult = await scope.toolUI.renderAndRegisterAsync({
-            toolName: tool.metadata.name,
-            requestId,
-            input:
-              input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
-                ? (input.arguments as Record<string, unknown>)
-                : {},
-            output: rawOutput,
-            structuredContent: result.structuredContent,
-            uiConfig: tool.metadata.ui,
-            platformType,
-          });
-
-          // Merge UI metadata into result._meta
-          result._meta = {
-            ...result._meta,
-            ...uiResult.meta,
-          };
-
-          // For platforms that support widgets (OpenAI, ext-apps), clear content since widget displays data
-          // For Claude and other platforms, keep the text content as they don't support _meta UI fields
-          const supportsWidgets = platformType === 'openai' || platformType === 'ext-apps';
-
-          if (supportsWidgets) {
-            // Clear content - widget will display from _meta['ui/html']
-            result.content = [];
-          } else {
-            // For Claude and other platforms without widget support:
-            // Return JSON data + HTML template as artifact hint
-            const htmlContent = uiResult?.meta?.['ui/html'];
-
-            if (htmlContent) {
-              // Include HTML template as artifact hint for Claude
-              // Claude can use this to create an HTML artifact for visual display
-              result.content = [
-                {
-                  type: 'text',
-                  text: `## Data\n\`\`\`json\n${safeStringify(
-                    rawOutput,
-                    2,
-                  )}\n\`\`\`\n\n## Visual Template (for artifact rendering)\n\`\`\`html\n${htmlContent}\n\`\`\``,
-                },
-              ];
-            } else {
-              // Fallback: JSON only
-              result.content = [
-                {
-                  type: 'text',
-                  text: safeStringify(rawOutput, 2),
-                },
-              ];
-            }
-          }
-
-          this.logger.verbose('finalize: UI metadata added (inline mode)', {
-            tool: tool.metadata.name,
-            platform: platformType,
-            supportsWidgets,
-            contentCleared: supportsWidgets,
-            htmlHintIncluded: !supportsWidgets && !!uiResult?.meta?.['ui/html'],
-          });
-        }
-      } catch (error) {
-        // UI rendering failure should not fail the tool call
-        // Log with full context to help debugging
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        const uiConfig = tool.metadata.ui;
-
-        this.logger.error('finalize: UI rendering failed', {
-          tool: tool.metadata.name,
-          error: errorMessage,
-          stack: errorStack,
-          templateType: uiConfig?.template
-            ? typeof uiConfig.template === 'function'
-              ? 'react-component'
-              : typeof uiConfig.template === 'string'
-              ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-                ? 'react-file'
-                : 'html-file'
-              : 'unknown'
-            : 'none',
-          hasStructuredContent: result.structuredContent !== undefined,
-          structuredContentKeys:
-            result.structuredContent &&
-            typeof result.structuredContent === 'object' &&
-            result.structuredContent !== null &&
-            !Array.isArray(result.structuredContent)
-              ? Object.keys(result.structuredContent)
-              : [],
-        });
-
-        // In debug mode, also log to console for immediate visibility
-        if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
-          console.error('[FrontMCP] UI Rendering Error:', {
-            tool: tool.metadata.name,
-            error: errorMessage,
-            stack: errorStack,
-          });
-        }
+    // Apply UI result if available (from applyUI stage)
+    if (uiResult) {
+      result.content = uiResult.content;
+      if (uiMeta) {
+        result._meta = { ...result._meta, ...uiMeta };
       }
     }
 

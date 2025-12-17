@@ -203,10 +203,14 @@ function createServerFixture(server: TestServer): ServerFixture {
     info: server.info,
 
     createClient: async (opts) => {
+      // Inherit publicMode from current config when creating additional clients
+      // This ensures all clients connect to a public server correctly
       return McpTestClient.create({
         baseUrl: server.info.baseUrl,
         transport: opts?.transport ?? 'streamable-http',
         auth: opts?.token ? { token: opts.token } : undefined,
+        clientInfo: opts?.clientInfo,
+        publicMode: currentConfig.publicMode,
       }).buildAndConnect();
     },
 

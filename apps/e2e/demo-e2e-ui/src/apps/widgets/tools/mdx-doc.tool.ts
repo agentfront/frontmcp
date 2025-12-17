@@ -33,7 +33,9 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
   ui: {
-    uiType: 'mdx',
+    servingMode: 'auto',
+    displayMode: 'inline',
+    widgetDescription: 'Displays a formatted MDX document with sections.',
     template: (ctx) => {
       const { title, sectionCount, mdxContent } = ctx.output as unknown as Output;
 

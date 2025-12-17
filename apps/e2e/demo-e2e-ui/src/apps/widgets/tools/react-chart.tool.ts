@@ -1,22 +1,28 @@
+/**
+ * React Chart Tool with React UI
+ *
+ * Demonstrates how to use React components for Tool UI templates.
+ * The UI is defined as a React component and rendered via the React renderer.
+ */
+
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+import ChartCard from './chart-ui';
 
-const inputSchema = z
-  .object({
-    data: z
-      .array(
-        z.object({
-          label: z.string(),
-          value: z.number(),
-        }),
-      )
-      .describe('Chart data points'),
-    title: z.string().optional().describe('Chart title'),
-  })
-  .strict();
+// Define input/output schemas
+const inputSchema = z.object({
+  data: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.number(),
+      }),
+    )
+    .describe('Chart data points'),
+  title: z.string().optional().describe('Chart title'),
+});
 
 const outputSchema = z.object({
-  uiType: z.literal('react'),
   data: z.array(
     z.object({
       label: z.string(),
@@ -26,58 +32,33 @@ const outputSchema = z.object({
   maxValue: z.number(),
 });
 
-type Input = z.infer<typeof inputSchema>;
-type Output = z.infer<typeof outputSchema>;
+// Infer types from schemas
+type ChartInput = z.infer<typeof inputSchema>;
+type ChartOutput = z.infer<typeof outputSchema>;
 
 @Tool({
   name: 'react-chart',
-  description: 'Generate a React bar chart visualization',
+  description: 'Generate a React bar chart visualization. Returns interactive chart with data points.',
   inputSchema,
   outputSchema,
+  annotations: {
+    title: 'Chart Visualization',
+    readOnlyHint: true,
+  },
   ui: {
-    uiType: 'react',
-    template: (ctx) => {
-      const { data, maxValue } = ctx.output as unknown as Output;
-      const title = (ctx.input as unknown as Input).title;
-
-      return `
-        function BarChart() {
-          const data = ${JSON.stringify(data)};
-          const maxValue = ${maxValue};
-          const title = ${JSON.stringify(title || 'Chart')};
-
-          return (
-            <div style={{ fontFamily: 'sans-serif', padding: '16px' }}>
-              <h3 style={{ margin: '0 0 16px 0' }}>{title}</h3>
-              <div style={{ display: 'flex', alignItems: 'flex-end', height: '200px', gap: '8px' }}>
-                {data.map((item, i) => (
-                  <div key={i} style={{ flex: 1, textAlign: 'center' }}>
-                    <div
-                      style={{
-                        height: \`\${(item.value / maxValue) * 180}px\`,
-                        background: '#4A90D9',
-                        borderRadius: '4px 4px 0 0',
-                        minHeight: '4px',
-                      }}
-                    />
-                    <div style={{ fontSize: '12px', marginTop: '8px' }}>{item.label}</div>
-                    <div style={{ fontSize: '10px', color: '#666' }}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        }
-      `;
-    },
+    template: ChartCard,
+    widgetDescription: 'Displays an interactive bar chart with color-coded data points.',
+    displayMode: 'inline',
+    widgetAccessible: true,
+    servingMode: 'auto',
+    resourceMode: 'cdn',
   },
 })
 export default class ReactChartTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
-  async execute(input: Input): Promise<Output> {
+  async execute(input: ChartInput): Promise<ChartOutput> {
     const maxValue = Math.max(...input.data.map((d) => d.value), 1);
 
     return {
-      uiType: 'react',
       data: input.data,
       maxValue,
     };

@@ -20,3 +20,38 @@ export {
   buildToolDiscoveryMeta,
   buildOpenAICSP,
 } from './platform-meta';
+
+export {
+  // Dual-Payload Types
+  type TextContent,
+  type DualPayloadOptions,
+  type DualPayloadResult,
+  // Constants
+  DEFAULT_HTML_PREFIX,
+  // Builder Functions
+  buildDualPayload,
+  // Validation Helpers
+  isDualPayload,
+  parseDualPayload,
+} from './dual-payload';
+
+export {
+  // Serving Mode Types
+  type ResolvedServingMode,
+  type ResolveServingModeOptions,
+  // Resolver Functions
+  resolveServingMode,
+  isPlatformModeSupported,
+  getDefaultServingMode,
+  platformUsesDualPayload,
+  platformSupportsWidgets,
+} from './serving-mode';
+
+export {
+  // Response Builder Types
+  type TextContentBlock,
+  type BuildToolResponseOptions,
+  type ToolResponseContent,
+  // Builder Functions
+  buildToolResponseContent,
+} from './response-builder';

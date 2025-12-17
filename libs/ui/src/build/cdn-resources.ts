@@ -62,11 +62,152 @@ export const MDX_RUNTIME_CDN: CDNResource = {
 
 /**
  * Tailwind CSS Browser CDN (play.tailwindcss.com CDN).
+ * This is a JIT compiler that generates CSS on-the-fly.
+ * Supports all Tailwind classes including arbitrary values.
+ *
+ * Note: This CDN is NOT trusted by Claude Artifacts sandbox.
+ * Use CLOUDFLARE_CDN.tailwindCss for Claude.
  */
 export const TAILWIND_CDN: CDNResource = {
   url: 'https://cdn.tailwindcss.com',
   crossorigin: 'anonymous',
 };
+
+// ============================================
+// Cloudflare CDN (Claude-Compatible)
+// ============================================
+
+/**
+ * Platform type for CDN selection.
+ */
+export type CDNPlatform = 'openai' | 'claude' | 'unknown';
+
+/**
+ * Cloudflare CDN resources (trusted by Claude Artifacts).
+ *
+ * Claude's sandbox only allows resources from cdnjs.cloudflare.com.
+ * These are pre-built files (not JIT compilers) and work in restricted environments.
+ *
+ * Note: Tailwind from cloudflare is pre-built CSS, not the JIT compiler.
+ * This means arbitrary values like `w-[123px]` won't work - only standard classes.
+ */
+export const CLOUDFLARE_CDN = {
+  /**
+   * Pre-built Tailwind CSS (standard classes only, no JIT).
+   * Use this instead of TAILWIND_CDN for Claude Artifacts.
+   */
+  tailwindCss: {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css',
+    type: 'stylesheet' as const,
+  },
+
+  /**
+   * HTMX for dynamic interactions.
+   */
+  htmx: {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js',
+    integrity: 'sha512-2kIcAizYXhIn5IyXrMC72f2nh0JAtESHRpOieVw5dYPYeHwLCC2eKCqvdZDYRSEgasKrPpEPpRFjL8gqwBZWAA==',
+    crossorigin: 'anonymous' as const,
+  },
+
+  /**
+   * Alpine.js for reactive components.
+   */
+  alpinejs: {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.3/cdn.min.js',
+    integrity: 'sha512-lrQ8FHgsWKFSuQFq8NKPJicjlvJFEIrCqEj8zeX7ZOUlHWltN/Iow4jND+x84jqTdDf9n+hvQpJjGDvOl/eDRA==',
+    crossorigin: 'anonymous' as const,
+    defer: true,
+  },
+
+  /**
+   * Marked markdown parser.
+   */
+  marked: {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.4/marked.min.js',
+    integrity: 'sha512-Rn/d0sGeizGbk3VJEiYNDt/mMcfuzYoFkia3iBffv+HX8VUrHMo/0cKjZuxWGoZLPh/VxUcC9ais+RBFZW9EBg==',
+    crossorigin: 'anonymous' as const,
+  },
+
+  /**
+   * Handlebars templating.
+   */
+  handlebars: {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.7.8/handlebars.min.js',
+    integrity: 'sha512-E1dSFxg+wsfJ4HKjutk/WaCzK7S2wv1POn1RRPGh8ZK+ag9l244Vqxji3r6wgz9YBf6+vhQEYJZpSjqWFPg9gg==',
+    crossorigin: 'anonymous' as const,
+  },
+} as const;
+
+/**
+ * Get the appropriate Tailwind tag for a platform.
+ *
+ * - OpenAI: Uses Play CDN (JIT compiler, all classes + arbitrary values)
+ * - Claude: Uses pre-built CSS from Cloudflare (standard classes only)
+ * - Unknown: Defaults to pre-built CSS for maximum compatibility
+ *
+ * @param platform - Target platform
+ * @returns HTML tag string (script or link)
+ *
+ * @example
+ * ```typescript
+ * // For OpenAI (JIT compiler)
+ * getTailwindForPlatform('openai');
+ * // '<script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>'
+ *
+ * // For Claude (pre-built CSS)
+ * getTailwindForPlatform('claude');
+ * // '<link href="https://cdnjs.cloudflare.com/.../tailwind.min.css" rel="stylesheet">'
+ * ```
+ */
+export function getTailwindForPlatform(platform: CDNPlatform): string {
+  if (platform === 'openai') {
+    // OpenAI can use the JIT compiler
+    return buildCDNScriptTag(TAILWIND_CDN);
+  }
+
+  // Claude and unknown platforms use pre-built CSS from Cloudflare
+  return `<link href="${CLOUDFLARE_CDN.tailwindCss.url}" rel="stylesheet">`;
+}
+
+/**
+ * Build a stylesheet link tag for Cloudflare CSS resources.
+ *
+ * @param url - CSS file URL
+ * @returns HTML link tag string
+ */
+export function buildCloudflareStylesheetTag(url: string): string {
+  return `<link href="${url}" rel="stylesheet">`;
+}
+
+/**
+ * Build a script tag for Cloudflare JS resources.
+ *
+ * @param resource - Cloudflare CDN resource
+ * @returns HTML script tag string
+ */
+export function buildCloudflareScriptTag(resource: {
+  url: string;
+  integrity?: string;
+  crossorigin?: string;
+  defer?: boolean;
+}): string {
+  const attrs: string[] = [`src="${resource.url}"`];
+
+  if (resource.integrity) {
+    attrs.push(`integrity="${resource.integrity}"`);
+  }
+
+  if (resource.crossorigin) {
+    attrs.push(`crossorigin="${resource.crossorigin}"`);
+  }
+
+  if (resource.defer) {
+    attrs.push('defer');
+  }
+
+  return `<script ${attrs.join(' ')}></script>`;
+}
 
 // ============================================
 // Default Assets by UI Type

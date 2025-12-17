@@ -5,15 +5,15 @@ icon: terminal
 description: Run the Nx sample servers that showcase public, transparent, and orchestrated authentication modes.
 ---
 
-FrontMCP bundles three ready-to-serve authentication demos under `apps/auth/**`. Each project runs the same Notes + Tasks apps but wires a different auth mode, transport policy, and consent experience so you can validate clients before touching your own code.
+FrontMCP bundles three ready-to-serve authentication demos under `apps/e2e/**`. Each project runs the same Notes + Tasks apps but wires a different auth mode, transport policy, and consent experience so you can validate clients before touching your own code.
 
 ## Projects at a glance
 
-| Project                  | Mode                   | Default port | Highlights                                                                      | Serve command                                      |
-| ------------------------ | ---------------------- | ------------ | ------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `demo-public`            | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `pnpm nx serve demo-public --port 3003`            |
-| `demo-orchestrated-auth` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `pnpm nx serve demo-orchestrated-auth --port 3005` |
-| `demo-transparent-auth`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `pnpm nx serve demo-transparent-auth --port 3004`  |
+| Project                 | Mode                   | Default port | Highlights                                                                      | Serve command                                     |
+| ----------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `demo-e2e-public`       | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `pnpm nx serve demo-e2e-public --port 3003`       |
+| `demo-e2e-orchestrated` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `pnpm nx serve demo-e2e-orchestrated --port 3005` |
+| `demo-e2e-transparent`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `pnpm nx serve demo-e2e-transparent --port 3004`  |
 
 <Note>
 All commands assume `pnpm install` has already been run at the repo root. Replace the port if it conflicts with another service.
@@ -23,7 +23,7 @@ All commands assume `pnpm install` has already been run at the repo root. Replac
 
 <Steps>
 <Step title="Pick a project">
-Decide which auth mode to explore (`demo-public`, `demo-transparent-auth`, or `demo-orchestrated-auth`).
+Decide which auth mode to explore (`demo-e2e-public`, `demo-e2e-transparent`, or `demo-e2e-orchestrated`).
 </Step>
 <Step title="Configure environment">
 Transparent mode needs an upstream IdP. Export `IDP_PROVIDER_URL` and `IDP_EXPECTED_AUDIENCE` before serving:
@@ -45,9 +45,9 @@ Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log.
 
 ---
 
-## demo-public: instant anonymous access
+## demo-e2e-public: instant anonymous access
 
-```ts title="apps/auth/demo-public/src/main.ts"
+```ts title="apps/e2e/demo-e2e-public/src/main.ts"
 @FrontMcp({
   auth: {
     mode: 'public',
@@ -73,9 +73,9 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
 
 ---
 
-## demo-orchestrated-auth: built-in OAuth server
+## demo-e2e-orchestrated: built-in OAuth server
 
-```ts title="apps/auth/demo-orchestrated-auth/src/main.ts"
+```ts title="apps/e2e/demo-e2e-orchestrated/src/main.ts"
 @FrontMcp({
   auth: {
     mode: 'orchestrated',
@@ -108,9 +108,9 @@ The demo login accepts any email address. Replace it with a real IdP before expo
 
 ---
 
-## demo-transparent-auth: pass-through tokens
+## demo-e2e-transparent: pass-through tokens
 
-```ts title="apps/auth/demo-transparent-auth/src/main.ts"
+```ts title="apps/e2e/demo-e2e-transparent/src/main.ts"
 @FrontMcp({
   auth: {
     mode: 'transparent',
@@ -151,7 +151,8 @@ import { test, expect, TestServer } from '@frontmcp/testing';
 let serverProcess;
 
 test.beforeAll(async () => {
-  serverProcess = await TestServer.startNx('demo-public', { port: 4001 });
+  // Use port 4001 to avoid conflicts with default demo server ports (3003, 3004, 3005)
+  serverProcess = await TestServer.startNx('demo-e2e-public', { port: 4001 });
 });
 
 test.afterAll(async () => {

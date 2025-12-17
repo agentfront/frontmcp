@@ -3,7 +3,8 @@ import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcont
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { UnsupportedClientVersionException } from '../../exceptions/mcp-exceptions/unsupported-client-version.exception';
 import type { ClientCapabilities } from '../../notification';
-import { detectPlatformFromCapabilities } from '../../notification';
+import { detectPlatformFromCapabilities, detectAIPlatform } from '../../notification';
+import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
 
 /**
  * Validates that the client's protocol version is a valid date string format.
@@ -60,11 +61,16 @@ export default function initializeRequestHandler({
         // Store client info (name/version) for platform detection
         // and update the session payload with the detected platform type
         if (request.params.clientInfo) {
-          // If not detected from capabilities, use client info detection
-          const clientInfoPlatform = scope.notifications.setClientInfo(sessionId, {
+          // Try to store in notification service (may fail for HTTP transports without registered server)
+          scope.notifications.setClientInfo(sessionId, {
             name: request.params.clientInfo.name,
             version: request.params.clientInfo.version,
           });
+
+          // Detect platform directly from client info (don't rely on setClientInfo return)
+          // Use platform detection config from scope if available
+          const platformDetectionConfig = scope.metadata.transport?.platformDetection;
+          const clientInfoPlatform = detectAIPlatform(request.params.clientInfo, platformDetectionConfig);
 
           // Prefer capability-based detection (ext-apps) over client info detection
           const finalPlatform = detectedPlatform ?? clientInfoPlatform;
@@ -73,10 +79,17 @@ export default function initializeRequestHandler({
           // This makes platformType available via ctx.authInfo.sessionIdPayload.platformType
           if (finalPlatform && ctx.authInfo?.sessionIdPayload) {
             ctx.authInfo.sessionIdPayload.platformType = finalPlatform;
+
+            // Persist the platformType to the session cache so subsequent requests can access it
+            // This is critical for HTTP transports where sessions are parsed from encrypted headers
+            updateSessionPayload(sessionId, { platformType: finalPlatform });
           }
         } else if (detectedPlatform && ctx.authInfo?.sessionIdPayload) {
           // Update platform even without client info if detected from capabilities
           ctx.authInfo.sessionIdPayload.platformType = detectedPlatform;
+
+          // Persist to session cache
+          updateSessionPayload(sessionId, { platformType: detectedPlatform });
         }
       }
 

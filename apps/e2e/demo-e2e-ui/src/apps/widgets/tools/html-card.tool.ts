@@ -36,9 +36,13 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
   ui: {
-    uiType: 'html',
+    servingMode: 'auto',
+    displayMode: 'inline',
+    widgetDescription: 'Displays a styled HTML card with title, content, and optional footer.',
     template: (ctx) => {
-      const { title, content, footer } = ctx.output as unknown as { title: string; content: string; footer?: string };
+      // title comes from output, content/footer come from input
+      const { title } = ctx.output as unknown as { title: string };
+      const { content, footer } = ctx.input as unknown as { content: string; footer?: string };
       const escapeHtml = ctx.helpers.escapeHtml;
 
       return `

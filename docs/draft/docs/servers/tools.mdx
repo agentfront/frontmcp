@@ -760,7 +760,8 @@ ui: {
 | `widgetDescription` | Human-readable description shown to users                       |
 | `widgetAccessible`  | Allow widget to call tools via MCP Bridge                       |
 | `csp`               | Content Security Policy (allowed domains)                       |
-| `servingMode`       | How HTML is delivered: `'inline'`, `'static'`, `'hybrid'`, etc. |
+| `servingMode`       | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc. |
+| `htmlResponsePrefix`| Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
 | `mdxComponents`     | Custom components for MDX templates                             |
 | `hydrate`           | Enable client-side React hydration for interactivity            |
 

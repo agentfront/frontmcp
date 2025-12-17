@@ -35,7 +35,9 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
   ui: {
-    uiType: 'markdown',
+    servingMode: 'auto',
+    displayMode: 'inline',
+    widgetDescription: 'Displays a markdown report with findings and severity levels.',
     template: (ctx) => {
       const { title, findingCount, markdown } = ctx.output as unknown as Output;
 

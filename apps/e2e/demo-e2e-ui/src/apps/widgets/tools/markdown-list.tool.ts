@@ -33,7 +33,9 @@ type Output = z.infer<typeof outputSchema>;
   inputSchema,
   outputSchema,
   ui: {
-    uiType: 'markdown',
+    servingMode: 'auto',
+    displayMode: 'inline',
+    widgetDescription: 'Displays a markdown checklist with completion status.',
     template: (ctx) => {
       const { title, itemCount, completedCount, markdown } = ctx.output as unknown as Output;
 

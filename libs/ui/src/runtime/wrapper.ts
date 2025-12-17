@@ -2203,3 +2203,105 @@ export function getToolUIMimeType(platform: 'openai' | 'ext-apps' | 'generic' = 
       return 'text/html';
   }
 }
+
+// ============================================
+// Claude-Specific Wrapper (Cloudflare CDN)
+// ============================================
+
+/**
+ * Cloudflare CDN URLs for Claude Artifacts.
+ *
+ * Claude's sandbox only trusts cdnjs.cloudflare.com.
+ * These are pre-built files (not JIT compilers).
+ */
+const CLOUDFLARE_CDN = {
+  tailwindCss: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css',
+  htmx: 'https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js',
+  alpinejs: 'https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.3/cdn.min.js',
+} as const;
+
+/**
+ * Options for Claude-specific wrapper.
+ */
+export interface WrapToolUIForClaudeOptions {
+  /** Rendered template content (HTML body) */
+  content: string;
+  /** Tool name */
+  toolName: string;
+  /** Tool input arguments */
+  input?: Record<string, unknown>;
+  /** Tool output/result */
+  output?: unknown;
+  /** Page title */
+  title?: string;
+  /** Include HTMX for dynamic interactions */
+  includeHtmx?: boolean;
+  /** Include Alpine.js for reactive components */
+  includeAlpine?: boolean;
+}
+
+/**
+ * Wrap tool UI content for Claude Artifacts.
+ *
+ * Creates a complete HTML document using Cloudflare CDN resources
+ * which are trusted by Claude's sandbox environment.
+ *
+ * Key differences from standard wrapper:
+ * - Uses pre-built Tailwind CSS from cloudflare (not JIT compiler)
+ * - No esm.sh imports (Claude blocks non-cloudflare CDNs)
+ * - No React runtime (SSR-only, static HTML)
+ * - Self-contained with embedded data
+ *
+ * @param options - Claude wrapper options
+ * @returns Complete HTML document string
+ *
+ * @example
+ * ```typescript
+ * const html = wrapToolUIForClaude({
+ *   content: '<div class="p-4 bg-gray-100">Weather: 72°F</div>',
+ *   toolName: 'get_weather',
+ *   output: { temperature: 72 },
+ * });
+ * // Returns full HTML with Tailwind CSS from cloudflare CDN
+ * ```
+ */
+export function wrapToolUIForClaude(options: WrapToolUIForClaudeOptions): string {
+  const { content, toolName, input = {}, output, title, includeHtmx = false, includeAlpine = false } = options;
+
+  // Build Tailwind CSS link (pre-built, not JIT)
+  const tailwindCss = `<link href="${CLOUDFLARE_CDN.tailwindCss}" rel="stylesheet">`;
+
+  // Optional scripts (only from cloudflare)
+  const htmxScript = includeHtmx ? `<script src="${CLOUDFLARE_CDN.htmx}" crossorigin="anonymous"></script>` : '';
+
+  const alpineScript = includeAlpine
+    ? `<script src="${CLOUDFLARE_CDN.alpinejs}" crossorigin="anonymous" defer></script>`
+    : '';
+
+  // Embed data for JavaScript access
+  const helpers = createTemplateHelpers();
+  const dataScript = `<script>
+  window.__mcpToolName = ${helpers.jsonEmbed(toolName)};
+  window.__mcpToolInput = ${helpers.jsonEmbed(input)};
+  window.__mcpToolOutput = ${helpers.jsonEmbed(output)};
+</script>`;
+
+  // Page title
+  const pageTitle = title || `${escapeHtml(toolName)} - Tool Result`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${pageTitle}</title>
+  ${tailwindCss}
+  ${htmxScript}
+  ${alpineScript}
+  ${dataScript}
+</head>
+<body class="bg-gray-100 p-4">
+  ${content}
+</body>
+</html>`;
+}
