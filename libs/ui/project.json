@@ -45,7 +45,17 @@
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "react",
+            "react-dom",
+            "react-dom/server",
+            "react/jsx-runtime",
+            "@swc/core",
+            "@swc/wasm"
+          ]
         }
       }
     },
@@ -89,7 +99,17 @@
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "react",
+            "react-dom",
+            "react-dom/server",
+            "react/jsx-runtime",
+            "@swc/core",
+            "@swc/wasm"
+          ]
         }
       }
     },
