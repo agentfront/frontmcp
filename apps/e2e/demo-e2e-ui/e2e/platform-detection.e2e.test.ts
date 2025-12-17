@@ -88,10 +88,20 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      // Verify dual-payload structure for Claude (markdown-wrapped HTML)
-      const text = result.text();
-      expect(text).toBeDefined();
-      expect(text).toContain('```html');
+      // Verify dual-payload structure for Claude
+      // Dual-payload has two content blocks: [0] = JSON data, [1] = markdown-wrapped HTML
+      const content = result.raw.content;
+      expect(content).toBeDefined();
+      expect(content?.length).toBeGreaterThanOrEqual(2);
+      // First block is JSON data
+      const jsonBlock = content?.[0];
+      expect(jsonBlock?.type).toBe('text');
+      // Second block contains markdown-wrapped HTML
+      const htmlBlock = content?.[1];
+      expect(htmlBlock?.type).toBe('text');
+      if (htmlBlock && 'text' in htmlBlock) {
+        expect(htmlBlock.text).toContain('```html');
+      }
 
       await client.disconnect();
     });

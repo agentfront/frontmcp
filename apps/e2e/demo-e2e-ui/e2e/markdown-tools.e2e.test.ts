@@ -28,8 +28,9 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('markdown');
-        expect(result).toHaveTextContent('findingCount');
+        const json = result.json<{ findingCount: number; title: string }>();
+        expect(json.findingCount).toBe(2);
+        expect(json.title).toBe('Security Audit');
       });
 
       test('should return correct finding count', async ({ mcp }) => {
@@ -279,7 +280,8 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('markdown');
+        const json = result.json<{ title: string }>();
+        expect(json.title).toBe('Report with *bold* and _italic_');
       });
     });
 
@@ -418,8 +420,9 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('markdown');
-        expect(result).toHaveTextContent('completedCount');
+        const json = result.json<{ completedCount: number; title: string }>();
+        expect(json.completedCount).toBe(1);
+        expect(json.title).toBe('Todo List');
       });
 
       test('should count completed items correctly', async ({ mcp }) => {

@@ -150,7 +150,8 @@ export class RedisStorage implements BuildCacheStorage {
       const ttl = await this.options.client.ttl(redisKey);
       if (ttl > 0) {
         // Re-set with same TTL to update metadata
-        const serialized = this.options.json ? JSON.stringify(entry) : String(entry);
+        // CacheEntry must always be JSON serialized to maintain metadata structure
+        const serialized = JSON.stringify(entry);
         await this.options.client.setex(redisKey, ttl, serialized);
       }
 
@@ -194,7 +195,8 @@ export class RedisStorage implements BuildCacheStorage {
       },
     };
 
-    const serialized = this.options.json ? JSON.stringify(entry) : String(entry);
+    // CacheEntry must always be JSON serialized to maintain metadata structure
+    const serialized = JSON.stringify(entry);
 
     await this.options.client.setex(redisKey, effectiveTtl, serialized);
 

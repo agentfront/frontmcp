@@ -27,7 +27,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('rowCount');
+      const json = result.json<{ rowCount: number }>();
+      expect(json.rowCount).toBe(1);
     });
 
     test('should generate HTML card', async ({ mcp }) => {
@@ -37,7 +38,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('html');
+      const json = result.json<{ title: string }>();
+      expect(json.title).toBe('Welcome');
     });
 
     test('should generate React chart', async ({ mcp }) => {
@@ -47,7 +49,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('maxValue');
+      const json = result.json<{ maxValue: number }>();
+      expect(json.maxValue).toBe(100);
     });
 
     test('should generate React form', async ({ mcp }) => {
@@ -57,7 +60,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('fieldCount');
+      const json = result.json<{ fieldCount: number }>();
+      expect(json.fieldCount).toBe(1);
     });
 
     test('should generate MDX document', async ({ mcp }) => {
@@ -67,7 +71,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('sectionCount');
+      const json = result.json<{ sectionCount: number }>();
+      expect(json.sectionCount).toBe(1);
     });
 
     test('should generate interactive MDX', async ({ mcp }) => {
@@ -77,7 +82,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('mdx');
+      const json = result.json<{ topic: string }>();
+      expect(json.topic).toBe('Tips');
     });
 
     test('should generate markdown report', async ({ mcp }) => {
@@ -88,7 +94,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('findingCount');
+      const json = result.json<{ findingCount: number }>();
+      expect(json.findingCount).toBe(1);
     });
 
     test('should generate markdown list', async ({ mcp }) => {
@@ -98,7 +105,8 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveTextContent('completedCount');
+      const json = result.json<{ completedCount: number }>();
+      expect(json.completedCount).toBe(1);
     });
   });
 

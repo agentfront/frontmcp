@@ -28,7 +28,9 @@ test.describe('React Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('maxValue');
+        const json = result.json<{ maxValue: number; data: Array<{ label: string; value: number }> }>();
+        expect(json.maxValue).toBe(150);
+        expect(json.data).toHaveLength(3);
       });
 
       test('should return data array in output', async ({ mcp }) => {
@@ -319,7 +321,8 @@ test.describe('React Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('fieldCount');
+        const json = result.json<{ fieldCount: number }>();
+        expect(json.fieldCount).toBe(2);
       });
 
       test('should count form fields correctly', async ({ mcp }) => {

@@ -21,8 +21,9 @@ import type { ZodTypeAny } from 'zod';
  * - `unpkg`: unpkg.com
  * - `esm.sh`: esm.sh (ES modules)
  * - `skypack`: cdn.skypack.dev (deprecated, fallback only)
+ * - `custom`: User-defined CDN override (for explicit dependency configuration)
  */
-export type CDNProvider = 'cloudflare' | 'jsdelivr' | 'unpkg' | 'esm.sh' | 'skypack';
+export type CDNProvider = 'cloudflare' | 'jsdelivr' | 'unpkg' | 'esm.sh' | 'skypack' | 'custom';
 
 /**
  * Platform types that affect CDN selection.

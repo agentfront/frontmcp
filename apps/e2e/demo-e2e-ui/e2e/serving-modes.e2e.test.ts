@@ -137,6 +137,7 @@ test.describe('Serving Modes E2E', () => {
         expect(result).toBeSuccessful();
         const json = result.json<{ label: string; value: string }>();
         expect(json.label).toBe('Continue');
+        expect(json.value).toBe('Test');
 
         await client.disconnect();
       });
@@ -153,8 +154,9 @@ test.describe('Serving Modes E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        const json = result.json<{ label: string }>();
+        const json = result.json<{ label: string; value: string }>();
         expect(json.label).toBe('Cody');
+        expect(json.value).toBe('Test');
 
         await client.disconnect();
       });

@@ -27,8 +27,9 @@ test.describe('MDX Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('mdx');
-        expect(result).toHaveTextContent('sectionCount');
+        const json = result.json<{ sectionCount: number; title: string }>();
+        expect(json.sectionCount).toBe(2);
+        expect(json.title).toBe('API Documentation');
       });
 
       test('should return correct section count', async ({ mcp }) => {
@@ -309,8 +310,9 @@ test.describe('MDX Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('mdx');
-        expect(result).toHaveTextContent('hasCode');
+        const json = result.json<{ topic: string; hasCode: boolean }>();
+        expect(json.topic).toBe('TypeScript Tips');
+        expect(json.hasCode).toBe(true);
       });
 
       test('should indicate hasCode when codeExample provided', async ({ mcp }) => {

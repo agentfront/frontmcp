@@ -29,8 +29,9 @@ test.describe('HTML Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('html');
-        expect(result).toHaveTextContent('rowCount');
+        const json = result.json<{ rowCount: number; columnCount: number }>();
+        expect(json.rowCount).toBe(2);
+        expect(json.columnCount).toBe(3);
       });
 
       test('should return correct row count', async ({ mcp }) => {
@@ -307,8 +308,9 @@ test.describe('HTML Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('html');
-        expect(result).toHaveTextContent('Welcome');
+        const json = result.json<{ title: string; html: string }>();
+        expect(json.title).toBe('Welcome');
+        expect(json.html).toBeDefined();
       });
 
       test('should handle card without footer', async ({ mcp }) => {
@@ -400,7 +402,8 @@ test.describe('HTML Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        expect(result).toHaveTextContent('html');
+        const json = result.json<{ title: string }>();
+        expect(json.title).toBe('<script>alert("xss")</script>');
       });
 
       test('should handle script tags in content', async ({ mcp }) => {

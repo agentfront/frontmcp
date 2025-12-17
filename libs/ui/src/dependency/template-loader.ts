@@ -12,7 +12,7 @@
  */
 
 import { promises as fs } from 'fs';
-import { resolve as resolvePath, isAbsolute } from 'path';
+import { resolve as resolvePath, isAbsolute, sep } from 'path';
 import {
   detectTemplateMode,
   detectFormatFromPath,
@@ -294,7 +294,7 @@ export async function readTemplateFromFile(filePath: string, options: ReadTempla
 
   // Prevent path traversal attacks - ensure resolved path stays within base directory
   const normalizedBase = resolvePath(basePath);
-  if (!absolutePath.startsWith(normalizedBase + '/') && absolutePath !== normalizedBase) {
+  if (!absolutePath.startsWith(normalizedBase + sep) && absolutePath !== normalizedBase) {
     throw new Error(`Template path escapes base directory: ${filePath}`);
   }
 

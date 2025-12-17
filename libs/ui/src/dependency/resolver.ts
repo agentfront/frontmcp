@@ -105,7 +105,7 @@ export class DependencyResolver {
     // Use explicit override if provided
     if (override) {
       // Use 'custom' as provider for overrides since it's user-defined, not from a specific CDN
-      return this.createResolvedDependency(packageName, override, 'custom' as CDNProvider);
+      return this.createResolvedDependency(packageName, override, 'custom');
     }
 
     // Look up in registry
