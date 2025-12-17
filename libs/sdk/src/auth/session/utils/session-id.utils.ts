@@ -5,19 +5,15 @@ import { SessionIdPayload, TransportProtocolType, AIPlatformType } from '../../.
 import { getTokenSignatureFingerprint } from './auth-token.utils';
 import { detectPlatformFromUserAgent } from '../../../notification/notification.service';
 import type { PlatformDetectionConfig } from '../../../common/types/options/session.options';
+import { getMachineId } from '../../machine-id';
 
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
 
-// Single-process machine id generated at server launch
-const MACHINE_ID = (() => {
-  // Prefer an injected env (stable across restarts) if you have one; else random per launch:
-  return process.env['MACHINE_ID'] || randomUUID(); // TODO: move to gateway config module
-})();
-
 // Symmetric key derived from secret or machine id (stable for the process)
+// Uses getMachineId() from authorization module as single source of truth
 function getKey(): Buffer {
-  const base = process.env['MCP_SESSION_SECRET'] || MACHINE_ID; // TODO: move to gateway config module
+  const base = process.env['MCP_SESSION_SECRET'] || getMachineId();
   return createHash('sha256').update(base).digest(); // 32 bytes
 }
 
@@ -193,7 +189,7 @@ export function createSessionId(protocol: TransportProtocolType, token: string, 
   }
 
   const payload: SessionIdPayload = {
-    nodeId: MACHINE_ID,
+    nodeId: getMachineId(),
     authSig,
     uuid: randomUUID(),
     iat: nowSec(),
