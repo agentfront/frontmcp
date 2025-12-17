@@ -193,7 +193,7 @@ export async function fetchTemplateFromUrl(url: string, options: FetchTemplateOp
         return await processFetchResponse(url, response);
       } catch (error) {
         clearTimeout(timeoutId);
-        if ((error as Error).name === 'AbortError') {
+        if (error instanceof Error && error.name === 'AbortError') {
           throw new Error(`Template fetch timed out after ${timeout}ms: ${url}`);
         }
         throw error;
@@ -215,7 +215,7 @@ export async function fetchTemplateFromUrl(url: string, options: FetchTemplateOp
     return await processFetchResponse(url, response);
   } catch (error) {
     clearTimeout(timeoutId);
-    if ((error as Error).name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Template fetch timed out after ${timeout}ms: ${url}`);
     }
     throw error;

@@ -286,6 +286,11 @@ test.describe('Markdown Tools E2E', () => {
     });
 
     test.describe('XSS Injection Prevention', () => {
+      // Note: Markdown tools preserve content as-is. XSS prevention is handled
+      // at the rendering layer (e.g., markdown renderer with sanitization).
+      // These tests verify the tool processes potentially malicious input
+      // without crashing and returns valid output structure.
+
       test('should safely handle script tags in title', async ({ mcp }) => {
         const result = await mcp.tools.call('markdown-report', {
           title: '<script>alert("xss")</script>',
@@ -294,9 +299,12 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
-        const json = result.json<{ title: string; markdown: string }>();
-        // The title should be preserved but rendered safely in markdown output
+        const json = result.json<{ title: string; markdown: string; findingCount: number }>();
+        // Title is preserved in output (sanitization is at render layer)
         expect(json.title).toBe('<script>alert("xss")</script>');
+        // Verify output structure is valid
+        expect(json.findingCount).toBe(1);
+        expect(json.markdown).toBeDefined();
       });
 
       test('should safely handle script tags in findings', async ({ mcp }) => {
@@ -313,6 +321,10 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        const json = result.json<{ markdown: string; findingCount: number }>();
+        // Verify tool processed the input correctly
+        expect(json.findingCount).toBe(1);
+        expect(json.markdown).toBeDefined();
       });
 
       test('should safely handle javascript protocol in links', async ({ mcp }) => {
@@ -323,6 +335,8 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        const json = result.json<{ markdown: string }>();
+        expect(json.markdown).toBeDefined();
       });
 
       test('should safely handle event handlers in content', async ({ mcp }) => {
@@ -333,6 +347,9 @@ test.describe('Markdown Tools E2E', () => {
         });
 
         expect(result).toBeSuccessful();
+        const json = result.json<{ title: string; markdown: string }>();
+        expect(json.title).toBeDefined();
+        expect(json.markdown).toBeDefined();
       });
     });
 
