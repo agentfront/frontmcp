@@ -151,33 +151,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const sessionIdHeader = this.state.sessionIdHeader;
     const machineId = getMachineId();
 
-    // [DIAG] Log session verification context for CI debugging
-    console.log('[DIAG:session.verify] handlePublicMode called', {
-      hasSessionIdHeader: !!sessionIdHeader,
-      sessionIdHeaderLength: sessionIdHeader?.length,
-      userAgent: this.state.userAgent,
-      machineId: machineId.slice(0, 8) + '...',
-      platform: process.platform,
-      nodeVersion: process.version,
-    });
-
     // CRITICAL: If client sent session ID, ALWAYS use it for transport lookup.
     // The transport registry uses this ID as the key. Creating a different ID
     // would cause "session not initialized" error.
     if (sessionIdHeader) {
       // Try to decrypt/validate for payload extraction (optional - for nodeId validation)
       const existingPayload = decryptPublicSession(sessionIdHeader);
-
-      // [DIAG] Log payload extraction result
-      const nodeIdMatch = existingPayload?.nodeId === machineId;
-      console.log('[DIAG:session.verify] existing session payload', {
-        hasExistingPayload: !!existingPayload,
-        existingNodeId: existingPayload?.nodeId?.slice(0, 8),
-        currentMachineId: machineId.slice(0, 8),
-        nodeIdMatch,
-        existingPlatformType: existingPayload?.platformType,
-        payloadWillBeUsed: existingPayload && nodeIdMatch,
-      });
 
       // Determine user based on whether we could extract payload
       const user = existingPayload
@@ -188,13 +167,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // If payload is valid and nodeId matches, include payload for protocol detection.
       // If validation failed, transport layer will handle the error appropriately.
       const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
-
-      // [DIAG] Log final authorization response
-      console.log('[DIAG:session.verify] responding with existing session', {
-        sessionIdUsed: sessionIdHeader.slice(0, 20) + '...',
-        payloadIncluded: !!finalPayload,
-        platformTypeInPayload: finalPayload?.platformType,
-      });
 
       this.respond({
         kind: 'authorized',
@@ -220,14 +192,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
     const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
 
-    // [DIAG] Log platform detection from User-Agent
-    console.log('[DIAG:session.verify] new session platform detection', {
-      userAgent: this.state.userAgent,
-      detectedPlatformType: platformType,
-      platformIncludedInPayload: platformType !== 'unknown',
-      platformDetectionConfig: !!platformDetectionConfig,
-    });
-
     // Create a valid session payload matching the SessionIdPayload schema
     // Include platformType if detected (non-unknown) for Tool UI support
     const payload = {
@@ -240,14 +204,6 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     };
 
     const sessionId = encryptJson(payload);
-
-    // [DIAG] Log new session creation
-    console.log('[DIAG:session.verify] new session created', {
-      sessionIdLength: sessionId.length,
-      payloadNodeId: machineId.slice(0, 8) + '...',
-      payloadPlatformType: payload.platformType,
-      hasPlatformType: 'platformType' in payload,
-    });
 
     this.respond({
       kind: 'authorized',

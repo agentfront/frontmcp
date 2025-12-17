@@ -890,20 +890,6 @@ export class McpTestClient {
     const hasUI = meta?.['ui/html'] !== undefined || meta?.['ui/component'] !== undefined;
     const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
 
-    // [DIAG] Log tool result wrapper for CI debugging
-    console.log('[DIAG:test-client.wrapToolResult] received response', {
-      success: response.success,
-      isError,
-      hasMeta: !!meta,
-      metaKeys: meta ? Object.keys(meta) : [],
-      hasUiHtml: meta?.['ui/html'] !== undefined,
-      hasUiComponent: meta?.['ui/component'] !== undefined,
-      hasUI,
-      hasStructuredContent: structuredContent !== undefined,
-      contentLength: raw.content?.length ?? 0,
-      clientInfo: this.config.clientInfo,
-    });
-
     return {
       raw,
       isSuccess: !isError,

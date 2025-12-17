@@ -117,25 +117,7 @@ async function createTestFixtures(): Promise<TestFixtures> {
  * @param fixtures - The test fixtures to clean up
  * @param testFailed - Whether the test failed (to output server logs)
  */
-async function cleanupTestFixtures(fixtures: TestFixtures, testFailed = false): Promise<void> {
-  // In CI or when test fails, output server logs for debugging
-  const isCI = process.env['CI'] === 'true';
-  if ((isCI || testFailed) && serverInstance) {
-    const logs = serverInstance.getLogs();
-    if (logs.length > 0) {
-      console.log('[DIAG:server-logs] Server logs captured:');
-      // Filter to only show DIAG logs for clarity
-      const diagLogs = logs.filter((log) => log.includes('[DIAG:'));
-      if (diagLogs.length > 0) {
-        diagLogs.forEach((log) => console.log(log));
-      } else if (testFailed) {
-        // On failure, show all logs
-        console.log('[DIAG:server-logs] No DIAG logs found, showing all logs:');
-        logs.slice(-50).forEach((log) => console.log(log));
-      }
-    }
-  }
-
+async function cleanupTestFixtures(fixtures: TestFixtures, _testFailed = false): Promise<void> {
   // Disconnect client
   if (fixtures.mcp.isConnected()) {
     await fixtures.mcp.disconnect();
