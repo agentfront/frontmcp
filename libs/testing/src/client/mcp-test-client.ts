@@ -802,6 +802,7 @@ export class McpTestClient {
           publicMode: this.config.publicMode,
           debug: this.config.debug,
           interceptors: this._interceptors,
+          clientInfo: this.config.clientInfo,
         });
       case 'sse':
         // TODO: Implement SSE transport

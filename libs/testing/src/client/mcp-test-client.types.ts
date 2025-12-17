@@ -16,6 +16,7 @@ import type {
   Resource,
   ResourceTemplate,
   Prompt,
+  Implementation,
 } from '@modelcontextprotocol/sdk/types.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -65,6 +66,15 @@ export interface TestAuthConfig {
   headers?: Record<string, string>;
 }
 
+/**
+ * Client information sent during MCP initialization.
+ * Re-exported from MCP SDK's Implementation type.
+ * Also used for User-Agent header to enable platform detection.
+ *
+ * Includes: name, version, title?, description?, icons?
+ */
+export type ClientInfo = Implementation;
+
 // ═══════════════════════════════════════════════════════════════════
 // CLIENT CONFIG
 // ═══════════════════════════════════════════════════════════════════
@@ -88,11 +98,8 @@ export interface McpTestClientConfig {
   debug?: boolean;
   /** MCP protocol version to request (default: '2024-11-05') */
   protocolVersion?: string;
-  /** Client info to send during initialization */
-  clientInfo?: {
-    name: string;
-    version: string;
-  };
+  /** Client info to send during initialization and for platform detection */
+  clientInfo?: ClientInfo;
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -11,6 +11,7 @@ import type {
   JsonRpcResponse,
 } from './transport.interface';
 import type { InterceptorChain } from '../interceptor';
+import type { ClientInfo } from '../client/mcp-test-client.types';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -21,7 +22,10 @@ const DEFAULT_TIMEOUT = 30000;
  * following the MCP StreamableHTTP specification.
  */
 export class StreamableHttpTransport implements McpTransport {
-  private readonly config: Required<Omit<TransportConfig, 'interceptors'>> & { interceptors?: InterceptorChain };
+  private readonly config: Required<Omit<TransportConfig, 'interceptors' | 'clientInfo'>> & {
+    interceptors?: InterceptorChain;
+    clientInfo?: ClientInfo;
+  };
   private state: TransportState = 'disconnected';
   private sessionId: string | undefined;
   private authToken: string | undefined;
@@ -39,6 +43,7 @@ export class StreamableHttpTransport implements McpTransport {
       publicMode: config.publicMode ?? false,
       debug: config.debug ?? false,
       interceptors: config.interceptors,
+      clientInfo: config.clientInfo,
     };
 
     this.authToken = config.auth?.token;
@@ -409,6 +414,12 @@ export class StreamableHttpTransport implements McpTransport {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
     };
+
+    // Add User-Agent header based on clientInfo for platform detection
+    // Server uses this to detect the AI platform before MCP initialize
+    if (this.config.clientInfo) {
+      headers['User-Agent'] = `${this.config.clientInfo.name}/${this.config.clientInfo.version}`;
+    }
 
     // Only add Authorization header if we have a token AND not in public mode
     // Public mode explicitly skips auth headers for CI/CD and public docs testing

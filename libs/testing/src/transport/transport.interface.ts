@@ -3,6 +3,8 @@
  * @description Interface for MCP transport implementations
  */
 
+import type { ClientInfo } from '../client/mcp-test-client.types';
+
 // Simplified JSON-RPC types for transport layer
 export interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -144,4 +146,6 @@ export interface TransportConfig {
   debug?: boolean;
   /** Interceptor chain for request/response interception */
   interceptors?: import('../interceptor').InterceptorChain;
+  /** Client info for User-Agent header (enables platform detection on server) */
+  clientInfo?: ClientInfo;
 }
