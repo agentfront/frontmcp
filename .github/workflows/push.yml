@@ -171,4 +171,14 @@ jobs:
         uses: nrwl/nx-set-shas@v4
 
       - name: Run E2E tests (${{ matrix.project }})
+        id: test
+        continue-on-error: true
+        run: npx nx run ${{ matrix.project }}:test
+
+      - name: Reset Nx cache on failure
+        if: steps.test.outcome == 'failure'
+        run: npx nx reset
+
+      - name: Retry E2E tests (${{ matrix.project }})
+        if: steps.test.outcome == 'failure'
         run: npx nx run ${{ matrix.project }}:test
