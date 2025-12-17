@@ -419,9 +419,6 @@ export class StreamableHttpTransport implements McpTransport {
     // Server uses this to detect the AI platform before MCP initialize
     if (this.config.clientInfo) {
       headers['User-Agent'] = `${this.config.clientInfo.name}/${this.config.clientInfo.version}`;
-      console.log(`[PLATFORM_DEBUG] Client sending User-Agent: ${headers['User-Agent']}`);
-    } else {
-      console.log(`[PLATFORM_DEBUG] Client has NO clientInfo - User-Agent NOT set`);
     }
 
     // Only add Authorization header if we have a token AND not in public mode
