@@ -10,7 +10,7 @@ describe('buildToolResponseContent', () => {
   const createOptions = (overrides: Partial<BuildToolResponseOptions> = {}): BuildToolResponseOptions => ({
     rawOutput: { temperature: 72, unit: 'F' },
     servingMode: 'inline',
-    useDualPayload: false,
+    useStructuredContent: true,
     platformType: 'openai',
     ...overrides,
   });
@@ -29,6 +29,32 @@ describe('buildToolResponseContent', () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe('text');
       expect(JSON.parse(result.content[0].text)).toEqual({ temperature: 72, unit: 'F' });
+    });
+
+    it('should include structuredContent in static mode when useStructuredContent is true', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'static',
+          platformType: 'openai',
+          useStructuredContent: true,
+        }),
+      );
+
+      expect(result.format).toBe('json-only');
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+    });
+
+    it('should not include structuredContent in static mode when useStructuredContent is false', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'static',
+          platformType: 'gemini',
+          useStructuredContent: false,
+        }),
+      );
+
+      expect(result.format).toBe('json-only');
+      expect(result.structuredContent).toBeUndefined();
     });
 
     it('should handle complex nested output in static mode', () => {
@@ -75,79 +101,54 @@ describe('buildToolResponseContent', () => {
       expect(result.format).toBe('json-only');
       expect(result.content[0].text).not.toContain('<div>');
     });
+
+    it('should include structuredContent in hybrid mode when useStructuredContent is true', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'hybrid',
+          platformType: 'openai',
+          useStructuredContent: true,
+        }),
+      );
+
+      expect(result.format).toBe('json-only');
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+    });
   });
 
-  describe('inline mode - widget platforms', () => {
-    const widgetPlatforms: AIPlatformType[] = ['openai', 'ext-apps', 'cursor'];
+  describe('inline mode - structuredContent format', () => {
+    const structuredContentPlatforms: AIPlatformType[] = [
+      'openai',
+      'ext-apps',
+      'claude',
+      'cursor',
+      'continue',
+      'cody',
+      'generic-mcp',
+    ];
 
-    widgetPlatforms.forEach((platform) => {
-      it(`should clear content for ${platform} platform`, () => {
+    structuredContentPlatforms.forEach((platform) => {
+      it(`should return structured-content format for ${platform} platform with HTML content`, () => {
         const result = buildToolResponseContent(
           createOptions({
             servingMode: 'inline',
             platformType: platform,
-            htmlContent: '<div>Test</div>',
+            useStructuredContent: true,
+            htmlContent: '<!DOCTYPE html><html><body>Weather Widget</body></html>',
           }),
         );
 
-        expect(result.format).toBe('widget');
-        expect(result.contentCleared).toBe(true);
-        expect(result.content).toEqual([]);
+        expect(result.format).toBe('structured-content');
+        expect(result.contentCleared).toBe(false);
+        expect(result.content).toHaveLength(1);
+
+        // Single content block with raw HTML
+        expect(result.content[0].type).toBe('text');
+        expect(result.content[0].text).toBe('<!DOCTYPE html><html><body>Weather Widget</body></html>');
+
+        // structuredContent contains the raw output
+        expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
       });
-    });
-
-    it('should clear content even without htmlContent on widget platforms', () => {
-      const result = buildToolResponseContent(
-        createOptions({
-          servingMode: 'inline',
-          platformType: 'openai',
-          htmlContent: undefined,
-        }),
-      );
-
-      expect(result.format).toBe('widget');
-      expect(result.contentCleared).toBe(true);
-    });
-  });
-
-  describe('inline mode - dual-payload (Claude)', () => {
-    it('should return dual-payload format for Claude with HTML content', () => {
-      const result = buildToolResponseContent(
-        createOptions({
-          servingMode: 'inline',
-          platformType: 'claude',
-          useDualPayload: true,
-          htmlContent: '<div>Weather Widget</div>',
-        }),
-      );
-
-      expect(result.format).toBe('dual-payload');
-      expect(result.contentCleared).toBe(false);
-      expect(result.content).toHaveLength(2);
-
-      // First block: JSON data
-      expect(result.content[0].type).toBe('text');
-      expect(JSON.parse(result.content[0].text)).toEqual({ temperature: 72, unit: 'F' });
-
-      // Second block: HTML with prefix
-      expect(result.content[1].type).toBe('text');
-      expect(result.content[1].text).toContain('Here is the visual result');
-      expect(result.content[1].text).toContain('<div>Weather Widget</div>');
-    });
-
-    it('should use custom HTML prefix when provided', () => {
-      const result = buildToolResponseContent(
-        createOptions({
-          servingMode: 'inline',
-          platformType: 'claude',
-          useDualPayload: true,
-          htmlContent: '<div>Chart</div>',
-          htmlPrefix: 'Here is your chart',
-        }),
-      );
-
-      expect(result.format).toBe('dual-payload');
-      expect(result.content[1].text).toContain('Here is your chart');
     });
 
     it('should fallback to JSON-only when no HTML content', () => {
@@ -155,7 +156,7 @@ describe('buildToolResponseContent', () => {
         createOptions({
           servingMode: 'inline',
           platformType: 'claude',
-          useDualPayload: true,
+          useStructuredContent: true,
           htmlContent: undefined,
         }),
       );
@@ -163,6 +164,7 @@ describe('buildToolResponseContent', () => {
       expect(result.format).toBe('json-only');
       expect(result.content).toHaveLength(1);
       expect(JSON.parse(result.content[0].text)).toEqual({ temperature: 72, unit: 'F' });
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
     });
 
     it('should fallback to JSON-only when HTML content is empty string', () => {
@@ -170,12 +172,30 @@ describe('buildToolResponseContent', () => {
         createOptions({
           servingMode: 'inline',
           platformType: 'claude',
-          useDualPayload: true,
+          useStructuredContent: true,
           htmlContent: '',
         }),
       );
 
       expect(result.format).toBe('json-only');
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+    });
+  });
+
+  describe('inline mode - widget fallback (without structuredContent)', () => {
+    it('should clear content for widget platforms when useStructuredContent is false', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'openai',
+          useStructuredContent: false,
+          htmlContent: '<div>Test</div>',
+        }),
+      );
+
+      expect(result.format).toBe('widget');
+      expect(result.contentCleared).toBe(true);
+      expect(result.content).toEqual([]);
     });
   });
 
@@ -189,7 +209,7 @@ describe('buildToolResponseContent', () => {
           createOptions({
             servingMode: 'inline',
             platformType: platform,
-            useDualPayload: false,
+            useStructuredContent: false,
             htmlContent: '<div>Test Widget</div>',
           }),
         );
@@ -211,7 +231,7 @@ describe('buildToolResponseContent', () => {
         createOptions({
           servingMode: 'inline',
           platformType: 'gemini',
-          useDualPayload: false,
+          useStructuredContent: false,
           htmlContent: undefined,
         }),
       );
@@ -224,19 +244,19 @@ describe('buildToolResponseContent', () => {
   });
 
   describe('XSS prevention', () => {
-    it('should safely handle script tags in htmlContent for Claude', () => {
+    it('should pass HTML content as-is for structured-content format', () => {
       const result = buildToolResponseContent(
         createOptions({
           servingMode: 'inline',
           platformType: 'claude',
-          useDualPayload: true,
+          useStructuredContent: true,
           htmlContent: '<div><script>alert("xss")</script></div>',
         }),
       );
 
-      expect(result.format).toBe('dual-payload');
-      // HTML should be included as-is in the code fence (rendering is client-side)
-      expect(result.content[1].text).toContain('<script>');
+      expect(result.format).toBe('structured-content');
+      // HTML should be included as-is (rendering is client-side in sandbox)
+      expect(result.content[0].text).toContain('<script>');
     });
 
     it('should safely handle event handlers in htmlContent for non-widget platforms', () => {
@@ -244,6 +264,7 @@ describe('buildToolResponseContent', () => {
         createOptions({
           servingMode: 'inline',
           platformType: 'gemini',
+          useStructuredContent: false,
           htmlContent: '<img src=x onerror="alert(1)">',
         }),
       );
@@ -363,8 +384,8 @@ describe('buildToolResponseContent', () => {
       const scenarios = [
         { servingMode: 'static' as const, platformType: 'openai' as const },
         { servingMode: 'hybrid' as const, platformType: 'openai' as const },
-        { servingMode: 'inline' as const, platformType: 'claude' as const, useDualPayload: true },
-        { servingMode: 'inline' as const, platformType: 'gemini' as const },
+        { servingMode: 'inline' as const, platformType: 'claude' as const, useStructuredContent: true },
+        { servingMode: 'inline' as const, platformType: 'gemini' as const, useStructuredContent: false },
       ];
 
       scenarios.forEach((scenario) => {
@@ -379,6 +400,47 @@ describe('buildToolResponseContent', () => {
           expect(block.type).toBe('text');
         });
       });
+    });
+  });
+
+  describe('structuredContent property', () => {
+    it('should include structuredContent when useStructuredContent is true with HTML', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'openai',
+          useStructuredContent: true,
+          htmlContent: '<div>Test</div>',
+        }),
+      );
+
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+    });
+
+    it('should include structuredContent when useStructuredContent is true without HTML', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'openai',
+          useStructuredContent: true,
+          htmlContent: undefined,
+        }),
+      );
+
+      expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+    });
+
+    it('should not include structuredContent when useStructuredContent is false', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'gemini',
+          useStructuredContent: false,
+          htmlContent: '<div>Test</div>',
+        }),
+      );
+
+      expect(result.structuredContent).toBeUndefined();
     });
   });
 });

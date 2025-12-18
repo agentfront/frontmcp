@@ -7,43 +7,43 @@ import {
   resolveServingMode,
   isPlatformModeSupported,
   getDefaultServingMode,
-  platformUsesDualPayload,
+  platformUsesStructuredContent,
 } from '../serving-mode';
 
 describe('Serving Mode Resolution', () => {
   describe('resolveServingMode', () => {
     describe('with auto mode (default)', () => {
-      it('should select inline mode for OpenAI', () => {
+      it('should select inline mode for OpenAI with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'openai',
         });
 
         expect(result.effectiveMode).toBe('inline');
-        expect(result.useDualPayload).toBe(false);
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
         expect(result.reason).toContain('Auto-selected');
       });
 
-      it('should select inline mode for ext-apps', () => {
+      it('should select inline mode for ext-apps with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'ext-apps',
         });
 
         expect(result.effectiveMode).toBe('inline');
-        expect(result.useDualPayload).toBe(false);
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
-      it('should select inline mode with dual-payload for Claude', () => {
+      it('should select inline mode with structuredContent for Claude', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'claude',
         });
 
         expect(result.effectiveMode).toBe('inline');
-        expect(result.useDualPayload).toBe(true);
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
@@ -54,7 +54,7 @@ describe('Serving Mode Resolution', () => {
         });
 
         expect(result.effectiveMode).toBe(null);
-        expect(result.useDualPayload).toBe(false);
+        expect(result.useStructuredContent).toBe(false);
         expect(result.supportsUI).toBe(false);
         expect(result.reason).toContain('does not support widget UI');
       });
@@ -69,43 +69,47 @@ describe('Serving Mode Resolution', () => {
         expect(result.supportsUI).toBe(false);
       });
 
-      it('should select inline mode for Cursor', () => {
+      it('should select inline mode for Cursor with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'cursor',
         });
 
         expect(result.effectiveMode).toBe('inline');
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
-      it('should select inline mode for Continue', () => {
+      it('should select inline mode for Continue with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'continue',
         });
 
         expect(result.effectiveMode).toBe('inline');
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
-      it('should select inline mode for Cody', () => {
+      it('should select inline mode for Cody with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'cody',
         });
 
         expect(result.effectiveMode).toBe('inline');
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
-      it('should select inline mode for generic-mcp', () => {
+      it('should select inline mode for generic-mcp with structuredContent', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'generic-mcp',
         });
 
         expect(result.effectiveMode).toBe('inline');
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
     });
@@ -160,7 +164,7 @@ describe('Serving Mode Resolution', () => {
         });
 
         expect(result.effectiveMode).toBe('inline');
-        expect(result.useDualPayload).toBe(true);
+        expect(result.useStructuredContent).toBe(true);
         expect(result.supportsUI).toBe(true);
       });
 
@@ -236,17 +240,20 @@ describe('Serving Mode Resolution', () => {
     });
   });
 
-  describe('platformUsesDualPayload', () => {
-    it('should return true for Claude', () => {
-      expect(platformUsesDualPayload('claude')).toBe(true);
+  describe('platformUsesStructuredContent', () => {
+    it('should return true for all widget-supporting platforms', () => {
+      expect(platformUsesStructuredContent('openai')).toBe(true);
+      expect(platformUsesStructuredContent('ext-apps')).toBe(true);
+      expect(platformUsesStructuredContent('claude')).toBe(true);
+      expect(platformUsesStructuredContent('cursor')).toBe(true);
+      expect(platformUsesStructuredContent('continue')).toBe(true);
+      expect(platformUsesStructuredContent('cody')).toBe(true);
+      expect(platformUsesStructuredContent('generic-mcp')).toBe(true);
     });
 
-    it('should return false for other platforms', () => {
-      expect(platformUsesDualPayload('openai')).toBe(false);
-      expect(platformUsesDualPayload('ext-apps')).toBe(false);
-      expect(platformUsesDualPayload('cursor')).toBe(false);
-      expect(platformUsesDualPayload('gemini')).toBe(false);
-      expect(platformUsesDualPayload('unknown')).toBe(false);
+    it('should return false for non-widget platforms', () => {
+      expect(platformUsesStructuredContent('gemini')).toBe(false);
+      expect(platformUsesStructuredContent('unknown')).toBe(false);
     });
   });
 });

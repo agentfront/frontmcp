@@ -413,7 +413,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
 
       const servingMode = resolvedMode.effectiveMode;
-      const useDualPayload = resolvedMode.useDualPayload;
+      const useStructuredContent = resolvedMode.useStructuredContent;
       let htmlContent: string | undefined;
       let uiMeta: Record<string, unknown> = {};
 
@@ -481,9 +481,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const uiResult = buildToolResponseContent({
         rawOutput,
         htmlContent,
-        htmlPrefix: tool.metadata.ui?.htmlResponsePrefix,
         servingMode,
-        useDualPayload,
+        useStructuredContent,
         platformType,
       });
 
@@ -495,7 +494,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         tool: tool.metadata.name,
         platform: platformType,
         servingMode,
-        useDualPayload,
+        useStructuredContent,
         format: uiResult.format,
         contentCleared: uiResult.contentCleared,
       });
@@ -568,6 +567,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {
       result.content = uiResult.content;
+      // Set structuredContent from UI result (contains raw tool output)
+      // Cast to Record<string, unknown> since MCP protocol expects object type
+      if (uiResult.structuredContent !== undefined && uiResult.structuredContent !== null) {
+        result.structuredContent = uiResult.structuredContent as Record<string, unknown>;
+      }
       if (uiMeta) {
         result._meta = { ...result._meta, ...uiMeta };
       }

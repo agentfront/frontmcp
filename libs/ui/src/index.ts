@@ -57,21 +57,13 @@ export {
   // Note: buildOpenAICSP is exported from both adapters and runtime/csp
   // We export from adapters as the canonical source
   buildOpenAICSP,
-  // Dual-payload for Claude Artifacts
-  type TextContent,
-  type DualPayloadOptions,
-  type DualPayloadResult,
-  DEFAULT_HTML_PREFIX,
-  buildDualPayload,
-  isDualPayload,
-  parseDualPayload,
   // Serving mode resolution
   type ResolvedServingMode,
   type ResolveServingModeOptions,
   resolveServingMode,
   isPlatformModeSupported,
   getDefaultServingMode,
-  platformUsesDualPayload,
+  platformUsesStructuredContent,
   platformSupportsWidgets,
   // Response content builder
   type TextContentBlock,
