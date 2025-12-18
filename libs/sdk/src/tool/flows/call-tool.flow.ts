@@ -606,7 +606,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
     if (process.env['DEBUG_TOOL_RESPONSE']) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const fs = require('fs');
+      const fs = require('fs').promises;
       const debugOutput = {
         timestamp: new Date().toISOString(),
         tool: tool.metadata.name,
@@ -616,8 +616,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         finalResult: result,
       };
       const outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || '/tmp/tool-response-debug.json';
-      fs.writeFileSync(outputPath, JSON.stringify(debugOutput, null, 2));
-      console.log(`[DEBUG] Tool response written to: ${outputPath}`);
+      // Use async write to avoid blocking the event loop (fire-and-forget)
+      fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
+        .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))
+        .catch((err: Error) => console.error(`[DEBUG] Failed to write tool response: ${err.message}`));
     }
 
     // Respond with the properly formatted MCP result

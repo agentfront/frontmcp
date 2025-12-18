@@ -21,6 +21,7 @@ const outputSchema = ListToolsResultSchema;
 
 const stateSchema = z.object({
   cursor: z.string().optional(),
+  // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
   authInfo: z.any().optional() as z.ZodType<AuthInfo>,
   platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,
   tools: z.array(

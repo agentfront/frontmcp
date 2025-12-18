@@ -29,7 +29,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
-        "command": "exec node dist/apps/e2e/demo-e2e-ui/main.js",
+        "command": "node dist/apps/e2e/demo-e2e-ui/main.js",
         "cwd": "{workspaceRoot}"
       }
     },

@@ -194,6 +194,29 @@ export interface FrontMCPProviderProps {
 export type CDNType = 'esm' | 'umd';
 
 /**
+ * Content security options for XSS protection.
+ */
+export interface ContentSecurityOptions {
+  /**
+   * Allow unsafe URL schemes (javascript:, data:, vbscript:) in links.
+   * @default false
+   */
+  allowUnsafeLinks?: boolean;
+
+  /**
+   * Allow inline <script> tags and event handlers.
+   * @default false
+   */
+  allowInlineScripts?: boolean;
+
+  /**
+   * Bypass all sanitization (dangerous!).
+   * @default false
+   */
+  bypassSanitization?: boolean;
+}
+
+/**
  * Options for building the universal runtime script.
  */
 export interface UniversalRuntimeOptions {
@@ -211,6 +234,9 @@ export interface UniversalRuntimeOptions {
 
   /** Minify the output */
   minify?: boolean;
+
+  /** Content security / XSS protection options */
+  contentSecurity?: ContentSecurityOptions;
 }
 
 /**

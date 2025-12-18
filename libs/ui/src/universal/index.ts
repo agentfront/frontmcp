@@ -62,6 +62,7 @@ export type {
   CDNType,
   UniversalRuntimeOptions,
   UniversalRuntimeResult,
+  ContentSecurityOptions,
 } from './types';
 
 export { DEFAULT_FRONTMCP_STATE, UNIVERSAL_CDN, detectContentType } from './types';

@@ -7,6 +7,25 @@
 import { escapeHtml } from '../layouts/base';
 
 // ============================================
+// Security Helpers
+// ============================================
+
+/**
+ * Validates URL scheme to prevent XSS via javascript: URLs
+ */
+function isSafeUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase().trim();
+  return (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('/') ||
+    lower.startsWith('#') ||
+    lower.startsWith('mailto:')
+  );
+}
+
+// ============================================
 // Modal Types
 // ============================================
 
@@ -249,14 +268,16 @@ export function confirmModal(options: ConfirmModalOptions): string {
     </div>
   `;
 
-  const confirmButton = confirmHref
-    ? `<a
+  // Use link only if href is provided and passes URL safety check
+  const confirmButton =
+    confirmHref && isSafeUrl(confirmHref)
+      ? `<a
         href="${escapeHtml(confirmHref)}"
         class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
       >
         ${escapeHtml(confirmText)}
       </a>`
-    : `<button
+      : `<button
         type="button"
         class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
         onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"

@@ -10,7 +10,7 @@
  * - Significantly reduces build time for repeated builds
  */
 
-import type { CDNType } from './types';
+import type { CDNType, ContentSecurityOptions } from './types';
 import { UNIVERSAL_CDN } from './types';
 
 // ============================================
@@ -81,11 +81,23 @@ const DEFAULT_CACHE_CONFIG: Required<RuntimeCacheConfig> = {
  * Generate cache key for runtime configuration.
  */
 function generateCacheKey(options: CachedRuntimeOptions): string {
+  // Content security affects generated code, so must be part of cache key
+  const securityKey = options.contentSecurity
+    ? [
+        options.contentSecurity.allowUnsafeLinks ? 'unsafeLinks' : '',
+        options.contentSecurity.allowInlineScripts ? 'unsafeScripts' : '',
+        options.contentSecurity.bypassSanitization ? 'bypass' : '',
+      ]
+        .filter(Boolean)
+        .join('+') || 'secure'
+    : 'secure';
+
   return [
     options.cdnType,
     options.includeMarkdown ? 'md' : '',
     options.includeMdx ? 'mdx' : '',
     options.minify ? 'min' : '',
+    securityKey,
   ]
     .filter(Boolean)
     .join(':');
@@ -107,6 +119,8 @@ export interface CachedRuntimeOptions {
   includeMdx?: boolean;
   /** Minify output */
   minify?: boolean;
+  /** Content security / XSS protection options */
+  contentSecurity?: ContentSecurityOptions;
 }
 
 /**
@@ -219,11 +233,32 @@ function buildRequireShim(): string {
 
 /**
  * Build inline markdown parser (static).
+ * @param options Runtime options for content security configuration
  */
-function buildInlineMarkdownParser(): string {
+function buildInlineMarkdownParser(options?: CachedRuntimeOptions): string {
+  // Determine if unsafe links should be allowed (for customers who need to inject scripts/styles)
+  const allowUnsafeLinks = options?.contentSecurity?.bypassSanitization || options?.contentSecurity?.allowUnsafeLinks;
+
   return `
 // Inline Markdown Parser (Vendor)
 (function() {
+  // XSS protection settings (configured at build time)
+  // Set to true if contentSecurity.allowUnsafeLinks or bypassSanitization is enabled
+  var __allowUnsafeLinks = ${allowUnsafeLinks ? 'true' : 'false'};
+
+  // URL scheme validation to prevent XSS via javascript: URLs
+  function isSafeUrl(url) {
+    // If unsafe links are explicitly allowed, skip validation
+    if (__allowUnsafeLinks) return true;
+    if (!url) return false;
+    var lower = url.toLowerCase().trim();
+    return lower.startsWith('http://') ||
+           lower.startsWith('https://') ||
+           lower.startsWith('/') ||
+           lower.startsWith('#') ||
+           lower.startsWith('mailto:');
+  }
+
   function parseMarkdown(md) {
     var html = md;
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -237,7 +272,10 @@ function buildInlineMarkdownParser(): string {
     html = html.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
     html = html.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
     html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
-    html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+    // Links - validate URL scheme to prevent XSS (unless bypassed)
+    html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
+      return isSafeUrl(url) ? '<a href="' + url + '">' + text + '</a>' : text;
+    });
     html = html.replace(/^[-*]\\s+(.*)$/gm, '<li>$1</li>');
     html = html.replace(/\\n\\n+/g, '</p><p>');
     html = '<p>' + html + '</p>';
@@ -259,21 +297,37 @@ function buildInlineMarkdownParser(): string {
 
 /**
  * Build renderers runtime (static).
+ * @param options Runtime options for content security configuration
  */
-function buildRenderersRuntime(): string {
+function buildRenderersRuntime(options?: CachedRuntimeOptions): string {
+  // Determine if inline scripts should be allowed (for customers who need to inject scripts/styles)
+  const bypassSanitization = options?.contentSecurity?.bypassSanitization;
+  const allowInlineScripts = bypassSanitization || options?.contentSecurity?.allowInlineScripts;
+
   return `
 // Universal Renderers (Vendor)
 (function() {
   var renderers = {};
+
+  // XSS protection settings (configured at build time)
+  // Set to true if contentSecurity.allowInlineScripts or bypassSanitization is enabled
+  var __allowInlineScripts = ${allowInlineScripts ? 'true' : 'false'};
 
   renderers.html = {
     type: 'html',
     priority: 0,
     canHandle: function(c) { return c.type === 'html'; },
     render: function(c, ctx) {
+      var html = c.source;
+      // Apply XSS protection unless bypassed
+      if (!__allowInlineScripts) {
+        // Remove script tags and event handlers to prevent XSS
+        html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
+        html = html.replace(/\\s+on\\w+\\s*=/gi, ' data-removed-handler=');
+      }
       return React.createElement('div', {
         className: 'frontmcp-html-content',
-        dangerouslySetInnerHTML: { __html: c.source }
+        dangerouslySetInnerHTML: { __html: html }
       });
     }
   };
@@ -642,11 +696,13 @@ export function getCachedRuntime(options: CachedRuntimeOptions, config: RuntimeC
   const vendorParts: string[] = [buildStoreRuntime(), buildRequireShim()];
 
   // Add markdown parser for UMD (Claude) or when explicitly requested
+  // Pass options for content security configuration
   if (options.cdnType === 'umd' || options.includeMarkdown) {
-    vendorParts.push(buildInlineMarkdownParser());
+    vendorParts.push(buildInlineMarkdownParser(options));
   }
 
-  vendorParts.push(buildRenderersRuntime());
+  // Pass options for content security configuration (inline scripts protection)
+  vendorParts.push(buildRenderersRuntime(options));
   vendorParts.push(buildUIComponentsRuntime());
   vendorParts.push(buildUniversalAppRuntime());
 

@@ -92,13 +92,21 @@ function buildStoreRuntime(): string {
 
 /**
  * Build inline markdown parser for platforms without react-markdown CDN.
+ * @param options Content security options for XSS protection
  */
-function buildInlineMarkdownParser(): string {
+function buildInlineMarkdownParser(options?: UniversalRuntimeOptions): string {
+  const allowUnsafeLinks = options?.contentSecurity?.bypassSanitization || options?.contentSecurity?.allowUnsafeLinks;
+
   return `
 // Inline Markdown Parser
 (function() {
+  // XSS protection settings (configured at build time)
+  var __allowUnsafeLinks = ${allowUnsafeLinks ? 'true' : 'false'};
+
   // URL scheme validation to prevent XSS via javascript: URLs
   function isSafeUrl(url) {
+    // If unsafe links are allowed, all URLs are considered safe
+    if (__allowUnsafeLinks) return true;
     if (!url) return false;
     var lower = url.toLowerCase().trim();
     return lower.startsWith('http://') ||
@@ -125,7 +133,7 @@ function buildInlineMarkdownParser(): string {
     html = html.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
     // Inline code
     html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
-    // Links - validate URL scheme to prevent XSS
+    // Links - validate URL scheme to prevent XSS (unless bypassed)
     html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
       return isSafeUrl(url) ? '<a href="' + url + '">' + text + '</a>' : text;
     });
@@ -159,10 +167,16 @@ function buildInlineMarkdownParser(): string {
  * Build the inline renderers implementation.
  */
 function buildRenderersRuntime(options: UniversalRuntimeOptions): string {
+  const bypassSanitization = options?.contentSecurity?.bypassSanitization;
+  const allowInlineScripts = bypassSanitization || options?.contentSecurity?.allowInlineScripts;
+
   return `
 // Universal Renderers
 (function() {
   var renderers = {};
+
+  // XSS protection settings (configured at build time)
+  var __allowInlineScripts = ${allowInlineScripts ? 'true' : 'false'};
 
   // HTML Renderer
   renderers.html = {
@@ -170,10 +184,13 @@ function buildRenderersRuntime(options: UniversalRuntimeOptions): string {
     priority: 0,
     canHandle: function(c) { return c.type === 'html'; },
     render: function(c, ctx) {
-      // Basic XSS protection - remove script tags and event handlers
       var html = c.source;
-      html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
-      html = html.replace(/\\s+on\\w+\\s*=/gi, ' data-removed-handler=');
+      // Apply XSS protection unless bypassed
+      if (!__allowInlineScripts) {
+        // Remove script tags and event handlers
+        html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
+        html = html.replace(/\\s+on\\w+\\s*=/gi, ' data-removed-handler=');
+      }
       return React.createElement('div', {
         className: 'frontmcp-html-content',
         dangerouslySetInnerHTML: { __html: html }
@@ -416,7 +433,7 @@ export function buildUniversalRuntime(options: UniversalRuntimeOptions): Univers
 
   // 2. Inline markdown parser (for UMD/Claude or when no CDN available)
   if (options.cdnType === 'umd' || options.includeMarkdown) {
-    parts.push(buildInlineMarkdownParser());
+    parts.push(buildInlineMarkdownParser(options));
   }
 
   // 3. Renderers

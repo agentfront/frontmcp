@@ -15,6 +15,8 @@
 export {
   // Content Security Policy
   type UIContentSecurityPolicy,
+  // XSS Protection Options
+  type UIContentSecurity,
   // Template Context & Helpers
   type TemplateHelpers,
   type TemplateContext,
