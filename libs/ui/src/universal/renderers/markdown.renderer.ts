@@ -7,6 +7,7 @@
 
 import React from 'react';
 import type { ClientRenderer, UniversalContent, RenderContext } from '../types';
+import { escapeHtml } from '../../utils/escape-html';
 
 // ============================================
 // Security Helpers
@@ -58,10 +59,8 @@ function getReactMarkdown(): React.ComponentType<any> | null {
  * Supports: headers, bold, italic, links, code, lists.
  */
 function parseMarkdownToHtml(markdown: string): string {
-  let html = markdown;
-
-  // Escape HTML
-  html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Escape HTML using the centralized utility for consistent, complete escaping
+  let html = escapeHtml(markdown);
 
   // Headers (h1-h6)
   html = html.replace(/^######\s+(.*)$/gm, '<h6>$1</h6>');
@@ -158,10 +157,7 @@ export const markdownRenderer: ClientRenderer = {
     const source = content.source;
 
     if (typeof source !== 'string') {
-      return React.createElement('div', {
-        className: 'frontmcp-error',
-        children: 'Markdown renderer requires a string source',
-      });
+      return React.createElement('div', { className: 'frontmcp-error' }, 'Markdown renderer requires a string source');
     }
 
     // Try to use react-markdown
@@ -174,10 +170,8 @@ export const markdownRenderer: ClientRenderer = {
         ...content.components,
       };
 
-      return React.createElement(ReactMarkdown, {
-        children: source,
-        components,
-      });
+      // Pass children as positional argument per React.createElement conventions
+      return React.createElement(ReactMarkdown, { components }, source);
     }
 
     // Fallback: minimal inline parser

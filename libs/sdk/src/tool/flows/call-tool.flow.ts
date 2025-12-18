@@ -620,8 +620,29 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         finalResult: result,
       };
       // Use os.tmpdir() for cross-platform compatibility (works on Windows, macOS, Linux)
-      const defaultPath = path.join(os.tmpdir(), 'tool-response-debug.json');
-      const outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
+      const tempDir = os.tmpdir();
+      const defaultPath = path.join(tempDir, 'tool-response-debug.json');
+      let outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
+
+      // Path traversal protection: ensure custom path is within allowed directories
+      if (process.env['DEBUG_TOOL_RESPONSE_PATH']) {
+        const resolvedPath = path.resolve(outputPath);
+        const resolvedTempDir = path.resolve(tempDir);
+        const cwd = path.resolve(process.cwd());
+
+        // Only allow paths within temp directory or current working directory
+        const isInTempDir = resolvedPath.startsWith(resolvedTempDir + path.sep) || resolvedPath === resolvedTempDir;
+        const isInCwd = resolvedPath.startsWith(cwd + path.sep) || resolvedPath === cwd;
+
+        if (!isInTempDir && !isInCwd) {
+          console.error(
+            `[DEBUG] DEBUG_TOOL_RESPONSE_PATH must be within temp directory (${tempDir}) or current working directory (${cwd}). ` +
+              `Falling back to default path.`,
+          );
+          outputPath = defaultPath;
+        }
+      }
+
       // Use async write to avoid blocking the event loop (fire-and-forget)
       fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
         .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))
