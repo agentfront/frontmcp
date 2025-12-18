@@ -38,13 +38,6 @@ export interface BadgeOptions {
   className?: string;
   /** Removable badge */
   removable?: boolean;
-  /** Remove button HTMX */
-  onRemove?: {
-    delete?: string;
-    target?: string;
-    swap?: string;
-    confirm?: string;
-  };
 }
 
 // ============================================
@@ -101,7 +94,6 @@ export function badge(text: string, options: BadgeOptions = {}): string {
     dot = false,
     className = '',
     removable = false,
-    onRemove,
   } = options;
 
   // Dot badge (status indicator)
@@ -143,10 +135,7 @@ export function badge(text: string, options: BadgeOptions = {}): string {
     ? `<button
         type="button"
         class="ml-1.5 -mr-1 hover:opacity-70 transition-opacity"
-        ${onRemove?.delete ? `hx-delete="${escapeHtml(onRemove.delete)}"` : ''}
-        ${onRemove?.target ? `hx-target="${escapeHtml(onRemove.target)}"` : ''}
-        ${onRemove?.swap ? `hx-swap="${escapeHtml(onRemove.swap)}"` : ''}
-        ${onRemove?.confirm ? `hx-confirm="${escapeHtml(onRemove.confirm)}"` : ''}
+        onclick="this.parentElement.remove()"
         aria-label="Remove"
       >
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

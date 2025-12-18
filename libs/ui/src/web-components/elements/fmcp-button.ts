@@ -12,13 +12,6 @@
  * <fmcp-button disabled>Disabled</fmcp-button>
  * ```
  *
- * @example With HTMX
- * ```html
- * <fmcp-button hx-post="/api/submit" hx-target="#result">
- *   Submit
- * </fmcp-button>
- * ```
- *
  * @example In React
  * ```tsx
  * import { registerFmcpButton } from '@frontmcp/ui/web-components';
@@ -53,7 +46,6 @@ import { ButtonOptionsSchema } from '../../components/button.schema';
  * - `icon-only` - boolean
  * - `href` - URL for link-style buttons
  * - `target` - '_blank' | '_self'
- * - `hx-get`, `hx-post`, etc. - HTMX attributes
  *
  * Properties (for React/Vue):
  * - All attributes can be set as properties

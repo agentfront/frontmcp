@@ -37,12 +37,6 @@ export interface ModalOptions {
   className?: string;
   /** Initially visible */
   open?: boolean;
-  /** HTMX for closing */
-  onClose?: {
-    delete?: string;
-    target?: string;
-    swap?: string;
-  };
 }
 
 // ============================================
@@ -77,7 +71,6 @@ export function modal(content: string, options: ModalOptions): string {
     footer,
     className = '',
     open = false,
-    onClose,
   } = options;
 
   const sizeClasses = getSizeClasses(size);
@@ -94,9 +87,6 @@ export function modal(content: string, options: ModalOptions): string {
             type="button"
             class="p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-gray-100 transition-colors"
             onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
-            ${onClose?.delete ? `hx-delete="${escapeHtml(onClose.delete)}"` : ''}
-            ${onClose?.target ? `hx-target="${escapeHtml(onClose.target)}"` : ''}
-            ${onClose?.swap ? `hx-swap="${escapeHtml(onClose.swap)}"` : ''}
             aria-label="Close"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,14 +194,8 @@ export interface ConfirmModalOptions {
   variant?: 'primary' | 'danger' | 'warning';
   /** Icon */
   icon?: string;
-  /** HTMX for confirm action */
-  onConfirm?: {
-    post?: string;
-    delete?: string;
-    put?: string;
-    target?: string;
-    swap?: string;
-  };
+  /** Confirm action URL */
+  confirmHref?: string;
 }
 
 /**
@@ -226,7 +210,7 @@ export function confirmModal(options: ConfirmModalOptions): string {
     cancelText = 'Cancel',
     variant = 'primary',
     icon,
-    onConfirm,
+    confirmHref,
   } = options;
 
   const variantClasses: Record<string, string> = {
@@ -255,15 +239,6 @@ export function confirmModal(options: ConfirmModalOptions): string {
 
   const displayIcon = icon || defaultIcons[variant];
 
-  const htmxAttrs: string[] = [];
-  if (onConfirm) {
-    if (onConfirm.post) htmxAttrs.push(`hx-post="${escapeHtml(onConfirm.post)}"`);
-    if (onConfirm.delete) htmxAttrs.push(`hx-delete="${escapeHtml(onConfirm.delete)}"`);
-    if (onConfirm.put) htmxAttrs.push(`hx-put="${escapeHtml(onConfirm.put)}"`);
-    if (onConfirm.target) htmxAttrs.push(`hx-target="${escapeHtml(onConfirm.target)}"`);
-    if (onConfirm.swap) htmxAttrs.push(`hx-swap="${escapeHtml(onConfirm.swap)}"`);
-  }
-
   const content = `
     <div class="text-center">
       <div class="mx-auto w-12 h-12 rounded-full ${iconColors[variant]} flex items-center justify-center mb-4">
@@ -274,6 +249,21 @@ export function confirmModal(options: ConfirmModalOptions): string {
     </div>
   `;
 
+  const confirmButton = confirmHref
+    ? `<a
+        href="${escapeHtml(confirmHref)}"
+        class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
+      >
+        ${escapeHtml(confirmText)}
+      </a>`
+    : `<button
+        type="button"
+        class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
+        onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
+      >
+        ${escapeHtml(confirmText)}
+      </button>`;
+
   const footer = `
     <button
       type="button"
@@ -282,14 +272,7 @@ export function confirmModal(options: ConfirmModalOptions): string {
     >
       ${escapeHtml(cancelText)}
     </button>
-    <button
-      type="button"
-      class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
-      ${htmxAttrs.join(' ')}
-      onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
-    >
-      ${escapeHtml(confirmText)}
-    </button>
+    ${confirmButton}
   `;
 
   return modal(content, {

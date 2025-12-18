@@ -3,7 +3,7 @@
  * @description Zod schemas for Card component options validation.
  *
  * Provides strict validation schemas for card options including variants,
- * sizes, HTMX attributes, and clickable behavior.
+ * sizes, and clickable behavior.
  *
  * @example
  * ```typescript
@@ -42,29 +42,6 @@ export const CardSizeSchema = z.enum(['sm', 'md', 'lg']);
 export type CardSize = z.infer<typeof CardSizeSchema>;
 
 // ============================================
-// HTMX Schema
-// ============================================
-
-/**
- * HTMX attributes schema for card
- */
-export const CardHtmxSchema = z
-  .object({
-    get: z.string().optional(),
-    post: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    trigger: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Card HTMX type
- */
-export type CardHtmx = z.infer<typeof CardHtmxSchema>;
-
-// ============================================
 // Card Options Schema
 // ============================================
 
@@ -89,8 +66,6 @@ export const CardOptionsSchema = z
     className: z.string().optional(),
     /** Card ID */
     id: z.string().optional(),
-    /** HTMX attributes */
-    htmx: CardHtmxSchema,
     /** Data attributes */
     data: z.record(z.string(), z.string()).optional(),
     /** Clickable card (adds hover effects) */

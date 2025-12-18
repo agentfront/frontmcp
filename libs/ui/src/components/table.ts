@@ -1,7 +1,7 @@
 /**
  * Table Component
  *
- * Data tables with sorting, selection, and HTMX support.
+ * Data tables with sorting and selection support.
  */
 
 import { escapeHtml } from '../layouts/base';
@@ -62,17 +62,6 @@ export interface TableOptions<T = Record<string, unknown>> {
   emptyContent?: string;
   /** Loading state */
   loading?: boolean;
-  /** HTMX for sorting */
-  sortHtmx?: {
-    get: string;
-    target?: string;
-    swap?: string;
-  };
-  /** HTMX for selection */
-  selectHtmx?: {
-    post: string;
-    target?: string;
-  };
   /** Row key property for selection */
   rowKey?: keyof T;
   /** Row click handler (URL template with {key}) */
@@ -118,7 +107,7 @@ function buildSortIndicator(direction: 'asc' | 'desc' | null): string {
  * Build table header
  */
 function buildTableHeader<T>(columns: TableColumn<T>[], options: TableOptions<T>): string {
-  const { selectable, sortHtmx, compact } = options;
+  const { selectable, compact } = options;
   const paddingClass = compact ? 'px-3 py-2' : 'px-4 py-3';
 
   const selectAllCell = selectable
@@ -135,32 +124,19 @@ function buildTableHeader<T>(columns: TableColumn<T>[], options: TableOptions<T>
     .map((col) => {
       const alignClass = getAlignClasses(col.align);
       const widthStyle = col.width ? `style="width: ${col.width}"` : '';
-
-      if (col.sortable && sortHtmx) {
-        const nextDirection = col.sortDirection === 'asc' ? 'desc' : 'asc';
-        const sortUrl = `${sortHtmx.get}${sortHtmx.get.includes('?') ? '&' : '?'}sort=${col.key}&dir=${nextDirection}`;
-
-        return `<th
-        class="${paddingClass} ${alignClass} font-semibold text-text-primary cursor-pointer hover:bg-gray-50 ${
-          col.headerClass || ''
-        }"
-        ${widthStyle}
-        hx-get="${escapeHtml(sortUrl)}"
-        ${sortHtmx.target ? `hx-target="${escapeHtml(sortHtmx.target)}"` : ''}
-        ${sortHtmx.swap ? `hx-swap="${escapeHtml(sortHtmx.swap)}"` : ''}
-      >
-        <span class="inline-flex items-center">
-          ${escapeHtml(col.header)}
-          ${buildSortIndicator(col.sortDirection || null)}
-        </span>
-      </th>`;
-      }
+      const sortableClasses = col.sortable ? 'cursor-pointer hover:bg-gray-50' : '';
 
       return `<th
-      class="${paddingClass} ${alignClass} font-semibold text-text-primary ${col.headerClass || ''}"
+      class="${paddingClass} ${alignClass} font-semibold text-text-primary ${sortableClasses} ${col.headerClass || ''}"
       ${widthStyle}
     >
-      ${escapeHtml(col.header)}
+      ${
+        col.sortable
+          ? `<span class="inline-flex items-center">${escapeHtml(col.header)}${buildSortIndicator(
+              col.sortDirection || null,
+            )}</span>`
+          : escapeHtml(col.header)
+      }
     </th>`;
     })
     .join('\n');
@@ -181,16 +157,7 @@ function buildTableBody<T extends Record<string, unknown>>(
   columns: TableColumn<T>[],
   options: TableOptions<T>,
 ): string {
-  const {
-    selectable,
-    hoverable,
-    striped,
-    bordered,
-    compact,
-    selectHtmx,
-    rowKey = 'id' as keyof T,
-    onRowClick,
-  } = options;
+  const { selectable, hoverable, striped, bordered, compact, rowKey = 'id' as keyof T, onRowClick } = options;
 
   const paddingClass = compact ? 'px-3 py-2' : 'px-4 py-3';
 
@@ -237,15 +204,6 @@ function buildTableBody<T extends Record<string, unknown>>(
             class="w-4 h-4 rounded border-border text-primary focus:ring-primary/20"
             name="selected[]"
             value="${escapeHtml(rowId)}"
-            ${
-              selectHtmx
-                ? `
-              hx-post="${escapeHtml(selectHtmx.post)}"
-              ${selectHtmx.target ? `hx-target="${escapeHtml(selectHtmx.target)}"` : ''}
-              hx-trigger="change"
-            `
-                : ''
-            }
             aria-label="Select row"
           >
         </td>`
@@ -332,12 +290,8 @@ export interface PaginationOptions {
   pageSizeOptions?: number[];
   /** Additional CSS classes */
   className?: string;
-  /** HTMX for page changes */
-  htmx?: {
-    get: string;
-    target?: string;
-    swap?: string;
-  };
+  /** Base URL for page links */
+  baseUrl?: string;
 }
 
 /**
@@ -352,7 +306,7 @@ export function pagination(options: PaginationOptions): string {
     showPageSize = false,
     pageSizeOptions = [10, 25, 50, 100],
     className = '',
-    htmx,
+    baseUrl = '',
   } = options;
 
   const buildPageLink = (pageNum: number, label: string, disabled: boolean, active: boolean) => {
@@ -367,15 +321,9 @@ export function pagination(options: PaginationOptions): string {
       return `<span class="${baseClasses} ${stateClasses}">${label}</span>`;
     }
 
-    const pageUrl = htmx ? `${htmx.get}${htmx.get.includes('?') ? '&' : '?'}page=${pageNum}` : `?page=${pageNum}`;
+    const pageUrl = baseUrl ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}page=${pageNum}` : `?page=${pageNum}`;
 
-    const htmxAttrs = htmx
-      ? `hx-get="${escapeHtml(pageUrl)}" ${htmx.target ? `hx-target="${escapeHtml(htmx.target)}"` : ''} ${
-          htmx.swap ? `hx-swap="${escapeHtml(htmx.swap)}"` : ''
-        }`
-      : '';
-
-    return `<a href="${escapeHtml(pageUrl)}" class="${baseClasses} ${stateClasses}" ${htmxAttrs}>${label}</a>`;
+    return `<a href="${escapeHtml(pageUrl)}" class="${baseClasses} ${stateClasses}">${label}</a>`;
   };
 
   // Build page numbers
@@ -435,7 +383,7 @@ export function pagination(options: PaginationOptions): string {
   const pageSizeHtml = showPageSize
     ? `<select
         class="ml-4 px-2 py-1 text-sm border border-border rounded-lg bg-white"
-        onchange="window.location.href = '${htmx?.get || ''}?page=1&pageSize=' + this.value"
+        onchange="window.location.href = '${baseUrl}${baseUrl.includes('?') ? '&' : '?'}page=1&pageSize=' + this.value"
       >
         ${pageSizeOptions
           .map((size) => `<option value="${size}" ${size === pageSize ? 'selected' : ''}>${size} per page</option>`)

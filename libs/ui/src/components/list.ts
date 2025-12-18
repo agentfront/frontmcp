@@ -374,13 +374,6 @@ export interface ActionItem {
   icon?: string;
   /** Click URL */
   href?: string;
-  /** HTMX attributes */
-  htmx?: {
-    get?: string;
-    post?: string;
-    target?: string;
-    swap?: string;
-  };
   /** Destructive action */
   destructive?: boolean;
   /** Disabled state */
@@ -423,19 +416,11 @@ export function actionList(items: ActionItem[], className = ''): string {
         return `<div class="${baseClasses}">${contentHtml}</div>`;
       }
 
-      const htmxAttrs: string[] = [];
-      if (item.htmx) {
-        if (item.htmx.get) htmxAttrs.push(`hx-get="${escapeHtml(item.htmx.get)}"`);
-        if (item.htmx.post) htmxAttrs.push(`hx-post="${escapeHtml(item.htmx.post)}"`);
-        if (item.htmx.target) htmxAttrs.push(`hx-target="${escapeHtml(item.htmx.target)}"`);
-        if (item.htmx.swap) htmxAttrs.push(`hx-swap="${escapeHtml(item.htmx.swap)}"`);
-      }
-
       if (item.href) {
-        return `<a href="${escapeHtml(item.href)}" class="${baseClasses}" ${htmxAttrs.join(' ')}>${contentHtml}</a>`;
+        return `<a href="${escapeHtml(item.href)}" class="${baseClasses}">${contentHtml}</a>`;
       }
 
-      return `<div class="${baseClasses}" ${htmxAttrs.join(' ')}>${contentHtml}</div>`;
+      return `<div class="${baseClasses}">${contentHtml}</div>`;
     })
     .join('\n');
 

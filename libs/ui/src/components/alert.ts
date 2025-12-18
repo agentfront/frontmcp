@@ -35,12 +35,6 @@ export interface AlertOptions {
   id?: string;
   /** Actions (buttons) */
   actions?: string;
-  /** HTMX for dismiss */
-  onDismiss?: {
-    delete?: string;
-    target?: string;
-    swap?: string;
-  };
 }
 
 // ============================================
@@ -102,17 +96,7 @@ function getVariantClasses(variant: AlertVariant): { container: string; icon: st
  * Build an alert component
  */
 export function alert(message: string, options: AlertOptions = {}): string {
-  const {
-    variant = 'info',
-    title,
-    showIcon = true,
-    icon,
-    dismissible = false,
-    className = '',
-    id,
-    actions,
-    onDismiss,
-  } = options;
+  const { variant = 'info', title, showIcon = true, icon, dismissible = false, className = '', id, actions } = options;
 
   const variantClasses = getVariantClasses(variant);
 
@@ -130,13 +114,7 @@ export function alert(message: string, options: AlertOptions = {}): string {
     ? `<button
         type="button"
         class="flex-shrink-0 ml-auto -mr-1 -mt-1 p-1 rounded hover:bg-black/5 transition-colors"
-        ${
-          onDismiss?.delete
-            ? `hx-delete="${escapeHtml(onDismiss.delete)}"`
-            : `onclick="this.closest('.alert').remove()"`
-        }
-        ${onDismiss?.target ? `hx-target="${escapeHtml(onDismiss.target)}"` : ''}
-        ${onDismiss?.swap ? `hx-swap="${escapeHtml(onDismiss.swap)}"` : ''}
+        onclick="this.closest('.alert').remove()"
         aria-label="Dismiss"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

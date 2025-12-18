@@ -234,24 +234,6 @@ describe('List Components', () => {
       expect(html).toContain('cursor-not-allowed');
     });
 
-    it('should include HTMX attributes', () => {
-      const html = actionList(actions);
-      expect(html).toContain('hx-post="/delete"');
-    });
-
-    it('should include target and swap HTMX attributes', () => {
-      const actionsWithHtmx: ActionItem[] = [
-        {
-          label: 'Load',
-          htmx: { get: '/api/data', target: '#content', swap: 'innerHTML' },
-        },
-      ];
-      const html = actionList(actionsWithHtmx);
-      expect(html).toContain('hx-get="/api/data"');
-      expect(html).toContain('hx-target="#content"');
-      expect(html).toContain('hx-swap="innerHTML"');
-    });
-
     it('should render icon when provided', () => {
       const actionsWithIcon: ActionItem[] = [{ label: 'Settings', icon: '<svg>settings</svg>' }];
       const html = actionList(actionsWithIcon);

@@ -114,19 +114,6 @@ describe('Button Component', () => {
       expect(html).toContain('target="_blank"');
     });
 
-    it('should include HTMX attributes', () => {
-      const html = button('Test', {
-        htmx: {
-          post: '/api/action',
-          target: '#result',
-          swap: 'innerHTML',
-        },
-      });
-      expect(html).toContain('hx-post="/api/action"');
-      expect(html).toContain('hx-target="#result"');
-      expect(html).toContain('hx-swap="innerHTML"');
-    });
-
     it('should include data attributes', () => {
       const html = button('Test', {
         data: {

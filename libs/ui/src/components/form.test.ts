@@ -127,20 +127,6 @@ describe('Form Components', () => {
       expect(html).toContain('max="120"');
     });
 
-    it('should include HTMX attributes', () => {
-      const html = input({
-        name: 'email',
-        htmx: {
-          post: '/validate',
-          target: '#errors',
-          trigger: 'blur',
-        },
-      });
-      expect(html).toContain('hx-post="/validate"');
-      expect(html).toContain('hx-target="#errors"');
-      expect(html).toContain('hx-trigger="blur"');
-    });
-
     it('should render icon before input', () => {
       const html = input({
         name: 'email',
@@ -331,18 +317,6 @@ describe('Form Components', () => {
     it('should set method', () => {
       const html = form('<input>', { method: 'post' });
       expect(html).toContain('method="post"');
-    });
-
-    it('should include HTMX attributes', () => {
-      const html = form('<input>', {
-        htmx: {
-          post: '/api/submit',
-          target: '#result',
-          swap: 'innerHTML',
-        },
-      });
-      expect(html).toContain('hx-post="/api/submit"');
-      expect(html).toContain('hx-target="#result"');
     });
 
     it('should set enctype for file uploads', () => {

@@ -68,30 +68,6 @@ export const InputStateSchema = z.enum(['default', 'error', 'success', 'warning'
 export type InputState = z.infer<typeof InputStateSchema>;
 
 // ============================================
-// HTMX Schema for Form Fields
-// ============================================
-
-/**
- * Form field HTMX options schema
- */
-export const FormHtmxSchema = z
-  .object({
-    post: z.string().optional(),
-    get: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    trigger: z.string().optional(),
-    validate: z.boolean().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Form field HTMX type
- */
-export type FormHtmx = z.infer<typeof FormHtmxSchema>;
-
-// ============================================
 // Input Options Schema
 // ============================================
 
@@ -138,8 +114,6 @@ export const InputOptionsSchema = z
     step: z.union([z.string(), z.number()]).optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX attributes */
-    htmx: FormHtmxSchema,
     /** Data attributes */
     data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
@@ -206,8 +180,6 @@ export const SelectOptionsSchema = z
     readonly: z.boolean().optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX attributes */
-    htmx: FormHtmxSchema,
     /** Data attributes */
     data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
@@ -268,8 +240,6 @@ export const TextareaOptionsSchema = z
     autocomplete: z.string().optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX attributes */
-    htmx: FormHtmxSchema,
     /** Data attributes */
     data: z.record(z.string(), z.string()).optional(),
     /** Icon before input (HTML string) */
@@ -291,20 +261,6 @@ export type TextareaOptions = z.infer<typeof TextareaOptionsSchema>;
 // ============================================
 // Checkbox Options Schema
 // ============================================
-
-/**
- * Checkbox HTMX options schema
- */
-export const CheckboxHtmxSchema = z
-  .object({
-    post: z.string().optional(),
-    get: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    trigger: z.string().optional(),
-  })
-  .strict()
-  .optional();
 
 /**
  * Complete checkbox options schema
@@ -329,8 +285,6 @@ export const CheckboxOptionsSchema = z
     error: z.string().optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX attributes */
-    htmx: CheckboxHtmxSchema,
   })
   .strict();
 
@@ -403,22 +357,6 @@ export const FormMethodSchema = z.enum(['get', 'post', 'dialog']);
 export const FormEnctypeSchema = z.enum(['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain']);
 
 /**
- * Form HTMX options schema
- */
-export const FormFormHtmxSchema = z
-  .object({
-    post: z.string().optional(),
-    put: z.string().optional(),
-    patch: z.string().optional(),
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    encoding: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
  * Complete form options schema
  */
 export const FormOptionsSchema = z
@@ -437,8 +375,6 @@ export const FormOptionsSchema = z
     autocomplete: z.enum(['on', 'off']).optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX attributes */
-    htmx: FormFormHtmxSchema,
   })
   .strict();
 

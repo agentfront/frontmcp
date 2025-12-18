@@ -64,11 +64,6 @@ export class FmcpInput extends FmcpElement<InputOptions> {
       'class',
       'icon-before',
       'icon-after',
-      'hx-get',
-      'hx-post',
-      'hx-target',
-      'hx-swap',
-      'hx-trigger',
     ];
   }
 

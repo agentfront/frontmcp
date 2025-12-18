@@ -120,22 +120,6 @@ describe('Badge Component', () => {
       expect(html).toContain('aria-label="Remove"');
     });
 
-    it('should include HTMX attributes on remove button', () => {
-      const html = badge('Test', {
-        removable: true,
-        onRemove: {
-          delete: '/api/remove/1',
-          target: '#badge-container',
-          swap: 'outerHTML',
-          confirm: 'Are you sure?',
-        },
-      });
-      expect(html).toContain('hx-delete="/api/remove/1"');
-      expect(html).toContain('hx-target="#badge-container"');
-      expect(html).toContain('hx-swap="outerHTML"');
-      expect(html).toContain('hx-confirm="Are you sure?"');
-    });
-
     it('should escape text to prevent XSS', () => {
       const html = badge('<script>alert("xss")</script>');
       expect(html).not.toContain('<script>alert');
