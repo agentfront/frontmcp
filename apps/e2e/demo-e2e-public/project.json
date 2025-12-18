@@ -26,10 +26,11 @@
       }
     },
     "serve": {
-      "executor": "@nx/js:node",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
       "options": {
-        "inspect": false,
-        "buildTarget": "demo-e2e-public:build"
+        "command": "exec node dist/apps/e2e/demo-e2e-public/main.js",
+        "cwd": "{workspaceRoot}"
       }
     },
     "test": {

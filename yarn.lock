@@ -1480,6 +1480,20 @@
   resolved "https://registry.yarnpkg.com/@floating-ui/utils/-/utils-0.2.10.tgz#a2a1e3812d14525f725d011a73eceb41fef5bc1c"
   integrity sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==
 
+"@frontmcp/ui@0.5.1":
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/@frontmcp/ui/-/ui-0.5.1.tgz#66dd54b6c0a7e458b7e82728056878d9b76097dd"
+  integrity sha512-JdXQ6OeqwcKc7LMHHDAbONLRz0XEfda6tsQFJFQfHFsJX0pvtBcqEBPVc/dji39B3lDgwnpdO5hizqwVjAT/jQ==
+  dependencies:
+    "@swc/core" "^1.5.0"
+    enclave-vm "^1.0.3"
+    esbuild "^0.27.1"
+    handlebars "^4.7.8"
+    tslib "^2.3.0"
+    zod "^4.0.0"
+  optionalDependencies:
+    "@mdx-js/mdx" "^3.1.0"
+
 "@huggingface/jinja@^0.5.1":
   version "0.5.1"
   resolved "https://registry.yarnpkg.com/@huggingface/jinja/-/jinja-0.5.1.tgz#081d334ddcf6237f65561ae3d665bb713a8ff74f"
@@ -5684,6 +5698,11 @@ baseline-browser-mapping@^2.9.0:
   version "2.9.7"
   resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.9.7.tgz#d36ce64f2a2c468f6f743c8db495d319120007db"
   integrity sha512-k9xFKplee6KIio3IDbwj+uaCLpqzOwakOgmqzPezM0sFJlFKcg30vk2wOiAJtkTSfx0SSQDSe8q+mWA/fSH5Zg==
+
+baseline-browser-mapping@^2.9.9:
+  version "2.9.9"
+  resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.9.9.tgz#68c17013c33ba9e8264c5f2ae107d506228428ee"
+  integrity sha512-V8fbOCSeOFvlDj7LLChUcqbZrdKD9RU/VR260piF1790vT0mfLSwGc/Qzxv3IqiTukOpNtItePa0HBpMAj7MDg==
 
 basic-auth@^2.0.1:
   version "2.0.1"
