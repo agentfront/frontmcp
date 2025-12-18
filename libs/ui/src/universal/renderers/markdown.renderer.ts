@@ -8,6 +8,37 @@
 import React from 'react';
 import type { ClientRenderer, UniversalContent, RenderContext } from '../types';
 
+// ============================================
+// Security Helpers
+// ============================================
+
+/**
+ * Validates URL scheme to prevent XSS via javascript: URLs.
+ *
+ * Allowed protocols:
+ * - `http://`, `https://` - Web URLs
+ * - `/`, `#` - Relative paths and anchors
+ * - `mailto:` - Email links
+ * - `tel:` - Phone links
+ *
+ * Blocked protocols (XSS vectors):
+ * - `javascript:` - Inline script execution
+ * - `data:` - Data URIs (can contain scripts)
+ * - `vbscript:` - Legacy script protocol
+ */
+function isSafeUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase().trim();
+  return (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('/') ||
+    lower.startsWith('#') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:')
+  );
+}
+
 /**
  * Check if react-markdown is available.
  */
@@ -51,8 +82,10 @@ function parseMarkdownToHtml(markdown: string): string {
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // Links - validate URL scheme to prevent XSS (javascript:, data:, vbscript: URLs)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match: string, text: string, url: string) => {
+    return isSafeUrl(url) ? `<a href="${url}">${text}</a>` : text;
+  });
 
   // Unordered lists
   html = html.replace(/^[-*]\s+(.*)$/gm, '<li>$1</li>');

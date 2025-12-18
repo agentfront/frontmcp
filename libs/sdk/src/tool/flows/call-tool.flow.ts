@@ -607,6 +607,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (process.env['DEBUG_TOOL_RESPONSE']) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('fs').promises;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const os = require('os');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('path');
       const debugOutput = {
         timestamp: new Date().toISOString(),
         tool: tool.metadata.name,
@@ -615,7 +619,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         uiMeta,
         finalResult: result,
       };
-      const outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || '/tmp/tool-response-debug.json';
+      // Use os.tmpdir() for cross-platform compatibility (works on Windows, macOS, Linux)
+      const defaultPath = path.join(os.tmpdir(), 'tool-response-debug.json');
+      const outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
       // Use async write to avoid blocking the event loop (fire-and-forget)
       fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
         .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))

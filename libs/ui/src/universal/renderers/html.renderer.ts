@@ -37,10 +37,7 @@ export const htmlRenderer: ClientRenderer = {
 
     // Must be a string for HTML rendering
     if (typeof source !== 'string') {
-      return React.createElement('div', {
-        className: 'frontmcp-error',
-        children: 'HTML renderer requires a string source',
-      });
+      return React.createElement('div', { className: 'frontmcp-error' }, 'HTML renderer requires a string source');
     }
 
     // Render using dangerouslySetInnerHTML
@@ -87,10 +84,7 @@ export const safeHtmlRenderer: ClientRenderer = {
     const source = content.source;
 
     if (typeof source !== 'string') {
-      return React.createElement('div', {
-        className: 'frontmcp-error',
-        children: 'HTML renderer requires a string source',
-      });
+      return React.createElement('div', { className: 'frontmcp-error' }, 'HTML renderer requires a string source');
     }
 
     const sanitized = sanitizeHtml(source);

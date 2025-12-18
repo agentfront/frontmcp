@@ -7,6 +7,7 @@
 
 import React from 'react';
 import type { ClientRenderer, UniversalContent, RenderContext } from '../types';
+import { escapeHtml } from '../../utils/escape-html';
 
 /**
  * Check if MDX runtime is available.
@@ -89,10 +90,7 @@ export const mdxRenderer: ClientRenderer = {
     const source = content.source;
 
     if (typeof source !== 'string') {
-      return React.createElement('div', {
-        className: 'frontmcp-error',
-        children: 'MDX renderer requires a string source',
-      });
+      return React.createElement('div', { className: 'frontmcp-error' }, 'MDX renderer requires a string source');
     }
 
     // Try to get MDX runtime
@@ -102,29 +100,27 @@ export const mdxRenderer: ClientRenderer = {
       // MDX not available - show warning and fallback
       console.warn('[FrontMCP] MDX runtime not available. Content will be displayed as-is.');
 
-      // Fall back to rendering as HTML (escaping JSX tags)
-      const escapedHtml = source
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>');
+      // Fall back to rendering as HTML using the centralized escapeHtml utility
+      const escapedContent = escapeHtml(source).replace(/\n/g, '<br>');
 
-      return React.createElement('div', {
-        className: 'frontmcp-mdx-fallback',
-        children: [
-          React.createElement('div', {
+      return React.createElement(
+        'div',
+        { className: 'frontmcp-mdx-fallback' },
+        React.createElement(
+          'div',
+          {
             key: 'warning',
             className:
               'frontmcp-warning bg-yellow-50 border border-yellow-200 rounded p-2 mb-4 text-sm text-yellow-800',
-            children: 'MDX rendering is not available on this platform. Content is shown as raw text.',
-          }),
-          React.createElement('pre', {
-            key: 'content',
-            className: 'bg-gray-100 p-4 rounded overflow-auto',
-            dangerouslySetInnerHTML: { __html: escapedHtml },
-          }),
-        ],
-      });
+          },
+          'MDX rendering is not available on this platform. Content is shown as raw text.',
+        ),
+        React.createElement('pre', {
+          key: 'content',
+          className: 'bg-gray-100 p-4 rounded overflow-auto',
+          dangerouslySetInnerHTML: { __html: escapedContent },
+        }),
+      );
     }
 
     // Merge components from content and context
@@ -158,13 +154,11 @@ export const mdxRenderer: ClientRenderer = {
     // Runtime MDX compilation is complex and adds significant bundle size
     console.warn('[FrontMCP] MDX content needs to be pre-compiled. Raw MDX string rendering is not supported.');
 
-    return React.createElement('div', {
-      className: 'frontmcp-mdx-uncompiled',
-      children: React.createElement('pre', {
-        className: 'bg-gray-100 p-4 rounded overflow-auto text-sm',
-        children: source,
-      }),
-    });
+    return React.createElement(
+      'div',
+      { className: 'frontmcp-mdx-uncompiled' },
+      React.createElement('pre', { className: 'bg-gray-100 p-4 rounded overflow-auto text-sm' }, source),
+    );
   },
 };
 

@@ -11,18 +11,38 @@ import { escapeHtml } from '../layouts/base';
 // ============================================
 
 /**
- * Validates URL scheme to prevent XSS via javascript: URLs
+ * Validates URL scheme to prevent XSS via javascript: URLs.
+ *
+ * Allowed protocols:
+ * - `http://`, `https://` - Web URLs
+ * - `/`, `#` - Relative paths and anchors
+ * - `mailto:` - Email links
+ * - `tel:` - Phone links
+ *
+ * Blocked protocols (XSS vectors):
+ * - `javascript:` - Inline script execution
+ * - `data:` - Data URIs (can contain scripts)
+ * - `vbscript:` - Legacy script protocol
+ *
+ * @param url - URL to validate
+ * @returns true if URL uses a safe protocol, false otherwise
  */
 function isSafeUrl(url: string): boolean {
   if (!url) return false;
   const lower = url.toLowerCase().trim();
-  return (
+  const isSafe =
     lower.startsWith('http://') ||
     lower.startsWith('https://') ||
     lower.startsWith('/') ||
     lower.startsWith('#') ||
-    lower.startsWith('mailto:')
-  );
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:');
+
+  if (!isSafe) {
+    console.warn(`[FrontMCP] Blocked unsafe URL scheme in modal confirmHref: "${url.substring(0, 50)}..."`);
+  }
+
+  return isSafe;
 }
 
 // ============================================
