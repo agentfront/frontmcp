@@ -47,26 +47,6 @@ test.describe('Platform Detection E2E', () => {
         title: 'OpenAI Chart',
       });
 
-      // [DIAG] Output diagnostic info for CI debugging
-      console.log('[DIAG:platform-test] React chart result:', {
-        hasToolUI: result.hasToolUI(),
-        rawMeta: JSON.stringify(result.raw._meta),
-        rawContentLength: result.raw.content?.length,
-        platform: process.platform,
-        isError: result.raw.isError,
-      });
-
-      // Output server logs for debugging
-      const logs = server.getLogs();
-      const reactLogs = logs.filter((l) => l.includes('DIAG') || l.includes('react'));
-      if (reactLogs.length > 0) {
-        console.log('[DIAG:platform-test] Server logs (react/DIAG):', reactLogs.slice(-20));
-      } else {
-        console.log('[DIAG:platform-test] No DIAG/react logs in server output. Total logs:', logs.length);
-        // Show last few logs for context
-        console.log('[DIAG:platform-test] Last 5 server logs:', logs.slice(-5));
-      }
-
       expect(result).toBeSuccessful();
       expect(result.hasToolUI()).toBe(true);
 

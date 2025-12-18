@@ -28,6 +28,7 @@
     "serve": {
       "executor": "@nx/js:node",
       "options": {
+        "inspect": false,
         "buildTarget": "demo-e2e-public:build"
       }
     },

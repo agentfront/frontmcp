@@ -23,6 +23,7 @@ import {
   buildFontStylesheets,
   buildCdnScripts,
 } from '../theme';
+import { escapeHtml } from '../utils';
 
 // ============================================
 // Layout Types
@@ -141,17 +142,8 @@ export interface BaseLayoutOptions {
 // Utility Functions
 // ============================================
 
-/**
- * Escape HTML special characters to prevent XSS
- */
-export function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// Re-export escapeHtml from utils for backwards compatibility
+export { escapeHtml } from '../utils';
 
 /**
  * Get CSS class for layout size

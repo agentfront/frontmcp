@@ -7,6 +7,8 @@
  * @packageDocumentation
  */
 
+import { escapeHtml } from '../utils';
+
 /**
  * Helper function type for Handlebars.
  * Allows any function signature since Handlebars helpers vary widely.
@@ -14,30 +16,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type HelperFunction = (...args: any[]) => string | boolean | unknown;
 
-/**
- * Escape HTML special characters to prevent XSS.
- *
- * @param str - String to escape
- * @returns Escaped string safe for HTML output
- *
- * @example
- * ```handlebars
- * {{escapeHtml output.userInput}}
- * ```
- */
-export function escapeHtml(str: unknown): string {
-  if (str === null || str === undefined) {
-    return '';
-  }
-
-  const s = String(str);
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// Re-export escapeHtml from utils for backwards compatibility
+export { escapeHtml };
 
 /**
  * Format a date for display.

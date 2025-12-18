@@ -495,22 +495,6 @@ export default ${safeName};
     // Detect if this is a React component
     const detectedType = this.detectUIType(uiConfig.template);
     const isReactBased = detectedType === 'react' || detectedType === 'mdx';
-    const templateType = typeof uiConfig.template;
-    const templateIsFunction = templateType === 'function';
-
-    // [DIAG] Log React detection for debugging CI failures
-    if (detectedType === 'react' || toolName.includes('react')) {
-      console.log('[DIAG:tool-ui-registry] React template detection', {
-        toolName,
-        detectedType,
-        isReactBased,
-        templateType,
-        templateIsFunction,
-        willUseReactPath: isReactBased && templateIsFunction,
-        templateName: templateIsFunction ? (uiConfig.template as Function).name : 'N/A',
-        platform: process.platform,
-      });
-    }
 
     let html: string;
 
@@ -537,16 +521,6 @@ export default ${safeName};
         return { success: false, reason: 'React SSR rendering failed' };
       }
 
-      // [DIAG] Log SSR result for React components
-      if (toolName.includes('react')) {
-        console.log('[DIAG:tool-ui-registry] React SSR completed', {
-          toolName,
-          componentCodeLength: componentCode?.length ?? 0,
-          ssrContentLength: ssrContent?.length ?? 0,
-          ssrContentPreview: ssrContent?.slice(0, 100),
-        });
-      }
-
       // 3. Wrap with React runtime + component code
       // This creates a complete HTML document with:
       // - React 19 CDN imports
@@ -571,15 +545,6 @@ export default ${safeName};
         // This prevents OpenAI's wrapper from interfering with React re-renders
         selfContained: true,
       });
-
-      // [DIAG] Log final HTML result for React components
-      if (toolName.includes('react')) {
-        console.log('[DIAG:tool-ui-registry] React HTML wrapped', {
-          toolName,
-          htmlLength: html?.length ?? 0,
-          htmlHasDoctype: html?.startsWith('<!DOCTYPE'),
-        });
-      }
     } else {
       // For HTML templates: Use the original wrapToolUIUniversal approach
       // which embeds the pre-rendered content with the Bridge runtime
@@ -638,19 +603,6 @@ export default ${safeName};
       contentHash: buildResult?.hash,
       manifestUri: manifest?.uri,
     });
-
-    // [DIAG] Log final result for React tools
-    if (toolName.includes('react')) {
-      console.log('[DIAG:tool-ui-registry] Final result', {
-        toolName,
-        platformType,
-        rendererType,
-        htmlLength: html?.length ?? 0,
-        metaKeys: Object.keys(meta),
-        hasUiHtml: 'ui/html' in meta,
-        uiHtmlLength: (meta['ui/html'] as string)?.length ?? 0,
-      });
-    }
 
     return { html, meta };
   }

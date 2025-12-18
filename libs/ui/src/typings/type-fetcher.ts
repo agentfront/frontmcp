@@ -1,0 +1,573 @@
+/**
+ * TypeScript Type Fetcher
+ *
+ * Fetches TypeScript .d.ts files from esm.sh CDN based on import statements.
+ * Resolves dependencies recursively and combines them into a single output.
+ *
+ * @packageDocumentation
+ */
+
+import type {
+  TypeFetchResult,
+  TypeFetchError,
+  TypeFetchErrorCode,
+  TypeFetchBatchRequest,
+  TypeFetchBatchResult,
+  TypeFetcherOptions,
+  PackageResolution,
+  TypeCacheEntry,
+} from './types';
+import { TYPE_CACHE_PREFIX } from './types';
+import type { TypeCacheAdapter } from './cache';
+import { globalTypeCache } from './cache';
+import {
+  parseDtsImports,
+  parseImportStatement,
+  getPackageFromSpecifier,
+  getSubpathFromSpecifier,
+  combineDtsContents,
+} from './dts-parser';
+
+// ============================================
+// Semaphore for Concurrency Control
+// ============================================
+
+/**
+ * Simple semaphore for limiting concurrent operations.
+ */
+class Semaphore {
+  private permits: number;
+  private waiting: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      this.waiting.push(resolve);
+    });
+  }
+
+  release(): void {
+    if (this.waiting.length > 0) {
+      const next = this.waiting.shift();
+      next?.();
+    } else {
+      this.permits++;
+    }
+  }
+}
+
+// ============================================
+// Type Fetcher Class
+// ============================================
+
+/**
+ * TypeScript type fetcher for esm.sh CDN.
+ *
+ * Fetches .d.ts files based on import statements, resolves dependencies
+ * recursively, and combines them into single outputs per import.
+ *
+ * @example
+ * ```typescript
+ * const fetcher = new TypeFetcher({
+ *   maxDepth: 2,
+ *   timeout: 10000,
+ *   maxConcurrency: 5,
+ * });
+ *
+ * const result = await fetcher.fetchBatch({
+ *   imports: [
+ *     'import { Card } from "@frontmcp/ui/react"',
+ *     'import React from "react"',
+ *   ],
+ * });
+ *
+ * console.log(result.results[0].content); // Combined .d.ts for @frontmcp/ui
+ * ```
+ */
+export class TypeFetcher {
+  private readonly maxDepth: number;
+  private readonly timeout: number;
+  private readonly maxConcurrency: number;
+  private readonly cdnBaseUrl: string;
+  private readonly fetchFn: typeof globalThis.fetch;
+  private readonly cache: TypeCacheAdapter;
+
+  constructor(options: TypeFetcherOptions = {}, cache?: TypeCacheAdapter) {
+    this.maxDepth = options.maxDepth ?? 2;
+    this.timeout = options.timeout ?? 10000;
+    this.maxConcurrency = options.maxConcurrency ?? 5;
+    this.cdnBaseUrl = options.cdnBaseUrl ?? 'https://esm.sh';
+    this.fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.cache = cache ?? globalTypeCache;
+  }
+
+  /**
+   * Fetch types for a batch of import statements.
+   *
+   * @param request - Batch request configuration
+   * @returns Batch result with results and errors
+   */
+  async fetchBatch(request: TypeFetchBatchRequest): Promise<TypeFetchBatchResult> {
+    const startTime = Date.now();
+    const results: TypeFetchResult[] = [];
+    const errors: TypeFetchError[] = [];
+    let cacheHits = 0;
+    let networkRequests = 0;
+
+    const maxDepth = request.maxDepth ?? this.maxDepth;
+    const timeout = request.timeout ?? this.timeout;
+    const maxConcurrency = request.maxConcurrency ?? this.maxConcurrency;
+    const skipCache = request.skipCache ?? false;
+    const versionOverrides = request.versionOverrides ?? {};
+
+    const semaphore = new Semaphore(maxConcurrency);
+
+    // Process imports in parallel
+    const promises = request.imports.map(async (importStatement) => {
+      await semaphore.acquire();
+      try {
+        // Parse the import statement to get specifier
+        const specifier = parseImportStatement(importStatement);
+        if (!specifier) {
+          errors.push({
+            specifier: importStatement,
+            code: 'INVALID_SPECIFIER',
+            message: `Could not parse import statement: ${importStatement}`,
+          });
+          return;
+        }
+
+        // Check cache first
+        const packageName = getPackageFromSpecifier(specifier);
+        const version = versionOverrides[packageName] ?? 'latest';
+        const cacheKey = `${TYPE_CACHE_PREFIX}${packageName}@${version}`;
+
+        if (!skipCache) {
+          const cached = await this.cache.get(cacheKey);
+          if (cached) {
+            cacheHits++;
+            results.push(cached.result);
+            return;
+          }
+        }
+
+        // Fetch types
+        const result = await this.fetchTypesForSpecifier(specifier, {
+          maxDepth,
+          timeout,
+          version,
+        });
+
+        if (result.success) {
+          results.push(result.data);
+          networkRequests += result.fetchCount;
+
+          // Cache the result
+          const entry: TypeCacheEntry = {
+            result: result.data,
+            cachedAt: Date.now(),
+            size: result.data.content.length,
+            accessCount: 1,
+          };
+          await this.cache.set(cacheKey, entry);
+        } else {
+          errors.push(result.error);
+          networkRequests += result.fetchCount;
+        }
+      } finally {
+        semaphore.release();
+      }
+    });
+
+    await Promise.all(promises);
+
+    return {
+      results,
+      errors,
+      totalTimeMs: Date.now() - startTime,
+      cacheHits,
+      networkRequests,
+    };
+  }
+
+  /**
+   * Fetch types for a single import specifier.
+   */
+  private async fetchTypesForSpecifier(
+    specifier: string,
+    options: { maxDepth: number; timeout: number; version: string },
+  ): Promise<
+    | { success: true; data: TypeFetchResult; fetchCount: number }
+    | { success: false; error: TypeFetchError; fetchCount: number }
+  > {
+    let fetchCount = 0;
+    const fetchedUrls: string[] = [];
+    const visitedUrls = new Set<string>();
+    const contents = new Map<string, string>();
+
+    try {
+      // Resolve the package with path fallback
+      const resolution = await this.resolvePackage(specifier, options.version, options.timeout);
+      if (!resolution) {
+        return {
+          success: false,
+          error: {
+            specifier,
+            code: 'PACKAGE_NOT_FOUND',
+            message: `Could not resolve package: ${specifier}`,
+          },
+          fetchCount,
+        };
+      }
+
+      fetchCount++;
+
+      // Fetch the types recursively
+      const fetchResult = await this.fetchRecursive(
+        resolution.typesUrl,
+        options.maxDepth,
+        options.timeout,
+        visitedUrls,
+        contents,
+      );
+
+      fetchCount += fetchResult.fetchCount;
+      fetchedUrls.push(...fetchResult.fetchedUrls);
+
+      if (!fetchResult.success) {
+        return {
+          success: false,
+          error: {
+            specifier,
+            code: fetchResult.errorCode as TypeFetchErrorCode,
+            message: fetchResult.errorMessage ?? 'Unknown error',
+            url: fetchResult.errorUrl,
+          },
+          fetchCount,
+        };
+      }
+
+      // Combine all fetched contents
+      const combinedContent = combineDtsContents(contents);
+
+      const result: TypeFetchResult = {
+        specifier,
+        resolvedPackage: resolution.packageName,
+        version: resolution.version,
+        content: combinedContent,
+        fetchedUrls,
+        fetchedAt: new Date().toISOString(),
+      };
+
+      return { success: true, data: result, fetchCount };
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          specifier,
+          code: 'NETWORK_ERROR',
+          message: error instanceof Error ? error.message : String(error),
+        },
+        fetchCount,
+      };
+    }
+  }
+
+  /**
+   * Resolve a package specifier to a types URL.
+   * Uses path fallback: try full path, then remove last segment until found.
+   */
+  private async resolvePackage(specifier: string, version: string, timeout: number): Promise<PackageResolution | null> {
+    const packageName = getPackageFromSpecifier(specifier);
+    const subpath = getSubpathFromSpecifier(specifier);
+
+    // Build the URL with version
+    const versionSuffix = version === 'latest' ? '' : `@${version}`;
+    const baseUrl = `${this.cdnBaseUrl}/${packageName}${versionSuffix}`;
+
+    // If there's a subpath, try with subpath first, then without
+    const urlsToTry = subpath ? [`${baseUrl}/${subpath}`, baseUrl] : [baseUrl];
+
+    for (const url of urlsToTry) {
+      try {
+        const response = await this.fetchWithTimeout(url, timeout, 'HEAD');
+
+        if (response.ok) {
+          // Check for X-TypeScript-Types header
+          const typesHeader = response.headers.get('X-TypeScript-Types');
+          if (typesHeader) {
+            // Resolve the types URL (may be relative)
+            const typesUrl = typesHeader.startsWith('/') ? `${this.cdnBaseUrl}${typesHeader}` : typesHeader;
+
+            // Extract version from the types URL if available
+            const versionMatch = /@(\d+\.\d+\.\d+[^/]*)/.exec(typesUrl);
+            const resolvedVersion = versionMatch ? versionMatch[1] : version;
+
+            return {
+              packageName,
+              subpath,
+              version: resolvedVersion,
+              typesUrl,
+            };
+          }
+        }
+      } catch {
+        // Try next URL
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Recursively fetch .d.ts files.
+   */
+  private async fetchRecursive(
+    url: string,
+    depth: number,
+    timeout: number,
+    visited: Set<string>,
+    contents: Map<string, string>,
+  ): Promise<{
+    success: boolean;
+    fetchCount: number;
+    fetchedUrls: string[];
+    errorCode?: string;
+    errorMessage?: string;
+    errorUrl?: string;
+  }> {
+    // Prevent loops
+    if (visited.has(url)) {
+      return { success: true, fetchCount: 0, fetchedUrls: [] };
+    }
+    visited.add(url);
+
+    let fetchCount = 1;
+    const fetchedUrls = [url];
+
+    try {
+      const response = await this.fetchWithTimeout(url, timeout, 'GET');
+
+      if (!response.ok) {
+        return {
+          success: false,
+          fetchCount,
+          fetchedUrls,
+          errorCode: 'NETWORK_ERROR',
+          errorMessage: `HTTP ${response.status}: ${response.statusText}`,
+          errorUrl: url,
+        };
+      }
+
+      const content = await response.text();
+      contents.set(url, content);
+
+      // Stop if max depth reached
+      if (depth <= 0) {
+        return { success: true, fetchCount, fetchedUrls };
+      }
+
+      // Parse for dependencies
+      const parsed = parseDtsImports(content);
+
+      // Fetch external packages (but skip built-in types like @types/node)
+      for (const pkg of parsed.externalPackages) {
+        // Skip @types packages and built-in modules
+        if (pkg.startsWith('@types/') || isBuiltinModule(pkg)) {
+          continue;
+        }
+
+        // Resolve and fetch the dependency
+        const resolution = await this.resolvePackage(pkg, 'latest', timeout);
+        fetchCount++;
+
+        if (resolution && !visited.has(resolution.typesUrl)) {
+          const result = await this.fetchRecursive(resolution.typesUrl, depth - 1, timeout, visited, contents);
+          fetchCount += result.fetchCount;
+          fetchedUrls.push(...result.fetchedUrls);
+
+          // Continue even if a dependency fails
+        }
+      }
+
+      // Fetch relative imports
+      for (const relativePath of parsed.relativeImports) {
+        const resolvedUrl = resolveRelativeUrl(url, relativePath);
+        if (resolvedUrl && !visited.has(resolvedUrl)) {
+          const result = await this.fetchRecursive(resolvedUrl, depth - 1, timeout, visited, contents);
+          fetchCount += result.fetchCount;
+          fetchedUrls.push(...result.fetchedUrls);
+        }
+      }
+
+      return { success: true, fetchCount, fetchedUrls };
+    } catch (error) {
+      const isTimeout = error instanceof Error && error.message.includes('timeout');
+      return {
+        success: false,
+        fetchCount,
+        fetchedUrls,
+        errorCode: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorUrl: url,
+      };
+    }
+  }
+
+  /**
+   * Fetch with timeout support.
+   */
+  private async fetchWithTimeout(url: string, timeout: number, method: 'GET' | 'HEAD'): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await this.fetchFn(url, {
+        method,
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/typescript, text/plain, */*',
+        },
+      });
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+// ============================================
+// Utility Functions
+// ============================================
+
+/**
+ * Check if a module is a Node.js built-in.
+ */
+function isBuiltinModule(name: string): boolean {
+  const builtins = new Set([
+    'assert',
+    'buffer',
+    'child_process',
+    'cluster',
+    'console',
+    'constants',
+    'crypto',
+    'dgram',
+    'dns',
+    'domain',
+    'events',
+    'fs',
+    'http',
+    'https',
+    'module',
+    'net',
+    'os',
+    'path',
+    'punycode',
+    'querystring',
+    'readline',
+    'repl',
+    'stream',
+    'string_decoder',
+    'sys',
+    'timers',
+    'tls',
+    'tty',
+    'url',
+    'util',
+    'v8',
+    'vm',
+    'zlib',
+    // Node.js prefixed modules
+    'node:assert',
+    'node:buffer',
+    'node:child_process',
+    'node:cluster',
+    'node:console',
+    'node:constants',
+    'node:crypto',
+    'node:dgram',
+    'node:dns',
+    'node:domain',
+    'node:events',
+    'node:fs',
+    'node:http',
+    'node:https',
+    'node:module',
+    'node:net',
+    'node:os',
+    'node:path',
+    'node:punycode',
+    'node:querystring',
+    'node:readline',
+    'node:repl',
+    'node:stream',
+    'node:string_decoder',
+    'node:sys',
+    'node:timers',
+    'node:tls',
+    'node:tty',
+    'node:url',
+    'node:util',
+    'node:v8',
+    'node:vm',
+    'node:zlib',
+  ]);
+
+  return builtins.has(name);
+}
+
+/**
+ * Resolve a relative URL against a base URL.
+ */
+function resolveRelativeUrl(base: string, relative: string): string | null {
+  try {
+    // Ensure the relative path ends with .d.ts
+    let path = relative;
+    if (!path.endsWith('.d.ts') && !path.endsWith('.ts')) {
+      path = `${path}.d.ts`;
+    }
+
+    const resolved = new URL(path, base);
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+// ============================================
+// Factory Function
+// ============================================
+
+/**
+ * Create a new TypeFetcher instance.
+ *
+ * @param options - Fetcher configuration
+ * @param cache - Optional custom cache adapter
+ * @returns TypeFetcher instance
+ *
+ * @example
+ * ```typescript
+ * const fetcher = createTypeFetcher({
+ *   maxDepth: 2,
+ *   timeout: 10000,
+ *   maxConcurrency: 5,
+ * });
+ *
+ * const result = await fetcher.fetchBatch({
+ *   imports: ['import React from "react"'],
+ * });
+ * ```
+ */
+export function createTypeFetcher(options?: TypeFetcherOptions, cache?: TypeCacheAdapter): TypeFetcher {
+  return new TypeFetcher(options, cache);
+}

@@ -505,23 +505,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const errorStack = error instanceof Error ? error.stack : undefined;
       const uiConfig = tool.metadata.ui;
 
-      // [DIAG] Log UI rendering error for CI debugging
-      console.log('[DIAG:call-tool.applyUI] UI RENDERING ERROR', {
-        toolName: tool.metadata.name,
-        error: errorMessage,
-        stack: errorStack?.split('\n').slice(0, 5).join('\n'),
-        templateType: uiConfig?.template
-          ? typeof uiConfig.template === 'function'
-            ? 'react-component'
-            : typeof uiConfig.template === 'string'
-            ? uiConfig.template.endsWith('.tsx') || uiConfig.template.endsWith('.jsx')
-              ? 'react-file'
-              : 'html-file'
-            : 'unknown'
-          : 'none',
-        platform: process.platform,
-      });
-
       this.logger.error('applyUI: UI rendering failed', {
         tool: tool.metadata.name,
         error: errorMessage,
