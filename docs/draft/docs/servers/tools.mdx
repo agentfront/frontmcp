@@ -38,7 +38,7 @@ Tools are ideal for:
 Use class decorators for tools that need dependency injection, lifecycle hooks, or complex logic:
 
 ```ts
-import { Tool } from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Tool({
@@ -46,7 +46,7 @@ import { z } from 'zod';
   description: 'Greets a user by name',
   inputSchema: { name: z.string() },
 })
-class GreetTool {
+class GreetTool extends ToolContext {
   async execute({ name }: { name: string }) {
     return `Hello, ${name}!`;
   }

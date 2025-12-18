@@ -33,7 +33,7 @@
       "og:image": "/assets/logo/banner.dark.png",
       "charset": "UTF-8",
       "viewport": "width=device-width, initial-scale=1.0",
-      "keywords": "mcp, dependencyinjection, sdk, adapters, plugins, agentfront, frontmcp, framework, typescript, json-schema, zod, zod-v3, schemavalidation, openapi, apivalidation, typesafety, runtimevalidation"
+      "keywords": "mcp, model context protocol, ai agents, llm tools, claude, openai, anthropic, ai sdk, typescript, dependency injection, decorators, zod, json-schema, openapi, api validation, type safety, runtime validation, mcp server, mcp framework, frontmcp, agentfront, ai tools, agent framework, streamable http, oauth, authentication"
     }
   },
   "navbar": {
@@ -87,7 +87,8 @@
                   "docs/servers/apps",
                   "docs/servers/tools",
                   "docs/servers/resources",
-                  "docs/servers/prompts"
+                  "docs/servers/prompts",
+                  "docs/servers/discovery"
                 ]
               },
               {
@@ -101,7 +102,8 @@
                   "docs/authentication/remote-proxy",
                   "docs/authentication/progressive",
                   "docs/authentication/token",
-                  "docs/authentication/production"
+                  "docs/authentication/production",
+                  "docs/authentication/demo-servers"
                 ]
               },
               {
@@ -159,7 +161,9 @@
                   "docs/guides/customize-flow-stages",
                   "docs/guides/ast-guard",
                   "docs/guides/enclave",
-                  "docs/guides/vectoriadb"
+                  "docs/guides/vectoriadb",
+                  "docs/guides/ui-library",
+                  "docs/guides/codecall-crm-demo"
                 ]
               },
               {
@@ -196,7 +200,8 @@
               "docs/ui/components/table",
               "docs/ui/components/list",
               "docs/ui/components/avatar",
-              "docs/ui/components/modal"
+              "docs/ui/components/modal",
+              "docs/ui/components/resource-widgets"
             ]
           },
           {
@@ -218,7 +223,7 @@
           {
             "group": "Integration",
             "icon": "plug",
-            "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation"]
+            "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation", "docs/ui/integration/testing"]
           },
           {
             "group": "Theming",

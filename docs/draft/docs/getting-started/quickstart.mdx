@@ -342,11 +342,11 @@ npm run doctor
   Improve performance with transparent caching
 </Card>
 
-<Card title="Authentication" icon="lock" href="/docs/servers/authentication/overview">
+<Card title="Authentication" icon="lock" href="/docs/authentication/overview">
   Secure your server with OAuth (local or remote)
 </Card>
 
-<Card title="Plugins" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+<Card title="Plugins" icon="puzzle-piece" href="/docs/extensibility/plugins">
   Add cross-cutting features like logging, metrics, and rate limiting
 </Card>
 
@@ -465,11 +465,11 @@ export default class GreetTool extends ToolContext {
     formality: 'casual' | 'formal' | 'enthusiastic';
     timeOfDay?: 'morning' | 'afternoon' | 'evening';
   }) {
-    // Access logger
-    this.logger.info('Greeting user', { name: input.name });
+    // Access logger (via context)
+    this.context.getLogger().info('Greeting user', { name: input.name });
 
-    // Access auth info
-    const userId = this.authInfo.user?.id;
+    // Access auth info (via context)
+    const userId = this.context.authInfo.user?.id;
 
     // Build greeting based on formality
     let greeting = '';
