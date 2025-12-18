@@ -34,7 +34,6 @@ import { BundlerCache, createCacheKey, hashContent } from './cache';
 import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
 import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
 import { escapeHtml } from '../utils';
-import { buildUniversalRuntime } from '../universal/runtime-builder';
 import type { ContentType } from '../universal/types';
 import { detectContentType as detectUniversalContentType } from '../universal/types';
 import {
@@ -98,6 +97,26 @@ async function loadEsbuild(): Promise<typeof esbuildTransform> {
       return null;
     }
   }
+}
+
+/**
+ * Validate and sanitize rootId for safe use in HTML/JS contexts.
+ * Only allows alphanumeric, underscore, and hyphen characters.
+ */
+function sanitizeRootId(rootId: string): string {
+  const safeId = rootId.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (safeId !== rootId) {
+    console.warn('[FrontMCP] rootId sanitized:', { original: rootId, sanitized: safeId });
+  }
+  return safeId || 'frontmcp-root';
+}
+
+/**
+ * Sanitize CSS to prevent style tag breakout attacks.
+ */
+function sanitizeCss(css: string): string {
+  // Escape closing style tags to prevent injection
+  return css.replace(/<\/style>/gi, '\\3c/style\\3e');
 }
 
 /**
@@ -1018,7 +1037,7 @@ ${parts.appScript}
       targetPlatform: options.targetPlatform ?? DEFAULT_STATIC_HTML_OPTIONS.targetPlatform,
       minify: options.minify ?? DEFAULT_STATIC_HTML_OPTIONS.minify,
       skipCache: options.skipCache ?? DEFAULT_STATIC_HTML_OPTIONS.skipCache,
-      rootId: options.rootId ?? DEFAULT_STATIC_HTML_OPTIONS.rootId,
+      rootId: sanitizeRootId(options.rootId ?? DEFAULT_STATIC_HTML_OPTIONS.rootId),
       widgetAccessible: options.widgetAccessible ?? DEFAULT_STATIC_HTML_OPTIONS.widgetAccessible,
       externals: {
         ...DEFAULT_STATIC_HTML_OPTIONS.externals,
@@ -1078,7 +1097,7 @@ ${parts.appScript}
 
     // Custom CSS (injected after Tailwind)
     if (opts.customCss) {
-      parts.push(`<style>\n${opts.customCss}\n    </style>`);
+      parts.push(`<style>\n${sanitizeCss(opts.customCss)}\n    </style>`);
     }
 
     return parts.join('\n    ');

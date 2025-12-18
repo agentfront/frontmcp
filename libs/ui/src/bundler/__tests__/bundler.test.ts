@@ -429,7 +429,7 @@ describe('Error Handling', () => {
         source: 'const x = <div>Error</div',
         sourceType: 'jsx',
       });
-      fail('Should have thrown');
+      throw new Error('Should have thrown');
     } catch (error: unknown) {
       expect((error as Error).message).toBeDefined();
     }

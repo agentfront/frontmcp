@@ -10,7 +10,7 @@
  * - Significantly reduces build time for repeated builds
  */
 
-import type { CDNType, UniversalRuntimeOptions, UniversalRuntimeResult } from './types';
+import type { CDNType } from './types';
 import { UNIVERSAL_CDN } from './types';
 
 // ============================================

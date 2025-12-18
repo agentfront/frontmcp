@@ -515,8 +515,17 @@ export default ${safeName};
         mdxComponents: uiConfig.mdxComponents,
       });
 
-      // Check for graceful degradation (production error case)
+      // Check for graceful degradation - environment-aware error handling
       if (ssrContent === null) {
+        const isTest = process.env['NODE_ENV'] === 'test' || process.env['JEST_WORKER_ID'] !== undefined;
+        const isDevelopment = process.env['NODE_ENV'] === 'development';
+        const isProduction = !isDevelopment && !isTest;
+
+        if (!isProduction) {
+          // Development/Test: Throw error for visibility and debugging
+          throw new Error(`[ToolUIRegistry] React SSR rendering failed for ${toolName}`);
+        }
+        // Production: Graceful degradation
         console.warn('[ToolUIRegistry] React SSR returned null (graceful degradation)', { toolName, platformType });
         return { success: false, reason: 'React SSR rendering failed' };
       }
@@ -558,8 +567,17 @@ export default ${safeName};
         mdxComponents: uiConfig.mdxComponents,
       });
 
-      // Check for graceful degradation (production error case)
+      // Check for graceful degradation - environment-aware error handling
       if (renderedContent === null) {
+        const isTest = process.env['NODE_ENV'] === 'test' || process.env['JEST_WORKER_ID'] !== undefined;
+        const isDevelopment = process.env['NODE_ENV'] === 'development';
+        const isProduction = !isDevelopment && !isTest;
+
+        if (!isProduction) {
+          // Development/Test: Throw error for visibility and debugging
+          throw new Error(`[ToolUIRegistry] HTML template rendering failed for ${toolName}`);
+        }
+        // Production: Graceful degradation
         console.warn('[ToolUIRegistry] HTML template rendering returned null (graceful degradation)', {
           toolName,
           platformType,

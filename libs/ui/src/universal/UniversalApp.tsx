@@ -10,6 +10,7 @@ import type { UniversalAppProps, UniversalContent, RenderContext, FrontMCPState 
 import { useFrontMCPStore } from './store';
 import { useComponents, FrontMCPProvider, ComponentsProvider } from './context';
 import { renderContent, detectRenderer } from './renderers';
+import { escapeHtml } from '../utils/escape-html';
 
 // ============================================
 // Loading Component
@@ -43,7 +44,7 @@ function ErrorDisplay({ error }: { error: string }): React.ReactElement {
     },
     [
       React.createElement('div', { key: 'title', className: 'font-medium' }, 'Error'),
-      React.createElement('div', { key: 'message', className: 'text-sm mt-1' }, error),
+      React.createElement('div', { key: 'message', className: 'text-sm mt-1' }, escapeHtml(error)),
     ],
   );
 }

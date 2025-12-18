@@ -142,17 +142,17 @@ describe('Store Subscriptions', () => {
     expect(listener).toHaveBeenCalledTimes(1); // Still 1, not notified again
   });
 
-  it('should not notify if state object is same reference', () => {
+  it('should not notify if values are unchanged', () => {
     const store = createFrontMCPStore();
     const listener = jest.fn();
 
     store.subscribe(listener);
 
-    // Setting same values should still create new object, so listener is called
+    // Setting same values should NOT notify listeners (shallow equality check)
     store.setState({ toolName: null });
 
-    // This test verifies the implementation calls listeners on any setState
-    expect(listener).toHaveBeenCalled();
+    // Listener should NOT be called since toolName was already null
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it('should handle subscriber errors gracefully', () => {

@@ -45,11 +45,13 @@ export function createFrontMCPStore(initialState?: Partial<FrontMCPState>): Fron
   const getServerState = (): FrontMCPState => state;
 
   const setState = (partial: Partial<FrontMCPState>): void => {
-    const nextState = { ...state, ...partial };
+    // Check if any values actually changed using shallow equality
+    const hasChanged = Object.keys(partial).some(
+      (key) => partial[key as keyof FrontMCPState] !== state[key as keyof FrontMCPState],
+    );
 
-    // Only notify if state actually changed
-    if (nextState !== state) {
-      state = nextState;
+    if (hasChanged) {
+      state = { ...state, ...partial };
       listeners.forEach((listener) => listener());
     }
   };

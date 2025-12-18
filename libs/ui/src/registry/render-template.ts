@@ -261,10 +261,10 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
 
-      // Determine environment - test environments also get full error visibility
-      const isProduction = process.env['NODE_ENV'] === 'production';
+      // Determine environment - unknown/undefined defaults to production for graceful degradation
       const isTest = process.env['NODE_ENV'] === 'test' || process.env['JEST_WORKER_ID'] !== undefined;
-      const isDevelopment = !isProduction && !isTest;
+      const isDevelopment = process.env['NODE_ENV'] === 'development';
+      const isProduction = !isDevelopment && !isTest;
 
       // Always log the error for server-side visibility
       // In production: log warning and return null (graceful degradation)

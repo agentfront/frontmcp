@@ -97,6 +97,17 @@ function buildInlineMarkdownParser(): string {
   return `
 // Inline Markdown Parser
 (function() {
+  // URL scheme validation to prevent XSS via javascript: URLs
+  function isSafeUrl(url) {
+    if (!url) return false;
+    var lower = url.toLowerCase().trim();
+    return lower.startsWith('http://') ||
+           lower.startsWith('https://') ||
+           lower.startsWith('/') ||
+           lower.startsWith('#') ||
+           lower.startsWith('mailto:');
+  }
+
   function parseMarkdown(md) {
     var html = md;
     // Escape HTML
@@ -114,8 +125,10 @@ function buildInlineMarkdownParser(): string {
     html = html.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
     // Inline code
     html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
-    // Links
-    html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>');
+    // Links - validate URL scheme to prevent XSS
+    html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
+      return isSafeUrl(url) ? '<a href="' + url + '">' + text + '</a>' : text;
+    });
     // Lists
     html = html.replace(/^[-*]\\s+(.*)$/gm, '<li>$1</li>');
     // Paragraphs
@@ -157,9 +170,13 @@ function buildRenderersRuntime(options: UniversalRuntimeOptions): string {
     priority: 0,
     canHandle: function(c) { return c.type === 'html'; },
     render: function(c, ctx) {
+      // Basic XSS protection - remove script tags and event handlers
+      var html = c.source;
+      html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
+      html = html.replace(/\\s+on\\w+\\s*=/gi, ' data-removed-handler=');
       return React.createElement('div', {
         className: 'frontmcp-html-content',
-        dangerouslySetInnerHTML: { __html: c.source }
+        dangerouslySetInnerHTML: { __html: html }
       });
     }
   };
