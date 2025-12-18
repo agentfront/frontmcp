@@ -3,18 +3,15 @@
   "compilerOptions": {
     "outDir": "dist",
     "declaration": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strictFunctionTypes": true,
-    "target": "es2021"
+    "target": "es2021",
+    "jsx": "react-jsx"
   },
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": [
     "out-tsc",
     "dist",
