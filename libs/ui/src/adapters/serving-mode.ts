@@ -141,10 +141,11 @@ const PLATFORM_CAPABILITIES: Record<AIPlatformType, PlatformUICapabilities> = {
     defaultMode: 'inline', // Not used since supportsWidgets is false
   },
   unknown: {
-    // Unknown clients: be conservative, assume no widget support
-    supportsWidgets: false,
-    useStructuredContent: false,
-    supportedModes: [],
+    // Unknown clients: assume widget support, return ui/html + text/html+mcp
+    // This allows generic MCP clients to receive and render widget UI
+    supportsWidgets: true,
+    useStructuredContent: true,
+    supportedModes: ['inline'],
     defaultMode: 'inline',
   },
 };

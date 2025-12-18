@@ -128,7 +128,9 @@ export {
   getMCPBridgeScript,
   isMCPBridgeSupported,
   // CSP utilities (excluding buildOpenAICSP which is in adapters)
+  DEFAULT_CDN_DOMAINS,
   DEFAULT_CSP_DIRECTIVES,
+  RESTRICTIVE_CSP_DIRECTIVES,
   buildCSPDirectives,
   buildCSPMetaTag,
   validateCSPDomain,

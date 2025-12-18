@@ -200,8 +200,9 @@ describe('buildToolResponseContent', () => {
   });
 
   describe('inline mode - markdown fallback', () => {
-    // Only gemini and unknown don't support widgets in PLATFORM_CAPABILITIES
-    const nonWidgetPlatforms: AIPlatformType[] = ['gemini', 'unknown'];
+    // Only gemini doesn't support widgets in PLATFORM_CAPABILITIES
+    // (unknown now supports widgets with ui/html + text/html+mcp)
+    const nonWidgetPlatforms: AIPlatformType[] = ['gemini'];
 
     nonWidgetPlatforms.forEach((platform) => {
       it(`should return markdown format for ${platform} platform with HTML`, () => {

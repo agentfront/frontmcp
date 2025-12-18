@@ -42,7 +42,9 @@ export {
 
 // CSP utilities
 export {
+  DEFAULT_CDN_DOMAINS,
   DEFAULT_CSP_DIRECTIVES,
+  RESTRICTIVE_CSP_DIRECTIVES,
   buildCSPDirectives,
   buildCSPMetaTag,
   buildOpenAICSP,

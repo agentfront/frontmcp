@@ -59,14 +59,16 @@ describe('Serving Mode Resolution', () => {
         expect(result.reason).toContain('does not support widget UI');
       });
 
-      it('should skip UI for unknown clients (conservative default)', () => {
+      it('should return UI with structuredContent for unknown clients', () => {
         const result = resolveServingMode({
           configuredMode: 'auto',
           platformType: 'unknown',
         });
 
-        expect(result.effectiveMode).toBe(null);
-        expect(result.supportsUI).toBe(false);
+        // Unknown clients now get UI with ui/html and text/html+mcp
+        expect(result.effectiveMode).toBe('inline');
+        expect(result.useStructuredContent).toBe(true);
+        expect(result.supportsUI).toBe(true);
       });
 
       it('should select inline mode for Cursor with structuredContent', () => {
@@ -223,7 +225,11 @@ describe('Serving Mode Resolution', () => {
 
     it('should return false for auto mode if platform does not support widgets', () => {
       expect(isPlatformModeSupported('gemini', 'auto')).toBe(false);
-      expect(isPlatformModeSupported('unknown', 'auto')).toBe(false);
+    });
+
+    it('should return true for unknown platform (now supports widgets)', () => {
+      expect(isPlatformModeSupported('unknown', 'auto')).toBe(true);
+      expect(isPlatformModeSupported('unknown', 'inline')).toBe(true);
     });
   });
 
@@ -236,7 +242,10 @@ describe('Serving Mode Resolution', () => {
 
     it('should return null for platforms without widget support', () => {
       expect(getDefaultServingMode('gemini')).toBe(null);
-      expect(getDefaultServingMode('unknown')).toBe(null);
+    });
+
+    it('should return inline for unknown platform (now supports widgets)', () => {
+      expect(getDefaultServingMode('unknown')).toBe('inline');
     });
   });
 
@@ -253,7 +262,10 @@ describe('Serving Mode Resolution', () => {
 
     it('should return false for non-widget platforms', () => {
       expect(platformUsesStructuredContent('gemini')).toBe(false);
-      expect(platformUsesStructuredContent('unknown')).toBe(false);
+    });
+
+    it('should return true for unknown platform (now supports widgets)', () => {
+      expect(platformUsesStructuredContent('unknown')).toBe(true);
     });
   });
 });

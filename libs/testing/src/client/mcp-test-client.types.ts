@@ -18,6 +18,7 @@ import type {
   Prompt,
   Implementation,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { TestPlatformType } from '../platform/platform-types';
 
 // ═══════════════════════════════════════════════════════════════════
 // JSON-RPC TYPES (simplified for testing)
@@ -76,6 +77,45 @@ export interface TestAuthConfig {
 export type ClientInfo = Implementation;
 
 // ═══════════════════════════════════════════════════════════════════
+// CLIENT CAPABILITIES
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * MCP Apps extension key used for ext-apps platform detection.
+ * When a client sends this capability, the server detects it as an ext-apps client.
+ */
+export const MCP_APPS_EXTENSION_KEY = 'io.modelcontextprotocol/ui' as const;
+
+/**
+ * MCP Apps extension capability configuration.
+ */
+export interface McpAppsExtension {
+  /** Supported MIME types (e.g., ['text/html+mcp']) */
+  mimeTypes?: string[];
+}
+
+/**
+ * Experimental capabilities for MCP clients.
+ */
+export interface ExperimentalCapabilities {
+  /** MCP Apps (ext-apps) extension capability */
+  [MCP_APPS_EXTENSION_KEY]?: McpAppsExtension;
+  /** Other experimental capabilities */
+  [key: string]: unknown;
+}
+
+/**
+ * Client capabilities sent during MCP initialization.
+ * These capabilities enable platform-specific detection and features.
+ */
+export interface TestClientCapabilities {
+  /** Sampling capabilities */
+  sampling?: Record<string, unknown>;
+  /** Experimental capabilities including MCP Apps extension */
+  experimental?: ExperimentalCapabilities;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // CLIENT CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
@@ -100,6 +140,30 @@ export interface McpTestClientConfig {
   protocolVersion?: string;
   /** Client info to send during initialization and for platform detection */
   clientInfo?: ClientInfo;
+  /**
+   * Client capabilities sent during MCP initialization.
+   * Use this to enable platform-specific detection via capability extensions.
+   *
+   * Example for ext-apps:
+   * ```typescript
+   * capabilities: {
+   *   experimental: {
+   *     'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] }
+   *   }
+   * }
+   * ```
+   */
+  capabilities?: TestClientCapabilities;
+  /**
+   * Platform type for testing platform-specific meta keys.
+   * When set, automatically configures clientInfo and capabilities for platform detection.
+   *
+   * Platform-specific behavior:
+   * - `openai`: Uses openai/* meta keys
+   * - `ext-apps`: Uses ui/* meta keys per SEP-1865, sets io.modelcontextprotocol/ui capability
+   * - Others: Uses frontmcp/* + ui/* keys for compatibility
+   */
+  platform?: TestPlatformType;
 }
 
 // ═══════════════════════════════════════════════════════════════════

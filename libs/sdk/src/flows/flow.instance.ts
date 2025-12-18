@@ -404,7 +404,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     };
 
     const runFinalizeStage = async () => {
-      await runStageGroup((plan as any).finalize, false);
+      const res = await runStageGroup((plan as any).finalize, false);
+      // Propagate errors from finalize stage - don't swallow them
+      if (res.outcome === 'unknown_error' || res.outcome === 'fail') {
+        throw res.control ?? new InternalMcpError('Finalize stage failed');
+      }
+      return res;
     };
 
     // ---------- PRE ----------

@@ -21,6 +21,7 @@
  */
 
 import { McpTestClient } from '../client/mcp-test-client';
+import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import { TestTokenFactory } from '../auth/token-factory';
 import { TestServer } from '../server/test-server';
 import type {
@@ -214,6 +215,16 @@ function createServerFixture(server: TestServer): ServerFixture {
         clientInfo: opts?.clientInfo,
         publicMode: currentConfig.publicMode,
       }).buildAndConnect();
+    },
+
+    createClientBuilder: () => {
+      // Return a pre-configured builder with the server's base URL and publicMode
+      // This allows full customization including platform-specific capabilities
+      const builder = new McpTestClientBuilder({
+        baseUrl: server.info.baseUrl,
+        publicMode: currentConfig.publicMode,
+      });
+      return builder;
     },
 
     restart: () => server.restart(),

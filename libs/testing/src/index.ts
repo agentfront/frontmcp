@@ -213,3 +213,48 @@ export type {
 // ═══════════════════════════════════════════════════════════════════
 
 export { uiMatchers, UIAssertions } from './ui';
+
+// ═══════════════════════════════════════════════════════════════════
+// PLATFORM TESTING
+// ═══════════════════════════════════════════════════════════════════
+
+export type { TestPlatformType, PlatformMetaNamespace, TestClientInfo } from './platform';
+
+export {
+  getPlatformMetaNamespace,
+  getPlatformMimeType,
+  isOpenAIPlatform,
+  isExtAppsPlatform,
+  isFrontmcpPlatform,
+  getToolsListMetaPrefixes,
+  getToolCallMetaPrefixes,
+  getForbiddenMetaPrefixes,
+  getPlatformClientInfo,
+  buildUserAgent,
+  getPlatformUserAgent,
+  PLATFORM_DETECTION_PATTERNS,
+} from './platform';
+
+// ═══════════════════════════════════════════════════════════════════
+// EXAMPLE TOOLS (for E2E platform testing)
+// ═══════════════════════════════════════════════════════════════════
+
+export {
+  // Tool configurations
+  BASIC_UI_TOOL_CONFIG,
+  FULL_UI_TOOL_CONFIG,
+  basicUIToolInputSchema,
+  basicUIToolOutputSchema,
+  fullUIToolInputSchema,
+  fullUIToolOutputSchema,
+  // Execution helpers
+  generateBasicUIToolOutput,
+  generateFullUIToolOutput,
+  // Expected meta keys
+  EXPECTED_OPENAI_TOOLS_LIST_META_KEYS,
+  EXPECTED_OPENAI_TOOL_CALL_META_KEYS,
+  EXPECTED_EXTAPPS_TOOLS_LIST_META_KEYS,
+  EXPECTED_EXTAPPS_TOOL_CALL_META_KEYS,
+  EXPECTED_FRONTMCP_TOOLS_LIST_META_KEYS,
+  EXPECTED_FRONTMCP_TOOL_CALL_META_KEYS,
+} from './example-tools';

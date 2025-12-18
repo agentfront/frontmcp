@@ -23,6 +23,8 @@
  */
 
 import type { ToolResultWrapper } from '../client/mcp-test-client.types';
+import type { TestPlatformType } from '../platform/platform-types';
+import { getForbiddenMetaPrefixes, getToolCallMetaPrefixes, getPlatformMimeType } from '../platform/platform-types';
 
 // Type-only reference: Metadata keys used below align with UIMetadata from @frontmcp/ui/adapters
 // This is an optional peer dependency, so we don't import it directly
@@ -250,5 +252,195 @@ export const UIAssertions = {
     }
 
     return html;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PLATFORM META ASSERTIONS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Assert tool result has correct meta keys for OpenAI platform.
+   * Verifies openai/* keys are present and ui/*, frontmcp/* keys are absent.
+   * @param result - The tool result wrapper
+   * @throws Error if meta keys don't match OpenAI expectations
+   */
+  assertOpenAIMeta(result: ToolResultWrapper): void {
+    UIAssertions.assertPlatformMeta(result, 'openai');
+  },
+
+  /**
+   * Assert tool result has correct meta keys for ext-apps platform (SEP-1865).
+   * Verifies ui/* keys are present and openai/*, frontmcp/* keys are absent.
+   * @param result - The tool result wrapper
+   * @throws Error if meta keys don't match ext-apps expectations
+   */
+  assertExtAppsMeta(result: ToolResultWrapper): void {
+    UIAssertions.assertPlatformMeta(result, 'ext-apps');
+  },
+
+  /**
+   * Assert tool result has correct meta keys for FrontMCP platforms (Claude, Cursor, etc.).
+   * Verifies frontmcp/* + ui/* keys are present and openai/* keys are absent.
+   * @param result - The tool result wrapper
+   * @throws Error if meta keys don't match FrontMCP expectations
+   */
+  assertFrontmcpMeta(result: ToolResultWrapper): void {
+    UIAssertions.assertPlatformMeta(result, 'claude');
+  },
+
+  /**
+   * Assert tool result has correct meta keys for a specific platform.
+   * @param result - The tool result wrapper
+   * @param platform - The platform type to check for
+   * @throws Error if meta keys don't match platform expectations
+   */
+  assertPlatformMeta(result: ToolResultWrapper, platform: TestPlatformType): void {
+    const meta = result.raw._meta as Record<string, unknown> | undefined;
+
+    if (!meta) {
+      throw new Error(`Expected tool result to have _meta with platform meta for "${platform}"`);
+    }
+
+    const expectedPrefixes = getToolCallMetaPrefixes(platform);
+    const forbiddenPrefixes = getForbiddenMetaPrefixes(platform);
+    const metaKeys = Object.keys(meta);
+
+    // Check for expected prefixes
+    const hasExpectedPrefix = metaKeys.some((key) => expectedPrefixes.some((prefix) => key.startsWith(prefix)));
+
+    if (!hasExpectedPrefix) {
+      throw new Error(
+        `Expected _meta to have keys with prefixes [${expectedPrefixes.join(', ')}] for platform "${platform}", ` +
+          `but found: [${metaKeys.join(', ')}]`,
+      );
+    }
+
+    // Check for forbidden prefixes
+    const forbiddenKeys = metaKeys.filter((key) => forbiddenPrefixes.some((prefix) => key.startsWith(prefix)));
+
+    if (forbiddenKeys.length > 0) {
+      throw new Error(
+        `Expected _meta NOT to have keys [${forbiddenKeys.join(', ')}] for platform "${platform}" ` +
+          `(forbidden prefixes: [${forbiddenPrefixes.join(', ')}])`,
+      );
+    }
+  },
+
+  /**
+   * Assert that no cross-namespace pollution exists in meta.
+   * @param result - The tool result wrapper
+   * @param expectedNamespace - The namespace that SHOULD be present
+   * @throws Error if other namespaces are found
+   */
+  assertNoMixedNamespaces(result: ToolResultWrapper, expectedNamespace: string): void {
+    const meta = result.raw._meta as Record<string, unknown> | undefined;
+
+    if (!meta) {
+      throw new Error(`Expected tool result to have _meta with namespace "${expectedNamespace}"`);
+    }
+
+    const metaKeys = Object.keys(meta);
+    const wrongKeys = metaKeys.filter((key) => !key.startsWith(expectedNamespace));
+
+    if (wrongKeys.length > 0) {
+      throw new Error(
+        `Expected _meta to ONLY have keys with namespace "${expectedNamespace}", ` +
+          `but found: [${wrongKeys.join(', ')}]`,
+      );
+    }
+  },
+
+  /**
+   * Assert that _meta has the correct MIME type for a platform.
+   * @param result - The tool result wrapper
+   * @param platform - The platform type to check for
+   * @throws Error if MIME type doesn't match platform expectations
+   */
+  assertPlatformMimeType(result: ToolResultWrapper, platform: TestPlatformType): void {
+    const meta = result.raw._meta as Record<string, unknown> | undefined;
+    const expectedMimeType = getPlatformMimeType(platform);
+
+    if (!meta) {
+      throw new Error(`Expected tool result to have _meta with MIME type for platform "${platform}"`);
+    }
+
+    // Determine which key to check based on platform
+    let mimeTypeKey: string;
+    switch (platform) {
+      case 'openai':
+        mimeTypeKey = 'openai/mimeType';
+        break;
+      case 'ext-apps':
+        mimeTypeKey = 'ui/mimeType';
+        break;
+      default:
+        mimeTypeKey = 'frontmcp/mimeType';
+    }
+
+    const actualMimeType = meta[mimeTypeKey];
+
+    if (actualMimeType !== expectedMimeType) {
+      throw new Error(
+        `Expected _meta["${mimeTypeKey}"] to be "${expectedMimeType}" for platform "${platform}", ` +
+          `but got "${actualMimeType}"`,
+      );
+    }
+  },
+
+  /**
+   * Assert that _meta has HTML in the correct platform-specific key.
+   * @param result - The tool result wrapper
+   * @param platform - The platform type to check for
+   * @returns The HTML string
+   * @throws Error if HTML is missing or in wrong key
+   */
+  assertPlatformHtml(result: ToolResultWrapper, platform: TestPlatformType): string {
+    const meta = result.raw._meta as Record<string, unknown> | undefined;
+
+    if (!meta) {
+      throw new Error(`Expected tool result to have _meta with platform HTML for "${platform}"`);
+    }
+
+    // Determine which key to check based on platform
+    let htmlKey: string;
+    switch (platform) {
+      case 'openai':
+        htmlKey = 'openai/html';
+        break;
+      case 'ext-apps':
+        htmlKey = 'ui/html';
+        break;
+      default:
+        htmlKey = 'frontmcp/html';
+    }
+
+    const html = meta[htmlKey];
+
+    if (typeof html !== 'string' || html.length === 0) {
+      throw new Error(
+        `Expected _meta["${htmlKey}"] to contain HTML for platform "${platform}", ` +
+          `but ${html === undefined ? 'key not found' : `got ${typeof html}`}`,
+      );
+    }
+
+    return html;
+  },
+
+  /**
+   * Comprehensive platform meta validation.
+   * @param result - The tool result wrapper
+   * @param platform - The platform type to validate for
+   * @returns The platform-specific HTML string
+   * @throws Error if any platform-specific validation fails
+   */
+  assertValidPlatformMeta(result: ToolResultWrapper, platform: TestPlatformType): string {
+    // 1. Check correct namespace keys
+    UIAssertions.assertPlatformMeta(result, platform);
+
+    // 2. Check MIME type
+    UIAssertions.assertPlatformMimeType(result, platform);
+
+    // 3. Get and return HTML
+    return UIAssertions.assertPlatformHtml(result, platform);
   },
 };

@@ -472,7 +472,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           htmlContent = undefined;
           uiMeta = {};
         } else {
-          htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
+          // Extract HTML from platform-specific meta key
+          const htmlKey =
+            platformType === 'openai' ? 'openai/html' : platformType === 'ext-apps' ? 'ui/html' : 'frontmcp/html';
+          htmlContent = uiRenderResult?.meta?.[htmlKey] as string | undefined;
+          // Fallback to ui/html for compatibility
+          if (!htmlContent) {
+            htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
+          }
           uiMeta = uiRenderResult.meta || {};
         }
       }
@@ -535,6 +542,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   /**
    * Finalize the tool response.
    * Validates output, applies UI result from applyUI stage, and sends the response.
+   *
+   * Note: This stage runs even when execute fails (as part of cleanup).
+   * If rawOutput is undefined, it means an error occurred during execution
+   * and the error will be propagated by the flow framework - we should not
+   * throw a new error here.
    */
   @Stage('finalize')
   async finalize() {
@@ -542,13 +554,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { tool, rawOutput, uiResult, uiMeta } = this.state;
 
     if (!tool) {
-      this.logger.error('finalize: tool not found in state');
-      throw new ToolExecutionError('unknown', new Error('Tool not found in state'));
+      // No tool found - this is an early failure, just skip finalization
+      this.logger.verbose('finalize: skipping (no tool in state)');
+      return;
     }
 
     if (rawOutput === undefined) {
-      this.logger.error('finalize: tool output not found in state');
-      throw new ToolExecutionError(tool.metadata.name, new Error('Tool output not found'));
+      // No output means execute stage failed - skip finalization
+      // The original error will be propagated by the flow framework
+      this.logger.verbose('finalize: skipping (no output - execute stage likely failed)');
+      return;
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
@@ -587,6 +602,23 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       metaKeys: result._meta ? Object.keys(result._meta) : [],
       isError: result.isError,
     });
+
+    // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
+    if (process.env['DEBUG_TOOL_RESPONSE']) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs');
+      const debugOutput = {
+        timestamp: new Date().toISOString(),
+        tool: tool.metadata.name,
+        rawOutput,
+        uiResult,
+        uiMeta,
+        finalResult: result,
+      };
+      const outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || '/tmp/tool-response-debug.json';
+      fs.writeFileSync(outputPath, JSON.stringify(debugOutput, null, 2));
+      console.log(`[DEBUG] Tool response written to: ${outputPath}`);
+    }
 
     // Respond with the properly formatted MCP result
     this.respond(result);

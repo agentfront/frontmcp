@@ -3,8 +3,9 @@
  *
  * Tests the OpenAPI adapter that generates MCP tools from an OpenAPI spec.
  * Uses MockAPIServer to provide both the OpenAPI spec and mock API responses.
+ * Uses @frontmcp/testing McpTestClient for clean, type-safe MCP interactions.
  */
-import { TestServer, MockAPIServer, expect } from '@frontmcp/testing';
+import { TestServer, MockAPIServer, McpTestClient, expect } from '@frontmcp/testing';
 
 // OpenAPI spec for testing
 const OPENAPI_SPEC = {
@@ -77,6 +78,7 @@ const OPENAPI_SPEC = {
 describe('OpenAPI Adapter E2E', () => {
   let mockApi: MockAPIServer;
   let server: TestServer;
+  let client: McpTestClient;
 
   beforeAll(async () => {
     // Create mock API server
@@ -124,9 +126,19 @@ describe('OpenAPI Adapter E2E', () => {
       startupTimeout: 30000,
       debug: false,
     });
+
+    // Create a shared client for all tests
+    client = await McpTestClient.create({
+      baseUrl: server.info.baseUrl,
+      transport: 'streamable-http',
+      publicMode: true,
+    }).buildAndConnect();
   }, 60000);
 
   afterAll(async () => {
+    if (client) {
+      await client.disconnect();
+    }
     if (server) {
       await server.stop();
     }
@@ -137,177 +149,43 @@ describe('OpenAPI Adapter E2E', () => {
 
   describe('Tool Generation', () => {
     it('should generate tools from OpenAPI spec', async () => {
-      const response = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const tools = await client.tools.list();
 
-      expect(response.ok).toBe(true);
-      const sessionId = response.headers.get('mcp-session-id');
-
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
-
-      // List tools
-      const toolsResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'tools/list',
-          params: {},
-        }),
-      });
-
-      expect(toolsResponse.ok).toBe(true);
-      const toolsText = await toolsResponse.text();
       // Should have generated tools from OpenAPI spec
-      expect(toolsText).toContain('tools');
+      expect(tools).toBeDefined();
+      expect(tools.length).toBeGreaterThan(0);
+
+      // Verify tool names match operationIds from the spec
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).toContain('listProducts');
+      expect(toolNames).toContain('getProduct');
+      expect(toolNames).toContain('registerUser');
     });
   });
 
   describe('Resource Access', () => {
     it('should list custom resources', async () => {
-      const response = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const resources = await client.resources.list();
 
-      const sessionId = response.headers.get('mcp-session-id');
+      expect(resources).toBeDefined();
+      expect(resources.length).toBeGreaterThan(0);
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
-
-      // List resources
-      const resourcesResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'resources/list',
-          params: {},
-        }),
-      });
-
-      expect(resourcesResponse.ok).toBe(true);
-      const resourcesText = await resourcesResponse.text();
-      expect(resourcesText).toContain('ecommerce://catalog');
+      // Verify the catalog resource exists
+      const catalogResource = resources.find((r) => r.uri === 'ecommerce://catalog');
+      expect(catalogResource).toBeDefined();
     });
   });
 
   describe('Prompt Access', () => {
     it('should list prompts', async () => {
-      const response = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const prompts = await client.prompts.list();
 
-      const sessionId = response.headers.get('mcp-session-id');
+      expect(prompts).toBeDefined();
+      expect(prompts.length).toBeGreaterThan(0);
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
-
-      // List prompts
-      const promptsResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'prompts/list',
-          params: {},
-        }),
-      });
-
-      expect(promptsResponse.ok).toBe(true);
-      const promptsText = await promptsResponse.text();
-      expect(promptsText).toContain('product-recommendation');
+      // Verify the product-recommendation prompt exists
+      const recommendationPrompt = prompts.find((p) => p.name === 'product-recommendation');
+      expect(recommendationPrompt).toBeDefined();
     });
   });
 });

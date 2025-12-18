@@ -4,6 +4,7 @@
  */
 
 import type { McpTestClient } from '../client/mcp-test-client';
+import type { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import type { JWK } from 'jose';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -139,6 +140,21 @@ export interface ServerFixture {
     token?: string;
     clientInfo?: { name: string; version: string };
   }): Promise<McpTestClient>;
+
+  /**
+   * Create a client builder for full customization.
+   * Use this when you need to set platform-specific capabilities.
+   *
+   * @example
+   * ```typescript
+   * const client = await server
+   *   .createClientBuilder()
+   *   .withTransport('streamable-http')
+   *   .withPlatform('ext-apps')  // Auto-sets clientInfo AND capabilities
+   *   .buildAndConnect();
+   * ```
+   */
+  createClientBuilder(): McpTestClientBuilder;
 
   /**
    * Restart the server

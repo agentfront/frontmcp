@@ -2,12 +2,12 @@
  * E2E Tests for Multi-Client Platform Detection
  *
  * Tests UI tool output across different platform clients:
- * - OpenAI: inline HTML in _meta['ui/html']
- * - Claude: dual-payload (JSON + markdown-wrapped HTML)
- * - Cursor: inline HTML in _meta['ui/html']
- * - Continue: inline HTML in _meta['ui/html']
- * - Cody: inline HTML in _meta['ui/html']
- * - Unknown: JSON only (no UI rendering)
+ * - OpenAI: structuredContent format (HTML in content, raw data in structuredContent)
+ * - Claude: structuredContent format (HTML in content, raw data in structuredContent)
+ * - Cursor: structuredContent format (HTML in content, raw data in structuredContent)
+ * - Continue: structuredContent format (HTML in content, raw data in structuredContent)
+ * - Cody: structuredContent format (HTML in content, raw data in structuredContent)
+ * - Gemini/Unknown: JSON only (no UI rendering, no widget support)
  */
 import { test, expect } from '@frontmcp/testing';
 
@@ -75,7 +75,7 @@ test.describe('Platform Detection E2E', () => {
   });
 
   test.describe('Claude Platform', () => {
-    test('should return dual-payload for Claude Desktop client', async ({ server }) => {
+    test('should return structuredContent format for Claude Desktop client', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'Claude Desktop', version: '1.0.0' },
@@ -88,25 +88,15 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      // Verify dual-payload structure for Claude
-      // Dual-payload has two content blocks: [0] = JSON data, [1] = markdown-wrapped HTML
-      const content = result.raw.content;
-      expect(content).toBeDefined();
-      expect(content?.length).toBeGreaterThanOrEqual(2);
-      // First block is JSON data
-      const jsonBlock = content?.[0];
-      expect(jsonBlock?.type).toBe('text');
-      // Second block contains markdown-wrapped HTML
-      const htmlBlock = content?.[1];
-      expect(htmlBlock?.type).toBe('text');
-      if (htmlBlock && 'text' in htmlBlock) {
-        expect(htmlBlock.text).toContain('```html');
-      }
+      // Claude now uses structuredContent format like OpenAI:
+      // - content: single block with raw HTML
+      // - structuredContent: raw tool output
+      expect(result.hasToolUI()).toBe(true);
 
       await client.disconnect();
     });
 
-    test('should return dual-payload for Claude client variant', async ({ server }) => {
+    test('should return structuredContent format for Claude client variant', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'Claude', version: '2.0.0' },
@@ -119,6 +109,7 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
+      expect(result.hasToolUI()).toBe(true);
 
       await client.disconnect();
     });
@@ -142,6 +133,7 @@ test.describe('Platform Detection E2E', () => {
 
       results.forEach((result) => {
         expect(result).toBeSuccessful();
+        expect(result.hasToolUI()).toBe(true);
       });
 
       await client.disconnect();
@@ -529,10 +521,9 @@ test.describe('Platform Detection E2E', () => {
       expect(result1).toBeSuccessful();
       expect(result2).toBeSuccessful();
 
-      // Both should have correct platform behavior
+      // Both should have correct platform behavior (structuredContent format)
       expect(result1.hasToolUI()).toBe(true);
-      // Claude uses dual-payload, so check it succeeded
-      expect(result2).toBeSuccessful();
+      expect(result2.hasToolUI()).toBe(true);
 
       await client1.disconnect();
       await client2.disconnect();
