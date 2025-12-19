@@ -1,0 +1,647 @@
+---
+title: Runtime API Reference
+sidebarTitle: Runtime
+icon: gear
+description: Complete API reference for the @frontmcp/ui runtime system, including template context, helper functions, MCP Bridge, and wrapper utilities.
+---
+
+## Template Context
+
+### TemplateContext
+
+Context passed to template builder functions.
+
+```typescript
+interface TemplateContext<In, Out> {
+  /** The input arguments passed to the tool */
+  input: In;
+
+  /** The raw output returned by the tool's execute method */
+  output: Out;
+
+  /** The structured content parsed from the output */
+  structuredContent?: unknown;
+
+  /** Helper functions for template rendering */
+  helpers: TemplateHelpers;
+}
+```
+
+Usage in templates:
+
+```typescript
+const template: TemplateBuilderFn<WeatherInput, WeatherOutput> = (ctx) => {
+  const { input, output, helpers } = ctx;
+
+  return `
+    <div class="p-4">
+      <h1>${helpers.escapeHtml(input.location)}</h1>
+      <p>Temperature: ${output.temperature}°F</p>
+    </div>
+  `;
+};
+```
+
+---
+
+## Template Helpers
+
+### TemplateHelpers
+
+Helper functions available in every template context.
+
+```typescript
+interface TemplateHelpers {
+  escapeHtml: (str: string) => string;
+  formatDate: (date: Date | string, format?: string) => string;
+  formatCurrency: (amount: number, currency?: string) => string;
+  uniqueId: (prefix?: string) => string;
+  jsonEmbed: (data: unknown) => string;
+}
+```
+
+### `escapeHtml(str)`
+
+Escapes HTML special characters to prevent XSS attacks.
+
+```typescript
+helpers.escapeHtml('<script>alert("xss")</script>');
+// '&lt;script&gt;alert("xss")&lt;/script&gt;'
+
+helpers.escapeHtml('Tom & Jerry');
+// 'Tom &amp; Jerry'
+```
+
+| Character | Escaped  |
+| --------- | -------- |
+| `&`       | `&amp;`  |
+| `<`       | `&lt;`   |
+| `>`       | `&gt;`   |
+| `"`       | `&quot;` |
+| `'`       | `&#x27;` |
+
+<Warning>
+  Always use `escapeHtml` for user-provided content to prevent XSS vulnerabilities.
+</Warning>
+
+### `formatDate(date, format?)`
+
+Formats a date for display.
+
+```typescript
+helpers.formatDate(new Date());        // "12/3/2024" (localized)
+helpers.formatDate('2024-01-15');      // "1/15/2024"
+helpers.formatDate(date, 'iso');       // "2024-01-15T00:00:00.000Z"
+helpers.formatDate(date, 'time');      // "10:30:45 AM"
+helpers.formatDate(date, 'datetime');  // "1/15/2024, 10:30:45 AM"
+```
+
+| Format       | Description             |
+| ------------ | ----------------------- |
+| (default)    | Localized date          |
+| `'iso'`      | ISO 8601 format         |
+| `'time'`     | Localized time          |
+| `'datetime'` | Localized date and time |
+
+### `formatCurrency(amount, currency?)`
+
+Formats a number as currency.
+
+```typescript
+helpers.formatCurrency(1234.56);        // "$1,234.56"
+helpers.formatCurrency(1234.56, 'EUR'); // "€1,234.56"
+helpers.formatCurrency(1234.56, 'GBP'); // "£1,234.56"
+helpers.formatCurrency(1234.56, 'JPY'); // "¥1,235"
+```
+
+### `uniqueId(prefix?)`
+
+Generates a unique ID for DOM elements.
+
+```typescript
+helpers.uniqueId();          // "mcp-1-m3k2j1h"
+helpers.uniqueId('btn');     // "btn-2-m3k2j1i"
+helpers.uniqueId('modal');   // "modal-3-m3k2j1j"
+```
+
+IDs are guaranteed unique within a single template render.
+
+### `jsonEmbed(data)`
+
+Safely embeds JSON data in HTML, escaping characters that could break script tags.
+
+```typescript
+const data = { name: '</script><script>alert(1)</script>' };
+helpers.jsonEmbed(data);
+// '{"name":"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"}'
+```
+
+| Character | Escaped  |
+| --------- | -------- |
+| `<`       | `\u003c` |
+| `>`       | `\u003e` |
+| `&`       | `\u0026` |
+| `'`       | `\u0027` |
+
+```typescript
+const html = `
+  <script>
+    const data = ${helpers.jsonEmbed(userData)};
+  </script>
+`;
+```
+
+### `createTemplateHelpers()`
+
+Creates a new set of template helpers.
+
+```typescript
+import { createTemplateHelpers } from '@frontmcp/ui';
+
+const helpers = createTemplateHelpers();
+```
+
+---
+
+## MCP Bridge
+
+The MCP Bridge (`window.mcpBridge`) provides a unified API for widget interactivity across platforms.
+
+### MCPBridge Interface
+
+```typescript
+interface MCPBridge {
+  /** Detected provider type */
+  readonly provider: ProviderType;
+
+  /** Call a tool on the MCP server */
+  callTool(name: string, params: Record<string, unknown>): Promise<unknown>;
+
+  /** Send a message to the chat interface */
+  sendMessage(content: string): Promise<void>;
+
+  /** Open an external link */
+  openLink(url: string): Promise<void>;
+
+  /** Get the tool input arguments */
+  readonly toolInput: Record<string, unknown>;
+
+  /** Get the tool output/result */
+  readonly toolOutput: unknown;
+
+  /** Get the structured content */
+  readonly structuredContent: unknown;
+
+  /** Get the current widget state */
+  readonly widgetState: Record<string, unknown>;
+
+  /** Set the widget state (persisted) */
+  setWidgetState(state: Record<string, unknown>): void;
+
+  /** Get the host context */
+  readonly context: HostContext;
+
+  /** Subscribe to host context changes */
+  onContextChange(callback: (context: Partial<HostContext>) => void): () => void;
+
+  /** Subscribe to tool result updates */
+  onToolResult(callback: (result: unknown) => void): () => void;
+}
+```
+
+### ProviderType
+
+```typescript
+type ProviderType = 'openai' | 'ext-apps' | 'claude' | 'unknown';
+```
+
+### HostContext
+
+```typescript
+interface HostContext {
+  /** Current theme mode */
+  theme: ThemeMode;
+
+  /** Current display mode */
+  displayMode: DisplayMode;
+
+  /** Available display modes */
+  availableDisplayModes?: DisplayMode[];
+
+  /** Viewport dimensions */
+  viewport?: {
+    width: number;
+    height: number;
+    maxHeight?: number;
+    maxWidth?: number;
+  };
+
+  /** BCP 47 locale code */
+  locale?: string;
+
+  /** IANA timezone */
+  timeZone?: string;
+
+  /** User agent string */
+  userAgent?: string;
+
+  /** Platform type */
+  platform?: 'web' | 'desktop' | 'mobile';
+
+  /** Device capabilities */
+  deviceCapabilities?: {
+    touch?: boolean;
+    hover?: boolean;
+  };
+
+  /** Safe area insets (for mobile) */
+  safeAreaInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+}
+```
+
+### ThemeMode
+
+```typescript
+type ThemeMode = 'light' | 'dark' | 'system';
+```
+
+### DisplayMode
+
+```typescript
+type DisplayMode = 'inline' | 'fullscreen' | 'pip' | 'carousel';
+```
+
+---
+
+## Widget Runtime
+
+### `getMCPBridgeScript()`
+
+Returns the MCP Bridge runtime script for injection into widgets.
+
+```typescript
+import { getMCPBridgeScript } from '@frontmcp/ui';
+
+const script = getMCPBridgeScript();
+// Returns the minified runtime script
+```
+
+### `isMCPBridgeSupported()`
+
+Checks if MCP Bridge is supported in the current environment.
+
+```typescript
+import { isMCPBridgeSupported } from '@frontmcp/ui';
+
+if (isMCPBridgeSupported()) {
+  await window.mcpBridge.callTool('my_tool', {});
+}
+```
+
+### `MCP_BRIDGE_RUNTIME`
+
+The pre-built MCP Bridge runtime script as a `<script>` tag.
+
+```typescript
+import { MCP_BRIDGE_RUNTIME } from '@frontmcp/ui';
+
+const html = `
+  <head>
+    ${MCP_BRIDGE_RUNTIME}
+  </head>
+`;
+```
+
+---
+
+## Wrapper Functions
+
+### `wrapToolUI(options)`
+
+Wraps tool UI content in a complete HTML document with MCP Bridge runtime.
+
+```typescript
+import { wrapToolUI } from '@frontmcp/ui';
+
+const html = wrapToolUI({
+  content: '<div class="p-4">Weather: 72°F</div>',
+  toolName: 'get_weather',
+  input: { location: 'San Francisco' },
+  output: { temperature: 72 },
+});
+```
+
+#### WrapToolUIFullOptions
+
+| Property            | Type                                 | Default           | Description        |
+| ------------------- | ------------------------------------ | ----------------- | ------------------ |
+| `content`           | `string`                             | **required**      | HTML content       |
+| `toolName`          | `string`                             | **required**      | Tool name          |
+| `input`             | `Record<string, unknown>`            | `{}`              | Tool input         |
+| `output`            | `unknown`                            | -                 | Tool output        |
+| `structuredContent` | `unknown`                            | -                 | Parsed content     |
+| `csp`               | `UIContentSecurityPolicy`            | -                 | CSP configuration  |
+| `widgetAccessible`  | `boolean`                            | `false`           | Enable tool calls  |
+| `title`             | `string`                             | -                 | Page title         |
+| `theme`             | `DeepPartial<ThemeConfig>`           | `DEFAULT_THEME`   | Theme config       |
+| `platform`          | `PlatformCapabilities`               | `OPENAI_PLATFORM` | Target platform    |
+| `hostContext`       | `Partial<HostContext>`               | -                 | Initial context    |
+| `sanitizeInput`     | `boolean \| string[] \| SanitizerFn` | -                 | Input sanitization |
+| `rendererType`      | `string`                             | -                 | Renderer type      |
+| `hydrate`           | `boolean`                            | `false`           | Enable hydration   |
+
+### `wrapToolUIMinimal(options)`
+
+Wraps content with minimal boilerplate (no theme).
+
+```typescript
+import { wrapToolUIMinimal } from '@frontmcp/ui';
+
+const html = wrapToolUIMinimal({
+  content: '<div>Simple content</div>',
+  toolName: 'my_tool',
+});
+```
+
+---
+
+## Content Security Policy
+
+### UIContentSecurityPolicy
+
+```typescript
+interface UIContentSecurityPolicy {
+  /** Origins allowed for fetch/XHR/WebSocket */
+  connectDomains?: string[];
+
+  /** Origins allowed for images, scripts, fonts, styles */
+  resourceDomains?: string[];
+}
+```
+
+### `buildCSPMetaTag(csp?)`
+
+Builds a CSP meta tag from configuration.
+
+```typescript
+import { buildCSPMetaTag } from '@frontmcp/ui';
+
+const meta = buildCSPMetaTag({
+  connectDomains: ['https://api.example.com'],
+  resourceDomains: ['https://cdn.example.com'],
+});
+```
+
+### `buildCSPDirectives(csp?)`
+
+Builds CSP directive string.
+
+```typescript
+import { buildCSPDirectives } from '@frontmcp/ui';
+
+const directives = buildCSPDirectives({
+  connectDomains: ['https://api.example.com'],
+});
+// "default-src 'self'; connect-src 'self' https://api.example.com; ..."
+```
+
+### `validateCSPDomain(domain)`
+
+Validates a domain for CSP inclusion.
+
+```typescript
+import { validateCSPDomain } from '@frontmcp/ui';
+
+validateCSPDomain('https://example.com');  // true
+validateCSPDomain('javascript:alert(1)');  // false
+```
+
+### `sanitizeCSPDomains(domains)`
+
+Filters and validates CSP domains.
+
+```typescript
+import { sanitizeCSPDomains } from '@frontmcp/ui';
+
+sanitizeCSPDomains(['https://example.com', 'invalid', 'http://api.com']);
+// ['https://example.com', 'http://api.com']
+```
+
+---
+
+## Input Sanitization
+
+### `sanitizeInput(input, options)`
+
+Sanitizes input before exposing to widgets.
+
+```typescript
+import { sanitizeInput } from '@frontmcp/ui';
+
+// Auto-detect PII
+const safe = sanitizeInput(userInput, true);
+
+// Redact specific fields
+const safe = sanitizeInput(userInput, ['password', 'token']);
+
+// Custom sanitizer
+const safe = sanitizeInput(userInput, (key, value) =>
+  key === 'secret' ? '[REDACTED]' : value
+);
+```
+
+### SanitizerFn
+
+```typescript
+type SanitizerFn = (key: string, value: unknown) => unknown;
+```
+
+### PII Detection
+
+```typescript
+import { detectPII, detectPIIType, redactPIIFromText } from '@frontmcp/ui';
+
+detectPII('john@example.com');  // true
+detectPIIType('john@example.com');  // 'email'
+redactPIIFromText('Call me at 555-123-4567');  // 'Call me at [PHONE]'
+```
+
+### PII Validators
+
+```typescript
+import { isEmail, isPhone, isCreditCard, isSSN, isIPv4 } from '@frontmcp/ui';
+
+isEmail('user@example.com');  // true
+isPhone('555-123-4567');      // true
+isCreditCard('4111111111111111');  // true
+isSSN('123-45-6789');         // true
+isIPv4('192.168.1.1');        // true
+```
+
+---
+
+## OpenAI Integration
+
+### `buildOpenAIMeta(options)`
+
+Builds OpenAI Apps SDK meta annotations.
+
+```typescript
+import { buildOpenAIMeta } from '@frontmcp/ui';
+
+const meta = buildOpenAIMeta({
+  csp: { connectDomains: ['https://api.example.com'] },
+  widgetAccessible: true,
+  widgetDescription: 'Interactive weather widget',
+  displayMode: 'fullscreen',
+});
+// { 'openai/widgetAccessible': true, 'openai/widgetCSP': {...}, ... }
+```
+
+### `getToolUIMimeType(platform?)`
+
+Gets the MIME type for tool UI responses.
+
+```typescript
+import { getToolUIMimeType } from '@frontmcp/ui';
+
+getToolUIMimeType('openai');   // 'text/html+skybridge'
+getToolUIMimeType('ext-apps'); // 'text/html+mcp'
+getToolUIMimeType('generic');  // 'text/html'
+```
+
+### OpenAIRuntime Interface
+
+The `window.openai` interface exposed by OpenAI's environment.
+
+```typescript
+interface OpenAIRuntime {
+  // Properties
+  theme?: 'light' | 'dark';
+  userAgent?: OpenAIUserAgent;
+  locale?: string;
+  maxHeight?: number;
+  displayMode?: DisplayMode;
+  safeArea?: SafeAreaInsets;
+  toolInput?: Record<string, unknown>;
+  toolOutput?: unknown;
+  toolResponseMetadata?: Record<string, unknown>;
+  widgetState?: Record<string, unknown>;
+
+  // Methods
+  callTool?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  requestDisplayMode?: (options: { mode: DisplayMode }) => Promise<void>;
+  requestClose?: () => Promise<void>;
+  openExternal?: (options: { href: string }) => Promise<void>;
+  sendFollowUpMessage?: (options: { prompt: string }) => Promise<void>;
+  setWidgetState?: (state: Record<string, unknown>) => void;
+}
+```
+
+---
+
+## Tool UI Configuration
+
+### ToolUIConfig
+
+Configuration for the `ui` property in `@Tool` decorator.
+
+```typescript
+interface ToolUIConfig<In = unknown, Out = unknown> {
+  /** Template for rendering (HTML, function, React, MDX) */
+  template: ToolUITemplate<In, Out>;
+
+  /** Content Security Policy */
+  csp?: UIContentSecurityPolicy;
+
+  /** Enable tool calls from widget */
+  widgetAccessible?: boolean;
+
+  /** Preferred display mode */
+  displayMode?: 'inline' | 'fullscreen' | 'pip';
+
+  /** Description shown to users */
+  widgetDescription?: string;
+
+  /** Status messages during invocation */
+  invocationStatus?: {
+    invoking?: string;
+    invoked?: string;
+  };
+
+  /** How widget HTML is served */
+  servingMode?: WidgetServingMode;
+
+  /** Custom URL for custom-url serving mode */
+  customWidgetUrl?: string;
+
+  /** Path for direct-url serving mode */
+  directPath?: string;
+
+  /** Enable React hydration */
+  hydrate?: boolean;
+
+  /** Custom MDX components */
+  mdxComponents?: Record<string, any>;
+
+  /** Custom content wrapper */
+  wrapper?: (content: string, ctx: TemplateContext<In, Out>) => string;
+}
+```
+
+### ToolUITemplate
+
+```typescript
+type ToolUITemplate<In = unknown, Out = unknown> =
+  | TemplateBuilderFn<In, Out>  // Function: (ctx) => string
+  | string                       // HTML, MDX, or JSX string
+  | ((props: any) => any);       // React component
+```
+
+### WidgetServingMode
+
+```typescript
+type WidgetServingMode =
+  | 'inline'      // Embedded in tool response _meta
+  | 'static'      // Pre-compiled at startup, via ui:// resource URI
+  | 'hybrid'      // Shell cached at startup, component in response
+  | 'direct-url'  // HTTP endpoint on MCP server
+  | 'custom-url'; // External/CDN hosting
+```
+
+---
+
+## Global Window Extensions
+
+The runtime extends the global `window` object:
+
+```typescript
+interface Window {
+  mcpBridge?: MCPBridge | MCPBridgeExtended;
+  openai?: OpenAIRuntime;
+  claude?: unknown;
+  __mcpPlatform?: string;
+  __mcpToolName?: string;
+  __mcpToolInput?: Record<string, unknown>;
+  __mcpToolOutput?: unknown;
+  __mcpStructuredContent?: unknown;
+  __mcpToolResponseMetadata?: Record<string, unknown>;
+  __mcpHostContext?: HostContext;
+  __mcpWidgetToken?: string;
+}
+```
+
+Access these in your widget scripts:
+
+```typescript
+// Via MCP Bridge (recommended)
+const output = window.mcpBridge?.toolOutput;
+
+// Via globals (fallback)
+const output = window.__mcpToolOutput;
+```

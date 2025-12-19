@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/sdk",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "FrontMCP SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -48,7 +48,7 @@
     "content-type": "^1.0.5"
   },
   "dependencies": {
-    "@frontmcp/ui": "0.5.1",
+    "@frontmcp/ui": "0.6.0",
     "@modelcontextprotocol/sdk": "1.24.3",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",

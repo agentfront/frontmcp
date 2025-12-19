@@ -1,3 +1,15 @@
+## [1.0.2] - 2025-12-19
+
+### Fixed
+
+- Align Jest config with CommonJS export to ensure test runner compatibility.
+- Adjust TypeScript build output and root directories for correct dist emission without affecting API.
+
+### Chore
+
+- Added resilience to end-to-end tests and improved test client context handling.
+- Documented peer dependency alignment for zod.
+
 ## [1.0.1] - 2025-12-11
 
 ### Changed

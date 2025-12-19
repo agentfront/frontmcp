@@ -55,33 +55,41 @@ When your MCP tools return data, AI platforms typically display it as raw text o
 
 FrontMCP UI adapts to different AI platform capabilities:
 
-| Platform   | Network Access | External Scripts | Widget Display          |
-| ---------- | -------------- | ---------------- | ----------------------- |
-| **OpenAI** | Full           | CDN allowed      | Inline, Fullscreen, PiP |
-| **Claude** | Blocked        | Inline only      | Artifacts               |
-| **Gemini** | Limited        | Inline preferred | Basic                   |
+| Platform     | Network | Widget Display          | Response Format    |
+| ------------ | ------- | ----------------------- | ------------------ |
+| **OpenAI**   | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **ext-apps** | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **Cursor**   | Full    | Inline                  | `_meta['ui/html']` |
+| **Claude**   | Blocked | Artifacts               | Dual-payload       |
+| **Gemini**   | Limited | Basic                   | JSON only          |
 
-The library automatically detects the platform and adjusts rendering accordingly.
+The library automatically detects the platform and selects the appropriate delivery format.
+
+<Info>
+With `servingMode: 'auto'` (default), unsupported platforms automatically receive JSON-only responses—no broken widgets.
+</Info>
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Your MCP Tool                         │
-│  @Tool({ ui: { template: ... } })                       │
+│  @Tool({ ui: { template: ..., servingMode: 'auto' } })  │
 └───────────────────────┬─────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │               FrontMCP UI Renderer                       │
 │  Auto-detects: HTML | React | MDX                       │
+│  + Platform Detection + Response Format Selection       │
 └───────────────────────┬─────────────────────────────────┘
                         │
           ┌─────────────┼─────────────┐
           ▼             ▼             ▼
     ┌──────────┐  ┌──────────┐  ┌──────────┐
     │  OpenAI  │  │  Claude  │  │  Gemini  │
-    │  Widget  │  │ Artifact │  │  Widget  │
+    │  Widget  │  │ Artifact │  │ JSON-only│
+    │ _meta UI │  │Dual-Pay  │  │          │
     └──────────┘  └──────────┘  └──────────┘
 ```
 
@@ -89,13 +97,14 @@ The library automatically detects the platform and adjusts rendering accordingly
 
 Every `@Tool` exposes a `ui` block that describes how the widget should render across hosts. Configure these settings once and the renderer keeps your UX consistent everywhere.
 
-| Setting            | Controls                                                             | Use it when                                                                 |
-| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `displayMode`      | Whether the widget renders inline, fullscreen, or picture-in-picture | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
-| `servingMode`      | How the HTML is delivered (`inline`, `static`, `hybrid`, URL-based)  | Precompile heavy React widgets or reuse shells across multiple responses.   |
-| `widgetAccessible` | Allows widgets to call tools through the MCP Bridge                  | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
-| `csp`              | Allowed domains for scripts, images, fonts, and network calls        | Restrict remote dependencies per platform and satisfy Claude’s strict CSP.  |
-| `hydrate`          | Ships the React runtime for client-side interactivity                | Power forms, tabs, and charts that need local state or event handlers.      |
+| Setting              | Controls                                                                                   | Use it when                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `displayMode`        | Whether the widget renders inline, fullscreen, or picture-in-picture                       | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
+| `servingMode`        | How HTML is delivered (`auto`, `inline`, `static`, `hybrid`, URL-based). Default: `'auto'` | Let FrontMCP select the best format per platform, or force a specific mode. |
+| `htmlResponsePrefix` | Text shown before HTML in Claude's dual-payload format                                     | Customize the artifact description for better Claude UX.                    |
+| `widgetAccessible`   | Allows widgets to call tools through the MCP Bridge                                        | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
+| `csp`                | Allowed domains for scripts, images, fonts, and network calls                              | Restrict remote dependencies per platform and satisfy Claude's strict CSP.  |
+| `hydrate`            | Ships the React runtime for client-side interactivity                                      | Power forms, tabs, and charts that need local state or event handlers.      |
 
 <Tip>
 Pair metadata with a concise `widgetDescription` so clients can preview the UI before rendering it, just like Mintlify recommends leading with the most important context.

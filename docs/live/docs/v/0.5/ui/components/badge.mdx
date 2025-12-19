@@ -1,0 +1,241 @@
+---
+title: Badge Component
+sidebarTitle: Badge
+icon: tag
+description: Badges are small status indicators and labels. Use them to highlight statuses, counts, or categories.
+---
+
+## Import
+
+```typescript
+import {
+  badge,
+  badgeGroup,
+  activeBadge,
+  pendingBadge,
+  errorBadge,
+  onlineDot,
+  offlineDot,
+} from '@frontmcp/ui';
+```
+
+## Basic Usage
+
+```typescript
+const html = badge('New');
+```
+
+## Variants
+
+<Tabs>
+  <Tab title="Preview">
+    Eight badge variants:
+    - **default** - Gray background
+    - **primary** - Primary color tint
+    - **secondary** - Secondary color tint
+    - **success** - Green/positive
+    - **warning** - Yellow/caution
+    - **danger** - Red/error
+    - **info** - Blue/informational
+    - **outline** - Border only, transparent
+  </Tab>
+  <Tab title="Code">
+    ```typescript
+    badge('Default', { variant: 'default' })
+    badge('Primary', { variant: 'primary' })
+    badge('Secondary', { variant: 'secondary' })
+    badge('Success', { variant: 'success' })
+    badge('Warning', { variant: 'warning' })
+    badge('Danger', { variant: 'danger' })
+    badge('Info', { variant: 'info' })
+    badge('Outline', { variant: 'outline' })
+    ```
+  </Tab>
+</Tabs>
+
+## Sizes
+
+```typescript
+badge('Small', { size: 'sm' })
+badge('Medium', { size: 'md' })  // default
+badge('Large', { size: 'lg' })
+```
+
+## Pill Style
+
+Round the badge edges for a pill shape:
+
+```typescript
+badge('Featured', { pill: true })
+badge('Pro', { variant: 'primary', pill: true })
+```
+
+## With Icon
+
+```typescript
+const html = badge('Verified', {
+  variant: 'success',
+  icon: '<svg class="w-3 h-3" ...>...</svg>',
+});
+```
+
+## Status Dots
+
+Use dot badges as status indicators:
+
+```typescript
+// Dot only (text becomes tooltip/aria-label)
+const html = badge('Online', { dot: true, variant: 'success' });
+const offline = badge('Offline', { dot: true, variant: 'default' });
+const busy = badge('Busy', { dot: true, variant: 'danger' });
+```
+
+### Dot Presets
+
+```typescript
+import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/ui';
+
+onlineDot()              // Green dot, "Online" label
+offlineDot()             // Gray dot, "Offline" label
+busyDot()                // Red dot, "Busy" label
+awayDot()                // Yellow dot, "Away" label
+onlineDot('Available')   // Custom label
+```
+
+## Removable Badges
+
+Add a remove button:
+
+```typescript
+const html = badge('Tag', {
+  removable: true,
+});
+
+// With HTMX remove action
+const htmxBadge = badge('Category', {
+  removable: true,
+  onRemove: {
+    delete: '/api/tags/category',
+    target: 'closest .badge-container',
+    swap: 'outerHTML',
+    confirm: 'Remove this tag?',
+  },
+});
+```
+
+## Status Badge Presets
+
+Convenient functions for common status patterns:
+
+```typescript
+import {
+  activeBadge,
+  inactiveBadge,
+  pendingBadge,
+  errorBadge,
+  newBadge,
+  betaBadge,
+} from '@frontmcp/ui';
+
+activeBadge()         // "Active" - success variant
+inactiveBadge()       // "Inactive" - default variant
+pendingBadge()        // "Pending" - warning variant
+errorBadge()          // "Error" - danger variant
+newBadge()            // "New" - primary, small, pill
+betaBadge()           // "Beta" - secondary, small, pill
+
+// With custom text
+activeBadge('Running')
+pendingBadge('In Review')
+```
+
+## Badge Groups
+
+Arrange multiple badges:
+
+```typescript
+import { badge, badgeGroup } from '@frontmcp/ui';
+
+const tags = badgeGroup([
+  badge('JavaScript'),
+  badge('TypeScript'),
+  badge('React'),
+  badge('Node.js'),
+]);
+
+// With custom gap
+const spaced = badgeGroup([
+  badge('Tag 1'),
+  badge('Tag 2'),
+], { gap: 'md' });
+```
+
+## Use Cases
+
+### Status Indicators
+
+```typescript
+import { card, badge } from '@frontmcp/ui';
+
+const taskCard = card(`
+  <div class="flex items-center justify-between">
+    <span>Implement authentication</span>
+    ${badge('In Progress', { variant: 'warning' })}
+  </div>
+`, { title: 'Task' });
+```
+
+### User Status
+
+```typescript
+const userRow = `
+  <div class="flex items-center gap-3">
+    <span>John Doe</span>
+    ${badge('Admin', { variant: 'primary', pill: true })}
+    ${badge('Online', { dot: true, variant: 'success' })}
+  </div>
+`;
+```
+
+### Tag Lists
+
+```typescript
+const articleTags = badgeGroup([
+  badge('Technology', { variant: 'primary' }),
+  badge('Tutorial', { variant: 'secondary' }),
+  badge('Beginner', { variant: 'info' }),
+], { gap: 'sm' });
+```
+
+## API Reference
+
+### `badge(text, options?)`
+
+| Parameter | Type           | Description                         |
+| --------- | -------------- | ----------------------------------- |
+| `text`    | `string`       | Badge text (or aria-label for dots) |
+| `options` | `BadgeOptions` | Configuration options               |
+
+### BadgeOptions
+
+| Option      | Type                                                                                                 | Default     | Description                |
+| ----------- | ---------------------------------------------------------------------------------------------------- | ----------- | -------------------------- |
+| `variant`   | `'default' \| 'primary' \| 'secondary' \| 'success' \| 'warning' \| 'danger' \| 'info' \| 'outline'` | `'default'` | Visual style               |
+| `size`      | `'sm' \| 'md' \| 'lg'`                                                                               | `'md'`      | Badge size                 |
+| `pill`      | `boolean`                                                                                            | `false`     | Fully rounded (pill shape) |
+| `icon`      | `string`                                                                                             | -           | HTML for icon before text  |
+| `dot`       | `boolean`                                                                                            | `false`     | Render as dot indicator    |
+| `className` | `string`                                                                                             | -           | Additional CSS classes     |
+| `removable` | `boolean`                                                                                            | `false`     | Show remove button         |
+| `onRemove`  | `object`                                                                                             | -           | HTMX options for remove    |
+
+### `badgeGroup(badges, options?)`
+
+| Option      | Type                   | Default | Description            |
+| ----------- | ---------------------- | ------- | ---------------------- |
+| `gap`       | `'sm' \| 'md' \| 'lg'` | `'sm'`  | Space between badges   |
+| `className` | `string`               | -       | Additional CSS classes |
+
+### Returns
+
+`string` - HTML string for the badge element.

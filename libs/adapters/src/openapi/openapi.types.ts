@@ -1,4 +1,3 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
 import type { LoadOptions, GenerateOptions, McpOpenAPITool, SecurityContext, ToolMetadata } from 'mcp-from-openapi';
 import type { FrontMcpLogger, ToolAnnotations, ToolExample, ToolUIConfig, FrontMcpContext } from '@frontmcp/sdk';

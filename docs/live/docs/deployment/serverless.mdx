@@ -1,0 +1,409 @@
+---
+title: Serverless Deployment
+slug: deployment/serverless
+icon: cloud
+---
+
+Deploy your FrontMCP server to serverless platforms like Vercel, AWS Lambda, and Cloudflare Workers.
+
+## Supported Platforms
+
+| Platform           | Status       | Module Format | Config File              |
+| ------------------ | ------------ | ------------- | ------------------------ |
+| Vercel             | Stable       | ESM           | `vercel.json`            |
+| AWS Lambda         | Stable       | ESM           | `ci/template.yaml` (SAM) |
+| Cloudflare Workers | Experimental | CommonJS      | `wrangler.toml`          |
+
+## Quick Start
+
+<Tip>
+**New project?** Use `frontmcp create` with the `--target` flag to scaffold a serverless-ready project:
+
+```bash
+# Vercel project
+npx frontmcp create my-app --target vercel
+
+# AWS Lambda project (generates SAM template)
+npx frontmcp create my-app --target lambda
+
+# Cloudflare Workers project
+npx frontmcp create my-app --target cloudflare
+```
+
+This generates the platform config files (`vercel.json`, `ci/template.yaml`, or `wrangler.toml`) automatically.
+
+</Tip>
+
+<Tabs>
+  <Tab title="Vercel">
+    ```bash
+    # Build for Vercel
+    frontmcp build --adapter vercel
+
+    # Deploy
+    vercel deploy
+    ```
+
+  </Tab>
+  <Tab title="AWS Lambda">
+    ```bash
+    # Install required dependency
+    npm install @codegenie/serverless-express
+
+    # Build for Lambda
+    frontmcp build --adapter lambda
+
+    # Deploy with your preferred tool (SAM, CDK, Serverless Framework)
+    ```
+
+  </Tab>
+  <Tab title="Cloudflare">
+    ```bash
+    # Build for Cloudflare Workers
+    frontmcp build --adapter cloudflare
+
+    # Deploy
+    wrangler deploy
+    ```
+
+  </Tab>
+</Tabs>
+
+## Vercel
+
+Vercel is a popular platform for deploying serverless functions with excellent DX.
+
+### Setup
+
+1. Build your project:
+
+   ```bash
+   frontmcp build --adapter vercel
+   ```
+
+2. This generates:
+
+   ```
+   dist/
+     main.js      # Your compiled server
+     index.js     # Vercel handler wrapper
+   vercel.json    # Vercel configuration
+   ```
+
+3. Deploy:
+   ```bash
+   vercel deploy
+   ```
+
+### Generated vercel.json
+
+```json
+{
+  "version": 2,
+  "builds": [{ "src": "dist/index.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/(.*)", "dest": "/dist/index.js" }]
+}
+```
+
+<Note>
+You can customize this file after generation. The build command will not overwrite existing config files.
+</Note>
+
+### How It Works
+
+The generated `index.js` wrapper:
+
+1. Sets `FRONTMCP_SERVERLESS=1` environment variable
+2. Imports your compiled `main.js` (which runs the `@FrontMcp` decorator)
+3. Exports an async handler that retrieves the Express app and forwards requests
+
+```javascript
+// Generated dist/index.js (simplified)
+process.env.FRONTMCP_SERVERLESS = '1';
+import './main.js';
+import { getServerlessHandlerAsync } from '@frontmcp/sdk';
+
+export default async function handler(req, res) {
+  const app = await getServerlessHandlerAsync();
+  return app(req, res);
+}
+```
+
+## AWS Lambda
+
+Deploy to AWS Lambda using the Serverless Express adapter.
+
+### Prerequisites
+
+Install the required dependency:
+
+```bash
+npm install @codegenie/serverless-express
+```
+
+### Setup
+
+<Tip>
+Projects created with `frontmcp create --target lambda` include a SAM template at `ci/template.yaml` and a deploy script:
+```bash
+npm run deploy  # Runs: cd ci && sam build && sam deploy
+```
+</Tip>
+
+1. Build your project:
+
+   ```bash
+   frontmcp build --adapter lambda
+   ```
+
+2. This generates:
+
+   ```
+   dist/
+     main.js      # Your compiled server
+     index.js     # Lambda handler wrapper
+   ```
+
+3. Deploy using your preferred AWS deployment tool.
+
+### Example SAM Template
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  FrontMcpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: dist/index.handler
+      Runtime: nodejs20.x
+      Timeout: 30
+      MemorySize: 256
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+```
+
+### Example serverless.yml
+
+```yaml
+service: frontmcp-server
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'dev'}
+
+functions:
+  api:
+    handler: dist/index.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+```
+
+### ESM Requirements
+
+<Note>
+AWS Lambda with ESM requires one of:
+- `"type": "module"` in your `package.json`
+- Using `.mjs` extension for handler files
+- Configuring your deployment tool for ESM
+
+The generated `dist/index.js` uses ESM syntax (`import`/`export`).
+
+</Note>
+
+### Cold Start Optimization
+
+Lambda cold starts can add latency to the first request. Consider:
+
+- **Provisioned Concurrency**: Keep instances warm
+- **Smaller bundle size**: Use tree-shaking and minimize dependencies
+- **ARM64 architecture**: Often faster cold starts than x86
+
+## Cloudflare Workers (Experimental)
+
+<Warning>
+Cloudflare Workers support is **experimental**. The Express-to-Workers adapter has limitations
+with streaming, certain middleware, and some response methods.
+
+For production Cloudflare deployments, consider using [Hono](https://hono.dev/) or native Workers APIs.
+
+</Warning>
+
+<Tip>
+Projects created with `frontmcp create --target cloudflare` include a `wrangler.toml` and a deploy script:
+```bash
+npm run deploy  # Runs: wrangler deploy
+```
+</Tip>
+
+### Limitations
+
+- Basic request/response handling only
+- No streaming support
+- Limited Express middleware compatibility
+- Missing some response methods (`redirect()`, `type()`, etc.)
+
+### Setup
+
+1. Build your project:
+
+   ```bash
+   frontmcp build --adapter cloudflare
+   ```
+
+2. This generates:
+
+   ```
+   dist/
+     main.js      # Your compiled server
+     index.js     # Cloudflare handler wrapper
+   wrangler.toml  # Wrangler configuration
+   ```
+
+3. Deploy:
+   ```bash
+   wrangler deploy
+   ```
+
+### Generated wrangler.toml
+
+```toml
+name = "frontmcp-worker"
+main = "dist/index.js"
+compatibility_date = "2024-01-01"
+```
+
+## How Serverless Mode Works
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Build Time                               │
+├─────────────────────────────────────────────────────────────┤
+│  frontmcp build --adapter vercel                            │
+│       │                                                      │
+│       ├── Compiles TypeScript with --module esnext          │
+│       ├── Generates platform-specific index.js wrapper      │
+│       └── Creates platform config (vercel.json, etc.)       │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Runtime                                  │
+├─────────────────────────────────────────────────────────────┤
+│  1. Platform invokes index.js                               │
+│  2. index.js sets FRONTMCP_SERVERLESS=1                     │
+│  3. index.js imports main.js                                │
+│  4. @FrontMcp decorator detects serverless mode             │
+│  5. Decorator calls createHandler() instead of bootstrap()  │
+│  6. Express app stored globally via setServerlessHandler()  │
+│  7. index.js calls getServerlessHandlerAsync()              │
+│  8. Requests are forwarded to the Express app               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Environment Variable
+
+The `FRONTMCP_SERVERLESS=1` environment variable triggers serverless mode:
+
+```typescript
+// In the @FrontMcp decorator
+const isServerless = process.env.FRONTMCP_SERVERLESS === '1';
+
+if (isServerless) {
+  // Don't call listen(), store handler globally instead
+  const handler = await FrontMcpInstance.createHandler(metadata);
+  setServerlessHandler(handler);
+} else {
+  // Normal mode: start HTTP server
+  FrontMcpInstance.bootstrap(metadata);
+}
+```
+
+## Troubleshooting
+
+### "Serverless handler not initialized"
+
+```
+Error: Serverless handler not initialized. Ensure @FrontMcp decorator ran and FRONTMCP_SERVERLESS=1 is set.
+```
+
+**Causes:**
+
+- The `@FrontMcp` decorator wasn't executed before the handler was called
+- `FRONTMCP_SERVERLESS=1` is not set in the entry point
+
+**Solutions:**
+
+- Ensure your main.ts/main.js has the `@FrontMcp` decorator on a class
+- Verify the generated `index.js` sets the environment variable before importing main.js
+
+### "Module not found: @codegenie/serverless-express"
+
+The Lambda adapter requires an additional dependency:
+
+```bash
+npm install @codegenie/serverless-express
+```
+
+### Cold Start Performance
+
+First requests may be slow due to initialization. Strategies:
+
+| Platform   | Solution                                 |
+| ---------- | ---------------------------------------- |
+| Lambda     | Provisioned Concurrency, smaller bundles |
+| Vercel     | Edge Functions (if applicable)           |
+| Cloudflare | Workers are generally fast to cold start |
+
+### TypeScript Compilation Errors
+
+If you see module-related errors:
+
+- The adapter sets the correct module format automatically
+- `--module esnext` for Vercel/Lambda
+- `--module commonjs` for Node.js/Cloudflare
+
+Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfig settings.
+
+## API Reference
+
+### CLI Commands
+
+```bash
+# Build for Node.js (default, CommonJS)
+frontmcp build
+
+# Build for Vercel (ESM)
+frontmcp build --adapter vercel
+
+# Build for AWS Lambda (ESM)
+frontmcp build --adapter lambda
+
+# Build for Cloudflare Workers (CommonJS)
+frontmcp build --adapter cloudflare
+
+# Specify output directory
+frontmcp build --adapter vercel --outDir build
+```
+
+### SDK Exports
+
+```typescript
+import {
+  getServerlessHandler,      // Get handler synchronously (may be null)
+  getServerlessHandlerAsync, // Get handler with await (throws if not ready)
+  setServerlessHandler,      // Store handler (used by decorator)
+  setServerlessHandlerPromise, // Store handler promise
+  setServerlessHandlerError, // Store initialization error
+} from '@frontmcp/sdk';
+```

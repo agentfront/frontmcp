@@ -1,0 +1,374 @@
+---
+title: Custom Templates
+sidebarTitle: Custom
+icon: gear
+description: Beyond HTML, React, and MDX, you can create custom static templates or integrate other templating systems.
+---
+
+## Static HTML Templates
+
+For widgets that don't need dynamic data, use static HTML:
+
+```typescript
+@Tool({
+  name: 'show_help',
+  ui: {
+    template: `
+      <div class="p-6 bg-blue-50 rounded-xl">
+        <h2 class="text-xl font-bold text-blue-900">Need Help?</h2>
+        <p class="text-blue-700 mt-2">
+          Contact support at support@example.com
+        </p>
+        <a href="https://docs.example.com"
+           class="inline-block mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg">
+          View Documentation
+        </a>
+      </div>
+    `,
+  },
+})
+```
+
+<Info>
+  Static templates are auto-detected when the template is a plain string
+  without JSX tags or variable interpolation.
+</Info>
+
+## External Template Files
+
+Keep templates in separate files for better organization:
+
+```typescript title="src/widgets/help.html"
+<div class="help-widget">
+  <h2>Help Center</h2>
+  <nav>
+    <a href="/docs/getting-started">Getting Started</a>
+    <a href="/docs/api">API Reference</a>
+    <a href="/docs/faq">FAQ</a>
+  </nav>
+</div>
+```
+
+```typescript title="src/tools/help.tool.ts"
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const helpTemplate = readFileSync(
+  join(__dirname, '../widgets/help.html'),
+  'utf-8'
+);
+
+@Tool({
+  name: 'show_help',
+  ui: {
+    template: helpTemplate,
+  },
+})
+```
+
+## Template Wrappers
+
+Create a custom wrapper for consistent styling:
+
+```typescript
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: (ctx) => `<p>${ctx.output.message}</p>`,
+    wrapper: (content, ctx) => `
+      <div class="my-custom-wrapper">
+        <header class="wrapper-header">
+          <h1>${ctx.helpers.escapeHtml(ctx.output.title)}</h1>
+        </header>
+        <main class="wrapper-content">
+          ${content}
+        </main>
+        <footer class="wrapper-footer">
+          Powered by FrontMCP
+        </footer>
+      </div>
+    `,
+  },
+})
+```
+
+## Handlebars Integration
+
+Use Handlebars for logic-less templates:
+
+```typescript
+import Handlebars from 'handlebars';
+
+// Register helpers
+Handlebars.registerHelper('formatDate', (date) => {
+  return new Date(date).toLocaleDateString();
+});
+
+Handlebars.registerHelper('currency', (amount) => {
+  return `$${amount.toFixed(2)}`;
+});
+
+// Create template
+const source = `
+<div class="order-summary">
+  <h2>Order #{{output.id}}</h2>
+  <p>Date: {{formatDate output.date}}</p>
+
+  <ul>
+    {{#each output.items}}
+    <li>{{name}} - {{currency price}}</li>
+    {{/each}}
+  </ul>
+
+  <p class="total">Total: {{currency output.total}}</p>
+</div>
+`;
+
+const template = Handlebars.compile(source);
+
+@Tool({
+  name: 'get_order',
+  ui: {
+    template: (ctx) => template(ctx),
+  },
+})
+```
+
+## EJS Templates
+
+Use EJS for embedded JavaScript:
+
+```typescript
+import ejs from 'ejs';
+
+const template = `
+<div class="user-card">
+  <h2><%= helpers.escapeHtml(output.name) %></h2>
+  <p><%= output.email %></p>
+
+  <% if (output.isPremium) { %>
+    <span class="badge premium">Premium</span>
+  <% } %>
+
+  <ul>
+    <% output.projects.forEach(function(project) { %>
+      <li><%= project.name %></li>
+    <% }); %>
+  </ul>
+</div>
+`;
+
+@Tool({
+  name: 'get_user',
+  ui: {
+    template: (ctx) => ejs.render(template, ctx),
+  },
+})
+```
+
+## Pug/Jade Templates
+
+Use Pug for clean, indentation-based templates:
+
+```typescript
+import pug from 'pug';
+
+const template = pug.compile(`
+.dashboard
+  h1= output.title
+
+  .stats
+    each stat in output.stats
+      .stat-card
+        .stat-value= stat.value
+        .stat-label= stat.label
+
+  if output.alerts.length
+    .alerts
+      each alert in output.alerts
+        .alert(class=alert.type)= alert.message
+`);
+
+@Tool({
+  name: 'get_dashboard',
+  ui: {
+    template: (ctx) => template(ctx),
+  },
+})
+```
+
+## Mustache Templates
+
+Logic-less templating with Mustache:
+
+```typescript
+import Mustache from 'mustache';
+
+const template = `
+<div class="profile">
+  <h2>{{output.name}}</h2>
+  <p>{{output.bio}}</p>
+
+  {{#output.isPremium}}
+  <span class="badge">Premium Member</span>
+  {{/output.isPremium}}
+
+  <h3>Skills</h3>
+  <ul>
+    {{#output.skills}}
+    <li>{{.}}</li>
+    {{/output.skills}}
+  </ul>
+</div>
+`;
+
+@Tool({
+  name: 'get_profile',
+  ui: {
+    template: (ctx) => Mustache.render(template, ctx),
+  },
+})
+```
+
+## Nunjucks Templates
+
+Mozilla's powerful templating:
+
+```typescript
+import nunjucks from 'nunjucks';
+
+// Configure environment
+const env = new nunjucks.Environment();
+env.addFilter('currency', (num) => `$${num.toFixed(2)}`);
+env.addFilter('date', (d) => new Date(d).toLocaleDateString());
+
+const template = `
+<div class="invoice">
+  <h1>Invoice #{{ output.id }}</h1>
+  <p>Date: {{ output.date | date }}</p>
+
+  <table>
+    <tr>
+      <th>Item</th>
+      <th>Qty</th>
+      <th>Price</th>
+    </tr>
+    {% for item in output.items %}
+    <tr>
+      <td>{{ item.name }}</td>
+      <td>{{ item.quantity }}</td>
+      <td>{{ item.price | currency }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <p class="total">Total: {{ output.total | currency }}</p>
+</div>
+`;
+
+@Tool({
+  name: 'get_invoice',
+  ui: {
+    template: (ctx) => env.renderString(template, ctx),
+  },
+})
+```
+
+## Building a Custom Renderer
+
+Create your own rendering system:
+
+```typescript title="src/renderers/custom-renderer.ts"
+import { TemplateContext } from '@frontmcp/ui';
+
+export interface CustomTemplateConfig {
+  layout: 'card' | 'page' | 'minimal';
+  sections: Array<{
+    type: 'header' | 'content' | 'footer';
+    template: string;
+  }>;
+}
+
+export function renderCustomTemplate<In, Out>(
+  config: CustomTemplateConfig,
+  ctx: TemplateContext<In, Out>
+): string {
+  const layouts = {
+    card: (content: string) => `
+      <div class="card rounded-xl shadow-lg overflow-hidden">
+        ${content}
+      </div>
+    `,
+    page: (content: string) => `
+      <div class="page max-w-4xl mx-auto py-8">
+        ${content}
+      </div>
+    `,
+    minimal: (content: string) => content,
+  };
+
+  const sectionTemplates = {
+    header: (template: string) => `
+      <header class="bg-gray-100 px-6 py-4 border-b">
+        ${interpolate(template, ctx)}
+      </header>
+    `,
+    content: (template: string) => `
+      <main class="px-6 py-4">
+        ${interpolate(template, ctx)}
+      </main>
+    `,
+    footer: (template: string) => `
+      <footer class="bg-gray-50 px-6 py-4 border-t">
+        ${interpolate(template, ctx)}
+      </footer>
+    `,
+  };
+
+  const sections = config.sections
+    .map((s) => sectionTemplates[s.type](s.template))
+    .join('');
+
+  return layouts[config.layout](sections);
+}
+
+function interpolate<In, Out>(template: string, ctx: TemplateContext<In, Out>): string {
+  return template.replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, (_, path) => {
+    const value = getNestedValue(ctx, path);
+    return ctx.helpers.escapeHtml(String(value ?? ''));
+  });
+}
+
+function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((o, k) => o?.[k], obj);
+}
+```
+
+Usage:
+
+```typescript
+import { renderCustomTemplate } from '../renderers/custom-renderer';
+
+@Tool({
+  name: 'get_user',
+  ui: {
+    template: (ctx) => renderCustomTemplate({
+      layout: 'card',
+      sections: [
+        { type: 'header', template: '<h2>{{output.name}}</h2>' },
+        { type: 'content', template: '<p>{{output.bio}}</p>' },
+        { type: 'footer', template: '<small>ID: {{output.id}}</small>' },
+      ],
+    }, ctx),
+  },
+})
+```
+
+## Best Practices
+
+1. **Choose based on team familiarity** - Use what your team knows
+2. **Keep templates simple** - Complex logic belongs in code
+3. **Cache compiled templates** - Compile once, render many times
+4. **Always escape output** - Use each engine's escaping features
+5. **Test thoroughly** - Template errors can be hard to debug
+6. **Document your choice** - Explain why you chose a specific engine

@@ -7,12 +7,16 @@ description: FrontMCP UI adapts to different AI platform capabilities. Each plat
 
 ## Platform Capabilities
 
-| Platform   | Network | External Scripts | Widget Modes            | Theme   |
-| ---------- | ------- | ---------------- | ----------------------- | ------- |
-| **OpenAI** | Open    | CDN allowed      | inline, fullscreen, pip | Yes     |
-| **Claude** | Blocked | Inline only      | Artifacts               | Limited |
-| **Gemini** | Limited | Inline preferred | Basic                   | No      |
-| **ngrok**  | Open    | CDN allowed      | All                     | Yes     |
+| Platform        | Network | External Scripts    | Widget Modes            | Response Format    |
+| --------------- | ------- | ------------------- | ----------------------- | ------------------ |
+| **OpenAI**      | Open    | CDN allowed         | inline, fullscreen, pip | `_meta['ui/html']` |
+| **ext-apps**    | Open    | CDN allowed         | inline, fullscreen, pip | `_meta['ui/html']` |
+| **Cursor**      | Open    | CDN allowed         | inline                  | `_meta['ui/html']` |
+| **Claude**      | Blocked | Cloudflare CDN only | Artifacts               | Dual-payload       |
+| **Continue**    | Limited | Inline only         | inline                  | `_meta['ui/html']` |
+| **Cody**        | Limited | Inline only         | inline                  | `_meta['ui/html']` |
+| **Gemini**      | Limited | Inline preferred    | Basic                   | JSON only          |
+| **generic-mcp** | Varies  | CDN/Inline          | inline, static          | `_meta['ui/html']` |
 
 ## Platform Detection
 
@@ -90,13 +94,74 @@ window.openai.setWidgetState(state)       // Persist state
 
 ## Claude
 
-Claude uses Artifacts with restricted capabilities:
+Claude uses Artifacts with restricted capabilities and a special **dual-payload** response format.
 
 ### Constraints
 
-- **Network blocked** - Cannot fetch external resources
-- **Scripts must be inline** - No CDN script tags
+- **Network blocked** - Cannot fetch most external resources
+- **Cloudflare CDN allowed** - Resources from `cdnjs.cloudflare.com` are trusted
 - **Limited interactivity** - No tool invocation from widgets
+
+### Dual-Payload Response Format
+
+When `servingMode: 'auto'` detects a Claude client, FrontMCP returns a special two-block response:
+
+````json
+{
+  "content": [
+    { "type": "text", "text": "{\"temperature\":72,\"unit\":\"F\"}" },
+    { "type": "text", "text": "Here is the visual result:\n\n```html\n<!DOCTYPE html>...\n```" }
+  ]
+}
+````
+
+- **Block 0**: Pure JSON data for programmatic parsing
+- **Block 1**: Markdown-wrapped HTML that Claude displays as an Artifact
+
+Claude automatically detects the `html` code fence and offers to render it as an interactive Artifact.
+
+### Customizing the HTML Prefix
+
+Control the text shown before the HTML block:
+
+````typescript
+@Tool({
+  name: 'get_weather',
+  ui: {
+    template: WeatherWidget,
+    htmlResponsePrefix: 'Here is the weather dashboard',
+  },
+})
+// Output: "Here is the weather dashboard:\n\n```html\n..."
+````
+
+Default: `'Here is the visual result'`
+
+### Cloudflare CDN for Tailwind
+
+Claude trusts resources from `cdnjs.cloudflare.com`. FrontMCP uses pre-built Tailwind CSS from Cloudflare:
+
+```typescript
+// Pre-built Tailwind CSS (loaded automatically with resourceMode: 'cdn')
+const TAILWIND_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
+```
+
+<Warning>
+Other CDNs like `esm.sh`, `unpkg.com`, and `jsdelivr.net` are blocked by Claude's CSP. Only use `cdnjs.cloudflare.com` for maximum compatibility.
+</Warning>
+
+### resourceMode Configuration
+
+Control how external resources are loaded:
+
+```typescript
+ui: {
+  template: MyWidget,
+  resourceMode: 'cdn',    // Load from Cloudflare CDN (default)
+  // or
+  resourceMode: 'inline', // Embed all scripts in HTML (fully offline)
+}
+```
 
 ### Configuration
 
@@ -119,9 +184,9 @@ console.log(CLAUDE_PLATFORM);
 // }
 ```
 
-### Handling Blocked Network
+### Handling Fully Blocked Networks
 
-For Claude, inline all scripts:
+For environments without any network access, inline all scripts:
 
 ```typescript
 import { baseLayout, fetchAndCacheScriptsFromTheme } from '@frontmcp/ui';
@@ -136,28 +201,6 @@ const html = baseLayout({
   platform: 'claude',
   scripts: true, // Will inline cached scripts
 });
-```
-
-### Tailwind Without CDN
-
-For Claude, use pre-built CSS or inline styles:
-
-```typescript
-// Option 1: Pre-built Tailwind
-const html = `
-<style>
-  /* Pre-compiled Tailwind classes you use */
-  .p-4 { padding: 1rem; }
-  .text-xl { font-size: 1.25rem; }
-  /* ... */
-</style>
-<div class="p-4 text-xl">Content</div>
-`;
-
-// Option 2: Inline styles
-const html = `
-<div style="padding: 1rem; font-size: 1.25rem;">Content</div>
-`;
 ```
 
 ## Gemini

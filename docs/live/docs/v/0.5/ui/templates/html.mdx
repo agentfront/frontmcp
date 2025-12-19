@@ -1,0 +1,347 @@
+---
+title: HTML Templates
+sidebarTitle: HTML
+icon: file-code
+description: HTML templates are functions that return HTML strings. They're the simplest and most performant option for tool widgets.
+---
+
+## Basic Syntax
+
+```typescript
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: (ctx) => `
+      <div class="p-4">
+        <h1>${ctx.helpers.escapeHtml(ctx.output.title)}</h1>
+        <p>${ctx.helpers.escapeHtml(ctx.output.body)}</p>
+      </div>
+    `,
+  },
+})
+```
+
+## Template Context
+
+Your template function receives a context object:
+
+```typescript
+template: (ctx) => {
+  // Destructure for convenience
+  const { input, output, helpers } = ctx;
+
+  // input: The arguments passed to the tool
+  console.log(input.userId);
+
+  // output: The result from execute()
+  console.log(output.name);
+
+  // helpers: Utility functions
+  const safe = helpers.escapeHtml(output.name);
+
+  return `<p>${safe}</p>`;
+}
+```
+
+## Using Helpers
+
+### escapeHtml
+
+**Always escape user content** to prevent XSS:
+
+```typescript
+// ✅ Safe
+template: (ctx) => `<p>${ctx.helpers.escapeHtml(ctx.output.name)}</p>`
+
+// ❌ Dangerous - XSS vulnerability
+template: (ctx) => `<p>${ctx.output.name}</p>`
+```
+
+Characters escaped: `&`, `<`, `>`, `"`, `'`
+
+### formatDate
+
+Format dates for display:
+
+```typescript
+template: (ctx) => {
+  const { output, helpers } = ctx;
+
+  return `
+    <p>Created: ${helpers.formatDate(output.createdAt)}</p>
+    <p>Due: ${helpers.formatDate(output.dueDate, 'MMMM d, yyyy')}</p>
+  `;
+}
+```
+
+### formatCurrency
+
+Format numbers as currency:
+
+```typescript
+template: (ctx) => `
+  <p>Total: ${ctx.helpers.formatCurrency(ctx.output.total, 'USD')}</p>
+  <p>Tax: ${ctx.helpers.formatCurrency(ctx.output.tax, 'EUR')}</p>
+`
+```
+
+### uniqueId
+
+Generate unique DOM IDs:
+
+```typescript
+template: (ctx) => {
+  const { helpers } = ctx;
+  const inputId = helpers.uniqueId('input');
+  const labelId = helpers.uniqueId('label');
+
+  return `
+    <label id="${labelId}" for="${inputId}">Name</label>
+    <input id="${inputId}" type="text" aria-labelledby="${labelId}" />
+  `;
+}
+```
+
+### jsonEmbed
+
+Safely embed JSON in HTML:
+
+```typescript
+template: (ctx) => `
+  <div id="chart-container"></div>
+  <script>
+    const chartData = ${ctx.helpers.jsonEmbed(ctx.output.chartData)};
+    renderChart('chart-container', chartData);
+  </script>
+`
+```
+
+<Warning>
+  `jsonEmbed` escapes characters that could break out of script tags.
+  It does NOT make arbitrary data safe for other contexts.
+</Warning>
+
+## Using Components
+
+Import and use FrontMCP UI components:
+
+```typescript
+import { card, badge, button, alert } from '@frontmcp/ui';
+
+@Tool({
+  name: 'get_order',
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+
+      return card(`
+        <div class="flex justify-between items-start">
+          <div>
+            <h3 class="font-semibold">Order #${helpers.escapeHtml(output.id)}</h3>
+            <p class="text-sm text-gray-500">${helpers.formatDate(output.date)}</p>
+          </div>
+          ${badge(output.status, {
+            variant: output.status === 'Shipped' ? 'success' : 'warning'
+          })}
+        </div>
+
+        <div class="mt-4 pt-4 border-t">
+          <p class="text-lg font-bold">
+            ${helpers.formatCurrency(output.total)}
+          </p>
+        </div>
+      `, {
+        title: 'Order Details',
+        footer: button('Track Order', {
+          variant: 'outline',
+          href: output.trackingUrl,
+        }),
+      });
+    },
+  },
+})
+```
+
+## Conditional Rendering
+
+Use standard JavaScript:
+
+```typescript
+template: (ctx) => {
+  const { output, helpers } = ctx;
+
+  const statusBadge = output.isPremium
+    ? badge('Premium', { variant: 'primary' })
+    : badge('Free', { variant: 'default' });
+
+  const warningAlert = output.expiresIn < 7
+    ? alert(`Expires in ${output.expiresIn} days`, { variant: 'warning' })
+    : '';
+
+  return `
+    <div class="p-4">
+      ${statusBadge}
+      ${warningAlert}
+      <h2>${helpers.escapeHtml(output.name)}</h2>
+    </div>
+  `;
+}
+```
+
+## Looping
+
+Use `map()` and `join()`:
+
+```typescript
+template: (ctx) => {
+  const { output, helpers } = ctx;
+
+  const itemsList = output.items
+    .map(item => `
+      <li class="py-2 flex justify-between">
+        <span>${helpers.escapeHtml(item.name)}</span>
+        <span>${helpers.formatCurrency(item.price)}</span>
+      </li>
+    `)
+    .join('');
+
+  return `
+    <ul class="divide-y">
+      ${itemsList}
+    </ul>
+  `;
+}
+```
+
+## Multi-line Templates
+
+For complex templates, use template literals:
+
+```typescript
+template: (ctx) => {
+  const { output, helpers } = ctx;
+
+  return `
+    <div class="max-w-md mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-4">
+        <h1 class="text-white text-xl font-bold">
+          ${helpers.escapeHtml(output.title)}
+        </h1>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6">
+        <p class="text-gray-600">
+          ${helpers.escapeHtml(output.description)}
+        </p>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-3 gap-4 mt-6">
+          <div class="text-center">
+            <div class="text-2xl font-bold text-blue-500">${output.views}</div>
+            <div class="text-sm text-gray-500">Views</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-green-500">${output.likes}</div>
+            <div class="text-sm text-gray-500">Likes</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-purple-500">${output.shares}</div>
+            <div class="text-sm text-gray-500">Shares</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-6 py-4 bg-gray-50 border-t">
+        ${button('Share', { variant: 'primary', fullWidth: true })}
+      </div>
+    </div>
+  `;
+}
+```
+
+## HTMX Integration
+
+Add dynamic behavior without client-side JavaScript:
+
+```typescript
+import { card, button, input } from '@frontmcp/ui';
+
+template: (ctx) => card(`
+  <form hx-post="/api/update" hx-target="#result" hx-swap="innerHTML">
+    ${input({ name: 'value', value: ctx.output.currentValue })}
+    ${button('Update', { type: 'submit' })}
+  </form>
+  <div id="result"></div>
+`, { title: 'Update Value' })
+```
+
+## Performance Tips
+
+1. **Keep templates simple** - Complex logic should be in `execute()`
+2. **Pre-compute values** - Do calculations before the template
+3. **Use components** - They handle escaping and validation
+4. **Avoid deep nesting** - Flatten your template structure
+
+```typescript
+// ✅ Good - pre-computed
+template: (ctx) => {
+  const { output } = ctx;
+  const formattedDate = formatDate(output.date);
+  const statusVariant = output.status === 'active' ? 'success' : 'default';
+
+  return `<p>${formattedDate}</p>${badge(output.status, { variant: statusVariant })}`;
+}
+
+// ❌ Avoid - computation in template
+template: (ctx) => `<p>${formatDate(ctx.output.date)}</p>`
+```
+
+## Common Patterns
+
+### Error Handling
+
+```typescript
+template: (ctx) => {
+  if (ctx.output.error) {
+    return alert(ctx.output.error, { variant: 'danger', title: 'Error' });
+  }
+
+  return card(`<p>Success!</p>`);
+}
+```
+
+### Loading State
+
+```typescript
+template: (ctx) => {
+  if (ctx.output.loading) {
+    return `
+      <div class="flex items-center justify-center p-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    `;
+  }
+
+  return card(ctx.output.content);
+}
+```
+
+### Empty State
+
+```typescript
+template: (ctx) => {
+  if (!ctx.output.items?.length) {
+    return `
+      <div class="text-center py-8">
+        <p class="text-gray-500">No items found</p>
+        ${button('Add Item', { variant: 'outline' })}
+      </div>
+    `;
+  }
+
+  // Render items...
+}
+```

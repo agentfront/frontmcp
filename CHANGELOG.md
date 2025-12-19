@@ -1,3 +1,34 @@
+## [v0.6.0] - 2025-12-19
+
+### feat
+
+- Move transport and session controls into the new top-level `transport` block with redis-backed persistence, platform detection, and per-app overrides.
+- Extend `frontmcp create` with serverless targets and ship ready-made wrappers for Vercel, AWS Lambda, and Cloudflare Workers.
+- Add `FrontMcpContext` helpers plus CONTEXT-scoped providers so request IDs, tracing, and auth metadata are accessible inside every tool, resource, and hook.
+- Publish a comprehensive `apps/e2e` workspace (public auth, CodeCall, cache, notifications, hooks, OpenAPI, providers, multi-app) complete with Nx serve targets and Jest suites.
+- Upgrade the UI renderer with universal and dual-payload output, safer structured content handling, and resilient clientInfo/platform detection.
+
+### fix
+
+- Treat `zod`, `react`, and `react-dom` as peerDependencies across packages to avoid duplicate installs and version drift.
+- Tighten transport/session recreation by validating session IDs, sanitizing inputs, and deleting corrupted Redis payloads before reuse.
+- Harden templated UI and Markdown rendering with stricter escaping, URL validation, and CSP guards to block XSS vectors.
+
+### docs
+
+- Document the new top-level transport/redis config, request-context APIs, and migration steps in the server and extensibility guides.
+- Refresh the CodeCall CRM demo and testing overview to point at the `apps/e2e` samples and their Jest suites.
+- Expand the serverless deployment guide with CLI target flags, generated config files, and per-platform notes.
+
+### build
+
+- Add Docker assets, multi-stage builds, and Redis setup scripts so generated projects can run locally or in CI without manual tweaks.
+- Improve the release pipeline by iterating dist folders for Verdaccio publishes and keeping Nx release commands in sync with lockfiles.
+
+### ci
+
+- Enhance the e2e workflow with retry logic, Nx run-many batching, `--forceExit`, and a dedicated debug workflow for UI transport tests.
+
 ## [v0.5.1] - 2025-12-12
 
 ### feat
@@ -182,3 +213,4 @@ This was a version bump only, there were no code changes.
 ### ❤️ Thank You
 
 - David Antoon @frontegg-david
+

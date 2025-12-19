@@ -1,3 +1,14 @@
+## [2.1.0] - 2025-12-19
+
+### Added
+
+- Introduced logger support within the OpenAPI adapter to improve observability.
+- Expanded security handling with automatic auth type routing and enhanced documentation.
+
+### Changed
+
+- Refined security resolver examples and guidance for broader authentication scheme coverage.
+
 ## [2.0.0] - 2025-12-11
 
 ### Breaking
