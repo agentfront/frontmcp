@@ -168,59 +168,61 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
 
   const meta: UIMetadata = {};
 
-  // Add manifest-related fields if provided
-  if (rendererType) {
-    meta['ui/type'] = rendererType;
-  }
-  if (contentHash) {
-    meta['ui/contentHash'] = contentHash;
-  }
-  if (manifestUri) {
-    meta['ui/manifestUri'] = manifestUri;
-  }
-
-  // For inline mode, embed HTML directly in response
-  // This is the only serving mode that uses buildUIMeta
-  // (static mode returns structured data only, no UI _meta)
-  meta['ui/html'] = html;
-
-  // Always include MIME type for platforms that need it
-  meta['ui/mimeType'] = getMimeType(platformType);
-
-  // Include token if provided
-  if (token) {
-    meta['ui/widgetToken'] = token;
-  }
-
-  // Include direct URL if provided
-  if (directUrl) {
-    meta['ui/directUrl'] = directUrl;
-  }
-
-  // Platform-specific fields
+  // Platform-specific meta keys - each platform gets its own namespace
   switch (platformType) {
     case 'openai':
+      // OpenAI uses openai/* namespace only
+      meta['openai/html'] = html;
+      meta['openai/mimeType'] = 'text/html+skybridge';
+      if (rendererType) meta['openai/type'] = rendererType;
+      if (contentHash) meta['openai/contentHash'] = contentHash;
+      if (manifestUri) meta['openai/manifestUri'] = manifestUri;
+      if (token) meta['openai/widgetToken'] = token;
+      if (directUrl) meta['openai/directUrl'] = directUrl;
       return buildOpenAIMeta(meta, uiConfig);
 
+    case 'ext-apps':
+      // ext-apps (SEP-1865) uses ui/* namespace only
+      meta['ui/html'] = html;
+      meta['ui/mimeType'] = 'text/html+mcp';
+      if (rendererType) meta['ui/type'] = rendererType;
+      if (contentHash) meta['ui/contentHash'] = contentHash;
+      if (manifestUri) meta['ui/manifestUri'] = manifestUri;
+      if (token) meta['ui/widgetToken'] = token;
+      if (directUrl) meta['ui/directUrl'] = directUrl;
+      return buildExtAppsMeta(meta, uiConfig);
+
     case 'claude':
-      return buildClaudeMeta(meta, uiConfig);
-
-    case 'gemini':
-      return buildGeminiMeta(meta, uiConfig);
-
     case 'cursor':
     case 'continue':
     case 'cody':
-      return buildIDEMeta(meta, uiConfig);
-
     case 'generic-mcp':
-      return buildGenericMeta(meta, uiConfig);
-
-    case 'ext-apps':
-      return buildExtAppsMeta(meta, uiConfig);
-
+    case 'gemini':
     default:
-      // Unknown platform - just return universal fields
+      // Other platforms use frontmcp/* namespace
+      meta['frontmcp/html'] = html;
+      meta['frontmcp/mimeType'] = 'text/html+mcp';
+      if (rendererType) meta['frontmcp/type'] = rendererType;
+      if (contentHash) meta['frontmcp/contentHash'] = contentHash;
+      if (manifestUri) meta['frontmcp/manifestUri'] = manifestUri;
+      if (token) meta['frontmcp/widgetToken'] = token;
+      if (directUrl) meta['frontmcp/directUrl'] = directUrl;
+
+      // Also add ui/* for compatibility with MCP clients that expect it
+      meta['ui/html'] = html;
+      meta['ui/mimeType'] = 'text/html+mcp';
+      if (rendererType) meta['ui/type'] = rendererType;
+
+      // Platform-specific additions
+      if (platformType === 'claude') {
+        return buildClaudeMeta(meta, uiConfig);
+      } else if (platformType === 'gemini') {
+        return buildGeminiMeta(meta, uiConfig);
+      } else if (platformType === 'cursor' || platformType === 'continue' || platformType === 'cody') {
+        return buildIDEMeta(meta, uiConfig);
+      } else if (platformType === 'generic-mcp') {
+        return buildGenericMeta(meta, uiConfig);
+      }
       return meta;
   }
 }
@@ -228,18 +230,6 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
 // ============================================
 // Helper Functions
 // ============================================
-
-/**
- * Get MIME type based on platform.
- */
-function getMimeType(platformType: AIPlatformType): string {
-  switch (platformType) {
-    case 'openai':
-      return 'text/html+skybridge';
-    default:
-      return 'text/html+mcp';
-  }
-}
 
 /**
  * Build OpenAI-specific metadata for tool CALL response (inline mode).

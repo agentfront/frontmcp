@@ -175,66 +175,129 @@ describe('Platform Metadata Adapters', () => {
     });
   });
 
-  describe('buildUIMeta - universal fields (inline mode)', () => {
-    it('should always include ui/html', () => {
-      const platforms: AIPlatformType[] = ['openai', 'claude', 'gemini', 'ext-apps', 'generic-mcp', 'unknown'];
+  describe('buildUIMeta - HTML content per platform (inline mode)', () => {
+    it('should include HTML in platform-specific namespace', () => {
+      // OpenAI uses openai/* namespace
+      const openaiMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'openai',
+        html,
+      });
+      expect(openaiMeta['openai/html']).toBe(html);
+      expect(openaiMeta['ui/html']).toBeUndefined();
 
-      for (const platformType of platforms) {
-        const meta = buildUIMeta({
-          uiConfig: baseUIConfig,
-          platformType,
-          html,
-        });
+      // ext-apps uses ui/* namespace
+      const extAppsMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'ext-apps',
+        html,
+      });
+      expect(extAppsMeta['ui/html']).toBe(html);
+      expect(extAppsMeta['openai/html']).toBeUndefined();
 
-        expect(meta['ui/html']).toBe(html);
-      }
+      // Other platforms use frontmcp/* + ui/* for compatibility
+      const claudeMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'claude',
+        html,
+      });
+      expect(claudeMeta['frontmcp/html']).toBe(html);
+      expect(claudeMeta['ui/html']).toBe(html); // compatibility
+      expect(claudeMeta['openai/html']).toBeUndefined();
     });
 
-    it('should include widget token when provided', () => {
-      const meta = buildUIMeta({
+    it('should include widget token in platform-specific namespace', () => {
+      // ext-apps
+      const extAppsMeta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
         html,
         token: 'test-token-123',
       });
+      expect(extAppsMeta['ui/widgetToken']).toBe('test-token-123');
 
-      expect(meta['ui/widgetToken']).toBe('test-token-123');
+      // OpenAI
+      const openaiMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'openai',
+        html,
+        token: 'test-token-456',
+      });
+      expect(openaiMeta['openai/widgetToken']).toBe('test-token-456');
+
+      // Other platforms
+      const claudeMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'claude',
+        html,
+        token: 'test-token-789',
+      });
+      expect(claudeMeta['frontmcp/widgetToken']).toBe('test-token-789');
     });
 
-    it('should include direct URL when provided', () => {
-      const meta = buildUIMeta({
+    it('should include direct URL in platform-specific namespace', () => {
+      const directUrl = 'https://mcp-server.example.com/widgets/test?token=123';
+
+      // ext-apps
+      const extAppsMeta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
         html,
-        directUrl: 'https://mcp-server.example.com/widgets/test?token=123',
+        directUrl,
       });
+      expect(extAppsMeta['ui/directUrl']).toBe(directUrl);
 
-      expect(meta['ui/directUrl']).toBe('https://mcp-server.example.com/widgets/test?token=123');
+      // OpenAI
+      const openaiMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'openai',
+        html,
+        directUrl,
+      });
+      expect(openaiMeta['openai/directUrl']).toBe(directUrl);
+
+      // Other platforms
+      const claudeMeta = buildUIMeta({
+        uiConfig: baseUIConfig,
+        platformType: 'claude',
+        html,
+        directUrl,
+      });
+      expect(claudeMeta['frontmcp/directUrl']).toBe(directUrl);
     });
   });
 
   describe('MIME type per platform', () => {
-    it('should use text/html+skybridge for OpenAI', () => {
+    it('should use openai/* namespace with text/html+skybridge for OpenAI', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'openai',
         html,
       });
 
-      expect(meta['ui/mimeType']).toBe('text/html+skybridge');
+      // OpenAI uses openai/* namespace only
+      expect(meta['openai/mimeType']).toBe('text/html+skybridge');
+      expect(meta['openai/html']).toBe(html);
+      // Should NOT have ui/* keys
+      expect(meta['ui/mimeType']).toBeUndefined();
     });
 
-    it('should use text/html+mcp for ext-apps', () => {
+    it('should use ui/* namespace with text/html+mcp for ext-apps', () => {
       const meta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'ext-apps',
         html,
       });
 
+      // ext-apps uses ui/* namespace per SEP-1865
       expect(meta['ui/mimeType']).toBe('text/html+mcp');
+      expect(meta['ui/html']).toBe(html);
+      // Should NOT have openai/* or frontmcp/* keys
+      expect(meta['openai/mimeType']).toBeUndefined();
+      expect(meta['frontmcp/mimeType']).toBeUndefined();
     });
 
-    it('should use text/html+mcp for other platforms', () => {
+    it('should use frontmcp/* and ui/* namespaces with text/html+mcp for other platforms', () => {
       const platforms: AIPlatformType[] = ['claude', 'gemini', 'cursor', 'continue', 'cody', 'generic-mcp'];
 
       for (const platformType of platforms) {
@@ -244,7 +307,13 @@ describe('Platform Metadata Adapters', () => {
           html,
         });
 
+        // Other platforms use frontmcp/* namespace + ui/* for compatibility
+        expect(meta['frontmcp/mimeType']).toBe('text/html+mcp');
+        expect(meta['frontmcp/html']).toBe(html);
         expect(meta['ui/mimeType']).toBe('text/html+mcp');
+        expect(meta['ui/html']).toBe(html);
+        // Should NOT have openai/* keys
+        expect(meta['openai/mimeType']).toBeUndefined();
       }
     });
   });

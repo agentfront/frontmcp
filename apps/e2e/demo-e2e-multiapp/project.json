@@ -26,9 +26,11 @@
       }
     },
     "serve": {
-      "executor": "@nx/js:node",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
       "options": {
-        "buildTarget": "demo-e2e-multiapp:build"
+        "command": "node dist/apps/e2e/demo-e2e-multiapp/main.js",
+        "cwd": "{workspaceRoot}"
       }
     },
     "test": {

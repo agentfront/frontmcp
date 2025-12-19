@@ -403,8 +403,23 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       await runStageGroup((plan as any).error, false, { ignoreRespond: true });
     };
 
-    const runFinalizeStage = async () => {
-      await runStageGroup((plan as any).finalize, false);
+    const runFinalizeStage = async (options?: { suppressErrors?: boolean }) => {
+      const res = await runStageGroup((plan as any).finalize, false);
+      // Handle finalize stage errors
+      if (res.outcome === 'unknown_error' || res.outcome === 'fail') {
+        const finalizeError = res.control ?? new InternalMcpError('Finalize stage failed');
+        if (options?.suppressErrors) {
+          // Log finalizes errors but doesn't throw when called from finally blocks
+          // This prevents masking the original error
+          this.scope.logger.error(
+            '[FrontMCP] Finalize stage error (suppressed to preserve original error):',
+            finalizeError,
+          );
+          return res;
+        }
+        throw finalizeError;
+      }
+      return res;
     };
 
     // ---------- PRE ----------
@@ -416,12 +431,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           try {
             await runErrorStage();
           } finally {
-            await runFinalizeStage();
+            await runFinalizeStage({ suppressErrors: true });
           }
           throw post.control ?? new InternalMcpError('Missing control for fail/error outcome');
         }
         if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
-          await runFinalizeStage();
+          await runFinalizeStage({ suppressErrors: true });
           if (!(post.control instanceof FlowControl)) {
             throw new InternalMcpError('Expected FlowControl but received different error type');
           }
@@ -434,12 +449,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           await runErrorStage();
         } finally {
-          await runFinalizeStage();
+          await runFinalizeStage({ suppressErrors: true });
         }
         throw pre.control ?? new InternalMcpError('Missing control for fail/error outcome');
       }
       if (pre.outcome === 'abort' || pre.outcome === 'next' || pre.outcome === 'handled') {
-        await runFinalizeStage();
+        await runFinalizeStage({ suppressErrors: true });
         if (!(pre.control instanceof FlowControl)) {
           throw new InternalMcpError('Expected FlowControl but received different error type');
         }
@@ -456,11 +471,11 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           await runErrorStage();
         } finally {
-          await runFinalizeStage();
+          await runFinalizeStage({ suppressErrors: true });
         }
         throw exec.control ?? new InternalMcpError('Missing control for fail/error outcome');
       } else if (exec.outcome === 'abort' || exec.outcome === 'next' || exec.outcome === 'handled') {
-        await runFinalizeStage();
+        await runFinalizeStage({ suppressErrors: true });
         if (!(exec.control instanceof FlowControl)) {
           throw new InternalMcpError('Expected FlowControl but received different error type');
         }
@@ -475,12 +490,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
         try {
           await runErrorStage();
         } finally {
-          await runFinalizeStage();
+          await runFinalizeStage({ suppressErrors: true });
         }
         throw post.control ?? new InternalMcpError('Missing control for fail/error outcome');
       }
       if (post.outcome === 'abort' || post.outcome === 'next' || post.outcome === 'handled') {
-        await runFinalizeStage();
+        await runFinalizeStage({ suppressErrors: true });
         if (!(post.control instanceof FlowControl)) {
           throw new InternalMcpError('Expected FlowControl but received different error type');
         }

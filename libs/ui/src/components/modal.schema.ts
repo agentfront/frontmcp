@@ -35,27 +35,6 @@ export const ModalSizeSchema = z.enum(['sm', 'md', 'lg', 'xl', 'full']);
 export type ModalSize = z.infer<typeof ModalSizeSchema>;
 
 // ============================================
-// OnClose Schema
-// ============================================
-
-/**
- * Close button HTMX options schema
- */
-export const ModalOnCloseSchema = z
-  .object({
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Modal onClose type
- */
-export type ModalOnClose = z.infer<typeof ModalOnCloseSchema>;
-
-// ============================================
 // Modal Options Schema
 // ============================================
 
@@ -82,8 +61,6 @@ export const ModalOptionsSchema = z
     className: z.string().optional(),
     /** Initially visible */
     open: z.boolean().optional(),
-    /** HTMX for closing */
-    onClose: ModalOnCloseSchema,
   })
   .strict();
 
@@ -107,19 +84,6 @@ export const ConfirmModalVariantSchema = z.enum(['info', 'warning', 'danger']);
 export type ConfirmModalVariant = z.infer<typeof ConfirmModalVariantSchema>;
 
 /**
- * Confirm modal HTMX schema
- */
-export const ConfirmModalOnConfirmSchema = z
-  .object({
-    post: z.string().optional(),
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
  * Confirm modal options schema
  */
 export const ConfirmModalOptionsSchema = z
@@ -138,8 +102,8 @@ export const ConfirmModalOptionsSchema = z
     cancelText: z.string().optional(),
     /** Initially visible */
     open: z.boolean().optional(),
-    /** HTMX on confirm */
-    onConfirm: ConfirmModalOnConfirmSchema,
+    /** Confirm action URL */
+    confirmHref: z.string().optional(),
   })
   .strict();
 
@@ -183,8 +147,6 @@ export const DrawerOptionsSchema = z
     className: z.string().optional(),
     /** Initially visible */
     open: z.boolean().optional(),
-    /** HTMX for closing */
-    onClose: ModalOnCloseSchema,
   })
   .strict();
 

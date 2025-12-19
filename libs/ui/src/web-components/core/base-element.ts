@@ -85,7 +85,6 @@ export interface FmcpRenderEventDetail<TOptions = unknown> {
  * - **Property Setters**: React/Vue can set properties directly
  * - **Zod Validation**: Invalid options render error box
  * - **Batched Rendering**: Multiple changes batch via queueMicrotask
- * - **HTMX Support**: hx-* attributes pass through to inner elements
  *
  * @typeParam TOptions - The component's options type (from Zod schema)
  *

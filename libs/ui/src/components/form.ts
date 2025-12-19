@@ -82,15 +82,6 @@ export interface InputOptions {
   step?: string | number;
   /** Additional CSS classes */
   className?: string;
-  /** HTMX attributes */
-  htmx?: {
-    post?: string;
-    get?: string;
-    target?: string;
-    swap?: string;
-    trigger?: string;
-    validate?: boolean;
-  };
   /** Data attributes */
   data?: Record<string, string>;
   /** Icon before input */
@@ -149,14 +140,6 @@ export interface CheckboxOptions {
   error?: string;
   /** Additional CSS classes */
   className?: string;
-  /** HTMX attributes */
-  htmx?: {
-    post?: string;
-    get?: string;
-    target?: string;
-    swap?: string;
-    trigger?: string;
-  };
 }
 
 /**
@@ -215,21 +198,6 @@ function getInputStateClasses(state: InputState): string {
 }
 
 /**
- * Build HTMX attributes for form elements
- */
-function buildFormHtmxAttrs(htmx?: InputOptions['htmx']): string {
-  if (!htmx) return '';
-  const attrs: string[] = [];
-  if (htmx.post) attrs.push(`hx-post="${escapeHtml(htmx.post)}"`);
-  if (htmx.get) attrs.push(`hx-get="${escapeHtml(htmx.get)}"`);
-  if (htmx.target) attrs.push(`hx-target="${escapeHtml(htmx.target)}"`);
-  if (htmx.swap) attrs.push(`hx-swap="${escapeHtml(htmx.swap)}"`);
-  if (htmx.trigger) attrs.push(`hx-trigger="${escapeHtml(htmx.trigger)}"`);
-  if (htmx.validate) attrs.push('hx-validate="true"');
-  return attrs.join(' ');
-}
-
-/**
  * Build data attributes
  */
 function buildDataAttrs(data?: Record<string, string>): string {
@@ -263,7 +231,6 @@ export function input(options: InputOptions): string {
     max,
     step,
     className = '',
-    htmx,
     data,
     iconBefore,
     iconAfter,
@@ -286,7 +253,6 @@ export function input(options: InputOptions): string {
     .filter(Boolean)
     .join(' ');
 
-  const htmxAttrs = buildFormHtmxAttrs(htmx);
   const dataAttrs = buildDataAttrs(data);
 
   const inputAttrs = [
@@ -304,7 +270,6 @@ export function input(options: InputOptions): string {
     max !== undefined ? `max="${escapeHtml(String(max))}"` : '',
     step !== undefined ? `step="${escapeHtml(String(step))}"` : '',
     `class="${baseClasses}"`,
-    htmxAttrs,
     dataAttrs,
   ]
     .filter(Boolean)
@@ -362,7 +327,6 @@ export function select(options: SelectOptions): string {
     disabled = false,
     multiple = false,
     className = '',
-    htmx,
     data,
   } = options;
 
@@ -381,7 +345,6 @@ export function select(options: SelectOptions): string {
     .filter(Boolean)
     .join(' ');
 
-  const htmxAttrs = buildFormHtmxAttrs(htmx);
   const dataAttrs = buildDataAttrs(data);
 
   const optionsHtml = selectOptions
@@ -411,7 +374,6 @@ export function select(options: SelectOptions): string {
       ${required ? 'required' : ''}
       ${disabled ? 'disabled' : ''}
       ${multiple ? 'multiple' : ''}
-      ${htmxAttrs}
       ${dataAttrs}
     >
       ${optionsHtml}
@@ -441,7 +403,6 @@ export function textarea(options: TextareaOptions): string {
     rows = 4,
     resize = 'vertical',
     className = '',
-    htmx,
     data,
   } = options;
 
@@ -468,7 +429,6 @@ export function textarea(options: TextareaOptions): string {
     .filter(Boolean)
     .join(' ');
 
-  const htmxAttrs = buildFormHtmxAttrs(htmx);
   const dataAttrs = buildDataAttrs(data);
 
   const labelHtml = label
@@ -492,7 +452,6 @@ export function textarea(options: TextareaOptions): string {
       ${required ? 'required' : ''}
       ${disabled ? 'disabled' : ''}
       ${readonly ? 'readonly' : ''}
-      ${htmxAttrs}
       ${dataAttrs}
     >${escapeHtml(value)}</textarea>
     ${helperHtml}
@@ -514,10 +473,7 @@ export function checkbox(options: CheckboxOptions): string {
     helper,
     error,
     className = '',
-    htmx,
   } = options;
-
-  const htmxAttrs = buildFormHtmxAttrs(htmx);
 
   const checkboxClasses = [
     'h-4 w-4 rounded border-border text-primary',
@@ -539,7 +495,6 @@ export function checkbox(options: CheckboxOptions): string {
         class="${checkboxClasses}"
         ${checked ? 'checked' : ''}
         ${disabled ? 'disabled' : ''}
-        ${htmxAttrs}
       >
       <div>
         <span class="text-sm font-medium text-text-primary">${escapeHtml(label)}</span>
@@ -616,17 +571,6 @@ export interface FormOptions {
   id?: string;
   /** Additional CSS classes */
   className?: string;
-  /** HTMX attributes */
-  htmx?: {
-    post?: string;
-    get?: string;
-    put?: string;
-    delete?: string;
-    target?: string;
-    swap?: string;
-    indicator?: string;
-    confirm?: string;
-  };
   /** Prevent default submission */
   preventDefault?: boolean;
   /** Autocomplete */
@@ -639,19 +583,7 @@ export interface FormOptions {
  * Build form wrapper
  */
 export function form(content: string, options: FormOptions = {}): string {
-  const { action, method = 'post', id, className = '', htmx, preventDefault = false, autocomplete, enctype } = options;
-
-  const htmxAttrs: string[] = [];
-  if (htmx) {
-    if (htmx.post) htmxAttrs.push(`hx-post="${escapeHtml(htmx.post)}"`);
-    if (htmx.get) htmxAttrs.push(`hx-get="${escapeHtml(htmx.get)}"`);
-    if (htmx.put) htmxAttrs.push(`hx-put="${escapeHtml(htmx.put)}"`);
-    if (htmx.delete) htmxAttrs.push(`hx-delete="${escapeHtml(htmx.delete)}"`);
-    if (htmx.target) htmxAttrs.push(`hx-target="${escapeHtml(htmx.target)}"`);
-    if (htmx.swap) htmxAttrs.push(`hx-swap="${escapeHtml(htmx.swap)}"`);
-    if (htmx.indicator) htmxAttrs.push(`hx-indicator="${escapeHtml(htmx.indicator)}"`);
-    if (htmx.confirm) htmxAttrs.push(`hx-confirm="${escapeHtml(htmx.confirm)}"`);
-  }
+  const { action, method = 'post', id, className = '', preventDefault = false, autocomplete, enctype } = options;
 
   const attrs = [
     action ? `action="${escapeHtml(action)}"` : '',
@@ -661,7 +593,6 @@ export function form(content: string, options: FormOptions = {}): string {
     autocomplete ? `autocomplete="${autocomplete}"` : '',
     enctype ? `enctype="${enctype}"` : '',
     preventDefault ? 'onsubmit="return false;"' : '',
-    htmxAttrs.join(' '),
   ]
     .filter(Boolean)
     .join(' ');

@@ -61,20 +61,6 @@ describe('Alert Component', () => {
       expect(html).toContain('onclick=');
     });
 
-    it('should include HTMX attributes on dismiss', () => {
-      const html = alert('Test', {
-        dismissible: true,
-        onDismiss: {
-          delete: '/api/dismiss',
-          target: '#alert-container',
-          swap: 'outerHTML',
-        },
-      });
-      expect(html).toContain('hx-delete="/api/dismiss"');
-      expect(html).toContain('hx-target="#alert-container"');
-      expect(html).toContain('hx-swap="outerHTML"');
-    });
-
     it('should set alert ID', () => {
       const html = alert('Test', { id: 'my-alert' });
       expect(html).toContain('id="my-alert"');

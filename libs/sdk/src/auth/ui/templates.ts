@@ -1,7 +1,7 @@
 /**
- * HTMX Template Builders for OAuth UI
+ * Template Builders for OAuth UI
  *
- * Server-side HTML rendering with HTMX for interactivity.
+ * Server-side HTML rendering with Tailwind CSS for OAuth authorization flows.
  * No build step required - pure runtime rendering with Tailwind CSS CDN.
  *
  * Features:
@@ -10,7 +10,6 @@
  * - Federated login page for multi-provider selection
  * - All pages use Tailwind CSS from CDN (no build required)
  * - Google Fonts (Inter) for modern typography
- * - HTMX for progressive enhancement (~14KB)
  *
  * Uses base-layout.ts for consistent HTML shell with CDN resources.
  */
@@ -92,7 +91,7 @@ export const escapeHtml = baseEscapeHtml;
 // ============================================
 
 /**
- * Build OAuth consent page with HTMX + Tailwind
+ * Build OAuth consent page with Tailwind
  * Shows all apps at once with Authorize/Skip buttons
  */
 export function buildConsentPage(params: {
@@ -171,17 +170,11 @@ function buildAppCardHtml(app: AppAuthCard, pendingAuthId: string, csrfToken: st
       <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
       <input type="hidden" name="app" value="${escapeHtml(app.appId)}">
       <button type="submit" name="action" value="authorize"
-        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
-        hx-post="${escapeHtml(callbackPath)}"
-        hx-swap="outerHTML"
-        hx-target="closest div[data-app-id]">
+        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors">
         Authorize
       </button>
       <button type="submit" name="action" value="skip"
-        class="px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 font-medium rounded-lg transition-colors"
-        hx-post="${escapeHtml(callbackPath)}"
-        hx-swap="outerHTML"
-        hx-target="closest div[data-app-id]">
+        class="px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 font-medium rounded-lg transition-colors">
         Skip
       </button>
     </form>
@@ -189,7 +182,7 @@ function buildAppCardHtml(app: AppAuthCard, pendingAuthId: string, csrfToken: st
 }
 
 /**
- * Build incremental auth page (single app) with HTMX + Tailwind
+ * Build incremental auth page (single app) with Tailwind
  * Used when a tool requires authorization for a skipped app
  */
 export function buildIncrementalAuthPage(params: {
@@ -566,7 +559,7 @@ export function buildErrorPage(params: { error: string; description: string }): 
 
 /**
  * Simple wrapper for compatibility - just returns the HTML string
- * (HTMX templates are already complete HTML documents)
+ * (Templates are already complete HTML documents)
  */
 export function renderToHtml(html: string, _options?: { title?: string }): string {
   return html;

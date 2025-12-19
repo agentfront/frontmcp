@@ -8,10 +8,34 @@
 import type { UIContentSecurityPolicy } from './types';
 
 /**
+ * Default CDN domains used by FrontMCP UI templates.
+ * These are required for Tailwind, Google Fonts, and other external resources.
+ */
+export const DEFAULT_CDN_DOMAINS = [
+  'https://cdn.jsdelivr.net', // Tailwind, Alpine, React, icons
+  'https://cdnjs.cloudflare.com', // HTMX, other libraries
+  'https://fonts.googleapis.com', // Google Fonts stylesheets
+  'https://fonts.gstatic.com', // Google Fonts files
+] as const;
+
+/**
  * Default CSP when no custom policy is provided.
- * Very restrictive - no external resources allowed.
+ * Includes CDN domains required for standard FrontMCP templates.
  */
 export const DEFAULT_CSP_DIRECTIVES = [
+  "default-src 'none'",
+  `script-src 'self' 'unsafe-inline' ${DEFAULT_CDN_DOMAINS.join(' ')}`,
+  `style-src 'self' 'unsafe-inline' ${DEFAULT_CDN_DOMAINS.join(' ')}`,
+  `img-src 'self' data: ${DEFAULT_CDN_DOMAINS.join(' ')}`,
+  `font-src 'self' data: ${DEFAULT_CDN_DOMAINS.join(' ')}`,
+  "connect-src 'none'",
+] as const;
+
+/**
+ * Restrictive CSP for sandboxed environments with no external resources.
+ * Use this when you want to block all external resources.
+ */
+export const RESTRICTIVE_CSP_DIRECTIVES = [
   "default-src 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
@@ -32,24 +56,22 @@ export function buildCSPDirectives(csp?: UIContentSecurityPolicy): string[] {
   const validResourceDomains = sanitizeCSPDomains(csp.resourceDomains);
   const validConnectDomains = sanitizeCSPDomains(csp.connectDomains);
 
+  // Combine user-specified domains with default CDN domains
+  // This ensures templates can always load Tailwind, fonts, etc.
+  const allResourceDomains = [...new Set([...DEFAULT_CDN_DOMAINS, ...validResourceDomains])];
+
   const directives: string[] = [
     "default-src 'none'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
+    `script-src 'self' 'unsafe-inline' ${allResourceDomains.join(' ')}`,
+    `style-src 'self' 'unsafe-inline' ${allResourceDomains.join(' ')}`,
   ];
 
   // Image sources
-  const imgSources = ["'self'", 'data:'];
-  if (validResourceDomains.length) {
-    imgSources.push(...validResourceDomains);
-  }
+  const imgSources = ["'self'", 'data:', ...allResourceDomains];
   directives.push(`img-src ${imgSources.join(' ')}`);
 
   // Font sources
-  const fontSources = ["'self'", 'data:'];
-  if (validResourceDomains.length) {
-    fontSources.push(...validResourceDomains);
-  }
+  const fontSources = ["'self'", 'data:', ...allResourceDomains];
   directives.push(`font-src ${fontSources.join(' ')}`);
 
   // Connect sources (for fetch/XHR/WebSocket)
@@ -57,12 +79,6 @@ export function buildCSPDirectives(csp?: UIContentSecurityPolicy): string[] {
     directives.push(`connect-src ${validConnectDomains.join(' ')}`);
   } else {
     directives.push("connect-src 'none'");
-  }
-
-  // Script sources (add resource domains if specified)
-  if (validResourceDomains.length) {
-    directives[1] = `script-src 'self' 'unsafe-inline' ${validResourceDomains.join(' ')}`;
-    directives[2] = `style-src 'self' 'unsafe-inline' ${validResourceDomains.join(' ')}`;
   }
 
   return directives;

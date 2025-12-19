@@ -3,7 +3,7 @@
  * @description Zod schemas for List component options validation.
  *
  * Provides strict validation schemas for permission lists, feature lists,
- * description lists, and action lists with HTMX support.
+ * description lists, and action lists.
  *
  * @example
  * ```typescript
@@ -177,16 +177,6 @@ export const ActionItemSchema = z
     icon: z.string().optional(),
     /** Click URL */
     href: z.string().optional(),
-    /** HTMX attributes */
-    htmx: z
-      .object({
-        get: z.string().optional(),
-        post: z.string().optional(),
-        target: z.string().optional(),
-        swap: z.string().optional(),
-      })
-      .strict()
-      .optional(),
     /** Destructive action styling */
     destructive: z.boolean().optional(),
     /** Disabled state */

@@ -3,7 +3,7 @@
  * @description Zod schemas for Button component options validation.
  *
  * Provides strict validation schemas for button options including variants,
- * sizes, HTMX attributes, and data attributes. All schemas use .strict()
+ * sizes, and data attributes. All schemas use .strict()
  * to reject unknown properties.
  *
  * @example
@@ -47,33 +47,6 @@ export const ButtonSizeSchema = z.enum(['xs', 'sm', 'md', 'lg', 'xl']);
 export type ButtonSize = z.infer<typeof ButtonSizeSchema>;
 
 // ============================================
-// HTMX Schema
-// ============================================
-
-/**
- * HTMX attributes schema for button
- */
-export const ButtonHtmxSchema = z
-  .object({
-    get: z.string().optional(),
-    post: z.string().optional(),
-    put: z.string().optional(),
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    trigger: z.string().optional(),
-    confirm: z.string().optional(),
-    indicator: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * HTMX attributes type
- */
-export type ButtonHtmx = z.infer<typeof ButtonHtmxSchema>;
-
-// ============================================
 // Button Options Schema
 // ============================================
 
@@ -112,8 +85,6 @@ export const ButtonOptionsSchema = z
     href: z.string().optional(),
     /** Open in new tab */
     target: z.enum(['_blank', '_self']).optional(),
-    /** HTMX attributes */
-    htmx: ButtonHtmxSchema,
     /** Data attributes */
     data: z.record(z.string(), z.string()).optional(),
     /** ARIA label */

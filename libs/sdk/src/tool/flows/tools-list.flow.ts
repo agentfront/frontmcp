@@ -8,7 +8,9 @@ import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
 import { isUIType } from '@frontmcp/ui/types';
+import type { AIPlatformType } from '@frontmcp/ui/adapters';
 import type { Scope } from '../../scope/scope.instance';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -19,6 +21,9 @@ const outputSchema = ListToolsResultSchema;
 
 const stateSchema = z.object({
   cursor: z.string().optional(),
+  // z.any() used because AuthInfo is an external type from @modelcontextprotocol/sdk that varies by SDK version
+  authInfo: z.any().optional() as z.ZodType<AuthInfo>,
+  platformType: z.string().optional() as z.ZodType<AIPlatformType | undefined>,
   tools: z.array(
     z.object({
       appName: z.string(),
@@ -79,10 +84,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
     let method!: string;
     let params: any;
+    let ctx: { authInfo?: AuthInfo } | undefined;
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
       params = inputData.request.params;
+      ctx = inputData.ctx as { authInfo?: AuthInfo } | undefined;
     } catch (e) {
       throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.issues : undefined);
     }
@@ -92,9 +99,26 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'tools/list');
     }
 
+    // Extract authInfo and detect platform type
+    const authInfo = ctx?.authInfo;
+    const sessionId = authInfo?.sessionId;
+
+    // Cast scope to access notifications service for platform detection
+    const scope = this.scope as Scope;
+
+    // Get platform type: first check sessionIdPayload (detected from user-agent),
+    // then fall back to notification service (detected from MCP clientInfo),
+    // finally default to 'unknown'
+    const platformType: AIPlatformType =
+      authInfo?.sessionIdPayload?.platformType ??
+      (sessionId ? scope.notifications?.getPlatformType(sessionId) : undefined) ??
+      'unknown';
+
+    this.logger.verbose(`parseInput: detected platform=${platformType}`);
+
     const cursor = params?.cursor;
     if (cursor) this.logger.verbose(`parseInput: cursor=${cursor}`);
-    this.state.set('cursor', cursor);
+    this.state.set({ cursor, authInfo, platformType });
     this.logger.verbose('parseInput:done');
   }
 
@@ -171,6 +195,11 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
     try {
       const resolved = this.state.required.resolvedTools;
+      const platformType = this.state.platformType ?? 'unknown';
+
+      // Only OpenAI ChatGPT uses openai/* meta keys
+      // ext-apps (SEP-1865) uses ui/* keys per the MCP Apps specification
+      const isOpenAIPlatform = platformType === 'openai';
 
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
@@ -202,10 +231,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           inputSchema,
         };
 
-        // Add OpenAI _meta for tools with UI configuration
-        // This is CRITICAL for ChatGPT to discover widget-producing tools at listing time
-        // NOTE: Use static URI (like pizzaz example: ui://widget/tool-name.html), NOT template with {requestId}
-        // OpenAI tries to fetch the outputTemplate URI directly at discovery time
+        // Add _meta for tools with UI configuration
+        // OpenAI platforms use openai/* keys, other platforms use frontmcp/* keys
         if (hasUIConfig(tool.metadata)) {
           const uiConfig = tool.metadata.ui;
           if (!uiConfig) {
@@ -247,35 +274,67 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Use centralized type guard from @frontmcp/ui/types
           const uiType: UIType = manifest?.uiType ?? (isUIType(detectedType) ? detectedType : 'auto');
 
-          // Always include outputTemplate for all UI tools
-          // - static mode: Full widget with React runtime and bridge
-          // - inline mode: Lean shell (just HTML + theme), actual widget comes in tool response
-          const meta: Record<string, unknown> = {
-            'openai/outputTemplate': `ui://widget/${encodeURIComponent(finalName)}.html`,
-            'openai/resultCanProduceWidget': true,
-            'openai/widgetAccessible': uiConfig.widgetAccessible ?? false,
-            // CDN info for client-side resource loading
-            'ui/cdn': buildCDNInfoForUIType(uiType),
-          };
+          // Build meta keys based on platform type:
+          // - OpenAI: openai/* keys only (ChatGPT proprietary format)
+          // - ext-apps: ui/* keys only per SEP-1865 MCP Apps specification
+          // - Other platforms: frontmcp/* keys + ui/* for compatibility
+          const meta: Record<string, unknown> = {};
+          const isExtApps = platformType === 'ext-apps';
+          const widgetUri = `ui://widget/${encodeURIComponent(finalName)}.html`;
 
-          // Add manifest information for client-side renderer selection
-          if (manifest) {
-            meta['ui/type'] = manifest.uiType;
-            meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
-            meta['ui/displayMode'] = manifest.displayMode;
-            meta['ui/bundlingMode'] = manifest.bundlingMode;
-          } else if (uiConfig.template) {
-            // Fallback to detecting UI type from template
-            meta['ui/type'] = uiType;
-            // Note: ui/manifestUri is only set when a manifest exists in the registry
-          }
+          if (isOpenAIPlatform) {
+            // OpenAI-specific meta keys for ChatGPT widget discovery
+            // ChatGPT only understands openai/* keys - don't mix with ui/* keys
+            meta['openai/outputTemplate'] = widgetUri;
+            meta['openai/resultCanProduceWidget'] = true;
+            meta['openai/widgetAccessible'] = uiConfig.widgetAccessible ?? false;
 
-          // Add invocation status if configured
-          if (uiConfig.invocationStatus?.invoking) {
-            meta['openai/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
-          }
-          if (uiConfig.invocationStatus?.invoked) {
-            meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
+            // Add invocation status if configured
+            if (uiConfig.invocationStatus?.invoking) {
+              meta['openai/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
+            }
+            if (uiConfig.invocationStatus?.invoked) {
+              meta['openai/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
+            }
+          } else if (isExtApps) {
+            // SEP-1865 MCP Apps specification uses ui/* keys only
+            meta['ui/resourceUri'] = widgetUri;
+            meta['ui/mimeType'] = 'text/html+mcp';
+
+            // Add manifest info for ext-apps (uses ui/* namespace)
+            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            if (manifest) {
+              meta['ui/type'] = manifest.uiType;
+              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+              meta['ui/displayMode'] = manifest.displayMode;
+              meta['ui/bundlingMode'] = manifest.bundlingMode;
+            } else if (uiConfig.template) {
+              meta['ui/type'] = uiType;
+            }
+          } else {
+            // FrontMCP meta keys for other platforms (Claude, Cursor, etc.)
+            meta['frontmcp/outputTemplate'] = widgetUri;
+            meta['frontmcp/resultCanProduceWidget'] = true;
+            meta['frontmcp/widgetAccessible'] = uiConfig.widgetAccessible ?? false;
+
+            // Add invocation status if configured
+            if (uiConfig.invocationStatus?.invoking) {
+              meta['frontmcp/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
+            }
+            if (uiConfig.invocationStatus?.invoked) {
+              meta['frontmcp/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
+            }
+
+            // Add ui/* keys for compatibility with generic MCP clients
+            meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
+            if (manifest) {
+              meta['ui/type'] = manifest.uiType;
+              meta['ui/manifestUri'] = `ui://widget/${encodeURIComponent(finalName)}/manifest.json`;
+              meta['ui/displayMode'] = manifest.displayMode;
+              meta['ui/bundlingMode'] = manifest.bundlingMode;
+            } else if (uiConfig.template) {
+              meta['ui/type'] = uiType;
+            }
           }
 
           item._meta = meta;

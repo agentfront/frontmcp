@@ -23,6 +23,7 @@ import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/aut
 import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
 import { parseSessionHeader, encryptJson, decryptPublicSession } from '../session/utils/session-id.utils';
 import { getMachineId } from '../authorization';
+import { detectPlatformFromUserAgent } from '../../notification/notification.service';
 
 const inputSchema = httpRequestInputSchema;
 
@@ -32,6 +33,7 @@ const stateSchema = z.object({
   token: z.string().optional(),
   sessionIdHeader: z.string().optional(), // 'mcp-session-id'
   sessionProtocol: z.string().optional(), // 'sse/http/streamable-http'
+  userAgent: z.string().optional(), // User-Agent header for platform detection
   prmMetadataPath: z.string().optional(),
   prmMetadataHeader: z.string().optional(),
   jwtPayload: z.object({}).passthrough().optional(),
@@ -107,6 +109,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       : undefined;
 
     const token = extractBearerToken(authorizationHeader);
+    const userAgent = (request.headers?.['user-agent'] as string | undefined) ?? undefined;
 
     const prmMetadataPath = `/.well-known/oauth-protected-resource${entryPath}${routeBase}`;
     const prmMetadataHeader = `Bearer resource_metadata="${baseUrl}${prmMetadataPath}"`;
@@ -117,6 +120,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       token,
       sessionIdHeader,
       sessionProtocol,
+      userAgent,
       prmMetadataPath,
       prmMetadataHeader,
     });
@@ -162,6 +166,8 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // ALWAYS use client's session ID, regardless of validation result.
       // If payload is valid and nodeId matches, include payload for protocol detection.
       // If validation failed, transport layer will handle the error appropriately.
+      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
+
       this.respond({
         kind: 'authorized',
         authorization: {
@@ -169,7 +175,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
           user,
           session: {
             id: sessionIdHeader, // ← CRITICAL: Always use client's session ID
-            payload: existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined,
+            payload: finalPayload,
           },
         },
       });
@@ -182,13 +188,19 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const user = { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
     const uuid = crypto.randomUUID();
 
+    // Detect platform from User-Agent header for UI rendering support
+    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
+    const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
+
     // Create a valid session payload matching the SessionIdPayload schema
+    // Include platformType if detected (non-unknown) for Tool UI support
     const payload = {
       uuid,
       nodeId: machineId,
       authSig: 'public',
       iat: Math.floor(now / 1000),
       isPublic: true,
+      ...(platformType !== 'unknown' && { platformType }),
     };
 
     const sessionId = encryptJson(payload);

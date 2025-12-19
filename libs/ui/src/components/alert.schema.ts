@@ -33,27 +33,6 @@ export const AlertVariantSchema = z.enum(['info', 'success', 'warning', 'danger'
 export type AlertVariant = z.infer<typeof AlertVariantSchema>;
 
 // ============================================
-// OnDismiss Schema
-// ============================================
-
-/**
- * Dismiss button HTMX options schema
- */
-export const AlertOnDismissSchema = z
-  .object({
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Alert onDismiss type
- */
-export type AlertOnDismiss = z.infer<typeof AlertOnDismissSchema>;
-
-// ============================================
 // Alert Options Schema
 // ============================================
 
@@ -78,8 +57,6 @@ export const AlertOptionsSchema = z
     id: z.string().optional(),
     /** Actions (HTML string for buttons) */
     actions: z.string().optional(),
-    /** HTMX for dismiss */
-    onDismiss: AlertOnDismissSchema,
   })
   .strict();
 

@@ -3,7 +3,6 @@
  * @description Button Component for FrontMCP UI.
  *
  * Versatile button component with multiple variants, sizes, and states.
- * Includes HTMX support for dynamic interactions without JavaScript.
  *
  * @example Basic button
  * ```typescript
@@ -32,17 +31,6 @@
  * const loadingBtn = button('Saving...', {
  *   loading: true,
  *   disabled: true,
- * });
- * ```
- *
- * @example Button with HTMX
- * ```typescript
- * const htmxBtn = button('Load More', {
- *   htmx: {
- *     get: '/api/items?page=2',
- *     target: '#items-list',
- *     swap: 'beforeend',
- *   },
  * });
  * ```
  *
@@ -137,24 +125,6 @@ function sanitizeDataKey(key: string): string | null {
 }
 
 /**
- * Build HTMX attributes string
- */
-function buildHtmxAttrs(htmx?: ButtonOptions['htmx']): string {
-  if (!htmx) return '';
-  const attrs: string[] = [];
-  if (htmx.get) attrs.push(`hx-get="${escapeHtml(htmx.get)}"`);
-  if (htmx.post) attrs.push(`hx-post="${escapeHtml(htmx.post)}"`);
-  if (htmx.put) attrs.push(`hx-put="${escapeHtml(htmx.put)}"`);
-  if (htmx.delete) attrs.push(`hx-delete="${escapeHtml(htmx.delete)}"`);
-  if (htmx.target) attrs.push(`hx-target="${escapeHtml(htmx.target)}"`);
-  if (htmx.swap) attrs.push(`hx-swap="${escapeHtml(htmx.swap)}"`);
-  if (htmx.trigger) attrs.push(`hx-trigger="${escapeHtml(htmx.trigger)}"`);
-  if (htmx.confirm) attrs.push(`hx-confirm="${escapeHtml(htmx.confirm)}"`);
-  if (htmx.indicator) attrs.push(`hx-indicator="${escapeHtml(htmx.indicator)}"`);
-  return attrs.join(' ');
-}
-
-/**
  * Loading spinner SVG
  */
 const loadingSpinner = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -234,7 +204,6 @@ export function button(text: string, options: ButtonOptions = {}): string {
     value,
     href,
     target,
-    htmx,
     data,
     ariaLabel,
   } = validatedOptions;
@@ -278,7 +247,6 @@ export function button(text: string, options: ButtonOptions = {}): string {
     .filter(Boolean)
     .join(' ');
 
-  const htmxAttrs = buildHtmxAttrs(htmx);
   const dataAttrs = data
     ? Object.entries(data)
         .map(([key, val]) => {
@@ -314,12 +282,12 @@ export function button(text: string, options: ButtonOptions = {}): string {
   if (href && !disabled && !loading && isValidHrefProtocol(href)) {
     return `<a href="${escapeHtml(
       href,
-    )}" class="${baseClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr} ${targetAttr} ${relAttr}>
+    )}" class="${baseClasses}" ${idAttr} ${dataAttrs} ${ariaLabelAttr} ${targetAttr} ${relAttr}>
       ${contentHtml}
     </a>`;
   }
 
-  return `<button type="${type}" class="${baseClasses}" ${idAttr} ${nameAttr} ${valueAttr} ${disabledAttr} ${htmxAttrs} ${dataAttrs} ${ariaLabelAttr}>
+  return `<button type="${type}" class="${baseClasses}" ${idAttr} ${nameAttr} ${valueAttr} ${disabledAttr} ${dataAttrs} ${ariaLabelAttr}>
     ${contentHtml}
   </button>`;
 }

@@ -95,19 +95,6 @@ describe('Card Component', () => {
       expect(html).toContain('href="/path"');
     });
 
-    it('should include HTMX attributes', () => {
-      const html = card('Content', {
-        htmx: {
-          get: '/api/data',
-          target: '#container',
-          swap: 'outerHTML',
-        },
-      });
-      expect(html).toContain('hx-get="/api/data"');
-      expect(html).toContain('hx-target="#container"');
-      expect(html).toContain('hx-swap="outerHTML"');
-    });
-
     it('should include data attributes', () => {
       const html = card('Content', {
         data: {

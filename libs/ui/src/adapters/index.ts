@@ -22,20 +22,6 @@ export {
 } from './platform-meta';
 
 export {
-  // Dual-Payload Types
-  type TextContent,
-  type DualPayloadOptions,
-  type DualPayloadResult,
-  // Constants
-  DEFAULT_HTML_PREFIX,
-  // Builder Functions
-  buildDualPayload,
-  // Validation Helpers
-  isDualPayload,
-  parseDualPayload,
-} from './dual-payload';
-
-export {
   // Serving Mode Types
   type ResolvedServingMode,
   type ResolveServingModeOptions,
@@ -43,7 +29,7 @@ export {
   resolveServingMode,
   isPlatformModeSupported,
   getDefaultServingMode,
-  platformUsesDualPayload,
+  platformUsesStructuredContent,
   platformSupportsWidgets,
 } from './serving-mode';
 

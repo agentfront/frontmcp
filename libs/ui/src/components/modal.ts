@@ -7,6 +7,45 @@
 import { escapeHtml } from '../layouts/base';
 
 // ============================================
+// Security Helpers
+// ============================================
+
+/**
+ * Validates URL scheme to prevent XSS via javascript: URLs.
+ *
+ * Allowed protocols:
+ * - `http://`, `https://` - Web URLs
+ * - `/`, `#` - Relative paths and anchors
+ * - `mailto:` - Email links
+ * - `tel:` - Phone links
+ *
+ * Blocked protocols (XSS vectors):
+ * - `javascript:` - Inline script execution
+ * - `data:` - Data URIs (can contain scripts)
+ * - `vbscript:` - Legacy script protocol
+ *
+ * @param url - URL to validate
+ * @returns true if URL uses a safe protocol, false otherwise
+ */
+function isSafeUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase().trim();
+  const isSafe =
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('/') ||
+    lower.startsWith('#') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:');
+
+  if (!isSafe) {
+    console.warn(`[FrontMCP] Blocked unsafe URL scheme in modal confirmHref: "${url.substring(0, 50)}..."`);
+  }
+
+  return isSafe;
+}
+
+// ============================================
 // Modal Types
 // ============================================
 
@@ -37,12 +76,6 @@ export interface ModalOptions {
   className?: string;
   /** Initially visible */
   open?: boolean;
-  /** HTMX for closing */
-  onClose?: {
-    delete?: string;
-    target?: string;
-    swap?: string;
-  };
 }
 
 // ============================================
@@ -77,7 +110,6 @@ export function modal(content: string, options: ModalOptions): string {
     footer,
     className = '',
     open = false,
-    onClose,
   } = options;
 
   const sizeClasses = getSizeClasses(size);
@@ -94,9 +126,6 @@ export function modal(content: string, options: ModalOptions): string {
             type="button"
             class="p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-gray-100 transition-colors"
             onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
-            ${onClose?.delete ? `hx-delete="${escapeHtml(onClose.delete)}"` : ''}
-            ${onClose?.target ? `hx-target="${escapeHtml(onClose.target)}"` : ''}
-            ${onClose?.swap ? `hx-swap="${escapeHtml(onClose.swap)}"` : ''}
             aria-label="Close"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,14 +233,8 @@ export interface ConfirmModalOptions {
   variant?: 'primary' | 'danger' | 'warning';
   /** Icon */
   icon?: string;
-  /** HTMX for confirm action */
-  onConfirm?: {
-    post?: string;
-    delete?: string;
-    put?: string;
-    target?: string;
-    swap?: string;
-  };
+  /** Confirm action URL */
+  confirmHref?: string;
 }
 
 /**
@@ -226,7 +249,7 @@ export function confirmModal(options: ConfirmModalOptions): string {
     cancelText = 'Cancel',
     variant = 'primary',
     icon,
-    onConfirm,
+    confirmHref,
   } = options;
 
   const variantClasses: Record<string, string> = {
@@ -255,15 +278,6 @@ export function confirmModal(options: ConfirmModalOptions): string {
 
   const displayIcon = icon || defaultIcons[variant];
 
-  const htmxAttrs: string[] = [];
-  if (onConfirm) {
-    if (onConfirm.post) htmxAttrs.push(`hx-post="${escapeHtml(onConfirm.post)}"`);
-    if (onConfirm.delete) htmxAttrs.push(`hx-delete="${escapeHtml(onConfirm.delete)}"`);
-    if (onConfirm.put) htmxAttrs.push(`hx-put="${escapeHtml(onConfirm.put)}"`);
-    if (onConfirm.target) htmxAttrs.push(`hx-target="${escapeHtml(onConfirm.target)}"`);
-    if (onConfirm.swap) htmxAttrs.push(`hx-swap="${escapeHtml(onConfirm.swap)}"`);
-  }
-
   const content = `
     <div class="text-center">
       <div class="mx-auto w-12 h-12 rounded-full ${iconColors[variant]} flex items-center justify-center mb-4">
@@ -274,6 +288,23 @@ export function confirmModal(options: ConfirmModalOptions): string {
     </div>
   `;
 
+  // Use link only if href is provided and passes URL safety check
+  const confirmButton =
+    confirmHref && isSafeUrl(confirmHref)
+      ? `<a
+        href="${escapeHtml(confirmHref)}"
+        class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
+      >
+        ${escapeHtml(confirmText)}
+      </a>`
+      : `<button
+        type="button"
+        class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
+        onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
+      >
+        ${escapeHtml(confirmText)}
+      </button>`;
+
   const footer = `
     <button
       type="button"
@@ -282,14 +313,7 @@ export function confirmModal(options: ConfirmModalOptions): string {
     >
       ${escapeHtml(cancelText)}
     </button>
-    <button
-      type="button"
-      class="px-4 py-2 rounded-lg ${variantClasses[variant]} transition-colors"
-      ${htmxAttrs.join(' ')}
-      onclick="document.getElementById('${escapeHtml(id)}').classList.add('hidden')"
-    >
-      ${escapeHtml(confirmText)}
-    </button>
+    ${confirmButton}
   `;
 
   return modal(content, {

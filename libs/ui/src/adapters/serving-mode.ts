@@ -6,7 +6,7 @@
  * based on the MCP client's capabilities:
  *
  * - **OpenAI/ext-apps**: Use `'inline'` mode with `_meta['ui/html']`
- * - **Claude**: Use `'inline'` mode with dual-payload format
+ * - **Claude**: Use `'inline'` mode with structuredContent (raw HTML + raw output)
  * - **Gemini/unsupported**: Skip UI entirely (return JSON only)
  *
  * When a specific mode is forced (not 'auto'), but the client doesn't support it,
@@ -31,14 +31,16 @@ export interface ResolvedServingMode {
   effectiveMode: Exclude<WidgetServingMode, 'auto'> | null;
 
   /**
-   * Whether dual-payload format should be used (Claude).
-   */
-  useDualPayload: boolean;
-
-  /**
    * Whether the client supports widget UI.
    */
   supportsUI: boolean;
+
+  /**
+   * Whether structuredContent should be used (Claude).
+   * When true, the response includes raw tool output in structuredContent
+   * and raw HTML in a single content block.
+   */
+  useStructuredContent: boolean;
 
   /**
    * Reason for the decision (useful for logging/debugging).
@@ -72,8 +74,8 @@ export interface ResolveServingModeOptions {
 interface PlatformUICapabilities {
   /** Whether the platform supports widget UI */
   supportsWidgets: boolean;
-  /** Whether to use dual-payload format */
-  useDualPayload: boolean;
+  /** Whether to use structuredContent format (Claude) */
+  useStructuredContent: boolean;
   /** Supported serving modes for this platform */
   supportedModes: Array<Exclude<WidgetServingMode, 'auto'>>;
   /** Default serving mode for auto-detection */
@@ -82,23 +84,24 @@ interface PlatformUICapabilities {
 
 /**
  * Platform capabilities mapping.
+ * All platforms that support widgets use structuredContent for JSON payloads.
  */
 const PLATFORM_CAPABILITIES: Record<AIPlatformType, PlatformUICapabilities> = {
   openai: {
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
     defaultMode: 'inline',
   },
   'ext-apps': {
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
     defaultMode: 'inline',
   },
   claude: {
     supportsWidgets: true,
-    useDualPayload: true,
+    useStructuredContent: true,
     // Claude supports inline only (no resource fetching for static)
     supportedModes: ['inline'],
     defaultMode: 'inline',
@@ -106,42 +109,43 @@ const PLATFORM_CAPABILITIES: Record<AIPlatformType, PlatformUICapabilities> = {
   cursor: {
     // Cursor (IDE) - similar to OpenAI, supports widgets
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline', 'static', 'hybrid', 'direct-url', 'custom-url'],
     defaultMode: 'inline',
   },
   continue: {
     // Continue (IDE extension) - basic widget support
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline'],
     defaultMode: 'inline',
   },
   cody: {
     // Sourcegraph Cody - basic widget support
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline'],
     defaultMode: 'inline',
   },
   'generic-mcp': {
     // Generic MCP clients - assume widget support
     supportsWidgets: true,
-    useDualPayload: false,
+    useStructuredContent: true,
     supportedModes: ['inline', 'static'],
     defaultMode: 'inline',
   },
   gemini: {
     supportsWidgets: false,
-    useDualPayload: false,
+    useStructuredContent: false,
     supportedModes: [],
     defaultMode: 'inline', // Not used since supportsWidgets is false
   },
   unknown: {
-    // Unknown clients: be conservative, assume no widget support
-    supportsWidgets: false,
-    useDualPayload: false,
-    supportedModes: [],
+    // Unknown clients: assume widget support, return ui/html + text/html+mcp
+    // This allows generic MCP clients to receive and render widget UI
+    supportsWidgets: true,
+    useStructuredContent: true,
+    supportedModes: ['inline'],
     defaultMode: 'inline',
   },
 };
@@ -164,19 +168,19 @@ const PLATFORM_CAPABILITIES: Record<AIPlatformType, PlatformUICapabilities> = {
  *   configuredMode: 'auto',
  *   platformType: 'openai',
  * });
- * // { effectiveMode: 'inline', useDualPayload: false, supportsUI: true, ... }
+ * // { effectiveMode: 'inline', useStructuredContent: true, supportsUI: true, ... }
  *
  * const claudeResult = resolveServingMode({
  *   configuredMode: 'auto',
  *   platformType: 'claude',
  * });
- * // { effectiveMode: 'inline', useDualPayload: true, supportsUI: true, ... }
+ * // { effectiveMode: 'inline', useStructuredContent: true, supportsUI: true, ... }
  *
  * const geminiResult = resolveServingMode({
  *   configuredMode: 'auto',
  *   platformType: 'gemini',
  * });
- * // { effectiveMode: null, useDualPayload: false, supportsUI: false, ... }
+ * // { effectiveMode: null, useStructuredContent: false, supportsUI: false, ... }
  * ```
  */
 export function resolveServingMode(options: ResolveServingModeOptions): ResolvedServingMode {
@@ -187,7 +191,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): Resolved
   if (!capabilities.supportsWidgets) {
     return {
       effectiveMode: null,
-      useDualPayload: false,
+      useStructuredContent: false,
       supportsUI: false,
       reason: `Platform '${platformType}' does not support widget UI`,
     };
@@ -197,7 +201,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): Resolved
   if (configuredMode === 'auto') {
     return {
       effectiveMode: capabilities.defaultMode,
-      useDualPayload: capabilities.useDualPayload,
+      useStructuredContent: capabilities.useStructuredContent,
       supportsUI: true,
       reason: `Auto-selected '${capabilities.defaultMode}' for platform '${platformType}'`,
     };
@@ -207,7 +211,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): Resolved
   if (capabilities.supportedModes.includes(configuredMode)) {
     return {
       effectiveMode: configuredMode,
-      useDualPayload: capabilities.useDualPayload,
+      useStructuredContent: capabilities.useStructuredContent,
       supportsUI: true,
       reason: `Using configured mode '${configuredMode}' (supported by '${platformType}')`,
     };
@@ -216,7 +220,7 @@ export function resolveServingMode(options: ResolveServingModeOptions): Resolved
   // Mode not supported by platform: skip UI
   return {
     effectiveMode: null,
-    useDualPayload: false,
+    useStructuredContent: false,
     supportsUI: false,
     reason: `Mode '${configuredMode}' not supported by platform '${platformType}'. Supported: ${
       capabilities.supportedModes.join(', ') || 'none'
@@ -246,11 +250,13 @@ export function getDefaultServingMode(platformType: AIPlatformType): Exclude<Wid
 }
 
 /**
- * Check if a platform uses dual-payload format.
+ * Check if a platform uses structuredContent format.
+ * When true, responses include raw tool output in structuredContent
+ * and raw HTML in a single content block.
  */
-export function platformUsesDualPayload(platformType: AIPlatformType): boolean {
+export function platformUsesStructuredContent(platformType: AIPlatformType): boolean {
   const capabilities = PLATFORM_CAPABILITIES[platformType] || PLATFORM_CAPABILITIES.unknown;
-  return capabilities.useDualPayload;
+  return capabilities.useStructuredContent;
 }
 
 /**

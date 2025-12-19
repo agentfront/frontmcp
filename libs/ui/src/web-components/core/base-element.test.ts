@@ -15,14 +15,6 @@ const TestOptionsSchema = z.object({
   size: z.enum(['sm', 'md', 'lg']).optional(),
   disabled: z.boolean().optional(),
   fullWidth: z.boolean().optional(),
-  htmx: z
-    .object({
-      get: z.string().optional(),
-      post: z.string().optional(),
-      target: z.string().optional(),
-    })
-    .strict()
-    .optional(),
 });
 
 type TestOptions = z.infer<typeof TestOptionsSchema>;
@@ -176,13 +168,7 @@ class TestElement extends FmcpElement<TestOptions> {
       .filter(Boolean)
       .join(' ');
 
-    const htmxAttrs = options.htmx
-      ? Object.entries(options.htmx)
-          .map(([k, v]) => `hx-${k}="${v}"`)
-          .join(' ')
-      : '';
-
-    return `<div class="${classes}" ${htmxAttrs}>${content}</div>`;
+    return `<div class="${classes}">${content}</div>`;
   }
 }
 
@@ -246,13 +232,6 @@ describe('FmcpElement Base Class', () => {
       const el = createTestElement({ 'full-width': '' });
 
       expect(el.innerHTML).toContain('full-width');
-    });
-
-    it('should parse HTMX attributes into nested object', () => {
-      const el = createTestElement({ 'hx-get': '/api/data', 'hx-target': '#result' });
-
-      expect(el.innerHTML).toContain('hx-get="/api/data"');
-      expect(el.innerHTML).toContain('hx-target="#result"');
     });
   });
 
@@ -332,13 +311,6 @@ describe('FmcpElement Base Class', () => {
 
       expect(el.innerHTML).toContain('validation-error');
       expect(el.innerHTML).toContain('data-component="test"');
-    });
-
-    it('should render error box for invalid htmx properties', () => {
-      const el = createTestElement({ 'hx-invalid': '/api' });
-
-      // htmx attributes outside schema should fail strict validation
-      expect(el.innerHTML).toContain('validation-error');
     });
   });
 
@@ -420,9 +392,6 @@ describe('FmcpElement Base Class', () => {
       // Common attrs
       expect(attrs).toContain('class');
       expect(attrs).toContain('id');
-      // HTMX attrs
-      expect(attrs).toContain('hx-get');
-      expect(attrs).toContain('hx-post');
     });
   });
 });

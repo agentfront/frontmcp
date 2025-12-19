@@ -21,6 +21,7 @@
  */
 
 import { McpTestClient } from '../client/mcp-test-client';
+import { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 import { TestTokenFactory } from '../auth/token-factory';
 import { TestServer } from '../server/test-server';
 import type {
@@ -114,8 +115,10 @@ async function createTestFixtures(): Promise<TestFixtures> {
 
 /**
  * Clean up fixtures after a single test
+ * @param fixtures - The test fixtures to clean up
+ * @param testFailed - Whether the test failed (to output server logs)
  */
-async function cleanupTestFixtures(fixtures: TestFixtures): Promise<void> {
+async function cleanupTestFixtures(fixtures: TestFixtures, _testFailed = false): Promise<void> {
   // Disconnect client
   if (fixtures.mcp.isConnected()) {
     await fixtures.mcp.disconnect();
@@ -214,6 +217,16 @@ function createServerFixture(server: TestServer): ServerFixture {
       }).buildAndConnect();
     },
 
+    createClientBuilder: () => {
+      // Return a pre-configured builder with the server's base URL and publicMode
+      // This allows full customization including platform-specific capabilities
+      const builder = new McpTestClientBuilder({
+        baseUrl: server.info.baseUrl,
+        publicMode: currentConfig.publicMode,
+      });
+      return builder;
+    },
+
     restart: () => server.restart(),
 
     getLogs: () => server.getLogs(),
@@ -244,10 +257,14 @@ function resolveServerCommand(server: string): string {
 function testWithFixtures(name: string, fn: TestFn): void {
   it(name, async () => {
     const fixtures = await createTestFixtures();
+    let testFailed = false;
     try {
       await fn(fixtures);
+    } catch (error) {
+      testFailed = true;
+      throw error;
     } finally {
-      await cleanupTestFixtures(fixtures);
+      await cleanupTestFixtures(fixtures, testFailed);
     }
   });
 }
@@ -272,10 +289,14 @@ function use(config: TestConfig): void {
 function skip(name: string, fn: TestFn): void {
   it.skip(name, async () => {
     const fixtures = await createTestFixtures();
+    let testFailed = false;
     try {
       await fn(fixtures);
+    } catch (error) {
+      testFailed = true;
+      throw error;
     } finally {
-      await cleanupTestFixtures(fixtures);
+      await cleanupTestFixtures(fixtures, testFailed);
     }
   });
 }
@@ -286,10 +307,14 @@ function skip(name: string, fn: TestFn): void {
 function only(name: string, fn: TestFn): void {
   it.only(name, async () => {
     const fixtures = await createTestFixtures();
+    let testFailed = false;
     try {
       await fn(fixtures);
+    } catch (error) {
+      testFailed = true;
+      throw error;
     } finally {
-      await cleanupTestFixtures(fixtures);
+      await cleanupTestFixtures(fixtures, testFailed);
     }
   });
 }

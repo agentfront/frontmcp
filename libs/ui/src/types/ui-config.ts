@@ -34,6 +34,95 @@ export interface UIContentSecurityPolicy {
   resourceDomains?: string[];
 }
 
+/**
+ * XSS protection and content security settings.
+ *
+ * Controls sanitization of HTML content rendered in widgets.
+ * By default, strict sanitization is applied to prevent XSS attacks.
+ *
+ * ## Platform Isolation Context
+ *
+ * Both OpenAI and Claude render widgets in **double-iframe isolation**:
+ *
+ * ```
+ * ┌─────────────────────────────────────────────────┐
+ * │  ChatGPT / Claude Desktop                       │
+ * │  ┌─────────────────────────────────────────────┐│
+ * │  │  Outer Sandbox Iframe                       ││
+ * │  │  - sandbox="allow-scripts allow-same-origin"││
+ * │  │  - No access to parent cookies              ││
+ * │  │  ┌─────────────────────────────────────────┐││
+ * │  │  │  Inner Widget Iframe                    │││
+ * │  │  │  - CSP: script-src 'self' 'unsafe-inline'│││
+ * │  │  │  - CSP: connect-src based on config     │││
+ * │  │  │  - Your widget HTML renders here        │││
+ * │  │  └─────────────────────────────────────────┘││
+ * │  └─────────────────────────────────────────────┘│
+ * └─────────────────────────────────────────────────┘
+ * ```
+ *
+ * This isolation means XSS attacks are **contained** but can still:
+ * - Access widget data (input/output)
+ * - Make API calls within CSP-allowed domains
+ * - Display fake/phishing UI to users
+ *
+ * **Recommendation:** Only disable protection for fully trusted content.
+ */
+export interface UIContentSecurity {
+  /**
+   * Allow `javascript:` and other potentially dangerous URL schemes in links.
+   *
+   * When `false` (default), URLs are validated to only allow:
+   * - `http://`, `https://` (web URLs)
+   * - `/`, `#` (relative paths, anchors)
+   * - `mailto:` (email links)
+   *
+   * When `true`, allows any URL scheme including:
+   * - `javascript:` (inline script execution)
+   * - `data:` (data URIs)
+   * - `vbscript:` (legacy script)
+   *
+   * @default false
+   */
+  allowUnsafeLinks?: boolean;
+
+  /**
+   * Allow inline `<script>` tags and event handlers (onclick, onerror, etc).
+   *
+   * When `false` (default), HTML content is sanitized to remove:
+   * - `<script>...</script>` tags
+   * - Event handler attributes (`onclick`, `onerror`, `onload`, etc.)
+   *
+   * When `true`, these elements are preserved in the output.
+   *
+   * **Note:** Even with this enabled, CSP may still block script execution
+   * depending on the platform's iframe sandbox settings.
+   *
+   * @default false
+   */
+  allowInlineScripts?: boolean;
+
+  /**
+   * Completely bypass all HTML sanitization.
+   *
+   * **⚠️ DANGEROUS:** Only use with fully trusted, server-generated content.
+   *
+   * When `true`, no sanitization is applied:
+   * - Script tags are preserved
+   * - Event handlers are preserved
+   * - All URL schemes are allowed
+   * - No HTML escaping is performed
+   *
+   * This is useful for:
+   * - Embedding trusted third-party widgets
+   * - Complex interactive dashboards from trusted sources
+   * - Content that was pre-sanitized server-side
+   *
+   * @default false
+   */
+  bypassSanitization?: boolean;
+}
+
 // ============================================
 // Template Context & Helpers
 // ============================================
@@ -196,6 +285,53 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Controls which external resources the widget can access.
    */
   csp?: UIContentSecurityPolicy;
+
+  /**
+   * Content security and XSS protection settings.
+   *
+   * By default, FrontMCP sanitizes HTML content to prevent XSS attacks:
+   * - Removes `<script>` tags and event handlers (onclick, onerror, etc.)
+   * - Validates URL schemes in links (blocks `javascript:`, `data:`, `vbscript:`)
+   *
+   * These protections can be disabled for trusted content that requires
+   * inline scripts, custom event handlers, or special URL schemes.
+   *
+   * ## Security Context
+   *
+   * **OpenAI/Claude run widgets in double-iframe isolation:**
+   * - Outer sandbox iframe with restricted permissions
+   * - Inner content iframe with CSP headers
+   * - No access to parent window or cookies
+   * - Network requests restricted by CSP
+   *
+   * This isolation provides defense-in-depth, making XSS less impactful.
+   * However, XSS can still:
+   * - Steal widget state/data
+   * - Make unauthorized API calls (within CSP limits)
+   * - Phish users with fake UI
+   *
+   * **Best Practice:** Keep XSS protection enabled unless you have a specific
+   * need for inline scripts/handlers AND trust your content source completely.
+   *
+   * @example
+   * ```typescript
+   * // Default: Full XSS protection
+   * ui: { template: MyWidget }
+   *
+   * // Allow inline scripts for trusted dashboard
+   * ui: {
+   *   template: TrustedDashboard,
+   *   contentSecurity: { allowInlineScripts: true }
+   * }
+   *
+   * // Bypass all sanitization for fully trusted HTML
+   * ui: {
+   *   template: FullyTrustedContent,
+   *   contentSecurity: { bypassSanitization: true }
+   * }
+   * ```
+   */
+  contentSecurity?: UIContentSecurity;
 
   /**
    * Whether the widget can invoke tools via the MCP bridge.

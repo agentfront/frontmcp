@@ -26,9 +26,11 @@
       }
     },
     "serve": {
-      "executor": "@nx/js:node",
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
       "options": {
-        "buildTarget": "demo-e2e-serverless:build"
+        "command": "node dist/apps/e2e/demo-e2e-serverless/main.js",
+        "cwd": "{workspaceRoot}"
       }
     },
     "test": {

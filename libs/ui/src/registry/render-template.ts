@@ -206,11 +206,15 @@ export function hasUIConfig(metadata: { ui?: unknown }): metadata is { ui: UITem
  * - Detects MDX syntax (Markdown headers, JSX components, expressions)
  * - Compiles and renders via @frontmcp/ui's MDX renderer
  *
+ * Error handling behavior by environment:
+ * - **Production**: Logs warning and returns `null` for graceful degradation (no UI)
+ * - **Development/Test**: Logs error and throws for visibility and debugging
+ *
  * @param options - Template and context data
- * @returns Promise resolving to rendered HTML string
- * @throws Error if template execution or rendering fails
+ * @returns Promise resolving to rendered HTML string, or `null` in production on error
+ * @throws Error if template execution or rendering fails (development/test only)
  */
-export async function renderToolTemplateAsync(options: RenderTemplateOptions): Promise<string> {
+export async function renderToolTemplateAsync(options: RenderTemplateOptions): Promise<string | null> {
   const { template, input, output, structuredContent, mdxComponents } = options;
 
   // Create template context with helpers
@@ -257,20 +261,34 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
 
-      // Log detailed error for debugging
-      if (process.env['DEBUG'] || process.env['NODE_ENV'] === 'development') {
-        console.error('[FrontMCP] React SSR Error:', {
-          component: componentName,
-          error: errorMessage,
-          stack: errorStack,
-          propsKeys: Object.keys(ctx),
-          hasInput: 'input' in ctx,
-          hasOutput: 'output' in ctx,
-          hasStructuredContent: 'structuredContent' in ctx,
-        });
-      }
+      // Determine environment - unknown/undefined defaults to production for graceful degradation
+      const isTest = process.env['NODE_ENV'] === 'test' || process.env['JEST_WORKER_ID'] !== undefined;
+      const isDevelopment = process.env['NODE_ENV'] === 'development';
+      const isProduction = !isDevelopment && !isTest;
 
-      throw new Error(`React template rendering failed for "${componentName}": ${errorMessage}`);
+      // Always log the error for server-side visibility
+      // In production: log warning and return null (graceful degradation)
+      // In development/test: log error with full details and re-throw
+      const logData = {
+        component: componentName,
+        error: errorMessage,
+        stack: errorStack,
+        propsKeys: Object.keys(ctx),
+        hasInput: 'input' in ctx,
+        hasOutput: 'output' in ctx,
+        hasStructuredContent: 'structuredContent' in ctx,
+        env: { isProduction, isTest, isDevelopment },
+      };
+
+      if (isProduction) {
+        // Production: Log warning and return null for graceful degradation
+        console.warn('[FrontMCP] React SSR Error (graceful degradation, returning no UI):', logData);
+        return null;
+      } else {
+        // Development/Test: Log full error and re-throw for visibility
+        console.error('[FrontMCP] React SSR Error:', logData);
+        throw new Error(`React template rendering failed for "${componentName}": ${errorMessage}`);
+      }
     }
   }
 

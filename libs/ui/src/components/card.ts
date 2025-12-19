@@ -40,14 +40,6 @@ export interface CardOptions {
   className?: string;
   /** Card ID */
   id?: string;
-  /** HTMX attributes */
-  htmx?: {
-    get?: string;
-    post?: string;
-    target?: string;
-    swap?: string;
-    trigger?: string;
-  };
   /** Data attributes */
   data?: Record<string, string>;
   /** Clickable card (adds hover effects) */
@@ -87,20 +79,6 @@ function getSizeClasses(size: CardSize): string {
 }
 
 /**
- * Build HTMX attributes string
- */
-function buildHtmxAttrs(htmx?: CardOptions['htmx']): string {
-  if (!htmx) return '';
-  const attrs: string[] = [];
-  if (htmx.get) attrs.push(`hx-get="${escapeHtml(htmx.get)}"`);
-  if (htmx.post) attrs.push(`hx-post="${escapeHtml(htmx.post)}"`);
-  if (htmx.target) attrs.push(`hx-target="${escapeHtml(htmx.target)}"`);
-  if (htmx.swap) attrs.push(`hx-swap="${escapeHtml(htmx.swap)}"`);
-  if (htmx.trigger) attrs.push(`hx-trigger="${escapeHtml(htmx.trigger)}"`);
-  return attrs.join(' ');
-}
-
-/**
  * Build data attributes string
  */
 function buildDataAttrs(data?: Record<string, string>): string {
@@ -123,7 +101,6 @@ export function card(content: string, options: CardOptions = {}): string {
     footer,
     className = '',
     id,
-    htmx,
     data,
     clickable = false,
     href,
@@ -134,7 +111,6 @@ export function card(content: string, options: CardOptions = {}): string {
   const clickableClasses = clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
 
   const allClasses = [variantClasses, sizeClasses, clickableClasses, className].filter(Boolean).join(' ');
-  const htmxAttrs = buildHtmxAttrs(htmx);
   const dataAttrs = buildDataAttrs(data);
   const idAttr = id ? `id="${escapeHtml(id)}"` : '';
 
@@ -155,14 +131,14 @@ export function card(content: string, options: CardOptions = {}): string {
 
   // Wrap in anchor tag if href provided
   if (href) {
-    return `<a href="${escapeHtml(href)}" class="${allClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs}>
+    return `<a href="${escapeHtml(href)}" class="${allClasses}" ${idAttr} ${dataAttrs}>
       ${headerHtml}
       ${content}
       ${footerHtml}
     </a>`;
   }
 
-  return `<div class="${allClasses}" ${idAttr} ${htmxAttrs} ${dataAttrs}>
+  return `<div class="${allClasses}" ${idAttr} ${dataAttrs}>
     ${headerHtml}
     ${content}
     ${footerHtml}

@@ -3,7 +3,8 @@
 ## Repository Structure
 
 - **Monorepo**: Nx-based monorepo managing multiple TypeScript libraries
-- **Libraries Location**: `/libs/*` - each library is independent and publishable
+- **Libraries Location**: `/libs/*`
+- each library is independent and publishable
 
 ### Primary Libraries (scoped under `@frontmcp/*`)
 
@@ -268,6 +269,21 @@ export type AnyResourceRecord = ResourceRecord | ResourceTemplateRecord;
 // Import from common, not from module-specific files
 import { AnyResourceRecord } from '../common/records';
 ```
+
+## Git Operations
+
+**IMPORTANT: Never run git commit or git push commands.** The user handles all git operations themselves. Claude should only:
+
+- Create/edit files
+- Stage files with `git add` if explicitly asked
+- Check status with `git status`, `git diff`, `git log`
+
+Never:
+
+- `git commit`
+- `git push`
+- `git commit --amend`
+- Any command that modifies git history
 
 ## Anti-Patterns to Avoid
 

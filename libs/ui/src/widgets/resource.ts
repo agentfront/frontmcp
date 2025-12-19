@@ -379,11 +379,7 @@ export function resourceList(options: ResourceListOptions): string {
       ? `<div class="text-center mt-6">
         ${button('Load More', {
           variant: 'outline',
-          htmx: {
-            get: loadMoreUrl,
-            target: 'closest .resource-list',
-            swap: 'beforeend',
-          },
+          href: loadMoreUrl,
         })}
       </div>`
       : '';

@@ -24,6 +24,7 @@ import {
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/ui/adapters';
+import { isUIRenderFailure } from '@frontmcp/ui/registry';
 import { safeStringify } from '@frontmcp/ui/utils';
 
 const inputSchema = z.object({
@@ -412,7 +413,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
 
       const servingMode = resolvedMode.effectiveMode;
-      const useDualPayload = resolvedMode.useDualPayload;
+      const useStructuredContent = resolvedMode.useStructuredContent;
       let htmlContent: string | undefined;
       let uiMeta: Record<string, unknown> = {};
 
@@ -460,17 +461,35 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           platformType,
         });
 
-        htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
-        uiMeta = uiRenderResult.meta || {};
+        // Handle graceful degradation: rendering failed in production
+        if (isUIRenderFailure(uiRenderResult)) {
+          this.logger.warn('applyUI: UI rendering failed (graceful degradation)', {
+            tool: tool.metadata.name,
+            reason: uiRenderResult.reason,
+            platform: platformType,
+          });
+          // Proceed without UI - tool result will not have ui/html metadata
+          htmlContent = undefined;
+          uiMeta = {};
+        } else {
+          // Extract HTML from platform-specific meta key
+          const htmlKey =
+            platformType === 'openai' ? 'openai/html' : platformType === 'ext-apps' ? 'ui/html' : 'frontmcp/html';
+          htmlContent = uiRenderResult?.meta?.[htmlKey] as string | undefined;
+          // Fallback to ui/html for compatibility
+          if (!htmlContent) {
+            htmlContent = uiRenderResult?.meta?.['ui/html'] as string | undefined;
+          }
+          uiMeta = uiRenderResult.meta || {};
+        }
       }
 
       // Build the response content using the extracted utility
       const uiResult = buildToolResponseContent({
         rawOutput,
         htmlContent,
-        htmlPrefix: tool.metadata.ui?.htmlResponsePrefix,
         servingMode,
-        useDualPayload,
+        useStructuredContent,
         platformType,
       });
 
@@ -482,7 +501,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         tool: tool.metadata.name,
         platform: platformType,
         servingMode,
-        useDualPayload,
+        useStructuredContent,
         format: uiResult.format,
         contentCleared: uiResult.contentCleared,
       });
@@ -523,6 +542,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   /**
    * Finalize the tool response.
    * Validates output, applies UI result from applyUI stage, and sends the response.
+   *
+   * Note: This stage runs even when execute fails (as part of cleanup).
+   * If rawOutput is undefined, it means an error occurred during execution
+   * and the error will be propagated by the flow framework - we should not
+   * throw a new error here.
    */
   @Stage('finalize')
   async finalize() {
@@ -530,13 +554,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { tool, rawOutput, uiResult, uiMeta } = this.state;
 
     if (!tool) {
-      this.logger.error('finalize: tool not found in state');
-      throw new ToolExecutionError('unknown', new Error('Tool not found in state'));
+      // No tool found - this is an early failure, just skip finalization
+      this.logger.verbose('finalize: skipping (no tool in state)');
+      return;
     }
 
     if (rawOutput === undefined) {
-      this.logger.error('finalize: tool output not found in state');
-      throw new ToolExecutionError(tool.metadata.name, new Error('Tool output not found'));
+      // No output means execute stage failed - skip finalization
+      // The original error will be propagated by the flow framework
+      this.logger.verbose('finalize: skipping (no output - execute stage likely failed)');
+      return;
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
@@ -555,6 +582,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {
       result.content = uiResult.content;
+      // Set structuredContent from UI result (contains raw tool output)
+      // Cast to Record<string, unknown> since MCP protocol expects object type
+      if (uiResult.structuredContent !== undefined && uiResult.structuredContent !== null) {
+        result.structuredContent = uiResult.structuredContent as Record<string, unknown>;
+      }
       if (uiMeta) {
         result._meta = { ...result._meta, ...uiMeta };
       }
@@ -570,6 +602,52 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       metaKeys: result._meta ? Object.keys(result._meta) : [],
       isError: result.isError,
     });
+
+    // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
+    if (process.env['DEBUG_TOOL_RESPONSE']) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs').promises;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const os = require('os');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('path');
+      const debugOutput = {
+        timestamp: new Date().toISOString(),
+        tool: tool.metadata.name,
+        rawOutput,
+        uiResult,
+        uiMeta,
+        finalResult: result,
+      };
+      // Use os.tmpdir() for cross-platform compatibility (works on Windows, macOS, Linux)
+      const tempDir = os.tmpdir();
+      const defaultPath = path.join(tempDir, 'tool-response-debug.json');
+      let outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
+
+      // Path traversal protection: ensure custom path is within allowed directories
+      if (process.env['DEBUG_TOOL_RESPONSE_PATH']) {
+        const resolvedPath = path.resolve(outputPath);
+        const resolvedTempDir = path.resolve(tempDir);
+        const cwd = path.resolve(process.cwd());
+
+        // Only allow paths within temp directory or current working directory
+        const isInTempDir = resolvedPath.startsWith(resolvedTempDir + path.sep) || resolvedPath === resolvedTempDir;
+        const isInCwd = resolvedPath.startsWith(cwd + path.sep) || resolvedPath === cwd;
+
+        if (!isInTempDir && !isInCwd) {
+          console.error(
+            `[DEBUG] DEBUG_TOOL_RESPONSE_PATH must be within temp directory (${tempDir}) or current working directory (${cwd}). ` +
+              `Falling back to default path.`,
+          );
+          outputPath = defaultPath;
+        }
+      }
+
+      // Use async write to avoid blocking the event loop (fire-and-forget)
+      fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
+        .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))
+        .catch((err: Error) => console.error(`[DEBUG] Failed to write tool response: ${err.message}`));
+    }
 
     // Respond with the properly formatted MCP result
     this.respond(result);

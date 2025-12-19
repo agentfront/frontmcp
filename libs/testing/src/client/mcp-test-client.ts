@@ -8,6 +8,7 @@ import type {
   McpResponse,
   TestTransportType,
   TestAuthConfig,
+  TestClientCapabilities,
   ToolResultWrapper,
   ResourceContentWrapper,
   PromptResultWrapper,
@@ -60,7 +61,9 @@ const DEFAULT_CLIENT_INFO = {
 // ═══════════════════════════════════════════════════════════════════
 
 export class McpTestClient {
-  private readonly config: Required<McpTestClientConfig>;
+  // Platform and capabilities are optional - only set when testing platform-specific behavior
+  private readonly config: Required<Omit<McpTestClientConfig, 'platform' | 'capabilities'>> &
+    Pick<McpTestClientConfig, 'platform' | 'capabilities'>;
   private transport: McpTransport | null = null;
   private initResult: InitializeResult | null = null;
   private requestIdCounter = 0;
@@ -92,6 +95,8 @@ export class McpTestClient {
       debug: config.debug ?? false,
       protocolVersion: config.protocolVersion ?? DEFAULT_PROTOCOL_VERSION,
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
+      platform: config.platform,
+      capabilities: config.capabilities,
     };
 
     // If a token is provided, user is authenticated (even in public mode)
@@ -745,11 +750,14 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   private async initialize(): Promise<McpResponse<InitializeResult>> {
+    // Use configured capabilities or default to base capabilities
+    const capabilities: TestClientCapabilities = this.config.capabilities ?? {
+      sampling: {},
+    };
+
     return this.request<InitializeResult>('initialize', {
       protocolVersion: this.config.protocolVersion,
-      capabilities: {
-        sampling: {},
-      },
+      capabilities,
       clientInfo: this.config.clientInfo,
     });
   }
@@ -802,6 +810,7 @@ export class McpTestClient {
           publicMode: this.config.publicMode,
           debug: this.config.debug,
           interceptors: this._interceptors,
+          clientInfo: this.config.clientInfo,
         });
       case 'sse':
         // TODO: Implement SSE transport
@@ -884,9 +893,16 @@ export class McpTestClient {
     const isError = !response.success || raw.isError === true;
 
     // Check for Tool UI response - has UI metadata in _meta
-    // inline mode uses ui/html, hybrid mode uses ui/component
+    // Platform-specific HTML keys:
+    // - OpenAI: openai/html
+    // - ext-apps: ui/html
+    // - Others: frontmcp/html (+ ui/html for compatibility)
     const meta = raw._meta as Record<string, unknown> | undefined;
-    const hasUI = meta?.['ui/html'] !== undefined || meta?.['ui/component'] !== undefined;
+    const hasUI =
+      meta?.['ui/html'] !== undefined ||
+      meta?.['ui/component'] !== undefined ||
+      meta?.['openai/html'] !== undefined ||
+      meta?.['frontmcp/html'] !== undefined;
     const structuredContent = (raw as Record<string, unknown>)['structuredContent'];
 
     return {

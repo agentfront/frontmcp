@@ -3,14 +3,13 @@
  * @description Attribute parsing utilities for FrontMCP Web Components.
  *
  * Converts HTML attributes to typed options for component rendering.
- * Handles boolean attributes, HTMX attributes, and kebab-to-camel case conversion.
+ * Handles boolean attributes and kebab-to-camel case conversion.
  *
  * @example Attribute parsing
  * ```typescript
  * // variant="primary" -> { variant: 'primary' }
  * // disabled -> { disabled: true }
  * // disabled="false" -> { disabled: false }
- * // hx-get="/api" -> { htmx: { get: '/api' } }
  * ```
  *
  * @module @frontmcp/ui/web-components/core/attribute-parser
@@ -26,8 +25,6 @@ export interface ParsedAttribute {
   key: string | null;
   /** The parsed value */
   value: unknown;
-  /** Whether this is a nested htmx option */
-  isHtmx?: boolean;
   /** Whether this is a data attribute */
   isData?: boolean;
 }
@@ -39,7 +36,6 @@ export interface ParsedAttribute {
  * - Simple: `variant="primary"` -> `{ variant: 'primary' }`
  * - Boolean: `disabled` -> `{ disabled: true }`
  * - Boolean false: `disabled="false"` -> `{ disabled: false }`
- * - HTMX: `hx-get="/api"` -> `{ htmx: { get: '/api' } }`
  * - Data: `data-foo="bar"` -> `{ data: { foo: 'bar' } }`
  *
  * @param attrName - The attribute name (kebab-case)
@@ -50,16 +46,6 @@ export function parseAttributeValue(attrName: string, value: string | null): Par
   // Skip internal fmcp attributes
   if (attrName.startsWith('data-fmcp-')) {
     return { key: null, value: undefined };
-  }
-
-  // Handle HTMX attributes (hx-* -> htmx.*)
-  if (attrName.startsWith('hx-')) {
-    const htmxKey = attrName.slice(3); // Remove 'hx-'
-    return {
-      key: htmxKey,
-      value: value ?? '',
-      isHtmx: true,
-    };
   }
 
   // Handle data attributes (data-* -> data.*)
@@ -157,24 +143,6 @@ export function getObservedAttributesFromSchema<T>(schema: ZodSchema<T>): string
   const commonAttrs = ['class', 'id', 'style'];
   attributes.push(...commonAttrs);
 
-  // Include HTMX attributes
-  const htmxAttrs = [
-    'hx-get',
-    'hx-post',
-    'hx-put',
-    'hx-delete',
-    'hx-patch',
-    'hx-target',
-    'hx-swap',
-    'hx-trigger',
-    'hx-confirm',
-    'hx-indicator',
-    'hx-push-url',
-    'hx-select',
-    'hx-vals',
-  ];
-  attributes.push(...htmxAttrs);
-
   // Deduplicate
   return [...new Set(attributes)];
 }
@@ -182,7 +150,7 @@ export function getObservedAttributesFromSchema<T>(schema: ZodSchema<T>): string
 /**
  * Merge a parsed attribute into an options object.
  *
- * Handles nested objects for htmx and data attributes.
+ * Handles nested objects for data attributes.
  *
  * @param options - Current options object
  * @param parsed - Parsed attribute result
@@ -195,12 +163,7 @@ export function mergeAttributeIntoOptions<T>(options: Partial<T>, parsed: Parsed
 
   const result = { ...options } as Record<string, unknown>;
 
-  if (parsed.isHtmx) {
-    // Merge into htmx nested object
-    const htmx = (result['htmx'] as Record<string, unknown>) ?? {};
-    htmx[parsed.key] = parsed.value;
-    result['htmx'] = htmx;
-  } else if (parsed.isData) {
+  if (parsed.isData) {
     // Merge into data nested object
     const data = (result['data'] as Record<string, string>) ?? {};
     data[parsed.key] = String(parsed.value);

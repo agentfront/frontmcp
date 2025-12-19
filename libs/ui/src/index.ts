@@ -57,21 +57,13 @@ export {
   // Note: buildOpenAICSP is exported from both adapters and runtime/csp
   // We export from adapters as the canonical source
   buildOpenAICSP,
-  // Dual-payload for Claude Artifacts
-  type TextContent,
-  type DualPayloadOptions,
-  type DualPayloadResult,
-  DEFAULT_HTML_PREFIX,
-  buildDualPayload,
-  isDualPayload,
-  parseDualPayload,
   // Serving mode resolution
   type ResolvedServingMode,
   type ResolveServingModeOptions,
   resolveServingMode,
   isPlatformModeSupported,
   getDefaultServingMode,
-  platformUsesDualPayload,
+  platformUsesStructuredContent,
   platformSupportsWidgets,
   // Response content builder
   type TextContentBlock,
@@ -136,7 +128,9 @@ export {
   getMCPBridgeScript,
   isMCPBridgeSupported,
   // CSP utilities (excluding buildOpenAICSP which is in adapters)
+  DEFAULT_CDN_DOMAINS,
   DEFAULT_CSP_DIRECTIVES,
+  RESTRICTIVE_CSP_DIRECTIVES,
   buildCSPDirectives,
   buildCSPMetaTag,
   validateCSPDomain,
@@ -346,3 +340,126 @@ export {
   calculateQuickHash,
   generateBuildId,
 } from './bundler/file-cache';
+
+// ============================================
+// Universal Renderer Module
+// ============================================
+// The universal module provides a React-based multi-format renderer
+// that can handle HTML, Markdown, React, and MDX content with auto-detection.
+//
+// For full access, import from '@frontmcp/ui/universal':
+// import { UniversalApp, createFrontMCPStore, useFrontMCPStore } from '@frontmcp/ui/universal';
+//
+// Core universal exports:
+export {
+  // Types
+  type ContentType,
+  type UniversalContent,
+  type FrontMCPState,
+  type FrontMCPStore,
+  type RenderContext,
+  type ClientRenderer,
+  type UniversalAppProps,
+  type FrontMCPProviderProps,
+  type CDNType,
+  type UniversalRuntimeOptions,
+  type UniversalRuntimeResult,
+  // Store
+  createFrontMCPStore,
+  getGlobalStore,
+  setGlobalStore,
+  resetGlobalStore,
+  useFrontMCPStore,
+  useToolOutput as useUniversalToolOutput,
+  useToolInput as useUniversalToolInput,
+  useContent,
+  useToolName,
+  useLoadingState,
+  initializeStoreFromWindow,
+  // Context
+  FrontMCPProvider,
+  ComponentsProvider,
+  UniversalProvider,
+  useFrontMCPContext,
+  useComponents,
+  withFrontMCP,
+  // Renderers
+  RendererRegistry,
+  rendererRegistry,
+  detectRenderer,
+  renderContent,
+  createContent,
+  htmlRenderer,
+  safeHtmlRenderer,
+  markdownRenderer,
+  reactRenderer,
+  mdxRenderer,
+  // Universal App
+  UniversalApp,
+  UniversalAppWithProvider,
+  LoadingSpinner,
+  ErrorDisplay,
+  EmptyState,
+  // Runtime Builder
+  buildUniversalRuntime,
+  buildMinimalRuntime,
+  // Cached Runtime (Optimized)
+  getCachedRuntime,
+  clearRuntimeCache,
+  getRuntimeCacheStats,
+  buildAppScript,
+  buildDataInjectionCode,
+  buildComponentCode,
+  RUNTIME_PLACEHOLDERS,
+  type CachedRuntimeOptions,
+  type CachedRuntimeResult,
+  // Constants
+  DEFAULT_FRONTMCP_STATE,
+  UNIVERSAL_CDN,
+  detectContentType,
+} from './universal';
+
+// ============================================
+// TypeScript Type Fetching Engine
+// ============================================
+// The typings module provides TypeScript .d.ts fetching from esm.sh CDN.
+// Resolves dependencies recursively and combines them into single outputs.
+//
+// For full access, import from '@frontmcp/ui/typings':
+// import { createTypeFetcher, TypeFetcher } from '@frontmcp/ui/typings';
+//
+// Core typings exports:
+export {
+  // Types
+  type TypeFetchResult,
+  type TypeFetchError,
+  type TypeFetchErrorCode,
+  type TypeFetchBatchRequest,
+  type TypeFetchBatchResult,
+  type TypeCacheEntry,
+  type TypeCacheStats,
+  type DtsImport,
+  type DtsParseResult,
+  type TypeFetcherOptions,
+  type PackageResolution,
+  // Constants
+  DEFAULT_TYPE_FETCHER_OPTIONS,
+  TYPE_CACHE_PREFIX,
+  DEFAULT_TYPE_CACHE_TTL,
+  // Cache
+  type TypeCacheAdapter,
+  type TypeCacheOptions,
+  DEFAULT_CACHE_OPTIONS as DEFAULT_TYPE_CACHE_OPTIONS,
+  MemoryTypeCache,
+  globalTypeCache,
+  // DTS Parser
+  parseDtsImports,
+  isRelativeImport,
+  getPackageFromSpecifier,
+  getSubpathFromSpecifier,
+  parseImportStatement,
+  combineDtsContents,
+  // Type Fetcher
+  TypeFetcher,
+  createTypeFetcher,
+} from './typings';

@@ -50,6 +50,7 @@ export type {
   BundleOptions,
   SSRBundleOptions,
   BundlerOptions,
+  EsbuildTransformOptions,
   // Results
   BundleResult,
   SSRResult,
@@ -61,6 +62,11 @@ export type {
   CacheEntry,
   // Context
   TransformContext,
+  // Static HTML types
+  TargetPlatform,
+  StaticHTMLExternalConfig,
+  StaticHTMLOptions,
+  StaticHTMLResult,
 } from './types';
 
 export {
@@ -68,6 +74,10 @@ export {
   DEFAULT_SECURITY_POLICY,
   DEFAULT_BUNDLE_OPTIONS,
   DEFAULT_BUNDLER_OPTIONS,
+  // Static HTML constants
+  DEFAULT_STATIC_HTML_OPTIONS,
+  STATIC_HTML_CDN,
+  getCdnTypeForPlatform,
 } from './types';
 
 // ============================================

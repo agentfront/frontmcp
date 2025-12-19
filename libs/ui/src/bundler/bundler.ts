@@ -16,11 +16,32 @@ import type {
   SecurityPolicy,
   SourceType,
   OutputFormat,
+  StaticHTMLOptions,
+  StaticHTMLResult,
+  StaticHTMLExternalConfig,
+  TargetPlatform,
+  EsbuildTransformOptions,
 } from './types';
-import { DEFAULT_BUNDLE_OPTIONS, DEFAULT_BUNDLER_OPTIONS, DEFAULT_SECURITY_POLICY } from './types';
+import {
+  DEFAULT_BUNDLE_OPTIONS,
+  DEFAULT_BUNDLER_OPTIONS,
+  DEFAULT_SECURITY_POLICY,
+  DEFAULT_STATIC_HTML_OPTIONS,
+  STATIC_HTML_CDN,
+  getCdnTypeForPlatform,
+} from './types';
 import { BundlerCache, createCacheKey, hashContent } from './cache';
 import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
 import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
+import { escapeHtml } from '../utils';
+import type { ContentType } from '../universal/types';
+import { detectContentType as detectUniversalContentType } from '../universal/types';
+import {
+  getCachedRuntime,
+  buildAppScript,
+  buildDataInjectionCode,
+  buildComponentCode,
+} from '../universal/cached-runtime';
 
 /**
  * Lazy-loaded esbuild transform function.
@@ -76,6 +97,26 @@ async function loadEsbuild(): Promise<typeof esbuildTransform> {
       return null;
     }
   }
+}
+
+/**
+ * Validate and sanitize rootId for safe use in HTML/JS contexts.
+ * Only allows alphanumeric, underscore, and hyphen characters.
+ */
+function sanitizeRootId(rootId: string): string {
+  const safeId = rootId.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (safeId !== rootId) {
+    console.warn('[FrontMCP] rootId sanitized:', { original: rootId, sanitized: safeId });
+  }
+  return safeId || 'frontmcp-root';
+}
+
+/**
+ * Sanitize CSS to prevent style tag breakout attacks.
+ */
+function sanitizeCss(css: string): string {
+  // Escape closing style tags to prevent injection
+  return css.replace(/<\/style>/gi, '\\3c/style\\3e');
 }
 
 /**
@@ -304,6 +345,488 @@ export class InMemoryBundler {
   }
 
   /**
+   * Bundle a component to a self-contained static HTML document.
+   *
+   * Creates a complete HTML page with:
+   * - React runtime (CDN or inline based on platform)
+   * - FrontMCP UI hooks and components (always inline)
+   * - Tool data injection (input/output)
+   * - Transpiled component code
+   * - Client-side rendering via createRoot
+   *
+   * @param options - Static HTML options
+   * @returns Static HTML result with complete document
+   *
+   * @example
+   * ```typescript
+   * const result = await bundler.bundleToStaticHTML({
+   *   source: `
+   *     import { Card, useToolOutput } from '@frontmcp/ui/react';
+   *     export default function Weather() {
+   *       const output = useToolOutput();
+   *       return <Card title="Weather">{output?.temperature}°F</Card>;
+   *     }
+   *   `,
+   *   toolName: 'get_weather',
+   *   output: { temperature: 72 },
+   * });
+   *
+   * // result.html contains the complete HTML document
+   * ```
+   */
+  async bundleToStaticHTML(options: StaticHTMLOptions): Promise<StaticHTMLResult> {
+    const startTime = performance.now();
+
+    // Merge options with defaults
+    const opts = this.mergeStaticHTMLOptions(options);
+    const platform = opts.targetPlatform === 'auto' ? 'generic' : opts.targetPlatform;
+    const cdnType = getCdnTypeForPlatform(platform);
+
+    // Handle universal mode vs standard component mode
+    if (opts.universal) {
+      return this.bundleToStaticHTMLUniversal(options, opts, platform, cdnType, startTime);
+    }
+
+    // Standard mode: Transpile the component to CommonJS format
+    // We use CJS because esbuild.transform doesn't support globalName (that's only for build)
+    // The component script wrapper will capture module.exports and assign to window.__frontmcp_component
+    const bundleResult = await this.bundle({
+      source: options.source,
+      sourceType: opts.sourceType,
+      format: 'cjs',
+      minify: opts.minify,
+      sourceMaps: false,
+      externals: ['react', 'react-dom', 'react/jsx-runtime', '@frontmcp/ui', '@frontmcp/ui/react'],
+      security: opts.security,
+      skipCache: opts.skipCache,
+    });
+
+    // Build HTML sections
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+    const frontmcpRuntime = this.buildFrontMCPRuntime();
+    const dataScript = this.buildDataInjectionScript(opts.toolName, opts.input, opts.output, opts.structuredContent);
+    const componentScript = this.buildComponentRenderScript(bundleResult.code, opts.rootId, cdnType);
+
+    // Assemble complete HTML document
+    const html = this.assembleStaticHTML({
+      title: opts.title || `${opts.toolName} - Widget`,
+      head,
+      reactRuntime,
+      frontmcpRuntime,
+      dataScript,
+      componentScript,
+      rootId: opts.rootId,
+      cdnType,
+    });
+
+    const hash = hashContent(html);
+
+    return {
+      html,
+      componentCode: bundleResult.code,
+      metrics: {
+        ...bundleResult.metrics,
+        totalTime: performance.now() - startTime,
+      },
+      hash,
+      size: html.length,
+      cached: bundleResult.cached,
+      sourceType: bundleResult.sourceType,
+      targetPlatform: platform,
+    };
+  }
+
+  /**
+   * Bundle to static HTML with universal rendering mode.
+   * Uses the universal renderer that can handle multiple content types.
+   *
+   * Optimization: Uses cached runtime (vendor chunk) to avoid rebuilding
+   * static code on every request. Only the user's component is transpiled.
+   */
+  private async bundleToStaticHTMLUniversal(
+    options: StaticHTMLOptions,
+    opts: ReturnType<typeof this.mergeStaticHTMLOptions>,
+    platform: TargetPlatform,
+    cdnType: 'esm' | 'umd',
+    startTime: number,
+  ): Promise<StaticHTMLResult> {
+    // Detect content type - use auto-detection if not explicitly set or set to 'auto'
+    let contentType: ContentType;
+    const rawContentType = options.contentType ?? 'auto';
+    if (rawContentType === 'auto') {
+      contentType = detectUniversalContentType(options.source);
+    } else {
+      contentType = rawContentType;
+    }
+
+    // For React content (full modules with import/export), we need to transpile the source code
+    // For MDX content (markdown with JSX tags), we DON'T transpile - the MDX renderer handles it
+    let transpiledCode: string | null = null;
+    let transformTime = 0;
+    if (contentType === 'react') {
+      const bundleResult = await this.bundle({
+        source: options.source,
+        sourceType: opts.sourceType,
+        format: 'cjs',
+        minify: opts.minify,
+        sourceMaps: false,
+        externals: ['react', 'react-dom', 'react/jsx-runtime', '@frontmcp/ui', '@frontmcp/ui/react'],
+        security: opts.security,
+        skipCache: opts.skipCache,
+      });
+      transpiledCode = bundleResult.code;
+      transformTime = bundleResult.metrics.transformTime;
+    }
+    // Note: MDX content is passed as-is to the MDX renderer which handles the markdown + JSX
+    // Custom components for MDX can be provided via opts.customComponents
+
+    // Get cached runtime (vendor chunk) - this is pre-built and cached globally
+    const cachedRuntime = getCachedRuntime({
+      cdnType,
+      includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
+      includeMdx: opts.includeMdx || contentType === 'mdx',
+      minify: opts.minify,
+    });
+
+    // Build app chunk (user-specific code)
+    const componentCodeStr = transpiledCode ? buildComponentCode(transpiledCode) : '';
+    const dataInjectionStr = buildDataInjectionCode(
+      opts.toolName,
+      opts.input,
+      opts.output,
+      opts.structuredContent,
+      contentType,
+      transpiledCode ? null : options.source, // Pass source only if not a component
+      transpiledCode !== null,
+    );
+    const appScript = buildAppScript(
+      cachedRuntime.appTemplate,
+      componentCodeStr,
+      dataInjectionStr,
+      opts.customComponents ?? '',
+    );
+
+    // Build HTML sections
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+    const renderScript = this.buildUniversalRenderScript(opts.rootId, cdnType);
+
+    // Assemble complete HTML document with vendor + app chunks
+    const html = this.assembleUniversalStaticHTMLCached({
+      title: opts.title || `${opts.toolName} - Widget`,
+      head,
+      reactRuntime,
+      cdnImports: cachedRuntime.cdnImports,
+      vendorScript: cachedRuntime.vendorScript,
+      appScript,
+      renderScript,
+      rootId: opts.rootId,
+      cdnType,
+    });
+
+    const hash = hashContent(html);
+
+    return {
+      html,
+      componentCode: transpiledCode ?? appScript,
+      metrics: {
+        transformTime,
+        bundleTime: 0,
+        totalTime: performance.now() - startTime,
+        cacheTime: cachedRuntime.cached ? 0 : undefined,
+      },
+      hash,
+      size: html.length,
+      cached: cachedRuntime.cached,
+      sourceType: opts.sourceType === 'auto' ? this.detectSourceType(options.source) : opts.sourceType,
+      targetPlatform: platform,
+      universal: true,
+      contentType,
+    };
+  }
+
+  /**
+   * Assemble the complete universal static HTML document using cached runtime.
+   *
+   * For ESM mode (OpenAI), scripts must wait for React to load asynchronously.
+   * For UMD mode (Claude), scripts can execute synchronously.
+   */
+  private assembleUniversalStaticHTMLCached(parts: {
+    title: string;
+    head: string;
+    reactRuntime: string;
+    cdnImports: string;
+    vendorScript: string;
+    appScript: string;
+    renderScript: string;
+    rootId: string;
+    cdnType: 'esm' | 'umd';
+  }): string {
+    if (parts.cdnType === 'umd') {
+      // UMD mode (Claude): Scripts execute synchronously after React loads
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>${escapeHtml(parts.title)}</title>
+    ${parts.head}
+    ${parts.reactRuntime}
+    ${parts.cdnImports}
+    <!-- Vendor Runtime (Cached) -->
+    <script>
+${parts.vendorScript}
+    </script>
+    <!-- App Script (User Component) -->
+    <script>
+${parts.appScript}
+    </script>
+</head>
+<body>
+    <div id="${parts.rootId}" class="frontmcp-loading">
+        <div class="frontmcp-spinner"></div>
+    </div>
+    ${parts.renderScript}
+</body>
+</html>`;
+    } else {
+      // ESM mode (OpenAI): React loads async, scripts must wait for it
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>${escapeHtml(parts.title)}</title>
+    ${parts.head}
+    ${parts.reactRuntime}
+    ${parts.cdnImports}
+</head>
+<body>
+    <div id="${parts.rootId}" class="frontmcp-loading">
+        <div class="frontmcp-spinner"></div>
+    </div>
+    <!-- Scripts wait for React to load (ESM is async) -->
+    <script type="module">
+      // Wait for React to be ready
+      function initFrontMCP() {
+        // Vendor Runtime (Cached)
+${parts.vendorScript}
+
+        // App Script (User Component)
+${parts.appScript}
+
+        // Render the app
+        var container = document.getElementById('${parts.rootId}');
+        if (container && window.ReactDOM && window.ReactDOM.createRoot && window.__frontmcp.UniversalApp) {
+          var root = window.ReactDOM.createRoot(container);
+          root.render(React.createElement(window.__frontmcp.UniversalApp));
+        }
+      }
+
+      if (window.__reactReady) {
+        initFrontMCP();
+      } else {
+        window.addEventListener('react:ready', initFrontMCP);
+      }
+    </script>
+</body>
+</html>`;
+    }
+  }
+
+  /**
+   * Build the component script for transpiled React/MDX content.
+   * Wraps CommonJS code with module/exports shim to capture the component.
+   */
+  private buildUniversalComponentScript(transpiledCode: string, cdnType: 'esm' | 'umd'): string {
+    // CommonJS wrapper that captures exports and assigns to window.__frontmcp_component
+    const wrappedCode = `
+        // CommonJS module shim
+        var module = { exports: {} };
+        var exports = module.exports;
+
+        // Execute transpiled component code (CommonJS format)
+        ${transpiledCode}
+
+        // Capture the component export
+        window.__frontmcp_component = module.exports.default || module.exports;
+    `;
+
+    if (cdnType === 'umd') {
+      return `
+    <!-- Universal Component Script (transpiled) -->
+    <script>
+      (function() {
+        ${wrappedCode}
+      })();
+    </script>`;
+    } else {
+      return `
+    <!-- Universal Component Script (transpiled, ESM) -->
+    <script type="module">
+      function loadComponent() {
+        ${wrappedCode}
+      }
+
+      if (window.__reactReady) {
+        loadComponent();
+      } else {
+        window.addEventListener('react:ready', loadComponent);
+      }
+    </script>`;
+    }
+  }
+
+  /**
+   * Build the universal runtime script section.
+   */
+  private buildUniversalRuntimeScript(runtimeScript: string): string {
+    return `
+    <!-- Universal Runtime -->
+    <script>
+      ${runtimeScript}
+    </script>`;
+  }
+
+  /**
+   * Build data injection script for universal mode.
+   */
+  private buildUniversalDataScript(
+    toolName: string,
+    input: Record<string, unknown> | undefined,
+    output: unknown,
+    structuredContent: unknown,
+    contentType: ContentType,
+    source: string,
+    hasTranspiledComponent = false,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    // For transpiled React/MDX components, reference the component function
+    // For HTML/Markdown, use the source string
+    if (hasTranspiledComponent) {
+      return `
+    <!-- Universal Data Injection (React Component) -->
+    <script>
+      window.__frontmcp.setState({
+        toolName: ${safeJson(toolName)},
+        input: ${safeJson(input ?? null)},
+        output: ${safeJson(output ?? null)},
+        structuredContent: ${safeJson(structuredContent ?? null)},
+        content: {
+          type: 'react',
+          source: window.__frontmcp_component
+        },
+        loading: false,
+        error: null
+      });
+    </script>`;
+    }
+
+    // Escape the source for embedding in JS (for HTML/Markdown content)
+    const escapedSource = JSON.stringify(source);
+
+    return `
+    <!-- Universal Data Injection -->
+    <script>
+      window.__frontmcp.setState({
+        toolName: ${safeJson(toolName)},
+        input: ${safeJson(input ?? null)},
+        output: ${safeJson(output ?? null)},
+        structuredContent: ${safeJson(structuredContent ?? null)},
+        content: {
+          type: ${safeJson(contentType)},
+          source: ${escapedSource}
+        },
+        loading: false,
+        error: null
+      });
+    </script>`;
+  }
+
+  /**
+   * Build the universal render script.
+   */
+  private buildUniversalRenderScript(rootId: string, cdnType: 'esm' | 'umd'): string {
+    if (cdnType === 'umd') {
+      return `
+    <!-- Universal Render Script (UMD - synchronous) -->
+    <script>
+      (function() {
+        var container = document.getElementById('${rootId}');
+        if (container && window.ReactDOM && window.ReactDOM.createRoot && window.__frontmcp.UniversalApp) {
+          var root = window.ReactDOM.createRoot(container);
+          root.render(React.createElement(window.__frontmcp.UniversalApp));
+        } else if (container && window.ReactDOM && window.ReactDOM.render && window.__frontmcp.UniversalApp) {
+          window.ReactDOM.render(
+            React.createElement(window.__frontmcp.UniversalApp),
+            container
+          );
+        }
+      })();
+    </script>`;
+    } else {
+      return `
+    <!-- Universal Render Script (ESM - waits for React) -->
+    <script type="module">
+      function renderUniversalApp() {
+        var container = document.getElementById('${rootId}');
+        if (container && window.ReactDOM && window.ReactDOM.createRoot && window.__frontmcp.UniversalApp) {
+          var root = window.ReactDOM.createRoot(container);
+          root.render(React.createElement(window.__frontmcp.UniversalApp));
+        }
+      }
+
+      if (window.__reactReady) {
+        renderUniversalApp();
+      } else {
+        window.addEventListener('react:ready', renderUniversalApp);
+      }
+    </script>`;
+    }
+  }
+
+  /**
+   * Assemble the complete universal static HTML document.
+   */
+  private assembleUniversalStaticHTML(parts: {
+    title: string;
+    head: string;
+    reactRuntime: string;
+    frontmcpRuntime?: string;
+    cdnImports: string;
+    universalRuntimeScript: string;
+    componentScript?: string;
+    dataScript: string;
+    renderScript: string;
+    rootId: string;
+    cdnType: 'esm' | 'umd';
+  }): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>${escapeHtml(parts.title)}</title>
+    ${parts.head}
+    ${parts.reactRuntime}
+    ${parts.frontmcpRuntime ?? ''}
+    ${parts.cdnImports}
+    ${parts.universalRuntimeScript}
+    ${parts.componentScript ?? ''}
+    ${parts.dataScript}
+</head>
+<body>
+    <div id="${parts.rootId}" class="frontmcp-loading">
+        <div class="frontmcp-spinner"></div>
+    </div>
+    ${parts.renderScript}
+</body>
+</html>`;
+  }
+
+  /**
    * Get cache statistics.
    */
   getCacheStats() {
@@ -342,7 +865,7 @@ export class InMemoryBundler {
     const loader = this.getLoader(sourceType);
 
     // Build esbuild options
-    const esbuildOptions: Record<string, unknown> = {
+    const esbuildOptions: EsbuildTransformOptions = {
       loader,
       minify: options.minify,
       sourcemap: options.sourceMaps,
@@ -366,7 +889,7 @@ export class InMemoryBundler {
   /**
    * Get esbuild loader for source type.
    */
-  private getLoader(sourceType: SourceType): string {
+  private getLoader(sourceType: SourceType): EsbuildTransformOptions['loader'] {
     switch (sourceType) {
       case 'jsx':
         return 'jsx';
@@ -478,6 +1001,489 @@ export class InMemoryBundler {
   }
 })();
     `.trim();
+  }
+
+  // ============================================
+  // Static HTML Helper Methods
+  // ============================================
+
+  /**
+   * Merge static HTML options with defaults.
+   */
+  private mergeStaticHTMLOptions(
+    options: StaticHTMLOptions,
+  ): Required<
+    Pick<
+      StaticHTMLOptions,
+      | 'sourceType'
+      | 'targetPlatform'
+      | 'minify'
+      | 'skipCache'
+      | 'rootId'
+      | 'widgetAccessible'
+      | 'externals'
+      | 'universal'
+      | 'contentType'
+      | 'includeMarkdown'
+      | 'includeMdx'
+    >
+  > &
+    Pick<
+      StaticHTMLOptions,
+      'toolName' | 'input' | 'output' | 'structuredContent' | 'title' | 'security' | 'customCss' | 'customComponents'
+    > {
+    return {
+      sourceType: options.sourceType ?? DEFAULT_STATIC_HTML_OPTIONS.sourceType,
+      targetPlatform: options.targetPlatform ?? DEFAULT_STATIC_HTML_OPTIONS.targetPlatform,
+      minify: options.minify ?? DEFAULT_STATIC_HTML_OPTIONS.minify,
+      skipCache: options.skipCache ?? DEFAULT_STATIC_HTML_OPTIONS.skipCache,
+      rootId: sanitizeRootId(options.rootId ?? DEFAULT_STATIC_HTML_OPTIONS.rootId),
+      widgetAccessible: options.widgetAccessible ?? DEFAULT_STATIC_HTML_OPTIONS.widgetAccessible,
+      externals: {
+        ...DEFAULT_STATIC_HTML_OPTIONS.externals,
+        ...options.externals,
+      },
+      // Universal mode options
+      universal: options.universal ?? DEFAULT_STATIC_HTML_OPTIONS.universal,
+      contentType: options.contentType ?? DEFAULT_STATIC_HTML_OPTIONS.contentType,
+      includeMarkdown: options.includeMarkdown ?? DEFAULT_STATIC_HTML_OPTIONS.includeMarkdown,
+      includeMdx: options.includeMdx ?? DEFAULT_STATIC_HTML_OPTIONS.includeMdx,
+      // Pass-through options
+      toolName: options.toolName,
+      input: options.input,
+      output: options.output,
+      structuredContent: options.structuredContent,
+      title: options.title,
+      security: options.security,
+      customCss: options.customCss,
+      customComponents: options.customComponents,
+    };
+  }
+
+  /**
+   * Build the <head> section for static HTML.
+   */
+  private buildStaticHTMLHead(opts: { externals: StaticHTMLExternalConfig; customCss?: string }): string {
+    const parts: string[] = [];
+
+    // Meta tags
+    parts.push(`<meta charset="UTF-8">`);
+    parts.push(`<meta name="viewport" content="width=device-width, initial-scale=1.0">`);
+
+    // Font preconnect
+    for (const url of STATIC_HTML_CDN.fonts.preconnect) {
+      parts.push(`<link rel="preconnect" href="${url}" crossorigin>`);
+    }
+
+    // Font stylesheet
+    parts.push(`<link rel="stylesheet" href="${STATIC_HTML_CDN.fonts.inter}">`);
+
+    // Tailwind CSS (same for all platforms - CSS file from cdnjs)
+    const tailwindConfig = opts.externals.tailwind ?? 'cdn';
+    if (tailwindConfig === 'cdn') {
+      parts.push(`<link rel="stylesheet" href="${STATIC_HTML_CDN.tailwind}">`);
+    } else if (tailwindConfig !== 'inline' && tailwindConfig) {
+      // Custom URL
+      parts.push(`<link rel="stylesheet" href="${tailwindConfig}">`);
+    }
+
+    // Base styles for loading state and common utilities
+    parts.push(`<style>
+      body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .frontmcp-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; }
+      .frontmcp-spinner { width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>`);
+
+    // Custom CSS (injected after Tailwind)
+    if (opts.customCss) {
+      parts.push(`<style>\n${sanitizeCss(opts.customCss)}\n    </style>`);
+    }
+
+    return parts.join('\n    ');
+  }
+
+  /**
+   * Build React runtime scripts for static HTML.
+   */
+  private buildReactRuntimeScripts(
+    externals: StaticHTMLExternalConfig,
+    platform: TargetPlatform,
+    cdnType: 'esm' | 'umd',
+  ): string {
+    const reactConfig = externals.react ?? 'cdn';
+    const reactDomConfig = externals.reactDom ?? 'cdn';
+
+    if (cdnType === 'umd') {
+      // Claude: Use UMD builds from cdnjs (synchronous loading)
+      const reactUrl = reactConfig === 'cdn' ? STATIC_HTML_CDN.umd.react : reactConfig;
+      const reactDomUrl = reactDomConfig === 'cdn' ? STATIC_HTML_CDN.umd.reactDom : reactDomConfig;
+
+      return `
+    <!-- React Runtime (UMD from cdnjs - Claude compatible) -->
+    <script src="${reactUrl}"></script>
+    <script src="${reactDomUrl}"></script>
+    <script>
+      // Webpack/esbuild polyfills for transpiled code (UMD globals)
+      window.external_react_namespaceObject = window.React;
+      window.jsx_runtime_namespaceObject = {
+        jsx: function(type, props, key) {
+          if (key !== undefined) props = Object.assign({}, props, { key: key });
+          return React.createElement(type, props);
+        },
+        jsxs: function(type, props, key) {
+          if (key !== undefined) props = Object.assign({}, props, { key: key });
+          return React.createElement(type, props);
+        },
+        Fragment: React.Fragment
+      };
+      window.__reactReady = true;
+    </script>`;
+    } else {
+      // OpenAI/Cursor/generic: Use ES modules from esm.sh
+      const reactUrl = reactConfig === 'cdn' ? STATIC_HTML_CDN.esm.react : reactConfig;
+      const reactDomUrl = reactDomConfig === 'cdn' ? STATIC_HTML_CDN.esm.reactDom : reactDomConfig;
+
+      return `
+    <!-- React Runtime (ES modules from esm.sh) -->
+    <script type="module">
+      import React from '${reactUrl}';
+      import { createRoot } from '${reactDomUrl}';
+
+      // Make React available globally
+      window.React = React;
+      window.ReactDOM = { createRoot };
+
+      // Webpack/esbuild polyfills for transpiled code
+      window.external_react_namespaceObject = React;
+      window.jsx_runtime_namespaceObject = {
+        jsx: function(type, props, key) {
+          if (key !== undefined) props = Object.assign({}, props, { key: key });
+          return React.createElement(type, props);
+        },
+        jsxs: function(type, props, key) {
+          if (key !== undefined) props = Object.assign({}, props, { key: key });
+          return React.createElement(type, props);
+        },
+        Fragment: React.Fragment
+      };
+
+      // Signal React is ready
+      window.__reactReady = true;
+      window.dispatchEvent(new CustomEvent('react:ready'));
+    </script>`;
+    }
+  }
+
+  /**
+   * Build FrontMCP runtime (hooks and UI components).
+   * Always inlined for reliability across platforms.
+   */
+  private buildFrontMCPRuntime(): string {
+    return `
+    <!-- FrontMCP Runtime (always inline) -->
+    <script>
+      // Custom require() shim for browser - maps module names to globals
+      // This allows esbuild-transpiled code to work in browsers
+      window.__moduleCache = {};
+      window.require = function(moduleName) {
+        // Check cache first
+        if (window.__moduleCache[moduleName]) {
+          return window.__moduleCache[moduleName];
+        }
+
+        // Map module names to browser globals
+        var moduleMap = {
+          'react': function() { return window.React; },
+          'react-dom': function() { return window.ReactDOM; },
+          'react-dom/client': function() { return window.ReactDOM; },
+          'react/jsx-runtime': function() { return window.jsx_runtime_namespaceObject; },
+          'react/jsx-dev-runtime': function() { return window.jsx_runtime_namespaceObject; },
+          '@frontmcp/ui': function() { return window.react_namespaceObject; },
+          '@frontmcp/ui/react': function() { return window.react_namespaceObject; },
+        };
+
+        var resolver = moduleMap[moduleName];
+        if (resolver) {
+          var mod = resolver();
+          window.__moduleCache[moduleName] = mod;
+          return mod;
+        }
+
+        console.warn('[FrontMCP] Unknown module requested:', moduleName);
+        return {};
+      };
+
+      // Async require for dynamic imports (returns Promise)
+      window.requireAsync = function(moduleName) {
+        return new Promise(function(resolve, reject) {
+          // If module is already loaded, resolve immediately
+          var mod = window.require(moduleName);
+          if (mod && Object.keys(mod).length > 0) {
+            resolve(mod);
+            return;
+          }
+
+          // For now, we don't support dynamic CDN loading
+          // All required modules should be pre-loaded
+          console.warn('[FrontMCP] Async module not available:', moduleName);
+          resolve({});
+        });
+      };
+
+      // FrontMCP Hook implementations
+      window.__frontmcp = {
+        // Context for MCP bridge
+        context: {
+          toolName: null,
+          toolInput: null,
+          toolOutput: null,
+          structuredContent: null,
+          callTool: null,
+        },
+
+        // Set context from data injection
+        setContext: function(ctx) {
+          Object.assign(this.context, ctx);
+        },
+      };
+
+      // Hook: useToolOutput - returns the tool output data
+      window.useToolOutput = function() {
+        return window.__frontmcp.context.toolOutput;
+      };
+
+      // Hook: useToolInput - returns the tool input arguments
+      window.useToolInput = function() {
+        return window.__frontmcp.context.toolInput;
+      };
+
+      // Hook: useMcpBridgeContext - returns full bridge context
+      window.useMcpBridgeContext = function() {
+        return window.__frontmcp.context;
+      };
+
+      // Hook: useCallTool - returns function to call other tools
+      window.useCallTool = function() {
+        return function(name, args) {
+          if (window.__frontmcp.context.callTool) {
+            return window.__frontmcp.context.callTool(name, args);
+          }
+          console.warn('[FrontMCP] callTool not available - widget may not have tool access');
+          return Promise.resolve(null);
+        };
+      };
+
+      // UI Components (simplified inline versions)
+      window.Card = function(props) {
+        var children = props.children;
+        var title = props.title;
+        var className = props.className || '';
+        return React.createElement('div', {
+          className: 'bg-white rounded-lg shadow border border-gray-200 overflow-hidden ' + className
+        }, [
+          title && React.createElement('div', {
+            key: 'header',
+            className: 'px-4 py-3 border-b border-gray-200 bg-gray-50'
+          }, React.createElement('h3', { className: 'text-sm font-medium text-gray-900' }, title)),
+          React.createElement('div', { key: 'body', className: 'p-4' }, children)
+        ]);
+      };
+
+      window.Badge = function(props) {
+        var children = props.children;
+        var variant = props.variant || 'default';
+        var variantClasses = {
+          default: 'bg-gray-100 text-gray-800',
+          success: 'bg-green-100 text-green-800',
+          warning: 'bg-yellow-100 text-yellow-800',
+          error: 'bg-red-100 text-red-800',
+          info: 'bg-blue-100 text-blue-800',
+        };
+        return React.createElement('span', {
+          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' + (variantClasses[variant] || variantClasses.default)
+        }, children);
+      };
+
+      window.Button = function(props) {
+        var children = props.children;
+        var variant = props.variant || 'primary';
+        var onClick = props.onClick;
+        var disabled = props.disabled;
+        var variantClasses = {
+          primary: 'bg-blue-600 text-white hover:bg-blue-700',
+          secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200',
+          outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
+          danger: 'bg-red-600 text-white hover:bg-red-700',
+        };
+        return React.createElement('button', {
+          className: 'px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ' +
+            (disabled ? 'opacity-50 cursor-not-allowed ' : '') +
+            (variantClasses[variant] || variantClasses.primary),
+          onClick: onClick,
+          disabled: disabled,
+        }, children);
+      };
+
+      // Make hooks available on react_namespaceObject for bundled imports
+      window.react_namespaceObject = Object.assign({}, window.React || {}, {
+        useToolOutput: window.useToolOutput,
+        useToolInput: window.useToolInput,
+        useMcpBridgeContext: window.useMcpBridgeContext,
+        useCallTool: window.useCallTool,
+        Card: window.Card,
+        Badge: window.Badge,
+        Button: window.Button,
+      });
+    </script>`;
+  }
+
+  /**
+   * Build data injection script for tool input/output.
+   */
+  private buildDataInjectionScript(
+    toolName: string,
+    input?: Record<string, unknown>,
+    output?: unknown,
+    structuredContent?: unknown,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    return `
+    <!-- Tool Data Injection -->
+    <script>
+      window.__mcpToolName = ${safeJson(toolName)};
+      window.__mcpToolInput = ${safeJson(input ?? null)};
+      window.__mcpToolOutput = ${safeJson(output ?? null)};
+      window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+
+      // Initialize FrontMCP context
+      window.__frontmcp.setContext({
+        toolName: window.__mcpToolName,
+        toolInput: window.__mcpToolInput,
+        toolOutput: window.__mcpToolOutput,
+        structuredContent: window.__mcpStructuredContent,
+      });
+    </script>`;
+  }
+
+  /**
+   * Build component render script.
+   * Wraps CommonJS code with module/exports shim to capture the component.
+   */
+  private buildComponentRenderScript(componentCode: string, rootId: string, cdnType: 'esm' | 'umd'): string {
+    // CommonJS wrapper that captures exports and assigns to window.__frontmcp_component
+    const wrappedCode = `
+        // CommonJS module shim
+        var module = { exports: {} };
+        var exports = module.exports;
+
+        // Execute transpiled component code (CommonJS format)
+        ${componentCode}
+
+        // Capture the component export
+        window.__frontmcp_component = module.exports;
+    `;
+
+    if (cdnType === 'umd') {
+      // UMD: Synchronous execution
+      return `
+    <!-- Component Render Script (UMD - synchronous) -->
+    <script>
+      (function() {
+        ${wrappedCode}
+
+        // Get the component
+        var Component = window.__frontmcp_component.default || window.__frontmcp_component;
+
+        // Render the component
+        var container = document.getElementById('${rootId}');
+        if (container && window.ReactDOM && window.ReactDOM.createRoot) {
+          var root = window.ReactDOM.createRoot(container);
+          root.render(React.createElement(Component, {
+            output: window.__mcpToolOutput,
+            input: window.__mcpToolInput,
+          }));
+        } else if (container && window.ReactDOM && window.ReactDOM.render) {
+          // Fallback for React 17
+          window.ReactDOM.render(
+            React.createElement(Component, {
+              output: window.__mcpToolOutput,
+              input: window.__mcpToolInput,
+            }),
+            container
+          );
+        }
+      })();
+    </script>`;
+    } else {
+      // ESM: Wait for React to load
+      return `
+    <!-- Component Render Script (ESM - waits for React) -->
+    <script type="module">
+      function renderComponent() {
+        ${wrappedCode}
+
+        // Get the component
+        var Component = window.__frontmcp_component.default || window.__frontmcp_component;
+
+        // Render the component
+        var container = document.getElementById('${rootId}');
+        if (container && window.ReactDOM && window.ReactDOM.createRoot) {
+          var root = window.ReactDOM.createRoot(container);
+          root.render(React.createElement(Component, {
+            output: window.__mcpToolOutput,
+            input: window.__mcpToolInput,
+          }));
+        }
+      }
+
+      // Wait for React to be ready
+      if (window.__reactReady) {
+        renderComponent();
+      } else {
+        window.addEventListener('react:ready', renderComponent);
+      }
+    </script>`;
+    }
+  }
+
+  /**
+   * Assemble the complete static HTML document.
+   */
+  private assembleStaticHTML(parts: {
+    title: string;
+    head: string;
+    reactRuntime: string;
+    frontmcpRuntime: string;
+    dataScript: string;
+    componentScript: string;
+    rootId: string;
+    cdnType: 'esm' | 'umd';
+  }): string {
+    // Full-width layout - user provides styling via customCss
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>${escapeHtml(parts.title)}</title>
+    ${parts.head}
+    ${parts.reactRuntime}
+    ${parts.frontmcpRuntime}
+    ${parts.dataScript}
+</head>
+<body>
+    <div id="${parts.rootId}" class="frontmcp-loading">
+        <div class="frontmcp-spinner"></div>
+    </div>
+    ${parts.componentScript}
+</body>
+</html>`;
   }
 }
 

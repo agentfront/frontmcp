@@ -1,11 +1,10 @@
 /**
  * Auth UI Module
  *
- * Server-rendered UI templates for OAuth flows using HTMX
- * with Tailwind CSS (CDN) and Google Fonts.
+ * Server-rendered UI templates for OAuth flows with Tailwind CSS (CDN)
+ * and Google Fonts.
  *
  * No build step required - all rendering is done at runtime.
- * HTMX provides progressive enhancement for interactivity (~14KB).
  */
 
 // Base layout exports
@@ -40,4 +39,4 @@ export {
   buildErrorPage,
   // Utility functions
   renderToHtml,
-} from './htmx-templates';
+} from './templates';

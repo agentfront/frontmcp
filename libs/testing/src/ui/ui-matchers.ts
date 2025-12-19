@@ -26,6 +26,8 @@
 
 import type { MatcherFunction } from 'expect';
 import type { ToolResultWrapper } from '../client/mcp-test-client.types';
+import type { TestPlatformType } from '../platform/platform-types';
+import { getForbiddenMetaPrefixes, getToolCallMetaPrefixes, getPlatformMimeType } from '../platform/platform-types';
 
 // Type-only reference: Metadata keys used below align with UIMetadata from @frontmcp/ui/adapters
 // This is an optional peer dependency, so we don't import it directly
@@ -308,6 +310,258 @@ const toHaveProperHtmlStructure: MatcherFunction<[]> = function (received) {
 };
 
 // ═══════════════════════════════════════════════════════════════════
+// PLATFORM META MATCHERS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Check if tool result has correct meta keys for a specific platform.
+ * @param platform - The platform type to check for
+ *
+ * This matcher verifies:
+ * - OpenAI: Has openai/* keys, no ui/* or frontmcp/* keys
+ * - ext-apps: Has ui/* keys, no openai/* or frontmcp/* keys
+ * - Others: Has frontmcp/* + ui/* keys, no openai/* keys
+ */
+const toHavePlatformMeta: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () => `Expected _meta to have platform meta for "${platform}", but no _meta found`,
+    };
+  }
+
+  const expectedPrefixes = getToolCallMetaPrefixes(platform);
+  const forbiddenPrefixes = getForbiddenMetaPrefixes(platform);
+  const metaKeys = Object.keys(meta);
+
+  // Check for expected prefixes
+  const hasExpectedPrefix = metaKeys.some((key) => expectedPrefixes.some((prefix) => key.startsWith(prefix)));
+
+  // Check for forbidden prefixes
+  const forbiddenKeys = metaKeys.filter((key) => forbiddenPrefixes.some((prefix) => key.startsWith(prefix)));
+
+  const pass = hasExpectedPrefix && forbiddenKeys.length === 0;
+
+  return {
+    pass,
+    message: () => {
+      if (!hasExpectedPrefix) {
+        return `Expected _meta to have keys with prefixes [${expectedPrefixes.join(
+          ', ',
+        )}] for platform "${platform}", but found: [${metaKeys.join(', ')}]`;
+      }
+      if (forbiddenKeys.length > 0) {
+        return `Expected _meta NOT to have keys [${forbiddenKeys.join(
+          ', ',
+        )}] for platform "${platform}" (forbidden prefixes: [${forbiddenPrefixes.join(', ')}])`;
+      }
+      return `Expected result not to have platform meta for "${platform}"`;
+    },
+  };
+};
+
+/**
+ * Check if _meta has a specific key.
+ * @param key - The meta key to look for (e.g., 'ui/html', 'openai/mimeType')
+ */
+const toHaveMetaKey: MatcherFunction<[key: string]> = function (received, key) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () => `Expected _meta to have key "${key}", but no _meta found`,
+    };
+  }
+
+  const pass = key in meta;
+
+  return {
+    pass,
+    message: () => (pass ? `Expected _meta not to have key "${key}"` : `Expected _meta to have key "${key}"`),
+  };
+};
+
+/**
+ * Check if _meta has a specific key with a specific value.
+ * @param key - The meta key to look for
+ * @param value - The expected value
+ */
+const toHaveMetaValue: MatcherFunction<[key: string, value: unknown]> = function (received, key, value) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () => `Expected _meta["${key}"] to equal ${JSON.stringify(value)}, but no _meta found`,
+    };
+  }
+
+  const actualValue = meta[key];
+  const pass = JSON.stringify(actualValue) === JSON.stringify(value);
+
+  return {
+    pass,
+    message: () =>
+      pass
+        ? `Expected _meta["${key}"] not to equal ${JSON.stringify(value)}`
+        : `Expected _meta["${key}"] to equal ${JSON.stringify(value)}, but got ${JSON.stringify(actualValue)}`,
+  };
+};
+
+/**
+ * Check if _meta does NOT have a specific key.
+ * @param key - The meta key that should be absent
+ */
+const toNotHaveMetaKey: MatcherFunction<[key: string]> = function (received, key) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    // No meta means key is definitely absent
+    return {
+      pass: true,
+      message: () => `Expected _meta to have key "${key}", but no _meta found`,
+    };
+  }
+
+  const pass = !(key in meta);
+
+  return {
+    pass,
+    message: () => (pass ? `Expected _meta to have key "${key}"` : `Expected _meta not to have key "${key}"`),
+  };
+};
+
+/**
+ * Check if _meta ONLY has keys with a specific namespace prefix.
+ * @param namespace - The namespace prefix (e.g., 'openai/', 'ui/', 'frontmcp/')
+ *
+ * Note: For platforms like Claude that use both frontmcp/* and ui/*,
+ * use toHavePlatformMeta() instead.
+ */
+const toHaveOnlyNamespacedMeta: MatcherFunction<[namespace: string]> = function (received, namespace) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () => `Expected _meta to have keys with namespace "${namespace}", but no _meta found`,
+    };
+  }
+
+  const metaKeys = Object.keys(meta);
+  const wrongKeys = metaKeys.filter((key) => !key.startsWith(namespace));
+  const pass = wrongKeys.length === 0 && metaKeys.length > 0;
+
+  return {
+    pass,
+    message: () => {
+      if (metaKeys.length === 0) {
+        return `Expected _meta to have keys with namespace "${namespace}", but _meta is empty`;
+      }
+      if (wrongKeys.length > 0) {
+        return `Expected _meta to ONLY have keys with namespace "${namespace}", but found: [${wrongKeys.join(', ')}]`;
+      }
+      return `Expected _meta not to have only keys with namespace "${namespace}"`;
+    },
+  };
+};
+
+/**
+ * Check if _meta has the correct MIME type for a platform.
+ * @param platform - The platform type to check for
+ *
+ * MIME types:
+ * - OpenAI: text/html+skybridge
+ * - Others: text/html+mcp
+ */
+const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
+  const meta = extractMeta(received);
+  const expectedMimeType = getPlatformMimeType(platform);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () =>
+        `Expected _meta to have MIME type "${expectedMimeType}" for platform "${platform}", but no _meta found`,
+    };
+  }
+
+  // Determine which key to check based on platform
+  let mimeTypeKey: string;
+  switch (platform) {
+    case 'openai':
+      mimeTypeKey = 'openai/mimeType';
+      break;
+    case 'ext-apps':
+      mimeTypeKey = 'ui/mimeType';
+      break;
+    default:
+      // For other platforms, check frontmcp/mimeType (primary) or ui/mimeType (compatibility)
+      mimeTypeKey = 'frontmcp/mimeType';
+  }
+
+  const actualMimeType = meta[mimeTypeKey];
+  const pass = actualMimeType === expectedMimeType;
+
+  return {
+    pass,
+    message: () =>
+      pass
+        ? `Expected _meta["${mimeTypeKey}"] not to be "${expectedMimeType}"`
+        : `Expected _meta["${mimeTypeKey}"] to be "${expectedMimeType}" for platform "${platform}", but got "${actualMimeType}"`,
+  };
+};
+
+/**
+ * Check if _meta has HTML content in the correct platform-specific key.
+ * @param platform - The platform type to check for
+ *
+ * HTML keys:
+ * - OpenAI: openai/html
+ * - ext-apps: ui/html
+ * - Others: frontmcp/html (or ui/html for compatibility)
+ */
+const toHavePlatformHtml: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
+  const meta = extractMeta(received);
+
+  if (!meta) {
+    return {
+      pass: false,
+      message: () => `Expected _meta to have platform HTML for "${platform}", but no _meta found`,
+    };
+  }
+
+  // Determine which key to check based on platform
+  let htmlKey: string;
+  switch (platform) {
+    case 'openai':
+      htmlKey = 'openai/html';
+      break;
+    case 'ext-apps':
+      htmlKey = 'ui/html';
+      break;
+    default:
+      htmlKey = 'frontmcp/html';
+  }
+
+  const html = meta[htmlKey];
+  const pass = typeof html === 'string' && html.length > 0;
+
+  return {
+    pass,
+    message: () =>
+      pass
+        ? `Expected _meta not to have platform HTML in "${htmlKey}"`
+        : `Expected _meta["${htmlKey}"] to contain HTML for platform "${platform}", but ${
+            html === undefined ? 'key not found' : `got ${typeof html}`
+          }`,
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -315,6 +569,7 @@ const toHaveProperHtmlStructure: MatcherFunction<[]> = function (received) {
  * All UI matchers as an object for expect.extend()
  */
 export const uiMatchers = {
+  // Existing HTML matchers
   toHaveRenderedHtml,
   toContainHtmlElement,
   toContainBoundValue,
@@ -323,4 +578,12 @@ export const uiMatchers = {
   toHaveCssClass,
   toNotContainRawContent,
   toHaveProperHtmlStructure,
+  // Platform meta matchers
+  toHavePlatformMeta,
+  toHaveMetaKey,
+  toHaveMetaValue,
+  toNotHaveMetaKey,
+  toHaveOnlyNamespacedMeta,
+  toHavePlatformMimeType,
+  toHavePlatformHtml,
 };

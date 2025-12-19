@@ -4,11 +4,14 @@
  *
  * This module consolidates all the content formatting logic for tool responses,
  * handling the various output formats based on serving mode and platform capabilities.
+ *
+ * For platforms with useStructuredContent=true (all widget-supporting platforms):
+ * - content: [{ type: 'text', text: '<!DOCTYPE html>...' }]  (single block with raw HTML)
+ * - structuredContent: raw tool output (set by SDK, not this module)
  */
 
 import type { WidgetServingMode } from '../types';
 import type { AIPlatformType } from './platform-meta';
-import { buildDualPayload } from './dual-payload';
 import { safeStringify } from '../utils/safe-stringify';
 import { platformSupportsWidgets } from './serving-mode';
 
@@ -39,20 +42,15 @@ export interface BuildToolResponseOptions {
   htmlContent?: string;
 
   /**
-   * Prefix text for dual-payload HTML block.
-   * @default 'Here is the visual result'
-   */
-  htmlPrefix?: string;
-
-  /**
    * The effective serving mode (after resolution from 'auto').
    */
   servingMode: Exclude<WidgetServingMode, 'auto'>;
 
   /**
-   * Whether to use dual-payload format (Claude).
+   * Whether to use structuredContent format.
+   * When true, raw HTML is returned in content and rawOutput goes to structuredContent.
    */
-  useDualPayload: boolean;
+  useStructuredContent: boolean;
 
   /**
    * The detected platform type.
@@ -66,9 +64,16 @@ export interface BuildToolResponseOptions {
 export interface ToolResponseContent {
   /**
    * The content blocks to include in the response.
-   * Empty array means widget platform will display from _meta.
+   * For structuredContent format: single TextContent with raw HTML.
+   * For widget format: empty (widget reads from _meta).
    */
   content: TextContentBlock[];
+
+  /**
+   * Structured content containing raw tool output.
+   * Set when useStructuredContent is true.
+   */
+  structuredContent?: unknown;
 
   /**
    * Metadata to merge into result._meta.
@@ -83,7 +88,7 @@ export interface ToolResponseContent {
   /**
    * Format used for the response.
    */
-  format: 'widget' | 'dual-payload' | 'markdown' | 'json-only';
+  format: 'structured-content' | 'widget' | 'markdown' | 'json-only';
 }
 
 // ============================================
@@ -98,38 +103,39 @@ export interface ToolResponseContent {
  *
  * @example
  * ```typescript
- * // Widget platform (OpenAI)
+ * // Platform with structuredContent (all widget-supporting platforms)
  * const result = buildToolResponseContent({
  *   rawOutput: { temperature: 72 },
- *   htmlContent: '<div>...</div>',
+ *   htmlContent: '<!DOCTYPE html>...',
  *   servingMode: 'inline',
- *   useDualPayload: false,
- *   platformType: 'openai',
- * });
- * // result.content = []
- * // result.contentCleared = true
- * // result.format = 'widget'
- *
- * // Claude (dual-payload)
- * const claudeResult = buildToolResponseContent({
- *   rawOutput: { temperature: 72 },
- *   htmlContent: '<div>...</div>',
- *   servingMode: 'inline',
- *   useDualPayload: true,
+ *   useStructuredContent: true,
  *   platformType: 'claude',
  * });
- * // result.content = [{ type: 'text', text: '{"temperature":72}' }, { type: 'text', text: '...' }]
- * // result.format = 'dual-payload'
+ * // result.content = [{ type: 'text', text: '<!DOCTYPE html>...' }]
+ * // result.structuredContent = { temperature: 72 }
+ * // result.format = 'structured-content'
+ *
+ * // Platform without widget support (gemini, unknown)
+ * const geminiResult = buildToolResponseContent({
+ *   rawOutput: { temperature: 72 },
+ *   htmlContent: '<!DOCTYPE html>...',
+ *   servingMode: 'inline',
+ *   useStructuredContent: false,
+ *   platformType: 'gemini',
+ * });
+ * // result.content = [{ type: 'text', text: '{"temperature":72}' }]
+ * // result.format = 'json-only'
  * ```
  */
 export function buildToolResponseContent(options: BuildToolResponseOptions): ToolResponseContent {
-  const { rawOutput, htmlContent, htmlPrefix, servingMode, useDualPayload, platformType } = options;
+  const { rawOutput, htmlContent, servingMode, useStructuredContent, platformType } = options;
 
   // Static mode: return ONLY structured JSON data
   // Widget reads tool output from platform context (e.g., window.openai.toolOutput)
   if (servingMode === 'static') {
     return {
       content: [{ type: 'text', text: safeStringify(rawOutput) }],
+      structuredContent: useStructuredContent ? rawOutput : undefined,
       contentCleared: false,
       format: 'json-only',
     };
@@ -139,6 +145,7 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
   if (servingMode === 'hybrid') {
     return {
       content: [{ type: 'text', text: safeStringify(rawOutput) }],
+      structuredContent: useStructuredContent ? rawOutput : undefined,
       contentCleared: false,
       format: 'json-only',
     };
@@ -146,34 +153,30 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
 
   // Inline mode: determine format based on platform capabilities
 
-  // Check dual-payload FIRST (Claude) - it takes precedence over widget format
-  // because Claude has supportsWidgets=true but uses a different rendering approach
-  if (useDualPayload) {
-    // Claude dual-payload format:
-    // Block 0: Pure JSON data (for programmatic parsing)
-    // Block 1: Markdown-wrapped HTML (for Artifact rendering)
+  // structuredContent format: raw HTML in content, raw output in structuredContent
+  // Used by all widget-supporting platforms (Claude, OpenAI, etc.)
+  if (useStructuredContent) {
     if (htmlContent) {
-      const dualPayload = buildDualPayload({
-        data: rawOutput,
-        html: htmlContent,
-        htmlPrefix: htmlPrefix || 'Here is the visual result',
-      });
+      // Single content block with raw HTML
+      // structuredContent contains the raw tool output
       return {
-        content: dualPayload.content,
+        content: [{ type: 'text', text: htmlContent }],
+        structuredContent: rawOutput,
         contentCleared: false,
-        format: 'dual-payload',
+        format: 'structured-content',
       };
     }
 
     // Fallback: JSON only (no HTML available)
     return {
       content: [{ type: 'text', text: safeStringify(rawOutput) }],
+      structuredContent: rawOutput,
       contentCleared: false,
       format: 'json-only',
     };
   }
 
-  // Widget platforms (OpenAI, etc.): clear content, widget reads from _meta['ui/html']
+  // Widget platforms without structuredContent: clear content, widget reads from _meta['ui/html']
   const supportsWidgets = platformSupportsWidgets(platformType);
   if (supportsWidgets) {
     return {

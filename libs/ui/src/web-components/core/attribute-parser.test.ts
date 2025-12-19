@@ -126,53 +126,6 @@ describe('Attribute Parser', () => {
       });
     });
 
-    describe('HTMX attributes', () => {
-      it('should parse hx-get as htmx nested object', () => {
-        const result = parseAttributeValue('hx-get', '/api/data');
-        expect(result).toEqual({
-          key: 'get',
-          value: '/api/data',
-          isHtmx: true,
-        });
-      });
-
-      it('should parse hx-post as htmx nested object', () => {
-        const result = parseAttributeValue('hx-post', '/api/submit');
-        expect(result).toEqual({
-          key: 'post',
-          value: '/api/submit',
-          isHtmx: true,
-        });
-      });
-
-      it('should parse hx-target as htmx nested object', () => {
-        const result = parseAttributeValue('hx-target', '#result');
-        expect(result).toEqual({
-          key: 'target',
-          value: '#result',
-          isHtmx: true,
-        });
-      });
-
-      it('should parse hx-swap as htmx nested object', () => {
-        const result = parseAttributeValue('hx-swap', 'innerHTML');
-        expect(result).toEqual({
-          key: 'swap',
-          value: 'innerHTML',
-          isHtmx: true,
-        });
-      });
-
-      it('should handle null value for htmx attribute', () => {
-        const result = parseAttributeValue('hx-boost', null);
-        expect(result).toEqual({
-          key: 'boost',
-          value: '',
-          isHtmx: true,
-        });
-      });
-    });
-
     describe('data attributes', () => {
       it('should parse data-* as data nested object', () => {
         const result = parseAttributeValue('data-action', 'submit');
@@ -223,28 +176,6 @@ describe('Attribute Parser', () => {
       const parsed: ParsedAttribute = { key: 'variant', value: 'primary' };
       const result = mergeAttributeIntoOptions(options, parsed);
       expect(result).toEqual({ variant: 'primary', size: 'md' });
-    });
-
-    it('should merge htmx attribute into nested htmx object', () => {
-      const options = {};
-      const parsed: ParsedAttribute = { key: 'get', value: '/api', isHtmx: true };
-      const result = mergeAttributeIntoOptions(options, parsed);
-      expect(result).toEqual({ htmx: { get: '/api' } });
-    });
-
-    it('should merge multiple htmx attributes into same nested object', () => {
-      let options: Record<string, unknown> = {};
-      options = mergeAttributeIntoOptions(options, {
-        key: 'get',
-        value: '/api',
-        isHtmx: true,
-      });
-      options = mergeAttributeIntoOptions(options, {
-        key: 'target',
-        value: '#result',
-        isHtmx: true,
-      });
-      expect(options).toEqual({ htmx: { get: '/api', target: '#result' } });
     });
 
     it('should merge data attribute into nested data object', () => {
@@ -303,17 +234,6 @@ describe('Attribute Parser', () => {
       expect(attrs).toContain('class');
       expect(attrs).toContain('id');
       expect(attrs).toContain('style');
-    });
-
-    it('should include HTMX attributes', () => {
-      const schema = z.object({});
-      const attrs = getObservedAttributesFromSchema(schema);
-
-      expect(attrs).toContain('hx-get');
-      expect(attrs).toContain('hx-post');
-      expect(attrs).toContain('hx-target');
-      expect(attrs).toContain('hx-swap');
-      expect(attrs).toContain('hx-trigger');
     });
 
     it('should deduplicate attributes', () => {

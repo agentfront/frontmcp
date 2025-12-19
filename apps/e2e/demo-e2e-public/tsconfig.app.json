@@ -4,10 +4,11 @@
     "outDir": "../../../dist/out-tsc",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
     "types": ["node"],
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
   "exclude": ["jest.config.ts", "jest.e2e.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts", "e2e/**/*.ts"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

@@ -3,7 +3,6 @@
  *
  * Provides a consistent HTML shell with all CDN resources pre-configured:
  * - Tailwind CSS v4 (Browser CDN) - Utility-first CSS framework with @theme support
- * - HTMX (CDN) - Progressive enhancement for interactivity
  * - Google Fonts (Inter) - Modern UI typography
  *
  * No build step required - all resources loaded from CDN at runtime.
@@ -36,12 +35,6 @@
 export const CDN = {
   /** Tailwind CSS v4 Browser CDN - generates styles on-the-fly with @theme support */
   tailwind: 'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
-
-  /** HTMX - lightweight JS for AJAX, CSS Transitions, WebSockets */
-  htmx: {
-    url: 'https://unpkg.com/htmx.org@1.9.10',
-    integrity: 'sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC',
-  },
 
   /** Google Fonts - Inter for modern UI */
   fonts: {
@@ -137,9 +130,6 @@ export interface BaseLayoutOptions {
 
   /** Optional description for meta tag */
   description?: string;
-
-  /** Include HTMX script (default: true) */
-  includeHtmx?: boolean;
 
   /** Include Tailwind CSS (default: true) */
   includeTailwind?: boolean;
@@ -242,7 +232,6 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
   const {
     title,
     description,
-    includeHtmx = true,
     includeTailwind = true,
     includeFonts = true,
     headExtra = '',
@@ -282,11 +271,6 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
   </style>`
     : '';
 
-  // Build HTMX script
-  const htmxScript = includeHtmx
-    ? `<script src="${CDN.htmx.url}" integrity="${CDN.htmx.integrity}" crossorigin="anonymous"></script>`
-    : '';
-
   // Build meta description
   const metaDescription = description ? `<meta name="description" content="${escapeHtml(description)}">` : '';
 
@@ -304,9 +288,6 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
 
   <!-- Tailwind CSS v4 Browser CDN with @theme support -->
   ${tailwindBlock}
-
-  <!-- HTMX CDN - progressive enhancement (~14KB gzipped) -->
-  ${htmxScript}
   ${headExtra}
 </head>
 <body class="${escapeHtml(bodyClass)}">

@@ -53,12 +53,12 @@ Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log.
     mode: 'public',
     sessionTtl: 3600,
     anonymousScopes: ['anonymous'],
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: false,
-    },
+  },
+  transport: {
+    enableStatefulHttp: true,
+    enableStreamableHttp: true,
+    enableStatelessHttp: false,
+    requireSessionForStreamable: false,
   },
 });
 ```
@@ -86,21 +86,21 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
       showDescriptions: true,
       requireSelection: true,
     },
-    sessionMode: 'stateful',
     allowDefaultPublic: false,
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: false,
-    },
+  },
+  transport: {
+    sessionMode: 'stateful',
+    enableStatefulHttp: true,
+    enableStreamableHttp: true,
+    enableStatelessHttp: false,
+    requireSessionForStreamable: false,
   },
 });
 ```
 
 - Spins up the full OAuth 2.1 stack (authorization code + PKCE) entirely inside FrontMCP.
 - Shows the consent UI grouping tools by app, plus incremental auth defaults.
-- Uses the same transport defaults documented in [Transport controls](/docs/servers/server#transport-controls) so you can compare behavior with production builds.
+- Uses the same transport defaults documented in [Transport controls](/docs/servers/server#transport) so you can compare behavior with production builds.
 
 <Warning>
 The demo login accepts any email address. Replace it with a real IdP before exposing the flow to users.
@@ -121,12 +121,12 @@ The demo login accepts any email address. Replace it with a real IdP before expo
     expectedAudience: process.env.IDP_EXPECTED_AUDIENCE!,
     requiredScopes: [],
     allowAnonymous: false,
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: false,
-    },
+  },
+  transport: {
+    enableStatefulHttp: true,
+    enableStreamableHttp: true,
+    enableStatelessHttp: false,
+    requireSessionForStreamable: false,
   },
 });
 ```
@@ -169,7 +169,7 @@ test('lists demo tools', async ({ mcp }) => {
 });
 ```
 
-Pair this with the [`auth.transport` reference](/docs/servers/server#transport-controls) to mirror the exact transports your production server exposes.
+Pair this with the [Transport controls reference](/docs/servers/server#transport) to mirror the exact transports your production server exposes.
 
 ---
 

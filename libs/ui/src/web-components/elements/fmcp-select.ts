@@ -57,11 +57,6 @@ export class FmcpSelect extends FmcpElement<SelectOptions> {
       'disabled',
       'multiple',
       'class',
-      'hx-get',
-      'hx-post',
-      'hx-target',
-      'hx-swap',
-      'hx-trigger',
     ];
   }
 

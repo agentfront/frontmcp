@@ -42,10 +42,11 @@
 // Core Registry
 // ============================================
 
-export { ToolUIRegistry } from './tool-ui.registry';
+export { ToolUIRegistry, isUIRenderFailure } from './tool-ui.registry';
 export type {
   RenderOptions,
   UIRenderResult,
+  UIRenderFailure,
   CompileStaticWidgetOptions,
   HybridComponentPayload,
   BuildHybridComponentPayloadOptions,

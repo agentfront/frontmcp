@@ -3,8 +3,15 @@
  * @description Builder pattern for creating McpTestClient instances
  */
 
-import type { McpTestClientConfig, TestTransportType, TestAuthConfig } from './mcp-test-client.types';
+import type {
+  McpTestClientConfig,
+  TestTransportType,
+  TestAuthConfig,
+  TestClientCapabilities,
+} from './mcp-test-client.types';
 import { McpTestClient } from './mcp-test-client';
+import type { TestPlatformType } from '../platform/platform-types';
+import { getPlatformClientInfo, getPlatformCapabilities } from '../platform/platform-client-info';
 
 /**
  * Builder for creating McpTestClient instances with fluent API
@@ -100,6 +107,59 @@ export class McpTestClientBuilder {
    */
   withClientInfo(info: { name: string; version: string }): this {
     this.config.clientInfo = info;
+    return this;
+  }
+
+  /**
+   * Set the platform type for testing platform-specific meta keys.
+   * Automatically configures clientInfo and capabilities for platform detection.
+   *
+   * Platform-specific behavior:
+   * - `openai`: Uses openai/* meta keys, sets User-Agent to "ChatGPT/1.0"
+   * - `ext-apps`: Uses ui/* meta keys per SEP-1865, sets io.modelcontextprotocol/ui capability
+   * - `claude`: Uses frontmcp/* + ui/* keys, sets User-Agent to "claude-desktop/1.0"
+   * - `cursor`: Uses frontmcp/* + ui/* keys, sets User-Agent to "cursor/1.0"
+   * - Other platforms follow similar patterns
+   *
+   * @example
+   * ```typescript
+   * const client = await McpTestClient.create({ baseUrl })
+   *   .withPlatform('openai')
+   *   .buildAndConnect();
+   *
+   * // ext-apps automatically sets the io.modelcontextprotocol/ui capability
+   * const extAppsClient = await McpTestClient.create({ baseUrl })
+   *   .withPlatform('ext-apps')
+   *   .buildAndConnect();
+   * ```
+   */
+  withPlatform(platform: TestPlatformType): this {
+    this.config.platform = platform;
+    // Auto-set clientInfo based on platform for User-Agent detection
+    this.config.clientInfo = getPlatformClientInfo(platform);
+    // Auto-set capabilities based on platform (ext-apps requires io.modelcontextprotocol/ui)
+    this.config.capabilities = getPlatformCapabilities(platform);
+    return this;
+  }
+
+  /**
+   * Set custom client capabilities for MCP initialization.
+   * Use this for fine-grained control over capabilities sent during initialization.
+   *
+   * @example
+   * ```typescript
+   * const client = await McpTestClient.create({ baseUrl })
+   *   .withCapabilities({
+   *     sampling: {},
+   *     experimental: {
+   *       'io.modelcontextprotocol/ui': { mimeTypes: ['text/html+mcp'] }
+   *     }
+   *   })
+   *   .buildAndConnect();
+   * ```
+   */
+  withCapabilities(capabilities: TestClientCapabilities): this {
+    this.config.capabilities = capabilities;
     return this;
   }
 

@@ -7,3 +7,4 @@
  */
 
 export { safeStringify } from './safe-stringify';
+export { escapeHtml, escapeHtmlAttr, escapeJsString } from './escape-html';

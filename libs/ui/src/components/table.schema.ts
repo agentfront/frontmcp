@@ -3,7 +3,7 @@
  * @description Zod schemas for Table and Pagination component options validation.
  *
  * Provides strict validation schemas for table options including columns,
- * sorting, selection, and pagination with HTMX support.
+ * sorting, selection, and pagination.
  *
  * @example
  * ```typescript
@@ -68,33 +68,6 @@ export const TableColumnSchema = z
 export type TableColumn = z.infer<typeof TableColumnSchema>;
 
 // ============================================
-// HTMX Schemas
-// ============================================
-
-/**
- * Sort HTMX options schema
- */
-export const TableSortHtmxSchema = z
-  .object({
-    get: z.string(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Select HTMX options schema
- */
-export const TableSelectHtmxSchema = z
-  .object({
-    post: z.string(),
-    target: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-// ============================================
 // Table Options Schema
 // ============================================
 
@@ -127,10 +100,6 @@ export const TableOptionsSchema = z
     emptyContent: z.string().optional(),
     /** Loading state */
     loading: z.boolean().optional(),
-    /** HTMX for sorting */
-    sortHtmx: TableSortHtmxSchema,
-    /** HTMX for selection */
-    selectHtmx: TableSelectHtmxSchema,
     /** Row key property for selection */
     rowKey: z.string().optional(),
     /** Row click handler (URL template with {key}) */
@@ -146,18 +115,6 @@ export type TableOptions = z.infer<typeof TableOptionsSchema>;
 // ============================================
 // Pagination Schema
 // ============================================
-
-/**
- * Pagination HTMX options schema
- */
-export const PaginationHtmxSchema = z
-  .object({
-    get: z.string(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-  })
-  .strict()
-  .optional();
 
 /**
  * Pagination options schema
@@ -186,8 +143,6 @@ export const PaginationOptionsSchema = z
     maxVisiblePages: z.number().min(1).optional(),
     /** Additional CSS classes */
     className: z.string().optional(),
-    /** HTMX for page navigation */
-    htmx: PaginationHtmxSchema,
   })
   .strict();
 

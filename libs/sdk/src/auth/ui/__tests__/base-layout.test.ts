@@ -28,11 +28,6 @@ describe('Base Layout', () => {
       expect(CDN.tailwind).toBe('https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4');
     });
 
-    it('should have HTMX CDN URL with integrity hash', () => {
-      expect(CDN.htmx.url).toContain('htmx.org');
-      expect(CDN.htmx.integrity).toContain('sha384-');
-    });
-
     it('should have Google Fonts configuration', () => {
       expect(CDN.fonts.preconnect).toContain('https://fonts.googleapis.com');
       expect(CDN.fonts.preconnect).toContain('https://fonts.gstatic.com');
@@ -156,22 +151,6 @@ describe('Base Layout', () => {
 
       expect(html).not.toContain('@tailwindcss/browser');
       expect(html).not.toContain('type="text/tailwindcss"');
-    });
-
-    it('should include HTMX CDN by default', () => {
-      const html = baseLayout('<div>content</div>', defaultOptions);
-
-      expect(html).toContain('htmx.org');
-      expect(html).toContain('integrity=');
-    });
-
-    it('should exclude HTMX when includeHtmx is false', () => {
-      const html = baseLayout('<div>content</div>', {
-        ...defaultOptions,
-        includeHtmx: false,
-      });
-
-      expect(html).not.toContain('htmx.org');
     });
 
     it('should include Google Fonts by default', () => {

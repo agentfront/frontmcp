@@ -13,18 +13,10 @@ import { TransportSession, TransportProtocol, SessionJwtPayload } from '../sessi
 import { ProviderSnapshot } from '../session/session.types';
 import { encryptJson } from '../session/utils/session-id.utils';
 import { AuthMode } from '../../common';
+import { getMachineId } from '../machine-id';
 
-// Single-process machine id generated at server launch
-const MACHINE_ID = (() => {
-  return process.env['MACHINE_ID'] || randomUUID();
-})();
-
-/**
- * Get the current machine ID
- */
-export function getMachineId(): string {
-  return MACHINE_ID;
-}
+// Re-export getMachineId for backwards compatibility
+export { getMachineId } from '../machine-id';
 
 /**
  * Base Authorization class - represents authenticated user context
@@ -93,7 +85,7 @@ export abstract class AuthorizationBase implements Authorization {
       protocol,
       createdAt: Date.now(),
       expiresAt: this.expiresAt,
-      nodeId: MACHINE_ID,
+      nodeId: getMachineId(),
       clientFingerprint: fingerprint,
     };
 

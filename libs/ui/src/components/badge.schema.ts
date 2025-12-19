@@ -3,7 +3,7 @@
  * @description Zod schemas for Badge component options validation.
  *
  * Provides strict validation schemas for badge options including variants,
- * sizes, dot indicators, and removable badges with HTMX support.
+ * sizes, dot indicators, and removable badges.
  *
  * @example
  * ```typescript
@@ -51,28 +51,6 @@ export const BadgeSizeSchema = z.enum(['sm', 'md', 'lg']);
 export type BadgeSize = z.infer<typeof BadgeSizeSchema>;
 
 // ============================================
-// OnRemove Schema
-// ============================================
-
-/**
- * Remove button HTMX options schema
- */
-export const BadgeOnRemoveSchema = z
-  .object({
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    confirm: z.string().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Badge onRemove type
- */
-export type BadgeOnRemove = z.infer<typeof BadgeOnRemoveSchema>;
-
-// ============================================
 // Badge Options Schema
 // ============================================
 
@@ -95,8 +73,6 @@ export const BadgeOptionsSchema = z
     className: z.string().optional(),
     /** Removable badge */
     removable: z.boolean().optional(),
-    /** Remove button HTMX options */
-    onRemove: BadgeOnRemoveSchema,
   })
   .strict();
 

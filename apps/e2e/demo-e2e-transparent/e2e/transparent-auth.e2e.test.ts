@@ -9,10 +9,9 @@
  * This test uses MockOAuthServer to provide JWKS for token validation
  * without requiring a real IdP.
  *
- * Note: Tests for subsequent requests (tools/list, etc.) are marked as skipped
- * because there's an SDK issue with session handling after initialize.
+ * Uses @frontmcp/testing McpTestClient for clean, type-safe MCP interactions.
  */
-import { TestServer, TestTokenFactory, MockOAuthServer, expect } from '@frontmcp/testing';
+import { TestServer, TestTokenFactory, MockOAuthServer, McpTestClient, expect } from '@frontmcp/testing';
 
 describe('Transparent Auth Mode E2E', () => {
   let mockOAuth: MockOAuthServer;
@@ -66,6 +65,9 @@ describe('Transparent Auth Mode E2E', () => {
   });
 
   describe('Unauthorized Access', () => {
+    // These tests MUST use raw fetch because they test error responses
+    // that McpTestClient can't handle (it expects successful connections)
+
     it('should return 401 for requests without token', async () => {
       const response = await fetch(`${server.info.baseUrl}/`, {
         method: 'POST',
@@ -106,34 +108,23 @@ describe('Transparent Auth Mode E2E', () => {
   });
 
   describe('Token Validation', () => {
-    it('should accept valid tokens and return initialize response', async () => {
+    it('should accept valid tokens and connect successfully', async () => {
       const token = await tokenFactory.createTestToken({
         sub: 'user-123',
         scopes: ['read', 'write'],
       });
 
-      const response = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      // Use McpTestClient for clean connection
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
 
-      expect(response.ok).toBe(true);
-      const body = await response.text();
-      expect(body).toContain('serverInfo');
+      expect(client.isConnected()).toBe(true);
+      expect(client.serverInfo.name).toBeDefined();
+
+      await client.disconnect();
     });
 
     it('should reject expired tokens', async () => {
@@ -180,6 +171,7 @@ describe('Transparent Auth Mode E2E', () => {
   });
 
   describe('Protected Resource Metadata', () => {
+    // OAuth metadata endpoints are HTTP endpoints, not MCP - use fetch
     it('should expose protected resource metadata endpoint', async () => {
       const response = await fetch(`${server.info.baseUrl}/.well-known/oauth-protected-resource`, {
         method: 'GET',
@@ -204,69 +196,22 @@ describe('Transparent Auth Mode E2E', () => {
         scopes: ['read'],
       });
 
-      // First initialize
-      const initResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
 
-      expect(initResponse.ok).toBe(true);
-      const sessionId = initResponse.headers.get('mcp-session-id');
+      const tools = await client.tools.list();
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
+      expect(tools).toBeDefined();
+      expect(tools.length).toBeGreaterThan(0);
 
-      // List tools
-      const toolsResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'tools/list',
-          params: {},
-        }),
-      });
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).toContain('create-task');
+      expect(toolNames).toContain('list-tasks');
 
-      if (!toolsResponse.ok) {
-        console.log('DEBUG: toolsResponse.status =', toolsResponse.status);
-        console.log('DEBUG: toolsResponse body =', await toolsResponse.clone().text());
-      }
-      expect(toolsResponse.ok).toBe(true);
-      const toolsText = await toolsResponse.text();
-      expect(toolsText).toContain('create-task');
-      expect(toolsText).toContain('list-tasks');
+      await client.disconnect();
     });
   });
 
@@ -277,70 +222,22 @@ describe('Transparent Auth Mode E2E', () => {
         scopes: ['read', 'write'],
       });
 
-      // Initialize
-      const initResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
+
+      const result = await client.tools.call('create-task', {
+        title: 'Test Task',
+        description: 'Created with valid token',
+        priority: 'high',
       });
 
-      const sessionId = initResponse.headers.get('mcp-session-id');
+      expect(result).toBeSuccessful();
+      expect(result.text()).toContain('Test Task');
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
-
-      // Call tool
-      const callResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'tools/call',
-          params: {
-            name: 'create-task',
-            arguments: {
-              title: 'Test Task',
-              description: 'Created with valid token',
-              priority: 'high',
-            },
-          },
-        }),
-      });
-
-      expect(callResponse.ok).toBe(true);
-      const resultText = await callResponse.text();
-      expect(resultText).toContain('Test Task');
+      await client.disconnect();
     });
   });
 
@@ -351,63 +248,21 @@ describe('Transparent Auth Mode E2E', () => {
         scopes: ['read'],
       });
 
-      // Initialize
-      const initResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
 
-      const sessionId = initResponse.headers.get('mcp-session-id');
+      const resources = await client.resources.list();
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
+      expect(resources).toBeDefined();
+      expect(resources.length).toBeGreaterThan(0);
 
-      // List resources
-      const resourcesResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'resources/list',
-          params: {},
-        }),
-      });
+      const resourceUris = resources.map((r) => r.uri);
+      expect(resourceUris).toContain('tasks://all');
 
-      expect(resourcesResponse.ok).toBe(true);
-      const resourcesText = await resourcesResponse.text();
-      expect(resourcesText).toContain('tasks://all');
+      await client.disconnect();
     });
   });
 
@@ -418,63 +273,21 @@ describe('Transparent Auth Mode E2E', () => {
         scopes: ['read'],
       });
 
-      // Initialize
-      const initResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            capabilities: {},
-            clientInfo: { name: 'test-client', version: '1.0.0' },
-            protocolVersion: '2024-11-05',
-          },
-        }),
-      });
+      const client = await McpTestClient.create({
+        baseUrl: server.info.baseUrl,
+        transport: 'streamable-http',
+        auth: { token },
+      }).buildAndConnect();
 
-      const sessionId = initResponse.headers.get('mcp-session-id');
+      const prompts = await client.prompts.list();
 
-      // Send initialized notification
-      await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      });
+      expect(prompts).toBeDefined();
+      expect(prompts.length).toBeGreaterThan(0);
 
-      // List prompts
-      const promptsResponse = await fetch(`${server.info.baseUrl}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-          Authorization: `Bearer ${token}`,
-          'mcp-session-id': sessionId ?? '',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'prompts/list',
-          params: {},
-        }),
-      });
+      const promptNames = prompts.map((p) => p.name);
+      expect(promptNames).toContain('prioritize-tasks');
 
-      expect(promptsResponse.ok).toBe(true);
-      const promptsText = await promptsResponse.text();
-      expect(promptsText).toContain('prioritize-tasks');
+      await client.disconnect();
     });
   });
 });

@@ -10,6 +10,7 @@
  */
 
 import type { ImportMap, ResolvedDependency, CDNDependency } from './types';
+import { escapeHtmlAttr } from '../utils';
 
 // ============================================
 // Import Map Generation
@@ -233,16 +234,6 @@ export function generateUMDShim(dependencies: ResolvedDependency[], options: UMD
     : `window.__esm_shim = ${shimObject};`;
 
   return minify ? code.replace(/\s+/g, ' ').replace(/\s*([{},:])\s*/g, '$1') : code;
-}
-
-/**
- * Escape special characters for HTML attribute values.
- *
- * @param str - String to escape
- * @returns Escaped string safe for HTML attributes
- */
-function escapeHtmlAttr(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
 /**

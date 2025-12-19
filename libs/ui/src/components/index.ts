@@ -5,7 +5,6 @@
  * Provides reusable UI components for FrontMCP pages including:
  * - Button, Card, Badge, Alert, Avatar, Modal, Table, Form, List components
  * - Zod schemas for all component options (for runtime validation)
- * - Full HTMX support for dynamic interactions
  *
  * @module @frontmcp/ui/components
  */
