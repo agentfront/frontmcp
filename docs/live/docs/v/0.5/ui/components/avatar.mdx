@@ -1,0 +1,274 @@
+---
+title: Avatar Component
+sidebarTitle: Avatar
+icon: user
+description: Avatars represent users or entities with images, initials, or icons. They support status indicators and can be grouped.
+---
+
+## Import
+
+```typescript
+import { avatar, avatarGroup } from '@frontmcp/ui';
+```
+
+## Basic Usage
+
+```typescript
+// With image
+const html = avatar({
+  src: 'https://example.com/avatar.jpg',
+  alt: 'John Doe',
+});
+
+// With initials (fallback when no image)
+const initials = avatar({
+  name: 'John Doe',
+});
+// Renders: "JD"
+
+// With icon
+const icon = avatar({
+  icon: '👤',
+});
+```
+
+## Sizes
+
+```typescript
+avatar({ name: 'John', size: 'xs' })  // 24px
+avatar({ name: 'John', size: 'sm' })  // 32px
+avatar({ name: 'John', size: 'md' })  // 40px (default)
+avatar({ name: 'John', size: 'lg' })  // 48px
+avatar({ name: 'John', size: 'xl' })  // 64px
+avatar({ name: 'John', size: '2xl' }) // 80px
+```
+
+## Shapes
+
+```typescript
+// Circle (default)
+avatar({ name: 'John', shape: 'circle' })
+
+// Rounded square
+avatar({ name: 'John', shape: 'rounded' })
+
+// Square
+avatar({ name: 'John', shape: 'square' })
+```
+
+## Status Indicator
+
+Show online/offline status:
+
+```typescript
+avatar({
+  name: 'John Doe',
+  src: '/avatars/john.jpg',
+  status: 'online',
+})
+
+avatar({ name: 'Jane', status: 'offline' })
+avatar({ name: 'Bob', status: 'busy' })
+avatar({ name: 'Alice', status: 'away' })
+```
+
+### Status Colors
+
+| Status    | Color  |
+| --------- | ------ |
+| `online`  | Green  |
+| `offline` | Gray   |
+| `busy`    | Red    |
+| `away`    | Yellow |
+
+## With Badge
+
+Add a notification badge:
+
+```typescript
+avatar({
+  name: 'John Doe',
+  src: '/avatars/john.jpg',
+  badge: '3',  // notification count
+})
+
+avatar({
+  name: 'Jane',
+  badge: '!',  // alert indicator
+  badgeVariant: 'danger',
+})
+```
+
+## Initials Generation
+
+When no `src` is provided, initials are generated from the `name`:
+
+```typescript
+avatar({ name: 'John Doe' })        // "JD"
+avatar({ name: 'Alice' })           // "A"
+avatar({ name: 'Bob Smith Jr' })    // "BS"
+avatar({ name: 'jean-pierre' })     // "JP"
+```
+
+### Custom Initials
+
+```typescript
+avatar({
+  name: 'John Doe',
+  initials: 'JD',  // Override generated initials
+})
+```
+
+## Colors
+
+Background colors for initials:
+
+```typescript
+// Auto-generated based on name (deterministic)
+avatar({ name: 'John Doe' })
+
+// Specific color
+avatar({ name: 'John', color: 'blue' })
+avatar({ name: 'Jane', color: 'green' })
+avatar({ name: 'Bob', color: 'purple' })
+```
+
+Available colors: `gray`, `red`, `orange`, `yellow`, `green`, `teal`, `blue`, `indigo`, `purple`, `pink`.
+
+## Avatar Groups
+
+Display multiple avatars together:
+
+```typescript
+const html = avatarGroup([
+  avatar({ src: '/avatars/1.jpg', alt: 'User 1' }),
+  avatar({ src: '/avatars/2.jpg', alt: 'User 2' }),
+  avatar({ src: '/avatars/3.jpg', alt: 'User 3' }),
+  avatar({ name: '+5' }),  // overflow indicator
+]);
+```
+
+### Group Options
+
+```typescript
+// Stacked (overlapping)
+avatarGroup(avatars, { stacked: true })
+
+// Custom spacing
+avatarGroup(avatars, { spacing: 'tight' })  // more overlap
+avatarGroup(avatars, { spacing: 'normal' }) // default
+avatarGroup(avatars, { spacing: 'loose' })  // less overlap
+
+// Max visible (shows +N for overflow)
+avatarGroup(avatars, { max: 3 })
+```
+
+## Clickable Avatar
+
+```typescript
+// As link
+avatar({
+  name: 'John Doe',
+  src: '/avatars/john.jpg',
+  href: '/users/john',
+})
+
+// With HTMX
+avatar({
+  name: 'John Doe',
+  htmx: {
+    get: '/api/users/john/profile',
+    target: '#profile-modal',
+  },
+})
+```
+
+## Complete Example
+
+```typescript
+import { card, avatar, avatarGroup, badge } from '@frontmcp/ui';
+
+const teamCard = card(`
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      ${avatar({
+        src: '/avatars/team-lead.jpg',
+        name: 'Sarah Johnson',
+        size: 'lg',
+        status: 'online',
+      })}
+      <div>
+        <h3 class="font-semibold">Sarah Johnson</h3>
+        <p class="text-sm text-gray-500">Team Lead</p>
+      </div>
+    </div>
+    ${badge('Active', { variant: 'success' })}
+  </div>
+
+  <div class="border-t pt-4">
+    <p class="text-sm text-gray-500 mb-2">Team Members</p>
+    ${avatarGroup([
+      avatar({ src: '/avatars/1.jpg', name: 'Alice', status: 'online' }),
+      avatar({ src: '/avatars/2.jpg', name: 'Bob', status: 'away' }),
+      avatar({ src: '/avatars/3.jpg', name: 'Charlie', status: 'online' }),
+      avatar({ src: '/avatars/4.jpg', name: 'Diana', status: 'offline' }),
+      avatar({ name: '+3', color: 'gray' }),
+    ], { stacked: true, max: 5 })}
+  </div>
+`, { title: 'Development Team' });
+```
+
+## Use with Lists
+
+```typescript
+import { actionList, avatar } from '@frontmcp/ui';
+
+const userList = actionList([
+  {
+    title: 'John Doe',
+    description: 'john@example.com',
+    icon: avatar({ name: 'John Doe', size: 'sm' }),
+    href: '/users/john',
+  },
+  {
+    title: 'Jane Smith',
+    description: 'jane@example.com',
+    icon: avatar({ name: 'Jane Smith', size: 'sm', status: 'online' }),
+    href: '/users/jane',
+  },
+]);
+```
+
+## API Reference
+
+### `avatar(options)`
+
+| Option         | Type                                            | Default     | Description                      |
+| -------------- | ----------------------------------------------- | ----------- | -------------------------------- |
+| `src`          | `string`                                        | -           | Image URL                        |
+| `alt`          | `string`                                        | -           | Image alt text                   |
+| `name`         | `string`                                        | -           | Name for initials generation     |
+| `initials`     | `string`                                        | -           | Custom initials (overrides name) |
+| `icon`         | `string`                                        | -           | Icon instead of image/initials   |
+| `size`         | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl'` | `'md'`      | Avatar size                      |
+| `shape`        | `'circle' \| 'rounded' \| 'square'`             | `'circle'`  | Avatar shape                     |
+| `status`       | `'online' \| 'offline' \| 'busy' \| 'away'`     | -           | Status indicator                 |
+| `badge`        | `string`                                        | -           | Badge content                    |
+| `badgeVariant` | `string`                                        | `'primary'` | Badge color variant              |
+| `color`        | `string`                                        | auto        | Background color for initials    |
+| `href`         | `string`                                        | -           | Link URL                         |
+| `htmx`         | `object`                                        | -           | HTMX attributes                  |
+| `className`    | `string`                                        | -           | Additional CSS classes           |
+
+### `avatarGroup(avatars, options?)`
+
+| Option      | Type                             | Default    | Description            |
+| ----------- | -------------------------------- | ---------- | ---------------------- |
+| `stacked`   | `boolean`                        | `true`     | Overlap avatars        |
+| `spacing`   | `'tight' \| 'normal' \| 'loose'` | `'normal'` | Overlap amount         |
+| `max`       | `number`                         | -          | Max visible before +N  |
+| `className` | `string`                         | -          | Additional CSS classes |
+
+### Returns
+
+`string` - HTML string for the avatar element.

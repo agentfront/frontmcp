@@ -38,7 +38,7 @@ Tools are ideal for:
 Use class decorators for tools that need dependency injection, lifecycle hooks, or complex logic:
 
 ```ts
-import { Tool } from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 @Tool({
@@ -46,7 +46,7 @@ import { z } from 'zod';
   description: 'Greets a user by name',
   inputSchema: { name: z.string() },
 })
-class GreetTool {
+class GreetTool extends ToolContext {
   async execute({ name }: { name: string }) {
     return `Hello, ${name}!`;
   }
@@ -169,7 +169,7 @@ Optionally define an output schema for response validation:
     total: z.number(),
   }),
 })
-class CalculateTotalTool {
+class CalculateTotalTool extends ToolContext {
   execute({ items }) {
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const tax = subtotal * 0.1;
@@ -308,7 +308,7 @@ Provide examples to improve discoverability and help LLMs understand how to use 
     },
   ],
 })
-class CreateUserTool {
+class CreateUserTool extends ToolContext {
   async execute({ email, role }) {
     // Implementation
   }
@@ -389,14 +389,14 @@ Class-based tools have access to a rich execution context via `this`:
   name: 'context-example',
   inputSchema: { query: z.string() },
 })
-class ContextExampleTool {
+class ContextExampleTool extends ToolContext {
   async execute({ query }: { query: string }) {
     // Input received by the tool
     this.input;              // { query: 'value' }
     this.metadata;           // Tool metadata (name, description, etc.)
 
-    // Authentication
-    this.authInfo;           // Auth context from MCP session
+    // Authentication (prefer this.requestContext.authInfo)
+    this.authInfo;           // Auth context from MCP session (deprecated)
 
     // Dependency injection
     this.get(ConfigService); // Resolve a provider
@@ -428,7 +428,7 @@ Inject services via the `get()` method:
     name: z.string(),
   },
 })
-class CreateUserTool {
+class CreateUserTool extends ToolContext {
   async execute({ email, name }) {
     const db = this.get(DatabaseProvider);
     const user = await db.users.create({ email, name });
@@ -436,6 +436,52 @@ class CreateUserTool {
   }
 }
 ```
+
+### Request Context
+
+Class-based tools have access to the full request context including tracing, timing, and authentication:
+
+```ts
+@Tool({
+  name: 'traced-tool',
+  inputSchema: { query: z.string() },
+})
+class TracedTool extends ToolContext {
+  async execute({ query }: { query: string }) {
+    // Full request context
+    const ctx = this.requestContext;
+
+    // Tracing (W3C Trace Context)
+    console.log(ctx.requestId);                    // Unique request ID
+    console.log(ctx.traceContext.traceId);         // W3C Trace ID
+    console.log(ctx.traceContext.parentId);        // Parent span ID (if present)
+
+    // Authentication (prefer over this.authInfo)
+    console.log(ctx.authInfo.token);               // JWT token
+    console.log(ctx.authInfo.user);                // User info
+
+    // Session
+    console.log(ctx.sessionId);                    // MCP session ID
+
+    // Timing marks for performance tracking
+    ctx.mark('db-query-start');
+    await this.queryDatabase();
+    ctx.mark('db-query-end');
+    console.log(ctx.elapsed('db-query-start', 'db-query-end')); // ms
+
+    // Request metadata
+    console.log(ctx.metadata.userAgent);
+    console.log(ctx.metadata.clientIp);
+
+    return `Processed: ${query}`;
+  }
+}
+```
+
+<Tip>
+  Use `this.requestContext.authInfo` instead of the deprecated `this.authInfo` for accessing authentication data.
+  See [Request Context](/docs/extensibility/request-context) for complete API reference.
+</Tip>
 
 ---
 
@@ -455,7 +501,7 @@ class CreateUserTool {
     idempotentHint: true,
   },
 })
-class CalculateTool {
+class CalculateTool extends ToolContext {
   execute({ expression }) {
     // Using a safe math parser (not eval!)
     const result = safeEvaluate(expression);
@@ -481,7 +527,7 @@ class CalculateTool {
     openWorldHint: true,
   },
 })
-class CreateGitHubIssueTool {
+class CreateGitHubIssueTool extends ToolContext {
   async execute({ owner, repo, title, body, labels }) {
     const config = this.get(ConfigProvider);
 
@@ -526,7 +572,7 @@ class CreateGitHubIssueTool {
     destructiveHint: true,
   },
 })
-class UpdateUserStatusTool {
+class UpdateUserStatusTool extends ToolContext {
   async execute({ userId, status, reason }) {
     const db = this.get(DatabaseProvider);
     const audit = this.get(AuditLogProvider);
@@ -568,7 +614,7 @@ class UpdateUserStatusTool {
     encoding: z.enum(['utf-8', 'base64']).default('utf-8'),
   },
 })
-class WriteFileTool {
+class WriteFileTool extends ToolContext {
   async execute({ path, content, encoding }) {
     const fs = await import('fs/promises');
     const pathModule = await import('path');
@@ -663,7 +709,7 @@ Add a `ui` property to attach a visual template:
     widgetDescription: 'Displays current weather conditions',
   },
 })
-class GetWeatherTool {
+class GetWeatherTool extends ToolContext {
   async execute({ location }) {
     return { location, temperature: 22, conditions: 'Sunny' };
   }
@@ -714,7 +760,8 @@ ui: {
 | `widgetDescription` | Human-readable description shown to users                       |
 | `widgetAccessible`  | Allow widget to call tools via MCP Bridge                       |
 | `csp`               | Content Security Policy (allowed domains)                       |
-| `servingMode`       | How HTML is delivered: `'inline'`, `'static'`, `'hybrid'`, etc. |
+| `servingMode`       | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc. |
+| `htmlResponsePrefix`| Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
 | `mdxComponents`     | Custom components for MDX templates                             |
 | `hydrate`           | Enable client-side React hydration for interactivity            |
 
@@ -744,7 +791,7 @@ import { card, badge, button, descriptionList } from '@frontmcp/ui';
     },
   },
 })
-class GetOrderTool { /* ... */ }
+class GetOrderTool extends ToolContext { /* ... */ }
 ```
 
 ### Testing Tool UI

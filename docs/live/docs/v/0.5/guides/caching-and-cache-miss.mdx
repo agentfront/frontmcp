@@ -1,0 +1,702 @@
+---
+title: Caching & Cache Miss
+slug: guides/caching-and-cache-miss
+description: Add transparent response caching to tools with configurable TTL and storage options
+icon: database
+---
+
+The Cache Plugin provides transparent response caching for tools, dramatically improving performance by avoiding redundant computations and API calls. This guide shows you how to add caching to your FrontMCP tools.
+
+## What You'll Learn
+
+By the end of this guide, you'll know how to:
+
+- ✅ Enable caching for specific tools
+- ✅ Configure TTL (time-to-live) per tool
+- ✅ Use sliding windows to keep hot data cached
+- ✅ Switch between memory and Redis storage
+- ✅ Handle cache misses and invalidation
+
+<Tip>
+  Caching is perfect for tools that make expensive computations, database queries, or third-party API calls with
+  deterministic outputs.
+</Tip>
+
+---
+
+## Prerequisites
+
+- A FrontMCP project with at least one app and tool
+- Understanding of tool execution flow
+- (Optional) Redis server for production caching
+
+---
+
+## Step 1: Install the Cache Plugin
+
+```bash
+npm install @frontmcp/plugins
+```
+
+---
+
+## Step 2: Add Plugin to Your App
+
+<CodeGroup>
+
+```ts Simple (in-memory)
+import { App } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [CachePlugin], // Default: memory store, 1-day TTL
+  tools: [
+    /* your tools */
+  ],
+})
+export default class MyApp {}
+```
+
+```ts Custom TTL (in-memory)
+import { App } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    CachePlugin.init({
+      type: 'memory',
+      defaultTTL: 300, // 5 minutes
+    }),
+  ],
+  tools: [
+    /* your tools */
+  ],
+})
+export default class MyApp {}
+```
+
+```ts Redis (production)
+import { App } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [
+    CachePlugin.init({
+      type: 'redis',
+      defaultTTL: 600, // 10 minutes
+      config: {
+        host: 'localhost',
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    }),
+  ],
+  tools: [
+    /* your tools */
+  ],
+})
+export default class MyApp {}
+```
+
+</CodeGroup>
+
+---
+
+## Step 3: Enable Caching on Tools
+
+Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
+
+<Tabs>
+  <Tab title="Class-based Tool">
+    ```ts
+    import { Tool, ToolContext } from '@frontmcp/sdk';
+    import { z } from 'zod';
+
+    @Tool({
+      name: 'get-user-profile',
+      description: 'Fetch user profile from database',
+      inputSchema: { userId: z.string() },
+      cache: true, // Enable caching with plugin defaults
+    })
+    export default class GetUserProfileTool extends ToolContext {
+      async execute(input: { userId: string }) {
+        // Expensive database query
+        return await this.database.getUserProfile(input.userId);
+      }
+    }
+    ```
+
+  </Tab>
+
+  <Tab title="Function-based Tool">
+    ```ts
+    import { tool } from '@frontmcp/sdk';
+    import { z } from 'zod';
+
+    export const GetUserProfile = tool({
+      name: 'get-user-profile',
+      description: 'Fetch user profile from database',
+      inputSchema: { userId: z.string() },
+      cache: true, // Enable caching with plugin defaults
+    })(async (input) => {
+      // Expensive database query
+      return await database.getUserProfile(input.userId);
+    });
+    ```
+
+  </Tab>
+
+  <Tab title="Custom TTL">
+    ```ts
+    @Tool({
+      name: 'get-report',
+      description: 'Generate monthly report',
+      inputSchema: {
+        month: z.string(),
+        year: z.number(),
+      },
+      cache: {
+        ttl: 1800, // Cache for 30 minutes
+      },
+    })
+    export default class GetReportTool extends ToolContext {
+      async execute(input: { month: string; year: number }) {
+        // Expensive report generation
+        return await this.reportService.generate(input.month, input.year);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="With Sliding Window">
+    ```ts
+    @Tool({
+      name: 'get-popular-items',
+      description: 'Get trending items',
+      inputSchema: { category: z.string() },
+      cache: {
+        ttl: 120, // 2 minutes
+        slideWindow: true, // Refresh TTL on each read
+      },
+    })
+    export default class GetPopularItemsTool extends ToolContext {
+      async execute(input: { category: string }) {
+        // Hot data that's frequently accessed
+        return await this.analytics.getPopularItems(input.category);
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Step 4: Test Cache Behavior
+
+<Steps>
+  <Step title="Start your server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Call the tool twice">
+    Use the MCP Inspector or a client to call your cached tool twice with the same input:
+
+    ```json
+    // First call
+    { "userId": "user-123" }
+    ```
+
+    The first call executes the tool normally (cache miss).
+
+  </Step>
+
+<Step title="Observe cache hit">
+  The second call returns instantly from cache! Check your logs for: ``` [DEBUG] Cache hit for get-user-profile ```
+</Step>
+
+  <Step title="Test cache expiration">
+    Wait for the TTL to expire, then call again. The cache will miss and the tool will execute.
+  </Step>
+</Steps>
+
+---
+
+## How Caching Works
+
+<Steps>
+  <Step title="Cache Key Generation">
+    When a tool is called, the plugin creates a deterministic hash from:
+    - Tool name (e.g., `get-user-profile`)
+    - Validated input (e.g., `{ userId: "user-123" }`)
+
+    Same input = Same cache key
+
+  </Step>
+
+<Step title="Before Execution (Will Hook)">
+  The plugin checks the cache store for the key: - **Cache Hit**: Return cached result immediately, skip execution -
+  **Cache Miss**: Allow tool to execute normally
+</Step>
+
+<Step title="After Execution (Did Hook)">
+  If the tool executed, the plugin stores the result in the cache with the configured TTL
+</Step>
+
+  <Step title="Sliding Window (Optional)">
+    If `slideWindow: true`, each cache read refreshes the TTL, keeping popular data cached longer
+  </Step>
+</Steps>
+
+<Info>The cache operates at the **hook level**, so it works transparently without modifying your tool code.</Info>
+
+---
+
+## Configuration Options
+
+### Tool-Level Cache Options
+
+<ParamField path="cache" type="boolean | object">
+  Enable caching for this tool
+
+- `true` - Use plugin's default TTL
+- `{ ttl, slideWindow }` - Custom configuration
+
+</ParamField>
+
+<ParamField path="cache.ttl" type="number">
+  Time-to-live in seconds. Overrides plugin's `defaultTTL`.
+
+**Examples:**
+
+- `60` - 1 minute
+- `300` - 5 minutes
+- `3600` - 1 hour
+- `86400` - 1 day
+
+</ParamField>
+
+<ParamField path="cache.slideWindow" type="boolean" default="false">
+  When `true`, reading from cache refreshes the TTL
+  **Use cases:**
+
+- Trending/popular data
+- Frequently accessed reports
+- User dashboards
+
+</ParamField>
+
+---
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Pattern 1: Fast-Changing Data (Short TTL)">
+    For data that changes frequently:
+
+    ```ts
+    @Tool({
+      name: 'get-stock-price',
+      inputSchema: { symbol: z.string() },
+      cache: {
+        ttl: 5, // Only 5 seconds
+      },
+    })
+    class GetStockPriceTool extends ToolContext {
+      async execute(input: { symbol: string }) {
+        return await this.marketData.getPrice(input.symbol);
+      }
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Pattern 2: Expensive Reports (Long TTL)">
+    For computationally expensive operations:
+
+    ```ts
+    @Tool({
+      name: 'generate-annual-report',
+      inputSchema: {
+        year: z.number(),
+        department: z.string(),
+      },
+      cache: {
+        ttl: 86400, // 24 hours
+      },
+    })
+    class GenerateAnnualReportTool extends ToolContext {
+      async execute(input) {
+        // Very expensive computation
+        return await this.reports.generateAnnual(input.year, input.department);
+      }
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Pattern 3: Hot Data with Sliding Window">
+    For frequently accessed data:
+
+    ```ts
+    @Tool({
+      name: 'get-user-dashboard',
+      inputSchema: { userId: z.string() },
+      cache: {
+        ttl: 300, // 5 minutes
+        slideWindow: true, // Keep hot dashboards cached
+      },
+    })
+    class GetUserDashboardTool extends ToolContext {
+      async execute(input: { userId: string }) {
+        return await this.dashboard.generate(input.userId);
+      }
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Pattern 4: Multi-Tenant Isolation">
+    Include tenant ID in input for automatic isolation:
+
+    ```ts
+    @Tool({
+      name: 'get-tenant-data',
+      inputSchema: {
+        tenantId: z.string(), // Automatically part of cache key
+        dataType: z.string(),
+      },
+      cache: { ttl: 600 },
+    })
+    class GetTenantDataTool extends ToolContext {
+      async execute(input) {
+        return await this.tenantService.getData(
+          input.tenantId,
+          input.dataType
+        );
+      }
+    }
+    ```
+
+    Each tenant's data is cached separately!
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Memory vs Redis
+
+### When to Use Memory Cache
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="code">
+    Perfect for local development and testing
+  </Card>
+
+<Card title="Single Instance" icon="server">
+  When running one server instance
+</Card>
+
+<Card title="Non-Critical Data" icon="circle-info">
+  Data loss on restart is acceptable
+</Card>
+
+  <Card title="Simple Setup" icon="check">
+    No external dependencies needed
+  </Card>
+</CardGroup>
+
+<Warning>Memory cache resets when the server restarts. Not shared across multiple instances.</Warning>
+
+### When to Use Redis
+
+<CardGroup cols={2}>
+  <Card title="Production" icon="building">
+    Recommended for production deployments
+  </Card>
+
+<Card title="Multi-Instance" icon="layer-group">
+  Cache shared across multiple server instances
+</Card>
+
+<Card title="Persistence" icon="database">
+  Cache survives server restarts
+</Card>
+
+  <Card title="Better Eviction" icon="broom">
+    Redis handles memory limits gracefully
+  </Card>
+</CardGroup>
+
+<Check>Redis provides persistence, sharing, and better memory management for production use.</Check>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cache not working">
+    **Checklist:**
+    1. Tool has `cache: true` or `cache: { ... }` in metadata
+    2. Plugin is registered in app's `plugins` array
+    3. Redis is running (if using Redis backend)
+    4. No errors in server logs
+
+    **Debug:**
+    ```ts
+    logging: {
+      level: LogLevel.DEBUG, // See cache hit/miss logs
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Stale data being returned">
+    **Problem:** Cache TTL is too long for your data freshness requirements.
+
+    **Solution:** Reduce the TTL:
+    ```ts
+    cache: {
+      ttl: 60, // Shorter TTL = fresher data
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Cache not shared across instances">
+    **Problem:** Using memory cache with multiple server instances.
+
+    **Solution:** Switch to Redis:
+    ```ts
+    CachePlugin.init({
+      type: 'redis',
+      config: { host: 'localhost', port: 6379 },
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Non-deterministic tools being cached">
+    **Problem:** Tool output varies even with same input (e.g., returns current timestamp).
+
+    **Solution:** Don't cache non-deterministic tools:
+    ```ts
+    @Tool({
+      name: 'get-current-time',
+      // No cache field - don't cache this!
+    })
+    ```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="1. Only Cache Deterministic Tools">
+    Cache tools where the same input produces the same output:
+
+    ✅ **Good candidates:**
+    - Database queries by ID
+    - API calls with stable responses
+    - Report generation
+    - Static data lookup
+
+    ❌ **Bad candidates:**
+    - Tools that return current time/date
+    - Tools with random output
+    - Tools with side effects (mutations)
+
+  </Accordion>
+
+  <Accordion title="2. Choose Appropriate TTLs">
+    Match TTL to data change frequency:
+
+    | Data Type | Suggested TTL |
+    |-----------|---------------|
+    | Real-time prices | 5-10 seconds |
+    | User profiles | 5-15 minutes |
+    | Reports | 30 minutes - 1 hour |
+    | Static content | Hours to days |
+
+  </Accordion>
+
+  <Accordion title="3. Include Scoping Fields">
+    Always include tenant/user IDs in inputs:
+
+    ```ts
+    // Good: Automatic tenant isolation
+    inputSchema: {
+      tenantId: z.string(),
+      userId: z.string(),
+      reportId: z.string(),
+    }
+
+    // Bad: Shared across tenants
+    inputSchema: {
+      reportId: z.string(),
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="4. Use Redis for Production">
+    Redis provides:
+    - Persistence across restarts
+    - Sharing across instances
+    - Better memory management
+    - Monitoring and debugging tools
+
+    ```ts
+    // Production config
+    CachePlugin.init({
+      type: 'redis',
+      defaultTTL: 600,
+      config: {
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+      },
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="5. Monitor Cache Performance">
+    Enable debug logging to see cache hits/misses:
+
+    ```ts
+    logging: {
+      level: LogLevel.DEBUG,
+    }
+    ```
+
+    Look for:
+    - High miss rates (TTL too short? Tool not deterministic?)
+    - Memory growth (TTL too long?)
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+Here's a full example with multiple tools using different caching strategies:
+
+```ts
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
+import { z } from 'zod';
+
+// Real-time data: short TTL
+@Tool({
+  name: 'get-stock-price',
+  inputSchema: { symbol: z.string() },
+  cache: { ttl: 10 }, // 10 seconds
+})
+class GetStockPriceTool extends ToolContext {
+  async execute(input: { symbol: string }) {
+    return await this.marketData.getPrice(input.symbol);
+  }
+}
+
+// User data: medium TTL
+@Tool({
+  name: 'get-user',
+  inputSchema: {
+    tenantId: z.string(),
+    userId: z.string(),
+  },
+  cache: { ttl: 300 }, // 5 minutes
+})
+class GetUserTool extends ToolContext {
+  async execute(input) {
+    return await this.database.getUser(input.tenantId, input.userId);
+  }
+}
+
+// Popular content: sliding window
+@Tool({
+  name: 'get-trending',
+  inputSchema: { category: z.string() },
+  cache: {
+    ttl: 120, // 2 minutes
+    slideWindow: true, // Keep hot data cached
+  },
+})
+class GetTrendingTool extends ToolContext {
+  async execute(input: { category: string }) {
+    return await this.analytics.getTrending(input.category);
+  }
+}
+
+// Expensive reports: long TTL
+@Tool({
+  name: 'generate-report',
+  inputSchema: {
+    tenantId: z.string(),
+    month: z.string(),
+  },
+  cache: { ttl: 3600 }, // 1 hour
+})
+class GenerateReportTool extends ToolContext {
+  async execute(input) {
+    // Very expensive operation
+    return await this.reports.generate(input.tenantId, input.month);
+  }
+}
+
+@App({
+  id: 'analytics',
+  name: 'Analytics App',
+  plugins: [
+    CachePlugin.init({
+      type: 'redis',
+      defaultTTL: 600, // 10 minutes default
+      config: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+      },
+    }),
+  ],
+  tools: [GetStockPriceTool, GetUserTool, GetTrendingTool, GenerateReportTool],
+})
+class AnalyticsApp {}
+
+@FrontMcp({
+  info: { name: 'Analytics Server', version: '1.0.0' },
+  apps: [AnalyticsApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+---
+
+## What's Next?
+
+<CardGroup cols={3}>
+  <Card title="Cache Plugin Docs" icon="book" href="/docs/plugins/cache-plugin">
+    Full Cache Plugin reference documentation
+  </Card>
+
+  <Card title="Custom Hooks" icon="link" href="/docs/guides/customize-flow-stages">
+    Learn how the cache plugin uses hooks internally
+  </Card>
+
+  <Card title="Plugin Development" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+    Create your own plugins with custom behavior
+  </Card>
+</CardGroup>

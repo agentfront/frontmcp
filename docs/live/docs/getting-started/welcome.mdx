@@ -36,11 +36,7 @@ class CalcApp {}
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
   apps: [CalcApp],
-  auth: {
-    type: 'remote',
-    name: 'my-oauth',
-    baseUrl: 'https://oauth.example.com',
-  },
+  http: { port: 3000 },
 })
 export default class Server {}
 ```

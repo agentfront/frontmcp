@@ -235,8 +235,8 @@ OpenapiAdapter.init({
 
   // ✅ Auth provider mapper - LOW RISK
   authProviderMapper: {
-    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
-    SlackAuth: (authInfo) => authInfo.user?.slackToken,
+    GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
+    SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
   },
 
   // ✅ Auth resolved from server-side context
@@ -261,7 +261,7 @@ OpenapiAdapter.init({
 }
 ```
 
-Auth is resolved server-side from `authInfo` context. Clients never see it.
+Auth is resolved server-side from the request context. Clients never see it.
 
 ### 2. Request isolation + multi-provider authentication
 
@@ -274,16 +274,16 @@ OpenapiAdapter.init({
   baseUrl: 'https://api.example.com',
 
   authProviderMapper: {
-    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
-    SlackAuth: (authInfo) => authInfo.user?.slackToken,
-    StripeAuth: (authInfo) => authInfo.user?.stripeKey,
+    GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
+    SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
+    StripeAuth: (ctx) => ctx.authInfo.user?.stripeKey,
   },
 });
 
 // Each tool uses the right provider automatically:
-// github_createRepo() → GitHubAuth → authInfo.user.githubToken
-// slack_postMessage() → SlackAuth → authInfo.user.slackToken
-// stripe_createCharge() → StripeAuth → authInfo.user.stripeKey
+// github_createRepo() → GitHubAuth → ctx.authInfo.user.githubToken
+// slack_postMessage() → SlackAuth → ctx.authInfo.user.slackToken
+// stripe_createCharge() → StripeAuth → ctx.authInfo.user.stripeKey
 ```
 
 FrontMCP validates configuration at startup and creates isolated headers per-request—no cross-contamination possible.
@@ -322,19 +322,33 @@ console.log(validation);
 OpenapiAdapter.init({
   spec: multiProviderSpec, // Has GitHubAuth, SlackAuth, StripeAuth
   authProviderMapper: {
-    GitHubAuth: (authInfo) => authInfo.user?.githubToken,
+    GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
     // Missing SlackAuth and StripeAuth!
   },
 });
 
 // Error: Missing auth provider mappings for security schemes: SlackAuth, StripeAuth
 // Solutions:
-//   1. Add authProviderMapper: { 'SlackAuth': (authInfo) => authInfo.user?.slackToken }
-//   2. Add securityResolver: (tool, authInfo) => ({ jwt: authInfo.token })
+//   1. Add authProviderMapper: { 'SlackAuth': (ctx) => ctx.authInfo.user?.slackToken }
+//   2. Add securityResolver: (tool, ctx) => ({ jwt: ctx.authInfo.token })
 //   3. Add staticAuth: { jwt: process.env.API_TOKEN }
 ```
 
 You know **immediately** if your security config is wrong. No silent failures in production.
+
+### 4. Defense-in-depth security protections
+
+Beyond authentication, FrontMCP protects against common attack vectors:
+
+| Protection | What it prevents |
+|------------|------------------|
+| **SSRF Prevention** | Blocks dangerous protocols (`file://`, `javascript:`, `data:`) in server URLs |
+| **Header Injection** | Rejects control characters (`\r`, `\n`, `\x00`) that could inject headers |
+| **Prototype Pollution** | Blocks reserved JS keys (`__proto__`, `constructor`) in input transforms |
+| **Integer Overflow** | Content-Length validated with `isFinite()` to prevent size bypass |
+| **Query Param Collision** | Detects conflicts between security and user input parameters |
+
+These protections are automatic—you don't need to configure anything. See [`openapi.executor.ts`](https://github.com/agentfront/frontmcp/blob/main/libs/adapters/src/openapi/openapi.executor.ts) for implementation details.
 
 ### 5. Runs on YOUR infrastructure
 
@@ -367,7 +381,9 @@ OpenapiAdapter.init({
   spec: apiSpec,
   baseUrl: 'https://api.example.com',
 
-  headersMapper: (authInfo, headers) => {
+  headersMapper: (ctx, headers) => {
+    const authInfo = ctx.authInfo;
+
     // ✅ Add tenant ID from user context
     if (authInfo.user?.tenantId) {
       headers.set('x-tenant-id', authInfo.user.tenantId);
@@ -378,10 +394,15 @@ OpenapiAdapter.init({
       headers.set('authorization', `Bearer ${authInfo.token}`);
     }
 
+    // ✅ Add trace ID for observability
+    headers.set('x-trace-id', ctx.traceContext.traceId);
+
     return headers;
   },
 
-  bodyMapper: (authInfo, body) => {
+  bodyMapper: (ctx, body) => {
+    const authInfo = ctx.authInfo;
+
     // ✅ Inject user context into all mutations
     return {
       ...body,
@@ -458,8 +479,8 @@ const adapter = OpenapiAdapter.init({
   spec: require('./api.yaml'),
   baseUrl: process.env.API_BASE_URL!,
   authProviderMapper: {
-    BearerAuth: (authInfo) => authInfo.token,
-    ApiKeyAuth: (authInfo) => authInfo.user?.apiKey,
+    BearerAuth: (ctx) => ctx.authInfo.token,
+    ApiKeyAuth: (ctx) => ctx.authInfo.user?.apiKey,
   },
 });
 ```
@@ -492,7 +513,7 @@ console.log(`Warnings: ${validation.warnings.join('\n')}`);
 
 ## The comprehensive test suite
 
-We take security seriously. FrontMCP's OpenAPI adapter has **70 comprehensive tests** covering:
+We take security seriously. FrontMCP's OpenAPI adapter has **193 comprehensive tests** covering:
 
 - ✅ All authentication strategies
 - ✅ Request isolation
@@ -500,14 +521,15 @@ We take security seriously. FrontMCP's OpenAPI adapter has **70 comprehensive te
 - ✅ Security validation
 - ✅ Missing mappings detection
 - ✅ Headers and body mapping
+- ✅ Defense-in-depth protections (SSRF, header injection, prototype pollution)
 - ✅ Error handling
 - ✅ Edge cases
 
 ```bash
 npm test
 
-# Test Suites: 6 passed, 6 total
-# Tests:       70 passed, 70 total
+# Test Suites: 7 passed, 7 total
+# Tests:       193 passed, 193 total
 ```
 
 Every security feature is tested. Every edge case is covered.

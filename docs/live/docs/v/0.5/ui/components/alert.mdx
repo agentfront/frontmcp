@@ -1,0 +1,269 @@
+---
+title: Alert Component
+sidebarTitle: Alert
+icon: bell
+description: Alerts display important messages to users. Use them for notifications, errors, warnings, and success messages.
+---
+
+## Import
+
+```typescript
+import {
+  alert,
+  infoAlert,
+  successAlert,
+  warningAlert,
+  dangerAlert,
+  toast,
+  toastContainer,
+} from '@frontmcp/ui';
+```
+
+## Basic Usage
+
+```typescript
+const html = alert('This is an informational message.');
+```
+
+## Variants
+
+<Tabs>
+  <Tab title="Preview">
+    Five alert variants:
+    - **info** - Blue, informational
+    - **success** - Green, positive outcome
+    - **warning** - Yellow, caution
+    - **danger** - Red, error or critical
+    - **neutral** - Gray, general message
+  </Tab>
+  <Tab title="Code">
+    ```typescript
+    alert('Info message', { variant: 'info' })
+    alert('Success message', { variant: 'success' })
+    alert('Warning message', { variant: 'warning' })
+    alert('Error message', { variant: 'danger' })
+    alert('Neutral message', { variant: 'neutral' })
+    ```
+  </Tab>
+</Tabs>
+
+### Shorthand Functions
+
+```typescript
+import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui';
+
+infoAlert('Your session will expire in 5 minutes.')
+successAlert('Profile updated successfully!')
+warningAlert('This action cannot be undone.')
+dangerAlert('Failed to save changes.')
+```
+
+## With Title
+
+```typescript
+const html = alert('Your changes have been saved to the database.', {
+  variant: 'success',
+  title: 'Success!',
+});
+```
+
+## Icons
+
+Alerts show an icon by default. Customize or hide it:
+
+```typescript
+// Default icon (based on variant)
+alert('Message with icon', { showIcon: true })
+
+// No icon
+alert('Message without icon', { showIcon: false })
+
+// Custom icon
+alert('Custom icon message', {
+  icon: '<svg class="w-5 h-5" ...>...</svg>',
+})
+```
+
+## Dismissible Alerts
+
+Add a close button:
+
+```typescript
+// Client-side dismiss (removes from DOM)
+const html = alert('Click X to dismiss this alert.', {
+  dismissible: true,
+});
+
+// HTMX dismiss with server action
+const htmxAlert = alert('Notification from server.', {
+  dismissible: true,
+  onDismiss: {
+    delete: '/api/notifications/123',
+    target: '#notification-123',
+    swap: 'outerHTML',
+  },
+});
+```
+
+## With Actions
+
+Add buttons to the alert:
+
+```typescript
+import { alert, button, buttonGroup } from '@frontmcp/ui';
+
+const html = alert('A new version is available.', {
+  variant: 'info',
+  title: 'Update Available',
+  actions: buttonGroup([
+    button('Update Now', { size: 'sm' }),
+    button('Later', { variant: 'ghost', size: 'sm' }),
+  ]),
+});
+```
+
+## Toast Notifications
+
+Toasts are floating alerts that appear temporarily:
+
+```typescript
+import { toast } from '@frontmcp/ui';
+
+// Basic toast
+const html = toast('File uploaded successfully!', {
+  variant: 'success',
+});
+
+// With title and position
+const positioned = toast('Please check your inbox.', {
+  variant: 'info',
+  title: 'Email Sent',
+  position: 'top-right',  // default
+  duration: 5000,         // auto-dismiss after 5s
+});
+```
+
+### Toast Positions
+
+- `top-right` (default)
+- `top-left`
+- `top-center`
+- `bottom-right`
+- `bottom-left`
+- `bottom-center`
+
+### Toast Container
+
+For multiple toasts, create a container:
+
+```typescript
+import { toastContainer } from '@frontmcp/ui';
+
+// Add to your layout
+const container = toastContainer('top-right', 'toast-container');
+
+// Then inject toasts into it
+```
+
+## Complex Example
+
+```typescript
+import { alert, button, buttonGroup } from '@frontmcp/ui';
+
+const errorAlert = alert(
+  'Unable to connect to the database. Please check your connection settings and try again.',
+  {
+    variant: 'danger',
+    title: 'Connection Failed',
+    dismissible: true,
+    actions: buttonGroup([
+      button('Retry', {
+        size: 'sm',
+        htmx: {
+          post: '/api/retry-connection',
+          target: '#connection-status',
+        },
+      }),
+      button('View Logs', {
+        variant: 'ghost',
+        size: 'sm',
+        href: '/admin/logs',
+      }),
+    ]),
+  },
+);
+```
+
+## Use in Tool Templates
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, alert, successAlert, dangerAlert } from '@frontmcp/ui';
+
+@Tool({
+  name: 'process_data',
+  ui: {
+    template: (ctx) => {
+      const { output } = ctx;
+
+      if (output.error) {
+        return card(`
+          ${dangerAlert(output.error, { title: 'Processing Failed' })}
+          <p class="mt-4 text-sm text-gray-500">
+            Please try again or contact support.
+          </p>
+        `);
+      }
+
+      return card(`
+        ${successAlert(`Processed ${output.count} items successfully.`)}
+        <div class="mt-4">
+          <p class="text-sm text-gray-600">
+            Time taken: ${output.duration}ms
+          </p>
+        </div>
+      `);
+    },
+  },
+})
+export class ProcessDataTool extends ToolContext {
+  // ...
+}
+```
+
+## API Reference
+
+### `alert(message, options?)`
+
+| Parameter | Type           | Description           |
+| --------- | -------------- | --------------------- |
+| `message` | `string`       | Alert message text    |
+| `options` | `AlertOptions` | Configuration options |
+
+### AlertOptions
+
+| Option        | Type                                                        | Default  | Description              |
+| ------------- | ----------------------------------------------------------- | -------- | ------------------------ |
+| `variant`     | `'info' \| 'success' \| 'warning' \| 'danger' \| 'neutral'` | `'info'` | Visual style             |
+| `title`       | `string`                                                    | -        | Alert heading            |
+| `showIcon`    | `boolean`                                                   | `true`   | Show variant icon        |
+| `icon`        | `string`                                                    | -        | Custom icon HTML         |
+| `dismissible` | `boolean`                                                   | `false`  | Show close button        |
+| `className`   | `string`                                                    | -        | Additional CSS classes   |
+| `id`          | `string`                                                    | -        | Alert ID                 |
+| `actions`     | `string`                                                    | -        | HTML for action buttons  |
+| `onDismiss`   | `object`                                                    | -        | HTMX options for dismiss |
+
+### `toast(message, options?)`
+
+| Option     | Type           | Default        | Description                   |
+| ---------- | -------------- | -------------- | ----------------------------- |
+| `variant`  | `AlertVariant` | `'info'`       | Visual style                  |
+| `title`    | `string`       | -              | Toast heading                 |
+| `duration` | `number`       | `5000`         | Auto-dismiss ms (0 = no auto) |
+| `position` | `string`       | `'top-right'`  | Screen position               |
+| `id`       | `string`       | auto-generated | Toast ID                      |
+
+### Returns
+
+`string` - HTML string for the alert/toast element.

@@ -1,0 +1,393 @@
+---
+title: Form Components
+sidebarTitle: Form
+icon: rectangle-list
+description: Form components for collecting user input. Includes text inputs, selects, textareas, checkboxes, and form layout utilities.
+---
+
+## Import
+
+```typescript
+import {
+  input,
+  select,
+  textarea,
+  checkbox,
+  radio,
+  formGroup,
+  formField,
+} from '@frontmcp/ui';
+```
+
+## Text Input
+
+```typescript
+// Basic input
+const html = input({ name: 'email', type: 'email' });
+
+// With label and placeholder
+const labeled = input({
+  name: 'username',
+  label: 'Username',
+  placeholder: 'Enter your username',
+});
+
+// With helper text
+const withHelp = input({
+  name: 'password',
+  type: 'password',
+  label: 'Password',
+  helperText: 'Must be at least 8 characters',
+});
+
+// With error
+const withError = input({
+  name: 'email',
+  type: 'email',
+  label: 'Email',
+  error: 'Please enter a valid email address',
+});
+```
+
+### Input Types
+
+```typescript
+input({ name: 'text', type: 'text' })
+input({ name: 'email', type: 'email' })
+input({ name: 'password', type: 'password' })
+input({ name: 'number', type: 'number' })
+input({ name: 'tel', type: 'tel' })
+input({ name: 'url', type: 'url' })
+input({ name: 'search', type: 'search' })
+input({ name: 'date', type: 'date' })
+```
+
+### Input Sizes
+
+```typescript
+input({ name: 'small', size: 'sm' })
+input({ name: 'medium', size: 'md' })  // default
+input({ name: 'large', size: 'lg' })
+```
+
+### With Icons
+
+```typescript
+const searchInput = input({
+  name: 'search',
+  type: 'search',
+  placeholder: 'Search...',
+  iconBefore: '<svg class="w-4 h-4" ...>🔍</svg>',
+});
+
+const passwordInput = input({
+  name: 'password',
+  type: 'password',
+  iconAfter: '<button type="button">👁️</button>',
+});
+```
+
+## Select
+
+```typescript
+// Basic select
+const html = select({
+  name: 'country',
+  options: [
+    { value: 'us', label: 'United States' },
+    { value: 'uk', label: 'United Kingdom' },
+    { value: 'ca', label: 'Canada' },
+  ],
+});
+
+// With label and placeholder
+const labeled = select({
+  name: 'role',
+  label: 'User Role',
+  placeholder: 'Select a role',
+  options: [
+    { value: 'admin', label: 'Administrator' },
+    { value: 'editor', label: 'Editor' },
+    { value: 'viewer', label: 'Viewer' },
+  ],
+});
+
+// With option groups
+const grouped = select({
+  name: 'timezone',
+  label: 'Timezone',
+  optionGroups: [
+    {
+      label: 'North America',
+      options: [
+        { value: 'est', label: 'Eastern Time' },
+        { value: 'pst', label: 'Pacific Time' },
+      ],
+    },
+    {
+      label: 'Europe',
+      options: [
+        { value: 'gmt', label: 'GMT' },
+        { value: 'cet', label: 'Central European' },
+      ],
+    },
+  ],
+});
+
+// Pre-selected value
+const preselected = select({
+  name: 'status',
+  value: 'active',
+  options: [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+  ],
+});
+```
+
+## Textarea
+
+```typescript
+// Basic textarea
+const html = textarea({
+  name: 'description',
+  rows: 4,
+});
+
+// With label and placeholder
+const labeled = textarea({
+  name: 'bio',
+  label: 'Biography',
+  placeholder: 'Tell us about yourself...',
+  rows: 5,
+});
+
+// With character count
+const withCount = textarea({
+  name: 'message',
+  label: 'Message',
+  maxLength: 500,
+  showCharCount: true,
+});
+```
+
+## Checkbox
+
+```typescript
+// Basic checkbox
+const html = checkbox({
+  name: 'agree',
+  label: 'I agree to the terms and conditions',
+});
+
+// Checked by default
+const checked = checkbox({
+  name: 'newsletter',
+  label: 'Subscribe to newsletter',
+  checked: true,
+});
+
+// With description
+const withDesc = checkbox({
+  name: 'notifications',
+  label: 'Email notifications',
+  description: 'Receive updates about your account',
+});
+```
+
+## Radio Buttons
+
+```typescript
+// Radio group
+const html = radio({
+  name: 'plan',
+  options: [
+    { value: 'free', label: 'Free' },
+    { value: 'pro', label: 'Pro - $9/month' },
+    { value: 'enterprise', label: 'Enterprise - Contact us' },
+  ],
+});
+
+// With default selection
+const selected = radio({
+  name: 'frequency',
+  value: 'weekly',
+  options: [
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+  ],
+});
+```
+
+## Form Layout
+
+### Form Group
+
+Wrap form fields in a group:
+
+```typescript
+import { formGroup, input, select, button } from '@frontmcp/ui';
+
+const form = formGroup([
+  input({ name: 'name', label: 'Full Name' }),
+  input({ name: 'email', type: 'email', label: 'Email' }),
+  select({
+    name: 'role',
+    label: 'Role',
+    options: [
+      { value: 'user', label: 'User' },
+      { value: 'admin', label: 'Admin' },
+    ],
+  }),
+  button('Submit', { type: 'submit' }),
+]);
+```
+
+### Form Field
+
+Wrap a single field with label and error:
+
+```typescript
+import { formField, input } from '@frontmcp/ui';
+
+const field = formField({
+  label: 'Email Address',
+  required: true,
+  error: 'This field is required',
+  children: input({ name: 'email', type: 'email' }),
+});
+```
+
+## HTMX Integration
+
+Submit forms without page reload:
+
+```typescript
+import { input, button, formGroup } from '@frontmcp/ui';
+
+const form = `
+<form hx-post="/api/submit" hx-target="#result" hx-swap="innerHTML">
+  ${formGroup([
+    input({ name: 'name', label: 'Name', required: true }),
+    input({ name: 'email', type: 'email', label: 'Email', required: true }),
+    button('Submit', { type: 'submit' }),
+  ])}
+</form>
+<div id="result"></div>
+`;
+```
+
+### Validation on Change
+
+```typescript
+const emailInput = input({
+  name: 'email',
+  type: 'email',
+  label: 'Email',
+  htmx: {
+    post: '/api/validate-email',
+    trigger: 'change',
+    target: '#email-error',
+    swap: 'innerHTML',
+  },
+});
+```
+
+## Complete Form Example
+
+```typescript
+import { card, input, select, textarea, checkbox, button, formGroup } from '@frontmcp/ui';
+
+const contactForm = card(`
+  <form hx-post="/api/contact" hx-target="#form-result">
+    ${formGroup([
+      input({
+        name: 'name',
+        label: 'Full Name',
+        placeholder: 'John Doe',
+        required: true,
+      }),
+
+      input({
+        name: 'email',
+        type: 'email',
+        label: 'Email Address',
+        placeholder: 'john@example.com',
+        required: true,
+      }),
+
+      select({
+        name: 'subject',
+        label: 'Subject',
+        placeholder: 'Select a topic',
+        options: [
+          { value: 'general', label: 'General Inquiry' },
+          { value: 'support', label: 'Technical Support' },
+          { value: 'sales', label: 'Sales Question' },
+        ],
+      }),
+
+      textarea({
+        name: 'message',
+        label: 'Message',
+        placeholder: 'How can we help?',
+        rows: 4,
+        required: true,
+      }),
+
+      checkbox({
+        name: 'subscribe',
+        label: 'Subscribe to our newsletter',
+      }),
+
+      button('Send Message', { type: 'submit', fullWidth: true }),
+    ])}
+  </form>
+  <div id="form-result"></div>
+`, { title: 'Contact Us' });
+```
+
+## API Reference
+
+### `input(options)`
+
+| Option        | Type                   | Default  | Description            |
+| ------------- | ---------------------- | -------- | ---------------------- |
+| `name`        | `string`               | required | Input name attribute   |
+| `type`        | `string`               | `'text'` | Input type             |
+| `label`       | `string`               | -        | Field label            |
+| `placeholder` | `string`               | -        | Placeholder text       |
+| `value`       | `string`               | -        | Initial value          |
+| `size`        | `'sm' \| 'md' \| 'lg'` | `'md'`   | Input size             |
+| `disabled`    | `boolean`              | `false`  | Disable input          |
+| `required`    | `boolean`              | `false`  | Mark as required       |
+| `error`       | `string`               | -        | Error message          |
+| `helperText`  | `string`               | -        | Helper text            |
+| `iconBefore`  | `string`               | -        | Icon HTML before input |
+| `iconAfter`   | `string`               | -        | Icon HTML after input  |
+
+### `select(options)`
+
+| Option         | Type                   | Default  | Description                 |
+| -------------- | ---------------------- | -------- | --------------------------- |
+| `name`         | `string`               | required | Select name attribute       |
+| `options`      | `array`                | -        | Array of `{ value, label }` |
+| `optionGroups` | `array`                | -        | Grouped options             |
+| `placeholder`  | `string`               | -        | Placeholder option          |
+| `value`        | `string`               | -        | Selected value              |
+| `label`        | `string`               | -        | Field label                 |
+| `size`         | `'sm' \| 'md' \| 'lg'` | `'md'`   | Select size                 |
+
+### `textarea(options)`
+
+| Option          | Type      | Default  | Description          |
+| --------------- | --------- | -------- | -------------------- |
+| `name`          | `string`  | required | Textarea name        |
+| `rows`          | `number`  | `3`      | Number of rows       |
+| `maxLength`     | `number`  | -        | Character limit      |
+| `showCharCount` | `boolean` | `false`  | Show character count |
+
+### Returns
+
+`string` - HTML string for the form element.

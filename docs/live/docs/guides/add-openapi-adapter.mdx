@@ -87,7 +87,7 @@ import spec from './openapi.json';
     OpenapiAdapter.init({
       name: 'expense-api',
       baseUrl: 'https://api.example.com',
-      spec: spec as any, // Use local spec instead of URL
+      spec: spec, // Direct JSON import supported
     }),
   ],
 })
@@ -221,6 +221,10 @@ Becomes a tool with this input:
 ---
 
 ## Advanced Configuration
+
+<Tip>
+  For comprehensive documentation on all configuration options including `inputTransforms`, `toolTransforms`, `descriptionMode`, and the `x-frontmcp` OpenAPI extension, see the [full OpenAPI Adapter documentation](/docs/adapters/openapi-adapter).
+</Tip>
 
 ### Filter Operations
 

@@ -1,0 +1,261 @@
+---
+title: Testing
+sidebarTitle: Overview
+slug: testing/overview
+icon: flask-vial
+description: End-to-end testing framework for FrontMCP servers
+---
+
+`@frontmcp/testing` is the official testing library for FrontMCP, providing a complete toolkit for end-to-end testing of MCP servers. Test your tools, resources, prompts, authentication, plugins, and the full MCP protocol.
+
+<Columns cols={3}>
+  <Card title="Fixture-Based" icon="puzzle-piece">
+    Playwright-inspired fixtures inject ready-to-use test clients
+  </Card>
+  <Card title="Full Protocol" icon="code">
+    Test tools, resources, prompts, and raw JSON-RPC
+  </Card>
+  <Card title="Offline Testing" icon="wifi-slash">
+    Mock HTTP calls for fully offline test suites
+  </Card>
+</Columns>
+
+---
+
+## Installation
+
+```bash
+npm install -D @frontmcp/testing
+```
+
+<Info>
+  `@frontmcp/testing` requires `@frontmcp/sdk` as a peer dependency and uses Jest as the test runner.
+</Info>
+
+---
+
+## Quick Start
+
+### 1. Configure Jest
+
+Create or update your `jest.e2e.config.ts`:
+
+```ts title="jest.e2e.config.ts"
+import type { Config } from 'jest';
+
+const config: Config = {
+  displayName: 'e2e',
+  preset: '@frontmcp/testing/jest-preset',
+  testMatch: ['**/*.e2e.ts'],
+  testTimeout: 30000,
+};
+
+export default config;
+```
+
+### 2. Write Your First Test
+
+```ts title="server.e2e.ts"
+import { test, expect } from '@frontmcp/testing';
+
+// Point to your FrontMCP server entry file
+test.use({
+  server: './src/main.ts',
+  port: 3003,
+});
+
+test('server exposes tools', async ({ mcp }) => {
+  const tools = await mcp.tools.list();
+  expect(tools).toContainTool('my-tool');
+});
+
+test('tool execution works', async ({ mcp }) => {
+  const result = await mcp.tools.call('my-tool', { input: 'test' });
+  expect(result).toBeSuccessful();
+  expect(result.json()).toHaveProperty('success', true);
+});
+```
+
+### 3. Run Tests
+
+```bash
+# Using jest directly
+npx jest --config jest.e2e.config.ts
+
+# Using nx
+nx e2e my-app
+```
+
+The library automatically:
+
+- Starts your FrontMCP server on the specified port
+- Connects an MCP client using Streamable-HTTP transport
+- Runs your tests with injected fixtures
+- Cleans up after all tests complete
+
+---
+
+## Key Features
+
+### Fixture System
+
+Tests receive pre-configured fixtures via dependency injection:
+
+| Fixture  | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `mcp`    | Auto-connected MCP client for making requests             |
+| `server` | Server control (restart, logs, create additional clients) |
+| `auth`   | Token factory for authentication testing                  |
+
+```ts
+test('example with all fixtures', async ({ mcp, server, auth }) => {
+  // mcp: ready-to-use MCP client
+  const tools = await mcp.tools.list();
+
+  // auth: create test tokens
+  const token = await auth.createToken({ sub: 'user-123', scopes: ['read'] });
+
+  // server: create additional clients
+  const client2 = await server.createClient({ token });
+});
+```
+
+### Custom Jest Matchers
+
+MCP-specific matchers for cleaner assertions:
+
+```ts
+// Tool matchers
+expect(tools).toContainTool('create-note');
+
+// Result matchers
+expect(result).toBeSuccessful();
+expect(result).toBeError(-32602);
+
+// Content matchers
+expect(result).toHaveTextContent();
+expect(content).toHaveMimeType('application/json');
+
+// Resource matchers
+expect(resources).toContainResource('notes://all');
+expect(templates).toContainResourceTemplate('notes://note/{id}');
+```
+
+### HTTP Mocking
+
+Mock external HTTP calls made by your tools for offline testing:
+
+```ts
+import { httpMock } from '@frontmcp/testing';
+
+test('tool with external API', async ({ mcp }) => {
+  const interceptor = httpMock.interceptor();
+
+  interceptor.get('https://api.example.com/users', {
+    body: [{ id: 1, name: 'John' }],
+  });
+
+  const result = await mcp.tools.call('fetch-users', {});
+  expect(result).toBeSuccessful();
+
+  interceptor.restore();
+});
+```
+
+### MCP Request Interception
+
+Mock or modify MCP protocol requests:
+
+```ts
+test('mock tool response', async ({ mcp }) => {
+  mcp.mock.tool('expensive-tool', { cached: true });
+
+  const result = await mcp.tools.call('expensive-tool', {});
+  expect(result.json()).toEqual({ cached: true });
+});
+```
+
+---
+
+## Test Configuration
+
+Configure tests using `test.use()`:
+
+```ts
+test.use({
+  // Server configuration
+  server: './src/main.ts',    // Entry file path
+  port: 3003,                  // Port (default: auto-select)
+  startupTimeout: 30000,       // Startup timeout in ms
+
+  // Transport
+  transport: 'streamable-http', // 'sse' | 'streamable-http'
+
+  // Authentication
+  auth: {
+    mode: 'public',            // 'public' | 'orchestrated'
+    type: 'local',             // 'local' | 'remote'
+  },
+
+  // Debugging
+  logLevel: 'debug',           // 'debug' | 'info' | 'warn' | 'error'
+  env: { API_KEY: 'test' },    // Environment variables
+});
+```
+
+<Tip>
+  Use `port: 0` to automatically select an available port. This prevents conflicts when running multiple test suites in parallel.
+</Tip>
+
+---
+
+## Demo Showcase reference suite
+
+The repository ships `apps/demo-showcase`, a minimal notes server dedicated to `@frontmcp/testing`. Use it as a blueprint for wiring fixtures, HTTP mocking, and the prompts/resources APIs end to end.
+
+<Note>
+  The Notes app lives in `apps/demo-showcase/src/apps/notes` with an in-memory `notesStore`. The Jest suites under `apps/demo-showcase/e2e` default to `test.describe.skip` until local auth ships—remove `.skip` when you are ready to run them locally.
+</Note>
+
+- `tools.e2e.ts` exercises the create/list/get/delete tools, validates Zod errors, and clears shared state between tests.
+- `resources.e2e.ts` covers `resources/list`, `resources/templates/list`, and typed JSON reads for the `notes://` URIs.
+- `prompts.e2e.ts` checks `prompts/list`, `prompts/get`, argument validation, and multi-message payloads backed by live tool calls.
+- `openapi.e2e.ts` demonstrates `httpMock.interceptor()` stubs for Beeceptor endpoints while allowing passthrough for the OpenAPI spec.
+
+```ts title="apps/demo-showcase/e2e/tools.e2e.ts"
+test.use({
+  server: './src/main.ts',
+  port: 3010,
+  logLevel: 'debug',
+});
+
+test.describe.skip('Tools', () => {
+  test('lists all tools', async ({ mcp }) => {
+    const tools = await mcp.tools.list();
+    expect(tools).toContainTool('create-note');
+  });
+});
+```
+
+<Tip>
+  Pair the suite with `httpMock.interceptor()` from `openapi.e2e.ts` to keep every test offline—mock the endpoints you expect to hit, allow passthrough for the OpenAPI spec, then call `interceptor.restore()` in `finally` to clean up.
+</Tip>
+
+---
+
+## Next Steps
+
+<Columns cols={2}>
+  <Card title="Test Fixtures" icon="puzzle-piece" href="/docs/testing/fixtures">
+    Deep dive into the fixture system and available APIs
+  </Card>
+  <Card title="Custom Matchers" icon="check-double" href="/docs/testing/matchers">
+    Full reference for all MCP-specific Jest matchers
+  </Card>
+  <Card title="Auth Testing" icon="key" href="/docs/testing/authentication">
+    Test authentication flows with token generation
+  </Card>
+  <Card title="HTTP Mocking" icon="globe" href="/docs/testing/http-mocking">
+    Mock external API calls for offline testing
+  </Card>
+</Columns>

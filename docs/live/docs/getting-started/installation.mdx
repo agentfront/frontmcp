@@ -17,7 +17,7 @@ icon: arrow-down-to-line
 
 ## Option A — Create a new project
 
-Use the built-in project generator. It **requires** a project name and will create a new folder under your current directory.
+Use the built-in project generator. It will create a new folder under your current directory.
 
 <CodeGroup>
     ```bash universal
@@ -34,11 +34,55 @@ Use the built-in project generator. It **requires** a project name and will crea
 
 </CodeGroup>
 
+The `create` command is **interactive** by default:
+
+```
+? Project name: my-app
+? Deployment target:
+  > Node.js (Docker)
+    Vercel (Serverless)
+    AWS Lambda
+    Cloudflare Workers
+? Redis setup: (Docker target only)
+  > Docker Compose
+    Existing Redis
+    None
+? Enable GitHub Actions CI/CD? (Y/n)
+```
+
+Use `--yes` (or `-y`) to skip prompts and use defaults.
+
+### CLI Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--yes, -y` | Use defaults (non-interactive) | - |
+| `--target <type>` | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node` |
+| `--redis <setup>` | Redis: `docker`, `existing`, `none` | `docker` |
+| `--cicd / --no-cicd` | Enable GitHub Actions | `--cicd` |
+
+**Examples:**
+```bash
+# Interactive mode (default)
+npx frontmcp create my-app
+
+# Non-interactive with defaults
+npx frontmcp create my-app --yes
+
+# Vercel target with CI/CD
+npx frontmcp create my-app --target vercel
+
+# Docker without Redis
+npx frontmcp create my-app --target node --redis none --no-cicd
+```
+
 This will:
 
 - scaffold a FrontMCP project in `./my-app`
 - configure `tsconfig.json` for decorators and modern ESM
 - generate a `package.json` with helpful scripts
+- create deployment configuration for your target (Dockerfile, vercel.json, etc.)
+- generate GitHub Actions workflows (if enabled)
 - install required dev dependencies (e.g. TypeScript, tsx, zod, reflect-metadata)
 
 ---

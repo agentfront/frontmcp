@@ -1,0 +1,438 @@
+---
+title: Quickstart
+slug: getting-started/quickstart
+icon: rocket-launch
+description: Build your first MCP server with FrontMCP in under 5 minutes
+---
+
+Build and run your first MCP server with FrontMCP. This quickstart gets you from zero to a working server in under 5 minutes.
+
+## Prerequisites
+
+- **Node.js**:
+  - **Minimum**: Version 22 (LTS Maintenance)
+  - **Recommended**: Version 24 (Active LTS)
+  - _FrontMCP is developed and tested on Node.js 24_
+- **npm ≥ 10** (or pnpm/yarn)
+
+---
+
+## Option 1: Quick Start (Recommended)
+
+Create a new project with the FrontMCP CLI:
+
+<CodeGroup>
+
+```bash npm
+npx frontmcp create my-mcp-server
+cd my-mcp-server
+npm run dev
+```
+
+```bash pnpm
+pnpm dlx frontmcp create my-mcp-server
+cd my-mcp-server
+pnpm dev
+```
+
+```bash yarn
+npx frontmcp create my-mcp-server
+cd my-mcp-server
+yarn dev
+```
+
+</CodeGroup>
+
+The CLI creates a complete project structure with:
+
+- ✅ TypeScript configured
+- ✅ Sample server, app, and tool
+- ✅ Development scripts ready
+- ✅ Hot-reload enabled
+
+<Check>Your server is now running at `http://localhost:3000`!</Check>
+
+---
+
+## Option 2: Add to Existing Project
+
+If you already have a Node.js project, install FrontMCP:
+
+<CodeGroup>
+
+```bash npm
+npm install -D frontmcp @types/node@^24
+npx frontmcp init
+```
+
+```bash pnpm
+pnpm add -D frontmcp @types/node@^24
+pnpm dlx frontmcp init
+```
+
+```bash yarn
+yarn add -D frontmcp @types/node@^24
+npx frontmcp init
+```
+
+</CodeGroup>
+
+The `init` command:
+
+- Adds FrontMCP scripts to `package.json`
+- Updates `tsconfig.json` with required settings
+- Creates a minimal server if none exists
+
+---
+
+## Project Structure
+
+After creating your project, you'll have:
+
+```
+my-mcp-server/
+├── src/
+│   ├── main.ts          # Server entry point
+│   ├── hello.app.ts     # App definition
+│   └── tools/
+│       └── greet.tool.ts # Sample tool
+├── package.json
+└── tsconfig.json
+```
+
+### Server Configuration
+
+```ts src/main.ts
+import 'reflect-metadata';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import HelloApp from './hello.app';
+
+@FrontMcp({
+  info: { name: 'Hello MCP', version: '0.1.0' },
+  apps: [HelloApp],
+  http: { port: 3000 },
+  logging: { level: LogLevel.INFO },
+})
+export default class Server {}
+```
+
+<Info>
+  The `@FrontMcp` decorator configures your server. It requires `info`, `apps`, and optional `http` and `logging`
+  settings.
+</Info>
+
+### App Definition
+
+```ts src/hello.app.ts
+import { App } from '@frontmcp/sdk';
+import GreetTool from './tools/greet.tool';
+
+@App({
+  id: 'hello',
+  name: 'Hello App',
+  tools: [GreetTool],
+})
+export default class HelloApp {}
+```
+
+<Info>
+  Apps organize related tools, plugins, and providers. Each app can have its own authentication and configuration.
+</Info>
+
+### Your First Tool
+
+<Tabs>
+  <Tab title="Class-based (Recommended)">
+    ```ts src/tools/greet.tool.ts
+    import { Tool, ToolContext } from '@frontmcp/sdk';
+    import { z } from 'zod';
+
+    @Tool({
+      name: 'greet',
+      description: 'Greets a user by name',
+      inputSchema: { name: z.string() },
+    })
+    export default class GreetTool extends ToolContext {
+      async execute(input: { name: string }) {
+        return `Hello, ${input.name}!`;
+      }
+    }
+    ```
+
+  </Tab>
+
+  <Tab title="Function-based">
+    ```ts src/tools/greet.tool.ts
+    import { tool } from '@frontmcp/sdk';
+    import { z } from 'zod';
+
+    export default tool({
+      name: 'greet',
+      description: 'Greets a user by name',
+      inputSchema: { name: z.string() },
+    })(async (input) => {
+      return `Hello, ${input.name}!`;
+    });
+    ```
+
+  </Tab>
+</Tabs>
+
+<Tip>
+  Use class-based tools when you need access to providers, logging, or auth context. Use function-based tools for simple
+  stateless operations.
+</Tip>
+
+---
+
+## Available Commands
+
+Your project includes these scripts:
+
+<CodeGroup>
+
+```bash Development
+npm run dev
+# Starts server with hot-reload and type-checking
+```
+
+```bash Build
+npm run build
+# Compiles TypeScript to ./dist
+```
+
+```bash Production
+npm run start
+# Runs the compiled server
+```
+
+```bash Inspector
+npm run inspect
+# Opens the MCP Inspector UI
+```
+
+```bash Doctor
+npm run doctor
+# Verifies Node/npm versions and config
+```
+
+</CodeGroup>
+
+---
+
+## Test Your Server
+
+<Steps>
+  <Step stepNumber={1} title="Start the server">
+    ```bash
+    npm run dev
+    ```
+
+    You should see:
+    ```
+    [INFO] Server listening on http://localhost:3000
+    [INFO] Registered 1 tool: greet
+    ```
+
+  </Step>
+
+  <Step stepNumber={2} title="Launch the Inspector">
+    Open a new terminal and run:
+
+    ```bash
+    npm run inspect
+    ```
+
+    This opens the MCP Inspector at `http://localhost:6274`
+
+  </Step>
+
+<Step stepNumber={3} title="Connect to your server">
+  In the Inspector: 1. Enter server URL: `http://localhost:3000` 2. Click "Connect" 3. You should see your `greet` tool
+  listed
+</Step>
+
+  <Step title="Call your tool">
+    1. Select the `greet` tool
+    2. Enter input: `{ "name": "Ada" }`
+    3. Click "Call Tool"
+    4. You should see: `"Hello, Ada!"`
+  </Step>
+</Steps>
+
+<Check>Congratulations! You've built and tested your first MCP server! 🎉</Check>
+
+---
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Add Tools" icon="wrench" href="/docs/servers/tools">
+    Learn how to create more powerful tools with validation, providers, and context
+  </Card>
+
+<Card title="OpenAPI Adapter" icon="file-code" href="/docs/guides/add-openapi-adapter">
+  Auto-generate tools from your REST API's OpenAPI spec
+</Card>
+
+<Card title="Add Caching" icon="database" href="/docs/guides/caching-and-cache-miss">
+  Improve performance with transparent caching
+</Card>
+
+<Card title="Authentication" icon="lock" href="/docs/servers/authentication/overview">
+  Secure your server with OAuth (local or remote)
+</Card>
+
+<Card title="Plugins" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+  Add cross-cutting features like logging, metrics, and rate limiting
+</Card>
+
+  <Card title="Deploy" icon="cloud-arrow-up" href="/docs/deployment/production-build">
+    Build and deploy your server to production
+  </Card>
+</CardGroup>
+
+---
+
+## Common Commands Reference
+
+| Command                      | Description                      |
+| ---------------------------- | -------------------------------- |
+| `npx frontmcp create <name>` | Create a new FrontMCP project    |
+| `npx frontmcp init`          | Add FrontMCP to existing project |
+| `npm run dev`                | Start with hot-reload            |
+| `npm run build`              | Compile to production            |
+| `npm run inspect`            | Open MCP Inspector               |
+| `npm run doctor`             | Verify setup                     |
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server won't start">
+    **Check:**
+    1. Node.js version 22+ (Node 24 recommended): `node --version`
+    2. Port 3000 is available
+    3. No TypeScript errors: Check console output
+
+    **Fix:**
+    ```bash
+    npm run doctor  # Verify configuration
+    ```
+
+  </Accordion>
+
+  <Accordion title="Tools not appearing">
+    **Possible causes:**
+    - Tool not imported in app
+    - Decorator metadata not enabled
+
+    **Fix:**
+    1. Verify `import GreetTool from './tools/greet.tool'`
+    2. Check `tsconfig.json` has:
+       ```json
+       {
+         "experimentalDecorators": true,
+         "emitDecoratorMetadata": true
+       }
+       ```
+    3. Ensure `import 'reflect-metadata'` at top of `main.ts`
+
+  </Accordion>
+
+  <Accordion title="Type errors in development">
+    **Solution:**
+    The `dev` command performs async type-checks. Fix TypeScript errors shown in the console.
+
+    ```bash
+    # Manual type check
+    npx tsc --noEmit
+    ```
+
+  </Accordion>
+
+  <Accordion title="Inspector can't connect">
+    **Check:**
+    1. Server is running: `http://localhost:3000` should be accessible
+    2. Correct URL in Inspector: `http://localhost:3000` (not `https`)
+    3. No CORS issues: Both server and inspector on localhost
+
+    **Debug:**
+    ```bash
+    # Test server directly
+    curl http://localhost:3000/health
+    ```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Example: Extended Greeting Tool
+
+Here's a more advanced version with multiple features:
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'greet',
+  description: 'Greets a user with optional formality level',
+  inputSchema: {
+    name: z.string().min(1, 'Name is required'),
+    formality: z.enum(['casual', 'formal', 'enthusiastic']).default('casual'),
+    timeOfDay: z.enum(['morning', 'afternoon', 'evening']).optional(),
+  },
+})
+export default class GreetTool extends ToolContext {
+  async execute(input: {
+    name: string;
+    formality: 'casual' | 'formal' | 'enthusiastic';
+    timeOfDay?: 'morning' | 'afternoon' | 'evening';
+  }) {
+    // Access logger
+    this.logger.info('Greeting user', { name: input.name });
+
+    // Access auth info
+    const userId = this.authInfo.user?.id;
+
+    // Build greeting based on formality
+    let greeting = '';
+    switch (input.formality) {
+      case 'formal':
+        greeting = `Good ${input.timeOfDay || 'day'}, ${input.name}.`;
+        break;
+      case 'enthusiastic':
+        greeting = `Hey ${input.name}! Great to see you! 🎉`;
+        break;
+      case 'casual':
+      default:
+        greeting = `Hello, ${input.name}!`;
+    }
+
+    return {
+      message: greeting,
+      timestamp: new Date().toISOString(),
+      userId,
+    };
+  }
+}
+```
+
+This example demonstrates:
+
+- ✅ Input validation with Zod
+- ✅ Default values
+- ✅ Optional fields
+- ✅ Accessing logger
+- ✅ Accessing auth context
+- ✅ Structured output
+
+---
+
+<Tip>
+  FrontMCP speaks **MCP Streamable HTTP**. Any MCP-capable client (Claude Desktop, custom agents, etc.) can connect and
+  call your tools!
+</Tip>
