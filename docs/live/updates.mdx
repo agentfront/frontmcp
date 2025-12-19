@@ -5,6 +5,57 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.6.0" description="2025-12-19" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.0: Unified transport and serverless targets"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.0"
+    cta="View full changlog"
+  >
+    🚦 **Unified transport controls** – Configure sessions, platform detection, and Redis-backed persistence from one top-level block with per-app overrides.
+
+    ☁️ **Serverless deploy targets** – Scaffold Vercel, AWS Lambda, and Cloudflare Workers bundles via `frontmcp create --target ...` plus generated wrappers and templates.
+
+    🧠 **Context everywhere** – CONTEXT-scoped providers, safer session keys, and the new `FrontMcpContext` helpers keep tracing, auth, and request metadata in sync.
+
+    🧪 **Scenario-rich E2E demos** – Fresh `apps/e2e/**` servers (public auth, CodeCall CRM, cache, notifications, OpenAPI) ship with ready-to-run Jest suites.
+
+    🎨 **Resilient UI renderer** – Universal rendering, dual-payload responses, and hardened platform detection keep tool UIs streaming even when clients fall back.
+
+    🛠️ **CLI & build polish** – Interactive `frontmcp create`, Docker assets, Verdaccio publish fixes, and peer dependency cleanup keep new projects aligned with the framework.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.2" description="2025-12-19" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.2"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer need local overrides.
+
+    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without manual file moves.
+
+    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the converter into new workspaces.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.1.0" description="2025-12-19" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.1.0"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    🪵 **Adapter logging** – Plug a logger into the generator to trace request mappers, auth routing, and spec parsing steps.
+
+    🔐 **Security routing** – Expanded helpers automatically map OpenAPI schemes to the right MCP auth metadata for multi-scheme APIs.
+
+    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups without guesswork.
+
+  </Card>
+</Update>
+
 <Update label="v0.5.x" description="2025-12-12" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.5.1: Tool UIs, orchestration, and security"

@@ -1,3 +1,34 @@
+## [v0.6.0] - 2025-12-19
+
+### feat
+
+- Move transport and session controls into the new top-level `transport` block with redis-backed persistence, platform detection, and per-app overrides.
+- Extend `frontmcp create` with serverless targets and ship ready-made wrappers for Vercel, AWS Lambda, and Cloudflare Workers.
+- Add `FrontMcpContext` helpers plus CONTEXT-scoped providers so request IDs, tracing, and auth metadata are accessible inside every tool, resource, and hook.
+- Publish a comprehensive `apps/e2e` workspace (public auth, CodeCall, cache, notifications, hooks, OpenAPI, providers, multi-app) complete with Nx serve targets and Jest suites.
+- Upgrade the UI renderer with universal and dual-payload output, safer structured content handling, and resilient clientInfo/platform detection.
+
+### fix
+
+- Treat `zod`, `react`, and `react-dom` as peerDependencies across packages to avoid duplicate installs and version drift.
+- Tighten transport/session recreation by validating session IDs, sanitizing inputs, and deleting corrupted Redis payloads before reuse.
+- Harden templated UI and Markdown rendering with stricter escaping, URL validation, and CSP guards to block XSS vectors.
+
+### docs
+
+- Document the new top-level transport/redis config, request-context APIs, and migration steps in the server and extensibility guides.
+- Refresh the CodeCall CRM demo and testing overview to point at the `apps/e2e` samples and their Jest suites.
+- Expand the serverless deployment guide with CLI target flags, generated config files, and per-platform notes.
+
+### build
+
+- Add Docker assets, multi-stage builds, and Redis setup scripts so generated projects can run locally or in CI without manual tweaks.
+- Improve the release pipeline by iterating dist folders for Verdaccio publishes and keeping Nx release commands in sync with lockfiles.
+
+### ci
+
+- Enhance the e2e workflow with retry logic, Nx run-many batching, `--forceExit`, and a dedicated debug workflow for UI transport tests.
+
 ## [v0.5.1] - 2025-12-12
 
 ### feat
@@ -110,75 +141,4 @@ This was a version bump only, there were no code changes.
 
 ### 🩹 Fixes
 
-- **core:** fix openapi tool execution ([#12](https://github.com/agentfront/frontmcp/pull/12))
-
-### ❤️ Thank You
-
-- David Antoon @frontegg-david
-
-## 0.2.1 (2025-11-05)
-
-### 🚀 Features
-
-- **auth:** support no auth DCR (development mode only) ([#11](https://github.com/agentfront/frontmcp/pull/11))
-
-### ❤️ Thank You
-
-- David Antoon @frontegg-david
-
-## 0.2.0 (2025-11-05)
-
-FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector, smarter
-config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
-
-- 🧪 **Dev-only no-auth**: run without auth _in development mode only_. Example: <code>frontmcp dev --no-auth</code>
-- 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json scripts, and
-  starter files.
-- 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
-- 🔭 **Inspector, zero setup**: <code>frontmcp inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
-- 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-- ✨ **Tool schema ergonomics**: pass Zod fields directly (<code>inputSchema: &#123; ... &#125;</code> /
-  <code>outputSchema: &#123; ... &#125;</code>).
-- ⚡ **Async type checks in dev**: background type-checking while watching files.
-- 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>; builds
-  to <code>./dist</code> (override with <code>--out-dir</code>).
-- 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and session-aware
-  SSE.
-- 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
-
-## 0.1.3 (2025-11-05)
-
-### 🚀 Features
-
-- **adapters:** improve OpenAPI adapter ([#7](https://github.com/agentfront/frontmcp/pull/7))
-
-### 🩹 Fixes
-
-- **docs:** adjust quick start code ([#8](https://github.com/agentfront/frontmcp/pull/8))
-
-### ❤️ Thank You
-
-- David Antoon @frontegg-david
-
-## 0.1.2 (2025-11-05)
-
-This was a version bump only, there were no code changes.
-
-## 0.1.1 (2025-11-05)
-
-This was a version bump only, there were no code changes.
-
-## 0.1.0 (2025-11-05)
-
-### 🚀 Features
-
-- **core:** migrate tool call to new the flow runner ([#6](https://github.com/agentfront/frontmcp/pull/6))
-
-### 🩹 Fixes
-
-- Fix docs and README ([#3](https://github.com/agentfront/frontmcp/pull/3))
-- **core:** fix tool listing ([#4](https://github.com/agentfront/frontmcp/pull/4))
-
-### ❤️ Thank You
-
-- David Antoon @frontegg-david
+- **core:** fix openapi tool execution ([#12](https://git

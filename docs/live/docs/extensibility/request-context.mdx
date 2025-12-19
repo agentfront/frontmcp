@@ -10,6 +10,7 @@ FrontMcpContext provides per-request state that flows through the entire async e
 ## Overview
 
 Every HTTP request to your FrontMCP server creates a `FrontMcpContext` that:
+
 - Propagates through all stages, tools, resources, and prompts via AsyncLocalStorage
 - Provides W3C Trace Context for distributed tracing
 - Stores authentication information after verification
@@ -148,11 +149,11 @@ FrontMcpContext automatically parses [W3C Trace Context](https://www.w3.org/TR/t
 
 ### Supported Headers
 
-| Header | Description |
-|--------|-------------|
-| `traceparent` | W3C standard: `{version}-{trace-id}-{parent-id}-{flags}` |
-| `tracestate` | Vendor-specific trace data |
-| `x-frontmcp-trace-id` | Fallback for non-W3C clients |
+| Header                | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `traceparent`         | W3C standard: `{version}-{trace-id}-{parent-id}-{flags}` |
+| `tracestate`          | Vendor-specific trace data                               |
+| `x-frontmcp-trace-id` | Fallback for non-W3C clients                             |
 
 ### Using Trace Context
 
@@ -171,6 +172,7 @@ const response = await ctx.fetch('https://api.example.com/data');
 ### Integration with Observability Tools
 
 FrontMCP's trace context is compatible with:
+
 - OpenTelemetry
 - Datadog APM
 - AWS X-Ray
@@ -316,62 +318,62 @@ const logContext = ctx.toLogContext();
 
 ### FrontMcpContext Class
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `requestId` | `string` | Unique request identifier (UUID v4) |
-| `traceContext` | `TraceContext` | W3C Trace Context data |
-| `sessionId` | `string` | MCP session identifier |
-| `authInfo` | `Partial<AuthInfo>` | Authentication information |
-| `scopeId` | `string` | Current scope identifier |
-| `timestamp` | `number` | Request start timestamp (ms since epoch) |
-| `metadata` | `RequestMetadata` | HTTP request metadata |
-| `config` | `FrontMcpContextConfig` | Context configuration |
-| `transport` | `TransportAccessor \| undefined` | Transport for elicit requests |
-| `flow` | `FlowBaseRef \| undefined` | Current flow reference |
-| `scope` | `ScopeRef \| undefined` | Current scope reference |
-| `sessionMetadata` | `SessionIdPayload \| undefined` | Session metadata (protocol, platform) |
+| Property          | Type                             | Description                              |
+| ----------------- | -------------------------------- | ---------------------------------------- |
+| `requestId`       | `string`                         | Unique request identifier (UUID v4)      |
+| `traceContext`    | `TraceContext`                   | W3C Trace Context data                   |
+| `sessionId`       | `string`                         | MCP session identifier                   |
+| `authInfo`        | `Partial<AuthInfo>`              | Authentication information               |
+| `scopeId`         | `string`                         | Current scope identifier                 |
+| `timestamp`       | `number`                         | Request start timestamp (ms since epoch) |
+| `metadata`        | `RequestMetadata`                | HTTP request metadata                    |
+| `config`          | `FrontMcpContextConfig`          | Context configuration                    |
+| `transport`       | `TransportAccessor \| undefined` | Transport for elicit requests            |
+| `flow`            | `FlowBaseRef \| undefined`       | Current flow reference                   |
+| `scope`           | `ScopeRef \| undefined`          | Current scope reference                  |
+| `sessionMetadata` | `SessionIdPayload \| undefined`  | Session metadata (protocol, platform)    |
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `mark` | `mark(name: string): void` | Record a timing mark |
-| `elapsed` | `elapsed(from?: string, to?: string): number` | Get elapsed time in ms |
-| `getMarks` | `getMarks(): ReadonlyMap<string, number>` | Get all timing marks |
-| `set` | `set<T>(key: string \| symbol, value: T): void` | Store context-scoped data |
-| `get` | `get<T>(key: string \| symbol): T \| undefined` | Retrieve context-scoped data |
-| `has` | `has(key: string \| symbol): boolean` | Check if key exists |
-| `delete` | `delete(key: string \| symbol): boolean` | Delete a key |
-| `getLogger` | `getLogger(parent: FrontMcpLogger): FrontMcpLogger` | Get child logger with context |
-| `toLogContext` | `toLogContext(): Record<string, unknown>` | Get summary for logging |
-| `fetch` | `fetch(input: RequestInfo \| URL, init?: RequestInit): Promise<Response>` | Context-aware fetch |
-| `updateAuthInfo` | `updateAuthInfo(authInfo: Partial<AuthInfo>): void` | Update auth info (internal) |
-| `updateSessionMetadata` | `updateSessionMetadata(metadata: SessionIdPayload): void` | Update session metadata (internal) |
+| Method                  | Signature                                                                 | Description                        |
+| ----------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| `mark`                  | `mark(name: string): void`                                                | Record a timing mark               |
+| `elapsed`               | `elapsed(from?: string, to?: string): number`                             | Get elapsed time in ms             |
+| `getMarks`              | `getMarks(): ReadonlyMap<string, number>`                                 | Get all timing marks               |
+| `set`                   | `set<T>(key: string \| symbol, value: T): void`                           | Store context-scoped data          |
+| `get`                   | `get<T>(key: string \| symbol): T \| undefined`                           | Retrieve context-scoped data       |
+| `has`                   | `has(key: string \| symbol): boolean`                                     | Check if key exists                |
+| `delete`                | `delete(key: string \| symbol): boolean`                                  | Delete a key                       |
+| `getLogger`             | `getLogger(parent: FrontMcpLogger): FrontMcpLogger`                       | Get child logger with context      |
+| `toLogContext`          | `toLogContext(): Record<string, unknown>`                                 | Get summary for logging            |
+| `fetch`                 | `fetch(input: RequestInfo \| URL, init?: RequestInit): Promise<Response>` | Context-aware fetch                |
+| `updateAuthInfo`        | `updateAuthInfo(authInfo: Partial<AuthInfo>): void`                       | Update auth info (internal)        |
+| `updateSessionMetadata` | `updateSessionMetadata(metadata: SessionIdPayload): void`                 | Update session metadata (internal) |
 
 ### TraceContext Interface
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `traceId` | `string` | 32-character hex trace identifier |
-| `parentId` | `string \| undefined` | 16-character hex parent span ID |
-| `traceFlags` | `number` | Trace flags (e.g., 1 for sampled) |
-| `traceState` | `string \| undefined` | Vendor-specific trace state |
-| `raw` | `string` | Raw traceparent header value |
+| Property     | Type                  | Description                       |
+| ------------ | --------------------- | --------------------------------- |
+| `traceId`    | `string`              | 32-character hex trace identifier |
+| `parentId`   | `string \| undefined` | 16-character hex parent span ID   |
+| `traceFlags` | `number`              | Trace flags (e.g., 1 for sampled) |
+| `traceState` | `string \| undefined` | Vendor-specific trace state       |
+| `raw`        | `string`              | Raw traceparent header value      |
 
 ### RequestMetadata Interface
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `userAgent` | `string \| undefined` | User-Agent header |
-| `contentType` | `string \| undefined` | Content-Type header |
-| `accept` | `string \| undefined` | Accept header |
-| `clientIp` | `string \| undefined` | Client IP address |
+| Property        | Type                     | Description                     |
+| --------------- | ------------------------ | ------------------------------- |
+| `userAgent`     | `string \| undefined`    | User-Agent header               |
+| `contentType`   | `string \| undefined`    | Content-Type header             |
+| `accept`        | `string \| undefined`    | Accept header                   |
+| `clientIp`      | `string \| undefined`    | Client IP address               |
 | `customHeaders` | `Record<string, string>` | Headers matching `x-frontmcp-*` |
 
 ### TransportAccessor Interface
 
-| Property/Method | Type | Description |
-|-----------------|------|-------------|
-| `supportsElicit` | `boolean` | Whether transport supports elicit |
-| `elicit` | `<T>(message: string, schema: T): Promise<ElicitResult>` | Send elicit request |
+| Property/Method  | Type                                                     | Description                       |
+| ---------------- | -------------------------------------------------------- | --------------------------------- |
+| `supportsElicit` | `boolean`                                                | Whether transport supports elicit |
+| `elicit`         | `<T>(message: string, schema: T): Promise<ElicitResult>` | Send elicit request               |
 
 ---
 
