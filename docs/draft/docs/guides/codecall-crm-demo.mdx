@@ -5,22 +5,22 @@ icon: users-round
 description: Explore the multi-tool CRM sample that showcases the CodeCall plugin in action.
 ---
 
-The FrontMCP monorepo ships a full CRM reference app at `apps/demo/src/apps/crm`. It demonstrates how to group many CRUD tools behind the CodeCall plugin, feed them with an in-memory data store, and expose them through a single CodeCall entry point.
+FrontMCP ships a dedicated CRM showcase under `apps/e2e/demo-e2e-codecall`. It demonstrates how to put every customer workflow behind CodeCall: vector-backed search, describe, execute, CRUD tools, resources, prompts, and matching Jest suites.
 
 <Info>
-Source: `apps/demo/src/apps/crm`. The `apps/demo/src/apps/crm/data/store.ts` module seeds sample users and activities so the tools return realistic data without additional services.
+Source: `apps/e2e/demo-e2e-codecall`. The project includes a `pnpm nx serve demo-e2e-codecall` target for interactive exploration and `pnpm nx test demo-e2e-codecall` for automated validation.
 </Info>
 
 ## Architecture overview
 
-- **CodeCall plugin** – `CodeCallPlugin.init({ topK: 10 })` runs in `codecall_only` mode so models discover tools via search rather than the global tool list.
-- **Eight dedicated tools** – Separate tool classes handle user CRUD plus activity logging and stats.
-- **Typed data store** – `CrmStore` exposes `users` and `activities` helpers for list, get, mutate, and aggregate operations.
-- **Zod validation** – Every tool validates inputs (email, enums, limits) before touching the store and returns structured responses.
+- **CodeCall-only surface** – `CodeCallPlugin.init({ mode: 'codecall_only', topK: 10 })` keeps the CRM tools discoverable via `codecall:search` and `codecall:describe` instead of dumping everything into the global tool list.
+- **In-memory CRM store** – `crm.store.ts` seeds users and activities, exposes CRUD helpers, and powers the `users` resource plus analysis prompts.
+- **Full tool catalog** – Eight tools ship with Zod schemas so CodeCall plans can CRUD users or log activities with strong typing.
+- **Extra surfaces** – A `crm://users` resource and `analyze-user-activity` prompt make it easy to showcase CodeCall + prompts/resources in the same server.
 
 ## App and plugin wiring
 
-```ts
+```ts title="apps/e2e/demo-e2e-codecall/src/apps/crm/index.ts"
 import { App } from '@frontmcp/sdk';
 import { CodeCallPlugin } from '@frontmcp/plugins';
 import UsersListTool from './tools/users-list.tool';
@@ -31,14 +31,16 @@ import UsersDeleteTool from './tools/users-delete.tool';
 import ActivitiesListTool from './tools/activities-list.tool';
 import ActivitiesLogTool from './tools/activities-log.tool';
 import ActivitiesStatsTool from './tools/activities-stats.tool';
+import UsersResource from './resources/users.resource';
+import AnalyzeUserActivityPrompt from './prompts/analyze-user-activity.prompt';
 
 @App({
-  id: 'crm',
-  name: 'CRM Demo with CodeCall',
-  description: 'A demo CRM application showcasing CodeCall plugin for AgentScript-based tool orchestration',
+  name: 'CRM',
+  description: 'CRM application with CodeCall plugin for E2E testing',
   plugins: [
     CodeCallPlugin.init({
-      topK: 10, // return up to 10 relevant tools per search request
+      mode: 'codecall_only',
+      topK: 10,
     }),
   ],
   tools: [
@@ -51,109 +53,114 @@ import ActivitiesStatsTool from './tools/activities-stats.tool';
     ActivitiesLogTool,
     ActivitiesStatsTool,
   ],
+  resources: [UsersResource],
+  prompts: [AnalyzeUserActivityPrompt],
 })
-export default class CrmMcpApp {}
+export class CrmApp {}
 ```
 
 ## Tool catalog
 
-| Tool               | Category   | What it does                                                   |
+| Tool               | Category   | Purpose                                                        |
 | ------------------ | ---------- | -------------------------------------------------------------- |
-| `users:list`       | Users      | Filter users by status or role with pagination-friendly limits |
-| `users:get`        | Users      | Fetch a profile by ID or email                                 |
-| `users:create`     | Users      | Create a new user with default role/status enforcement         |
-| `users:update`     | Users      | Patch name, role, status, or last login                        |
-| `users:delete`     | Users      | Remove a user after verifying they exist                       |
-| `activities:list`  | Activities | Return recent activities with optional user/type filters       |
-| `activities:log`   | Activities | Append an activity and update `lastLoginAt` on login events    |
-| `activities:stats` | Activities | Summarize total activity counts grouped by type                |
+| `users-list`       | Users      | Returns every seeded user with pagination-friendly metadata    |
+| `users-get`        | Users      | Fetches a single profile by ID                                 |
+| `users-create`     | Users      | Adds a new record with validation for email, company, and role |
+| `users-update`     | Users      | Applies partial updates and reports success                    |
+| `users-delete`     | Users      | Removes a user and returns human-friendly status text          |
+| `activities-list`  | Activities | Lists activities globally or per user                          |
+| `activities-log`   | Activities | Appends a new activity and timestamps login events             |
+| `activities-stats` | Activities | Summarizes totals grouped by type and user                     |
 
-Each tool extends `ToolContext`, so the CodeCall plan receives consistent logging, auth info, and error handling.
+Each tool extends `ToolContext`, so CodeCall receives consistent logging, auth info, and structured results.
 
-## CrmStore helpers
+## Data store, resource, and prompt
 
-The in-memory store keeps sample data and exposes ergonomic helpers. Tools resolve it directly instead of re-implementing storage logic.
+```ts title="apps/e2e/demo-e2e-codecall/src/apps/crm/data/crm.store.ts"
+class CrmStore {
+  private users = new Map<string, User>();
+  private activities: Activity[] = [];
 
-```ts
-import { CrmStore } from '../data/store';
+  constructor() {
+    this.seedData();
+  }
 
-// Create a new pending user
-const user = CrmStore.users.create({
-  email: 'sasha@example.com',
-  name: 'Sasha Rivera',
-  role: 'user',
-  status: 'pending',
-});
+  listUsers(): User[] {
+    return Array.from(this.users.values());
+  }
 
-// Promote and timestamp existing users
-CrmStore.users.update(user.id, { status: 'active', role: 'admin' });
-
-// Show activity stats for dashboards
-const stats = CrmStore.activities.getStats(user.id);
-```
-
-Because everything is in memory, the demo stays deterministic and easy to reset between sessions.
-
-## Log activities through CodeCall
-
-The `activities:log` tool validates the user before writing an entry and automatically updates `lastLoginAt` for login events—perfect for showcasing multi-step plans.
-
-```ts
-@Tool({
-  name: 'activities:log',
-  description: 'Log a new activity for a user in the CRM.',
-  inputSchema: {
-    userId: z.string(),
-    type: z.enum(['login', 'logout', 'page_view', 'action', 'error']),
-    description: z.string(),
-    metadata: z.record(z.unknown()).optional(),
-  },
-})
-export default class ActivitiesLogTool extends ToolContext {
-  async execute(input: { userId: string; type: Activity['type']; description: string; metadata?: Record<string, unknown> }) {
-    const user = CrmStore.users.get(input.userId);
-    if (!user) {
-      throw new Error(`User ${input.userId} not found`);
-    }
-
-    const activity = CrmStore.activities.create({
-      userId: input.userId,
-      type: input.type,
-      description: input.description,
-      metadata: input.metadata,
+  getActivityStats() {
+    const byType: Record<string, number> = {};
+    const byUser: Record<string, number> = {};
+    this.activities.forEach((activity) => {
+      byType[activity.type] = (byType[activity.type] || 0) + 1;
+      byUser[activity.userId] = (byUser[activity.userId] || 0) + 1;
     });
-
-    if (input.type === 'login') {
-      CrmStore.users.update(input.userId, { lastLoginAt: activity.timestamp });
-    }
-
-    return { activity, success: true };
+    return { total: this.activities length, byType, byUser };
   }
 }
+
+export const crmStore = new CrmStore();
 ```
+
+- `UsersResource` exposes `crm://users` so inspectors can list users without calling CodeCall.
+- `AnalyzeUserActivityPrompt` renders a Markdown report that blends `crmStore.getActivityStats()` with filtered activities, perfect for demonstrating prompt outputs that leverage tool-side data.
+
+## End-to-end tests
+
+The Jest suite at `apps/e2e/demo-e2e-codecall/e2e/codecall.e2e.test.ts` validates search, describe, and execute flows plus the CRM tools themselves.
+
+```ts
+import { test, expect } from '@frontmcp/testing';
+
+test.use({
+  server: 'apps/e2e/demo-e2e-codecall/src/main.ts',
+  publicMode: true,
+});
+
+test('executes users-list via CodeCall', async ({ mcp }) => {
+  const result = await mcp.tools.call('codecall:execute', {
+    script: `const data = await callTool('users-list', {}); return data;`,
+  });
+  expect(result).toBeSuccessful();
+  expect(result).toHaveTextContent('John Doe');
+});
+```
+
+<Info>The suite also asserts that the CodeCall meta-tools reply with relevance scores, matched queries, and schema descriptions so you can copy the expectations directly into your own regression tests.</Info>
 
 ## Run it locally
 
 <Steps>
-  <Step stepNumber={1} title="Install workspace dependencies">
+  <Step stepNumber={1} title="Install dependencies">
     ```bash
     pnpm install
     ```
   </Step>
-  <Step stepNumber={2} title="Start the demo server">
+  <Step stepNumber={2} title="Start the server">
     ```bash
-    pnpm nx serve demo
+    pnpm nx serve demo-e2e-codecall --port 3013
     ```
-    The dev server prints the HTTP URL (for example `http://localhost:5173`). Keep this terminal open.
+    The log prints a Streamable HTTP URL (for example `http://localhost:3013`).
   </Step>
-  <Step stepNumber={3} title="Open the MCP Inspector">
-    Run `npx @modelcontextprotocol/inspector`, paste the server URL from the previous step, and click **Connect**.
+  <Step stepNumber={3} title="Connect a client">
+    Launch the MCP Inspector (`npx @modelcontextprotocol/inspector`) or your favorite IDE client and point it at the URL from the previous step.
   </Step>
   <Step stepNumber={4} title="Exercise CodeCall">
-    Call `codecall.search`, `codecall.describe`, and `codecall.execute` from the Inspector to watch the CRM tools run inside the sandbox.
+    Call `codecall:search`, `codecall:describe`, and `codecall:execute`. Try running:
+    ```js
+    const list = await callTool('codecall:search', { queries: ['list users'] });
+    const describe = await callTool('codecall:describe', { toolNames: ['users-create'] });
+    ```
+  </Step>
+  <Step stepNumber={5} title="Run the Jest suite">
+    ```bash
+    pnpm nx test demo-e2e-codecall
+    ```
+    The suite boots the server with `TestServer.startNx`, then validates search relevance, schema descriptions, resource reads, and CodeCall execution outputs.
   </Step>
 </Steps>
 
 <Tip>
-Pair this demo with the [platform-aware UI guide](/docs/guides/ui-library) to style consent and troubleshooting screens for your own CodeCall deployments.
+Pair this demo with the [CodeCall configuration reference](/docs/plugins/codecall/configuration) to see how `mode: 'codecall_only'`, `topK`, and metadata filters influence the meta-tools.
 </Tip>

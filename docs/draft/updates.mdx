@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-19" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -13,91 +13,37 @@ mode: 'center'
   >
     **Breaking changes**
 
-    🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
+    🚨 **Transport config refactor** – Move every session, SSE, and persistence toggle into the new top-level `transport` block; update configs now so v1.0 ships without migration warnings.
 
     **Features**
 
-    🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
+    🚀 **Serverless-ready scaffolding** – `frontmcp create --target <platform>` now emits Vercel, Lambda, and Cloudflare wrappers plus config files, so a single command gets you from repo to deployable artifact.
 
-    🧩 **Tool UI metadata & widgets** – Configure display modes, static/hybrid serving, CSP, hydration, and widget accessibility per tool while composing OpenAI App SDK-ready resource cards, lists, and previews without reimplementing layout glue.
+    🧠 **Context-scoped providers** – Access `FrontMcpContext` from CONTEXT-scoped providers to read request IDs, tracing info, client metadata, and auth state inside every tool, resource, and hook.
 
-    📡 **Transport-aware auth** – Flip the new `auth.transport` switches per app (public, transparent, or orchestrated) to enable streamable, stateful, or stateless HTTP plus SSE listeners so production stays locked down while demos and CI can bypass the `initialize` handshake.
+    🧪 **apps/e2e workspace** – Spin up `pnpm nx serve demo-e2e-cache`, `demo-e2e-codecall`, `demo-e2e-hooks`, `demo-e2e-errors`, or `demo-e2e-multiapp` to demo caching, CodeCall orchestration, lifecycle hooks, multi-app routing, and auth flows with matching Jest suites.
 
-    🔐 **Authentication reference servers** – Boot `pnpm nx serve demo-e2e-public`, `demo-e2e-orchestrated`, or `demo-e2e-transparent` to see each mode with consent screens, incremental scopes, stateful/stateless session strategies, and transport presets before wiring your own app.
-
-    🛰️ **Prompt & resource discovery** – Servers now answer `prompts/list`, `prompts/get`, `resources/list`, and `resources/templates/list` with owner-aware names and `list_changed` notifications, so clients can build live pickers without guessing metadata.
-
-    🚀 **CodeCall meta-API plugin** – Collapse sprawling tool lists into the new CodeCall plugin: models search, describe, and execute tools through AgentScript plans that run inside Enclave with AST Guard validation.
-
-    🧠 **VectoriaDB semantic search** – Index every tool with the built-in vector database (with TF-IDF fallback), filter by metadata, and answer natural-language queries entirely on your own infrastructure. Now backed by `vectoriadb@^2.0.1` so you automatically inherit the latest semantic tuning and storage adapter fixes.
-
-    🛡️ **AST Guard security toolkit** – Validate user-provided JavaScript with new presets, tool-owner enforcement, and sandbox upgrades so risky scripts, rogue globals, and tampered call targets get blocked before execution.
-
-    🧾 **CRM toolset upgrade** – The demo CRM app now includes dedicated user/activity tools wired through CodeCall plus an in-memory store with login stats, showing how to orchestrate CRUD flows and telemetry from a single meta-entry point.
-
-    🧪 **@frontmcp/testing** – Author Jest-based end-to-end suites with fixture injection, HTTP mocking, request interceptors, and custom MCP matchers while the runner boots your server automatically via `test.use()`.
-
-    🗃️ **Demo Showcase server** – Boot the new `apps/demo-showcase` notes app to exercise tools, resources, prompts, and OpenAPI adapters in one place, complete with sample `apps/demo-showcase/e2e` suites you can copy into your own repo.
-
-    🧰 **Layer 0 pre-scanner** – AgentScript now runs through a pre-parser `ast-guard` scan that blocks ReDoS payloads, Trojan Source characters, deep nesting, and oversize inputs before the AST is even built.
-
-    🧠 **AI Scoring Gate** – A semantic scoring stage reviews every CodeCall plan for exfiltration patterns, bulk destructive actions, and sensitive field access, halting risky scripts before Enclave executes them.
-
-    🧵 **Worker Pool adapter** – Opt into the new worker-pool runtime to execute CodeCall plans inside OS-isolated threads with queue backpressure, strict memory caps, and graceful restarts.
-
-    🛑 **I/O flood protection** – Console output and call counts are now rate limited per script, preventing log floods and transport stalls even when models misbehave.
-
-    🤖 **Schema & runtime upgrades** – Core packages now ship with MCP SDK `1.24.3`, Zod 4, Hugging Face Transformers `^3.2.2`, and `zod-from-json-schema`, keeping schema validation, JSON generation, and App SDK widgets in sync with the latest protocol changes.
+    🎨 **Universal renderer upgrade** – Tool UIs now emit dual-payload output with resilient platform detection, so Claude Artifacts, Cursor, and in-browser previews all render consistently without guesswork.
 
     **Fixes**
 
-    🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
+    🛡️ **Session hardening** – Transport recreation now validates session IDs, sanitizes inputs, and drops corrupted Redis payloads before they are reused.
 
-    🔐 **Identifier whitelists** – UnknownGlobalRule, ReservedPrefixRule, and static call-target validation stop AgentScript plans from inventing globals or mutating safe call sites.
+    🧩 **Peer dependency alignment** – `zod`, `react`, and `react-dom` ship as peer dependencies across packages, preventing duplicate installs and version drift in large workspaces.
 
-    🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
+    🔐 **UI security polish** – Markdown and templated UI rendering gained stricter escaping, URL validation, and CSP defaults to block XSS regressions in custom layouts.
 
     **Docs**
 
-    🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
+    📚 **Server transport guide** – The server reference documents the new `transport`/`redis` blocks plus migration tables so you can retire `auth.transport` before it breaks.
 
-    🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
+    🧾 **Request context + providers** – The extensibility guide walks through CONTEXT-scoped providers, `FrontMcpContext.fetch()`, and tracing helpers so observability data flows into every tool.
 
-    🛰️ **Discovery reference** – Added `/docs/servers/discovery` to explain `prompts/list`, `prompts/get`, and `resources/templates/list` responses plus the new `list_changed` notifications.
-
-    📚 **Vector intelligence guide** – The VectoriaDB walkthrough now covers offline embeddings, persistence strategies, and HNSW tuning alongside updated installation, quickstart, and local-dev prerequisites.
-
-    🧩 **Script hardening playbook** – The AST Guard and Enclave guides document the new presets, call-target validation, and CodeCall integration so teams can let copilots script without sacrificing safety.
-
-    🗂️ **CRM & CodeCall example** – `/docs/guides/codecall-crm-demo` now covers the in-memory store, tool catalog, and CodeCall search defaults so you can replicate multi-tool orchestration in your own servers.
-
-    🔑 **Auth demo guide** – New `/docs/authentication/demo-servers` walks through each Nx sample, required environment variables, and how to pair them with `@frontmcp/testing`.
-
-    🌐 **Transport controls reference** – `/docs/servers/server` now documents the `auth.transport` toggles so you know exactly when to enable streamable, stateful, or stateless HTTP and SSE listeners.
-
-    🎛️ **Tool UI metadata docs** – Refreshed `/docs/ui/overview` and `/docs/ui/integration/tools` with display modes, serving strategies, hydration, CSP guidance, and widget accessibility tips so templates behave predictably across platforms.
-
-    🧱 **OpenAI resource widgets** – Added `/docs/ui/components/resource-widgets` to cover `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview`, plus escaping and HTMX best practices for App SDK layouts.
-
-    🖼️ **Reliable README branding** – README logos now point at absolute GitHub URLs so they render on npm, CDN mirrors, and any docs preview without shipping extra assets.
-
-    **Performance**
-
-    ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
+    🧑‍🏫 **apps/e2e playbooks** – The testing, caching, and CodeCall guides now point at the new `apps/e2e/**` workspace, complete with Nx serve commands, e2e specs, and walkthroughs for cache stats, CodeCall plans, and prompt-driven reports.
 
     **Build/CI**
 
-    🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
-
-    🧱 **CLI dependency cleanup** – The global CLI now bundles only `tslib` and always reuses the workspace versions of `@frontmcp/sdk`, adapters, and plugins, so globals stop drifting from your project's dependencies.
-
-    🧰 **Zod 4 scaffolding** – CLI generators write `zod@^4.0.0` into fresh `package.json` files, keeping newly scaffolded apps aligned with the runtime upgrade without manual edits.
-
-    🛠️ **Pinned Nx SHAs** – CI builds pin Nx SHAs in push workflows for reproducible caching and predictable checks across forks.
-
-    ⚙️ **CUDA-free validators** – Release workflows skip CUDA downloads when installing ONNX validators so CPU-only runners stay fast and deterministic.
-
-    📦 **Dependency alignment** – Package manifests now pull in MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, esbuild `0.27.1`, and the shared Hugging Face Transformers/Zod stack so installs stay consistent across workspaces while honoring the Node 22 floor.
+    🔧 **Docker + release pipeline** – Projects scaffold Docker assets, Redis scripts, and Verdaccio-friendly publish loops, while e2e workflows gained retry logic, Nx run-many batching, `--forceExit`, and a dedicated UI debug workflow.
 
   </Card>
 </Update>

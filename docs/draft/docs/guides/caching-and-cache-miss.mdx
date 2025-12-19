@@ -127,7 +127,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     export default class GetUserProfileTool extends ToolContext {
       async execute(input: { userId: string }) {
         // Expensive database query
-        return await this.database.getUserProfile(input.userId);
+        return await this.database getUserProfile(input.userId);
       }
     }
     ```
@@ -356,7 +356,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     })
     class GetUserDashboardTool extends ToolContext {
       async execute(input: { userId: string }) {
-        return await this.dashboard.generate(input.userId);
+        return await this.dashboard generate(input.userId);
       }
     }
     ```
@@ -377,7 +377,7 @@ Caching is **opt-in** per tool. Add the `cache` field to your tool metadata:
     })
     class GetTenantDataTool extends ToolContext {
       async execute(input) {
-        return await this.tenantService.getData(
+        return await this.tenantService getData(
           input.tenantId,
           input.dataType
         );
@@ -607,7 +607,7 @@ import { z } from 'zod';
 })
 class GetStockPriceTool extends ToolContext {
   async execute(input: { symbol: string }) {
-    return await this.marketData.getPrice(input.symbol);
+    return await this.marketData getPrice(input.symbol);
   }
 }
 
@@ -622,7 +622,7 @@ class GetStockPriceTool extends ToolContext {
 })
 class GetUserTool extends ToolContext {
   async execute(input) {
-    return await this.database.getUser(input.tenantId, input.userId);
+    return await this.database getUser(input.tenantId, input.userId);
   }
 }
 
@@ -637,7 +637,7 @@ class GetUserTool extends ToolContext {
 })
 class GetTrendingTool extends ToolContext {
   async execute(input: { category: string }) {
-    return await this.analytics.getTrending(input.category);
+    return await this.analytics getTrending(input.category);
   }
 }
 
@@ -653,7 +653,7 @@ class GetTrendingTool extends ToolContext {
 class GenerateReportTool extends ToolContext {
   async execute(input) {
     // Very expensive operation
-    return await this.reports.generate(input.tenantId, input.month);
+    return await this.reports generate(input.tenantId, input.month);
   }
 }
 
@@ -684,6 +684,35 @@ export default class Server {}
 ```
 
 ---
+
+## Try the Cache E2E demo
+
+Want a fully wired playground? The `apps/e2e/demo-e2e-cache` project runs the Cache Plugin with both cached and uncached tools, an execution tracker, a prompt, and a resource so you can assert cache hits without extra glue code.
+
+<Info>Serve it with `pnpm nx serve demo-e2e-cache --port 3016` and run the Jest suite with `pnpm nx test demo-e2e-cache`. The Nx target already sets `publicMode`, retries, and `forceExit`, so the suite is CI-ready out of the box.</Info>
+
+```ts title="apps/e2e/demo-e2e-cache/src/apps/compute/tools/expensive-operation.tool.ts"
+@Tool({
+  name: 'expensive-operation',
+  description: 'Simulates an expensive computation with caching enabled',
+  cache: { ttl: 30 },
+  inputSchema,
+  outputSchema,
+})
+export default class ExpensiveOperationTool extends ToolContext {
+  async execute(input: Input): Promise<Output> {
+    const executionCount = executionTracker.increment('expensive-operation');
+    const result = Math.pow(input.complexity, 2) * 100 + input.operationId.length;
+    return { ...input, result, executionCount, computedAt: new Date().toISOString() };
+  }
+}
+```
+
+- `CacheStatsResource` exposes `cache://stats`, letting you assert cache behavior via `mcp.resources.read()`.
+- `cache-report` prompt turns execution counts into a Markdown summary so clients can visualize hit ratios.
+- The Jest suite resets stats between tests and compares cached vs non-cached tools, giving you copy-ready expectations for your own services.
+
+<Tip>Reuse the `reset-stats` tool whenever you benchmark cache tweaks locally—it clears the shared execution tracker so you always start from a clean slate.</Tip>
 
 ## What's Next?
 
