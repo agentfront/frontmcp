@@ -169,7 +169,7 @@ Optionally define an output schema for response validation:
     total: z.number(),
   }),
 })
-class CalculateTotalTool {
+class CalculateTotalTool extends ToolContext {
   execute({ items }) {
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const tax = subtotal * 0.1;
@@ -308,7 +308,7 @@ Provide examples to improve discoverability and help LLMs understand how to use 
     },
   ],
 })
-class CreateUserTool {
+class CreateUserTool extends ToolContext {
   async execute({ email, role }) {
     // Implementation
   }
@@ -389,7 +389,7 @@ Class-based tools have access to a rich execution context via `this`:
   name: 'context-example',
   inputSchema: { query: z.string() },
 })
-class ContextExampleTool {
+class ContextExampleTool extends ToolContext {
   async execute({ query }: { query: string }) {
     // Input received by the tool
     this.input;              // { query: 'value' }
@@ -428,7 +428,7 @@ Inject services via the `get()` method:
     name: z.string(),
   },
 })
-class CreateUserTool {
+class CreateUserTool extends ToolContext {
   async execute({ email, name }) {
     const db = this.get(DatabaseProvider);
     const user = await db.users.create({ email, name });
@@ -446,7 +446,7 @@ Class-based tools have access to the full request context including tracing, tim
   name: 'traced-tool',
   inputSchema: { query: z.string() },
 })
-class TracedTool {
+class TracedTool extends ToolContext {
   async execute({ query }: { query: string }) {
     // Full request context
     const ctx = this.requestContext;
@@ -501,7 +501,7 @@ class TracedTool {
     idempotentHint: true,
   },
 })
-class CalculateTool {
+class CalculateTool extends ToolContext {
   execute({ expression }) {
     // Using a safe math parser (not eval!)
     const result = safeEvaluate(expression);
@@ -527,7 +527,7 @@ class CalculateTool {
     openWorldHint: true,
   },
 })
-class CreateGitHubIssueTool {
+class CreateGitHubIssueTool extends ToolContext {
   async execute({ owner, repo, title, body, labels }) {
     const config = this.get(ConfigProvider);
 
@@ -572,7 +572,7 @@ class CreateGitHubIssueTool {
     destructiveHint: true,
   },
 })
-class UpdateUserStatusTool {
+class UpdateUserStatusTool extends ToolContext {
   async execute({ userId, status, reason }) {
     const db = this.get(DatabaseProvider);
     const audit = this.get(AuditLogProvider);
@@ -614,7 +614,7 @@ class UpdateUserStatusTool {
     encoding: z.enum(['utf-8', 'base64']).default('utf-8'),
   },
 })
-class WriteFileTool {
+class WriteFileTool extends ToolContext {
   async execute({ path, content, encoding }) {
     const fs = await import('fs/promises');
     const pathModule = await import('path');
@@ -709,7 +709,7 @@ Add a `ui` property to attach a visual template:
     widgetDescription: 'Displays current weather conditions',
   },
 })
-class GetWeatherTool {
+class GetWeatherTool extends ToolContext {
   async execute({ location }) {
     return { location, temperature: 22, conditions: 'Sunny' };
   }
@@ -791,7 +791,7 @@ import { card, badge, button, descriptionList } from '@frontmcp/ui';
     },
   },
 })
-class GetOrderTool { /* ... */ }
+class GetOrderTool extends ToolContext { /* ... */ }
 ```
 
 ### Testing Tool UI

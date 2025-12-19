@@ -465,11 +465,11 @@ export default class GreetTool extends ToolContext {
     formality: 'casual' | 'formal' | 'enthusiastic';
     timeOfDay?: 'morning' | 'afternoon' | 'evening';
   }) {
-    // Access logger (via context)
-    this.context.getLogger().info('Greeting user', { name: input.name });
+    // Access context-aware logger
+    this.contextLogger.info('Greeting user', { name: input.name });
 
     // Access auth info (via context)
-    const userId = this.context.authInfo.user?.id;
+    const userId = this.context.authInfo?.user?.id;
 
     // Build greeting based on formality
     let greeting = '';
