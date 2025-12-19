@@ -73,7 +73,7 @@
         "icon": "book",
         "versions": [
           {
-            "version": "v0.5 (latest)",
+            "version": "v0.6 (latest)",
             "default": true,
             "groups": [
               {
@@ -93,7 +93,8 @@
                   "docs/servers/apps",
                   "docs/servers/tools",
                   "docs/servers/resources",
-                  "docs/servers/prompts"
+                  "docs/servers/prompts",
+                  "docs/servers/discovery"
                 ]
               },
               {
@@ -107,7 +108,8 @@
                   "docs/authentication/remote-proxy",
                   "docs/authentication/progressive",
                   "docs/authentication/token",
-                  "docs/authentication/production"
+                  "docs/authentication/production",
+                  "docs/authentication/demo-servers"
                 ]
               },
               {
@@ -115,6 +117,7 @@
                 "icon": "puzzle-piece",
                 "pages": [
                   "docs/extensibility/providers",
+                  "docs/extensibility/request-context",
                   "docs/extensibility/plugins",
                   "docs/extensibility/adapters",
                   "docs/extensibility/logging"
@@ -164,12 +167,118 @@
                   "docs/guides/customize-flow-stages",
                   "docs/guides/ast-guard",
                   "docs/guides/enclave",
-                  "docs/guides/vectoriadb"
+                  "docs/guides/vectoriadb",
+                  "docs/guides/ui-library",
+                  "docs/guides/codecall-crm-demo"
                 ]
               },
               {
                 "group": "Deployment",
-                "pages": ["docs/deployment/local-dev-server", "docs/deployment/production-build"]
+                "pages": [
+                  "docs/deployment/local-dev-server",
+                  "docs/deployment/production-build",
+                  "docs/deployment/redis-setup",
+                  "docs/deployment/serverless"
+                ]
+              }
+            ]
+          },
+          {
+            "version": "v0.5",
+            "groups": [
+              {
+                "group": "Get Started",
+                "pages": [
+                  "docs/v/0.5/getting-started/welcome",
+                  "docs/v/0.5/getting-started/installation",
+                  "docs/v/0.5/getting-started/quickstart",
+                  "updates"
+                ]
+              },
+              {
+                "group": "Servers",
+                "pages": [
+                  "docs/v/0.5/servers/server",
+                  "docs/v/0.5/servers/apps",
+                  "docs/v/0.5/servers/tools",
+                  "docs/v/0.5/servers/resources",
+                  "docs/v/0.5/servers/prompts"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "icon": "shield-check",
+                "pages": [
+                  "docs/v/0.5/authentication/overview",
+                  "docs/v/0.5/authentication/modes",
+                  "docs/v/0.5/authentication/local",
+                  "docs/v/0.5/authentication/remote",
+                  "docs/v/0.5/authentication/remote-proxy",
+                  "docs/v/0.5/authentication/progressive",
+                  "docs/v/0.5/authentication/token",
+                  "docs/v/0.5/authentication/production"
+                ]
+              },
+              {
+                "group": "Extensibility",
+                "icon": "puzzle-piece",
+                "pages": [
+                  "docs/v/0.5/extensibility/providers",
+                  "docs/v/0.5/extensibility/plugins",
+                  "docs/v/0.5/extensibility/adapters",
+                  "docs/v/0.5/extensibility/logging"
+                ]
+              },
+              {
+                "group": "Adapters",
+                "pages": ["docs/v/0.5/adapters/overview", "docs/v/0.5/adapters/openapi-adapter"]
+              },
+              {
+                "group": "Plugins",
+                "pages": [
+                  "docs/v/0.5/plugins/overview",
+                  "docs/v/0.5/plugins/cache-plugin",
+                  {
+                    "group": "CodeCall",
+                    "icon": "code",
+                    "pages": [
+                      "docs/v/0.5/plugins/codecall/overview",
+                      "docs/v/0.5/plugins/codecall/security",
+                      "docs/v/0.5/plugins/codecall/api-reference",
+                      "docs/v/0.5/plugins/codecall/configuration",
+                      "docs/v/0.5/plugins/codecall/scaling"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Testing",
+                "icon": "flask-vial",
+                "pages": [
+                  "docs/v/0.5/testing/overview",
+                  "docs/v/0.5/testing/fixtures",
+                  "docs/v/0.5/testing/matchers",
+                  "docs/v/0.5/testing/authentication",
+                  "docs/v/0.5/testing/interceptors",
+                  "docs/v/0.5/testing/http-mocking",
+                  "docs/v/0.5/testing/api-reference"
+                ]
+              },
+              {
+                "group": "Guides",
+                "pages": [
+                  "docs/v/0.5/guides/create-plugin",
+                  "docs/v/0.5/guides/add-openapi-adapter",
+                  "docs/v/0.5/guides/caching-and-cache-miss",
+                  "docs/v/0.5/guides/customize-flow-stages",
+                  "docs/v/0.5/guides/ast-guard",
+                  "docs/v/0.5/guides/enclave",
+                  "docs/v/0.5/guides/vectoriadb"
+                ]
+              },
+              {
+                "group": "Deployment",
+                "pages": ["docs/v/0.5/deployment/local-dev-server", "docs/v/0.5/deployment/production-build"]
               }
             ]
           },
