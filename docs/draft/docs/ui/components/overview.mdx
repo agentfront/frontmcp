@@ -2,7 +2,7 @@
 title: Component Library
 sidebarTitle: Overview
 icon: grid-2
-description: FrontMCP UI provides a collection of pre-built components for building tool widgets. All components generate pure HTML strings, use Zod validation, support Tailwind CSS classes, and include HTMX integration.
+description: FrontMCP UI provides a collection of pre-built components for building tool widgets. All components generate pure HTML strings, use Zod validation, and support Tailwind CSS classes plus widget-accessible interactivity patterns.
 ---
 
 ## Installation
@@ -27,7 +27,7 @@ import {
 
 <CardGroup cols={2}>
   <Card title="Button" icon="hand-pointer" href="/docs/ui/components/button">
-    Versatile buttons with variants, sizes, loading states, and HTMX support
+    Versatile buttons with variants, sizes, loading states, and link-friendly behaviors.
   </Card>
   <Card title="Card" icon="square" href="/docs/ui/components/card">
     Content containers with headers, footers, and multiple styles
@@ -95,28 +95,39 @@ The error box displays:
   Error boxes are for development debugging. In production, ensure you pass valid options to avoid displaying error messages to users.
 </Warning>
 
-## HTMX Integration
+## Interactivity & MCP Bridge
 
-Most components support HTMX attributes for dynamic interactions:
+<Warning>
+  The legacy `htmx` option has been removed. Passing `htmx` now triggers a validation error.
+</Warning>
+
+Components emit static HTML so they work across every host. Use safe `href` links for navigation, or pair widgets with MCP Bridge when you need to call another tool.
 
 ```typescript
-const html = button('Load More', {
-  htmx: {
-    get: '/api/items?page=2',
-    target: '#items-list',
-    swap: 'beforeend',
-    trigger: 'click',
-  },
-});
+const html = `
+${button('Load More', {
+  id: 'load-more-btn',
+  data: { action: 'load-more' },
+})}
+
+<script>
+  const btn = document.getElementById('load-more-btn');
+  btn?.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const result = await window.mcpBridge.callTool('list_items', { page: 2 });
+      // Update DOM with result.items
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+`;
 ```
 
-Common HTMX attributes:
-
-- `get`, `post`, `put`, `delete` - HTTP methods
-- `target` - CSS selector for target element
-- `swap` - How to swap content (`innerHTML`, `beforeend`, etc.)
-- `trigger` - Event that triggers the request
-- `confirm` - Confirmation dialog text
+<Info>
+  Set `ui.widgetAccessible = true` on your tool so MCP Bridge methods are exposed inside the widget.
+</Info>
 
 ## Styling
 

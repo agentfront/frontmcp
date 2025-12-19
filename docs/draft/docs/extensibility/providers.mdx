@@ -120,24 +120,24 @@ const requestLoggerProvider = {
 
 ### FrontMcpContext API
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `requestId` | `string` | Unique request identifier (UUID v4) |
-| `traceContext` | `TraceContext` | W3C Trace Context (traceId, parentId, traceFlags) |
-| `sessionId` | `string` | MCP session identifier |
-| `authInfo` | `Partial<AuthInfo>` | Authentication information |
-| `scopeId` | `string` | Current scope identifier |
-| `timestamp` | `number` | Request start timestamp |
-| `metadata` | `RequestMetadata` | Headers, user-agent, client IP |
-| `transport` | `TransportAccessor \| undefined` | Transport for elicit requests |
+| Property       | Type                             | Description                                       |
+| -------------- | -------------------------------- | ------------------------------------------------- |
+| `requestId`    | `string`                         | Unique request identifier (UUID v4)               |
+| `traceContext` | `TraceContext`                   | W3C Trace Context (traceId, parentId, traceFlags) |
+| `sessionId`    | `string`                         | MCP session identifier                            |
+| `authInfo`     | `Partial<AuthInfo>`              | Authentication information                        |
+| `scopeId`      | `string`                         | Current scope identifier                          |
+| `timestamp`    | `number`                         | Request start timestamp                           |
+| `metadata`     | `RequestMetadata`                | Headers, user-agent, client IP                    |
+| `transport`    | `TransportAccessor \| undefined` | Transport for elicit requests                     |
 
-| Method | Description |
-|--------|-------------|
-| `mark(name)` | Record timing mark |
-| `elapsed(from?, to?)` | Get elapsed time between marks |
-| `set(key, value)` | Store context-scoped data |
-| `get(key)` | Retrieve context-scoped data |
-| `getLogger(parent)` | Get child logger with context |
+| Method                | Description                             |
+| --------------------- | --------------------------------------- |
+| `mark(name)`          | Record timing mark                      |
+| `elapsed(from?, to?)` | Get elapsed time between marks          |
+| `set(key, value)`     | Store context-scoped data               |
+| `get(key)`            | Retrieve context-scoped data            |
+| `getLogger(parent)`   | Get child logger with context           |
 | `fetch(input, init?)` | Context-aware fetch with auto-injection |
 
 ### Context-Aware Fetch
