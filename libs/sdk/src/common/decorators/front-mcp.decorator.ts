@@ -3,6 +3,7 @@ import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { FrontMcpInstance } from '../../front-mcp';
 import { applyMigration } from '../migrate';
+import { InternalMcpError } from '../../errors/mcp.error';
 
 /**
  * Decorator that marks a class as a FrontMcp Server and provides metadata
@@ -57,16 +58,24 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
         setServerlessHandler,
         setServerlessHandlerPromise,
         setServerlessHandlerError,
+      }: {
+        FrontMcpInstance: typeof FrontMcpInstance;
+        setServerlessHandler: (handler: unknown) => void;
+        setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
+        setServerlessHandlerError: (error: Error) => void;
       } = require('@frontmcp/sdk');
 
       if (!ServerlessInstance) {
-        throw new Error('@frontmcp/sdk version mismatch');
+        throw new InternalMcpError(
+          '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
+          'SDK_VERSION_MISMATCH',
+        );
       }
 
       const handlerPromise = ServerlessInstance.createHandler(metadata);
       setServerlessHandlerPromise(handlerPromise);
       handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
-        const e = err instanceof Error ? err : new Error(String(err));
+        const e = err instanceof Error ? err : new InternalMcpError(String(err), 'SERVERLESS_INIT_FAILED');
         setServerlessHandlerError(e);
         console.error('[FrontMCP] Serverless initialization failed:', e);
       });
@@ -75,7 +84,10 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       const sdk = '@frontmcp/sdk';
       import(sdk).then(({ FrontMcpInstance }) => {
         if (!FrontMcpInstance) {
-          throw new Error(`${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`);
+          throw new InternalMcpError(
+            `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
+            'SDK_VERSION_MISMATCH',
+          );
         }
 
         FrontMcpInstance.bootstrap(metadata);
