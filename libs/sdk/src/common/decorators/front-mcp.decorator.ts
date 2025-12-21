@@ -3,6 +3,7 @@ import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { FrontMcpInstance } from '../../front-mcp';
 import { applyMigration } from '../migrate';
+import { InternalMcpError } from '../../errors/mcp.error';
 
 /**
  * Decorator that marks a class as a FrontMcp Server and provides metadata
@@ -50,32 +51,43 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      const sdk = '@frontmcp/sdk';
-      import(sdk)
-        .then(({ FrontMcpInstance, setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError }) => {
-          if (!FrontMcpInstance) {
-            throw new Error(
-              `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
-            );
-          }
+      // Use synchronous require for bundler compatibility (rspack/webpack)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const {
+        FrontMcpInstance: ServerlessInstance,
+        setServerlessHandler,
+        setServerlessHandlerPromise,
+        setServerlessHandlerError,
+      }: {
+        FrontMcpInstance: typeof FrontMcpInstance;
+        setServerlessHandler: (handler: unknown) => void;
+        setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
+        setServerlessHandlerError: (error: Error) => void;
+      } = require('@frontmcp/sdk');
 
-          const handlerPromise = FrontMcpInstance.createHandler(metadata);
-          setServerlessHandlerPromise(handlerPromise);
-          handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
-            const e = err instanceof Error ? err : new Error(String(err));
-            setServerlessHandlerError(e);
-            console.error('[FrontMCP] Serverless initialization failed:', e);
-          });
-        })
-        .catch((err: unknown) => {
-          console.error('[FrontMCP] Failed to import @frontmcp/sdk for serverless init:', err);
-        });
+      if (!ServerlessInstance) {
+        throw new InternalMcpError(
+          '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
+          'SDK_VERSION_MISMATCH',
+        );
+      }
+
+      const handlerPromise = ServerlessInstance.createHandler(metadata);
+      setServerlessHandlerPromise(handlerPromise);
+      handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
+        const e = err instanceof Error ? err : new InternalMcpError(String(err), 'SERVERLESS_INIT_FAILED');
+        setServerlessHandlerError(e);
+        console.error('[FrontMCP] Serverless initialization failed:', e);
+      });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
       const sdk = '@frontmcp/sdk';
       import(sdk).then(({ FrontMcpInstance }) => {
         if (!FrontMcpInstance) {
-          throw new Error(`${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`);
+          throw new InternalMcpError(
+            `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
+            'SDK_VERSION_MISMATCH',
+          );
         }
 
         FrontMcpInstance.bootstrap(metadata);
