@@ -45,6 +45,18 @@ describe('CacheVercelKvProvider', () => {
       });
     });
 
+    it('should throw error when only url is provided without token', () => {
+      expect(() => {
+        new CacheVercelKvProvider({ url: 'https://kv.example.com' });
+      }).toThrow("Both 'url' and 'token' must be provided together");
+    });
+
+    it('should throw error when only token is provided without url', () => {
+      expect(() => {
+        new CacheVercelKvProvider({ token: 'secret-token' });
+      }).toThrow("Both 'url' and 'token' must be provided together");
+    });
+
     it('should use default keyPrefix of "cache:"', () => {
       const provider = new CacheVercelKvProvider();
       // We can verify this indirectly through the setValue call

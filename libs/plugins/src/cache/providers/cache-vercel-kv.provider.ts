@@ -30,6 +30,16 @@ export default class CacheVercelKvProvider implements CacheStoreInterface {
     // Lazy import @vercel/kv to avoid bundling when not used
     const vercelKv = require('@vercel/kv');
 
+    // Validate partial configuration - both url and token must be provided together, or neither
+    const hasUrl = options.url !== undefined;
+    const hasToken = options.token !== undefined;
+    if (hasUrl !== hasToken) {
+      throw new Error(
+        `CacheVercelKvProvider: Both 'url' and 'token' must be provided together, or neither. ` +
+          `Received: url=${hasUrl ? 'provided' : 'missing'}, token=${hasToken ? 'provided' : 'missing'}`,
+      );
+    }
+
     // Use the kv instance with custom config if url/token provided
     if (options.url && options.token) {
       this.kv = vercelKv.createClient({
