@@ -25,7 +25,8 @@ template: (ctx) => `<div>${ctx.output.name}</div>`
 template: MyReactComponent
 
 // MDX: String containing JSX tags
-template: `# Title\n<Card>{output.name}</Card>`
+template: `# Title
+<Card>{output.name}</Card>`
 ```
 
 ## Quick Comparison
@@ -84,7 +85,7 @@ interface TemplateContext<In, Out> {
 
   // Helper functions
   helpers: {
-    escapeHtml: (str: string) => string;
+    escapeHtml: (value: unknown) => string;
     formatDate: (date: Date | string, format?: string) => string;
     formatCurrency: (amount: number, currency?: string) => string;
     uniqueId: (prefix?: string) => string;
@@ -117,6 +118,10 @@ Created: {helpers.formatDate(output.createdAt)}
 ```
 
 </CodeGroup>
+
+<Tip>
+`helpers.escapeHtml()` now accepts any value, returns an empty string for `null`/`undefined`, and stringifies objects before escaping. You can also import `escapeHtml` directly from `@frontmcp/ui`.
+</Tip>
 
 ## Choosing a Template Type
 

@@ -5,17 +5,21 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-21" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    **Breaking changes**
+    ### Breaking changes
 
     🚨 **Node 22+ runtime floor** – FrontMCP packages now declare `engines.node >= 22`, so older Node 20 deployments must upgrade before installing the latest release.
 
-    **Features**
+    ### Features
+
+    ⚙️ **Rspack serverless bundler** – Lambda and Vercel adapters now emit a single `handler.cjs` and auto-generated `serverless-setup.js`, so you can drop the bundle straight into Vercel or SAM without chasing ESM/CJS glitches.
+
+    🧼 **Resilient template escaping** – `escapeHtml` now accepts any value, normalizes `null`/`undefined`, and stays consistent across @frontmcp/ui exports, keeping widgets alive even when data is sparse.
 
     🎨 **Platform-aware UI library** – Build HTML, React, and MDX flows with the new `@frontmcp/ui` package, complete with consent/error layouts, Tailwind v4 theming, HTMX hooks, and script caching for blocked-network platforms like Claude Artifacts.
 
@@ -49,7 +53,9 @@ mode: 'center'
 
     🤖 **Schema & runtime upgrades** – Core packages now ship with MCP SDK `1.24.3`, Zod 4, Hugging Face Transformers `^3.2.2`, and `zod-from-json-schema`, keeping schema validation, JSON generation, and App SDK widgets in sync with the latest protocol changes.
 
-    **Fixes**
+    ### Fixes
+
+    🛠️ **Serverless bootstrap errors** – The `@FrontMcp` decorator now uses synchronous requires and InternalMcpError codes so version mismatches crash fast instead of hanging serverless handlers.
 
     🧰 **CodeCall validation** – Search and describe meta-tools now require intention-rich descriptions and stricter metadata checks, which keeps models from issuing ambiguous orchestration requests.
 
@@ -57,7 +63,11 @@ mode: 'center'
 
     🪪 **Tool-owner enforcement** – Registries attach owner-prefixed IDs everywhere so CodeCall and adapters cannot invoke tools outside their allotted scope.
 
-    **Docs**
+    ### Docs
+
+    📘 **Serverless deployment guide** – Documented the new `serverless-setup.js`, `handler.cjs` bundling flow, and refreshed Lambda/Vercel config samples so deploys mirror the CLI output.
+
+    🧼 **Template helper reference** – Updated the runtime and template overview docs to explain the expanded `escapeHtml` signature, direct imports, and null-safe behavior for widget builders.
 
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
@@ -81,11 +91,11 @@ mode: 'center'
 
     🖼️ **Reliable README branding** – README logos now point at absolute GitHub URLs so they render on npm, CDN mirrors, and any docs preview without shipping extra assets.
 
-    **Performance**
+    ### Performance
 
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
-    **Build/CI**
+    ### Build/CI
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 
