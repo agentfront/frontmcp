@@ -37,27 +37,20 @@ type Output = z.infer<typeof outputSchema>;
     servingMode: 'static',
     displayMode: 'inline',
     widgetDescription: 'Displays a pre-rendered badge that does not make additional server calls.',
-    template: (ctx) => {
-      const { label, value, color } = ctx.output as unknown as Output;
-      const escapeHtml = ctx.helpers.escapeHtml;
-
-      const colorClasses: Record<string, string> = {
-        green: 'bg-green-100 text-green-800 border-green-200',
-        blue: 'bg-blue-100 text-blue-800 border-blue-200',
-        red: 'bg-red-100 text-red-800 border-red-200',
-        yellow: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        gray: 'bg-gray-100 text-gray-800 border-gray-200',
-      };
-
-      const classes = colorClasses[color] || colorClasses.gray;
-
-      return `
-<div class="inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${classes}">
-  <span class="font-semibold">${escapeHtml(label)}:</span>
-  <span class="ml-1">${escapeHtml(value)}</span>
+    // Handlebars string template - processed at runtime with actual data
+    // Handlebars automatically escapes HTML in {{...}} expressions
+    template: `
+<div class="inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium
+  {{#if (eq output.color 'green')}}bg-green-100 text-green-800 border-green-200{{/if}}
+  {{#if (eq output.color 'blue')}}bg-blue-100 text-blue-800 border-blue-200{{/if}}
+  {{#if (eq output.color 'red')}}bg-red-100 text-red-800 border-red-200{{/if}}
+  {{#if (eq output.color 'yellow')}}bg-yellow-100 text-yellow-800 border-yellow-200{{/if}}
+  {{#unless output.color}}bg-gray-100 text-gray-800 border-gray-200{{/unless}}
+  {{#if (eq output.color 'gray')}}bg-gray-100 text-gray-800 border-gray-200{{/if}}">
+  <span class="font-semibold">{{output.label}}:</span>
+  <span class="ml-1">{{output.value}}</span>
 </div>
-      `.trim();
-    },
+    `.trim(),
   },
 })
 export default class StaticBadgeTool extends ToolContext<typeof inputSchema, typeof outputSchema> {

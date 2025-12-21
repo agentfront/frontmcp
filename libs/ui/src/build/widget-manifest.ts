@@ -573,13 +573,16 @@ async function renderTemplate(
     output,
     structuredContent: undefined,
     helpers: {
-      escapeHtml: (str: string) => str.replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[c] ?? c),
+      escapeHtml: (str: unknown) => {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>"']/g, (c) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        })[c] ?? c);
+      },
       formatDate: (date: Date | string) => new Date(date).toLocaleDateString(),
       formatCurrency: (amount: number, currency = 'USD') =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount),

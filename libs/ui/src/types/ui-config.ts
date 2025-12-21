@@ -133,8 +133,10 @@ export interface UIContentSecurity {
 export interface TemplateHelpers {
   /**
    * Escape HTML special characters to prevent XSS.
+   * Handles null/undefined by returning empty string.
+   * Non-string values are converted to string before escaping.
    */
-  escapeHtml: (str: string) => string;
+  escapeHtml: (str: unknown) => string;
 
   /**
    * Format a date for display.

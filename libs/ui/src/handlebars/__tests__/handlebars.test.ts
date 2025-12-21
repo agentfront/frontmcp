@@ -515,3 +515,170 @@ describe('HandlebarsRenderer with built-in helpers in templates', () => {
     expect(otherHtml).toBe('Other');
   });
 });
+
+describe('Static Widget Template Scenarios', () => {
+  let renderer: HandlebarsRenderer;
+
+  beforeEach(() => {
+    renderer = new HandlebarsRenderer();
+  });
+
+  afterEach(() => {
+    renderer.clearCache();
+  });
+
+  describe('empty output handling (static mode build time)', () => {
+    it('should handle empty output object gracefully', async () => {
+      // This simulates static widget build time when output is {}
+      const template = '<div>{{output.label}}: {{output.value}}</div>';
+      const html = await renderer.render(template, {
+        input: {},
+        output: {},
+      });
+
+      // Should render empty values, not crash
+      expect(html).toBe('<div>: </div>');
+    });
+
+    it('should handle undefined output properties with eq helper', async () => {
+      // Static badge template pattern with color conditionals
+      const template = `
+        {{#if (eq output.color 'green')}}green-class{{/if}}
+        {{#if (eq output.color 'blue')}}blue-class{{/if}}
+        {{#unless output.color}}default-class{{/unless}}
+      `.trim();
+
+      const html = await renderer.render(template, {
+        input: {},
+        output: {}, // No color property
+      });
+
+      // Should render default class when color is undefined
+      expect(html).toContain('default-class');
+      expect(html).not.toContain('green-class');
+      expect(html).not.toContain('blue-class');
+    });
+
+    it('should render static badge template with actual data', async () => {
+      const template = `
+<div class="badge {{#if (eq output.color 'green')}}bg-green{{/if}}{{#if (eq output.color 'blue')}}bg-blue{{/if}}{{#unless output.color}}bg-gray{{/unless}}">
+  <span>{{output.label}}:</span>
+  <span>{{output.value}}</span>
+</div>
+      `.trim();
+
+      const html = await renderer.render(template, {
+        input: {},
+        output: { label: 'Status', value: 'Active', color: 'green' },
+      });
+
+      expect(html).toContain('bg-green');
+      expect(html).toContain('Status');
+      expect(html).toContain('Active');
+      expect(html).not.toContain('bg-gray');
+    });
+
+    it('should use default color when color is not provided', async () => {
+      const template = `
+<div class="badge {{#if (eq output.color 'green')}}bg-green{{/if}}{{#unless output.color}}bg-gray{{/unless}}">
+  <span>{{output.label}}</span>
+</div>
+      `.trim();
+
+      const html = await renderer.render(template, {
+        input: {},
+        output: { label: 'Test' }, // No color
+      });
+
+      expect(html).toContain('bg-gray');
+      expect(html).not.toContain('bg-green');
+    });
+  });
+
+  describe('XSS prevention in static templates', () => {
+    it('should escape HTML in output values by default', async () => {
+      const template = '<div>{{output.userInput}}</div>';
+      const html = await renderer.render(template, {
+        input: {},
+        output: { userInput: '<script>alert("xss")</script>' },
+      });
+
+      expect(html).not.toContain('<script>');
+      expect(html).toContain('&lt;script&gt;');
+    });
+
+    it('should escape all special characters in badge template', async () => {
+      const template = '<span>{{output.label}}: {{output.value}}</span>';
+      const html = await renderer.render(template, {
+        input: {},
+        output: {
+          label: 'Test & "Label"',
+          value: '<Value>',
+        },
+      });
+
+      expect(html).toContain('&amp;');
+      expect(html).toContain('&quot;');
+      expect(html).toContain('&lt;');
+      expect(html).toContain('&gt;');
+    });
+  });
+
+  describe('complex static widget patterns', () => {
+    it('should handle nested conditionals', async () => {
+      const template = `
+{{#if output.visible}}
+  {{#if (eq output.type 'warning')}}
+    <div class="warning">{{output.message}}</div>
+  {{else}}
+    <div class="info">{{output.message}}</div>
+  {{/if}}
+{{else}}
+  <div class="hidden"></div>
+{{/if}}
+      `.trim();
+
+      const warningHtml = await renderer.render(template, {
+        input: {},
+        output: { visible: true, type: 'warning', message: 'Alert!' },
+      });
+      expect(warningHtml).toContain('class="warning"');
+      expect(warningHtml).toContain('Alert!');
+
+      const infoHtml = await renderer.render(template, {
+        input: {},
+        output: { visible: true, type: 'info', message: 'Notice' },
+      });
+      expect(infoHtml).toContain('class="info"');
+
+      const hiddenHtml = await renderer.render(template, {
+        input: {},
+        output: { visible: false },
+      });
+      expect(hiddenHtml).toContain('class="hidden"');
+    });
+
+    it('should handle each loops with empty arrays', async () => {
+      const template = `
+{{#each output.items}}
+  <li>{{this.name}}</li>
+{{else}}
+  <li>No items</li>
+{{/each}}
+      `.trim();
+
+      const emptyHtml = await renderer.render(template, {
+        input: {},
+        output: { items: [] },
+      });
+      expect(emptyHtml).toContain('No items');
+
+      const withItemsHtml = await renderer.render(template, {
+        input: {},
+        output: { items: [{ name: 'Item 1' }, { name: 'Item 2' }] },
+      });
+      expect(withItemsHtml).toContain('Item 1');
+      expect(withItemsHtml).toContain('Item 2');
+    });
+  });
+});

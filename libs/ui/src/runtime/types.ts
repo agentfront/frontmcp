@@ -38,8 +38,8 @@ export interface UIContentSecurityPolicy {
  * Helper functions available in template context.
  */
 export interface TemplateHelpers {
-  /** Escape HTML special characters to prevent XSS. */
-  escapeHtml: (str: string) => string;
+  /** Escape HTML special characters to prevent XSS. Handles null/undefined gracefully. */
+  escapeHtml: (str: unknown) => string;
 
   /** Format a date for display. */
   formatDate: (date: Date | string, format?: string) => string;
