@@ -41,66 +41,29 @@ Direct token pass-through from external identity provider.
 export class Server {}
 ```
 
-### Using Presets
-
-For common providers, use presets for even simpler configuration:
-
-```typescript
-@FrontMcp({
-  info: { name: 'MyServer', version: '1.0.0' },
-  auth: {
-    mode: 'transparent',
-    preset: 'auth0',  // or 'frontegg', 'okta'
-    domain: 'your-tenant.auth0.com',
-    clientId: 'your-client-id',
-    expectedAudience: 'https://api.myservice.com',
-  },
-})
-export class Server {}
-```
-
 ### Configuration Options
 
 | Option             | Type                 | Default              | Description                          |
 | ------------------ | -------------------- | -------------------- | ------------------------------------ |
-| `provider`         | `string`             | Required*            | Base URL of the identity provider    |
-| `preset`           | `'frontegg' \| 'auth0' \| 'okta'` | -       | Provider preset (alternative to provider) |
-| `domain`           | `string`             | Required with preset | Provider domain for presets          |
+| `provider`         | `string`             | Required             | Base URL of the identity provider    |
 | `clientId`         | `string`             | -                    | OAuth client ID                      |
+| `clientSecret`     | `string`             | -                    | OAuth client secret                  |
 | `jwksUri`          | `string`             | Auto-discovered      | Custom JWKS endpoint                 |
 | `expectedAudience` | `string \| string[]` | Issuer URL           | Required audience claim value(s)     |
 | `requiredScopes`   | `string[]`           | `[]`                 | Scopes that must be present in token |
 | `allowAnonymous`   | `boolean`            | `false`              | Allow requests without tokens        |
 | `advanced`         | `object`             | -                    | Advanced options (inline jwks, scopes, dcrEnabled, endpoint overrides) |
 
-<Note>*Either `provider` or `preset`+`domain` is required.</Note>
-
 ### Provider Examples
 
 <Tabs>
-  <Tab title="Frontegg">
-    ```typescript
-    @FrontMcp({
-      info: { name: 'MyServer', version: '1.0.0' },
-      auth: {
-        mode: 'transparent',
-        preset: 'frontegg',
-        domain: 'your-app.frontegg.com',
-        clientId: 'your-client-id',
-        expectedAudience: 'https://your-app.frontegg.com',
-      },
-    })
-    export class Server {}
-    ```
-  </Tab>
   <Tab title="Auth0">
     ```typescript
     @FrontMcp({
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        preset: 'auth0',
-        domain: 'your-tenant.auth0.com',
+        provider: 'https://your-tenant.auth0.com',
         clientId: 'your-client-id',
         expectedAudience: 'https://api.yourservice.com',
         requiredScopes: ['openid', 'profile'],
@@ -115,8 +78,7 @@ export class Server {}
       info: { name: 'MyServer', version: '1.0.0' },
       auth: {
         mode: 'transparent',
-        preset: 'okta',
-        domain: 'your-org.okta.com',
+        provider: 'https://your-org.okta.com',
         clientId: 'your-client-id',
         expectedAudience: 'api://default',
       },
@@ -331,8 +293,8 @@ export class SlackApp {}
   name: 'CRM',
   auth: {
     mode: 'transparent',
-    preset: 'auth0',
-    domain: 'company.auth0.com',
+    provider: 'https://company.auth0.com',
+    clientId: 'crm-client-id',
   },
 })
 export class CrmApp {}
@@ -360,8 +322,8 @@ Configure different providers per app:
   name: 'Billing',
   auth: {
     mode: 'transparent',
-    preset: 'auth0',
-    domain: 'billing.auth0.com',
+    provider: 'https://billing.auth0.com',
+    clientId: 'billing-client-id',
   },
 })
 export class BillingApp {}
@@ -370,8 +332,8 @@ export class BillingApp {}
   name: 'Analytics',
   auth: {
     mode: 'transparent',
-    preset: 'okta',
-    domain: 'analytics.okta.com',
+    provider: 'https://analytics.okta.com',
+    clientId: 'analytics-client-id',
   },
 })
 export class AnalyticsApp {}

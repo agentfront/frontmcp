@@ -130,18 +130,7 @@ const auth: AuthOptionsInput = {
 };
 ```
 
-**With presets** (for common providers):
-
-```typescript
-const auth: AuthOptionsInput = {
-  mode: 'transparent',
-  preset: 'auth0', // or 'frontegg', 'okta'
-  domain: 'your-tenant.auth0.com',
-  clientId: 'your-client-id',
-};
-```
-
-**Use case**: Integrating with existing IdP (Auth0, Okta, Frontegg, etc.)
+**Use case**: Integrating with existing IdP (Auth0, Okta, Azure AD, etc.)
 
 ```mermaid
 sequenceDiagram
@@ -554,8 +543,8 @@ const server = new FrontMcp({
       standalone: false, // Nested under parent (default)
       auth: {
         mode: 'transparent',
-        preset: 'auth0',
-        domain: 'mycompany.auth0.com',
+        provider: 'https://mycompany.auth0.com',
+        clientId: 'crm-client-id',
       },
     },
     {

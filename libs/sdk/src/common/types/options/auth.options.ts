@@ -129,35 +129,6 @@ export const remoteProviderConfigSchema = z.object({
   userInfoEndpoint: z.string().url().optional(),
 });
 
-// ============================================
-// AUTH PRESETS
-// Simplified configuration for common OAuth providers
-// ============================================
-
-/**
- * Supported authentication provider presets
- */
-export const authPresetSchema = z.enum(['frontegg', 'auth0', 'okta']);
-export type AuthPreset = z.infer<typeof authPresetSchema>;
-
-/**
- * Resolve provider base URL from preset and domain
- */
-const PRESET_PROVIDERS: Record<AuthPreset, (domain: string) => string> = {
-  frontegg: (domain) => `https://${domain}`,
-  auth0: (domain) => `https://${domain}`,
-  okta: (domain) => `https://${domain}`,
-};
-
-/**
- * Resolve JWKS URI from preset and domain
- */
-const PRESET_JWKS: Record<AuthPreset, (domain: string) => string> = {
-  frontegg: (domain) => `https://${domain}/.well-known/jwks.json`,
-  auth0: (domain) => `https://${domain}/.well-known/jwks.json`,
-  okta: (domain) => `https://${domain}/oauth2/v1/keys`,
-};
-
 /**
  * Advanced remote provider options (for flat transparent config)
  * Contains less commonly used settings that can be nested under 'advanced'
@@ -486,52 +457,38 @@ const transparentAuthCanonicalSchema = z.object({
 });
 
 /**
- * Transparent auth input schema - accepts flat, preset, or legacy nested config
+ * Transparent auth input schema - accepts flat or legacy nested config
  *
- * Supports three input formats:
+ * Supports two input formats:
  * 1. Flat: { provider, clientId, clientSecret, jwksUri, ... }
- * 2. Preset: { preset: 'frontegg', domain: 'app.frontegg.com', ... }
- * 3. Legacy nested: { remote: { provider, ... }, ... }
+ * 2. Legacy nested: { remote: { provider, ... }, ... }
  */
 const transparentAuthInputSchema = z.object({
   mode: z.literal('transparent'),
 
-  // ---- Flat provider fields (new!) ----
+  // ---- Flat provider fields ----
   /**
-   * OAuth provider base URL (flat config)
+   * OAuth provider base URL
    * @example 'https://auth.example.com'
    */
   provider: z.string().url().optional(),
 
   /**
-   * Client ID for this MCP server (flat config)
+   * Client ID for this MCP server
    */
   clientId: z.string().optional(),
 
   /**
-   * Client secret for confidential clients (flat config)
+   * Client secret for confidential clients
    */
   clientSecret: z.string().optional(),
 
   /**
-   * Custom JWKS URI (flat config)
+   * Custom JWKS URI
    */
   jwksUri: z.string().url().optional(),
 
-  // ---- Preset fields (new!) ----
-  /**
-   * Provider preset for simplified configuration
-   * @example 'frontegg', 'auth0', 'okta'
-   */
-  preset: authPresetSchema.optional(),
-
-  /**
-   * Provider domain (required when using preset)
-   * @example 'sample-app.frontegg.com'
-   */
-  domain: z.string().optional(),
-
-  // ---- Advanced options (new!) ----
+  // ---- Advanced options ----
   /**
    * Advanced remote provider options
    * Use for less common settings like scopes, DCR, endpoint overrides
@@ -587,7 +544,7 @@ type TransparentAuthCanonical = z.infer<typeof transparentAuthCanonicalSchema>;
 
 /**
  * Normalize transparent auth input to canonical internal format
- * Handles: flat config, preset config, and legacy nested config
+ * Handles: flat config and legacy nested config
  */
 function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): TransparentAuthCanonical {
   // Already has remote (legacy) - pass through with merge of any flat fields
@@ -614,25 +571,16 @@ function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): Transpar
     };
   }
 
-  // Resolve preset to provider URL
-  let providerUrl = input.provider;
-  let jwksUri = input.jwksUri;
-
-  if (input.preset && input.domain) {
-    providerUrl = PRESET_PROVIDERS[input.preset](input.domain);
-    jwksUri = jwksUri ?? PRESET_JWKS[input.preset](input.domain);
-  }
-
-  if (!providerUrl) {
-    throw new Error('Either provider, preset+domain, or remote is required for transparent auth');
+  if (!input.provider) {
+    throw new Error('Either provider or remote is required for transparent auth');
   }
 
   // Build remote config from flat fields + advanced options
   const remote: RemoteProviderConfig = {
-    provider: providerUrl,
+    provider: input.provider,
     clientId: input.clientId,
     clientSecret: input.clientSecret,
-    jwksUri,
+    jwksUri: input.jwksUri,
     dcrEnabled: input.advanced?.dcrEnabled ?? false,
     ...input.advanced,
   };
@@ -652,7 +600,7 @@ function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): Transpar
 /**
  * Transparent mode authentication options
  *
- * Supports three input formats for easy configuration:
+ * Supports two input formats for easy configuration:
  *
  * @example Flat config (recommended)
  * ```typescript
@@ -661,16 +609,6 @@ function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): Transpar
  *   provider: 'https://auth.example.com',
  *   clientId: 'my-client-id',
  *   expectedAudience: 'my-api',
- * }
- * ```
- *
- * @example Preset config (simplest)
- * ```typescript
- * {
- *   mode: 'transparent',
- *   preset: 'frontegg',
- *   domain: 'sample-app.frontegg.com',
- *   clientId: 'my-client-id',
  * }
  * ```
  *
@@ -683,12 +621,8 @@ function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): Transpar
  * ```
  */
 export const transparentAuthOptionsSchema = transparentAuthInputSchema
-  .refine((data) => data.remote || data.provider || (data.preset && data.domain), {
-    message: 'Must specify provider, preset+domain, or remote configuration',
-  })
-  .refine((data) => !data.preset || data.domain, {
-    message: 'domain is required when using preset',
-    path: ['domain'],
+  .refine((data) => data.remote || data.provider, {
+    message: 'Must specify provider or remote configuration',
   })
   .transform(normalizeTransparentAuthInput);
 
@@ -1027,12 +961,8 @@ const standaloneOptionSchema = {
  */
 const appTransparentAuthInputSchema = transparentAuthInputSchema
   .extend(standaloneOptionSchema)
-  .refine((data) => data.remote || data.provider || (data.preset && data.domain), {
-    message: 'Must specify provider, preset+domain, or remote configuration',
-  })
-  .refine((data) => !data.preset || data.domain, {
-    message: 'domain is required when using preset',
-    path: ['domain'],
+  .refine((data) => data.remote || data.provider, {
+    message: 'Must specify provider or remote configuration',
   })
   .transform((input) => {
     const normalized = normalizeTransparentAuthInput(input);

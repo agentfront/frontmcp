@@ -1,4 +1,4 @@
-import { transparentAuthOptionsSchema, authPresetSchema } from '../auth.options';
+import { transparentAuthOptionsSchema } from '../auth.options';
 
 describe('Transparent Auth Options Schema', () => {
   describe('Flat Config', () => {
@@ -61,75 +61,6 @@ describe('Transparent Auth Options Schema', () => {
     });
   });
 
-  describe('Preset Config', () => {
-    it('should resolve Frontegg preset', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'frontegg' as const,
-        domain: 'sample-app.frontegg.com',
-        clientId: 'frontegg-client',
-      };
-
-      const result = transparentAuthOptionsSchema.parse(input);
-
-      expect(result.remote.provider).toBe('https://sample-app.frontegg.com');
-      expect(result.remote.jwksUri).toBe('https://sample-app.frontegg.com/.well-known/jwks.json');
-      expect(result.remote.clientId).toBe('frontegg-client');
-    });
-
-    it('should resolve Auth0 preset', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'auth0' as const,
-        domain: 'my-tenant.auth0.com',
-        clientId: 'auth0-client',
-      };
-
-      const result = transparentAuthOptionsSchema.parse(input);
-
-      expect(result.remote.provider).toBe('https://my-tenant.auth0.com');
-      expect(result.remote.jwksUri).toBe('https://my-tenant.auth0.com/.well-known/jwks.json');
-    });
-
-    it('should resolve Okta preset', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'okta' as const,
-        domain: 'my-org.okta.com',
-        clientId: 'okta-client',
-      };
-
-      const result = transparentAuthOptionsSchema.parse(input);
-
-      expect(result.remote.provider).toBe('https://my-org.okta.com');
-      expect(result.remote.jwksUri).toBe('https://my-org.okta.com/oauth2/v1/keys');
-    });
-
-    it('should allow custom jwksUri to override preset default', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'frontegg' as const,
-        domain: 'sample-app.frontegg.com',
-        jwksUri: 'https://custom.example.com/jwks',
-      };
-
-      const result = transparentAuthOptionsSchema.parse(input);
-
-      expect(result.remote.provider).toBe('https://sample-app.frontegg.com');
-      expect(result.remote.jwksUri).toBe('https://custom.example.com/jwks');
-    });
-
-    it('should require domain when preset is specified', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'frontegg' as const,
-        clientId: 'my-client',
-      };
-
-      expect(() => transparentAuthOptionsSchema.parse(input)).toThrow();
-    });
-  });
-
   describe('Legacy Nested Config', () => {
     it('should accept legacy nested remote config', () => {
       const input = {
@@ -187,16 +118,14 @@ describe('Transparent Auth Options Schema', () => {
   });
 
   describe('Validation', () => {
-    it('should reject config without provider, preset, or remote', () => {
+    it('should reject config without provider or remote', () => {
       const input = {
         mode: 'transparent' as const,
         clientId: 'orphan-client',
         expectedAudience: 'api',
       };
 
-      expect(() => transparentAuthOptionsSchema.parse(input)).toThrow(
-        'Must specify provider, preset+domain, or remote configuration',
-      );
+      expect(() => transparentAuthOptionsSchema.parse(input)).toThrow('Must specify provider or remote configuration');
     });
 
     it('should reject invalid provider URL', () => {
@@ -218,16 +147,6 @@ describe('Transparent Auth Options Schema', () => {
 
       expect(() => transparentAuthOptionsSchema.parse(input)).toThrow();
     });
-
-    it('should reject invalid preset', () => {
-      const input = {
-        mode: 'transparent' as const,
-        preset: 'invalid-provider' as any,
-        domain: 'example.com',
-      };
-
-      expect(() => transparentAuthOptionsSchema.parse(input)).toThrow();
-    });
   });
 
   describe('Defaults', () => {
@@ -244,18 +163,5 @@ describe('Transparent Auth Options Schema', () => {
       expect(result.anonymousScopes).toEqual(['anonymous']);
       expect(result.remote.dcrEnabled).toBe(false);
     });
-  });
-});
-
-describe('Auth Preset Schema', () => {
-  it('should accept valid presets', () => {
-    expect(authPresetSchema.parse('frontegg')).toBe('frontegg');
-    expect(authPresetSchema.parse('auth0')).toBe('auth0');
-    expect(authPresetSchema.parse('okta')).toBe('okta');
-  });
-
-  it('should reject invalid presets', () => {
-    expect(() => authPresetSchema.parse('invalid')).toThrow();
-    expect(() => authPresetSchema.parse('keycloak')).toThrow();
   });
 });
