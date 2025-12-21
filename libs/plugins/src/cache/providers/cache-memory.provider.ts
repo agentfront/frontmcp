@@ -16,18 +16,18 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1; // ~24.8 days (Node setTimeout limit)
   description: 'Memory-based cache provider',
   scope: ProviderScope.GLOBAL,
 })
-export default class CacheMemoryProvider  implements CacheStoreInterface{
+export default class CacheMemoryProvider implements CacheStoreInterface {
   private readonly memory = new Map<string, Entry>();
   private sweeper?: NodeJS.Timeout;
 
   constructor(sweepIntervalTTL = 60) {
     this.sweeper = setInterval(() => this.sweep(), sweepIntervalTTL * 1000);
-    // don’t keep the process alive just for the sweeper (Node >=14)
-    (this.sweeper as any).unref?.();
+    // don't keep the process alive just for the sweeper (Node >=14)
+    (this.sweeper as { unref?: () => void }).unref?.();
   }
 
-  /** Set any value (auto-stringifies objects) */
-  async setValue(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  /** Set a value (auto-stringifies objects) */
+  async setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     const strValue = typeof value === 'string' ? value : JSON.stringify(value);
 
     // clear any previous timeout on this key
@@ -49,7 +49,7 @@ export default class CacheMemoryProvider  implements CacheStoreInterface{
             this.memory.delete(key);
           }
         }, ttlMs);
-        (entry.timeout as any).unref?.();
+        (entry.timeout as { unref?: () => void }).unref?.();
       }
     }
 
@@ -57,7 +57,7 @@ export default class CacheMemoryProvider  implements CacheStoreInterface{
   }
 
   /** Get a value and automatically parse JSON if possible */
-  async getValue<T = any>(key: string, defaultValue?: T): Promise<T | undefined> {
+  async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     const entry = this.memory.get(key);
     if (!entry) return defaultValue;
 

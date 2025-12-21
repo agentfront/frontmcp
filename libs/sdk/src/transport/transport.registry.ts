@@ -16,7 +16,10 @@ import { Scope } from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
-import { RedisSessionStore, StoredSession } from '../auth/session';
+import { StoredSession } from '../auth/session';
+import type { SessionStore } from '../auth/session/transport-session.types';
+import { createSessionStore } from '../store';
+import type { RedisOptions } from '../common/types/options/redis.options';
 import { getMachineId } from '../auth/authorization/authorization.class';
 
 export class TransportService {
@@ -38,15 +41,20 @@ export class TransportService {
   private readonly MAX_SESSION_HISTORY = 10000;
 
   /**
-   * Redis session store for transport persistence
+   * Session store for transport persistence (Redis or Vercel KV)
    * Used to persist session metadata across server restarts
    */
-  private sessionStore?: RedisSessionStore;
+  private sessionStore?: SessionStore & { ping?: () => Promise<boolean>; disconnect?: () => Promise<void> };
 
   /**
    * Transport persistence configuration
    */
   private persistenceConfig?: TransportPersistenceConfigInput;
+
+  /**
+   * Pending store configuration for async initialization
+   */
+  private pendingStoreConfig?: RedisOptions;
 
   /**
    * Mutex map for preventing concurrent transport creation for the same key.
@@ -63,40 +71,62 @@ export class TransportService {
       throw new Error('TransportRegistry: distributed=true requires a TransportBus implementation.');
     }
 
-    // Initialize Redis session store if persistence is enabled
+    // Initialize session store if persistence is enabled (Redis or Vercel KV)
     if (persistenceConfig?.enabled && persistenceConfig.redis) {
-      this.sessionStore = new RedisSessionStore(
-        {
-          host: persistenceConfig.redis.host,
-          port: persistenceConfig.redis.port,
-          password: persistenceConfig.redis.password,
-          db: persistenceConfig.redis.db,
-          tls: persistenceConfig.redis.tls,
-          // Note: Uses 'mcp:transport:' prefix (not 'mcp:session:') to separate transport
-          // persistence data from authentication session data in the auth module
-          keyPrefix: persistenceConfig.redis.keyPrefix ?? 'mcp:transport:',
-          defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
-        },
-        this.scope.logger.child('RedisSessionStore'),
+      // Use factory to create appropriate session store based on provider
+      const redisConfig = persistenceConfig.redis;
+      const providerType = 'provider' in redisConfig ? redisConfig.provider : 'redis';
+
+      // Override keyPrefix for transport persistence (separate from auth sessions)
+      // Cast to RedisOptions since we're modifying the config
+      this.pendingStoreConfig = {
+        ...redisConfig,
+        keyPrefix: redisConfig.keyPrefix ?? 'mcp:transport:',
+        defaultTtlMs: persistenceConfig.defaultTtlMs ?? 3600000, // 1 hour default
+      } as RedisOptions;
+
+      this.scope.logger.info(
+        `[TransportService] ${providerType} session store will be initialized for transport persistence`,
       );
-      this.scope.logger.info('[TransportService] Redis session store initialized for transport persistence');
     }
 
     this.ready = this.initialize();
   }
 
   private async initialize() {
-    // Validate Redis connection if session store is configured
+    // Create session store if configuration is pending
+    if (this.pendingStoreConfig) {
+      try {
+        const store = await createSessionStore(this.pendingStoreConfig, this.scope.logger.child('SessionStore'));
+        // Cast to our extended type (both RedisSessionStore and VercelKvSessionStore have ping/disconnect)
+        this.sessionStore = store as SessionStore & { ping?: () => Promise<boolean>; disconnect?: () => Promise<void> };
+        this.pendingStoreConfig = undefined;
+      } catch (error) {
+        this.scope.logger.error('[TransportService] Failed to create session store - session persistence disabled', {
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    // Validate connection if session store is configured
     if (this.sessionStore) {
-      const isConnected = await this.sessionStore.ping();
+      const isConnected = this.sessionStore.ping ? await this.sessionStore.ping() : true;
       if (!isConnected) {
-        this.scope.logger.error('[TransportService] Failed to connect to Redis - session persistence disabled');
+        const providerType =
+          this.persistenceConfig?.redis && 'provider' in this.persistenceConfig.redis
+            ? this.persistenceConfig.redis.provider
+            : 'redis';
+        this.scope.logger.error(
+          `[TransportService] Failed to connect to ${providerType} - session persistence disabled`,
+        );
         // Nullify sessionStore to prevent silent failures on all subsequent operations
         // This ensures clean graceful degradation - sessions will only persist in memory
-        await this.sessionStore.disconnect().catch(() => void 0);
+        if (this.sessionStore.disconnect) {
+          await this.sessionStore.disconnect().catch(() => void 0);
+        }
         this.sessionStore = undefined;
       } else {
-        this.scope.logger.info('[TransportService] Redis connection validated successfully');
+        this.scope.logger.info('[TransportService] Session store connection validated successfully');
       }
     }
 
@@ -104,10 +134,16 @@ export class TransportService {
   }
 
   async destroy() {
-    // Close Redis connection if it was created
-    if (this.sessionStore) {
-      await this.sessionStore.disconnect();
-      this.scope.logger.info('[TransportService] Redis session store disconnected');
+    // Close session store connection if it was created
+    if (this.sessionStore && this.sessionStore.disconnect) {
+      try {
+        await this.sessionStore.disconnect();
+        this.scope.logger.info('[TransportService] Session store disconnected');
+      } catch (error) {
+        this.scope.logger.warn('[TransportService] Error disconnecting session store', {
+          error: (error as Error).message,
+        });
+      }
     }
   }
 

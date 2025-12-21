@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { FlowHooksOf } from './common';
 
-export { FrontMcpInstance } from './front-mcp';
+export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export {
   getServerlessHandler,
   getServerlessHandlerAsync,

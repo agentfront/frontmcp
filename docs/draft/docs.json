@@ -172,6 +172,7 @@
                   "docs/deployment/local-dev-server",
                   "docs/deployment/production-build",
                   "docs/deployment/redis-setup",
+                  "docs/deployment/vercel-kv",
                   "docs/deployment/serverless"
                 ]
               }
