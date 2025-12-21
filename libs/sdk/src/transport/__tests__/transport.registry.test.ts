@@ -117,7 +117,7 @@ describe('TransportService', () => {
         redis: { host: 'localhost' },
       });
       await service.ready;
-      expect(mockScope.logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to connect to Redis'));
+      expect(mockScope.logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to connect to redis'));
     });
 
     it('should use custom key prefix', async () => {
