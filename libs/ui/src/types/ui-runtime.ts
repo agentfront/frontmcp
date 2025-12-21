@@ -728,8 +728,9 @@ export interface WidgetTemplateContext<Input = Record<string, unknown>, Output =
 export interface WidgetTemplateHelpers {
   /**
    * Escape HTML special characters to prevent XSS.
+   * Handles null/undefined by returning empty string.
    */
-  escapeHtml(str: string): string;
+  escapeHtml(str: unknown): string;
 
   /**
    * Format a date for display.

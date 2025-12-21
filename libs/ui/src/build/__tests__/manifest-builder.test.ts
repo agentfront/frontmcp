@@ -362,6 +362,183 @@ describe('buildToolWidgetManifest', () => {
     });
   });
 
+  describe('function templates with ctx.output', () => {
+    it('should handle function template when sampleOutput is not provided (ctx.output is empty object)', async () => {
+      // When sampleOutput is not provided, ctx.output is set to {} (empty object)
+      // Templates must handle this case gracefully
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          // ctx.output is {} when no sampleOutput provided, so this guard doesn't trigger
+          if (!ctx.output) {
+            return '<div>Loading...</div>';
+          }
+          // Destructuring from {} gives undefined properties
+          const { message } = ctx.output as { message?: string };
+          // escapeHtml should handle undefined without crashing
+          return `<div>${ctx.helpers.escapeHtml(message)}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      // Should not throw even when sampleOutput is not provided
+      // escapeHtml(undefined) returns '' after the fix
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      // message is undefined, escapeHtml(undefined) returns '', so we get <div></div>
+      expect(result.content).toContain('<div></div>');
+    });
+
+    it('should not crash when template destructures undefined output properties', async () => {
+      // This is the exact bug scenario: template tries to use escapeHtml on
+      // properties from ctx.output when output is empty/undefined
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          // This would crash before the fix: ctx.helpers.escapeHtml(undefined).replace(...)
+          const output = ctx.output as { label?: string; value?: string } | undefined;
+          const label = output?.label;
+          const value = output?.value;
+          return `<span>${ctx.helpers.escapeHtml(label)}: ${ctx.helpers.escapeHtml(value)}</span>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      // Before fix: TypeError: Cannot read properties of undefined (reading 'replace')
+      // After fix: escapeHtml handles undefined gracefully
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).toContain('<span>: </span>');
+    });
+
+    it('should render function template correctly when sampleOutput is provided', async () => {
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          if (!ctx.output) {
+            return '<div>Loading...</div>';
+          }
+          const { message } = ctx.output as { message: string };
+          return `<div>${ctx.helpers.escapeHtml(message)}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+        sampleOutput: { message: 'Hello World' },
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).toContain('Hello World');
+    });
+  });
+
+  describe('ctx.helpers.escapeHtml with edge cases', () => {
+    it('should handle escapeHtml with undefined value', async () => {
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          // Explicitly pass undefined to escapeHtml
+          const value = undefined;
+          return `<div>${ctx.helpers.escapeHtml(value)}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      // Should not throw - escapeHtml should handle undefined
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).toContain('<div></div>');
+    });
+
+    it('should handle escapeHtml with null value', async () => {
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          // Explicitly pass null to escapeHtml
+          const value = null;
+          return `<div>${ctx.helpers.escapeHtml(value)}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      // Should not throw - escapeHtml should handle null
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).toContain('<div></div>');
+    });
+
+    it('should escape HTML special characters', async () => {
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          return `<div>${ctx.helpers.escapeHtml('<script>alert("xss")</script>')}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).not.toContain('<script>');
+      expect(result.content).toContain('&lt;script&gt;');
+    });
+
+    it('should convert non-string values to string before escaping', async () => {
+      const config: WidgetConfig = {
+        template: (ctx) => {
+          // Pass a number to escapeHtml
+          return `<div>${ctx.helpers.escapeHtml(123)}</div>`;
+        },
+        uiType: 'html',
+        bundlingMode: 'static',
+        displayMode: 'inline',
+      };
+
+      const result = await buildToolWidgetManifest({
+        uiConfig: config,
+        toolName: 'test_tool',
+        schema: simpleSchema,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.content).toContain('<div>123</div>');
+    });
+  });
+
   describe('deterministic hash generation', () => {
     it('should generate same hash for same input', async () => {
       const result1 = await buildToolWidgetManifest({
