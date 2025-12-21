@@ -5,6 +5,7 @@ import { ensureDir, fileExists, fsp, runCmd, resolveEntry, writeJSON } from '../
 import { REQUIRED_DECORATOR_FIELDS } from '../../tsconfig';
 import { ADAPTERS } from './adapters';
 import { AdapterName } from './types';
+import { bundleForServerless } from './bundler';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);
@@ -21,6 +22,15 @@ async function generateAdapterFiles(
 ): Promise<void> {
   const template = ADAPTERS[adapter];
 
+  // Generate serverless setup file first (if adapter has one)
+  // This file sets FRONTMCP_SERVERLESS=1 before any imports run
+  if (template.getSetupTemplate) {
+    const setupContent = template.getSetupTemplate();
+    const setupPath = path.join(outDir, 'serverless-setup.js');
+    await fsp.writeFile(setupPath, setupContent, 'utf8');
+    console.log(c('green', `  Generated serverless setup at ${path.relative(cwd, setupPath)}`));
+  }
+
   // Generate index.js entry point
   const mainModuleName = entryBasename.replace(/\.tsx?$/, '.js');
   const entryContent = template.getEntryTemplate(`./${mainModuleName}`);
@@ -30,6 +40,14 @@ async function generateAdapterFiles(
     const entryPath = path.join(outDir, 'index.js');
     await fsp.writeFile(entryPath, entryContent, 'utf8');
     console.log(c('green', `  Generated ${adapter} entry at ${path.relative(cwd, entryPath)}`));
+  }
+
+  // Bundle if adapter requires it (creates single CJS file for serverless)
+  if (template.shouldBundle && template.bundleOutput) {
+    console.log(c('cyan', `[build] Bundling for ${adapter}...`));
+    const entryPath = path.join(outDir, 'index.js');
+    await bundleForServerless(entryPath, outDir, template.bundleOutput);
+    console.log(c('green', `  Created bundle: ${template.bundleOutput}`));
   }
 
   // Generate config file if adapter has one (skip if already exists)

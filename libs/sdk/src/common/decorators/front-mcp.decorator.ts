@@ -50,26 +50,26 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      const sdk = '@frontmcp/sdk';
-      import(sdk)
-        .then(({ FrontMcpInstance, setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError }) => {
-          if (!FrontMcpInstance) {
-            throw new Error(
-              `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
-            );
-          }
+      // Use synchronous require for bundler compatibility (rspack/webpack)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const {
+        FrontMcpInstance: ServerlessInstance,
+        setServerlessHandler,
+        setServerlessHandlerPromise,
+        setServerlessHandlerError,
+      } = require('@frontmcp/sdk');
 
-          const handlerPromise = FrontMcpInstance.createHandler(metadata);
-          setServerlessHandlerPromise(handlerPromise);
-          handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
-            const e = err instanceof Error ? err : new Error(String(err));
-            setServerlessHandlerError(e);
-            console.error('[FrontMCP] Serverless initialization failed:', e);
-          });
-        })
-        .catch((err: unknown) => {
-          console.error('[FrontMCP] Failed to import @frontmcp/sdk for serverless init:', err);
-        });
+      if (!ServerlessInstance) {
+        throw new Error('@frontmcp/sdk version mismatch');
+      }
+
+      const handlerPromise = ServerlessInstance.createHandler(metadata);
+      setServerlessHandlerPromise(handlerPromise);
+      handlerPromise.then(setServerlessHandler).catch((err: unknown) => {
+        const e = err instanceof Error ? err : new Error(String(err));
+        setServerlessHandlerError(e);
+        console.error('[FrontMCP] Serverless initialization failed:', e);
+      });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
       const sdk = '@frontmcp/sdk';
