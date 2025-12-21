@@ -42,9 +42,33 @@ export type MemoryCachePluginOptions = BaseCachePluginOptions & {
   type: 'memory';
 };
 
+/**
+ * Use global store configuration from @FrontMcp decorator.
+ * Requires `redis` to be configured in the main FrontMcp options.
+ * Supports both Redis and Vercel KV global configurations.
+ *
+ * @example
+ * ```typescript
+ * // In main.ts - configure global store
+ * @FrontMcp({
+ *   redis: { host: 'localhost', port: 6379 },
+ *   apps: [MyApp]
+ * })
+ *
+ * // In app - use global store
+ * @App({
+ *   plugins: [CachePlugin.init({ type: 'global-store' })]
+ * })
+ * class MyApp {}
+ * ```
+ */
+export interface GlobalStoreCachePluginOptions extends BaseCachePluginOptions {
+  type: 'global-store';
+}
+
 export type RedisCacheOptions = RedisClientCachePluginOptions | RedisCachePluginOptions;
 
-export type CachePluginOptions = MemoryCachePluginOptions | RedisCacheOptions;
+export type CachePluginOptions = MemoryCachePluginOptions | RedisCacheOptions | GlobalStoreCachePluginOptions;
 
 export interface CacheStoreInterface {
   setValue(key: string, value: any, ttlSeconds?: number): Promise<void>;

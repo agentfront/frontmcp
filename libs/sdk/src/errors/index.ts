@@ -20,6 +20,7 @@ export {
   AuthConfigurationError,
   PromptNotFoundError,
   PromptExecutionError,
+  GlobalConfigNotFoundError,
   isPublicError,
   toMcpError,
   formatMcpErrorResponse,

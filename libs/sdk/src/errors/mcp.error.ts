@@ -431,6 +431,30 @@ export class PromptExecutionError extends InternalMcpError {
 }
 
 // ============================================================================
+// Configuration Errors
+// ============================================================================
+
+/**
+ * Global configuration not found error - thrown when a plugin requires
+ * global configuration that is not defined in @FrontMcp decorator.
+ */
+export class GlobalConfigNotFoundError extends PublicMcpError {
+  readonly pluginName: string;
+  readonly configKey: string;
+
+  constructor(pluginName: string, configKey: string) {
+    super(
+      `Plugin "${pluginName}" requires global "${configKey}" configuration. ` +
+        `Add "${configKey}" to your @FrontMcp decorator options.`,
+      'GLOBAL_CONFIG_NOT_FOUND',
+      500,
+    );
+    this.pluginName = pluginName;
+    this.configKey = configKey;
+  }
+}
+
+// ============================================================================
 // Error Utilities
 // ============================================================================
 

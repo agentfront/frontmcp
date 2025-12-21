@@ -149,10 +149,11 @@ When you connect a Vercel KV store to your project, these environment variables 
 
 ## Usage with CachePlugin
 
-Vercel KV works seamlessly with the CachePlugin:
+Vercel KV works seamlessly with the CachePlugin using `type: 'global-store'`:
 
 ```typescript
-import { FrontMcp } from '@frontmcp/sdk';
+import 'reflect-metadata';
+import { FrontMcp, App } from '@frontmcp/sdk';
 import { CachePlugin } from '@frontmcp/plugins';
 
 @FrontMcp({
@@ -160,15 +161,25 @@ import { CachePlugin } from '@frontmcp/plugins';
   redis: {
     provider: 'vercel-kv',
   },
+  apps: [MyApp],
+})
+export default class Server {}
+
+@App({
+  name: 'my-app',
   plugins: [
     CachePlugin.init({
-      type: 'redis',  // Uses the configured provider automatically
-      defaultTtl: 3600,
+      type: 'global-store',  // Uses the global redis config automatically
+      defaultTTL: 3600,
     }),
   ],
 })
-export default class Server {}
+class MyApp {}
 ```
+
+<Tip>
+The `type: 'global-store'` option allows plugins to automatically use whatever storage provider you've configured at the `@FrontMcp` level—whether it's Redis or Vercel KV. No need to repeat configuration!
+</Tip>
 
 ## Comparison: Vercel KV vs Standard Redis
 
@@ -203,7 +214,8 @@ Need resource subscriptions but still want Vercel KV's edge compatibility for se
 
 ```typescript
 import 'reflect-metadata';
-import { FrontMcp } from '@frontmcp/sdk';
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
@@ -217,8 +229,18 @@ import { FrontMcp } from '@frontmcp/sdk';
     port: 6379,
     password: process.env.REDIS_PASSWORD,
   },
+  apps: [MyApp],
 })
 export default class Server {}
+
+@App({
+  name: 'my-app',
+  plugins: [
+    // CachePlugin uses Vercel KV via global-store
+    CachePlugin.init({ type: 'global-store' }),
+  ],
+})
+class MyApp {}
 ```
 
 <Info>
