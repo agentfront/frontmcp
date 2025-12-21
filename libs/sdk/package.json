@@ -61,6 +61,7 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@vercel/kv": "^3.0.0",
     "typescript": "^5.9.3"
   }
 }

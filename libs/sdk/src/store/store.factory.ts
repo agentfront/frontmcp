@@ -12,6 +12,7 @@ import {
   type RedisOptions,
   type RedisProviderOptions,
   type VercelKvProviderOptions,
+  type PubsubOptions,
   isRedisProvider,
   isVercelKvProvider,
 } from '../common/types/options/redis.options';
@@ -204,4 +205,26 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
     },
     logger,
   );
+}
+
+/**
+ * Create a pub/sub store for resource subscriptions
+ *
+ * Pub/Sub requires Redis - Vercel KV does not support pub/sub operations.
+ * Use this when you need resource subscriptions with Vercel KV for sessions.
+ *
+ * @param options - Pub/sub configuration (Redis only)
+ * @returns A Redis store driver with pub/sub support
+ *
+ * @example Hybrid config
+ * ```typescript
+ * // Use Vercel KV for sessions, Redis for pub/sub
+ * const sessionStore = await createSessionStore({ provider: 'vercel-kv' });
+ * const pubsubStore = createPubsubStore({ host: 'localhost', port: 6379 });
+ * ```
+ */
+export function createPubsubStore(options: PubsubOptions): StoreDriver {
+  // PubsubOptions only allows Redis provider, so we can safely cast
+  const redisOptions = options as RedisProviderOptions;
+  return createRedisStoreDriver(redisOptions);
 }

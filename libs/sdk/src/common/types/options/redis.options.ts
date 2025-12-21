@@ -181,6 +181,36 @@ export type RedisOptions = z.infer<typeof redisOptionsSchema>;
 export type RedisOptionsInput = z.input<typeof redisOptionsSchema>;
 
 // ============================================
+// Pub/Sub Options Schema (Redis-only)
+// ============================================
+
+/**
+ * Pub/Sub configuration (requires Redis, not compatible with Vercel KV)
+ *
+ * Use this when you need pub/sub features like resource subscriptions
+ * but want to use Vercel KV for sessions/cache.
+ *
+ * @example Hybrid config
+ * ```typescript
+ * {
+ *   redis: { provider: 'vercel-kv' },  // sessions/cache
+ *   pubsub: { host: 'localhost' },      // pub/sub
+ * }
+ * ```
+ */
+export const pubsubOptionsSchema = z.union([redisProviderSchema, legacyRedisSchema]);
+
+/**
+ * Pub/Sub configuration type (Redis-only)
+ */
+export type PubsubOptions = z.infer<typeof pubsubOptionsSchema>;
+
+/**
+ * Pub/Sub configuration input type
+ */
+export type PubsubOptionsInput = z.input<typeof pubsubOptionsSchema>;
+
+// ============================================
 // Type Guards
 // ============================================
 
@@ -196,4 +226,11 @@ export function isRedisProvider(options: RedisOptions): options is RedisProvider
  */
 export function isVercelKvProvider(options: RedisOptions): options is VercelKvProviderOptions {
   return options.provider === 'vercel-kv';
+}
+
+/**
+ * Check if pub/sub options are valid Redis config
+ */
+export function isPubsubConfigured(options: PubsubOptions): options is RedisProviderOptions {
+  return options.provider === 'redis';
 }

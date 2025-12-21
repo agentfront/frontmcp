@@ -56,6 +56,7 @@ export interface VercelKvSessionConfig {
  */
 export class VercelKvSessionStore implements SessionStore {
   private kv: VercelKVClient | null = null;
+  private connectPromise: Promise<void> | null = null;
   private readonly keyPrefix: string;
   private readonly defaultTtlMs: number;
   private readonly logger?: FrontMcpLogger;
@@ -70,11 +71,28 @@ export class VercelKvSessionStore implements SessionStore {
 
   /**
    * Connect to Vercel KV
-   * Uses dynamic import to avoid bundling @vercel/kv when not used
+   * Uses dynamic import to avoid bundling @vercel/kv when not used.
+   * Thread-safe: concurrent calls will share the same connection promise.
    */
   async connect(): Promise<void> {
     if (this.kv) return;
 
+    // Prevent concurrent connection attempts
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    this.connectPromise = this.doConnect();
+    try {
+      await this.connectPromise;
+    } catch (error) {
+      // Reset promise on failure to allow retry
+      this.connectPromise = null;
+      throw error;
+    }
+  }
+
+  private async doConnect(): Promise<void> {
     const { createClient } = await import('@vercel/kv');
 
     const url = this.config.url || process.env['KV_REST_API_URL'];
@@ -91,10 +109,11 @@ export class VercelKvSessionStore implements SessionStore {
   }
 
   private async ensureConnected(): Promise<VercelKVClient> {
+    await this.connect();
     if (!this.kv) {
-      await this.connect();
+      throw new Error('[VercelKvSessionStore] Connection failed - client not initialized');
     }
-    return this.kv!;
+    return this.kv;
   }
 
   /**
@@ -230,6 +249,7 @@ export class VercelKvSessionStore implements SessionStore {
    */
   async disconnect(): Promise<void> {
     this.kv = null;
+    this.connectPromise = null;
   }
 
   /**

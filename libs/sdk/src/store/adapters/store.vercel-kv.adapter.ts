@@ -112,6 +112,9 @@ export class ScopedVercelKvStore extends StoreBaseAdapter {
   }
 
   private prefixKey(key: string): string {
+    if (!key || key.trim() === '') {
+      throw new Error('[ScopedVercelKvStore] key cannot be empty');
+    }
     return this.opts.keyPrefix ? `${this.opts.keyPrefix}${key}` : key;
   }
 

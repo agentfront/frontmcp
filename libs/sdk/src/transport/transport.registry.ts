@@ -136,8 +136,14 @@ export class TransportService {
   async destroy() {
     // Close session store connection if it was created
     if (this.sessionStore && this.sessionStore.disconnect) {
-      await this.sessionStore.disconnect();
-      this.scope.logger.info('[TransportService] Session store disconnected');
+      try {
+        await this.sessionStore.disconnect();
+        this.scope.logger.info('[TransportService] Session store disconnected');
+      } catch (error) {
+        this.scope.logger.warn('[TransportService] Error disconnecting session store', {
+          error: (error as Error).message,
+        });
+      }
     }
   }
 
