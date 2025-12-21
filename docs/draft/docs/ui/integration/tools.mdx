@@ -147,12 +147,12 @@ ui: {
 
 When `servingMode: 'auto'` (default), FrontMCP automatically selects the delivery method based on the client:
 
-| Platform | Effective Mode | Response Format |
-|----------|---------------|-----------------|
-| OpenAI / ext-apps | `inline` | HTML in `_meta['ui/html']` |
-| Claude | `inline` | Dual-payload (JSON + markdown-wrapped HTML) |
-| Cursor | `inline` | HTML in `_meta['ui/html']` |
-| Gemini / Unknown | (skipped) | JSON only |
+| Platform          | Effective Mode | Response Format                             |
+| ----------------- | -------------- | ------------------------------------------- |
+| OpenAI / ext-apps | `inline`       | HTML in `_meta['ui/html']`                  |
+| Claude            | `inline`       | Dual-payload (JSON + markdown-wrapped HTML) |
+| Cursor            | `inline`       | HTML in `_meta['ui/html']`                  |
+| Gemini / Unknown  | (skipped)      | JSON only                                   |
 
 <Warning>
 If `'auto'` mode detects an unsupported client, UI rendering is skipped entirely. The tool returns JSON-only data to avoid broken widget experiences.
@@ -162,13 +162,13 @@ If `'auto'` mode detects an unsupported client, UI rendering is skipped entirely
 
 Customize the text shown before HTML in dual-payload responses (Claude):
 
-```typescript
+````typescript
 ui: {
   template: WeatherWidget,
   htmlResponsePrefix: 'Here is the weather dashboard',
 }
 // Claude output: "Here is the weather dashboard:\n\n```html\n<!DOCTYPE html>...\n```"
-```
+````
 
 Default prefix is `'Here is the visual result'`.
 

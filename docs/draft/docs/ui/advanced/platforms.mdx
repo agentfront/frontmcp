@@ -7,16 +7,16 @@ description: FrontMCP UI adapts to different AI platform capabilities. Each plat
 
 ## Platform Capabilities
 
-| Platform | Network | External Scripts | Widget Modes | Response Format |
-|----------|---------|------------------|--------------|-----------------|
-| **OpenAI** | Open | CDN allowed | inline, fullscreen, pip | `_meta['ui/html']` |
-| **ext-apps** | Open | CDN allowed | inline, fullscreen, pip | `_meta['ui/html']` |
-| **Cursor** | Open | CDN allowed | inline | `_meta['ui/html']` |
-| **Claude** | Blocked | Cloudflare CDN only | Artifacts | Dual-payload |
-| **Continue** | Limited | Inline only | inline | `_meta['ui/html']` |
-| **Cody** | Limited | Inline only | inline | `_meta['ui/html']` |
-| **Gemini** | Limited | Inline preferred | Basic | JSON only |
-| **generic-mcp** | Varies | CDN/Inline | inline, static | `_meta['ui/html']` |
+| Platform        | Network | External Scripts    | Widget Modes            | Response Format    |
+| --------------- | ------- | ------------------- | ----------------------- | ------------------ |
+| **OpenAI**      | Open    | CDN allowed         | inline, fullscreen, pip | `_meta['ui/html']` |
+| **ext-apps**    | Open    | CDN allowed         | inline, fullscreen, pip | `_meta['ui/html']` |
+| **Cursor**      | Open    | CDN allowed         | inline                  | `_meta['ui/html']` |
+| **Claude**      | Blocked | Cloudflare CDN only | Artifacts               | Dual-payload       |
+| **Continue**    | Limited | Inline only         | inline                  | `_meta['ui/html']` |
+| **Cody**        | Limited | Inline only         | inline                  | `_meta['ui/html']` |
+| **Gemini**      | Limited | Inline preferred    | Basic                   | JSON only          |
+| **generic-mcp** | Varies  | CDN/Inline          | inline, static          | `_meta['ui/html']` |
 
 ## Platform Detection
 
@@ -106,14 +106,14 @@ Claude uses Artifacts with restricted capabilities and a special **dual-payload*
 
 When `servingMode: 'auto'` detects a Claude client, FrontMCP returns a special two-block response:
 
-```json
+````json
 {
   "content": [
     { "type": "text", "text": "{\"temperature\":72,\"unit\":\"F\"}" },
     { "type": "text", "text": "Here is the visual result:\n\n```html\n<!DOCTYPE html>...\n```" }
   ]
 }
-```
+````
 
 - **Block 0**: Pure JSON data for programmatic parsing
 - **Block 1**: Markdown-wrapped HTML that Claude displays as an Artifact
@@ -124,7 +124,7 @@ Claude automatically detects the `html` code fence and offers to render it as an
 
 Control the text shown before the HTML block:
 
-```typescript
+````typescript
 @Tool({
   name: 'get_weather',
   ui: {
@@ -133,7 +133,7 @@ Control the text shown before the HTML block:
   },
 })
 // Output: "Here is the weather dashboard:\n\n```html\n..."
-```
+````
 
 Default: `'Here is the visual result'`
 

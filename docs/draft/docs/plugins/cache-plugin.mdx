@@ -168,6 +168,35 @@ CachePlugin.init({
 
 <Check>Redis enables cache sharing across multiple server instances and persists cache across restarts.</Check>
 
+### Global Store (Reuse FrontMCP config)
+
+Best for: Teams that already defined a global store on the `@FrontMcp` decorator—whether it's classic Redis or the new `provider: 'vercel-kv'`.
+
+```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'edge-server', version: '1.0.0' },
+  redis: { provider: 'vercel-kv' },
+  apps: [MyApp],
+})
+export default class Server {}
+
+@App({
+  name: 'edge-app',
+  plugins: [
+    CachePlugin.init({
+      type: 'global-store',
+      defaultTTL: 1800,
+    }),
+  ],
+})
+class MyApp {}
+```
+
+<Tip>Using `type: 'global-store'` automatically reuses whatever store you configured globally, so CachePlugin picks up Redis in self-hosted environments and Vercel KV when you deploy to Vercel—no duplicate credentials.</Tip>
+
 ---
 
 ## Configuration Options
@@ -176,7 +205,7 @@ CachePlugin.init({
 
 Configure default behavior when registering the plugin:
 
-<ParamField path="type" type="'memory' | 'redis' | 'redis-client'" default="'memory'">
+<ParamField path="type" type="'memory' | 'redis' | 'redis-client' | 'global-store'" default="'memory'">
   Cache store backend to use
 </ParamField>
 
@@ -206,6 +235,8 @@ Configure default behavior when registering the plugin:
 <ParamField path="client" type="Redis">
   Existing ioredis client instance (required when `type: 'redis-client'`)
 </ParamField>
+
+<Note>`type: 'global-store'` ignores `config` and `client` because it reuses the store configured on `@FrontMcp` (Redis or Vercel KV). Keep `redis` defined at the server level and every CachePlugin instance can share it.</Note>
 
 ### Tool-Level Configuration
 
