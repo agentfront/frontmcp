@@ -8,7 +8,6 @@ import {
   FrontMcpConfigType,
   getGlobalStoreConfig,
   isVercelKvProvider,
-  isRedisProvider,
 } from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
@@ -56,8 +55,8 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
             return new CacheRedisProvider({
               type: 'redis',
               config: {
-                host: storeConfig.host!,
-                port: storeConfig.port!,
+                host: storeConfig.host ?? 'localhost',
+                port: storeConfig.port ?? 6379,
                 password: storeConfig.password,
                 db: storeConfig.db,
               },
@@ -153,15 +152,15 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 }
 
-function hashObject(obj: any) {
+function hashObject(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).sort();
   return keys.reduce((acc, key) => {
     acc += key + ':';
     const val = obj[key];
     if (typeof val === 'object' && val !== null) {
-      acc += hashObject(val);
+      acc += hashObject(val as Record<string, unknown>);
     } else {
-      acc += val;
+      acc += String(val);
     }
     acc += ';';
     return acc;

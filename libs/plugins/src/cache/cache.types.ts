@@ -71,9 +71,9 @@ export type RedisCacheOptions = RedisClientCachePluginOptions | RedisCachePlugin
 export type CachePluginOptions = MemoryCachePluginOptions | RedisCacheOptions | GlobalStoreCachePluginOptions;
 
 export interface CacheStoreInterface {
-  setValue(key: string, value: any, ttlSeconds?: number): Promise<void>;
+  setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
 
-  getValue<T = any>(key: string, defaultValue?: T): Promise<T | undefined>;
+  getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined>;
 
   delete(key: string): Promise<void>;
 

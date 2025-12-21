@@ -8,19 +8,26 @@ export interface CacheVercelKvProviderOptions {
   defaultTTL?: number;
 }
 
+/** Minimal interface for Vercel KV client operations used by the cache provider */
+interface VercelKvClient {
+  set(key: string, value: string, options?: { ex?: number }): Promise<void>;
+  get(key: string): Promise<unknown>;
+  del(key: string): Promise<void>;
+  exists(key: string): Promise<number>;
+}
+
 @Provider({
   name: 'provider:cache:vercel-kv',
   description: 'Vercel KV-based cache provider',
   scope: ProviderScope.GLOBAL,
 })
 export default class CacheVercelKvProvider implements CacheStoreInterface {
-  private kv: any;
+  private kv: VercelKvClient;
   private readonly keyPrefix: string;
   private readonly defaultTTL: number;
 
   constructor(options: CacheVercelKvProviderOptions = {}) {
     // Lazy import @vercel/kv to avoid bundling when not used
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const vercelKv = require('@vercel/kv');
 
     // Use the kv instance with custom config if url/token provided
@@ -42,8 +49,8 @@ export default class CacheVercelKvProvider implements CacheStoreInterface {
     return `${this.keyPrefix}${key}`;
   }
 
-  /** Set any value (auto-stringifies objects) */
-  async setValue(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  /** Set a value (auto-stringifies objects) */
+  async setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     const strValue = typeof value === 'string' ? value : JSON.stringify(value);
     const ttl = ttlSeconds ?? this.defaultTTL;
 
@@ -55,7 +62,7 @@ export default class CacheVercelKvProvider implements CacheStoreInterface {
   }
 
   /** Get a value and automatically parse JSON if possible */
-  async getValue<T = any>(key: string, defaultValue?: T): Promise<T | undefined> {
+  async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     const raw = await this.kv.get(this.prefixKey(key));
     if (raw === null || raw === undefined) return defaultValue;
 
