@@ -55,6 +55,48 @@ This compiles TypeScript to `dist/` using `tsconfig.build.json`.
 - Put a **reverse proxy** (NGINX, Traefik, Caddy) in front for TLS and path routing.
 - Pin matching versions of all `@frontmcp/*` packages.
 
+## Dependency security scan
+
+<Tip>
+The repo now bundles the `snyk` CLI in `devDependencies`, so `npx` always runs the pinned version without any global installation.
+</Tip>
+
+<Steps>
+<Step title="Authenticate the CLI">
+Run the one-time login so the CLI can read your organization policies.
+
+```bash
+npx snyk auth
+```
+
+<Check>Terminal prints "Your account has been authenticated".</Check>
+</Step>
+
+<Step title="Scan the workspace before shipping">
+Wire the scan right after `nx run-many -t build` (or run it manually) to fail builds on high severity issues.
+
+```bash
+npx snyk test --all-projects --severity-threshold=high
+```
+
+Use `--json` when you need machine-readable output for CI annotations.
+
+</Step>
+
+<Step title="Monitor production releases">
+Create a monitored snapshot whenever you publish binaries so Snyk keeps watching the locked dependencies.
+
+```bash
+npx snyk monitor --project-name frontmcp-core
+```
+
+</Step>
+</Steps>
+
+<Note>
+Set the `SNYK_TOKEN` environment variable in CI and secrets managers so headless jobs can authenticate without prompts.
+</Note>
+
 ### Example NGINX snippet
 
 ```nginx

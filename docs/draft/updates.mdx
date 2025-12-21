@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-21" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -59,6 +59,8 @@ mode: 'center'
 
     **Docs**
 
+    📚 **Production build hardening** – The Production Build guide now walks through authenticating the bundled Snyk CLI and wiring scans into release pipelines.
+
     🧪 **Testing suite docs** – Added `/docs/testing/overview`, fixtures, matchers, interceptors, HTTP mocking, and authentication pages plus Demo Showcase references so teams can ship copy-pasteable regression suites.
 
     🎨 **Platform-aware UI guide** – Documented `@frontmcp/ui` theming, HTMX, and script caching workflows at `/docs/guides/ui-library`, so you can style consent and troubleshooting screens without a SPA.
@@ -86,6 +88,8 @@ mode: 'center'
     ⚡ **Node 24 optimized runtime** – FrontMCP dev tooling, plugins, and test suites now run on Node 24 (Active LTS), giving you faster installs while keeping Node 22 support for production.
 
     **Build/CI**
+
+    🛡️ **Bundled Snyk CLI scans** – Run `npx snyk test --all-projects` locally or in CI to block vulnerable dependencies with the repo's pinned scanner.
 
     🔧 **Typed init defaults** – `frontmcp init` now installs `@types/node@^24` automatically, keeping editor IntelliSense in lockstep with the runtime APIs.
 
