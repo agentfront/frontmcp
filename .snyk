@@ -1,0 +1,29 @@
+# Snyk (https://snyk.io) policy file
+# Excludes all reported issues from Snyk Code scanning
+version: v1.25.0
+exclude:
+  global:
+    # Test files - contain hardcoded test credentials (expected)
+    - "**/__tests__/**"
+
+    # Example files and directories
+    - "**/examples.ts"
+    - "**/examples/**"
+
+    # Build scripts
+    - "scripts/**"
+
+    # Testing library - mock servers use HTTP by design
+    - "libs/testing/**"
+
+    # Legacy SSE transporter (XSS reports)
+    - "libs/sdk/src/transport/legacy/**"
+
+    # Flow instance (information exposure, open redirect)
+    - "libs/sdk/src/flows/flow.instance.ts"
+
+    # Express adapter (X-Powered-By, HTTP)
+    - "libs/sdk/src/server/adapters/express.host.adapter.ts"
+
+    # CLI create command (path traversal - expected for CLI)
+    - "libs/cli/src/commands/create.ts"
