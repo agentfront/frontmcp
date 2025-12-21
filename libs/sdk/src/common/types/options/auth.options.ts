@@ -129,6 +129,90 @@ export const remoteProviderConfigSchema = z.object({
   userInfoEndpoint: z.string().url().optional(),
 });
 
+// ============================================
+// AUTH PRESETS
+// Simplified configuration for common OAuth providers
+// ============================================
+
+/**
+ * Supported authentication provider presets
+ */
+export const authPresetSchema = z.enum(['frontegg', 'auth0', 'okta']);
+export type AuthPreset = z.infer<typeof authPresetSchema>;
+
+/**
+ * Resolve provider base URL from preset and domain
+ */
+const PRESET_PROVIDERS: Record<AuthPreset, (domain: string) => string> = {
+  frontegg: (domain) => `https://${domain}`,
+  auth0: (domain) => `https://${domain}`,
+  okta: (domain) => `https://${domain}`,
+};
+
+/**
+ * Resolve JWKS URI from preset and domain
+ */
+const PRESET_JWKS: Record<AuthPreset, (domain: string) => string> = {
+  frontegg: (domain) => `https://${domain}/.well-known/jwks.json`,
+  auth0: (domain) => `https://${domain}/.well-known/jwks.json`,
+  okta: (domain) => `https://${domain}/oauth2/v1/keys`,
+};
+
+/**
+ * Advanced remote provider options (for flat transparent config)
+ * Contains less commonly used settings that can be nested under 'advanced'
+ */
+export const advancedRemoteOptionsSchema = z.object({
+  /**
+   * Provider display name
+   */
+  name: z.string().optional(),
+
+  /**
+   * Unique identifier for this provider
+   * @default derived from provider URL
+   */
+  id: z.string().optional(),
+
+  /**
+   * Inline JWKS for offline token verification
+   */
+  jwks: jsonWebKeySetSchema.optional(),
+
+  /**
+   * Scopes to request from the upstream provider
+   */
+  scopes: z.array(z.string()).optional(),
+
+  /**
+   * Enable Dynamic Client Registration (DCR)
+   * @default false
+   */
+  dcrEnabled: z.boolean().default(false),
+
+  /**
+   * Authorization endpoint override
+   */
+  authEndpoint: z.string().url().optional(),
+
+  /**
+   * Token endpoint override
+   */
+  tokenEndpoint: z.string().url().optional(),
+
+  /**
+   * Registration endpoint override (for DCR)
+   */
+  registrationEndpoint: z.string().url().optional(),
+
+  /**
+   * User info endpoint override
+   */
+  userInfoEndpoint: z.string().url().optional(),
+});
+
+export type AdvancedRemoteOptions = z.infer<typeof advancedRemoteOptionsSchema>;
+
 /**
  * Token storage configuration for orchestrated mode
  */
@@ -353,11 +437,15 @@ export const publicAuthOptionsSchema = z.object({
 // Pass-through OAuth tokens from remote provider
 // ============================================
 
-export const transparentAuthOptionsSchema = z.object({
+/**
+ * Internal canonical transparent schema (always has remote)
+ * This is the normalized output format used internally
+ */
+const transparentAuthCanonicalSchema = z.object({
   mode: z.literal('transparent'),
 
   /**
-   * Remote OAuth provider configuration (required)
+   * Remote OAuth provider configuration (required in canonical form)
    */
   remote: remoteProviderConfigSchema,
 
@@ -396,6 +484,213 @@ export const transparentAuthOptionsSchema = z.object({
    */
   transport: transportConfigSchema.optional(),
 });
+
+/**
+ * Transparent auth input schema - accepts flat, preset, or legacy nested config
+ *
+ * Supports three input formats:
+ * 1. Flat: { provider, clientId, clientSecret, jwksUri, ... }
+ * 2. Preset: { preset: 'frontegg', domain: 'app.frontegg.com', ... }
+ * 3. Legacy nested: { remote: { provider, ... }, ... }
+ */
+const transparentAuthInputSchema = z.object({
+  mode: z.literal('transparent'),
+
+  // ---- Flat provider fields (new!) ----
+  /**
+   * OAuth provider base URL (flat config)
+   * @example 'https://auth.example.com'
+   */
+  provider: z.string().url().optional(),
+
+  /**
+   * Client ID for this MCP server (flat config)
+   */
+  clientId: z.string().optional(),
+
+  /**
+   * Client secret for confidential clients (flat config)
+   */
+  clientSecret: z.string().optional(),
+
+  /**
+   * Custom JWKS URI (flat config)
+   */
+  jwksUri: z.string().url().optional(),
+
+  // ---- Preset fields (new!) ----
+  /**
+   * Provider preset for simplified configuration
+   * @example 'frontegg', 'auth0', 'okta'
+   */
+  preset: authPresetSchema.optional(),
+
+  /**
+   * Provider domain (required when using preset)
+   * @example 'sample-app.frontegg.com'
+   */
+  domain: z.string().optional(),
+
+  // ---- Advanced options (new!) ----
+  /**
+   * Advanced remote provider options
+   * Use for less common settings like scopes, DCR, endpoint overrides
+   */
+  advanced: advancedRemoteOptionsSchema.optional(),
+
+  // ---- Legacy nested config (backward compat) ----
+  /**
+   * Legacy nested remote configuration
+   * @deprecated Use flat fields (provider, clientId, etc.) instead
+   */
+  remote: remoteProviderConfigSchema.optional(),
+
+  // ---- Existing top-level fields ----
+  /**
+   * Expected token audience
+   * If not set, defaults to the resource URL
+   */
+  expectedAudience: z.union([z.string(), z.array(z.string())]).optional(),
+
+  /**
+   * Required scopes for access
+   * Empty array means any valid token is accepted
+   * @default []
+   */
+  requiredScopes: z.array(z.string()).default([]),
+
+  /**
+   * Allow anonymous fallback when no token is provided
+   * @default false
+   */
+  allowAnonymous: z.boolean().default(false),
+
+  /**
+   * Scopes granted to anonymous sessions (when allowAnonymous=true)
+   * @default ['anonymous']
+   */
+  anonymousScopes: z.array(z.string()).default(['anonymous']),
+
+  /**
+   * Public access config for anonymous users (when allowAnonymous=true)
+   */
+  publicAccess: publicAccessConfigSchema.optional(),
+
+  /**
+   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
+   */
+  transport: transportConfigSchema.optional(),
+});
+
+type TransparentAuthInputRaw = z.infer<typeof transparentAuthInputSchema>;
+type TransparentAuthCanonical = z.infer<typeof transparentAuthCanonicalSchema>;
+
+/**
+ * Normalize transparent auth input to canonical internal format
+ * Handles: flat config, preset config, and legacy nested config
+ */
+function normalizeTransparentAuthInput(input: TransparentAuthInputRaw): TransparentAuthCanonical {
+  // Already has remote (legacy) - pass through with merge of any flat fields
+  if (input.remote) {
+    const mergedRemote = {
+      ...input.remote,
+      // Flat fields override if provided (for migration scenarios)
+      ...(input.clientId && { clientId: input.clientId }),
+      ...(input.clientSecret && { clientSecret: input.clientSecret }),
+      ...(input.jwksUri && { jwksUri: input.jwksUri }),
+      // Merge advanced options
+      ...input.advanced,
+    };
+
+    return {
+      mode: 'transparent',
+      remote: mergedRemote,
+      expectedAudience: input.expectedAudience,
+      requiredScopes: input.requiredScopes,
+      allowAnonymous: input.allowAnonymous,
+      anonymousScopes: input.anonymousScopes,
+      publicAccess: input.publicAccess,
+      transport: input.transport,
+    };
+  }
+
+  // Resolve preset to provider URL
+  let providerUrl = input.provider;
+  let jwksUri = input.jwksUri;
+
+  if (input.preset && input.domain) {
+    providerUrl = PRESET_PROVIDERS[input.preset](input.domain);
+    jwksUri = jwksUri ?? PRESET_JWKS[input.preset](input.domain);
+  }
+
+  if (!providerUrl) {
+    throw new Error('Either provider, preset+domain, or remote is required for transparent auth');
+  }
+
+  // Build remote config from flat fields + advanced options
+  const remote: RemoteProviderConfig = {
+    provider: providerUrl,
+    clientId: input.clientId,
+    clientSecret: input.clientSecret,
+    jwksUri,
+    dcrEnabled: input.advanced?.dcrEnabled ?? false,
+    ...input.advanced,
+  };
+
+  return {
+    mode: 'transparent',
+    remote,
+    expectedAudience: input.expectedAudience,
+    requiredScopes: input.requiredScopes,
+    allowAnonymous: input.allowAnonymous,
+    anonymousScopes: input.anonymousScopes,
+    publicAccess: input.publicAccess,
+    transport: input.transport,
+  };
+}
+
+/**
+ * Transparent mode authentication options
+ *
+ * Supports three input formats for easy configuration:
+ *
+ * @example Flat config (recommended)
+ * ```typescript
+ * {
+ *   mode: 'transparent',
+ *   provider: 'https://auth.example.com',
+ *   clientId: 'my-client-id',
+ *   expectedAudience: 'my-api',
+ * }
+ * ```
+ *
+ * @example Preset config (simplest)
+ * ```typescript
+ * {
+ *   mode: 'transparent',
+ *   preset: 'frontegg',
+ *   domain: 'sample-app.frontegg.com',
+ *   clientId: 'my-client-id',
+ * }
+ * ```
+ *
+ * @example Legacy nested config (backward compatible)
+ * ```typescript
+ * {
+ *   mode: 'transparent',
+ *   remote: { provider: 'https://auth.example.com', clientId: '...' },
+ * }
+ * ```
+ */
+export const transparentAuthOptionsSchema = transparentAuthInputSchema
+  .refine((data) => data.remote || data.provider || (data.preset && data.domain), {
+    message: 'Must specify provider, preset+domain, or remote configuration',
+  })
+  .refine((data) => !data.preset || data.domain, {
+    message: 'domain is required when using preset',
+    path: ['domain'],
+  })
+  .transform(normalizeTransparentAuthInput);
 
 // ============================================
 // ORCHESTRATED MODE
@@ -726,11 +1021,37 @@ const standaloneOptionSchema = {
   excludeFromParent: z.boolean().optional(),
 } satisfies RawZodShape<StandaloneOption>;
 
-export const appAuthOptionsSchema = z.union([
-  publicAuthOptionsSchema.extend(standaloneOptionSchema),
-  transparentAuthOptionsSchema.extend(standaloneOptionSchema),
+/**
+ * App-level transparent auth input with standalone option
+ * Uses the input schema (before transform) to allow .extend()
+ */
+const appTransparentAuthInputSchema = transparentAuthInputSchema
+  .extend(standaloneOptionSchema)
+  .refine((data) => data.remote || data.provider || (data.preset && data.domain), {
+    message: 'Must specify provider, preset+domain, or remote configuration',
+  })
+  .refine((data) => !data.preset || data.domain, {
+    message: 'domain is required when using preset',
+    path: ['domain'],
+  })
+  .transform((input) => {
+    const normalized = normalizeTransparentAuthInput(input);
+    return {
+      ...normalized,
+      standalone: input.standalone,
+      excludeFromParent: input.excludeFromParent,
+    };
+  });
+
+export const orchestratedSchema = z.discriminatedUnion('type', [
   orchestratedLocalSchema.extend(standaloneOptionSchema),
   orchestratedRemoteSchema.extend(standaloneOptionSchema),
+]);
+
+export const appAuthOptionsSchema = z.discriminatedUnion('mode', [
+  publicAuthOptionsSchema.extend(standaloneOptionSchema),
+  appTransparentAuthInputSchema,
+  orchestratedSchema,
 ]);
 
 export type AppAuthOptions = z.infer<typeof appAuthOptionsSchema>;

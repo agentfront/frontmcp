@@ -103,15 +103,24 @@ Pass-through tokens from an external identity provider. FrontMCP validates token
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'transparent',
-  remote: {
-    provider: 'https://auth.example.com',
-    jwksUri: 'https://auth.example.com/.well-known/jwks.json',
-  },
+  provider: 'https://auth.example.com',
   expectedAudience: 'https://api.myservice.com',
   requiredScopes: ['openid'],
   allowAnonymous: false,
 };
 ```
+
+<Tip>
+  **Using a common provider?** Use presets for even simpler configuration:
+  ```typescript
+  auth: {
+    mode: 'transparent',
+    preset: 'auth0',  // or 'frontegg', 'okta'
+    domain: 'your-tenant.auth0.com',
+    expectedAudience: 'https://api.yourservice.com',
+  }
+  ```
+</Tip>
 
 ### How It Works
 
@@ -134,47 +143,62 @@ sequenceDiagram
 
 | Option             | Type                 | Default         | Description                          |
 | ------------------ | -------------------- | --------------- | ------------------------------------ |
-| `remote.provider`  | `string`             | Required        | Base URL of the IdP                  |
-| `remote.jwksUri`   | `string`             | Auto-discovered | Custom JWKS endpoint                 |
-| `remote.jwks`      | `JSONWebKeySet`      | -               | Inline JWKS for offline verification |
+| `provider`         | `string`             | Required*       | Base URL of the IdP                  |
+| `preset`           | `'frontegg' \| 'auth0' \| 'okta'` | -   | Provider preset (alternative to provider) |
+| `domain`           | `string`             | Required with preset | Provider domain for presets       |
+| `clientId`         | `string`             | -               | OAuth client ID                      |
+| `jwksUri`          | `string`             | Auto-discovered | Custom JWKS endpoint                 |
 | `expectedAudience` | `string \| string[]` | Issuer URL      | Required audience claim value(s)     |
 | `requiredScopes`   | `string[]`           | `[]`            | Scopes that must be present          |
 | `allowAnonymous`   | `boolean`            | `false`         | Allow requests without tokens        |
+| `advanced`         | `object`             | -               | Advanced options (scopes, dcrEnabled, endpoints) |
+
+<Note>
+  *Either `provider` or `preset`+`domain` is required.
+</Note>
 
 ### Provider Examples
 
 <Tabs>
-  <Tab title="Auth0">
+  <Tab title="Frontegg (Preset)">
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://your-tenant.auth0.com',
-        // JWKS discovered automatically from /.well-known/jwks.json
-      },
+      preset: 'frontegg',
+      domain: 'your-app.frontegg.com',
+      clientId: 'your-client-id',
+      expectedAudience: 'https://your-app.frontegg.com',
+    }
+    ```
+  </Tab>
+  <Tab title="Auth0 (Preset)">
+    ```typescript
+    auth: {
+      mode: 'transparent',
+      preset: 'auth0',
+      domain: 'your-tenant.auth0.com',
+      clientId: 'your-client-id',
       expectedAudience: 'https://api.yourservice.com',
     }
     ```
   </Tab>
-  <Tab title="Okta">
+  <Tab title="Okta (Preset)">
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://your-org.okta.com/oauth2/default',
-      },
+      preset: 'okta',
+      domain: 'your-org.okta.com',
+      clientId: 'your-client-id',
       expectedAudience: 'api://default',
     }
     ```
   </Tab>
-  <Tab title="Azure AD">
+  <Tab title="Custom Provider">
     ```typescript
     auth: {
       mode: 'transparent',
-      remote: {
-        provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
-        jwksUri: 'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys',
-      },
+      provider: 'https://login.microsoftonline.com/{tenant}/v2.0',
+      jwksUri: 'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys',
       expectedAudience: 'api://{client-id}',
     }
     ```

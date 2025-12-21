@@ -125,15 +125,23 @@ Pass-through OAuth tokens from a remote identity provider. FrontMCP validates to
 ```typescript
 const auth: AuthOptionsInput = {
   mode: 'transparent',
-  remote: {
-    provider: 'https://auth.example.com',
-    jwksUri: 'https://auth.example.com/.well-known/jwks.json',
-  },
+  provider: 'https://auth.example.com',
   allowAnonymous: false,
 };
 ```
 
-**Use case**: Integrating with existing IdP (Auth0, Okta, etc.)
+**With presets** (for common providers):
+
+```typescript
+const auth: AuthOptionsInput = {
+  mode: 'transparent',
+  preset: 'auth0', // or 'frontegg', 'okta'
+  domain: 'your-tenant.auth0.com',
+  clientId: 'your-client-id',
+};
+```
+
+**Use case**: Integrating with existing IdP (Auth0, Okta, Frontegg, etc.)
 
 ```mermaid
 sequenceDiagram
@@ -537,7 +545,7 @@ const server = new FrontMcp({
       standalone: true, // Direct access at /slack
       auth: {
         mode: 'transparent',
-        remote: { provider: 'https://slack.com/oauth' },
+        provider: 'https://slack.com/oauth',
       },
     },
     {
@@ -546,7 +554,8 @@ const server = new FrontMcp({
       standalone: false, // Nested under parent (default)
       auth: {
         mode: 'transparent',
-        remote: { provider: 'https://mycompany.auth0.com' },
+        preset: 'auth0',
+        domain: 'mycompany.auth0.com',
       },
     },
     {
@@ -683,9 +692,9 @@ const server = new FrontMcp({
       spec: 'https://api.github.com/openapi.json',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://github.com',
-          clientId: 'github-client-id',
+        provider: 'https://github.com',
+        clientId: 'github-client-id',
+        advanced: {
           scopes: ['repo', 'user'],
         },
       },
@@ -695,10 +704,8 @@ const server = new FrontMcp({
       spec: 'https://api.stripe.com/openapi.json',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://connect.stripe.com',
-          clientId: 'stripe-client-id',
-        },
+        provider: 'https://connect.stripe.com',
+        clientId: 'stripe-client-id',
       },
     },
   ],

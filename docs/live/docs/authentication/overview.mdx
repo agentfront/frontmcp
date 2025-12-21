@@ -72,9 +72,8 @@ Authentication can be configured at two levels:
       name: 'Billing',
       auth: {
         mode: 'transparent',
-        remote: {
-          provider: 'https://auth.example.com',
-        },
+        preset: 'auth0',
+        domain: 'billing.auth0.com',
       },
     })
     export class BillingApp {}
