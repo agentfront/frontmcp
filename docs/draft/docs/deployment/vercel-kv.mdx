@@ -197,6 +197,54 @@ Vercel KV has some limitations compared to standard Redis:
 
 4. **Request-Based Pricing**: Unlike Redis instances with flat pricing, Vercel KV charges per request. High-traffic apps should evaluate costs.
 
+## Hybrid Configuration: Vercel KV + Redis
+
+Need resource subscriptions but still want Vercel KV's edge compatibility for sessions? Use the `pubsub` option to configure Redis specifically for pub/sub features while keeping Vercel KV for everything else.
+
+```typescript
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  // Vercel KV for sessions and cache (edge-compatible)
+  redis: {
+    provider: 'vercel-kv',
+  },
+  // Redis for pub/sub features (resource subscriptions)
+  pubsub: {
+    host: process.env.REDIS_HOST,
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+})
+export default class Server {}
+```
+
+<Info>
+The `pubsub` option only accepts Redis configuration—Vercel KV is not supported for pub/sub since it's REST-based and doesn't support the Redis pub/sub protocol.
+</Info>
+
+### When to Use Hybrid Configuration
+
+| Scenario | Configuration |
+|----------|---------------|
+| Sessions only, no subscriptions | `redis: { provider: 'vercel-kv' }` |
+| Full Redis features needed | `redis: { host: '...' }` |
+| Edge sessions + Redis subscriptions | `redis: { provider: 'vercel-kv' }` + `pubsub: { host: '...' }` |
+
+### Recommended Redis Services for Pub/Sub
+
+When using hybrid configuration, you need a Redis service for pub/sub:
+
+| Provider | Notes |
+|----------|-------|
+| [Upstash](https://upstash.com/) | Serverless Redis, pairs well with Vercel |
+| [Redis Cloud](https://redis.com/cloud/) | Managed Redis Enterprise |
+| [AWS ElastiCache](https://aws.amazon.com/elasticache/) | AWS-managed Redis |
+
+---
+
 ## Migration from Redis
 
 Switching from standard Redis to Vercel KV requires only a configuration change:
