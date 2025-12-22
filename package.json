@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/source",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.0.0"
@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
-    "docs:live": "cd docs/live && mint dev",
-    "docs:draft": "cd docs/draft && mint dev",
+    "docs:live": "cd docs/live && mint dev --port 4100",
+    "docs:draft": "cd docs/draft && mint dev --port 4200",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -63,7 +63,6 @@
     "jest-util": "^30.0.2",
     "jsonc-eslint-parser": "^2.1.0",
     "lint-staged": "^16.2.7",
-    "mint": "^4.2.207",
     "nx": "22.3.3",
     "prettier": "^2.6.2",
     "snyk": "^1.1301.2",
@@ -78,6 +77,8 @@
   "resolutions": {
     "body-parser": "^2.2.1",
     "js-yaml": "^4.1.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "test-exclude": "^7.0.1"
   },
   "workspaces": [

@@ -1,39 +1,64 @@
 # @frontmcp/ui
 
-React components, hooks, and rendering utilities for building interactive MCP widgets.
+FrontMCP's platform-aware UI toolkit for building HTML widgets, web components, and React surfaces that run inside MCP transports. It renders plain strings by default (perfect for agents and dual-payload responses) and exposes React renderers, web components, and bundling helpers so you can reuse the same design system everywhere.
 
 ## Package Split
 
-This package is part of a two-package system:
+| Package            | Purpose                                                         | React Required        |
+| ------------------ | --------------------------------------------------------------- | --------------------- |
+| `@frontmcp/ui`     | HTML components, layouts, widgets, React components/hooks       | Yes (peer dependency) |
+| `@frontmcp/uipack` | Themes, build/render pipelines, runtime helpers, template types | No                    |
 
-| Package              | Purpose                                                   | React Required |
-| -------------------- | --------------------------------------------------------- | -------------- |
-| **@frontmcp/ui**     | React components, hooks, SSR rendering                    | Yes            |
-| **@frontmcp/uipack** | Bundling, build tools, HTML components, platform adapters | No             |
-
-If you only need build tools or HTML components without React, use `@frontmcp/uipack` instead.
+Use `@frontmcp/ui` for components and renderers. Pair it with `@frontmcp/uipack` for theming, build-time tooling, validation, and platform adapters.
 
 ## Installation
 
 ```bash
-npm install @frontmcp/ui react react-dom
+npm install @frontmcp/ui @frontmcp/uipack react react-dom
 # or
-yarn add @frontmcp/ui react react-dom
+yarn add @frontmcp/ui @frontmcp/uipack react react-dom
 ```
 
 ## Features
 
-- **React Components** - Button, Card, Alert, Badge, and more
-- **MCP Bridge Hooks** - `useMcpBridge`, `useCallTool`, `useToolInput`, `useToolOutput`
-- **Server-Side Rendering** - React 18/19 SSR via `react-dom/server`
-- **Client-Side Hydration** - Hydrate SSR content for interactivity
-- **Universal App Shell** - Platform-agnostic React wrapper
+- **HTML-first components** – Buttons, cards, badges, alerts, forms, tables, layouts, and widgets that return ready-to-stream HTML strings.
+- **React + SSR** – Optional React components, hooks, and renderers so you can hydrate widgets when the host allows it.
+- **MCP Bridge helpers** – Generate bridge bundles, wrap tool responses, and expose follow-up actions from inside widgets.
+- **Web components** – Register `<fmcp-button>`, `<fmcp-card>`, and friends for projects that prefer custom elements.
+- **Validation + error boxes** – Every component validates its options with Zod and renders a friendly error when something is misconfigured.
+- **Works with uipack** – Import themes, runtime helpers, adapters, and build APIs from `@frontmcp/uipack` to keep HTML and React outputs in sync.
 
 ## Quick Start
 
-### React Components
+### HTML components
 
-```typescript
+```ts
+import { card, button } from '@frontmcp/ui/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
+
+const widget = card(
+  `
+  <h2 class="text-lg font-semibold">CRM Access</h2>
+  <p>Grant the orchestrator access to customer data.</p>
+  ${button('Approve', { variant: 'primary', type: 'submit' })}
+`,
+  { variant: 'elevated' },
+);
+
+const html = baseLayout(widget, {
+  title: 'Authorize CRM',
+  description: 'Let the agent read CRM data for this session.',
+  theme: DEFAULT_THEME,
+  width: 'md',
+  align: 'center',
+  scripts: { tailwind: true, htmx: true },
+});
+```
+
+### React components
+
+```tsx
 import { Button, Card, Alert, Badge } from '@frontmcp/ui/react';
 
 function MyWidget() {
@@ -49,9 +74,9 @@ function MyWidget() {
 }
 ```
 
-### MCP Bridge Hooks
+### MCP Bridge hooks
 
-```typescript
+```tsx
 import { useMcpBridge, useCallTool, useToolInput, useToolOutput } from '@frontmcp/ui/react/hooks';
 
 function ToolWidget() {
@@ -76,9 +101,9 @@ function ToolWidget() {
 }
 ```
 
-### Universal App Shell
+### Universal app shell
 
-```typescript
+```tsx
 import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
 
 function App() {
@@ -92,113 +117,99 @@ function App() {
 }
 ```
 
-## Entry Points
+## Entry points
 
-| Path                       | Exports                                    |
-| -------------------------- | ------------------------------------------ |
-| `@frontmcp/ui`             | Main exports (React components, renderers) |
-| `@frontmcp/ui/react`       | React components                           |
-| `@frontmcp/ui/react/hooks` | MCP bridge hooks                           |
-| `@frontmcp/ui/renderers`   | ReactRenderer, ReactRendererAdapter        |
-| `@frontmcp/ui/render`      | React 19 static rendering                  |
-| `@frontmcp/ui/universal`   | Universal app shell                        |
-| `@frontmcp/ui/bundler`     | SSR component bundler                      |
+| Path                          | Exports                                            |
+| ----------------------------- | -------------------------------------------------- |
+| `@frontmcp/ui/components`     | HTML components, helpers, error boxes              |
+| `@frontmcp/ui/layouts`        | Base layouts, consent/error templates              |
+| `@frontmcp/ui/pages`          | High-level page templates                          |
+| `@frontmcp/ui/widgets`        | OpenAI App SDK-style widgets                       |
+| `@frontmcp/ui/react`          | React components                                   |
+| `@frontmcp/ui/react/hooks`    | MCP Bridge React hooks                             |
+| `@frontmcp/ui/renderers`      | ReactRenderer + adapter helpers                    |
+| `@frontmcp/ui/render`         | React 19 static rendering utilities                |
+| `@frontmcp/ui/web-components` | `<fmcp-*>` custom elements                         |
+| `@frontmcp/ui/bridge`         | Bridge registry + adapters                         |
+| `@frontmcp/ui/bundler`        | SSR/component bundler (uses uipack under the hood) |
 
-## Server-Side Rendering
+Use `@frontmcp/uipack/theme`, `@frontmcp/uipack/runtime`, and `@frontmcp/uipack/build` for theming, runtime helpers, and build-time APIs.
+
+## Server-side rendering
 
 ### ReactRenderer (SSR)
 
-```typescript
+```ts
 import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
 
-// Render React component to HTML string
 const html = await reactRenderer.render(MyComponent, {
   input: { query: 'test' },
   output: { result: 'data' },
 });
 ```
 
-### ReactRendererAdapter (Client-Side)
+### ReactRendererAdapter (client hydration)
 
-```typescript
+```ts
 import { ReactRendererAdapter, createReactAdapter } from '@frontmcp/ui/renderers';
 
 const adapter = createReactAdapter();
-
-// Hydrate SSR content
 await adapter.hydrate(targetElement, context);
-
-// Render new content
 await adapter.renderToDOM(content, targetElement, context);
-
-// Update with new data
-await adapter.update(targetElement, newContext);
-
-// Cleanup
 adapter.destroy(targetElement);
 ```
 
-## SSR Bundling
+## SSR bundling
 
-```typescript
+```ts
 import { InMemoryBundler, createBundler } from '@frontmcp/ui/bundler';
 
 const bundler = createBundler({ cache: true });
-
-// Bundle a React component for SSR
 const result = await bundler.bundle('./components/MyWidget.tsx');
 ```
 
 ## Using with @frontmcp/uipack
 
-For React-free utilities, import from `@frontmcp/uipack`:
-
-```typescript
-// Build tools (no React)
-import { buildToolUI, getOutputModeForClient } from '@frontmcp/uipack/build';
-
-// HTML string components (no React)
-import { button, card, alert } from '@frontmcp/uipack/components';
-
-// Platform adapters
-import { buildToolDiscoveryMeta } from '@frontmcp/uipack/adapters';
-import type { AIPlatformType } from '@frontmcp/uipack/adapters';
-
-// Theme system
+```ts
+// Theme + scripts
 import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
+
+// Build API & adapters
+import { buildToolUI, buildToolDiscoveryMeta } from '@frontmcp/uipack/build';
+
+// Runtime helpers
+import { wrapToolUI, createTemplateHelpers } from '@frontmcp/uipack/runtime';
+
+// Validation + utils
+import { validateOptions } from '@frontmcp/uipack/validation';
 ```
 
-## Peer Dependencies
+`@frontmcp/uipack` lets you configure themes, register cached widgets, wrap templates with CSP, and emit platform-specific metadata without pulling React into HTML-only projects.
+
+## Peer dependencies
 
 ```json
 {
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@frontmcp/uipack": "^0.6.0"
+    "@frontmcp/uipack": "^0.6.1"
   }
 }
 ```
 
 ## Development
 
-### Building
-
 ```bash
 yarn nx build ui
-```
-
-### Testing
-
-```bash
 yarn nx test ui
 ```
 
-## Related Packages
+## Related packages
 
-- **[@frontmcp/uipack](../uipack/README.md)** - React-free bundling, build tools, HTML components
-- **[@frontmcp/sdk](../sdk/README.md)** - Core FrontMCP SDK
-- **[@frontmcp/testing](../testing/README.md)** - E2E testing utilities
+- [`@frontmcp/uipack`](../uipack/README.md) – React-free themes, runtime helpers, build tooling
+- [`@frontmcp/sdk`](../sdk/README.md) – Core SDK
+- [`@frontmcp/testing`](../testing/README.md) – UI assertions and fixtures
 
 ## License
 

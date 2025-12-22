@@ -5,7 +5,22 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="FrontMCP v0.6" description="2025-12-19" tags={["Releases"]}>
+<Update label="v0.6.x" description="2025-12-22" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.1: Edge storage and UI split"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.1"
+    cta="View full changlog"
+  >
+    🚀 **Vercel KV storage** – Configure `redis.provider: 'vercel-kv'` for sessions, cache, and inspector state without running your own Redis cluster.
+
+    🔄 **Hybrid pub/sub** – Layer Redis pub/sub on top of Vercel KV so resource subscriptions and capability broadcasts stay real-time even when the store lives at the edge.
+
+    🎨 **UI package split** – Import HTML components and template helpers from the new `@frontmcp/uipack` foundation while `@frontmcp/ui` focuses on React hooks and renderers.
+
+    ⚡ **Smarter serverless builds** – Rspack-powered bundling, tighter escaping, and refreshed dependencies keep Vercel, Lambda, and Cloudflare deployments aligned with local builds.
+
+  </Card>
+
   <Card
     title="FrontMCP v0.6.0: Unified transport and serverless targets"
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.0"

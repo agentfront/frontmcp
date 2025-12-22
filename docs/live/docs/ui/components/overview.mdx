@@ -7,7 +7,7 @@ description: FrontMCP UI provides a collection of pre-built components for build
 
 ## Installation
 
-Components are included with the main package:
+HTML string components are in the `@frontmcp/ui` package:
 
 ```typescript
 import {
@@ -20,8 +20,12 @@ import {
   table,
   avatar,
   modal,
-} from '@frontmcp/ui';
+} from '@frontmcp/ui/components';
 ```
+
+<Info>
+For React components, use `@frontmcp/ui/react` instead.
+</Info>
 
 ## Available Components
 
@@ -63,7 +67,7 @@ import {
 All components follow the same pattern:
 
 ```typescript
-import { componentName } from '@frontmcp/ui';
+import { componentName } from '@frontmcp/ui/components';
 
 // Basic usage
 const html = componentName('content');
@@ -145,7 +149,7 @@ All component classes are designed to work with the default theme's CSS variable
 All user-provided content must be escaped to prevent XSS:
 
 ```typescript
-import { escapeHtml } from '@frontmcp/ui';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
 // In your template
 const html = card(`
@@ -162,7 +166,7 @@ const html = card(`
 Many components have companion "group" functions for layouts:
 
 ```typescript
-import { button, buttonGroup, card, cardGroup, badge, badgeGroup } from '@frontmcp/ui';
+import { button, buttonGroup, card, cardGroup, badge, badgeGroup } from '@frontmcp/ui/components';
 
 // Button group
 const buttons = buttonGroup([

@@ -59,7 +59,7 @@ async function loadMoreItems() {
 ### Button with Tool Call
 
 ```typescript
-import { button } from '@frontmcp/ui';
+import { button } from '@frontmcp/ui/components';
 
 const html = `
 ${button('Load More', { id: 'load-more-btn' })}
@@ -191,7 +191,7 @@ const unsubscribe = window.mcpBridge.onToolResult((result) => {
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, button, input, badge } from '@frontmcp/ui';
+import { card, button, input, badge } from '@frontmcp/ui/components';
 
 @Tool({
   name: 'todo_list',

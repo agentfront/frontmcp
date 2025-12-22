@@ -279,7 +279,7 @@ const template = `
 Create your own rendering system:
 
 ```typescript title="src/renderers/custom-renderer.ts"
-import { TemplateContext } from '@frontmcp/ui';
+import type { TemplateContext } from '@frontmcp/uipack/types';
 
 export interface CustomTemplateConfig {
   layout: 'card' | 'page' | 'minimal';

@@ -13,10 +13,10 @@ FrontMCP uses Redis for caching, session storage, and distributed state manageme
 
 ## Requirements
 
-| Environment | Redis | Notes |
-|-------------|-------|-------|
-| Development | Recommended | Enables full feature testing |
-| Production | **Required** | Essential for multi-instance deployments |
+| Environment | Redis        | Notes                                    |
+| ----------- | ------------ | ---------------------------------------- |
+| Development | Recommended  | Enables full feature testing             |
+| Production  | **Required** | Essential for multi-instance deployments |
 
 ## Development Setup
 
@@ -69,6 +69,10 @@ CachePlugin.init({
 });
 ```
 
+<Tip>
+Already configuring the top-level `redis` block (or `redis.provider: 'vercel-kv'`) on `@FrontMcp`? Set `CachePlugin.init({ type: 'global-store' })` so the plugin automatically reuses that store without duplicating credentials.
+</Tip>
+
 For complete CachePlugin API documentation, see the [Cache Plugin Guide](/docs/plugins/cache-plugin).
 
 ## Production Setup
@@ -79,13 +83,13 @@ Redis is **required** in production. Without Redis, session data will be lost on
 
 ### Managed Redis Services (Recommended)
 
-| Provider | Service |
-|----------|---------|
-| AWS | ElastiCache for Redis |
-| GCP | Memorystore for Redis |
-| Azure | Azure Cache for Redis |
-| Upstash | Serverless Redis |
-| Redis Cloud | Redis Enterprise |
+| Provider    | Service               |
+| ----------- | --------------------- |
+| AWS         | ElastiCache for Redis |
+| GCP         | Memorystore for Redis |
+| Azure       | Azure Cache for Redis |
+| Upstash     | Serverless Redis      |
+| Redis Cloud | Redis Enterprise      |
 
 ### Self-Hosted Production
 
@@ -124,31 +128,34 @@ import { CachePlugin } from '@frontmcp/plugins';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === 'true',
+  },
   plugins: [
     CachePlugin.init({
-      type: 'redis',
-      config: {
-        host: process.env.REDIS_HOST,
-        port: Number(process.env.REDIS_PORT || 6379),
-        password: process.env.REDIS_PASSWORD,
-        tls: process.env.REDIS_TLS === 'true',
-      },
+      type: 'global-store',
+      defaultTTL: 600,
     }),
   ],
 })
 export default class Server {}
 ```
 
+Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel KV—the Cache Plugin will keep reusing the same store without code changes.
+
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `REDIS_HOST` | Yes | `localhost` | Redis server hostname |
-| `REDIS_PORT` | No | `6379` | Redis server port |
-| `REDIS_PASSWORD` | Prod only | - | Redis authentication password |
-| `REDIS_DB` | No | `0` | Redis database number |
-| `REDIS_TLS` | No | `false` | Enable TLS encryption |
-| `REDIS_KEY_PREFIX` | No | `mcp:` | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
+| Variable           | Required  | Default     | Description                                                                    |
+| ------------------ | --------- | ----------- | ------------------------------------------------------------------------------ |
+| `REDIS_HOST`       | Yes       | `localhost` | Redis server hostname                                                          |
+| `REDIS_PORT`       | No        | `6379`      | Redis server port                                                              |
+| `REDIS_PASSWORD`   | Prod only | -           | Redis authentication password                                                  |
+| `REDIS_DB`         | No        | `0`         | Redis database number                                                          |
+| `REDIS_TLS`        | No        | `false`     | Enable TLS encryption                                                          |
+| `REDIS_KEY_PREFIX` | No        | `mcp:`      | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
 
 ## Health Checks
 

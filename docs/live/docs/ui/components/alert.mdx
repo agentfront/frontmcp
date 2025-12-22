@@ -16,7 +16,7 @@ import {
   dangerAlert,
   toast,
   toastContainer,
-} from '@frontmcp/ui';
+} from '@frontmcp/ui/components';
 ```
 
 ## Basic Usage
@@ -50,7 +50,7 @@ const html = alert('This is an informational message.');
 ### Shorthand Functions
 
 ```typescript
-import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui';
+import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui/components';
 
 infoAlert('Your session will expire in 5 minutes.')
 successAlert('Profile updated successfully!')
@@ -110,7 +110,7 @@ const htmxAlert = alert('Notification from server.', {
 Add buttons to the alert:
 
 ```typescript
-import { alert, button, buttonGroup } from '@frontmcp/ui';
+import { alert, button, buttonGroup } from '@frontmcp/ui/components';
 
 const html = alert('A new version is available.', {
   variant: 'info',
@@ -127,7 +127,7 @@ const html = alert('A new version is available.', {
 Toasts are floating alerts that appear temporarily:
 
 ```typescript
-import { toast } from '@frontmcp/ui';
+import { toast } from '@frontmcp/ui/components';
 
 // Basic toast
 const html = toast('File uploaded successfully!', {
@@ -157,7 +157,7 @@ const positioned = toast('Please check your inbox.', {
 For multiple toasts, create a container:
 
 ```typescript
-import { toastContainer } from '@frontmcp/ui';
+import { toastContainer } from '@frontmcp/ui/components';
 
 // Add to your layout
 const container = toastContainer('top-right', 'toast-container');
@@ -168,7 +168,7 @@ const container = toastContainer('top-right', 'toast-container');
 ## Complex Example
 
 ```typescript
-import { alert, button, buttonGroup } from '@frontmcp/ui';
+import { alert, button, buttonGroup } from '@frontmcp/ui/components';
 
 const errorAlert = alert(
   'Unable to connect to the database. Please check your connection settings and try again.',
@@ -198,7 +198,7 @@ const errorAlert = alert(
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, alert, successAlert, dangerAlert } from '@frontmcp/ui';
+import { card, alert, successAlert, dangerAlert } from '@frontmcp/ui/components';
 
 @Tool({
   name: 'process_data',

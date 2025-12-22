@@ -6,6 +6,7 @@ exclude:
     # Nx Cache files & build folders
     - "**/.nx/cache/**"
     - "**/dist/**"
+    - "**/tmp/**"
 
     # Test files - contain hardcoded test credentials (expected)
     - "**/__tests__/**"
