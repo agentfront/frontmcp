@@ -2,16 +2,18 @@
 title: Platform-Aware UI Library
 slug: guides/ui-library
 icon: layout-grid
-description: Ship HTML-first consent, status, and orchestration screens with the @frontmcp/uipack package.
+description: Ship HTML-first consent, status, and orchestration screens with @frontmcp/ui and @frontmcp/uipack.
 ---
 
-`@frontmcp/uipack` is a platform-aware HTML component kit designed for LLM surfaces. It renders complete markup (no React runtime) and ships a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
+The FrontMCP UI packages provide a platform-aware HTML component system designed for LLM surfaces. They render complete markup (no React runtime required) and ship a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
 
 <Note>
-HTML components live in `@frontmcp/ui/components` (no React required). For React components and hooks, use `@frontmcp/ui/react` instead.
+**Package responsibilities:**
+- `@frontmcp/ui` provides HTML components (`/components`), layouts (`/layouts`), and React components (`/react`)
+- `@frontmcp/uipack` provides theming (`/theme`), page templates (`/pages`), and build utilities
 </Note>
 
-## Why @frontmcp/uipack
+## Why use the UI packages
 
 - **Pure HTML output** – Components return strings so you can stream them directly through MCP resources, auth flows, or ngrok tunnels.
 - **Platform detection** – Helpers detect OpenAI, Claude, Gemini, and local browsers so you can inline scripts when networks are blocked.
@@ -185,4 +187,4 @@ Validation errors render in development and production. Keep an eye on your prev
 
 ## Widgets and next steps
 
-The `widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/docs/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.
+The `@frontmcp/ui/widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/docs/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.
