@@ -5,6 +5,55 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.6.1" description="2025-12-22" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.1: Edge storage and streamlined UI packages"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.1"
+    cta="View full changlog"
+  >
+    ☁️ **Vercel KV sessions** – Run FrontMCP on Vercel without provisioning Redis by pointing sessions and CachePlugin stores at the new KV provider.
+
+    🧩 **Hybrid storage** – Mix Vercel KV for sessions with Redis pub/sub so resource subscriptions and broadcast features stay online in edge deployments.
+
+    🎨 **Split UI packages** – `@frontmcp/ui` now focuses on components/widgets while `@frontmcp/uipack` ships theming, templates, and runtime utilities for slimmer bundles.
+
+    🛡️ **Safer templates** – Improved escaping, schema validation, and Handlebars helpers keep malformed outputs from crashing tool executions.
+
+    ⚙️ **Toolchain refresh** – MCP SDK 1.25.1, Nx 22.3.3, Rspack bundling, handlebars, yaml, and built-in Snyk scans keep builds fast and secure.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.2" description="2025-12-22" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.2"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🔧 **CJS-ready builds** – Updated Jest configs and dist layout mean CommonJS runners import the converter without local patches.
+
+    🧪 **Stronger fixtures** – Beefed-up end-to-end tests guard against regressions in tricky schema conversions.
+
+    📚 **Peer alignment** – Documented zod peer expectations make it clear how to keep workspace versions in sync.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.1.0" description="2025-12-22" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.1.0"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    📡 **Generator logging** – Plug in a logger to trace how operations map into MCP tools during generation.
+
+    🔐 **Auth routing** – Automatic mapping of OpenAPI security schemes to MCP auth metadata keeps multi-scheme APIs predictable.
+
+    📘 **Sharper guidance** – Refined resolver examples document nuanced security setups without guesswork.
+
+  </Card>
+</Update>
+
 <Update label="FrontMCP v0.6" description="2025-12-19" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.6.0: Unified transport and serverless targets"
@@ -51,7 +100,7 @@ mode: 'center'
 
     🔐 **Security routing** – Expanded helpers automatically map OpenAPI schemes to the right MCP auth metadata for multi-scheme APIs.
 
-    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups without guesswork.
+    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups without guesswork。
 
   </Card>
 </Update>
@@ -66,19 +115,19 @@ mode: 'center'
 
     🛡️ **Auth modes** – Mix public, transparent, and orchestrated OAuth flows with consent screens, incremental scopes, stateless/stateful sessions, and runnable demo servers.
 
-    🧠 **Resources & prompts** – Register ResourceTemplates, prompt catalogs, and capability notifications so clients can browse every tool, resource, and prompt without custom wiring.
+    🧠 **Resources & prompts** – Register ResourceTemplates, prompt catalogs, and capability notifications so clients can browse every tool, resource, and prompt without custom wiring。
 
-    🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool execution guards to keep automated code paths safe.
+    🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool execution guards to keep automated code paths safe。
 
-    🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23, Zod 4, Node 24, and refreshed transformer dependencies.
+    🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23, Zod 4, Node 24, and refreshed transformer dependencies。
 
-    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity.
+    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity。
 
-    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your workspace SDK, adapter, and plugin versions so generators never ship stale dependencies.
+    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your workspace SDK, adapter, and plugin versions so generators never ship stale dependencies。
 
-    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews.
+    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews。
 
-    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK expects the 2.x line, keeping semantic search upgrades drop-in.
+    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK expects the 2.x line, keeping semantic search upgrades drop-in。
 
   </Card>
 </Update>
@@ -89,11 +138,11 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in Node 22 and 24.
+    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in Node 22 and 24。
 
-    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards green across CI.
+    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards green across CI。
 
-    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and source links more useful.
+    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and source links more useful。
 
   </Card>
 </Update>
@@ -104,11 +153,11 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the framework upgrade.
+    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the framework upgrade。
 
-    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP requests.
+    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP requests。
 
-    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator aligned with FrontMCP v0.5.
+    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator aligned with FrontMCP v0.5。
 
   </Card>
 </Update>
@@ -119,13 +168,13 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.4.0"
     cta="View full changlog"
   >
-    🚀 **Generator-native adapters** – The OpenAPI adapter now rides on the standalone `mcp-from-openapi` engine so every tool inherits conflict-free params, request mappers, and per-scheme auth scoring.
+    🚀 **Generator-native adapters** – The OpenAPI adapter now rides on the standalone `mcp-from-openapi` engine so every tool inherits conflict-free params, request mappers, and per-scheme auth scoring。
 
-    🧩 **Tool metadata upgrades** – Declare literal primitives, tuple arrays, `resource` / `resource_link` payloads, and a `rawInputSchema` so clients see structured responses without wrapper objects.
+    🧩 **Tool metadata upgrades** – Declare literal primitives, tuple arrays, `resource` / `resource_link` payloads, and a `rawInputSchema` so clients see structured responses without wrapper objects。
 
-    🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically.
+    🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically。
 
-    📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how independent libraries ship alongside synchronized packages.
+    📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how independent libraries ship alongside synchronized packages。
 
   </Card>
 </Update>
@@ -136,11 +185,11 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted specs from triggering ReDoS in your adapters.
+    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted specs from triggering ReDoS in your adapters。
 
-    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex shapes without custom parsing code.
+    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex shapes without custom parsing code。
 
-    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public uploads.
+    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public uploads。
 
   </Card>
 </Update>
@@ -151,11 +200,11 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path, query, header, or body).
+    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path, query, header, or body)。
 
-    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent metadata.
+    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent metadata。
 
-    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can reason about each operation automatically.
+    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can reason about each operation automatically。
 
   </Card>
 </Update>
@@ -166,20 +215,20 @@ mode: 'center'
         href="/docs"
         cta="Read the release notes"
     >
-        Flow-level hooks now ship with typed Will/Stage/Did/Around helpers, and the Cache plugin can short-circuit repeat tool calls with memory or Redis stores—plus steadier releases out of the box.
+        Flow-level hooks now ship with typed Will/Stage/Did/Around helpers, and the Cache plugin can short-circuit repeat tool calls with memory or Redis stores—plus steadier releases out of the box。
 
         #### Features
-        - Attach Will/Stage/Did/Around hooks across HTTP, transport, auth, and tool flows with the new <code>FlowHooksOf(...)</code> helper, including priority ordering and filters.
-        - Ship the Cache plugin to short-circuit repeat tool calls with memory or Redis stores, per-tool TTLs, and sliding-window refresh.
+        - Attach Will/Stage/Did/Around hooks across HTTP, transport, auth, and tool flows with the new <code>FlowHooksOf(...)</code> helper, including priority ordering and filters。
+        - Ship the Cache plugin to short-circuit repeat tool calls with memory or Redis stores, per-tool TTLs, and sliding-window refresh。
 
         #### Fixes
-        - Stringify JSON request bodies before dispatching OpenAPI adapter calls so downstream APIs receive valid payloads.
+        - Stringify JSON request bodies before dispatching OpenAPI adapter calls so downstream APIs receive valid payloads。
 
         #### Docs
-        - Added guides on customizing flow stages and using the cache plugin, and refreshed plugin references.
+        - Added guides on customizing flow stages and using the cache plugin, and refreshed plugin references。
 
         #### Build/CI
-        - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script.
+        - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script。
     </Card>
 
 </Update>
@@ -192,28 +241,28 @@ mode: 'center'
     >
         FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,
         smarter
-        config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
+        config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing。
 
-        - 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
+        - 🧪 **Dev-only no-auth**: run without auth *in development mode only*。
         Example: <code>frontmcp dev --no-auth</code>
         - 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
-        scripts, and starter files.
-        - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
+        scripts, and starter files。
+        - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically。
         - 🔭 **Inspector, zero setup**: <code>frontmcp
-        inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
-        - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
+        inspector</code> launches <code>@modelcontextprotocol/inspector</code>。
+        - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration。
         - ✨ **Tool schema ergonomics**: pass Zod fields directly
-        (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
-        - ⚡ **Async type checks in dev**: background type-checking while watching files.
+        (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>)。
+        - ⚡ **Async type checks in dev**: background type-checking while watching files。
         - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
-        builds to <code>./dist</code> (override with <code>--out-dir</code>).
+        builds to <code>./dist</code> (override with <code>--out-dir</code>)。
         - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
-        session-aware SSE.
-        - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
+        session-aware SSE。
+        - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows。
 
         <Warning>
             The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
-            production.
+            production。
         </Warning>
     </Card>
 
@@ -228,13 +277,13 @@ mode: 'center'
         FrontMCP 0.1 lands streamlined <strong>Streamable HTTP</strong> transport, scoped <strong>DI-powered
         invoker</strong> flows,
         and first-class <strong>adapters/plugins</strong> so you can ship production MCP servers with minimal
-        boilerplate.
+        boilerplate。
 
-        - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
+        - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events。
         - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
-        capabilities like caching.
+        capabilities like caching。
         - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
-        transforms.
+        transforms。
     </Card>
 
 </Update>

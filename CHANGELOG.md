@@ -1,3 +1,23 @@
+## [v0.6.1] - 2025-12-22
+
+### feat
+
+- Add a first-class Vercel KV storage provider plus hybrid Redis pub/sub fallbacks so serverless sessions, CachePlugin data, and resource subscriptions keep working on edge runtimes.
+- Split the UI stack into `@frontmcp/ui` (components/widgets) and `@frontmcp/uipack` (themes, templates, runtime utilities) to remove the React dependency from server bundles and expose the new utility modules.
+
+### fix
+
+- Harden Handlebars/HTML rendering with improved escaping, schema-path validation, and clearer error boxes so malformed tool outputs fail safely instead of crashing the process.
+- Improve Vercel/serverless deployments with generated Rspack configs, better bundle scaffolding, and clearer SDK version mismatch errors.
+
+### docs
+
+- Publish a dedicated Vercel KV deployment guide, cross-link it from Redis and Serverless docs, and refresh the UI library guide to explain the split packages and new import paths.
+
+### build
+
+- Upgrade to `@modelcontextprotocol/sdk 1.25.1`, Nx 22.3.3, and add handlebars, yaml, rspack, Snyk, and pinned resolutions to keep dependency audits and builds stable.
+
 ## [v0.6.0] - 2025-12-19
 
 ### feat
@@ -213,4 +233,3 @@ This was a version bump only, there were no code changes.
 ### ❤️ Thank You
 
 - David Antoon @frontegg-david
-

@@ -1,0 +1,360 @@
+---
+title: Vercel KV
+sidebarTitle: Vercel KV
+slug: deployment/vercel-kv
+icon: bolt
+description: Use Vercel KV for edge-compatible session storage and caching
+---
+
+# Vercel KV
+
+Vercel KV is an edge-compatible, REST-based key-value store that works seamlessly with Vercel deployments. FrontMCP supports Vercel KV as an alternative to standard Redis for session storage and caching.
+
+<CardGroup cols={2}>
+  <Card title="Zero Infrastructure" icon="cloud">
+    No Redis server to manage—Vercel handles everything
+  </Card>
+  <Card title="Edge Compatible" icon="bolt">
+    Works in Vercel Edge Functions and serverless environments
+  </Card>
+  <Card title="Auto-Configuration" icon="wand-magic-sparkles">
+    Environment variables are set automatically when you connect a KV store
+  </Card>
+  <Card title="Drop-in Replacement" icon="arrows-rotate">
+    Switch from Redis with a single config change
+  </Card>
+</CardGroup>
+
+## When to Use Vercel KV
+
+| Use Case               | Vercel KV         | Standard Redis               |
+| ---------------------- | ----------------- | ---------------------------- |
+| Vercel deployment      | ✅ Recommended    | ⚠️ Requires external service |
+| Edge Functions         | ✅ Native support | ❌ Not supported             |
+| Self-hosted            | ❌ Vercel only    | ✅ Full control              |
+| Pub/Sub needed         | ❌ Not supported  | ✅ Native support            |
+| Resource subscriptions | ❌ Requires Redis | ✅ Full support              |
+
+## Quick Start
+
+<Steps>
+  <Step title="Create KV Store in Vercel">
+    Go to your Vercel Dashboard → Storage → Create Database → KV
+  </Step>
+  <Step title="Connect to Project">
+    Select your project and environment. Vercel automatically adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` to your environment.
+  </Step>
+  <Step title="Configure FrontMCP">
+    ```typescript
+    import 'reflect-metadata';
+    import { FrontMcp } from '@frontmcp/sdk';
+
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        provider: 'vercel-kv',
+      },
+    })
+    export default class Server {}
+    ```
+
+  </Step>
+  <Step title="Deploy">
+    ```bash
+    vercel deploy
+    ```
+  </Step>
+</Steps>
+
+## Configuration
+
+### Basic Configuration
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    provider: 'vercel-kv',
+    // Uses KV_REST_API_URL and KV_REST_API_TOKEN from environment
+  },
+})
+```
+
+### Full Configuration
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    provider: 'vercel-kv',
+    url: process.env.KV_REST_API_URL,      // Optional: override env var
+    token: process.env.KV_REST_API_TOKEN,  // Optional: override env var
+    keyPrefix: 'myapp:',                   // Optional: namespace keys
+    defaultTtlMs: 7200000,                 // Optional: 2 hour TTL
+  },
+})
+```
+
+### Configuration Options
+
+<ParamField path="provider" type="'vercel-kv'" required>
+  Selects Vercel KV as the storage provider.
+</ParamField>
+
+<ParamField path="url" type="string" default="process.env.KV_REST_API_URL">
+  The Vercel KV REST API URL. Automatically set when you connect a KV store to your Vercel project.
+</ParamField>
+
+<ParamField path="token" type="string" default="process.env.KV_REST_API_TOKEN">
+  The Vercel KV REST API token. Automatically set when you connect a KV store to your Vercel project.
+</ParamField>
+
+<ParamField path="keyPrefix" type="string" default="'mcp:'">
+  Prefix added to all keys. Useful for namespacing when sharing a KV store across multiple apps.
+</ParamField>
+
+<ParamField path="defaultTtlMs" type="number" default="3600000">
+  Default time-to-live in milliseconds for session data. Defaults to 1 hour.
+</ParamField>
+
+## Environment Variables
+
+| Variable            | Required | Description                            |
+| ------------------- | -------- | -------------------------------------- |
+| `KV_REST_API_URL`   | Yes      | REST API endpoint for your KV store    |
+| `KV_REST_API_TOKEN` | Yes      | Authentication token for your KV store |
+
+<Tip>
+When you connect a Vercel KV store to your project, these environment variables are automatically added to your Vercel project settings. No manual configuration needed!
+</Tip>
+
+## Vercel Dashboard Setup
+
+<Steps>
+  <Step title="Navigate to Storage">
+    In your Vercel Dashboard, click **Storage** in the top navigation.
+  </Step>
+  <Step title="Create KV Database">
+    Click **Create Database** and select **KV** (Durable Redis).
+  </Step>
+  <Step title="Name Your Store">
+    Choose a name like `frontmcp-sessions` and select a region close to your deployment.
+  </Step>
+  <Step title="Connect to Project">
+    Select your FrontMCP project and choose which environments (Production, Preview, Development) should have access.
+  </Step>
+  <Step title="Verify Environment Variables">
+    Go to your project **Settings → Environment Variables** to confirm `KV_REST_API_URL` and `KV_REST_API_TOKEN` are set.
+  </Step>
+</Steps>
+
+## Usage with CachePlugin
+
+Vercel KV works seamlessly with the CachePlugin using `type: 'global-store'`:
+
+```typescript
+import 'reflect-metadata';
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    provider: 'vercel-kv',
+  },
+  apps: [MyApp],
+})
+export default class Server {}
+
+@App({
+  name: 'my-app',
+  plugins: [
+    CachePlugin.init({
+      type: 'global-store',  // Uses the global redis config automatically
+      defaultTTL: 3600,
+    }),
+  ],
+})
+class MyApp {}
+```
+
+<Tip>
+The `type: 'global-store'` option allows plugins to automatically use whatever storage provider you've configured at the `@FrontMcp` level—whether it's Redis or Vercel KV. No need to repeat configuration!
+</Tip>
+
+## Comparison: Vercel KV vs Standard Redis
+
+| Feature                    | Vercel KV         | Standard Redis                |
+| -------------------------- | ----------------- | ----------------------------- |
+| **Infrastructure**         | Managed by Vercel | Self-managed or cloud service |
+| **Edge Compatible**        | ✅ Yes            | ❌ No                         |
+| **Serverless Friendly**    | ✅ Optimized      | ⚠️ Connection overhead        |
+| **Pub/Sub**                | ❌ Not available  | ✅ Full support               |
+| **Resource Subscriptions** | ❌ Not supported  | ✅ Full support               |
+| **Latency**                | ~5-15ms (REST)    | ~1-5ms (TCP)                  |
+| **Pricing**                | Pay per request   | Pay for instance              |
+| **Setup Complexity**       | Minimal           | Moderate                      |
+
+## Limitations
+
+<Warning>
+Vercel KV has some limitations compared to standard Redis:
+</Warning>
+
+1. **No Pub/Sub Support**: Vercel KV is REST-based and does not support Redis pub/sub. If your app uses resource subscriptions, you'll need standard Redis.
+
+2. **Higher Latency**: REST API calls have slightly higher latency than direct Redis TCP connections. For most use cases, this difference is negligible.
+
+3. **Vercel-Only**: Vercel KV only works in Vercel deployments. For other platforms, use standard Redis.
+
+4. **Request-Based Pricing**: Unlike Redis instances with flat pricing, Vercel KV charges per request. High-traffic apps should evaluate costs.
+
+## Hybrid Configuration: Vercel KV + Redis
+
+Need resource subscriptions but still want Vercel KV's edge compatibility for sessions? Use the `pubsub` option to configure Redis specifically for pub/sub features while keeping Vercel KV for everything else.
+
+```typescript
+import 'reflect-metadata';
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  // Vercel KV for sessions and cache (edge-compatible)
+  redis: {
+    provider: 'vercel-kv',
+  },
+  // Redis for pub/sub features (resource subscriptions)
+  pubsub: {
+    host: process.env.REDIS_HOST,
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+  apps: [MyApp],
+})
+export default class Server {}
+
+@App({
+  name: 'my-app',
+  plugins: [
+    // CachePlugin uses Vercel KV via global-store
+    CachePlugin.init({ type: 'global-store' }),
+  ],
+})
+class MyApp {}
+```
+
+<Info>
+The `pubsub` option only accepts Redis configuration—Vercel KV is not supported for pub/sub since it's REST-based and doesn't support the Redis pub/sub protocol.
+</Info>
+
+### When to Use Hybrid Configuration
+
+| Scenario                            | Configuration                                                  |
+| ----------------------------------- | -------------------------------------------------------------- |
+| Sessions only, no subscriptions     | `redis: { provider: 'vercel-kv' }`                             |
+| Full Redis features needed          | `redis: { host: '...' }`                                       |
+| Edge sessions + Redis subscriptions | `redis: { provider: 'vercel-kv' }` + `pubsub: { host: '...' }` |
+
+### Recommended Redis Services for Pub/Sub
+
+When using hybrid configuration, you need a Redis service for pub/sub:
+
+| Provider                                               | Notes                                    |
+| ------------------------------------------------------ | ---------------------------------------- |
+| [Upstash](https://upstash.com/)                        | Serverless Redis, pairs well with Vercel |
+| [Redis Cloud](https://redis.com/cloud/)                | Managed Redis Enterprise                 |
+| [AWS ElastiCache](https://aws.amazon.com/elasticache/) | AWS-managed Redis                        |
+
+---
+
+## Migration from Redis
+
+Switching from standard Redis to Vercel KV requires only a configuration change:
+
+<Tabs>
+  <Tab title="Before (Redis)">
+    ```typescript
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        host: process.env.REDIS_HOST,
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="After (Vercel KV)">
+    ```typescript
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        provider: 'vercel-kv',
+      },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+The `@vercel/kv` package is an optional peer dependency. It's only loaded when you use `provider: 'vercel-kv'`, so it won't affect bundle size for non-Vercel deployments.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Vercel KV requires url and token">
+    **Cause**: The `KV_REST_API_URL` or `KV_REST_API_TOKEN` environment variables are not set.
+
+    **Solution**:
+    1. Ensure you've created a KV store in the Vercel Dashboard
+    2. Connect the KV store to your project
+    3. Check that environment variables are set in Project Settings → Environment Variables
+    4. If running locally, add variables to your `.env` file
+
+  </Accordion>
+
+  <Accordion title="Module not found: @vercel/kv">
+    **Cause**: The `@vercel/kv` package is not installed.
+
+    **Solution**:
+    ```bash
+    npm install @vercel/kv
+    # or
+    yarn add @vercel/kv
+    ```
+
+  </Accordion>
+
+  <Accordion title="Sessions not persisting across requests">
+    **Cause**: Each serverless invocation may create a new connection.
+
+    **Solution**: This is expected behavior. Vercel KV handles connection pooling internally. Ensure your session store is properly configured and `defaultTtlMs` is set appropriately.
+
+  </Accordion>
+
+  <Accordion title="Resource subscriptions not working">
+    **Cause**: Vercel KV does not support Redis pub/sub, which is required for resource subscriptions.
+
+    **Solution**: Use standard Redis for apps that require resource subscription functionality. Consider a managed Redis service like Upstash or Redis Cloud.
+
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Serverless Deployment" icon="cloud" href="/docs/deployment/serverless">
+    Deploy to Vercel, AWS Lambda, and Cloudflare Workers
+  </Card>
+  <Card title="Redis Setup" icon="database" href="/docs/deployment/redis-setup">
+    Configure standard Redis for non-Vercel deployments
+  </Card>
+  <Card title="Cache Plugin" icon="bolt" href="/docs/plugins/cache-plugin">
+    Add caching to your tools and resources
+  </Card>
+  <Card title="Production Deployment" icon="rocket" href="/docs/deployment/production-build">
+    Build and deploy for production
+  </Card>
+</CardGroup>
