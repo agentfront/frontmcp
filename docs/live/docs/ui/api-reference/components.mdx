@@ -8,7 +8,7 @@ description: Complete API reference for all @frontmcp/ui components. Each compon
 ## Button
 
 ```typescript
-import { button, buttonGroup } from '@frontmcp/ui';
+import { button, buttonGroup } from '@frontmcp/ui/components';
 ```
 
 ### `button(label, options?)`
@@ -76,7 +76,7 @@ import {
   ghostButton,
   dangerButton,
   linkButton,
-} from '@frontmcp/ui';
+} from '@frontmcp/ui/components';
 
 // Each accepts (label, options?) and pre-applies the variant
 primaryButton('Save');    // variant: 'primary'
@@ -88,7 +88,7 @@ dangerButton('Delete');   // variant: 'danger'
 ## Card
 
 ```typescript
-import { card, cardGroup } from '@frontmcp/ui';
+import { card, cardGroup } from '@frontmcp/ui/components';
 ```
 
 ### `card(content, options?)`
@@ -135,7 +135,7 @@ Groups cards in a grid layout.
 ## Badge
 
 ```typescript
-import { badge, badgeGroup } from '@frontmcp/ui';
+import { badge, badgeGroup } from '@frontmcp/ui/components';
 ```
 
 ### `badge(label, options?)`
@@ -173,7 +173,7 @@ import {
   errorBadge,
   newBadge,
   betaBadge,
-} from '@frontmcp/ui';
+} from '@frontmcp/ui/components';
 
 // Status badges
 activeBadge();    // Green "Active"
@@ -184,7 +184,7 @@ errorBadge();     // Red "Error"
 ### Status Dots
 
 ```typescript
-import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/ui';
+import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/ui/components';
 
 onlineDot();   // Green dot
 offlineDot();  // Gray dot
@@ -197,7 +197,7 @@ awayDot();     // Yellow dot
 ## Alert
 
 ```typescript
-import { alert, toast, toastContainer } from '@frontmcp/ui';
+import { alert, toast, toastContainer } from '@frontmcp/ui/components';
 ```
 
 ### `alert(message, options?)`
@@ -234,7 +234,7 @@ alert('Operation completed successfully', {
 ### Preset Alerts
 
 ```typescript
-import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui';
+import { infoAlert, successAlert, warningAlert, dangerAlert } from '@frontmcp/ui/components';
 
 successAlert('Saved!');
 dangerAlert('Error occurred', { title: 'Error' });
@@ -264,7 +264,7 @@ Creates a container for toast notifications.
 ## Form Components
 
 ```typescript
-import { input, select, textarea, checkbox, radioGroup, form } from '@frontmcp/ui';
+import { input, select, textarea, checkbox, radioGroup, form } from '@frontmcp/ui/components';
 ```
 
 ### `input(options)`
@@ -393,7 +393,7 @@ Wraps content in a form element.
 ### Form Layout Helpers
 
 ```typescript
-import { formRow, formSection, formActions, hiddenInput, csrfInput } from '@frontmcp/ui';
+import { formRow, formSection, formActions, hiddenInput, csrfInput } from '@frontmcp/ui/components';
 
 // Group fields horizontally
 formRow([input1, input2]);
@@ -414,7 +414,7 @@ csrfInput('token-value');
 ## Table
 
 ```typescript
-import { table, pagination } from '@frontmcp/ui';
+import { table, pagination } from '@frontmcp/ui/components';
 ```
 
 ### `table(options)`
@@ -480,7 +480,7 @@ Creates pagination controls.
 ## List
 
 ```typescript
-import { descriptionList, actionList, permissionList, featureList } from '@frontmcp/ui';
+import { descriptionList, actionList, permissionList, featureList } from '@frontmcp/ui/components';
 ```
 
 ### `descriptionList(items, options?)`
@@ -556,7 +556,7 @@ featureList([
 ## Avatar
 
 ```typescript
-import { avatar, avatarGroup, avatarWithText } from '@frontmcp/ui';
+import { avatar, avatarGroup, avatarWithText } from '@frontmcp/ui/components';
 ```
 
 ### `avatar(options)`
@@ -617,7 +617,7 @@ Avatar with name and optional subtitle.
 ## Modal
 
 ```typescript
-import { modal, modalTrigger, confirmModal, drawer } from '@frontmcp/ui';
+import { modal, modalTrigger, confirmModal, drawer } from '@frontmcp/ui/components';
 ```
 
 ### `modal(content, options)`
@@ -730,7 +730,7 @@ import {
   TableOptionsSchema,
   AvatarOptionsSchema,
   ModalOptionsSchema,
-} from '@frontmcp/ui';
+} from '@frontmcp/ui/components';
 
 // Validate options
 const result = ButtonOptionsSchema.safeParse(userInput);

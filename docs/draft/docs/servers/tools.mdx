@@ -753,24 +753,24 @@ ui: {
 
 ### UI Configuration Options
 
-| Option              | Description                                                     |
-| ------------------- | --------------------------------------------------------------- |
-| `template`          | HTML function, React component, or MDX string                   |
-| `displayMode`       | `'inline'` (default), `'fullscreen'`, or `'pip'`                |
-| `widgetDescription` | Human-readable description shown to users                       |
-| `widgetAccessible`  | Allow widget to call tools via MCP Bridge                       |
-| `csp`               | Content Security Policy (allowed domains)                       |
-| `servingMode`       | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc. |
-| `htmlResponsePrefix`| Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
-| `mdxComponents`     | Custom components for MDX templates                             |
-| `hydrate`           | Enable client-side React hydration for interactivity            |
+| Option               | Description                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `template`           | HTML function, React component, or MDX string                                           |
+| `displayMode`        | `'inline'` (default), `'fullscreen'`, or `'pip'`                                        |
+| `widgetDescription`  | Human-readable description shown to users                                               |
+| `widgetAccessible`   | Allow widget to call tools via MCP Bridge                                               |
+| `csp`                | Content Security Policy (allowed domains)                                               |
+| `servingMode`        | How HTML is delivered: `'auto'` (default), `'inline'`, `'static'`, `'hybrid'`, etc.     |
+| `htmlResponsePrefix` | Text prefix for Claude dual-payload HTML block (default: `'Here is the visual result'`) |
+| `mdxComponents`      | Custom components for MDX templates                                                     |
+| `hydrate`            | Enable client-side React hydration for interactivity                                    |
 
 ### Using @frontmcp/ui Components
 
 Combine Tool UI with the `@frontmcp/ui` component library:
 
 ```ts
-import { card, badge, button, descriptionList } from '@frontmcp/ui/components';
+import { card, badge, button, descriptionList } from '@frontmcp/ui';
 
 @Tool({
   name: 'get_order',
@@ -817,7 +817,7 @@ test('renders weather UI correctly', async ({ mcp }) => {
     Complete configuration options and examples
   </Card>
   <Card title="UI Components" icon="puzzle-piece" href="/docs/ui/components/overview">
-    Pre-built components from @frontmcp/uipack
+    Pre-built components from @frontmcp/ui
   </Card>
   <Card title="Templates" icon="code" href="/docs/ui/templates/overview">
     HTML, React, and MDX template patterns

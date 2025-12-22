@@ -5,6 +5,19 @@ icon: palette
 description: A platform-agnostic component library for building rich HTML widgets that display alongside AI tool responses. Transform plain text outputs into interactive, visually appealing interfaces.
 ---
 
+## Package Split
+
+FrontMCP UI is split into two packages to support different use cases:
+
+| Package | Purpose | React Required |
+|---------|---------|----------------|
+| **@frontmcp/uipack** | HTML components, build tools, themes, platform adapters | No |
+| **@frontmcp/ui** | React components, hooks, SSR rendering | Yes |
+
+<Info>
+Use `@frontmcp/uipack` when you only need HTML string components or build tools. Use `@frontmcp/ui` when you need React components or hooks.
+</Info>
+
 ## Why Use FrontMCP UI?
 
 When your MCP tools return data, AI platforms typically display it as raw text or JSON. FrontMCP UI lets you create visual widgets that make your tool outputs more useful and engaging.
@@ -55,13 +68,13 @@ When your MCP tools return data, AI platforms typically display it as raw text o
 
 FrontMCP UI adapts to different AI platform capabilities:
 
-| Platform     | Network | Widget Display          | Response Format    |
-| ------------ | ------- | ----------------------- | ------------------ |
-| **OpenAI**   | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
-| **ext-apps** | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
-| **Cursor**   | Full    | Inline                  | `_meta['ui/html']` |
-| **Claude**   | Blocked | Artifacts               | Dual-payload       |
-| **Gemini**   | Limited | Basic                   | JSON only          |
+| Platform | Network | Widget Display | Response Format |
+|----------|---------|----------------|-----------------|
+| **OpenAI** | Full | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **ext-apps** | Full | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **Cursor** | Full | Inline | `_meta['ui/html']` |
+| **Claude** | Blocked | Artifacts | Dual-payload |
+| **Gemini** | Limited | Basic | JSON only |
 
 The library automatically detects the platform and selects the appropriate delivery format.
 
@@ -97,14 +110,14 @@ With `servingMode: 'auto'` (default), unsupported platforms automatically receiv
 
 Every `@Tool` exposes a `ui` block that describes how the widget should render across hosts. Configure these settings once and the renderer keeps your UX consistent everywhere.
 
-| Setting              | Controls                                                                                   | Use it when                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `displayMode`        | Whether the widget renders inline, fullscreen, or picture-in-picture                       | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
-| `servingMode`        | How HTML is delivered (`auto`, `inline`, `static`, `hybrid`, URL-based). Default: `'auto'` | Let FrontMCP select the best format per platform, or force a specific mode. |
-| `htmlResponsePrefix` | Text shown before HTML in Claude's dual-payload format                                     | Customize the artifact description for better Claude UX.                    |
-| `widgetAccessible`   | Allows widgets to call tools through the MCP Bridge                                        | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
-| `csp`                | Allowed domains for scripts, images, fonts, and network calls                              | Restrict remote dependencies per platform and satisfy Claude's strict CSP.  |
-| `hydrate`            | Ships the React runtime for client-side interactivity                                      | Power forms, tabs, and charts that need local state or event handlers.      |
+| Setting            | Controls                                                             | Use it when                                                                 |
+| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `displayMode`      | Whether the widget renders inline, fullscreen, or picture-in-picture | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
+| `servingMode`      | How HTML is delivered (`auto`, `inline`, `static`, `hybrid`, URL-based). Default: `'auto'` | Let FrontMCP select the best format per platform, or force a specific mode. |
+| `htmlResponsePrefix` | Text shown before HTML in Claude's dual-payload format | Customize the artifact description for better Claude UX. |
+| `widgetAccessible` | Allows widgets to call tools through the MCP Bridge                  | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
+| `csp`              | Allowed domains for scripts, images, fonts, and network calls        | Restrict remote dependencies per platform and satisfy Claude's strict CSP.  |
+| `hydrate`          | Ships the React runtime for client-side interactivity                | Power forms, tabs, and charts that need local state or event handlers.      |
 
 <Tip>
 Pair metadata with a concise `widgetDescription` so clients can preview the UI before rendering it, just like Mintlify recommends leading with the most important context.
@@ -116,10 +129,10 @@ Limit `csp.resourceDomains` and `csp.connectDomains` to only the hosts your widg
 
 ## OpenAI App SDK resource widgets
 
-Need a richer layout than a single card? `@frontmcp/ui` ships `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview` helpers so your responses match OpenAI Apps SDK expectations without manual HTML.
+Need a richer layout than a single card? `@frontmcp/uipack` ships `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview` helpers so your responses match OpenAI Apps SDK expectations without manual HTML.
 
 ```typescript
-import { resourceWidget } from '@frontmcp/ui';
+import { resourceWidget } from '@frontmcp/ui/components';
 
 const widget = resourceWidget({
   type: 'document',
@@ -169,7 +182,7 @@ Add a visual widget to your tool in just a few lines:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge } from '@frontmcp/ui';
+import { card, badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({
@@ -205,22 +218,34 @@ export class GetWeatherTool extends ToolContext {
 
 <CodeGroup>
 ```bash npm
-npm install @frontmcp/ui
+# For HTML components only (no React)
+npm install @frontmcp/uipack
+
+# For React components and hooks
+npm install @frontmcp/ui react react-dom
 ```
 
 ```bash yarn
-yarn add @frontmcp/ui
+# For HTML components only (no React)
+yarn add @frontmcp/uipack
+
+# For React components and hooks
+yarn add @frontmcp/ui react react-dom
 ```
 
 ```bash pnpm
-pnpm add @frontmcp/ui
+# For HTML components only (no React)
+pnpm add @frontmcp/uipack
+
+# For React components and hooks
+pnpm add @frontmcp/ui react react-dom
 ```
 
 </CodeGroup>
 
 <Info>
-  `@frontmcp/ui` has a peer dependency on `react` for React/MDX templates.
-  If you only use HTML templates, React is optional.
+  `@frontmcp/uipack` has no React dependency - use it for HTML string templates.
+  `@frontmcp/ui` requires React for React components, hooks, and SSR.
 </Info>
 
 ## Next Steps
