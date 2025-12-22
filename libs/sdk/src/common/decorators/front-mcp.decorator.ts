@@ -81,11 +81,11 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
-      const sdk = '@frontmcp/sdk';
-      import(sdk).then(({ FrontMcpInstance }) => {
+      // Use direct string literal for bundler static analysis
+      import('@frontmcp/sdk').then(({ FrontMcpInstance }) => {
         if (!FrontMcpInstance) {
           throw new InternalMcpError(
-            `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
+            '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
             'SDK_VERSION_MISMATCH',
           );
         }

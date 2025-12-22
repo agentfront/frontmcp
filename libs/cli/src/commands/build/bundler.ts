@@ -39,6 +39,13 @@ export async function bundleForServerless(
     optimization: {
       minimize: false,
     },
+    // Suppress known third-party library warnings that don't affect runtime
+    ignoreWarnings: [
+      // Express view engine dynamic require - expected behavior, harmless at runtime
+      /Critical dependency: the request of a dependency is an expression/,
+      // Handlebars require.extensions - deprecated Node.js API but works at runtime
+      /require\.extensions is not supported by Rspack/,
+    ],
     // Suppress verbose output
     stats: 'errors-warnings',
   });
