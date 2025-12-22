@@ -49,7 +49,7 @@ import {
   ALERT_ICONS,
   CLOSE_ICON,
   cn,
-} from '../styles/variants';
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**
@@ -174,7 +174,6 @@ export function renderAlertSync(props: AlertRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { AlertVariant };
+// Note: AlertVariant type is exported from '../components'
 
 export default Alert;

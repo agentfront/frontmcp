@@ -94,7 +94,7 @@ MDX templates can use components you provide:
 Register FrontMCP components for use in MDX:
 
 ```typescript
-import { card, badge, button, alert } from '@frontmcp/ui';
+import { card, badge, button, alert } from '@frontmcp/ui/components';
 
 @Tool({
   name: 'my_tool',
@@ -306,7 +306,7 @@ Paragraph with custom class. {.text-gray-600}
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, button, alert, table } from '@frontmcp/ui';
+import { card, badge, button, alert, table } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({

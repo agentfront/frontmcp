@@ -28,8 +28,8 @@ import type {
   AdapterCapabilities,
   HostContext,
   DisplayMode,
-} from '../../bridge/types';
-import { FrontMcpBridge } from '../../bridge/core/bridge-factory';
+} from '../../bridge';
+import { FrontMcpBridge } from '../../bridge';
 
 // ============================================
 // Types

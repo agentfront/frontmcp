@@ -25,7 +25,7 @@
 
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import type { AIPlatformType } from '../../notification/notification.service';
-import { createDefaultBaseTemplate } from '@frontmcp/ui';
+import { createDefaultBaseTemplate } from '@frontmcp/uipack/base-template';
 import {
   type ToolUIRegistry,
   UI_RESOURCE_SCHEME,
@@ -34,7 +34,7 @@ import {
   parseWidgetUri,
   getUIResourceMimeType,
   type ParsedWidgetUri,
-} from '@frontmcp/ui/registry';
+} from '@frontmcp/uipack/registry';
 
 /**
  * Result of handling a UI resource request
@@ -63,11 +63,11 @@ export interface HandleUIResourceOptions {
 /**
  * Generate a placeholder widget HTML that reads from window.openai.toolOutput.
  *
- * Delegates to @frontmcp/ui's createDefaultBaseTemplate which provides:
+ * Delegates to @frontmcp/uipack's createDefaultBaseTemplate which provides:
  * - Tailwind CSS with @theme configuration
  * - Platform polyfills (callTool, detectMcpSession, getToolOutput)
  * - Polling for toolOutput injection
- * - Default JSON renderer (data-type-specific renderers are in @frontmcp/ui)
+ * - Default JSON renderer (data-type-specific renderers are in @frontmcp/uipack)
  *
  * This is returned when the static widget URI is fetched before the tool is called.
  * OpenAI caches this HTML, so it must be dynamic (read toolOutput at runtime).

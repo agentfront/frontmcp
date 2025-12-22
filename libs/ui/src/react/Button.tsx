@@ -49,7 +49,7 @@ import {
   BUTTON_BASE_CLASSES,
   LOADING_SPINNER,
   cn,
-} from '../styles/variants';
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**
@@ -169,7 +169,6 @@ export function renderButtonSync(props: ButtonRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { ButtonVariant, ButtonSize };
+// Note: ButtonVariant and ButtonSize types are exported from '../components'
 
 export default Button;

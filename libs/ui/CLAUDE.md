@@ -1,309 +1,203 @@
-# @frontmcp/ui - SDK Development Guidelines
+# @frontmcp/ui - Development Guidelines
 
 ## Overview
 
-`@frontmcp/ui` is a platform-agnostic HTML component library for building authentication and authorization UIs across LLM platforms (OpenAI, Claude, Gemini, ngrok).
+`@frontmcp/ui` provides **React components, hooks, and rendering utilities** for building interactive MCP widgets.
+
+This package requires React. For React-free utilities (bundling, build tools, HTML components, platform adapters), use `@frontmcp/uipack`.
 
 **Key Principles:**
 
-- Pure HTML string generation (no React/Vue/JSX)
-- Zod schema validation for all component inputs
-- Platform-aware theming and CDN configuration
-- HTMX support for dynamic interactions
-- GitHub/OpenAI gray-black aesthetic as default
+- React 18/19 components with TypeScript
+- SSR support via `react-dom/server`
+- Client-side hydration for interactive widgets
+- MCP bridge hooks for tool communication
 
 ## Architecture
 
 ```text
 libs/ui/src/
-├── components/        # UI components (button, card, form, etc.)
-│   ├── *.ts          # Component implementations
-│   └── *.schema.ts   # Zod schemas for validation
-├── theme/
-│   ├── presets/      # Theme presets (github-openai default)
-│   ├── theme.ts      # ThemeConfig types and utilities
-│   ├── cdn.ts        # CDN configuration and builders
-│   └── platforms.ts  # Platform capabilities (OpenAI, Claude, etc.)
-├── layouts/          # Page layout system
-├── pages/            # Pre-built page templates
-├── widgets/          # OpenAI App SDK widgets
-├── validation/       # Validation utilities and error box
-└── index.ts          # Main barrel exports
+├── react/              # React components and hooks
+│   ├── components/     # Button, Card, Alert, Badge, etc.
+│   └── hooks/          # useMcpBridge, useCallTool, useToolInput
+├── render/             # React 19 static rendering utilities
+├── renderers/          # React renderer for template processing
+│   ├── react.renderer.ts   # SSR renderer (react-dom/server)
+│   └── react.adapter.ts    # Client-side hydration adapter
+├── bundler/            # SSR component bundling
+├── universal/          # Universal React app shell
+└── index.ts            # Main barrel exports
 ```
 
-## Component Development
+## Package Split
 
-### 1. Create Schema First
+| Package            | Purpose                                                   | React Required |
+| ------------------ | --------------------------------------------------------- | -------------- |
+| `@frontmcp/ui`     | React components, hooks, SSR                              | Yes            |
+| `@frontmcp/uipack` | Bundling, build tools, HTML components, platform adapters | No             |
 
-Every component must have a Zod schema with `.strict()` mode:
+### Import Patterns
 
 ```typescript
-// component.schema.ts
-import { z } from 'zod';
+// React components and hooks (this package)
+import { Button, Card, Alert } from '@frontmcp/ui/react';
+import { useMcpBridge, useCallTool } from '@frontmcp/ui/react/hooks';
 
-export const ComponentOptionsSchema = z
-  .object({
-    variant: z.enum(['primary', 'secondary']).optional(),
-    size: z.enum(['sm', 'md', 'lg']).optional(),
-    disabled: z.boolean().optional(),
-    className: z.string().optional(),
-    htmx: z
-      .object({
-        get: z.string().optional(),
-        post: z.string().optional(),
-        target: z.string().optional(),
-        swap: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict(); // IMPORTANT: Reject unknown properties
+// SSR rendering
+import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
 
-export type ComponentOptions = z.infer<typeof ComponentOptionsSchema>;
+// Universal app shell
+import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
+
+// React-free utilities (from @frontmcp/uipack)
+import { buildToolUI } from '@frontmcp/uipack/build';
+import { button, card } from '@frontmcp/uipack/components';
+import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 ```
 
-### 2. Validate Inputs in Component
+## React Components
+
+### Available Components
 
 ```typescript
-// component.ts
-import { validateOptions } from '../validation';
-import { ComponentOptionsSchema, type ComponentOptions } from './component.schema';
+import {
+  Button,
+  Card,
+  Alert,
+  Badge,
+  // ... more components
+} from '@frontmcp/ui/react';
 
-export function component(content: string, options: ComponentOptions = {}): string {
-  // Validate options - returns error box on failure
-  const validation = validateOptions<ComponentOptions>(options, {
-    schema: ComponentOptionsSchema,
-    componentName: 'component',
-  });
+// Usage
+<Button variant="primary" onClick={handleClick}>
+  Submit
+</Button>
 
-  if (!validation.success) {
-    return validation.error; // Returns styled error box HTML
-  }
+<Card title="Welcome">
+  <p>Card content</p>
+</Card>
+```
 
-  const { variant = 'primary', size = 'md' } = validation.data;
+### MCP Bridge Hooks
 
-  // Build HTML...
-  return `<div class="...">${escapeHtml(content)}</div>`;
+```typescript
+import { useMcpBridge, useCallTool, useToolInput, useToolOutput } from '@frontmcp/ui/react/hooks';
+
+function MyWidget() {
+  const bridge = useMcpBridge();
+  const { call, loading, error } = useCallTool();
+  const input = useToolInput();
+  const output = useToolOutput();
+
+  return (
+    <div>
+      <p>Input: {JSON.stringify(input)}</p>
+      <p>Output: {JSON.stringify(output)}</p>
+      <button onClick={() => call('my-tool', { data: 'test' })}>Call Tool</button>
+    </div>
+  );
 }
 ```
 
-### 3. Add JSDoc Examples
+## React Renderer
 
-````typescript
-/**
- * @file component.ts
- * @description Component description.
- *
- * @example Basic usage
- * ```typescript
- * import { component } from '@frontmcp/ui';
- * const html = component('Content');
- * ```
- *
- * @example With options
- * ```typescript
- * const html = component('Content', {
- *   variant: 'secondary',
- *   htmx: { get: '/api/data', target: '#result' },
- * });
- * ```
- */
-````
-
-### 4. Write Validation Tests
+### Server-Side Rendering
 
 ```typescript
-describe('Validation', () => {
-  it('should return error box for invalid variant', () => {
-    const html = component('Test', { variant: 'invalid' as any });
-    expect(html).toContain('validation-error');
-    expect(html).toContain('data-component="component"');
-    expect(html).toContain('data-param="variant"');
-  });
+import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
 
-  it('should return error box for unknown properties', () => {
-    const html = component('Test', { unknownProp: true } as any);
-    expect(html).toContain('validation-error');
-  });
-
-  it('should accept valid options', () => {
-    const html = component('Test', { variant: 'primary' });
-    expect(html).not.toContain('validation-error');
-  });
-});
+// Render React component to HTML string
+const html = await reactRenderer.render(MyComponent, context);
 ```
 
-## Theme System
-
-### Default Theme (GitHub/OpenAI)
-
-The default theme uses a gray-black monochromatic palette:
+### Client-Side Hydration
 
 ```typescript
-import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
+import { ReactRendererAdapter, createReactAdapter } from '@frontmcp/ui/renderers';
 
-// Colors
-DEFAULT_THEME.colors.semantic.primary; // '#24292f' (near-black)
-DEFAULT_THEME.colors.semantic.secondary; // '#57606a' (medium gray)
-DEFAULT_THEME.colors.semantic.accent; // '#0969da' (blue accent)
+// Create adapter for client-side rendering
+const adapter = createReactAdapter();
+
+// Hydrate existing SSR content
+await adapter.hydrate(targetElement, context);
+
+// Render new content
+await adapter.renderToDOM(content, targetElement, context);
 ```
 
-### Creating Custom Themes
+## Universal App
+
+The universal app provides a platform-agnostic React shell:
 
 ```typescript
-import { createTheme } from '@frontmcp/ui';
+import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
 
-const customTheme = createTheme({
-  name: 'my-theme',
-  colors: {
-    semantic: { primary: '#0969da' },
-  },
-  cdn: {
-    fonts: {
-      preconnect: ['https://fonts.googleapis.com'],
-      stylesheets: ['https://fonts.googleapis.com/css2?family=Roboto&display=swap'],
-    },
-    scripts: {
-      tailwind: 'https://my-cdn.example.com/tailwind.js',
-    },
-  },
-});
+function App() {
+  return (
+    <FrontMCPProvider>
+      <UniversalApp>
+        <MyWidget />
+      </UniversalApp>
+    </FrontMCPProvider>
+  );
+}
 ```
 
-### CDN Configuration
-
-Themes can customize all external resource URLs:
+## SSR Bundling
 
 ```typescript
-theme.cdn = {
-  fonts: {
-    preconnect: string[];    // Font provider preconnect URLs
-    stylesheets: string[];   // Font stylesheet URLs
-  },
-  icons: {
-    script: { url: string; integrity?: string };
-  },
-  scripts: {
-    tailwind: string;        // Tailwind Browser CDN
-    htmx: { url: string; integrity?: string };
-    alpine: { url: string; integrity?: string };
-  },
-};
-```
+import { InMemoryBundler, createBundler } from '@frontmcp/ui/bundler';
 
-## Platform Support
-
-### Available Platforms
-
-```typescript
-import { getPlatform, OPENAI_PLATFORM, CLAUDE_PLATFORM } from '@frontmcp/ui';
-
-// Platform capabilities
-OPENAI_PLATFORM.network; // 'open' - can fetch external resources
-CLAUDE_PLATFORM.network; // 'blocked' - needs inline scripts
-OPENAI_PLATFORM.scripts; // 'external' - use CDN script tags
-CLAUDE_PLATFORM.scripts; // 'inline' - embed scripts in HTML
-```
-
-### Building Platform-Aware HTML
-
-```typescript
-import { buildCdnScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
-
-// For platforms with network access
-const scripts = buildCdnScriptsFromTheme(DEFAULT_THEME, {
-  tailwind: true,
-  htmx: true,
-  inline: false,
+// Create bundler for SSR components
+const bundler = createBundler({
+  cache: true,
 });
 
-// For blocked-network platforms (Claude Artifacts)
-await fetchAndCacheScriptsFromTheme(DEFAULT_THEME);
-const inlineScripts = buildCdnScriptsFromTheme(DEFAULT_THEME, {
-  inline: true,
-});
+// Bundle a React component for SSR
+const result = await bundler.bundle(componentPath);
 ```
 
-## Validation Error Handling
+## Dependencies
 
-Invalid component options render a styled error box:
-
-```html
-<div class="validation-error ..." data-component="button" data-param="variant">
-  Invalid property "variant" in button component
-</div>
-```
-
-The error box:
-
-- Is styled with red background/border
-- Shows component name and invalid parameter
-- Does NOT expose internal error details (security)
-- Prevents XSS via HTML escaping
-
-## File Naming Conventions
-
-```text
-component.ts         # Component implementation
-component.schema.ts  # Zod schema definitions
-component.test.ts    # Jest tests (include validation tests)
+```json
+{
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@frontmcp/uipack": "^0.6.0"
+  }
+}
 ```
 
 ## Testing Requirements
 
 - **Coverage**: 95%+ across statements, branches, functions, lines
-- **Validation Tests**: Every component must test invalid inputs
-- **XSS Tests**: Test HTML escaping for user-provided content
-- **Platform Tests**: Test behavior across platform configurations
+- **React Testing Library**: Use for component tests
+- **SSR Tests**: Test server-side rendering output
+- **Hydration Tests**: Test client-side hydration
 
-## Common Patterns
+## Entry Points
 
-### HTMX Integration
-
-```typescript
-export const HtmxSchema = z
-  .object({
-    get: z.string().optional(),
-    post: z.string().optional(),
-    put: z.string().optional(),
-    delete: z.string().optional(),
-    target: z.string().optional(),
-    swap: z.string().optional(),
-    trigger: z.string().optional(),
-  })
-  .strict()
-  .optional();
-```
-
-### Escaping User Content
-
-Always use `escapeHtml()` for user-provided content:
-
-```typescript
-import { escapeHtml } from '../layouts/base';
-
-const html = `<div title="${escapeHtml(title)}">${escapeHtml(content)}</div>`;
-```
-
-### Size/Variant Enums
-
-Use consistent naming:
-
-```typescript
-// Sizes
-type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-
-// Variants
-type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
-```
+| Path                       | Purpose                                    |
+| -------------------------- | ------------------------------------------ |
+| `@frontmcp/ui`             | Main exports (React components, renderers) |
+| `@frontmcp/ui/react`       | React components                           |
+| `@frontmcp/ui/react/hooks` | MCP bridge hooks                           |
+| `@frontmcp/ui/renderers`   | ReactRenderer, ReactRendererAdapter        |
+| `@frontmcp/ui/render`      | React 19 static rendering                  |
+| `@frontmcp/ui/universal`   | Universal app shell                        |
+| `@frontmcp/ui/bundler`     | SSR component bundler                      |
 
 ## Anti-Patterns to Avoid
 
+- Importing React-free utilities from `@frontmcp/ui` (use `@frontmcp/uipack`)
 - Using `any` type without justification
-- Missing `.strict()` on Zod schemas
-- Not validating component options
-- Exposing internal error details
-- Skipping XSS escaping
-- Hard-coding CDN URLs (use theme.cdn)
-- Missing JSDoc examples
-- Tests without validation coverage
+- Skipping SSR/hydration testing
+- Missing TypeScript types for props
+- Not handling loading/error states in hooks
+
+## Related Packages
+
+- **@frontmcp/uipack** - React-free bundling, build tools, HTML components
+- **@frontmcp/sdk** - Core FrontMCP SDK
+- **@frontmcp/testing** - E2E testing utilities

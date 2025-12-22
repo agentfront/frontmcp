@@ -10,7 +10,7 @@ import type { UniversalAppProps, UniversalContent, RenderContext, FrontMCPState 
 import { useFrontMCPStore } from './store';
 import { useComponents, FrontMCPProvider, ComponentsProvider } from './context';
 import { renderContent, detectRenderer } from './renderers';
-import { escapeHtml } from '../utils/escape-html';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
 // ============================================
 // Loading Component

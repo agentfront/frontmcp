@@ -8,11 +8,11 @@
  */
 
 import type { TemplateHelpers } from '../../common/metadata/tool-ui.metadata';
-// Import escapeHtml from @frontmcp/ui/utils - single source of truth
-import { escapeHtml } from '@frontmcp/ui/utils';
+// Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
-// Re-export createTemplateHelpers from @frontmcp/ui
-export { createTemplateHelpers } from '@frontmcp/ui/runtime';
+// Re-export createTemplateHelpers from @frontmcp/uipack (no React needed)
+export { createTemplateHelpers } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Individual Helper Functions (Backwards Compatibility)
@@ -82,7 +82,7 @@ export function jsonEmbed(data: unknown): string {
 
 /**
  * Create a TemplateHelpers object with all helper functions.
- * @deprecated Use createTemplateHelpers from @frontmcp/ui/runtime instead
+ * @deprecated Use createTemplateHelpers from @frontmcp/uipack/runtime instead
  */
 export function createTemplateHelpersLocal(): TemplateHelpers {
   return {

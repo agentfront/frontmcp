@@ -100,20 +100,17 @@ export {
   type UseCallToolReturn,
 } from './hooks';
 
-// Component Types
-export type { CardProps, CardRenderProps, CardVariant, CardSize } from './Card';
-export type { BadgeProps, BadgeRenderProps, BadgeVariant, BadgeSize } from './Badge';
-export type { ButtonProps, ButtonRenderProps, ButtonVariant, ButtonSize } from './Button';
-export type { AlertProps, AlertRenderProps, AlertVariant } from './Alert';
+// Component Types (React-specific props)
+export type { CardProps, CardRenderProps } from './Card';
+export type { BadgeProps, BadgeRenderProps } from './Badge';
+export type { ButtonProps, ButtonRenderProps } from './Button';
+export type { AlertProps, AlertRenderProps } from './Alert';
 
-// Note: ButtonProps and AlertProps are now exported from the new .tsx files above
-// The types.ts file is deprecated
+// Note: Variant/Size types (CardVariant, ButtonVariant, etc.) and Options types
+// (CardOptions, ButtonOptions, etc.) are exported from '../components'
 
-// Legacy web component types (deprecated, will be removed)
-export type { FmcpCard, FmcpBadge, FmcpButton, FmcpAlert } from './types';
-
-// Legacy schema types (deprecated, use styles/variants instead)
-export type { CardOptions, BadgeOptions, ButtonOptions, AlertOptions } from './types';
+// Legacy web component types (for ref typing)
+export type { FmcpCard, FmcpBadge, FmcpButton, FmcpAlert, FmcpInput, FmcpSelect } from './types';
 
 // Utilities (deprecated, use render/prerender instead)
 export { renderChildrenToString, isBrowser, isServer } from './utils';

@@ -23,7 +23,7 @@ describe('InMemoryBundler', () => {
     it('should create bundler with custom options', () => {
       const bundler = new InMemoryBundler({
         cache: { maxSize: 50, ttl: 10000 },
-        defaultSecurity: { maxSourceSize: 500000 },
+        defaultSecurity: { maxBundleSize: 500000 },
       });
       expect(bundler).toBeInstanceOf(InMemoryBundler);
     });
@@ -371,14 +371,14 @@ describe('Static HTML Generation', () => {
         source: 'export default () => <div>Claude</div>;',
         sourceType: 'jsx',
         toolName: 'test_tool',
-        platform: 'claude',
+        targetPlatform: 'claude',
       });
 
       const openaiResult = await bundler.bundleToStaticHTML({
         source: 'export default () => <div>OpenAI</div>;',
         sourceType: 'jsx',
         toolName: 'test_tool',
-        platform: 'openai',
+        targetPlatform: 'openai',
       });
 
       // Both should produce valid HTML
