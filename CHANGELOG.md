@@ -1,3 +1,25 @@
+## [v0.6.1] - 2025-12-22
+
+### feat
+
+- Add Vercel KV as a first-class storage provider with hybrid Redis/pub-sub support so session stores, cache plugins, and inspectors work on Vercel without running your own Redis cluster.
+- Split the UI stack into `@frontmcp/ui` for widgets/components and `@frontmcp/uipack` for theming, build utilities, and template types so HTML-first projects no longer pull in React by default.
+- Let the Cache Plugin reuse whichever global store you already configured (`type: 'global-store'`), automatically wiring Redis or Vercel KV into every tool that opts into caching.
+
+### fix
+
+- Rebuilt the Vercel/Lambda bundle pipeline with Rspack helpers, saner entry generation, and stronger escaping so serverless deploys ship the same assets as local builds.
+- Hardened Handlebars widgets and cache providers with null-safe escaping plus stricter validation so malformed templates stop returning blank widgets.
+
+### docs
+
+- Added a dedicated Vercel KV guide plus callouts in the Redis and Serverless docs so edge deployments know when to reach for Redis vs KV.
+- Updated the UI library guide and release notes to explain the new `@frontmcp/uipack` import paths and package split.
+
+### build
+
+- Raised the workspace to `@modelcontextprotocol/sdk 1.25.1`, Nx 22.3.3, new rspack/esbuild dependencies, and Snyk resolutions so installs stay reproducible on Node 24.
+
 ## [v0.6.0] - 2025-12-19
 
 ### feat
@@ -213,4 +235,3 @@ This was a version bump only, there were no code changes.
 ### ❤️ Thank You
 
 - David Antoon @frontegg-david
-

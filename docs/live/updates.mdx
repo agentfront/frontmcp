@@ -5,6 +5,53 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.6.1" description="2025-12-22" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.1: Edge storage and UI split"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.1"
+    cta="View full changlog"
+  >
+    🚀 **Vercel KV storage** – Configure `redis.provider: 'vercel-kv'` for sessions, cache, and inspector state without running your own Redis cluster.
+
+    🔄 **Hybrid pub/sub** – Layer Redis pub/sub on top of Vercel KV so resource subscriptions and capability broadcasts stay real-time even when the store lives at the edge.
+
+    🎨 **UI package split** – Import HTML components and template helpers from the new `@frontmcp/uipack` foundation while `@frontmcp/ui` focuses on React hooks and renderers.
+
+    ⚡ **Smarter serverless builds** – Rspack-powered bundling, tighter escaping, and refreshed dependencies keep Vercel, Lambda, and Cloudflare deployments aligned with local builds.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.2" description="2025-12-22" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.2"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🧠 **Deep ref stability** – Re-ran the converter against the 0.6.1 fixtures so nested `$ref` trees and combo keywords keep producing faithful Zod output.
+
+    🧰 **Zod 4 polish** – Tightened tuple, enum, and nullable helpers to match the runtime shipped with FrontMCP 0.6.1, eliminating the shim code adapters previously needed.
+
+    📦 **Workspace alignment** – Published with the same dependency pins and build targets as the main repo so Nx monorepos can consume it without overrides.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.1.0" description="2025-12-22" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.1.0"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    🔐 **Security-aware stubs** – Generator output now maps OpenAPI auth schemes onto the MCP metadata expected by FrontMCP 0.6.1 so adapters pick the right providers automatically.
+
+    🧱 **Rspack-friendly builds** – Emitted code matches the new bundler defaults, making it drop into serverless deployments without extra transpilation tweaks.
+
+    📚 **Clearer workflows** – Updated docs walk through combining the generator with the ui/uipack split so discovery metadata and widgets stay in sync.
+
+  </Card>
+</Update>
+
 <Update label="FrontMCP v0.6" description="2025-12-19" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.6.0: Unified transport and serverless targets"
