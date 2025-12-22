@@ -184,7 +184,6 @@ export function renderBadgeSync(props: BadgeRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { BadgeVariant, BadgeSize };
+// Note: BadgeVariant and BadgeSize types are exported from '../components'
 
 export default Badge;

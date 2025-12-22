@@ -16,7 +16,7 @@ The default theme (`GITHUB_OPENAI_THEME`) provides:
 - **Radius**: Rounded corners for modern appearance
 
 ```typescript
-import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
+import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/uipack/components';
 
 // DEFAULT_THEME is an alias for GITHUB_OPENAI_THEME
 console.log(DEFAULT_THEME.colors.semantic.primary); // '#24292f'
@@ -197,7 +197,7 @@ const shadows = {
 ### In Layouts
 
 ```typescript
-import { baseLayout, DEFAULT_THEME } from '@frontmcp/ui';
+import { baseLayout, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const html = baseLayout({
   content: '...',
@@ -208,7 +208,7 @@ const html = baseLayout({
 ### In Tool UI
 
 ```typescript
-import { createTheme } from '@frontmcp/ui';
+import { createTheme } from '@frontmcp/uipack/components';
 
 const customTheme = createTheme({
   name: 'my-brand',

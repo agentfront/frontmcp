@@ -12,7 +12,7 @@ description: Complete API reference for the @frontmcp/ui theme system. The theme
 Creates a new theme by extending the default theme.
 
 ```typescript
-import { createTheme } from '@frontmcp/ui';
+import { createTheme } from '@frontmcp/uipack/components';
 
 const myTheme = createTheme({
   name: 'my-brand',
@@ -37,7 +37,7 @@ const myTheme = createTheme({
 Deep merges two theme configurations.
 
 ```typescript
-import { mergeThemes, DEFAULT_THEME } from '@frontmcp/ui';
+import { mergeThemes, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const merged = mergeThemes(DEFAULT_THEME, {
   colors: {
@@ -65,7 +65,7 @@ const merged = mergeThemes(DEFAULT_THEME, {
 Converts a theme configuration to CSS custom properties.
 
 ```typescript
-import { buildThemeCss, DEFAULT_THEME } from '@frontmcp/ui';
+import { buildThemeCss, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const css = buildThemeCss(DEFAULT_THEME);
 // Returns: "--color-primary: #24292f;\n--color-secondary: #57606a;\n..."
@@ -84,7 +84,7 @@ const css = buildThemeCss(DEFAULT_THEME);
 Creates a complete `<style>` block with Tailwind `@theme` directive.
 
 ```typescript
-import { buildStyleBlock, DEFAULT_THEME } from '@frontmcp/ui';
+import { buildStyleBlock, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const styleTag = buildStyleBlock(DEFAULT_THEME);
 // Returns: "<style type="text/tailwindcss">@theme { ... }</style>"
@@ -553,7 +553,7 @@ scripts: {
 Builds preconnect `<link>` tags for font providers.
 
 ```typescript
-import { buildFontPreconnect } from '@frontmcp/ui';
+import { buildFontPreconnect } from '@frontmcp/uipack/components';
 
 const links = buildFontPreconnect();
 // '<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -564,7 +564,7 @@ const links = buildFontPreconnect();
 Builds font stylesheet `<link>` tags.
 
 ```typescript
-import { buildFontStylesheets } from '@frontmcp/ui';
+import { buildFontStylesheets } from '@frontmcp/uipack/components';
 
 const links = buildFontStylesheets({ inter: true, roboto: true });
 ```
@@ -574,7 +574,7 @@ const links = buildFontStylesheets({ inter: true, roboto: true });
 Builds `<script>` tags for Tailwind, HTMX, Alpine, and icons.
 
 ```typescript
-import { buildCdnScripts } from '@frontmcp/ui';
+import { buildCdnScripts } from '@frontmcp/uipack/components';
 
 const scripts = buildCdnScripts({
   tailwind: true,
@@ -598,7 +598,7 @@ const scripts = buildCdnScripts({
 Fetches and caches scripts for offline/blocked-network use.
 
 ```typescript
-import { fetchAndCacheScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+import { fetchAndCacheScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 // Pre-fetch at server startup
 await fetchAndCacheScriptsFromTheme(DEFAULT_THEME);
@@ -613,7 +613,7 @@ await fetchAndCacheScriptsFromTheme(DEFAULT_THEME);
 Detects the current platform from user agent or context.
 
 ```typescript
-import { getPlatform } from '@frontmcp/ui';
+import { getPlatform } from '@frontmcp/uipack/components';
 
 const platform = getPlatform();
 // { id: 'openai', network: 'open', scripts: 'external', ... }
@@ -624,7 +624,7 @@ const platform = getPlatform();
 Checks if the platform supports external CDN resources.
 
 ```typescript
-import { canUseCdn, getPlatform } from '@frontmcp/ui';
+import { canUseCdn, getPlatform } from '@frontmcp/uipack/components';
 
 if (canUseCdn(getPlatform())) {
   // Use external scripts
@@ -636,7 +636,7 @@ if (canUseCdn(getPlatform())) {
 Checks if scripts must be inlined.
 
 ```typescript
-import { needsInlineScripts, getPlatform } from '@frontmcp/ui';
+import { needsInlineScripts, getPlatform } from '@frontmcp/uipack/components';
 
 const inline = needsInlineScripts(getPlatform());
 ```
@@ -653,7 +653,7 @@ import {
   CLAUDE_PLATFORM,
   GEMINI_PLATFORM,
   NGROK_PLATFORM,
-} from '@frontmcp/ui';
+} from '@frontmcp/uipack/components';
 ```
 
 ### PlatformCapabilities
@@ -694,7 +694,7 @@ interface PlatformCapabilities {
 The default FrontMCP theme with GitHub/OpenAI-inspired gray-black aesthetic.
 
 ```typescript
-import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
+import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/uipack/components';
 
 // DEFAULT_THEME === GITHUB_OPENAI_THEME
 ```
@@ -725,7 +725,7 @@ import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/ui';
 ## Complete Example
 
 ```typescript
-import { createTheme, buildStyleBlock, buildCdnScripts } from '@frontmcp/ui';
+import { createTheme, buildStyleBlock, buildCdnScripts } from '@frontmcp/uipack/components';
 
 // Create custom theme
 const brandTheme = createTheme({

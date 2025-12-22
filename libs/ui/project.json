@@ -21,15 +21,27 @@
         "platform": "node",
         "assets": ["libs/ui/README.md", "LICENSE", "libs/ui/package.json"],
         "additionalEntryPoints": [
+          "libs/ui/src/bridge/index.ts",
           "libs/ui/src/bundler/index.ts",
+          "libs/ui/src/components/index.ts",
+          "libs/ui/src/layouts/index.ts",
+          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
-          "libs/ui/src/universal/index.ts"
+          "libs/ui/src/universal/index.ts",
+          "libs/ui/src/web-components/index.ts",
+          "libs/ui/src/widgets/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers", "@frontmcp/uipack"]
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "@frontmcp/uipack",
+            "@frontmcp/uipack/*"
+          ]
         }
       }
     },
@@ -48,15 +60,27 @@
         "thirdParty": false,
         "platform": "node",
         "additionalEntryPoints": [
+          "libs/ui/src/bridge/index.ts",
           "libs/ui/src/bundler/index.ts",
+          "libs/ui/src/components/index.ts",
+          "libs/ui/src/layouts/index.ts",
+          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
-          "libs/ui/src/universal/index.ts"
+          "libs/ui/src/universal/index.ts",
+          "libs/ui/src/web-components/index.ts",
+          "libs/ui/src/widgets/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers", "@frontmcp/uipack"]
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "@frontmcp/uipack",
+            "@frontmcp/uipack/*"
+          ]
         }
       }
     },
@@ -72,6 +96,14 @@
       "dependsOn": ["build"],
       "options": {
         "command": "npm publish libs/ui/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/ui"],
+      "options": {
+        "jestConfig": "libs/ui/jest.config.ts",
+        "passWithNoTests": true
       }
     }
   }

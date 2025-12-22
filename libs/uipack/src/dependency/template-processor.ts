@@ -21,7 +21,7 @@ import { HandlebarsRenderer, containsHandlebars, type RenderContext, type Helper
 import { mdxRenderer } from '../renderers/mdx.renderer';
 import type { TemplateContext } from '../runtime/types';
 import { validateTemplate, logValidationWarnings } from '../validation';
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '../utils';
 
 // ============================================
 // Helper Functions

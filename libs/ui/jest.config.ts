@@ -15,7 +15,12 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'html'],
   coverageDirectory: 'test-output/jest/coverage',
-  testPathIgnorePatterns: ['/node_modules/'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    // Web component tests need jsdom or browser environment
+    '/src/web-components/core/base-element.test.ts',
+    '/src/web-components/elements/elements.test.ts',
+  ],
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {
     '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',

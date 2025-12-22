@@ -34,7 +34,7 @@ npm install -D @types/react @types/react-dom
 Create a component file:
 
 ```tsx title="src/widgets/weather-widget.tsx"
-import { TemplateContext } from '@frontmcp/ui';
+import { TemplateContext } from '@frontmcp/uipack/components';
 
 interface WeatherOutput {
   location: string;
@@ -75,7 +75,7 @@ export class GetWeatherTool extends ToolContext {
 React templates receive the same context as other templates:
 
 ```tsx
-import { TemplateContext } from '@frontmcp/ui';
+import { TemplateContext } from '@frontmcp/uipack/components';
 
 // Define your input/output types
 interface MyInput {
@@ -124,7 +124,7 @@ export function OrderWidget({ output, helpers }: TemplateContext<unknown, Order>
 Import and use string components:
 
 ```tsx
-import { card, badge, button } from '@frontmcp/ui';
+import { card, badge, button } from '@frontmcp/uipack/components';
 
 export function ProfileWidget({ output }: TemplateContext<unknown, User>) {
   // Components return HTML strings - use dangerouslySetInnerHTML
@@ -154,7 +154,7 @@ export function ProfileWidget({ output }: TemplateContext<unknown, User>) {
 For cleaner code, wrap string components:
 
 ```tsx title="src/widgets/components.tsx"
-import { button as htmlButton, ButtonOptions } from '@frontmcp/ui';
+import { button as htmlButton, ButtonOptions } from '@frontmcp/uipack/components';
 
 // React wrapper for button
 export function Button({ children, ...props }: ButtonOptions & { children: string }) {
@@ -227,7 +227,7 @@ export function ItemList({ output, helpers }: TemplateContext<unknown, ListOutpu
 Split complex widgets into smaller components:
 
 ```tsx title="src/widgets/order/index.tsx"
-import { TemplateContext } from '@frontmcp/ui';
+import { TemplateContext } from '@frontmcp/uipack/components';
 import { OrderHeader } from './order-header';
 import { OrderItems } from './order-items';
 import { OrderTotal } from './order-total';
@@ -297,7 +297,7 @@ export function Badge({ text, color }: { text: string; color: string }) {
 Full type safety with generics:
 
 ```tsx
-import { TemplateContext } from '@frontmcp/ui';
+import { TemplateContext } from '@frontmcp/uipack/components';
 import { z } from 'zod';
 
 // Define schemas using z.object()

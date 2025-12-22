@@ -169,7 +169,6 @@ export function renderButtonSync(props: ButtonRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { ButtonVariant, ButtonSize };
+// Note: ButtonVariant and ButtonSize types are exported from '../components'
 
 export default Button;

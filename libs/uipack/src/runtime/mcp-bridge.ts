@@ -19,7 +19,7 @@
  */
 
 import type { ProviderType, ThemeMode, DisplayMode, HostContext } from './types';
-import { BRIDGE_SCRIPT_TAGS, generateBridgeIIFE } from '../bridge/runtime/iife-generator';
+import { BRIDGE_SCRIPT_TAGS, generateBridgeIIFE } from '../bridge-runtime';
 
 /**
  * The MCP Bridge runtime script.
@@ -581,7 +581,7 @@ export const PLATFORM_BRIDGE_SCRIPTS = BRIDGE_SCRIPT_TAGS;
  * });
  * ```
  */
-export { generateBridgeIIFE as generateCustomBridge } from '../bridge/runtime/iife-generator';
+export { generateBridgeIIFE as generateCustomBridge } from '../bridge-runtime';
 
 // Re-export IIFE generator options type
-export type { IIFEGeneratorOptions } from '../bridge/runtime/iife-generator';
+export type { IIFEGeneratorOptions } from '../bridge-runtime';

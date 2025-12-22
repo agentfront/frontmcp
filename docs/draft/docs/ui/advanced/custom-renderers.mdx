@@ -54,7 +54,7 @@ const mdxTemplate = `# {output.title}\n<Card>{output.body}</Card>`;
 ### 1. Define the Renderer Interface
 
 ```typescript title="src/renderers/my-renderer.ts"
-import { TemplateContext } from '@frontmcp/ui';
+import { TemplateContext } from '@frontmcp/uipack/components';
 
 export interface CustomRendererOptions {
   // Renderer-specific options
@@ -81,7 +81,7 @@ export interface CustomRenderer {
 ### 2. Implement the Renderer
 
 ```typescript title="src/renderers/my-renderer.ts"
-import { escapeHtml } from '@frontmcp/ui';
+import { escapeHtml } from '@frontmcp/uipack/components';
 
 export const myCustomRenderer: CustomRenderer = {
   canHandle(template: unknown): boolean {
@@ -121,7 +121,7 @@ interface MyCustomTemplate {
 ### 3. Register the Renderer
 
 ```typescript title="src/renderers/index.ts"
-import { htmlRenderer, reactRenderer, mdxRenderer } from '@frontmcp/ui';
+import { htmlRenderer, reactRenderer, mdxRenderer } from '@frontmcp/uipack/components';
 import { myCustomRenderer } from './my-renderer';
 
 // Order matters - first matching renderer wins
@@ -152,7 +152,7 @@ A renderer for YAML-based templates:
 
 ```typescript title="src/renderers/yaml-renderer.ts"
 import yaml from 'js-yaml';
-import { escapeHtml, TemplateContext } from '@frontmcp/ui';
+import { escapeHtml, TemplateContext } from '@frontmcp/uipack/components';
 
 interface YamlTemplate {
   title?: string;
@@ -262,7 +262,7 @@ This example uses `new Function()` for expression evaluation, which is equivalen
 
 ```typescript title="src/renderers/markdown-renderer.ts"
 import { marked } from 'marked';
-import { escapeHtml, TemplateContext } from '@frontmcp/ui';
+import { escapeHtml, TemplateContext } from '@frontmcp/uipack/components';
 
 export const markdownRenderer = {
   canHandle(template: unknown): boolean {

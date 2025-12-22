@@ -38,7 +38,7 @@
  */
 
 import type { ZodSchema } from 'zod';
-import { validationErrorBox } from '../../validation/error-box';
+import { validationErrorBox } from '@frontmcp/uipack/validation';
 import { parseAttributeValue, mergeAttributeIntoOptions } from './attribute-parser';
 
 // Server-side stub for HTMLElement (Node.js doesn't have DOM)

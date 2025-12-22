@@ -18,17 +18,10 @@ import type {
   BadgeSize,
   ButtonOptions,
   AlertOptions,
-} from '@frontmcp/uipack/components';
+} from '../components';
 
 // Re-export element classes for ref typing
-export type {
-  FmcpButton,
-  FmcpCard,
-  FmcpAlert,
-  FmcpBadge,
-  FmcpInput,
-  FmcpSelect,
-} from '@frontmcp/uipack/web-components';
+export type { FmcpButton, FmcpCard, FmcpAlert, FmcpBadge, FmcpInput, FmcpSelect } from '../web-components';
 
 // ============================================
 // Card Props
@@ -142,8 +135,5 @@ export interface AlertProps {
   children: ReactNode;
 }
 
-// ============================================
-// Re-export schema types for convenience
-// ============================================
-
-export type { CardOptions, CardVariant, CardSize, BadgeOptions, BadgeVariant, BadgeSize, ButtonOptions, AlertOptions };
+// Note: Schema types (CardOptions, CardVariant, CardSize, etc.) are exported from ../components
+// Import from '@frontmcp/ui/components' or '@frontmcp/ui' for these types

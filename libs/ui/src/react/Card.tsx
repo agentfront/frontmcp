@@ -187,7 +187,6 @@ export function renderCardSync(props: CardRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { CardVariant, CardSize };
+// Note: CardVariant and CardSize types are exported from '../components'
 
 export default Card;

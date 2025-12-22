@@ -1,17 +1,16 @@
 /**
  * @frontmcp/uipack
  *
- * React-free core library for FrontMCP UI development.
- * Provides bundling, build tools, platform adapters, and UI components
- * for building UIs across multiple LLM platforms.
+ * Build tools, bundling, and platform adapters for FrontMCP UI development.
+ * This package provides the infrastructure for compiling and deploying UI templates.
+ *
+ * For UI components (HTML and React), theming, and layouts, use @frontmcp/ui.
  *
  * Key features:
- * - Platform-aware theming (OpenAI, Claude, etc.)
+ * - Platform-aware adapters (OpenAI, Claude, etc.)
  * - Runtime JSX/TSX transpilation with SWC
- * - MCP Bridge integration for cross-platform widgets
- * - Standalone types and adapters for external consumers
  * - Build-time API for pre-compiling UI templates
- * - Pure HTML/CSS components (no React dependency)
+ * - Template rendering and widget registration
  *
  * ## Usage
  *
@@ -24,12 +23,13 @@
  *
  * // Import build-time API
  * import { buildToolUI } from '@frontmcp/uipack/build';
- *
- * // Import components directly
- * import { card, button, table } from '@frontmcp/uipack/components';
  * ```
  *
- * For React components and hooks, use @frontmcp/ui instead.
+ * For UI components and theming, use @frontmcp/ui instead:
+ * ```typescript
+ * import { card, button, table } from '@frontmcp/ui/components';
+ * import { DEFAULT_THEME, createTheme } from '.../theme';
+ * ```
  */
 
 // ============================================
@@ -37,11 +37,6 @@
 // These are the canonical source for UI configuration types
 // ============================================
 export * from './types';
-
-// ============================================
-// Utilities (SDK-independent)
-// ============================================
-export { safeStringify } from './utils';
 
 // ============================================
 // Platform Adapters (SDK-independent)
@@ -53,8 +48,6 @@ export {
   type BuildToolDiscoveryMetaOptions,
   buildUIMeta,
   buildToolDiscoveryMeta,
-  // Note: buildOpenAICSP is exported from both adapters and runtime/csp
-  // We export from adapters as the canonical source
   buildOpenAICSP,
   // Serving mode resolution
   type ResolvedServingMode,
@@ -87,31 +80,10 @@ export {
 } from './build';
 
 // ============================================
-// Core Modules
-// ============================================
-
-// Validation system
-export * from './validation';
-
-// Theme system
-export * from './theme';
-
-// Layout system
-export * from './layouts';
-
-// UI Components
-export * from './components';
-
-// Page templates
-export * from './pages';
-
-// Widgets (OpenAI App SDK, progress, etc.)
-export * from './widgets';
-
 // MCP Bridge Runtime (Tool UI templates)
-// Note: Excluding types that are now in ./types to avoid duplicates
+// ============================================
 export {
-  // Runtime types that are NOT in ./types
+  // Runtime types
   type ProviderType,
   type DisplayMode,
   type ThemeMode,
@@ -126,7 +98,7 @@ export {
   MCP_BRIDGE_RUNTIME,
   getMCPBridgeScript,
   isMCPBridgeSupported,
-  // CSP utilities (excluding buildOpenAICSP which is in adapters)
+  // CSP utilities
   DEFAULT_CDN_DOMAINS,
   DEFAULT_CSP_DIRECTIVES,
   RESTRICTIVE_CSP_DIRECTIVES,
@@ -134,7 +106,7 @@ export {
   buildCSPMetaTag,
   validateCSPDomain,
   sanitizeCSPDomains,
-  // Wrapper utilities (excluding buildOpenAIMeta which is in adapters)
+  // Wrapper utilities
   type WrapToolUIFullOptions,
   wrapToolUI,
   wrapToolUIMinimal,
@@ -157,88 +129,35 @@ export {
   redactPIIFromText,
 } from './runtime';
 
-// Tool Template Builder
-export * from './tool-template';
-
-// Base Template (for Tool UI widgets)
-export * from './base-template';
-
-// Multi-Framework Renderer System (excluding React renderer)
-export * from './renderers';
-
 // ============================================
-// FrontMcpBridge - Multi-Platform Adapter System
+// Bridge Runtime (IIFE Generator)
 // ============================================
-// The bridge module provides a unified API for MCP widgets across platforms:
-// - OpenAI ChatGPT Apps SDK
-// - ext-apps (SEP-1865 protocol)
-// - Claude (Anthropic)
-// - Gemini (Google)
-// - Generic fallback
-//
-// For full access to the bridge system, import from '@frontmcp/uipack/bridge':
-// import { FrontMcpBridge, createBridge } from '@frontmcp/uipack/bridge';
-//
-// Core bridge exports are also available here:
 export {
-  // Core types
-  type PlatformAdapter,
-  type AdapterCapabilities,
-  type BridgeConfig,
-  // Bridge class
-  FrontMcpBridge,
-  createBridge,
-  // Registry
-  AdapterRegistry,
-  defaultRegistry,
-  registerAdapter,
-  // Runtime script generation
   generateBridgeIIFE,
   generatePlatformBundle,
   UNIVERSAL_BRIDGE_SCRIPT,
   BRIDGE_SCRIPT_TAGS,
-} from './bridge';
+  type IIFEGeneratorOptions,
+} from './bridge-runtime';
 
 // ============================================
-// Web Components - Custom Elements for React/Vue/HTML
+// Tool Template Builder
 // ============================================
-// Web Components wrap the HTML functions as native custom elements
-// that work directly in React, Vue, Angular, or plain HTML.
-//
-// For full access to all web components, import from '@frontmcp/uipack/web-components':
-// import { registerAllComponents } from '@frontmcp/uipack/web-components';
-//
-// Core web component exports:
-export {
-  // Registration
-  registerAllComponents,
-  registerFmcpButton,
-  registerFmcpCard,
-  registerFmcpAlert,
-  registerFmcpBadge,
-  registerFmcpInput,
-  registerFmcpSelect,
-  // Element classes
-  FmcpButton,
-  FmcpCard,
-  FmcpAlert,
-  FmcpBadge,
-  FmcpInput,
-  FmcpSelect,
-  // Base class for custom elements
-  FmcpElement,
-} from './web-components';
+export * from './tool-template';
+
+// ============================================
+// Base Template (for Tool UI widgets)
+// ============================================
+export * from './base-template';
+
+// ============================================
+// Multi-Framework Renderer System
+// ============================================
+export * from './renderers';
 
 // ============================================
 // Registry Module - Standalone Tool UI Building
 // ============================================
-// The registry module provides the ToolUIRegistry class for standalone widget
-// compilation and rendering without requiring @frontmcp/sdk.
-//
-// For full access to the registry system, import from '@frontmcp/uipack/registry':
-// import { ToolUIRegistry, renderToolTemplateAsync } from '@frontmcp/uipack/registry';
-//
-// Core registry exports:
 export {
   // Core registry
   ToolUIRegistry,
@@ -267,13 +186,6 @@ export {
 // ============================================
 // Dependency Resolution Module
 // ============================================
-// The dependency module provides CDN dependency resolution, import parsing,
-// and file-based component bundling support for FrontMCP UI widgets.
-//
-// For full access, import from '@frontmcp/uipack/dependency':
-// import { DependencyResolver, parseImports, DEFAULT_CDN_REGISTRY } from '@frontmcp/uipack/dependency';
-//
-// Core dependency exports:
 export {
   // Types
   type CDNProvider,
@@ -315,13 +227,6 @@ export {
 // ============================================
 // File-Based Component Caching
 // ============================================
-// The file-cache module provides SHA-based caching for file-based
-// UI component builds, with filesystem (dev) and Redis (prod) storage.
-//
-// For full access, import from '@frontmcp/uipack/bundler/file-cache':
-// import { ComponentBuilder, FilesystemStorage, RedisStorage } from '@frontmcp/uipack/bundler/file-cache';
-//
-// Core file-cache exports:
 export {
   // Component Builder
   ComponentBuilder,
@@ -343,13 +248,6 @@ export {
 // ============================================
 // TypeScript Type Fetching Engine
 // ============================================
-// The typings module provides TypeScript .d.ts fetching from esm.sh CDN.
-// Resolves dependencies recursively and combines them into single outputs.
-//
-// For full access, import from '@frontmcp/uipack/typings':
-// import { createTypeFetcher, TypeFetcher } from '@frontmcp/uipack/typings';
-//
-// Core typings exports:
 export {
   // Types
   type TypeFetchResult,
@@ -386,10 +284,34 @@ export {
 } from './typings';
 
 // ============================================
-// Note: React-specific modules are in @frontmcp/ui
+// Theme System
 // ============================================
-// The following are NOT included in uipack (require React):
-// - Universal Renderer Module (@frontmcp/ui/universal)
+export * from './theme';
+
+// ============================================
+// Validation
+// ============================================
+export * from './validation';
+
+// ============================================
+// Utilities
+// ============================================
+export * from './utils';
+
+// ============================================
+// Styles
+// ============================================
+export * from './styles';
+
+// ============================================
+// Note: UI components are in @frontmcp/ui
+// ============================================
+// The following are NOT included in uipack (moved to @frontmcp/ui):
+// - Components (@frontmcp/ui/components)
+// - Layouts (@frontmcp/ui/layouts)
+// - Pages (@frontmcp/ui/pages)
+// - Widgets (@frontmcp/ui/widgets)
+// - Bridge (@frontmcp/ui/bridge)
+// - Web Components (@frontmcp/ui/web-components)
 // - React Components (@frontmcp/ui/react)
 // - React Hooks (@frontmcp/ui/react/hooks)
-// - React Renderer (@frontmcp/ui/renderers - reactRenderer)

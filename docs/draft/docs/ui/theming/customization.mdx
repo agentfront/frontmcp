@@ -10,7 +10,7 @@ description: Create custom themes to match your brand identity using the createT
 Use `createTheme()` to create a custom theme by overriding defaults:
 
 ```typescript
-import { createTheme } from '@frontmcp/ui';
+import { createTheme } from '@frontmcp/uipack/components';
 
 const myTheme = createTheme({
   name: 'my-brand',
@@ -28,7 +28,7 @@ The `createTheme()` function deep-merges your overrides with the default theme.
 ## Full Theme Example
 
 ```typescript
-import { createTheme } from '@frontmcp/ui';
+import { createTheme } from '@frontmcp/uipack/components';
 
 const brandTheme = createTheme({
   name: 'brand-theme',
@@ -97,7 +97,7 @@ const brandTheme = createTheme({
 ### In Base Layout
 
 ```typescript
-import { baseLayout } from '@frontmcp/ui';
+import { baseLayout } from '@frontmcp/uipack/components';
 
 const html = baseLayout({
   content: cardHtml,
@@ -124,7 +124,7 @@ const html = baseLayout({
 Pass theme to layout functions that need it:
 
 ```typescript
-import { dashboardLayout } from '@frontmcp/ui';
+import { dashboardLayout } from '@frontmcp/uipack/components';
 
 const html = dashboardLayout({
   title: 'Analytics',
@@ -203,7 +203,7 @@ const theme = createTheme({
 Generate CSS variables from a theme:
 
 ```typescript
-import { buildThemeCss, DEFAULT_THEME } from '@frontmcp/ui';
+import { buildThemeCss, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const css = buildThemeCss(DEFAULT_THEME);
 // Returns: ":root { --color-primary: #24292f; ... }"
@@ -214,7 +214,7 @@ const css = buildThemeCss(DEFAULT_THEME);
 Generate a complete `<style>` block:
 
 ```typescript
-import { buildStyleBlock, DEFAULT_THEME } from '@frontmcp/ui';
+import { buildStyleBlock, DEFAULT_THEME } from '@frontmcp/uipack/components';
 
 const styleTag = buildStyleBlock(DEFAULT_THEME);
 // Returns: "<style>:root { --color-primary: ... }</style>"
@@ -225,7 +225,7 @@ const styleTag = buildStyleBlock(DEFAULT_THEME);
 Generate font preconnect links:
 
 ```typescript
-import { buildFontPreconnectFromTheme, brandTheme } from '@frontmcp/ui';
+import { buildFontPreconnectFromTheme, brandTheme } from '@frontmcp/uipack/components';
 
 const preconnect = buildFontPreconnectFromTheme(brandTheme);
 // Returns: '<link rel="preconnect" href="https://fonts.googleapis.com">...'
@@ -236,7 +236,7 @@ const preconnect = buildFontPreconnectFromTheme(brandTheme);
 Generate font stylesheet links:
 
 ```typescript
-import { buildFontStylesheetsFromTheme, brandTheme } from '@frontmcp/ui';
+import { buildFontStylesheetsFromTheme, brandTheme } from '@frontmcp/uipack/components';
 
 const stylesheets = buildFontStylesheetsFromTheme(brandTheme);
 // Returns: '<link rel="stylesheet" href="https://fonts.googleapis.com/...">'
@@ -247,7 +247,7 @@ const stylesheets = buildFontStylesheetsFromTheme(brandTheme);
 Generate script tags:
 
 ```typescript
-import { buildCdnScriptsFromTheme, brandTheme } from '@frontmcp/ui';
+import { buildCdnScriptsFromTheme, brandTheme } from '@frontmcp/uipack/components';
 
 const scripts = buildCdnScriptsFromTheme(brandTheme, {
   tailwind: true,

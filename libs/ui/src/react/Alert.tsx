@@ -174,7 +174,6 @@ export function renderAlertSync(props: AlertRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { AlertVariant };
+// Note: AlertVariant type is exported from '../components'
 
 export default Alert;

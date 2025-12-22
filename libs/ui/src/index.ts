@@ -1,11 +1,21 @@
 /**
  * @frontmcp/ui
  *
- * React components and hooks for FrontMCP applications.
- * This package provides React-specific UI components, hooks, and rendering utilities.
+ * UI component library for FrontMCP applications.
+ * Provides HTML components, React components, and rendering utilities.
  *
- * For bundling, build tools, and platform adapters without React,
- * use @frontmcp/uipack instead.
+ * For build tools, bundling, platform adapters, and theming, use @frontmcp/uipack.
+ *
+ * @example HTML components
+ * ```typescript
+ * import { button, card, alert, badge } from '@frontmcp/ui/components';
+ * import { baseLayout } from '@frontmcp/ui/layouts';
+ * ```
+ *
+ * @example Theme (from uipack)
+ * ```typescript
+ * import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
+ * ```
  *
  * @example React components
  * ```typescript
@@ -17,33 +27,86 @@
  * ```typescript
  * import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
  * ```
- *
- * @example SSR bundling
- * ```typescript
- * import { InMemoryBundler, createBundler } from '@frontmcp/ui/bundler';
- * ```
  */
+
+// ============================================
+// HTML Components (Pure HTML string generation)
+// ============================================
+export * from './components';
+
+// ============================================
+// Layout System
+// ============================================
+export * from './layouts';
+
+// ============================================
+// Page Templates
+// ============================================
+export * from './pages';
+
+// ============================================
+// Widgets (OpenAI App SDK, progress, etc.)
+// ============================================
+export * from './widgets';
+
+// ============================================
+// MCP Bridge
+// ============================================
+export {
+  // Core types
+  type PlatformAdapter,
+  type AdapterCapabilities,
+  type BridgeConfig,
+  // Bridge class
+  FrontMcpBridge,
+  createBridge,
+  // Registry
+  AdapterRegistry,
+  defaultRegistry,
+  registerAdapter,
+  // Runtime script generation
+  generateBridgeIIFE,
+  generatePlatformBundle,
+  UNIVERSAL_BRIDGE_SCRIPT,
+  BRIDGE_SCRIPT_TAGS,
+} from './bridge';
+
+// ============================================
+// Web Components
+// ============================================
+export {
+  // Registration
+  registerAllComponents,
+  registerFmcpButton,
+  registerFmcpCard,
+  registerFmcpAlert,
+  registerFmcpBadge,
+  registerFmcpInput,
+  registerFmcpSelect,
+  // Element classes
+  FmcpButton,
+  FmcpCard,
+  FmcpAlert,
+  FmcpBadge,
+  FmcpInput,
+  FmcpSelect,
+  // Base class for custom elements
+  FmcpElement,
+} from './web-components';
 
 // ============================================
 // React Components and Hooks
 // ============================================
-// The react module provides React components and hooks for building
-// interactive MCP widgets. This is the primary export for @frontmcp/ui.
 export * from './react';
 
 // ============================================
 // React 19 Static Rendering
 // ============================================
-// The render module provides React 19 static rendering utilities
-// for server-side rendering.
 export * from './render';
 
 // ============================================
 // React Renderer and Adapter
 // ============================================
-// The renderers module provides React rendering for template processing:
-// - ReactRenderer: SSR (server-side rendering)
-// - ReactRendererAdapter: Client-side hydration and rendering
 export {
   ReactRenderer,
   reactRenderer,
@@ -64,3 +127,12 @@ export {
 // ============================================
 // Use '@frontmcp/ui/bundler' for InMemoryBundler and related exports.
 // Not re-exported here to avoid conflicts.
+
+// ============================================
+// Note: Theme, validation, utils, styles are in @frontmcp/uipack
+// ============================================
+// These foundational modules are in @frontmcp/uipack to avoid circular deps:
+// - Theme (@frontmcp/uipack/theme)
+// - Validation (@frontmcp/uipack/validation)
+// - Utils (@frontmcp/uipack/utils)
+// - Styles (@frontmcp/uipack/styles)

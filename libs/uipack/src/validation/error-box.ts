@@ -18,7 +18,7 @@
  * @module @frontmcp/ui/validation/error-box
  */
 
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '../utils';
 
 // ============================================
 // Types

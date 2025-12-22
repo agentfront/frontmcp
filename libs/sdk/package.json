@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@frontmcp/ui": "0.6.0",
+    "@frontmcp/uipack": "0.6.0",
     "@modelcontextprotocol/sdk": "1.24.3",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",

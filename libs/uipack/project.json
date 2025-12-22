@@ -18,17 +18,15 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
-        "assets": ["libs/uipack/README.md", "LICENSE", "libs/uipack/package.json"],
+        "assets": ["libs/uipack/README.md", "libs/uipack/CLAUDE.md", "LICENSE", "libs/uipack/package.json"],
         "additionalEntryPoints": [
           "libs/uipack/src/adapters/index.ts",
           "libs/uipack/src/base-template/index.ts",
-          "libs/uipack/src/bridge/index.ts",
+          "libs/uipack/src/bridge-runtime/index.ts",
           "libs/uipack/src/build/index.ts",
           "libs/uipack/src/bundler/index.ts",
-          "libs/uipack/src/components/index.ts",
+          "libs/uipack/src/dependency/index.ts",
           "libs/uipack/src/handlebars/index.ts",
-          "libs/uipack/src/layouts/index.ts",
-          "libs/uipack/src/pages/index.ts",
           "libs/uipack/src/registry/index.ts",
           "libs/uipack/src/renderers/index.ts",
           "libs/uipack/src/runtime/index.ts",
@@ -36,10 +34,9 @@
           "libs/uipack/src/theme/index.ts",
           "libs/uipack/src/tool-template/index.ts",
           "libs/uipack/src/types/index.ts",
+          "libs/uipack/src/typings/index.ts",
           "libs/uipack/src/utils/index.ts",
-          "libs/uipack/src/validation/index.ts",
-          "libs/uipack/src/web-components/index.ts",
-          "libs/uipack/src/widgets/index.ts"
+          "libs/uipack/src/validation/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
@@ -64,13 +61,11 @@
         "additionalEntryPoints": [
           "libs/uipack/src/adapters/index.ts",
           "libs/uipack/src/base-template/index.ts",
-          "libs/uipack/src/bridge/index.ts",
+          "libs/uipack/src/bridge-runtime/index.ts",
           "libs/uipack/src/build/index.ts",
           "libs/uipack/src/bundler/index.ts",
-          "libs/uipack/src/components/index.ts",
+          "libs/uipack/src/dependency/index.ts",
           "libs/uipack/src/handlebars/index.ts",
-          "libs/uipack/src/layouts/index.ts",
-          "libs/uipack/src/pages/index.ts",
           "libs/uipack/src/registry/index.ts",
           "libs/uipack/src/renderers/index.ts",
           "libs/uipack/src/runtime/index.ts",
@@ -78,10 +73,9 @@
           "libs/uipack/src/theme/index.ts",
           "libs/uipack/src/tool-template/index.ts",
           "libs/uipack/src/types/index.ts",
+          "libs/uipack/src/typings/index.ts",
           "libs/uipack/src/utils/index.ts",
-          "libs/uipack/src/validation/index.ts",
-          "libs/uipack/src/web-components/index.ts",
-          "libs/uipack/src/widgets/index.ts"
+          "libs/uipack/src/validation/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },

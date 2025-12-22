@@ -16,18 +16,13 @@
       "@frontmcp/uipack/theme": ["libs/uipack/dist/theme/index.d.ts"],
       "@frontmcp/uipack/build": ["libs/uipack/dist/build/index.d.ts"],
       "@frontmcp/uipack/bundler": ["libs/uipack/dist/bundler/index.d.ts"],
-      "@frontmcp/uipack/components": ["libs/uipack/dist/components/index.d.ts"],
-      "@frontmcp/uipack/bridge": ["libs/uipack/dist/bridge/index.d.ts"],
-      "@frontmcp/uipack/layouts": ["libs/uipack/dist/layouts/index.d.ts"],
-      "@frontmcp/uipack/pages": ["libs/uipack/dist/pages/index.d.ts"],
       "@frontmcp/uipack/validation": ["libs/uipack/dist/validation/index.d.ts"],
-      "@frontmcp/uipack/widgets": ["libs/uipack/dist/widgets/index.d.ts"],
       "@frontmcp/uipack/registry": ["libs/uipack/dist/registry/index.d.ts"],
       "@frontmcp/uipack/styles": ["libs/uipack/dist/styles/index.d.ts"],
       "@frontmcp/uipack/handlebars": ["libs/uipack/dist/handlebars/index.d.ts"],
       "@frontmcp/uipack/typings": ["libs/uipack/dist/typings/index.d.ts"],
       "@frontmcp/uipack/adapters": ["libs/uipack/dist/adapters/index.d.ts"],
-      "@frontmcp/uipack/web-components": ["libs/uipack/dist/web-components/index.d.ts"]
+      "@frontmcp/uipack/bridge-runtime": ["libs/uipack/dist/bridge-runtime/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

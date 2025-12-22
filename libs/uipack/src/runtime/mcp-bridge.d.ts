@@ -97,6 +97,6 @@ export declare const PLATFORM_BRIDGE_SCRIPTS: {
  * });
  * ```
  */
-export { generateBridgeIIFE as generateCustomBridge } from '../bridge/runtime/iife-generator';
-export type { IIFEGeneratorOptions } from '../bridge/runtime/iife-generator';
+export { generateBridgeIIFE as generateCustomBridge } from '../bridge-runtime';
+export type { IIFEGeneratorOptions } from '../bridge-runtime';
 //# sourceMappingURL=mcp-bridge.d.ts.map

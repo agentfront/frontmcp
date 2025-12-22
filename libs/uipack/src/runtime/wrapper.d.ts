@@ -6,7 +6,7 @@
  */
 import type { WrapToolUIOptions, HostContext } from './types';
 import { type ThemeConfig, type PlatformCapabilities, type DeepPartial } from '../theme';
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '../utils';
 import { type SanitizerFn } from './sanitizer';
 /**
  * Extended options for wrapToolUI that include theme and platform

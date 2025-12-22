@@ -12,7 +12,7 @@
 
 import type { WidgetServingMode } from '../types';
 import type { AIPlatformType } from './platform-meta';
-import { safeStringify } from '../utils/safe-stringify';
+import { safeStringify } from '../utils';
 import { platformSupportsWidgets } from './serving-mode';
 
 // ============================================

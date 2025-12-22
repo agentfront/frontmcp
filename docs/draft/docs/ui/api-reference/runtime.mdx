@@ -156,7 +156,7 @@ const html = `
 Creates a new set of template helpers.
 
 ```typescript
-import { createTemplateHelpers } from '@frontmcp/ui';
+import { createTemplateHelpers } from '@frontmcp/uipack/components';
 
 const helpers = createTemplateHelpers();
 ```
@@ -285,7 +285,7 @@ type DisplayMode = 'inline' | 'fullscreen' | 'pip' | 'carousel';
 Returns the MCP Bridge runtime script for injection into widgets.
 
 ```typescript
-import { getMCPBridgeScript } from '@frontmcp/ui';
+import { getMCPBridgeScript } from '@frontmcp/uipack/components';
 
 const script = getMCPBridgeScript();
 // Returns the minified runtime script
@@ -296,7 +296,7 @@ const script = getMCPBridgeScript();
 Checks if MCP Bridge is supported in the current environment.
 
 ```typescript
-import { isMCPBridgeSupported } from '@frontmcp/ui';
+import { isMCPBridgeSupported } from '@frontmcp/uipack/components';
 
 if (isMCPBridgeSupported()) {
   await window.mcpBridge.callTool('my_tool', {});
@@ -308,7 +308,7 @@ if (isMCPBridgeSupported()) {
 The pre-built MCP Bridge runtime script as a `<script>` tag.
 
 ```typescript
-import { MCP_BRIDGE_RUNTIME } from '@frontmcp/ui';
+import { MCP_BRIDGE_RUNTIME } from '@frontmcp/uipack/components';
 
 const html = `
   <head>
@@ -326,7 +326,7 @@ const html = `
 Wraps tool UI content in a complete HTML document with MCP Bridge runtime.
 
 ```typescript
-import { wrapToolUI } from '@frontmcp/ui';
+import { wrapToolUI } from '@frontmcp/uipack/components';
 
 const html = wrapToolUI({
   content: '<div class="p-4">Weather: 72°F</div>',
@@ -360,7 +360,7 @@ const html = wrapToolUI({
 Wraps content with minimal boilerplate (no theme).
 
 ```typescript
-import { wrapToolUIMinimal } from '@frontmcp/ui';
+import { wrapToolUIMinimal } from '@frontmcp/uipack/components';
 
 const html = wrapToolUIMinimal({
   content: '<div>Simple content</div>',
@@ -389,7 +389,7 @@ interface UIContentSecurityPolicy {
 Builds a CSP meta tag from configuration.
 
 ```typescript
-import { buildCSPMetaTag } from '@frontmcp/ui';
+import { buildCSPMetaTag } from '@frontmcp/uipack/components';
 
 const meta = buildCSPMetaTag({
   connectDomains: ['https://api.example.com'],
@@ -402,7 +402,7 @@ const meta = buildCSPMetaTag({
 Builds CSP directive string.
 
 ```typescript
-import { buildCSPDirectives } from '@frontmcp/ui';
+import { buildCSPDirectives } from '@frontmcp/uipack/components';
 
 const directives = buildCSPDirectives({
   connectDomains: ['https://api.example.com'],
@@ -415,7 +415,7 @@ const directives = buildCSPDirectives({
 Validates a domain for CSP inclusion.
 
 ```typescript
-import { validateCSPDomain } from '@frontmcp/ui';
+import { validateCSPDomain } from '@frontmcp/uipack/components';
 
 validateCSPDomain('https://example.com');  // true
 validateCSPDomain('javascript:alert(1)');  // false
@@ -426,7 +426,7 @@ validateCSPDomain('javascript:alert(1)');  // false
 Filters and validates CSP domains.
 
 ```typescript
-import { sanitizeCSPDomains } from '@frontmcp/ui';
+import { sanitizeCSPDomains } from '@frontmcp/uipack/components';
 
 sanitizeCSPDomains(['https://example.com', 'invalid', 'http://api.com']);
 // ['https://example.com', 'http://api.com']
@@ -441,7 +441,7 @@ sanitizeCSPDomains(['https://example.com', 'invalid', 'http://api.com']);
 Sanitizes input before exposing to widgets.
 
 ```typescript
-import { sanitizeInput } from '@frontmcp/ui';
+import { sanitizeInput } from '@frontmcp/uipack/components';
 
 // Auto-detect PII
 const safe = sanitizeInput(userInput, true);
@@ -464,7 +464,7 @@ type SanitizerFn = (key: string, value: unknown) => unknown;
 ### PII Detection
 
 ```typescript
-import { detectPII, detectPIIType, redactPIIFromText } from '@frontmcp/ui';
+import { detectPII, detectPIIType, redactPIIFromText } from '@frontmcp/uipack/components';
 
 detectPII('john@example.com');  // true
 detectPIIType('john@example.com');  // 'email'
@@ -474,7 +474,7 @@ redactPIIFromText('Call me at 555-123-4567');  // 'Call me at [PHONE]'
 ### PII Validators
 
 ```typescript
-import { isEmail, isPhone, isCreditCard, isSSN, isIPv4 } from '@frontmcp/ui';
+import { isEmail, isPhone, isCreditCard, isSSN, isIPv4 } from '@frontmcp/uipack/components';
 
 isEmail('user@example.com');  // true
 isPhone('555-123-4567');      // true
@@ -492,7 +492,7 @@ isIPv4('192.168.1.1');        // true
 Builds OpenAI Apps SDK meta annotations.
 
 ```typescript
-import { buildOpenAIMeta } from '@frontmcp/ui';
+import { buildOpenAIMeta } from '@frontmcp/uipack/components';
 
 const meta = buildOpenAIMeta({
   csp: { connectDomains: ['https://api.example.com'] },
@@ -508,7 +508,7 @@ const meta = buildOpenAIMeta({
 Gets the MIME type for tool UI responses.
 
 ```typescript
-import { getToolUIMimeType } from '@frontmcp/ui';
+import { getToolUIMimeType } from '@frontmcp/uipack/components';
 
 getToolUIMimeType('openai');   // 'text/html+skybridge'
 getToolUIMimeType('ext-apps'); // 'text/html+mcp'

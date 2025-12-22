@@ -22,9 +22,9 @@ import {
   needsInlineScripts,
   type DeepPartial,
 } from '../theme';
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '../utils';
 import { sanitizeInput as sanitizeInputFn, type SanitizerFn } from './sanitizer';
-import { BRIDGE_SCRIPT_TAGS } from '../bridge/runtime/iife-generator';
+import { BRIDGE_SCRIPT_TAGS } from '../bridge-runtime';
 
 // ============================================
 // Extended Options

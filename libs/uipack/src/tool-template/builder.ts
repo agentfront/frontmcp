@@ -19,7 +19,7 @@ import type {
 } from '../runtime/types';
 import { createTemplateHelpers, wrapToolUI, type WrapToolUIFullOptions } from '../runtime/wrapper';
 import type { ThemeConfig, PlatformCapabilities, DeepPartial } from '../theme';
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '../utils';
 import { rendererRegistry } from '../renderers/registry';
 import { detectTemplateType } from '../renderers/utils/detect';
 

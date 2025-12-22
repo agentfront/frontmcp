@@ -12,17 +12,36 @@ description: This guide walks you through adding visual widgets to your FrontMCP
 
 ## Installation
 
+FrontMCP UI is split into two packages:
+
+| Package | Use Case |
+|---------|----------|
+| `@frontmcp/uipack` | HTML components, build tools, themes (no React) |
+| `@frontmcp/ui` | React components, hooks, SSR rendering |
+
 <CodeGroup>
 ```bash npm
-npm install @frontmcp/ui
+# For HTML templates only (no React required)
+npm install @frontmcp/uipack
+
+# For React templates
+npm install @frontmcp/ui react react-dom
 ```
 
 ```bash yarn
-yarn add @frontmcp/ui
+# For HTML templates only (no React required)
+yarn add @frontmcp/uipack
+
+# For React templates
+yarn add @frontmcp/ui react react-dom
 ```
 
 ```bash pnpm
-pnpm add @frontmcp/ui
+# For HTML templates only (no React required)
+pnpm add @frontmcp/uipack
+
+# For React templates
+pnpm add @frontmcp/ui react react-dom
 ```
 
 </CodeGroup>
@@ -110,11 +129,11 @@ ui: {
 
 ## Step 3: Use Pre-built Components
 
-`@frontmcp/ui` provides a library of styled components:
+`@frontmcp/uipack` provides a library of styled HTML components:
 
 ```typescript title="src/tools/user-profile.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, button, alert } from '@frontmcp/ui';
+import { card, badge, button, alert } from '@frontmcp/uipack/components';
 import { z } from 'zod';
 
 @Tool({
@@ -169,7 +188,7 @@ Here's a full example combining multiple components:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, alert } from '@frontmcp/ui';
+import { card, badge, alert } from '@frontmcp/uipack/components';
 import { z } from 'zod';
 
 const inputSchema = {

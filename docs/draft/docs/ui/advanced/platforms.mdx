@@ -23,7 +23,7 @@ description: FrontMCP UI adapts to different AI platform capabilities. Each plat
 FrontMCP automatically detects the platform:
 
 ```typescript
-import { getPlatform, OPENAI_PLATFORM, CLAUDE_PLATFORM } from '@frontmcp/ui';
+import { getPlatform, OPENAI_PLATFORM, CLAUDE_PLATFORM } from '@frontmcp/uipack/components';
 
 // Auto-detect from user agent or context
 const platform = getPlatform();
@@ -54,7 +54,7 @@ OpenAI's Apps SDK provides full widget capabilities:
 ### Configuration
 
 ```typescript
-import { OPENAI_PLATFORM } from '@frontmcp/ui';
+import { OPENAI_PLATFORM } from '@frontmcp/uipack/components';
 
 // Platform preset
 console.log(OPENAI_PLATFORM);
@@ -166,7 +166,7 @@ ui: {
 ### Configuration
 
 ```typescript
-import { CLAUDE_PLATFORM } from '@frontmcp/ui';
+import { CLAUDE_PLATFORM } from '@frontmcp/uipack/components';
 
 // Platform preset
 console.log(CLAUDE_PLATFORM);
@@ -189,7 +189,7 @@ console.log(CLAUDE_PLATFORM);
 For environments without any network access, inline all scripts:
 
 ```typescript
-import { baseLayout, fetchAndCacheScriptsFromTheme } from '@frontmcp/ui';
+import { baseLayout, fetchAndCacheScriptsFromTheme } from '@frontmcp/uipack/components';
 
 // Pre-fetch and cache scripts at startup
 await fetchAndCacheScriptsFromTheme(theme);
@@ -210,7 +210,7 @@ Gemini has limited widget support:
 ### Configuration
 
 ```typescript
-import { GEMINI_PLATFORM } from '@frontmcp/ui';
+import { GEMINI_PLATFORM } from '@frontmcp/uipack/components';
 
 // Platform preset
 console.log(GEMINI_PLATFORM);
@@ -241,7 +241,7 @@ For Gemini, keep widgets simple:
 Create templates that adapt to the platform:
 
 ```typescript
-import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/ui';
+import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/uipack/components';
 
 @Tool({
   name: 'my_tool',
@@ -268,7 +268,7 @@ import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/ui';
 Handle missing capabilities gracefully:
 
 ```typescript
-import { supportsFullInteractivity, getFallbackMode } from '@frontmcp/ui';
+import { supportsFullInteractivity, getFallbackMode } from '@frontmcp/uipack/components';
 
 const platform = getPlatform();
 
@@ -287,7 +287,7 @@ if (supportsFullInteractivity(platform)) {
 Define custom platform configurations:
 
 ```typescript
-import { createPlatform } from '@frontmcp/ui';
+import { createPlatform } from '@frontmcp/uipack/components';
 
 const myPlatform = createPlatform({
   id: 'my-platform',
@@ -329,7 +329,7 @@ Test your widgets on each platform:
 
 ```typescript
 // Mock platform for testing
-import { getPlatform } from '@frontmcp/ui';
+import { getPlatform } from '@frontmcp/uipack/components';
 
 // Override for testing
 jest.mock('@frontmcp/ui', () => ({
