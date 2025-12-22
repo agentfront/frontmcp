@@ -5,12 +5,32 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-22" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+
+    **Breaking changes**
+
+    🚨 **UI packages reorganized** – Update to the new `@frontmcp/uipack` for HTML builders and scoped entrypoints like `@frontmcp/ui/components` so servers no longer need React just to render string templates.
+
+    **Features**
+
+    ⚡ **Vercel KV sessions** – Choose `redis.provider: 'vercel-kv'` for zero-maintenance session storage with auto-provisioned env vars, edge-safe REST access, and a full setup guide covering configuration and troubleshooting.
+
+    🧩 **CachePlugin global store upgrades** – `type: 'global-store'` now inherits whichever backend (Vercel KV or Redis) you configure at `@FrontMcp`, eliminating duplicate connection boilerplate.
+
+    🧷 **Hybrid storage option** – Combine Vercel KV sessions with Redis pub/sub via the new `pubsub` block to keep resource subscriptions responsive while staying on Vercel infrastructure.
+
+    **Fixes**
+
+    🛠️ **Vercel adapter reliability** – `frontmcp build --adapter vercel` now ships an rspack-bundled server plus generated `vercel.json`, resolving the missing-handler errors that blocked fresh deployments.
+
+    🧼 **Safer template escaping** – `escapeHtml` gracefully handles `null` and `undefined`, preventing crash loops when upstream data arrives incomplete.
+
+    🧭 **Clearer SDK mismatch errors** – The `@FrontMcp` decorator now surfaces actionable guidance when your runtime SDK drifts behind the generated server, so you can patch environments faster.
 
   </Card>
 </Update>
