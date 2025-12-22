@@ -168,6 +168,43 @@ CachePlugin.init({
 
 <Check>Redis enables cache sharing across multiple server instances and persists cache across restarts.</Check>
 
+### Global Store (Reuse `@FrontMcp` configuration)
+
+Best for: Deployments that already configure `redis` on `@FrontMcp` (including `provider: 'vercel-kv'`) and want every cache-enabled tool to share that store without duplicating credentials.
+
+```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+import CachePlugin from '@frontmcp/plugins/cache';
+
+@FrontMcp({
+  info: { name: 'Edge Server', version: '1.0.0' },
+  redis: {
+    provider: 'vercel-kv', // or host/port/password for standard Redis
+  },
+})
+export default class Server {}
+
+@App({
+  id: 'edge-app',
+  name: 'Edge App',
+  plugins: [
+    CachePlugin.init({
+      type: 'global-store',
+      defaultTTL: 600,
+    }),
+  ],
+})
+export default class EdgeApp {}
+```
+
+<Tip>
+`type: 'global-store'` automatically reuses the store defined in the `@FrontMcp` decorator—whether that's Redis or `provider: 'vercel-kv'`.
+</Tip>
+
+<Info>
+Need help wiring up Vercel KV? Follow the [Vercel KV guide](/docs/deployment/vercel-kv) or pair it with Redis pub/sub using the hybrid configuration described there.
+</Info>
+
 ---
 
 ## Configuration Options
@@ -176,8 +213,8 @@ CachePlugin.init({
 
 Configure default behavior when registering the plugin:
 
-<ParamField path="type" type="'memory' | 'redis' | 'redis-client'" default="'memory'">
-  Cache store backend to use
+<ParamField path="type" type="'memory' | 'redis' | 'redis-client' | 'global-store'" default="'memory'">
+  Cache store backend to use. Set `type: 'global-store'` to reuse the `@FrontMcp`-level `redis` configuration (Redis or Vercel KV) without redefining credentials.
 </ParamField>
 
 <ParamField path="defaultTTL" type="number" default="86400">
@@ -185,7 +222,7 @@ Configure default behavior when registering the plugin:
 </ParamField>
 
 <ParamField path="config" type="object">
-  Redis connection configuration (required when `type: 'redis'`)
+  Redis connection configuration (required when `type: 'redis'`, ignored when `type: 'global-store'`)
 
   <Expandable title="properties">
     <ResponseField name="host" type="string" required>
@@ -464,7 +501,7 @@ const cachePlugin = CachePlugin.init({
 })
 class GenerateMonthlyReportTool extends ToolContext {
   async execute(input: { tenantId: string; month: string }) {
-    this.logger.info('Generating report', input);
+    this.logger info('Generating report', input);
 
     // Expensive operation: aggregate data, generate charts, etc.
     const report = await this.database.generateReport(input.tenantId, input.month);
@@ -488,7 +525,7 @@ class GenerateMonthlyReportTool extends ToolContext {
 })
 class GetTrendingProductsTool extends ToolContext {
   async execute(input: { category: string; limit: number }) {
-    return await this.analytics.getTrendingProducts(input.category, input.limit);
+    return await this.analytics getTrendingProducts(input.category, input.limit);
   }
 }
 

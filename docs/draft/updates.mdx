@@ -5,12 +5,39 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-22" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    🚀 **Edge-ready storage** – Deploy on Vercel without running Redis by switching your server config to the new Vercel KV provider.
+
+    🔧 **Global cache reuse** – Let Cache Plugin reuse your global Redis or Vercel KV settings via `type: 'global-store'`, so tools stay fast without extra secrets.
+
+    🎨 **Slimmer UI installs** – Install `@frontmcp/uipack` for HTML-first widgets and add `@frontmcp/ui` only when you need React components or runtime helpers.
+
+    ⚡ **Serverless parity** – Rspack bundling now ships the same assets to Vercel and Lambda as local builds for predictable cold starts.
 
   </Card>
-</Update>
+
+### Features
+
+- Added first-class Vercel KV storage: configure `redis.provider: 'vercel-kv'` for session stores, cache providers, and inspectors plus hybrid Redis pub/sub when you still need subscriptions.
+- Introduced `type: 'global-store'` in Cache Plugin so every cached tool automatically reuses the `@FrontMcp`-level store (Redis or Vercel KV) without duplicating credentials.
+- Split the UI stack into `@frontmcp/uipack` (HTML components, theming, templates) and `@frontmcp/ui` (widgets, React wrappers) so HTML-first projects stay lightweight.
+
+### Fixes
+
+- Rebuilt the Vercel/Lambda bundle flow with Rspack helpers, saner entry generation, and stronger escaping so serverless deployments ship the same optimized assets as local builds.
+- Hardened Handlebars widgets, cache providers, and HTML escaping to stop malformed templates from rendering blank widgets or leaking unsafe output.
+
+### Docs
+
+- Added a dedicated [Vercel KV deployment guide](/docs/deployment/vercel-kv) plus Redis and Serverless callouts covering when to choose Redis vs KV and how to mix them for pub/sub.
+- Updated UI library docs, release notes, and import examples to explain the `@frontmcp/ui` / `@frontmcp/uipack` split and new Cache Plugin global-store workflow.
+
+### Build/CI
+
+- Upgraded the workspace to `@modelcontextprotocol/sdk 1.25.1`, Nx 22.3.3, new Rspack/esbuild tooling, and Snyk resolutions so installs remain reproducible on Node 24.
+  </Update>
