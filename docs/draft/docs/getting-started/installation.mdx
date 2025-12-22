@@ -54,14 +54,15 @@ Use `--yes` (or `-y`) to skip prompts and use defaults.
 
 ### CLI Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--yes, -y` | Use defaults (non-interactive) | - |
-| `--target <type>` | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node` |
-| `--redis <setup>` | Redis: `docker`, `existing`, `none` | `docker` |
-| `--cicd / --no-cicd` | Enable GitHub Actions | `--cicd` |
+| Flag                 | Description                                          | Default  |
+| -------------------- | ---------------------------------------------------- | -------- |
+| `--yes, -y`          | Use defaults (non-interactive)                       | -        |
+| `--target <type>`    | Deployment: `node`, `vercel`, `lambda`, `cloudflare` | `node`   |
+| `--redis <setup>`    | Redis: `docker`, `existing`, `none`                  | `docker` |
+| `--cicd / --no-cicd` | Enable GitHub Actions                                | `--cicd` |
 
 **Examples:**
+
 ```bash
 # Interactive mode (default)
 npx frontmcp create my-app

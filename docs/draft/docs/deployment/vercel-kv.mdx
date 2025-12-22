@@ -27,13 +27,13 @@ Vercel KV is an edge-compatible, REST-based key-value store that works seamlessl
 
 ## When to Use Vercel KV
 
-| Use Case | Vercel KV | Standard Redis |
-|----------|-----------|----------------|
-| Vercel deployment | ✅ Recommended | ⚠️ Requires external service |
-| Edge Functions | ✅ Native support | ❌ Not supported |
-| Self-hosted | ❌ Vercel only | ✅ Full control |
-| Pub/Sub needed | ❌ Not supported | ✅ Native support |
-| Resource subscriptions | ❌ Requires Redis | ✅ Full support |
+| Use Case               | Vercel KV         | Standard Redis               |
+| ---------------------- | ----------------- | ---------------------------- |
+| Vercel deployment      | ✅ Recommended    | ⚠️ Requires external service |
+| Edge Functions         | ✅ Native support | ❌ Not supported             |
+| Self-hosted            | ❌ Vercel only    | ✅ Full control              |
+| Pub/Sub needed         | ❌ Not supported  | ✅ Native support            |
+| Resource subscriptions | ❌ Requires Redis | ✅ Full support              |
 
 ## Quick Start
 
@@ -57,6 +57,7 @@ Vercel KV is an edge-compatible, REST-based key-value store that works seamlessl
     })
     export default class Server {}
     ```
+
   </Step>
   <Step title="Deploy">
     ```bash
@@ -118,10 +119,10 @@ Vercel KV is an edge-compatible, REST-based key-value store that works seamlessl
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `KV_REST_API_URL` | Yes | REST API endpoint for your KV store |
-| `KV_REST_API_TOKEN` | Yes | Authentication token for your KV store |
+| Variable            | Required | Description                            |
+| ------------------- | -------- | -------------------------------------- |
+| `KV_REST_API_URL`   | Yes      | REST API endpoint for your KV store    |
+| `KV_REST_API_TOKEN` | Yes      | Authentication token for your KV store |
 
 <Tip>
 When you connect a Vercel KV store to your project, these environment variables are automatically added to your Vercel project settings. No manual configuration needed!
@@ -183,16 +184,16 @@ The `type: 'global-store'` option allows plugins to automatically use whatever s
 
 ## Comparison: Vercel KV vs Standard Redis
 
-| Feature | Vercel KV | Standard Redis |
-|---------|-----------|----------------|
-| **Infrastructure** | Managed by Vercel | Self-managed or cloud service |
-| **Edge Compatible** | ✅ Yes | ❌ No |
-| **Serverless Friendly** | ✅ Optimized | ⚠️ Connection overhead |
-| **Pub/Sub** | ❌ Not available | ✅ Full support |
-| **Resource Subscriptions** | ❌ Not supported | ✅ Full support |
-| **Latency** | ~5-15ms (REST) | ~1-5ms (TCP) |
-| **Pricing** | Pay per request | Pay for instance |
-| **Setup Complexity** | Minimal | Moderate |
+| Feature                    | Vercel KV         | Standard Redis                |
+| -------------------------- | ----------------- | ----------------------------- |
+| **Infrastructure**         | Managed by Vercel | Self-managed or cloud service |
+| **Edge Compatible**        | ✅ Yes            | ❌ No                         |
+| **Serverless Friendly**    | ✅ Optimized      | ⚠️ Connection overhead        |
+| **Pub/Sub**                | ❌ Not available  | ✅ Full support               |
+| **Resource Subscriptions** | ❌ Not supported  | ✅ Full support               |
+| **Latency**                | ~5-15ms (REST)    | ~1-5ms (TCP)                  |
+| **Pricing**                | Pay per request   | Pay for instance              |
+| **Setup Complexity**       | Minimal           | Moderate                      |
 
 ## Limitations
 
@@ -249,21 +250,21 @@ The `pubsub` option only accepts Redis configuration—Vercel KV is not supporte
 
 ### When to Use Hybrid Configuration
 
-| Scenario | Configuration |
-|----------|---------------|
-| Sessions only, no subscriptions | `redis: { provider: 'vercel-kv' }` |
-| Full Redis features needed | `redis: { host: '...' }` |
+| Scenario                            | Configuration                                                  |
+| ----------------------------------- | -------------------------------------------------------------- |
+| Sessions only, no subscriptions     | `redis: { provider: 'vercel-kv' }`                             |
+| Full Redis features needed          | `redis: { host: '...' }`                                       |
 | Edge sessions + Redis subscriptions | `redis: { provider: 'vercel-kv' }` + `pubsub: { host: '...' }` |
 
 ### Recommended Redis Services for Pub/Sub
 
 When using hybrid configuration, you need a Redis service for pub/sub:
 
-| Provider | Notes |
-|----------|-------|
-| [Upstash](https://upstash.com/) | Serverless Redis, pairs well with Vercel |
-| [Redis Cloud](https://redis.com/cloud/) | Managed Redis Enterprise |
-| [AWS ElastiCache](https://aws.amazon.com/elasticache/) | AWS-managed Redis |
+| Provider                                               | Notes                                    |
+| ------------------------------------------------------ | ---------------------------------------- |
+| [Upstash](https://upstash.com/)                        | Serverless Redis, pairs well with Vercel |
+| [Redis Cloud](https://redis.com/cloud/)                | Managed Redis Enterprise                 |
+| [AWS ElastiCache](https://aws.amazon.com/elasticache/) | AWS-managed Redis                        |
 
 ---
 
@@ -311,6 +312,7 @@ The `@vercel/kv` package is an optional peer dependency. It's only loaded when y
     2. Connect the KV store to your project
     3. Check that environment variables are set in Project Settings → Environment Variables
     4. If running locally, add variables to your `.env` file
+
   </Accordion>
 
   <Accordion title="Module not found: @vercel/kv">
@@ -322,18 +324,21 @@ The `@vercel/kv` package is an optional peer dependency. It's only loaded when y
     # or
     yarn add @vercel/kv
     ```
+
   </Accordion>
 
   <Accordion title="Sessions not persisting across requests">
     **Cause**: Each serverless invocation may create a new connection.
 
     **Solution**: This is expected behavior. Vercel KV handles connection pooling internally. Ensure your session store is properly configured and `defaultTtlMs` is set appropriately.
+
   </Accordion>
 
   <Accordion title="Resource subscriptions not working">
     **Cause**: Vercel KV does not support Redis pub/sub, which is required for resource subscriptions.
 
     **Solution**: Use standard Redis for apps that require resource subscription functionality. Consider a managed Redis service like Upstash or Redis Cloud.
+
   </Accordion>
 </AccordionGroup>
 

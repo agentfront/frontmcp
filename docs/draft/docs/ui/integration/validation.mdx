@@ -106,7 +106,8 @@ const HtmxSchema = z.object({
 Create validated custom components:
 
 ```typescript
-import { validateOptions, escapeHtml } from '@frontmcp/ui/components';
+import { validateOptions } from '@frontmcp/uipack/validation';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 import { z } from 'zod';
 
 // Define schema
@@ -137,6 +138,10 @@ export function myComponent(content: string, options: MyComponentOptions = {}): 
   </div>`;
 }
 ```
+
+<Note>
+Import `validateOptions` from `@frontmcp/uipack/validation`. Utility helpers such as `escapeHtml` now live in `@frontmcp/uipack/utils`, so you can reuse them outside the built-in components.
+</Note>
 
 ## Validation Error Box
 

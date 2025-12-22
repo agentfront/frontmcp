@@ -61,7 +61,7 @@ baseLayout({
 
 ```typescript
 const html = `
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="grid grid-cols-1 md:grid-cols-2 lg-grid-cols-3 gap-4">
   ${card('Card 1')}
   ${card('Card 2')}
   ${card('Card 3')}
@@ -131,12 +131,12 @@ const html = `
 
 // Size options
 const sizes = {
-  sm: 'max-w-sm',   // 384px
-  md: 'max-w-md',   // 448px
-  lg: 'max-w-lg',   // 512px
-  xl: 'max-w-xl',   // 576px
-  '2xl': 'max-w-2xl', // 672px
-  '4xl': 'max-w-4xl', // 896px
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+  '4xl': 'max-w-4xl',
   full: 'max-w-full',
 };
 ```
@@ -240,8 +240,6 @@ const html = `
 ### Breakpoints
 
 ```typescript
-// sm: 640px, md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px
-
 const html = `
 <div class="
   p-4
@@ -261,7 +259,6 @@ const html = `
 ### Mobile-First
 
 ```typescript
-// Stack on mobile, side-by-side on larger screens
 const html = `
 <div class="flex flex-col md:flex-row gap-4">
   <div class="md:w-64">${sidebar}</div>
@@ -286,7 +283,7 @@ const html = `
 Always escape user content in layouts:
 
 ```typescript
-import { escapeHtml } from '@frontmcp/ui/components';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
 const html = `
 <div class="p-4">

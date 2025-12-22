@@ -5,12 +5,30 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-22" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    **Breaking changes**
+    ⚠️ **UI utility imports moved** – Import `escapeHtml`, `validateOptions`, and other helpers from `@frontmcp/uipack/*` packages to keep custom widgets compiling.
+
+    **Features**
+    🚀 **Vercel KV sessions** – Configure `provider: 'vercel-kv'` in `@FrontMcp` to run session storage and caching on Vercel's edge without managing Redis.
+    🔧 **CachePlugin global-store** – Set `type: 'global-store'` so every app reuses the storage defined on `@FrontMcp`, including Vercel KV deployments.
+    🧩 **Template validation tooling** – New schema-path and Handlebars validators flag missing fields during development before tools reach users.
+
+    **Fixes**
+    🛡️ **Safer HTML escaping** – `escapeHtml` now tolerates nullish values and the static badge tool renders via Handlebars, preventing unescaped output.
+    ⚡ **Vercel build reliability** – Serverless builds bundle with Rspack and esbuild, so `frontmcp build --adapter vercel` ships predictable artifacts.
+
+    **Docs**
+    📚 **Vercel KV guide** – End-to-end setup, hybrid Redis + KV patterns, and troubleshooting tips for the new storage option.
+    🧩 **UI import guidance** – Updated UI library guides clarify how `@frontmcp/ui` and `@frontmcp/uipack` split components, themes, and widgets.
+
+    **Build/CI**
+    🛠️ **Dependency refresh** – Upgraded Nx 22.3, MCP SDK 1.25.1, and enabled Snyk scanning plus new resolutions for safer builds.
 
   </Card>
 </Update>
