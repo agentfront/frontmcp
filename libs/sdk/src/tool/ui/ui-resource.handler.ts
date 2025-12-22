@@ -63,11 +63,11 @@ export interface HandleUIResourceOptions {
 /**
  * Generate a placeholder widget HTML that reads from window.openai.toolOutput.
  *
- * Delegates to @frontmcp/ui's createDefaultBaseTemplate which provides:
+ * Delegates to @frontmcp/uipack's createDefaultBaseTemplate which provides:
  * - Tailwind CSS with @theme configuration
  * - Platform polyfills (callTool, detectMcpSession, getToolOutput)
  * - Polling for toolOutput injection
- * - Default JSON renderer (data-type-specific renderers are in @frontmcp/ui)
+ * - Default JSON renderer (data-type-specific renderers are in @frontmcp/uipack)
  *
  * This is returned when the static widget URI is fetched before the tool is called.
  * OpenAI caches this HTML, so it must be dynamic (read toolOutput at runtime).

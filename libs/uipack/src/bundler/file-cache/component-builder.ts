@@ -453,8 +453,10 @@ export class ComponentBuilder {
       const module = { exports };
 
       // Execute the bundled code using custom executor or default new Function()
+      // SECURITY WARNING: Default execution uses `new Function()` which is equivalent
+      // to eval(). For untrusted code, provide a custom `executeCode` callback with
+      // proper sandboxing (e.g., Node.js vm module or enclave-vm).
       // Note: new Function() works in both Node.js and browser environments.
-      // For stricter sandboxing in Node.js, provide a custom executeCode using the vm module.
       if (executeCode) {
         executeCode(code, exports, module, React);
       } else {

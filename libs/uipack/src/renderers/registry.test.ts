@@ -214,7 +214,7 @@ describe('RendererRegistry', () => {
   });
 
   describe('render', () => {
-    const createContext = <In = {}, Out = {}>(input: In, output: Out): TemplateContext<In, Out> => ({
+    const createContext = <In = object, Out = object>(input: In, output: Out): TemplateContext<In, Out> => ({
       input,
       output,
       helpers: {
@@ -254,7 +254,7 @@ describe('RendererRegistry', () => {
   });
 
   describe('renderWith', () => {
-    const createContext = <In = {}, Out = {}>(input: In, output: Out): TemplateContext<In, Out> => ({
+    const createContext = <In = object, Out = object>(input: In, output: Out): TemplateContext<In, Out> => ({
       input,
       output,
       helpers: {

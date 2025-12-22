@@ -11,7 +11,7 @@ description: Ship HTML-first consent, status, and orchestration screens with the
 HTML components live in `@frontmcp/uipack` (no React required). For React components and hooks, use `@frontmcp/ui` instead.
 </Note>
 
-## Why @frontmcp/ui
+## Why @frontmcp/uipack
 
 - **Pure HTML output** – Components return strings so you can stream them directly through MCP resources, auth flows, or ngrok tunnels.
 - **Platform detection** – Helpers detect OpenAI, Claude, Gemini, and local browsers so you can inline scripts when networks are blocked.
@@ -23,15 +23,15 @@ HTML components live in `@frontmcp/uipack` (no React required). For React compon
 
 <CodeGroup>
 ```bash npm
-npm install @frontmcp/ui
+npm install @frontmcp/uipack
 ```
 
 ```bash pnpm
-pnpm add @frontmcp/ui
+pnpm add @frontmcp/uipack
 ```
 
 ```bash yarn
-yarn add @frontmcp/ui
+yarn add @frontmcp/uipack
 ```
 
 </CodeGroup>
@@ -41,7 +41,7 @@ yarn add @frontmcp/ui
 Wrap content with `baseLayout`, then mix components such as `card` and `button`. Everything resolves to HTML strings you can hand to an MCP resource or auth callback.
 
 ```ts
-import { baseLayout, card, button, DEFAULT_THEME } from '@frontmcp/ui';
+import { baseLayout, card, button, DEFAULT_THEME } from '@frontmcp/uipack';
 
 const content = card(
   `
@@ -69,7 +69,7 @@ Send `html` as the body of an MCP resource, OAuth consent page, or even an email
 Every interactive component accepts an `htmx` block. Attributes are sanitized to prevent unsafe protocols or arbitrary data-\* fields, so you can expose progressive enhancement safely.
 
 ```ts
-import { form, input, button } from '@frontmcp/ui';
+import { form, input, button } from '@frontmcp/uipack';
 
 const loginForm = form(
   `
@@ -102,7 +102,7 @@ import {
   getPlatform,
   canUseCdn,
   needsInlineScripts,
-} from '@frontmcp/ui';
+} from '@frontmcp/uipack';
 
 const theme = createTheme({
   name: 'crm-dark',
@@ -142,7 +142,7 @@ Claude Artifacts and other restricted environments block outbound requests. Call
 Need a consent or error page fast? Use the prebuilt templates so every auth flow looks consistent.
 
 ```ts
-import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/ui';
+import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/uipack';
 
 const grantScreen = consentPage({
   client: { name: 'CodeCall CRM', id: 'crm' },
@@ -169,7 +169,7 @@ const outageScreen = errorPage({
 Components validate input with Zod. When something is wrong, the library renders a compact error box that lists the component name and the failed property—perfect for catching mistakes before you ship.
 
 ```ts
-import { button } from '@frontmcp/ui';
+import { button } from '@frontmcp/uipack';
 
 const ok = button('Continue', { variant: 'primary' });
 

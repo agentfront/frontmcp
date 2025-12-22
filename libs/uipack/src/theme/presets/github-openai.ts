@@ -2,13 +2,13 @@
  * @file github-openai.ts
  * @description Default theme with GitHub/OpenAI gray-black aesthetic.
  *
- * This is the new default theme for @frontmcp/ui, featuring a monochromatic
+ * This is the new default theme for @frontmcp/uipack, featuring a monochromatic
  * gray-black color palette inspired by GitHub and OpenAI's design systems.
  * Includes system UI font stack, smaller border radii, and subtle shadows.
  *
  * @example
  * ```typescript
- * import { GITHUB_OPENAI_THEME, createTheme } from '@frontmcp/ui';
+ * import { GITHUB_OPENAI_THEME, createTheme } from '@frontmcp/uipack';
  *
  * // Use directly
  * baseLayout(content, { theme: GITHUB_OPENAI_THEME });
@@ -19,7 +19,7 @@
  * });
  * ```
  *
- * @module @frontmcp/ui/theme/presets/github-openai
+ * @module @frontmcp/uipack/theme/presets/github-openai
  */
 
 import type { ThemeConfig } from '../theme';

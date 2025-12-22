@@ -326,7 +326,7 @@ export function createCacheKey(
       sourceType: options.sourceType,
       format: options.format,
       minify: options.minify,
-      externals: options.externals?.sort(),
+      externals: options.externals?.slice().sort(),
       target: options.target,
     }),
   );

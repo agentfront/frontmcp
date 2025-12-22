@@ -15,7 +15,7 @@
  *
  * @example
  * ```typescript
- * import { buildCdnScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+ * import { buildCdnScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
  *
  * // Use default CDN URLs
  * const scripts = buildCdnScripts();
@@ -24,7 +24,7 @@
  * const themedScripts = buildCdnScriptsFromTheme(DEFAULT_THEME);
  * ```
  *
- * @module @frontmcp/ui/theme/cdn
+ * @module @frontmcp/uipack/theme/cdn
  */
 
 import type { ThemeConfig } from './theme';

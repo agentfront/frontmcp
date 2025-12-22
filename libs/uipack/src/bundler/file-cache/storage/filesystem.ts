@@ -331,7 +331,9 @@ export class FilesystemStorage implements BuildCacheStorage {
           }
         } catch {
           // Corrupted file, remove it
-          await unlink(filePath).catch(() => {});
+          await unlink(filePath).catch(() => {
+            /* ignore unlink errors */
+          });
           removed++;
         }
       }

@@ -56,7 +56,7 @@ export declare function isMCPBridgeSupported(): boolean;
  *
  * @example
  * ```typescript
- * import { FRONTMCP_BRIDGE_RUNTIME } from '@frontmcp/ui/runtime';
+ * import { FRONTMCP_BRIDGE_RUNTIME } from '@frontmcp/uipack/runtime';
  * const html = `<!DOCTYPE html><html><head>${FRONTMCP_BRIDGE_RUNTIME}</head>...</html>`;
  * ```
  */
@@ -68,7 +68,7 @@ export declare const FRONTMCP_BRIDGE_RUNTIME: string;
  *
  * @example
  * ```typescript
- * import { PLATFORM_BRIDGE_SCRIPTS } from '@frontmcp/ui/runtime';
+ * import { PLATFORM_BRIDGE_SCRIPTS } from '@frontmcp/uipack/runtime';
  *
  * // For ChatGPT only
  * const chatgptHtml = `<html><head>${PLATFORM_BRIDGE_SCRIPTS.chatgpt}</head>...</html>`;
@@ -88,7 +88,7 @@ export declare const PLATFORM_BRIDGE_SCRIPTS: {
  *
  * @example
  * ```typescript
- * import { generateCustomBridge } from '@frontmcp/ui/runtime';
+ * import { generateCustomBridge } from '@frontmcp/uipack/runtime';
  *
  * const script = generateCustomBridge({
  *   adapters: ['openai', 'ext-apps'],

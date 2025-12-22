@@ -4,11 +4,11 @@
  * Multi-framework rendering system for Tool UI templates.
  * Supports HTML, React, and MDX templates with auto-detection.
  *
- * @module @frontmcp/ui
+ * @module @frontmcp/uipack/renderers
  *
  * @example Basic usage with auto-detection
  * ```typescript
- * import { rendererRegistry } from '@frontmcp/ui';
+ * import { rendererRegistry } from '@frontmcp/uipack/renderers';
  *
  * // HTML template
  * const htmlTemplate = (ctx) => `<div>${ctx.output.name}</div>`;
@@ -17,7 +17,8 @@
  *
  * @example Register React renderer
  * ```typescript
- * import { rendererRegistry, reactRenderer } from '@frontmcp/ui';
+ * import { rendererRegistry } from '@frontmcp/uipack/renderers';
+ * import { reactRenderer } from '@frontmcp/ui';
  *
  * rendererRegistry.register(reactRenderer);
  *

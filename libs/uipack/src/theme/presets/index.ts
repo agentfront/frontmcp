@@ -3,9 +3,9 @@
  * @description Theme presets module exports.
  *
  * Provides pre-configured theme presets for different design aesthetics.
- * The GitHub/OpenAI theme is the default for all @frontmcp/ui components.
+ * The GitHub/OpenAI theme is the default for all @frontmcp/uipack components.
  *
- * @module @frontmcp/ui/theme/presets
+ * @module @frontmcp/uipack/theme/presets
  */
 
 // GitHub/OpenAI theme (default)

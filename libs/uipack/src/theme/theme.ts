@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * import { createTheme, DEFAULT_THEME } from '@frontmcp/ui';
+ * import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
  *
  * // Use the default GitHub/OpenAI theme
  * const theme = DEFAULT_THEME;
@@ -32,7 +32,7 @@
  * });
  * ```
  *
- * @module @frontmcp/ui/theme
+ * @module @frontmcp/uipack/theme
  */
 
 // Import default theme from presets (must be at top, used in createTheme)

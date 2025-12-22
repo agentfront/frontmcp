@@ -332,8 +332,8 @@ Test your widgets on each platform:
 import { getPlatform } from '@frontmcp/uipack/components';
 
 // Override for testing
-jest.mock('@frontmcp/ui', () => ({
-  ...jest.requireActual('@frontmcp/ui'),
+jest.mock('@frontmcp/uipack/theme', () => ({
+  ...jest.requireActual('@frontmcp/uipack/theme'),
   getPlatform: jest.fn().mockReturnValue({
     id: 'claude',
     network: 'blocked',

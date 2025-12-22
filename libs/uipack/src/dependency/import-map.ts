@@ -152,7 +152,8 @@ export function addScope(map: ImportMap, scopeUrl: string, mappings: Record<stri
  * ```
  */
 export function generateImportMapScriptTag(map: ImportMap): string {
-  const json = JSON.stringify(map, null, 2);
+  // Escape </ sequences to prevent script tag injection (XSS)
+  const json = JSON.stringify(map, null, 2).replace(/<\//g, '<\\/');
   return `<script type="importmap">\n${json}\n</script>`;
 }
 
@@ -163,7 +164,8 @@ export function generateImportMapScriptTag(map: ImportMap): string {
  * @returns Minified HTML script tag string
  */
 export function generateImportMapScriptTagMinified(map: ImportMap): string {
-  const json = JSON.stringify(map);
+  // Escape </ sequences to prevent script tag injection (XSS)
+  const json = JSON.stringify(map).replace(/<\//g, '<\\/');
   return `<script type="importmap">${json}</script>`;
 }
 

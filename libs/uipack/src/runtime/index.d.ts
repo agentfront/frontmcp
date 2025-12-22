@@ -4,7 +4,7 @@
  * Provides the infrastructure for rendering tool UI templates
  * that work across multiple host environments (OpenAI, Claude, ext-apps).
  *
- * @module @frontmcp/ui/runtime
+ * @module @frontmcp/uipack/runtime
  */
 export type {
   ProviderType,

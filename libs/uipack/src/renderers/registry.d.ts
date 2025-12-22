@@ -134,9 +134,8 @@ export declare class RendererRegistry {
  * React and MDX renderers can be added:
  *
  * ```typescript
- * import { rendererRegistry } from '@frontmcp/ui';
+ * import { rendererRegistry, mdxRenderer } from '@frontmcp/uipack/renderers';
  * import { reactRenderer } from '@frontmcp/ui';
- * import { mdxRenderer } from '@frontmcp/ui';
  *
  * rendererRegistry.register(reactRenderer);
  * rendererRegistry.register(mdxRenderer);
