@@ -22,7 +22,7 @@ window.mcpBridge.context.theme // 'light' | 'dark' | 'system'
 Create a separate dark theme:
 
 ```typescript
-import { createTheme } from '@frontmcp/uipack/components';
+import { createTheme } from '@frontmcp/uipack/theme';
 
 const darkTheme = createTheme({
   name: 'dark',
@@ -63,7 +63,8 @@ const darkTheme = createTheme({
 Detect the platform theme and apply the appropriate theme:
 
 ```typescript
-import { baseLayout, DEFAULT_THEME, createTheme } from '@frontmcp/uipack/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
 
 const lightTheme = DEFAULT_THEME;
 const darkTheme = createTheme({ name: 'dark', /* ... */ });
@@ -136,7 +137,7 @@ const html = `
 Allow users to toggle dark mode manually:
 
 ```typescript
-import { button } from '@frontmcp/uipack/components';
+import { button } from '@frontmcp/ui/components';
 
 const toggleButton = button('Toggle Dark Mode', {
   data: { 'toggle-theme': 'true' },
@@ -157,7 +158,7 @@ ${toggleButton}
 Components automatically use CSS variables, so they work with any theme:
 
 ```typescript
-import { card, badge, button } from '@frontmcp/uipack/components';
+import { card, badge, button } from '@frontmcp/ui/components';
 
 // These components use CSS variables like:
 // - bg-primary -> var(--color-primary)
@@ -177,7 +178,7 @@ const html = card(`
 Create a complete light/dark setup:
 
 ```typescript title="src/themes/index.ts"
-import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/components';
+import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
 
 // Light theme (default)
 export const lightTheme = DEFAULT_THEME;
@@ -235,7 +236,7 @@ Usage:
 
 ```typescript
 import { getTheme } from './themes';
-import { baseLayout } from '@frontmcp/uipack/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
 
 @Tool({
   name: 'my_tool',

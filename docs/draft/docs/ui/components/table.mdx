@@ -8,7 +8,7 @@ description: Tables display structured data in rows and columns. FrontMCP UI tab
 ## Import
 
 ```typescript
-import { table, tableRow, tableCell, tableHeader } from '@frontmcp/uipack/components';
+import { table, tableRow, tableCell, tableHeader } from '@frontmcp/ui/components';
 ```
 
 ## Basic Usage
@@ -64,7 +64,7 @@ table({ variant: 'compact', headers: [...], rows: [...] })
 Use the `render` function for custom cell content:
 
 ```typescript
-import { table, badge, button } from '@frontmcp/uipack/components';
+import { table, badge, button } from '@frontmcp/ui/components';
 
 const html = table({
   columns: [
@@ -220,7 +220,7 @@ const html = table({
 ## Complete Example
 
 ```typescript
-import { card, table, badge, button, input } from '@frontmcp/uipack/components';
+import { card, table, badge, button, input } from '@frontmcp/ui/components';
 
 const usersTable = card(`
   <div class="mb-4">

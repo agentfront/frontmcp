@@ -132,7 +132,7 @@ Limit `csp.resourceDomains` and `csp.connectDomains` to only the hosts your widg
 Need a richer layout than a single card? `@frontmcp/uipack` ships `resourceWidget`, `resourceList`, `resourceItem`, `codePreview`, and `imagePreview` helpers so your responses match OpenAI Apps SDK expectations without manual HTML.
 
 ```typescript
-import { resourceWidget } from '@frontmcp/uipack/components';
+import { resourceWidget } from '@frontmcp/ui/components';
 
 const widget = resourceWidget({
   type: 'document',
@@ -182,7 +182,7 @@ Add a visual widget to your tool in just a few lines:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge } from '@frontmcp/uipack/components';
+import { card, badge } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({

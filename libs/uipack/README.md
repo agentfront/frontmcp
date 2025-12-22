@@ -36,7 +36,7 @@ yarn add @frontmcp/uipack
 ### HTML Components
 
 ```typescript
-import { button, card, alert, badge } from '@frontmcp/uipack/components';
+import { button, card, alert, badge } from '@frontmcp/ui/components';
 
 // Create HTML string components
 const btn = button('Click Me', { variant: 'primary', size: 'md' });

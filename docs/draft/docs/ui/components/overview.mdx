@@ -7,7 +7,7 @@ description: FrontMCP UI provides a collection of pre-built components for build
 
 ## Installation
 
-HTML string components are in the `@frontmcp/uipack` package:
+HTML string components are in the `@frontmcp/ui` package:
 
 ```typescript
 import {
@@ -20,7 +20,7 @@ import {
   table,
   avatar,
   modal,
-} from '@frontmcp/uipack/components';
+} from '@frontmcp/ui/components';
 ```
 
 <Info>
@@ -67,7 +67,7 @@ For React components, use `@frontmcp/ui/react` instead.
 All components follow the same pattern:
 
 ```typescript
-import { componentName } from '@frontmcp/uipack/components';
+import { componentName } from '@frontmcp/ui/components';
 
 // Basic usage
 const html = componentName('content');
@@ -166,7 +166,7 @@ const html = card(`
 Many components have companion "group" functions for layouts:
 
 ```typescript
-import { button, buttonGroup, card, cardGroup, badge, badgeGroup } from '@frontmcp/uipack/components';
+import { button, buttonGroup, card, cardGroup, badge, badgeGroup } from '@frontmcp/ui/components';
 
 // Button group
 const buttons = buttonGroup([

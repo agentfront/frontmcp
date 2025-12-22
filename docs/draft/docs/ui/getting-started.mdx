@@ -133,7 +133,7 @@ ui: {
 
 ```typescript title="src/tools/user-profile.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, button, alert } from '@frontmcp/uipack/components';
+import { card, badge, button, alert } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 @Tool({
@@ -188,7 +188,7 @@ Here's a full example combining multiple components:
 
 ```typescript title="src/tools/weather.tool.ts"
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, alert } from '@frontmcp/uipack/components';
+import { card, badge, alert } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 const inputSchema = {

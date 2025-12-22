@@ -10,7 +10,7 @@ description: FrontMCP UI includes pre-built layout templates for common widget p
 A multi-panel dashboard with stats and content areas:
 
 ```typescript
-import { dashboardLayout } from '@frontmcp/uipack/components';
+import { dashboardLayout } from '@frontmcp/ui/layouts';
 
 const html = dashboardLayout({
   title: 'Analytics Dashboard',
@@ -49,7 +49,7 @@ dashboardLayout({
 For displaying detailed information about a single item:
 
 ```typescript
-import { detailLayout } from '@frontmcp/uipack/components';
+import { detailLayout } from '@frontmcp/ui/layouts';
 
 const html = detailLayout({
   title: 'Order #12345',
@@ -90,7 +90,7 @@ detailLayout({
 For displaying lists of items with search and filters:
 
 ```typescript
-import { listLayout } from '@frontmcp/uipack/components';
+import { listLayout } from '@frontmcp/ui/layouts';
 
 const html = listLayout({
   title: 'Users',
@@ -147,7 +147,7 @@ listLayout({
 Structured form with sections:
 
 ```typescript
-import { formLayout } from '@frontmcp/uipack/components';
+import { formLayout } from '@frontmcp/ui/layouts';
 
 const html = formLayout({
   title: 'User Settings',
@@ -209,7 +209,7 @@ formLayout({
 For when there's no content to display:
 
 ```typescript
-import { emptyStateLayout } from '@frontmcp/uipack/components';
+import { emptyStateLayout } from '@frontmcp/ui/layouts';
 
 const html = emptyStateLayout({
   icon: '📭',
@@ -236,7 +236,7 @@ emptyStateLayout({
 For displaying error states:
 
 ```typescript
-import { errorLayout } from '@frontmcp/uipack/components';
+import { errorLayout } from '@frontmcp/ui/layouts';
 
 const html = errorLayout({
   code: '404',
@@ -251,7 +251,7 @@ const html = errorLayout({
 For confirmation states:
 
 ```typescript
-import { successLayout } from '@frontmcp/uipack/components';
+import { successLayout } from '@frontmcp/ui/layouts';
 
 const html = successLayout({
   icon: '✅',
@@ -270,8 +270,9 @@ const html = successLayout({
 Build your own layout functions:
 
 ```typescript title="src/layouts/product-layout.ts"
-import { baseLayout, card, badge, button, escapeHtml } from '@frontmcp/uipack/components';
-import { ThemeConfig } from '@frontmcp/uipack/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { card, badge, button, escapeHtml } from '@frontmcp/ui/components';
+import type { ThemeConfig } from '@frontmcp/uipack/theme';
 
 interface ProductLayoutOptions {
   product: {

@@ -10,7 +10,7 @@ description: FrontMCP UI provides layout utilities to structure your tool widget
 The `baseLayout` function wraps your content in a complete HTML document:
 
 ```typescript
-import { baseLayout } from '@frontmcp/uipack/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
 
 const html = baseLayout({
   title: 'My Widget',
@@ -178,7 +178,7 @@ const html = `
 ### Card Grid
 
 ```typescript
-import { card, cardGroup } from '@frontmcp/uipack/components';
+import { card, cardGroup } from '@frontmcp/ui/components';
 
 const html = cardGroup([
   card('Feature 1', { title: 'Speed' }),
@@ -286,7 +286,7 @@ const html = `
 Always escape user content in layouts:
 
 ```typescript
-import { escapeHtml } from '@frontmcp/uipack/components';
+import { escapeHtml } from '@frontmcp/ui/components';
 
 const html = `
 <div class="p-4">

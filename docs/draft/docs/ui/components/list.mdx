@@ -8,7 +8,7 @@ description: Lists organize related content in vertical layouts. FrontMCP UI pro
 ## Import
 
 ```typescript
-import { descriptionList, actionList, listItem } from '@frontmcp/uipack/components';
+import { descriptionList, actionList, listItem } from '@frontmcp/ui/components';
 ```
 
 ## Description List
@@ -27,7 +27,7 @@ const html = descriptionList([
 ### With Custom Rendering
 
 ```typescript
-import { descriptionList, badge, button } from '@frontmcp/uipack/components';
+import { descriptionList, badge, button } from '@frontmcp/ui/components';
 
 const html = descriptionList([
   { term: 'Status', description: badge('Active', { variant: 'success' }) },
@@ -89,7 +89,7 @@ const html = actionList([
 ### With Actions
 
 ```typescript
-import { actionList, button, badge } from '@frontmcp/uipack/components';
+import { actionList, button, badge } from '@frontmcp/ui/components';
 
 const html = actionList([
   {
@@ -179,7 +179,7 @@ const html = actionList([
 Create individual list items for custom layouts:
 
 ```typescript
-import { listItem } from '@frontmcp/uipack/components';
+import { listItem } from '@frontmcp/ui/components';
 
 const item = listItem({
   title: 'Document.pdf',
@@ -200,7 +200,7 @@ listItem({ title: 'Large item', size: 'lg' })
 ## Complete Example
 
 ```typescript
-import { card, descriptionList, actionList, badge, button } from '@frontmcp/uipack/components';
+import { card, descriptionList, actionList, badge, button } from '@frontmcp/ui/components';
 
 const settingsCard = card(`
   <div class="space-y-6">

@@ -16,7 +16,7 @@ import {
   radio,
   formGroup,
   formField,
-} from '@frontmcp/uipack/components';
+} from '@frontmcp/ui/components';
 ```
 
 ## Text Input
@@ -227,7 +227,7 @@ const selected = radio({
 Wrap form fields in a group:
 
 ```typescript
-import { formGroup, input, select, button } from '@frontmcp/uipack/components';
+import { formGroup, input, select, button } from '@frontmcp/ui/components';
 
 const form = formGroup([
   input({ name: 'name', label: 'Full Name' }),
@@ -249,7 +249,7 @@ const form = formGroup([
 Wrap a single field with label and error:
 
 ```typescript
-import { formField, input } from '@frontmcp/uipack/components';
+import { formField, input } from '@frontmcp/ui/components';
 
 const field = formField({
   label: 'Email Address',
@@ -264,7 +264,7 @@ const field = formField({
 Submit forms without page reload:
 
 ```typescript
-import { input, button, formGroup } from '@frontmcp/uipack/components';
+import { input, button, formGroup } from '@frontmcp/ui/components';
 
 const form = `
 <form hx-post="/api/submit" hx-target="#result" hx-swap="innerHTML">
@@ -297,7 +297,7 @@ const emailInput = input({
 ## Complete Form Example
 
 ```typescript
-import { card, input, select, textarea, checkbox, button, formGroup } from '@frontmcp/uipack/components';
+import { card, input, select, textarea, checkbox, button, formGroup } from '@frontmcp/ui/components';
 
 const contactForm = card(`
   <form hx-post="/api/contact" hx-target="#form-result">

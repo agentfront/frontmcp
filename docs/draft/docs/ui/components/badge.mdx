@@ -16,7 +16,7 @@ import {
   errorBadge,
   onlineDot,
   offlineDot,
-} from '@frontmcp/uipack/components';
+} from '@frontmcp/ui/components';
 ```
 
 ## Basic Usage
@@ -93,7 +93,7 @@ const busy = badge('Busy', { dot: true, variant: 'danger' });
 ### Dot Presets
 
 ```typescript
-import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/uipack/components';
+import { onlineDot, offlineDot, busyDot, awayDot } from '@frontmcp/ui/components';
 
 onlineDot()              // Green dot, "Online" label
 offlineDot()             // Gray dot, "Offline" label
@@ -135,7 +135,7 @@ import {
   errorBadge,
   newBadge,
   betaBadge,
-} from '@frontmcp/uipack/components';
+} from '@frontmcp/ui/components';
 
 activeBadge()         // "Active" - success variant
 inactiveBadge()       // "Inactive" - default variant
@@ -154,7 +154,7 @@ pendingBadge('In Review')
 Arrange multiple badges:
 
 ```typescript
-import { badge, badgeGroup } from '@frontmcp/uipack/components';
+import { badge, badgeGroup } from '@frontmcp/ui/components';
 
 const tags = badgeGroup([
   badge('JavaScript'),
@@ -175,7 +175,7 @@ const spaced = badgeGroup([
 ### Status Indicators
 
 ```typescript
-import { card, badge } from '@frontmcp/uipack/components';
+import { card, badge } from '@frontmcp/ui/components';
 
 const taskCard = card(`
   <div class="flex items-center justify-between">

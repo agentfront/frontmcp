@@ -8,7 +8,7 @@ description: Cards are containers for grouping related content. They support hea
 ## Import
 
 ```typescript
-import { card, cardGroup } from '@frontmcp/uipack/components';
+import { card, cardGroup } from '@frontmcp/ui/components';
 ```
 
 ## Basic Usage
@@ -29,7 +29,7 @@ const html = card('Card body content here.', {
 ## With Header Actions
 
 ```typescript
-import { card, button, badge } from '@frontmcp/uipack/components';
+import { card, button, badge } from '@frontmcp/ui/components';
 
 const html = card('User information and details.', {
   title: 'User Profile',
@@ -123,7 +123,7 @@ const html = card('Initial content.', {
 Arrange multiple cards in a layout:
 
 ```typescript
-import { card, cardGroup } from '@frontmcp/uipack/components';
+import { card, cardGroup } from '@frontmcp/ui/components';
 
 // Vertical stack (default)
 const vertical = cardGroup([
@@ -149,7 +149,7 @@ const spaced = cardGroup([
 ## Complex Example
 
 ```typescript
-import { card, badge, button, avatar } from '@frontmcp/uipack/components';
+import { card, badge, button, avatar } from '@frontmcp/ui/components';
 
 const userCard = card(`
   <div class="flex items-center gap-4">

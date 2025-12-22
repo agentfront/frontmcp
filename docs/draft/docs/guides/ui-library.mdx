@@ -8,7 +8,7 @@ description: Ship HTML-first consent, status, and orchestration screens with the
 `@frontmcp/uipack` is a platform-aware HTML component kit designed for LLM surfaces. It renders complete markup (no React runtime) and ships a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
 
 <Note>
-HTML components live in `@frontmcp/uipack` (no React required). For React components and hooks, use `@frontmcp/ui` instead.
+HTML components live in `@frontmcp/ui/components` (no React required). For React components and hooks, use `@frontmcp/ui/react` instead.
 </Note>
 
 ## Why @frontmcp/uipack
@@ -41,7 +41,9 @@ yarn add @frontmcp/uipack
 Wrap content with `baseLayout`, then mix components such as `card` and `button`. Everything resolves to HTML strings you can hand to an MCP resource or auth callback.
 
 ```ts
-import { baseLayout, card, button, DEFAULT_THEME } from '@frontmcp/uipack';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { card, button } from '@frontmcp/ui/components';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
 
 const content = card(
   `
@@ -69,7 +71,7 @@ Send `html` as the body of an MCP resource, OAuth consent page, or even an email
 Every interactive component accepts an `htmx` block. Attributes are sanitized to prevent unsafe protocols or arbitrary data-\* fields, so you can expose progressive enhancement safely.
 
 ```ts
-import { form, input, button } from '@frontmcp/uipack';
+import { form, input, button } from '@frontmcp/ui/components';
 
 const loginForm = form(
   `
@@ -102,7 +104,7 @@ import {
   getPlatform,
   canUseCdn,
   needsInlineScripts,
-} from '@frontmcp/uipack';
+} from '@frontmcp/uipack/theme';
 
 const theme = createTheme({
   name: 'crm-dark',
@@ -142,7 +144,7 @@ Claude Artifacts and other restricted environments block outbound requests. Call
 Need a consent or error page fast? Use the prebuilt templates so every auth flow looks consistent.
 
 ```ts
-import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/uipack';
+import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/uipack/pages';
 
 const grantScreen = consentPage({
   client: { name: 'CodeCall CRM', id: 'crm' },
@@ -169,7 +171,7 @@ const outageScreen = errorPage({
 Components validate input with Zod. When something is wrong, the library renders a compact error box that lists the component name and the failed property—perfect for catching mistakes before you ship.
 
 ```ts
-import { button } from '@frontmcp/uipack';
+import { button } from '@frontmcp/ui/components';
 
 const ok = button('Continue', { variant: 'primary' });
 
