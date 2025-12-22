@@ -49,7 +49,7 @@ import {
   ALERT_ICONS,
   CLOSE_ICON,
   cn,
-} from '../styles/variants';
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**

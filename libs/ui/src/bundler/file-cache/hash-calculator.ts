@@ -13,7 +13,7 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 
-import type { FileBundleOptions, CDNDependency } from '../../dependency/types';
+import type { FileBundleOptions, CDNDependency } from '@frontmcp/uipack/dependency';
 
 // ============================================
 // Hash Functions

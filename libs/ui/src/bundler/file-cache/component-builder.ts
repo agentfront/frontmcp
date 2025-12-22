@@ -19,11 +19,10 @@ import type {
   CDNPlatformType,
   ResolvedDependency,
   ImportMap,
-} from '../../dependency/types';
+} from '@frontmcp/uipack/dependency';
 import type { BuildCacheStorage } from './storage/interface';
 import { calculateComponentHash, generateBuildId } from './hash-calculator';
-import { DependencyResolver } from '../../dependency/resolver';
-import { createImportMap, generateDependencyHTML } from '../../dependency/import-map';
+import { DependencyResolver, createImportMap, generateDependencyHTML } from '@frontmcp/uipack/dependency';
 
 // ============================================
 // Builder Options

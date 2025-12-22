@@ -49,7 +49,7 @@ import {
   BUTTON_BASE_CLASSES,
   LOADING_SPINNER,
   cn,
-} from '../styles/variants';
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**

@@ -18,10 +18,17 @@ import type {
   BadgeSize,
   ButtonOptions,
   AlertOptions,
-} from '../components';
+} from '@frontmcp/uipack/components';
 
 // Re-export element classes for ref typing
-export type { FmcpButton, FmcpCard, FmcpAlert, FmcpBadge, FmcpInput, FmcpSelect } from '../web-components';
+export type {
+  FmcpButton,
+  FmcpCard,
+  FmcpAlert,
+  FmcpBadge,
+  FmcpInput,
+  FmcpSelect,
+} from '@frontmcp/uipack/web-components';
 
 // ============================================
 // Card Props

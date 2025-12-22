@@ -7,7 +7,7 @@
 
 import React from 'react';
 import type { ClientRenderer, UniversalContent, RenderContext } from '../types';
-import { escapeHtml } from '../../utils/escape-html';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
 // ============================================
 // Security Helpers

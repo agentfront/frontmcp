@@ -9,12 +9,12 @@
  * - **static**: Static widget is pre-compiled at startup, client fetches via resources/read
  * - **hybrid**: Shell (React + renderer) cached at startup, component + data in response
  *
- * NOTE: Core Tool UI functionality has moved to @frontmcp/ui/registry for standalone usage.
- * This module re-exports from @frontmcp/ui/registry for backwards compatibility.
+ * NOTE: Core Tool UI functionality is in @frontmcp/uipack/registry for standalone usage.
+ * This module re-exports from @frontmcp/uipack for backwards compatibility.
  */
 
 // ============================================
-// Core Registry (from @frontmcp/ui/registry)
+// Core Registry (from @frontmcp/uipack/registry)
 // ============================================
 export {
   // Registry
@@ -32,7 +32,7 @@ export {
   parseWidgetUri,
   buildStaticWidgetUri,
   getUIResourceMimeType,
-} from '@frontmcp/ui/registry';
+} from '@frontmcp/uipack/registry';
 
 export type {
   // Registry types
@@ -45,7 +45,7 @@ export type {
   RenderTemplateOptions,
   // URI types
   ParsedWidgetUri,
-} from '@frontmcp/ui/registry';
+} from '@frontmcp/uipack/registry';
 
 // ============================================
 // Platform Adapters (from @frontmcp/ui/adapters)

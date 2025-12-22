@@ -36,7 +36,13 @@
 
 import React from 'react';
 import type { ReactNode, ReactElement } from 'react';
-import { type CardVariant, type CardSize, getCardVariantClasses, getCardSizeClasses, cn } from '../styles/variants';
+import {
+  type CardVariant,
+  type CardSize,
+  getCardVariantClasses,
+  getCardSizeClasses,
+  cn,
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**

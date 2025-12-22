@@ -1,35 +1,22 @@
 /**
- * Renderer Module
+ * React Renderer Module
  *
- * Multi-framework rendering system for Tool UI templates.
- * Supports HTML, React, and MDX templates with auto-detection.
+ * Provides the React renderer for template processing.
+ * Other renderers (HTML, MDX) and utilities are available in @frontmcp/uipack.
  *
- * @module @frontmcp/ui
+ * @module @frontmcp/ui/renderers
  *
- * @example Basic usage with auto-detection
+ * @example
  * ```typescript
- * import { rendererRegistry } from '@frontmcp/ui';
+ * import { reactRenderer, ReactRenderer } from '@frontmcp/ui/renderers';
+ * import { rendererRegistry } from '@frontmcp/uipack/renderers';
  *
- * // HTML template
- * const htmlTemplate = (ctx) => `<div>${ctx.output.name}</div>`;
- * const result = await rendererRegistry.render(htmlTemplate, context);
- * ```
- *
- * @example Register React renderer
- * ```typescript
- * import { rendererRegistry, reactRenderer } from '@frontmcp/ui';
- *
+ * // Register React renderer
  * rendererRegistry.register(reactRenderer);
- *
- * // Now React components are auto-detected
- * const MyComponent = ({ output }) => <div>{output.name}</div>;
- * const result = await rendererRegistry.render(MyComponent, context);
  * ```
  */
 
-// Types
-// Note: TemplateBuilderFn and ToolUITemplate are exported from ../runtime/types
-// to avoid duplication with the main runtime exports
+// Re-export types from @frontmcp/uipack for convenience
 export type {
   RendererType,
   UIRenderer,
@@ -45,36 +32,10 @@ export type {
   ReactComponentType,
   WrapperContext,
   ExtendedToolUIConfig,
-} from './types';
+} from '@frontmcp/uipack/renderers';
 
-// Cache
-export { TranspileCache, transpileCache, renderCache, type TranspileCacheOptions } from './cache';
-
-// Registry
-export { RendererRegistry, rendererRegistry } from './registry';
-
-// HTML Renderer (built-in)
-export { HtmlRenderer, htmlRenderer } from './html.renderer';
-
-// React Renderer
+// React Renderer (only available in @frontmcp/ui)
 export { ReactRenderer, reactRenderer, buildHydrationScript } from './react.renderer';
 
-// MDX Renderer
-export { MdxRenderer, mdxRenderer, buildMdxHydrationScript } from './mdx.renderer';
-
-// Utilities
-export {
-  isReactComponent,
-  isTemplateBuilderFunction,
-  containsJsx,
-  containsMdxSyntax,
-  isPlainHtml,
-  detectTemplateType,
-  hashString,
-  hashCombined,
-  isHash,
-  transpileJsx,
-  isSwcAvailable,
-  executeTranspiledCode,
-  transpileAndExecute,
-} from './utils';
+// React Renderer Adapter (client-side rendering)
+export { ReactRendererAdapter, createReactAdapter, loadReactAdapter } from './react.adapter';

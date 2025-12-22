@@ -1,0 +1,115 @@
+{
+  "name": "uipack",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/uipack/src",
+  "projectType": "library",
+  "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/uipack/dist",
+        "main": "libs/uipack/src/index.ts",
+        "tsConfig": "libs/uipack/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/uipack/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/uipack/README.md", "LICENSE", "libs/uipack/package.json"],
+        "additionalEntryPoints": [
+          "libs/uipack/src/adapters/index.ts",
+          "libs/uipack/src/base-template/index.ts",
+          "libs/uipack/src/bridge/index.ts",
+          "libs/uipack/src/build/index.ts",
+          "libs/uipack/src/bundler/index.ts",
+          "libs/uipack/src/components/index.ts",
+          "libs/uipack/src/handlebars/index.ts",
+          "libs/uipack/src/layouts/index.ts",
+          "libs/uipack/src/pages/index.ts",
+          "libs/uipack/src/registry/index.ts",
+          "libs/uipack/src/renderers/index.ts",
+          "libs/uipack/src/runtime/index.ts",
+          "libs/uipack/src/styles/index.ts",
+          "libs/uipack/src/theme/index.ts",
+          "libs/uipack/src/tool-template/index.ts",
+          "libs/uipack/src/types/index.ts",
+          "libs/uipack/src/utils/index.ts",
+          "libs/uipack/src/validation/index.ts",
+          "libs/uipack/src/web-components/index.ts",
+          "libs/uipack/src/widgets/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/uipack/dist/esm",
+        "main": "libs/uipack/src/index.ts",
+        "tsConfig": "libs/uipack/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": true,
+        "declarationRootDir": "libs/uipack/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": [
+          "libs/uipack/src/adapters/index.ts",
+          "libs/uipack/src/base-template/index.ts",
+          "libs/uipack/src/bridge/index.ts",
+          "libs/uipack/src/build/index.ts",
+          "libs/uipack/src/bundler/index.ts",
+          "libs/uipack/src/components/index.ts",
+          "libs/uipack/src/handlebars/index.ts",
+          "libs/uipack/src/layouts/index.ts",
+          "libs/uipack/src/pages/index.ts",
+          "libs/uipack/src/registry/index.ts",
+          "libs/uipack/src/renderers/index.ts",
+          "libs/uipack/src/runtime/index.ts",
+          "libs/uipack/src/styles/index.ts",
+          "libs/uipack/src/theme/index.ts",
+          "libs/uipack/src/tool-template/index.ts",
+          "libs/uipack/src/types/index.ts",
+          "libs/uipack/src/utils/index.ts",
+          "libs/uipack/src/validation/index.ts",
+          "libs/uipack/src/web-components/index.ts",
+          "libs/uipack/src/widgets/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js libs/uipack/dist/package.json"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish libs/uipack/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/uipack"],
+      "options": {
+        "jestConfig": "libs/uipack/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

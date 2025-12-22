@@ -9,7 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { escapeHtml } from '../layouts/base';
+import { escapeHtml } from '@frontmcp/uipack/layouts';
 
 // Lazy-load ReactDOMServer to avoid import errors in non-React environments
 let cachedReactDOMServer: typeof import('react-dom/server') | null = null;

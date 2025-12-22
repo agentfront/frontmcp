@@ -1,0 +1,68 @@
+{
+  "name": "@frontmcp/uipack",
+  "version": "0.6.0",
+  "description": "FrontMCP UIpack - Bundling, build tools, and platform adapters for MCP UI development (React-free core)",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "ui",
+    "bundler",
+    "esbuild",
+    "swc",
+    "tailwind",
+    "htmx",
+    "agentfront",
+    "frontmcp",
+    "framework",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      }
+    },
+    "./*": {
+      "development": "./src/*/index.ts",
+      "require": {
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/*/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/*/index.d.ts",
+        "default": "./dist/esm/*/index.js"
+      }
+    },
+    "./esm": null
+  },
+  "dependencies": {
+    "@swc/core": "^1.5.0",
+    "enclave-vm": "^1.0.3",
+    "esbuild": "^0.27.1",
+    "handlebars": "^4.7.8",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
