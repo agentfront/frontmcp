@@ -2,16 +2,18 @@
 title: Platform-Aware UI Library
 slug: guides/ui-library
 icon: layout-grid
-description: Ship HTML-first consent, status, and orchestration screens with the @frontmcp/ui package.
+description: Ship HTML-first consent, status, and orchestration screens with @frontmcp/ui and @frontmcp/uipack.
 ---
 
-@frontmcp/ui is a platform-aware HTML component kit designed for LLM surfaces. It renders complete markup (no React runtime) and ships a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
+The FrontMCP UI packages provide a platform-aware HTML component system designed for LLM surfaces. They render complete markup (no React runtime required) and ship a Tailwind v4 theme system, HTMX hooks, page templates, and OpenAI App widgets so you can style consent screens, troubleshooting pages, or CodeCall dashboards inside any MCP server.
 
 <Note>
-All exports live in `@frontmcp/ui`—bring them into your server, Remix app, or plain Node script without extra bundling.
+**Package responsibilities:**
+ - `@frontmcp/ui` provides HTML components (`/components`), layouts (`/layouts`), widgets (`/widgets`), and React components (`/react`)
+- `@frontmcp/uipack` provides theming (`/theme`), page templates (`/pages`), and build utilities
 </Note>
 
-## Why @frontmcp/ui
+## Why use the UI packages
 
 - **Pure HTML output** – Components return strings so you can stream them directly through MCP resources, auth flows, or ngrok tunnels.
 - **Platform detection** – Helpers detect OpenAI, Claude, Gemini, and local browsers so you can inline scripts when networks are blocked.
@@ -23,15 +25,15 @@ All exports live in `@frontmcp/ui`—bring them into your server, Remix app, or 
 
 <CodeGroup>
 ```bash npm
-npm install @frontmcp/ui
+npm install @frontmcp/ui @frontmcp/uipack
 ```
 
 ```bash pnpm
-pnpm add @frontmcp/ui
+pnpm add @frontmcp/ui @frontmcp/uipack
 ```
 
 ```bash yarn
-yarn add @frontmcp/ui
+yarn add @frontmcp/ui @frontmcp/uipack
 ```
 
 </CodeGroup>
@@ -41,7 +43,9 @@ yarn add @frontmcp/ui
 Wrap content with `baseLayout`, then mix components such as `card` and `button`. Everything resolves to HTML strings you can hand to an MCP resource or auth callback.
 
 ```ts
-import { baseLayout, card, button, DEFAULT_THEME } from '@frontmcp/ui';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { card, button } from '@frontmcp/ui/components';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
 
 const content = card(
   `
@@ -69,7 +73,7 @@ Send `html` as the body of an MCP resource, OAuth consent page, or even an email
 Every interactive component accepts an `htmx` block. Attributes are sanitized to prevent unsafe protocols or arbitrary data-\* fields, so you can expose progressive enhancement safely.
 
 ```ts
-import { form, input, button } from '@frontmcp/ui';
+import { form, input, button } from '@frontmcp/ui/components';
 
 const loginForm = form(
   `
@@ -102,7 +106,7 @@ import {
   getPlatform,
   canUseCdn,
   needsInlineScripts,
-} from '@frontmcp/ui';
+} from '@frontmcp/uipack/theme';
 
 const theme = createTheme({
   name: 'crm-dark',
@@ -142,7 +146,7 @@ Claude Artifacts and other restricted environments block outbound requests. Call
 Need a consent or error page fast? Use the prebuilt templates so every auth flow looks consistent.
 
 ```ts
-import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/ui';
+import { consentPage, consentSuccessPage, errorPage } from '@frontmcp/uipack/pages';
 
 const grantScreen = consentPage({
   client: { name: 'CodeCall CRM', id: 'crm' },
@@ -169,7 +173,7 @@ const outageScreen = errorPage({
 Components validate input with Zod. When something is wrong, the library renders a compact error box that lists the component name and the failed property—perfect for catching mistakes before you ship.
 
 ```ts
-import { button } from '@frontmcp/ui';
+import { button } from '@frontmcp/ui/components';
 
 const ok = button('Continue', { variant: 'primary' });
 
@@ -183,4 +187,4 @@ Validation errors render in development and production. Keep an eye on your prev
 
 ## Widgets and next steps
 
-The `widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/docs/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.
+The `@frontmcp/ui/widgets` module exposes OpenAI App SDK components (resource pickers, action lists) plus status badges, progress indicators, and table helpers. Pair this guide with the [CodeCall CRM demo](/docs/guides/codecall-crm-demo) to see the library inside a full orchestration workflow, or expose the HTML through an MCP resource for your own consent flows.

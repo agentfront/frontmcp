@@ -7,6 +7,10 @@ description: Configure Redis for development and production deployments
 
 FrontMCP uses Redis for caching, session storage, and distributed state management.
 
+<Tip>
+**Deploying to Vercel?** Consider [Vercel KV](/docs/deployment/vercel-kv) for edge-compatible storage without managing Redis infrastructure.
+</Tip>
+
 ## Requirements
 
 | Environment | Redis        | Notes                                    |
@@ -65,6 +69,10 @@ CachePlugin.init({
 });
 ```
 
+<Tip>
+Already configuring the top-level `redis` block (or `redis.provider: 'vercel-kv'`) on `@FrontMcp`? Set `CachePlugin.init({ type: 'global-store' })` so the plugin automatically reuses that store without duplicating credentials.
+</Tip>
+
 For complete CachePlugin API documentation, see the [Cache Plugin Guide](/docs/plugins/cache-plugin).
 
 ## Production Setup
@@ -120,20 +128,23 @@ import { CachePlugin } from '@frontmcp/plugins';
 
 @FrontMcp({
   info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === 'true',
+  },
   plugins: [
     CachePlugin.init({
-      type: 'redis',
-      config: {
-        host: process.env.REDIS_HOST,
-        port: Number(process.env.REDIS_PORT || 6379),
-        password: process.env.REDIS_PASSWORD,
-        tls: process.env.REDIS_TLS === 'true',
-      },
+      type: 'global-store',
+      defaultTTL: 600,
     }),
   ],
 })
 export default class Server {}
 ```
+
+Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel KV—the Cache Plugin will keep reusing the same store without code changes.
 
 ## Environment Variables
 
