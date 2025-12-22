@@ -39,7 +39,7 @@
       "og:image": "/assets/logo/banner.dark.png",
       "charset": "UTF-8",
       "viewport": "width=device-width, initial-scale=1.0",
-      "keywords": "mcp, dependencyinjection, sdk, adapters, plugins, agentfront, frontmcp, framework, typescript, json-schema, zod, zod-v3, schemavalidation, openapi, apivalidation, typesafety, runtimevalidation"
+      "keywords": "mcp, model context protocol, ai agents, llm tools, claude, openai, anthropic, ai sdk, typescript, dependency injection, decorators, zod, json-schema, openapi, api validation, type safety, runtime validation, mcp server, mcp framework, frontmcp, agentfront, ai tools, agent framework, streamable http, oauth, authentication"
     }
   },
   "navbar": {
@@ -178,6 +178,7 @@
                   "docs/deployment/local-dev-server",
                   "docs/deployment/production-build",
                   "docs/deployment/redis-setup",
+                  "docs/deployment/vercel-kv",
                   "docs/deployment/serverless"
                 ]
               }
@@ -386,7 +387,8 @@
                   "docs/ui/components/table",
                   "docs/ui/components/list",
                   "docs/ui/components/avatar",
-                  "docs/ui/components/modal"
+                  "docs/ui/components/modal",
+                  "docs/ui/components/resource-widgets"
                 ]
               },
               {
@@ -408,7 +410,7 @@
               {
                 "group": "Integration",
                 "icon": "plug",
-                "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation"]
+                "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation", "docs/ui/integration/testing"]
               },
               {
                 "group": "Theming",
