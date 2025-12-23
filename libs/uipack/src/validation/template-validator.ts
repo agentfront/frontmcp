@@ -8,20 +8,8 @@
  */
 
 import { z } from 'zod';
-import {
-  extractExpressions,
-  extractAll,
-  normalizePath,
-  type ExtractedExpression,
-} from '../handlebars/expression-extractor';
-import {
-  extractSchemaPaths,
-  getSchemaPathStrings,
-  isValidSchemaPath,
-  getTypeDescription,
-  getRootFieldNames,
-  type SchemaPath,
-} from './schema-paths';
+import { extractExpressions, extractAll, normalizePath } from '../handlebars/expression-extractor';
+import { extractSchemaPaths, getSchemaPathStrings, type SchemaPath } from './schema-paths';
 
 // ============================================
 // Types

@@ -703,7 +703,7 @@ export function getPackagePeerDependencies(
  */
 export function resolveAllDependencies(
   packageNames: string[],
-  platform: CDNPlatformType = 'unknown',
+  _platform: CDNPlatformType = 'unknown',
   registry: CDNRegistry = DEFAULT_CDN_REGISTRY,
 ): string[] {
   const resolved = new Set<string>();

@@ -37,7 +37,7 @@
  * @packageDocumentation
  */
 
-import type { TemplateContext, TemplateHelpers } from '../types';
+import type { TemplateHelpers } from '../types';
 import { builtinHelpers, type HelperFunction } from './helpers';
 
 /**

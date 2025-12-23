@@ -8,7 +8,7 @@
  */
 
 import type { ComponentBuildManifest, CacheStats } from '../../../dependency/types';
-import type { BuildCacheStorage, StorageOptions, CacheEntry, CacheEntryMetadata } from './interface';
+import type { BuildCacheStorage, StorageOptions, CacheEntry } from './interface';
 import { DEFAULT_STORAGE_OPTIONS, calculateManifestSize } from './interface';
 
 /**

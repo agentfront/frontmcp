@@ -635,7 +635,7 @@ export function urlToVirtualPath(url: string, packageName: string, version: stri
     const pathname = urlObj.pathname;
 
     // Remove /v{number}/ prefix from esm.sh URLs
-    let cleanPath = pathname.replace(/^\/v\d+\//, '/');
+    const cleanPath = pathname.replace(/^\/v\d+\//, '/');
 
     // Find where the package@version starts
     const versionedPackage = `${packageName}@${version}`;

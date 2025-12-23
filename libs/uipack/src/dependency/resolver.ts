@@ -17,7 +17,6 @@ import type {
   ImportMap,
 } from './types';
 import {
-  DEFAULT_CDN_REGISTRY,
   CDN_PROVIDER_PRIORITY,
   lookupPackage,
   getPackagePeerDependencies,

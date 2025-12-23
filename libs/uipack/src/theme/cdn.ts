@@ -97,8 +97,9 @@ const scriptCache: Map<string, string> = new Map();
  * Fetch a script and cache its content
  */
 export async function fetchScript(url: string): Promise<string> {
-  if (scriptCache.has(url)) {
-    return scriptCache.get(url)!;
+  const cached = scriptCache.get(url);
+  if (cached) {
+    return cached;
   }
 
   const response = await fetch(url);
@@ -244,8 +245,9 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
   if (inline) {
     // Use cached inline scripts - warn if not cached
     if (tailwind) {
-      if (isScriptCached(CDN.tailwind)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(CDN.tailwind)!));
+      const cached = getCachedScript(CDN.tailwind);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScripts() first.',
@@ -253,8 +255,9 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
       }
     }
     if (htmx) {
-      if (isScriptCached(CDN.htmx.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(CDN.htmx.url)!));
+      const cached = getCachedScript(CDN.htmx.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScripts() first.',
@@ -262,8 +265,9 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
       }
     }
     if (alpine) {
-      if (isScriptCached(CDN.alpine.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(CDN.alpine.url)!));
+      const cached = getCachedScript(CDN.alpine.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScripts() first.',
@@ -271,8 +275,9 @@ export function buildCdnScripts(options: CdnScriptOptions = {}): string {
       }
     }
     if (icons) {
-      if (isScriptCached(CDN.icons.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(CDN.icons.url)!));
+      const cached = getCachedScript(CDN.icons.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but Lucide icons script not cached. Call fetchAndCacheScripts() first.',
@@ -367,8 +372,9 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
   if (inline) {
     // Use cached inline scripts - warn if not cached
     if (tailwind) {
-      if (isScriptCached(tailwindUrl)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(tailwindUrl)!));
+      const cached = getCachedScript(tailwindUrl);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but Tailwind script not cached. Call fetchAndCacheScriptsFromTheme() first.',
@@ -376,8 +382,9 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
       }
     }
     if (htmx) {
-      if (isScriptCached(htmxConfig.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(htmxConfig.url)!));
+      const cached = getCachedScript(htmxConfig.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but HTMX script not cached. Call fetchAndCacheScriptsFromTheme() first.',
@@ -385,8 +392,9 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
       }
     }
     if (alpine) {
-      if (isScriptCached(alpineConfig.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(alpineConfig.url)!));
+      const cached = getCachedScript(alpineConfig.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but Alpine.js script not cached. Call fetchAndCacheScriptsFromTheme() first.',
@@ -394,8 +402,9 @@ export function buildCdnScriptsFromTheme(theme: ThemeConfig, options: ThemeCdnSc
       }
     }
     if (icons) {
-      if (isScriptCached(iconsConfig.url)) {
-        scripts.push(buildInlineScriptTag(getCachedScript(iconsConfig.url)!));
+      const cached = getCachedScript(iconsConfig.url);
+      if (cached) {
+        scripts.push(buildInlineScriptTag(cached));
       } else {
         console.warn(
           '[frontmcp/ui] Inline mode requested but icons script not cached. Call fetchAndCacheScriptsFromTheme() first.',

@@ -7,7 +7,7 @@
 
 import type { WrapToolUIOptions, HostContext } from './types';
 import { MCP_BRIDGE_RUNTIME } from './mcp-bridge';
-import { buildCSPMetaTag, buildCSPDirectives } from './csp';
+import { buildCSPMetaTag } from './csp';
 import {
   type ThemeConfig,
   type PlatformCapabilities,
