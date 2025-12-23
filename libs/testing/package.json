@@ -26,7 +26,7 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
-  "module": "./dist/esm/index.js",
+  "module": "./dist/esm/index.mjs",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "exports": {
@@ -38,8 +38,8 @@
         "default": "./dist/index.js"
       },
       "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
       }
     },
     "./setup": {
@@ -49,8 +49,8 @@
         "default": "./dist/setup.js"
       },
       "import": {
-        "types": "./dist/esm/setup.d.ts",
-        "default": "./dist/esm/setup.js"
+        "types": "./dist/setup.d.ts",
+        "default": "./dist/esm/setup.mjs"
       }
     },
     "./jest-preset": {
@@ -63,8 +63,8 @@
         "default": "./dist/fixtures/index.js"
       },
       "import": {
-        "types": "./dist/esm/fixtures/index.d.ts",
-        "default": "./dist/esm/fixtures/index.js"
+        "types": "./dist/fixtures/index.d.ts",
+        "default": "./dist/esm/fixtures/index.mjs"
       }
     },
     "./matchers": {
@@ -74,8 +74,8 @@
         "default": "./dist/matchers/index.js"
       },
       "import": {
-        "types": "./dist/esm/matchers/index.d.ts",
-        "default": "./dist/esm/matchers/index.js"
+        "types": "./dist/matchers/index.d.ts",
+        "default": "./dist/esm/matchers/index.mjs"
       }
     },
     "./playwright": {
@@ -85,8 +85,8 @@
         "default": "./dist/playwright/index.js"
       },
       "import": {
-        "types": "./dist/esm/playwright/index.d.ts",
-        "default": "./dist/esm/playwright/index.js"
+        "types": "./dist/playwright/index.d.ts",
+        "default": "./dist/esm/playwright/index.mjs"
       }
     },
     "./esm": null

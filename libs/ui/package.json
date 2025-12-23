@@ -25,7 +25,7 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
-  "module": "./dist/esm/index.js",
+  "module": "./dist/esm/index.mjs",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "exports": {
@@ -37,8 +37,8 @@
         "default": "./dist/index.js"
       },
       "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
       }
     },
     "./*": {
@@ -48,8 +48,8 @@
         "default": "./dist/*/index.js"
       },
       "import": {
-        "types": "./dist/esm/*/index.d.ts",
-        "default": "./dist/esm/*/index.js"
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/esm/*/index.mjs"
       }
     },
     "./esm": null

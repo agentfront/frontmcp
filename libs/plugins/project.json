@@ -46,14 +46,13 @@
         "main": "libs/plugins/src/index.ts",
         "tsConfig": "libs/plugins/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/plugins/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "additionalEntryPoints": ["libs/plugins/src/cache/index.ts", "libs/plugins/src/codecall/index.ts"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "ioredis",
             "enclave-vm",

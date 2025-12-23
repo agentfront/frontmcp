@@ -23,7 +23,7 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
-  "module": "./dist/esm/index.js",
+  "module": "./dist/esm/index.mjs",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "exports": {
@@ -35,8 +35,8 @@
         "default": "./dist/index.js"
       },
       "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
       }
     },
     "./openapi": {
@@ -46,8 +46,8 @@
         "default": "./dist/openapi/index.js"
       },
       "import": {
-        "types": "./dist/esm/openapi/index.d.ts",
-        "default": "./dist/esm/openapi/index.js"
+        "types": "./dist/openapi/index.d.ts",
+        "default": "./dist/esm/openapi/index.mjs"
       }
     },
     "./esm": null

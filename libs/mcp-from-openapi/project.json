@@ -39,13 +39,12 @@
         "main": "libs/mcp-from-openapi/src/index.ts",
         "tsConfig": "libs/mcp-from-openapi/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/mcp-from-openapi/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": ["@apidevtools/json-schema-ref-parser", "openapi-types", "yaml", "zod"]
         }
       }

@@ -39,13 +39,12 @@
         "main": "libs/json-schema-to-zod-v3/src/index.ts",
         "tsConfig": "libs/json-schema-to-zod-v3/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/json-schema-to-zod-v3/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": ["zod"]
         }
       }

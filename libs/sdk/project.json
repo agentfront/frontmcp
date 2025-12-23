@@ -19,7 +19,6 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
-        "skipTypeCheck": true,
         "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
         "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
         "esbuildOptions": {
@@ -52,15 +51,14 @@
         "main": "libs/sdk/src/index.ts",
         "tsConfig": "libs/sdk/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/sdk/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "skipTypeCheck": true,
         "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "@frontmcp/sdk",
             "@frontmcp/uipack",

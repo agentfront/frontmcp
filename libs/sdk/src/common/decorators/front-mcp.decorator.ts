@@ -1,9 +1,19 @@
 import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
-import { FrontMcpInstance } from '../../front-mcp';
 import { applyMigration } from '../migrate';
 import { InternalMcpError } from '../../errors/mcp.error';
+
+// Lazy import to avoid circular dependency
+// Uses require() to ensure same module instance (avoids dual-package hazard)
+let _FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance | null = null;
+function getFrontMcpInstance() {
+  if (!_FrontMcpInstance) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _FrontMcpInstance = require('../../front-mcp').FrontMcpInstance;
+  }
+  return _FrontMcpInstance!;
+}
 
 /**
  * Decorator that marks a class as a FrontMcp Server and provides metadata
@@ -59,7 +69,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
         setServerlessHandlerPromise,
         setServerlessHandlerError,
       }: {
-        FrontMcpInstance: typeof FrontMcpInstance;
+        FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance;
         setServerlessHandler: (handler: unknown) => void;
         setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
         setServerlessHandlerError: (error: Error) => void;
@@ -81,17 +91,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
-      // Use direct string literal for bundler static analysis
-      import('@frontmcp/sdk').then(({ FrontMcpInstance }) => {
-        if (!FrontMcpInstance) {
-          throw new InternalMcpError(
-            '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
-            'SDK_VERSION_MISMATCH',
-          );
-        }
-
-        FrontMcpInstance.bootstrap(metadata);
-      });
+      // Use lazy require to avoid circular dependency and dual-package hazard
+      getFrontMcpInstance().bootstrap(metadata);
     }
   };
 }

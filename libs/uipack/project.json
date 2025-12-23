@@ -61,8 +61,7 @@
         "main": "libs/uipack/src/index.ts",
         "tsConfig": "libs/uipack/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/uipack/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -86,7 +85,7 @@
           "libs/uipack/src/validation/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "onnxruntime-*",
             "esbuild",

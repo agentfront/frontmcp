@@ -53,8 +53,7 @@
         "main": "libs/testing/src/index.ts",
         "tsConfig": "libs/testing/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/testing/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -65,7 +64,7 @@
           "libs/testing/src/playwright/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",

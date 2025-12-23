@@ -45,14 +45,13 @@
         "main": "libs/adapters/src/index.ts",
         "tsConfig": "libs/adapters/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/adapters/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
         "additionalEntryPoints": ["libs/adapters/src/openapi/index.ts"],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",

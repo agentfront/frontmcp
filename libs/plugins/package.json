@@ -23,7 +23,7 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
-  "module": "./dist/esm/index.js",
+  "module": "./dist/esm/index.mjs",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "exports": {
@@ -35,8 +35,8 @@
         "default": "./dist/index.js"
       },
       "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
       }
     },
     "./cache": {
@@ -46,8 +46,8 @@
         "default": "./dist/cache/index.js"
       },
       "import": {
-        "types": "./dist/esm/cache/index.d.ts",
-        "default": "./dist/esm/cache/index.js"
+        "types": "./dist/cache/index.d.ts",
+        "default": "./dist/esm/cache/index.mjs"
       }
     },
     "./codecall": {
@@ -57,8 +57,8 @@
         "default": "./dist/codecall/index.js"
       },
       "import": {
-        "types": "./dist/esm/codecall/index.d.ts",
-        "default": "./dist/esm/codecall/index.js"
+        "types": "./dist/codecall/index.d.ts",
+        "default": "./dist/esm/codecall/index.mjs"
       }
     },
     "./esm": null
