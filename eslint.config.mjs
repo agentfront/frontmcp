@@ -61,4 +61,11 @@ export default [
       'no-unused-private-class-members': 'off',
     },
   },
+  {
+    // Allow `any` in .d.ts declaration files for compatibility with external libraries (React, Handlebars, etc.)
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 ];
