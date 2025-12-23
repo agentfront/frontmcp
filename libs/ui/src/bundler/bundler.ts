@@ -15,7 +15,6 @@ import type {
   BundlerOptions,
   SecurityPolicy,
   SourceType,
-  OutputFormat,
   StaticHTMLOptions,
   StaticHTMLResult,
   StaticHTMLExternalConfig,
@@ -425,6 +424,7 @@ export class InMemoryBundler {
       opts.output,
       opts.structuredContent,
       opts.buildMode,
+      cdnType,
       opts.dynamicOptions,
       opts.hybridOptions,
     );
@@ -609,6 +609,12 @@ export class InMemoryBundler {
         contentType,
         transpiledCode ? null : options.source,
         transpiledCode !== null,
+        {
+          buildMode: opts.buildMode,
+          cdnType,
+          dynamicOptions: opts.dynamicOptions,
+          hybridOptions: opts.hybridOptions,
+        },
       );
       const appScript = buildAppScript(
         cachedRuntime.appTemplate,
@@ -653,6 +659,7 @@ export class InMemoryBundler {
         opts.output,
         opts.structuredContent,
         opts.buildMode,
+        cdnType,
         opts.dynamicOptions,
         opts.hybridOptions,
       );
@@ -794,6 +801,12 @@ export class InMemoryBundler {
       contentType,
       transpiledCode ? null : options.source, // Pass source only if not a component
       transpiledCode !== null,
+      {
+        buildMode: opts.buildMode,
+        cdnType,
+        dynamicOptions: opts.dynamicOptions,
+        hybridOptions: opts.hybridOptions,
+      },
     );
     const appScript = buildAppScript(
       cachedRuntime.appTemplate,
@@ -1647,12 +1660,13 @@ ${parts.appScript}
     output?: unknown,
     structuredContent?: unknown,
     buildMode: BuildMode = 'static',
+    cdnType: 'esm' | 'umd' = 'esm',
     dynamicOptions?: DynamicModeOptions,
     hybridOptions?: HybridModeOptions,
   ): string {
     switch (buildMode) {
       case 'dynamic':
-        return this.buildDynamicDataScript(toolName, input, output, structuredContent, dynamicOptions);
+        return this.buildDynamicDataScript(toolName, input, output, structuredContent, cdnType, dynamicOptions);
       case 'hybrid':
         return this.buildHybridDataScript(toolName, input, structuredContent, hybridOptions);
       case 'static':
@@ -1697,9 +1711,113 @@ ${parts.appScript}
   }
 
   /**
-   * Build dynamic data injection - subscribes to platform events for updates (OpenAI).
+   * Build dynamic data injection - platform-aware.
+   * For OpenAI (ESM): subscribes to platform events for updates.
+   * For non-OpenAI (UMD/Claude): uses placeholders for data injection.
    */
   private buildDynamicDataScript(
+    toolName: string,
+    input?: Record<string, unknown>,
+    output?: unknown,
+    structuredContent?: unknown,
+    cdnType: 'esm' | 'umd' = 'esm',
+    options?: DynamicModeOptions,
+  ): string {
+    // For non-OpenAI platforms (UMD/Claude), use placeholders because they can't subscribe to OpenAI events
+    if (cdnType === 'umd') {
+      return this.buildDynamicWithPlaceholdersScript(toolName, structuredContent, options);
+    }
+
+    // For OpenAI (ESM), use subscription pattern
+    return this.buildDynamicWithSubscriptionScript(toolName, input, output, structuredContent, options);
+  }
+
+  /**
+   * Build dynamic data injection for non-OpenAI platforms using placeholders.
+   * Similar to hybrid mode but with platform-appropriate loading/error states.
+   */
+  private buildDynamicWithPlaceholdersScript(
+    toolName: string,
+    structuredContent?: unknown,
+    options?: DynamicModeOptions,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    const outputPlaceholder = HYBRID_DATA_PLACEHOLDER;
+    const inputPlaceholder = HYBRID_INPUT_PLACEHOLDER;
+    const includeInitialData = options?.includeInitialData !== false;
+
+    return `
+    <!-- Tool Data Injection (Dynamic Mode - Placeholder-based for non-OpenAI) -->
+    <script>
+      window.__mcpToolName = ${safeJson(toolName)};
+      window.__mcpToolInput = "${inputPlaceholder}";
+      window.__mcpToolOutput = "${outputPlaceholder}";
+      window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+      window.__mcpHybridError = null;
+
+      (function() {
+        var outputNotReplaced = false;
+        var includeInitialData = ${includeInitialData};
+
+        // Parse output placeholder
+        var rawOutput = window.__mcpToolOutput;
+        if (typeof rawOutput === 'string' && rawOutput !== "${outputPlaceholder}") {
+          try {
+            window.__mcpToolOutput = JSON.parse(rawOutput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected output data:', e);
+            window.__mcpToolOutput = null;
+            window.__mcpHybridError = 'Failed to parse output data';
+          }
+        } else if (rawOutput === "${outputPlaceholder}") {
+          window.__mcpToolOutput = null;
+          outputNotReplaced = true;
+        }
+
+        // Parse input placeholder
+        var rawInput = window.__mcpToolInput;
+        if (typeof rawInput === 'string' && rawInput !== "${inputPlaceholder}") {
+          try {
+            window.__mcpToolInput = JSON.parse(rawInput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected input data:', e);
+            window.__mcpToolInput = null;
+          }
+        } else if (rawInput === "${inputPlaceholder}") {
+          window.__mcpToolInput = null;
+        }
+
+        // Handle placeholder not replaced - show error if expecting initial data
+        if (outputNotReplaced && includeInitialData) {
+          window.__mcpHybridError = 'No data provided. The output placeholder was not replaced.';
+        }
+      })();
+
+      // Initialize FrontMCP context with appropriate loading/error state
+      if (window.__frontmcp && window.__frontmcp.setContext) {
+        window.__frontmcp.setContext({
+          toolName: window.__mcpToolName,
+          toolInput: window.__mcpToolInput,
+          toolOutput: window.__mcpToolOutput,
+          structuredContent: window.__mcpStructuredContent,
+          loading: ${!includeInitialData} && window.__mcpToolOutput === null && !window.__mcpHybridError,
+          error: window.__mcpHybridError,
+        });
+      }
+    </script>`;
+  }
+
+  /**
+   * Build dynamic data injection for OpenAI using subscription pattern.
+   */
+  private buildDynamicWithSubscriptionScript(
     toolName: string,
     input?: Record<string, unknown>,
     output?: unknown,
@@ -1780,7 +1898,7 @@ ${parts.appScript}
       : '';
 
     return `
-    <!-- Tool Data Injection (Dynamic Mode) -->
+    <!-- Tool Data Injection (Dynamic Mode - OpenAI Subscription) -->
     <script>
       window.__mcpToolName = ${safeJson(toolName)};
       window.__mcpToolInput = ${safeJson(input ?? null)};
@@ -1828,9 +1946,12 @@ ${parts.appScript}
       window.__mcpToolInput = "${inputPlaceholder}";
       window.__mcpToolOutput = "${outputPlaceholder}";
       window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+      window.__mcpHybridError = null;
 
       // Parse placeholders if they've been replaced with actual JSON
       (function() {
+        var outputNotReplaced = false;
+
         // Parse output placeholder
         var rawOutput = window.__mcpToolOutput;
         if (typeof rawOutput === 'string' && rawOutput !== "${outputPlaceholder}") {
@@ -1839,9 +1960,12 @@ ${parts.appScript}
           } catch (e) {
             console.warn('[FrontMCP] Failed to parse injected output data:', e);
             window.__mcpToolOutput = null;
+            window.__mcpHybridError = 'Failed to parse output data';
           }
         } else if (rawOutput === "${outputPlaceholder}") {
+          // Placeholder not replaced - no data was injected
           window.__mcpToolOutput = null;
+          outputNotReplaced = true;
         }
 
         // Parse input placeholder
@@ -1856,15 +1980,22 @@ ${parts.appScript}
         } else if (rawInput === "${inputPlaceholder}") {
           window.__mcpToolInput = null;
         }
+
+        // Set error if output placeholder was not replaced (no data provided)
+        if (outputNotReplaced) {
+          window.__mcpHybridError = 'No data provided. The output placeholder was not replaced.';
+        }
       })();
 
-      // Initialize FrontMCP context
+      // Initialize FrontMCP context with appropriate loading/error state
       if (window.__frontmcp && window.__frontmcp.setContext) {
         window.__frontmcp.setContext({
           toolName: window.__mcpToolName,
           toolInput: window.__mcpToolInput,
           toolOutput: window.__mcpToolOutput,
           structuredContent: window.__mcpStructuredContent,
+          loading: false,
+          error: window.__mcpHybridError,
         });
       }
     </script>`;

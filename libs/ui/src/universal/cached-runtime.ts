@@ -843,10 +843,86 @@ export function buildAppScript(
     .replace(RUNTIME_PLACEHOLDERS.DATA_INJECTION, dataInjection);
 }
 
+// ============================================
+// Build Mode Types (imported inline to avoid circular deps)
+// ============================================
+
+export type BuildMode = 'static' | 'dynamic' | 'hybrid';
+
+export interface DataInjectionOptions {
+  buildMode?: BuildMode;
+  /** CDN type - needed for platform-aware dynamic mode */
+  cdnType?: 'esm' | 'umd';
+  dynamicOptions?: {
+    includeInitialData?: boolean;
+    subscribeToUpdates?: boolean;
+  };
+  hybridOptions?: {
+    placeholder?: string;
+    inputPlaceholder?: string;
+  };
+}
+
+// Default placeholders for hybrid mode
+const DEFAULT_OUTPUT_PLACEHOLDER = '__FRONTMCP_OUTPUT_PLACEHOLDER__';
+const DEFAULT_INPUT_PLACEHOLDER = '__FRONTMCP_INPUT_PLACEHOLDER__';
+
 /**
  * Build data injection code for the app script.
+ * Supports static, dynamic, and hybrid build modes.
  */
 export function buildDataInjectionCode(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  structuredContent: unknown,
+  contentType: string,
+  source: string | null,
+  hasComponent: boolean,
+  options?: DataInjectionOptions,
+): string {
+  const buildMode = options?.buildMode ?? 'static';
+  const cdnType = options?.cdnType ?? 'esm';
+
+  switch (buildMode) {
+    case 'dynamic':
+      return buildDynamicDataInjectionCode(
+        toolName,
+        input,
+        output,
+        structuredContent,
+        contentType,
+        source,
+        hasComponent,
+        cdnType,
+        options?.dynamicOptions,
+      );
+    case 'hybrid':
+      return buildHybridDataInjectionCode(
+        toolName,
+        structuredContent,
+        contentType,
+        source,
+        hasComponent,
+        options?.hybridOptions,
+      );
+    default:
+      return buildStaticDataInjectionCode(
+        toolName,
+        input,
+        output,
+        structuredContent,
+        contentType,
+        source,
+        hasComponent,
+      );
+  }
+}
+
+/**
+ * Build static data injection code (original behavior).
+ */
+function buildStaticDataInjectionCode(
   toolName: string,
   input: unknown,
   output: unknown,
@@ -865,6 +941,7 @@ export function buildDataInjectionCode(
 
   if (hasComponent) {
     return `
+  // Static Mode - Data baked at build time
   window.__frontmcp.setState({
     toolName: ${safeJson(toolName)},
     input: ${safeJson(input ?? null)},
@@ -880,6 +957,7 @@ export function buildDataInjectionCode(
   }
 
   return `
+  // Static Mode - Data baked at build time
   window.__frontmcp.setState({
     toolName: ${safeJson(toolName)},
     input: ${safeJson(input ?? null)},
@@ -891,6 +969,256 @@ export function buildDataInjectionCode(
     },
     loading: false,
     error: null
+  });`;
+}
+
+/**
+ * Build dynamic data injection code - platform-aware.
+ * For OpenAI (ESM): subscribes to platform events.
+ * For non-OpenAI (UMD/Claude): uses placeholders for data injection.
+ */
+function buildDynamicDataInjectionCode(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  structuredContent: unknown,
+  contentType: string,
+  source: string | null,
+  hasComponent: boolean,
+  cdnType: 'esm' | 'umd',
+  dynamicOptions?: { includeInitialData?: boolean; subscribeToUpdates?: boolean },
+): string {
+  // For non-OpenAI platforms (UMD/Claude), use placeholders
+  if (cdnType === 'umd') {
+    return buildDynamicWithPlaceholdersCode(
+      toolName,
+      structuredContent,
+      contentType,
+      source,
+      hasComponent,
+      dynamicOptions,
+    );
+  }
+
+  // For OpenAI (ESM), use subscription pattern
+  return buildDynamicWithSubscriptionCode(
+    toolName,
+    input,
+    output,
+    structuredContent,
+    contentType,
+    source,
+    hasComponent,
+    dynamicOptions,
+  );
+}
+
+/**
+ * Build dynamic data injection for non-OpenAI platforms using placeholders.
+ */
+function buildDynamicWithPlaceholdersCode(
+  toolName: string,
+  structuredContent: unknown,
+  contentType: string,
+  source: string | null,
+  hasComponent: boolean,
+  dynamicOptions?: { includeInitialData?: boolean; subscribeToUpdates?: boolean },
+): string {
+  const safeJson = (value: unknown): string => {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'null';
+    }
+  };
+
+  const outputPlaceholder = DEFAULT_OUTPUT_PLACEHOLDER;
+  const inputPlaceholder = DEFAULT_INPUT_PLACEHOLDER;
+  const includeInitialData = dynamicOptions?.includeInitialData ?? true;
+
+  const contentBlock = hasComponent
+    ? `content: { type: 'react', source: window.__frontmcp_component }`
+    : `content: { type: ${safeJson(contentType)}, source: ${safeJson(source)} }`;
+
+  return `
+  // Dynamic Mode - Placeholder-based for non-OpenAI platforms
+  var __outputRaw = "${outputPlaceholder}";
+  var __inputRaw = "${inputPlaceholder}";
+  var __output = null;
+  var __input = null;
+  var __error = null;
+  var __outputNotReplaced = false;
+  var __includeInitialData = ${includeInitialData};
+
+  // Parse output placeholder
+  if (typeof __outputRaw === 'string' && __outputRaw !== "${outputPlaceholder}") {
+    try { __output = JSON.parse(__outputRaw); } catch (e) {
+      console.warn('[FrontMCP] Failed to parse output:', e);
+      __error = 'Failed to parse output data';
+    }
+  } else if (__outputRaw === "${outputPlaceholder}") {
+    __outputNotReplaced = true;
+  }
+
+  // Parse input placeholder
+  if (typeof __inputRaw === 'string' && __inputRaw !== "${inputPlaceholder}") {
+    try { __input = JSON.parse(__inputRaw); } catch (e) { console.warn('[FrontMCP] Failed to parse input:', e); }
+  }
+
+  // Handle placeholder not replaced - show error if expecting initial data
+  if (__outputNotReplaced && __includeInitialData) {
+    __error = 'No data provided. The output placeholder was not replaced.';
+  }
+
+  window.__frontmcp.setState({
+    toolName: ${safeJson(toolName)},
+    input: __input,
+    output: __output,
+    structuredContent: ${safeJson(structuredContent ?? null)},
+    ${contentBlock},
+    loading: !__includeInitialData && __output === null && !__error,
+    error: __error
+  });`;
+}
+
+/**
+ * Build dynamic data injection for OpenAI using subscription pattern.
+ */
+function buildDynamicWithSubscriptionCode(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  structuredContent: unknown,
+  contentType: string,
+  source: string | null,
+  hasComponent: boolean,
+  dynamicOptions?: { includeInitialData?: boolean; subscribeToUpdates?: boolean },
+): string {
+  const safeJson = (value: unknown): string => {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'null';
+    }
+  };
+
+  const includeInitialData = dynamicOptions?.includeInitialData ?? true;
+  const subscribeToUpdates = dynamicOptions?.subscribeToUpdates ?? true;
+
+  const contentBlock = hasComponent
+    ? `content: { type: 'react', source: window.__frontmcp_component }`
+    : `content: { type: ${safeJson(contentType)}, source: ${safeJson(source)} }`;
+
+  const initialState = includeInitialData
+    ? `{
+    toolName: ${safeJson(toolName)},
+    input: ${safeJson(input ?? null)},
+    output: ${safeJson(output ?? null)},
+    structuredContent: ${safeJson(structuredContent ?? null)},
+    ${contentBlock},
+    loading: false,
+    error: null
+  }`
+    : `{
+    toolName: ${safeJson(toolName)},
+    input: ${safeJson(input ?? null)},
+    output: null,
+    structuredContent: ${safeJson(structuredContent ?? null)},
+    ${contentBlock},
+    loading: true,
+    error: null
+  }`;
+
+  const subscriptionBlock = subscribeToUpdates
+    ? `
+  // Subscribe to platform tool result events
+  (function() {
+    function subscribeToUpdates() {
+      if (window.openai && window.openai.canvas && window.openai.canvas.onToolResult) {
+        window.openai.canvas.onToolResult(function(result) {
+          window.__frontmcp.updateOutput(result);
+          window.dispatchEvent(new CustomEvent('frontmcp:toolResult', { detail: result }));
+        });
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', subscribeToUpdates);
+    } else {
+      subscribeToUpdates();
+    }
+  })();`
+    : '';
+
+  return `
+  // Dynamic Mode - OpenAI Subscription
+  window.__frontmcp.setState(${initialState});
+  ${subscriptionBlock}`;
+}
+
+/**
+ * Build hybrid data injection code with placeholders.
+ */
+function buildHybridDataInjectionCode(
+  toolName: string,
+  structuredContent: unknown,
+  contentType: string,
+  source: string | null,
+  hasComponent: boolean,
+  hybridOptions?: { placeholder?: string; inputPlaceholder?: string },
+): string {
+  const safeJson = (value: unknown): string => {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'null';
+    }
+  };
+
+  const outputPlaceholder = hybridOptions?.placeholder ?? DEFAULT_OUTPUT_PLACEHOLDER;
+  const inputPlaceholder = hybridOptions?.inputPlaceholder ?? DEFAULT_INPUT_PLACEHOLDER;
+
+  const contentBlock = hasComponent
+    ? `content: { type: 'react', source: window.__frontmcp_component }`
+    : `content: { type: ${safeJson(contentType)}, source: ${safeJson(source)} }`;
+
+  return `
+  // Hybrid Mode - Placeholders replaced at runtime
+  var __outputRaw = "${outputPlaceholder}";
+  var __inputRaw = "${inputPlaceholder}";
+  var __output = null;
+  var __input = null;
+  var __error = null;
+  var __outputNotReplaced = false;
+
+  // Parse output placeholder
+  if (typeof __outputRaw === 'string' && __outputRaw !== "${outputPlaceholder}") {
+    try { __output = JSON.parse(__outputRaw); } catch (e) {
+      console.warn('[FrontMCP] Failed to parse output:', e);
+      __error = 'Failed to parse output data';
+    }
+  } else if (__outputRaw === "${outputPlaceholder}") {
+    // Placeholder not replaced - no data was injected
+    __outputNotReplaced = true;
+  }
+
+  // Parse input placeholder
+  if (typeof __inputRaw === 'string' && __inputRaw !== "${inputPlaceholder}") {
+    try { __input = JSON.parse(__inputRaw); } catch (e) { console.warn('[FrontMCP] Failed to parse input:', e); }
+  }
+
+  // Set error if output placeholder was not replaced (no data provided)
+  if (__outputNotReplaced) {
+    __error = 'No data provided. The output placeholder was not replaced.';
+  }
+
+  window.__frontmcp.setState({
+    toolName: ${safeJson(toolName)},
+    input: __input,
+    output: __output,
+    structuredContent: ${safeJson(structuredContent ?? null)},
+    ${contentBlock},
+    loading: false,
+    error: __error
   });`;
 }
 
