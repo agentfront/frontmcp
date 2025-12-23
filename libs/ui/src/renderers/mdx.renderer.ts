@@ -34,11 +34,12 @@ import { containsMdxSyntax, hashString, transpileCache, componentCache } from '@
 type MdxTemplate = string;
 
 /**
- * Runtime CDN URLs (same as React since MDX compiles to React).
+ * Runtime CDN URLs for client-side hydration.
+ * Uses React 19 via esm.sh for consistency with mdx-client.renderer.ts.
  */
 const REACT_CDN = {
-  react: 'https://unpkg.com/react@18/umd/react.production.min.js',
-  reactDom: 'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+  react: 'https://esm.sh/react@19',
+  reactDom: 'https://esm.sh/react-dom@19/client',
 };
 
 /**
@@ -182,10 +183,19 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
       helpers: context.helpers,
     };
 
-    // Spread output properties at top level for convenience
+    // Reserved prop names that should not be overwritten by output properties
+    const reservedProps = new Set(['input', 'output', 'structuredContent', 'helpers', 'components']);
+
+    // Spread output properties at top level for convenience, but preserve reserved props
+    // Output properties are spread first, then reserved props override them
+    const outputProps =
+      typeof context.output === 'object' && context.output !== null
+        ? Object.fromEntries(Object.entries(context.output).filter(([key]) => !reservedProps.has(key)))
+        : {};
+
     const spreadProps = {
+      ...outputProps,
       ...props,
-      ...(typeof context.output === 'object' && context.output !== null ? context.output : {}),
     };
 
     // Create the element with components and props

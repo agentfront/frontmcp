@@ -59,9 +59,26 @@ export { HtmlRenderer, htmlRenderer } from './html.renderer';
 
 // MDX Client Renderer (CDN-based, no React bundled)
 // For server-side MDX rendering with React, use @frontmcp/ui/renderers
-export { MdxClientRenderer, mdxClientRenderer, type MdxClientRenderOptions } from './mdx-client.renderer';
+export {
+  MdxClientRenderer,
+  mdxClientRenderer,
+  type MdxClientRenderOptions,
+  type MdxClientCdnConfig,
+} from './mdx-client.renderer';
 
-// Legacy export - deprecated, use MdxClientRenderer or @frontmcp/ui MdxRenderer
+/**
+ * @deprecated The `MdxRenderer` export is deprecated and will be removed in v1.0.0.
+ *
+ * For server-side MDX rendering with React, use `@frontmcp/ui/renderers`:
+ * ```typescript
+ * import { MdxRenderer, mdxRenderer } from '@frontmcp/ui/renderers';
+ * ```
+ *
+ * For client-side CDN-based MDX rendering (no React bundled), use:
+ * ```typescript
+ * import { MdxClientRenderer, mdxClientRenderer } from '@frontmcp/uipack/renderers';
+ * ```
+ */
 export { MdxClientRenderer as MdxRenderer, mdxClientRenderer as mdxRenderer } from './mdx-client.renderer';
 
 // Note: React renderer and server-side MDX are in @frontmcp/ui package (requires React)

@@ -84,8 +84,12 @@ export async function executeTranspiledCode(
 
     fn(exports, require, module, 'template.js', '/', React, context);
 
-    // Return the default export or first export
-    return module.exports['default'] || module.exports[Object.keys(module.exports)[0]] || module.exports;
+    // Return the default export, first named export, or module.exports itself
+    // Handle edge case where Object.keys returns empty array
+    const exportKeys = Object.keys(module.exports);
+    return (
+      module.exports['default'] || (exportKeys.length > 0 ? module.exports[exportKeys[0]] : null) || module.exports
+    );
   } catch (error) {
     throw new Error(`Failed to execute transpiled JSX: ${error instanceof Error ? error.message : String(error)}`);
   }

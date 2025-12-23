@@ -30,14 +30,29 @@ import { escapeHtml } from '../utils';
 type MdxTemplate = string;
 
 /**
- * CDN URLs for client-side MDX rendering (esm.sh).
+ * Default CDN URLs for client-side MDX rendering (esm.sh).
+ * These can be overridden via MdxClientRenderer constructor options.
  */
-const CDN = {
+const DEFAULT_CDN = {
   mdx: 'https://esm.sh/@mdx-js/mdx@3',
   react: 'https://esm.sh/react@19',
   reactDom: 'https://esm.sh/react-dom@19/client',
   jsxRuntime: 'https://esm.sh/react@19/jsx-runtime',
-};
+} as const;
+
+/**
+ * CDN configuration for client-side MDX rendering.
+ */
+export interface MdxClientCdnConfig {
+  /** MDX compiler URL @default 'https://esm.sh/@mdx-js/mdx@3' */
+  mdx?: string;
+  /** React library URL @default 'https://esm.sh/react@19' */
+  react?: string;
+  /** React DOM client URL @default 'https://esm.sh/react-dom@19/client' */
+  reactDom?: string;
+  /** JSX runtime URL @default 'https://esm.sh/react@19/jsx-runtime' */
+  jsxRuntime?: string;
+}
 
 /**
  * Options for client-side MDX rendering.
@@ -60,6 +75,12 @@ export interface MdxClientRenderOptions extends RenderOptions {
    * @default 'Loading...'
    */
   loadingMessage?: string;
+
+  /**
+   * Custom CDN URLs for dependencies.
+   * Useful for using specific versions or self-hosted mirrors.
+   */
+  cdn?: MdxClientCdnConfig;
 }
 
 /**
@@ -141,6 +162,12 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
     const showLoading = options?.showLoading !== false;
     const loadingMessage = options?.loadingMessage || 'Loading...';
 
+    // Merge custom CDN config with defaults
+    const cdn = {
+      ...DEFAULT_CDN,
+      ...options?.cdn,
+    };
+
     // Build props for MDX
     const props: ToolUIProps<In, Out> = {
       input: context.input,
@@ -174,10 +201,10 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
       React,
       { createRoot }
     ] = await Promise.all([
-      import('${CDN.mdx}'),
-      import('${CDN.jsxRuntime}'),
-      import('${CDN.react}'),
-      import('${CDN.reactDom}')
+      import('${cdn.mdx}'),
+      import('${cdn.jsxRuntime}'),
+      import('${cdn.react}'),
+      import('${cdn.reactDom}')
     ]);
 
     // MDX content and props
