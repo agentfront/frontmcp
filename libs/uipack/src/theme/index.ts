@@ -92,3 +92,6 @@ export {
 
 // Theme presets (includes DEFAULT_THEME)
 export { GITHUB_OPENAI_THEME, DEFAULT_THEME } from './presets';
+
+// CSS to Tailwind theme conversion
+export { type CssToThemeResult, cssToTailwindTheme, buildTailwindStyleBlock } from './css-to-theme';
