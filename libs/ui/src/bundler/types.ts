@@ -6,6 +6,70 @@
  * @packageDocumentation
  */
 
+import type { ThemeConfig } from '@frontmcp/uipack/theme';
+
+// ============================================
+// Build Mode Types
+// ============================================
+
+/**
+ * Build mode for static HTML generation.
+ * Controls how tool data is injected into the generated HTML.
+ *
+ * - 'static': Data is baked into HTML at build time (current default behavior)
+ * - 'dynamic': HTML subscribes to platform events for data updates (OpenAI onToolResult)
+ * - 'hybrid': Pre-built shell with placeholder for runtime data injection
+ */
+export type BuildMode = 'static' | 'dynamic' | 'hybrid';
+
+/**
+ * Placeholder marker for hybrid mode output.
+ * Used as a string that callers can replace with actual JSON data.
+ */
+export const HYBRID_DATA_PLACEHOLDER = '__FRONTMCP_OUTPUT_PLACEHOLDER__';
+
+/**
+ * Placeholder marker for hybrid mode input.
+ * Used as a string that callers can replace with actual JSON data.
+ */
+export const HYBRID_INPUT_PLACEHOLDER = '__FRONTMCP_INPUT_PLACEHOLDER__';
+
+/**
+ * Dynamic mode configuration options.
+ */
+export interface DynamicModeOptions {
+  /**
+   * Whether to include initial data in the HTML.
+   * If true, component shows data immediately; if false, shows loading state.
+   * @default true
+   */
+  includeInitialData?: boolean;
+
+  /**
+   * Subscribe to platform tool result events.
+   * For OpenAI: window.openai.canvas.onToolResult
+   * @default true
+   */
+  subscribeToUpdates?: boolean;
+}
+
+/**
+ * Hybrid mode configuration options.
+ */
+export interface HybridModeOptions {
+  /**
+   * Custom placeholder string for output data injection.
+   * @default HYBRID_DATA_PLACEHOLDER
+   */
+  placeholder?: string;
+
+  /**
+   * Custom placeholder string for input data injection.
+   * @default HYBRID_INPUT_PLACEHOLDER
+   */
+  inputPlaceholder?: string;
+}
+
 // ============================================
 // Source Types
 // ============================================
@@ -675,9 +739,28 @@ export const DEFAULT_BUNDLER_OPTIONS: Required<BundlerOptions> = {
  * - 'openai': OpenAI ChatGPT/Plugins - uses esm.sh
  * - 'claude': Claude Artifacts - uses cdnjs.cloudflare.com (only trusted CDN)
  * - 'cursor': Cursor IDE - uses esm.sh
- * - 'generic': Generic platform - uses esm.sh
+ * - 'ext-apps': MCP Apps (SEP-1865) - uses esm.sh
+ * - 'generic': Generic platform - uses esm.sh with frontmcp/* namespace
  */
-export type TargetPlatform = 'auto' | 'openai' | 'claude' | 'cursor' | 'generic';
+export type TargetPlatform = 'auto' | 'openai' | 'claude' | 'cursor' | 'ext-apps' | 'generic';
+
+/**
+ * Concrete platform type (excludes 'auto').
+ * Used for multi-platform builds where a specific platform must be targeted.
+ */
+export type ConcretePlatform = Exclude<TargetPlatform, 'auto'>;
+
+/**
+ * All platforms that can be targeted for multi-platform builds.
+ * Order: OpenAI, Claude, Cursor, ext-apps, Generic
+ */
+export const ALL_PLATFORMS: readonly ConcretePlatform[] = [
+  'openai',
+  'claude',
+  'cursor',
+  'ext-apps',
+  'generic',
+] as const;
 
 /**
  * Configuration for external dependencies in static HTML bundling.
@@ -808,6 +891,28 @@ export interface StaticHTMLOptions {
    */
   customCss?: string;
 
+  /**
+   * Theme configuration for CSS variables.
+   * When provided, theme CSS variables (--color-primary, --color-border, etc.)
+   * will be injected into the HTML as :root CSS variables.
+   *
+   * If not provided, uses DEFAULT_THEME from @frontmcp/uipack.
+   *
+   * @example
+   * ```typescript
+   * import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
+   *
+   * // Use default theme
+   * theme: DEFAULT_THEME
+   *
+   * // Or create custom theme
+   * theme: createTheme({
+   *   colors: { semantic: { primary: '#0969da' } }
+   * })
+   * ```
+   */
+  theme?: ThemeConfig;
+
   // ============================================
   // Universal Mode Options
   // ============================================
@@ -868,6 +973,31 @@ export interface StaticHTMLOptions {
    * ```
    */
   customComponents?: string;
+
+  // ============================================
+  // Build Mode Options
+  // ============================================
+
+  /**
+   * Build mode for data injection.
+   * - 'static': Data baked in at build time (default)
+   * - 'dynamic': Subscribes to platform events for updates (OpenAI)
+   * - 'hybrid': Shell with placeholder for runtime data injection
+   * @default 'static'
+   */
+  buildMode?: BuildMode;
+
+  /**
+   * Options for dynamic build mode.
+   * Only used when buildMode is 'dynamic'.
+   */
+  dynamicOptions?: DynamicModeOptions;
+
+  /**
+   * Options for hybrid build mode.
+   * Only used when buildMode is 'hybrid'.
+   */
+  hybridOptions?: HybridModeOptions;
 }
 
 /**
@@ -923,6 +1053,23 @@ export interface StaticHTMLResult {
    * Content type detected/used (when universal mode is enabled).
    */
   contentType?: 'html' | 'markdown' | 'react' | 'mdx';
+
+  /**
+   * Build mode used for data injection.
+   */
+  buildMode?: BuildMode;
+
+  /**
+   * For hybrid mode: the output placeholder string that can be replaced with data.
+   * Use injectHybridData() from @frontmcp/uipack to replace this placeholder.
+   */
+  dataPlaceholder?: string;
+
+  /**
+   * For hybrid mode: the input placeholder string that can be replaced with data.
+   * Use injectHybridDataFull() from @frontmcp/uipack to replace both placeholders.
+   */
+  inputPlaceholder?: string;
 }
 
 /**
@@ -945,11 +1092,6 @@ export const STATIC_HTML_CDN = {
     react: 'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
     reactDom: 'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
   },
-  /**
-   * Tailwind CSS from cdnjs (cloudflare) - works on all platforms
-   * Using CSS file instead of JS browser version to avoid style normalization issues
-   */
-  tailwind: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.css',
   /**
    * Font CDN URLs
    */
@@ -990,4 +1132,120 @@ export const DEFAULT_STATIC_HTML_OPTIONS = {
   contentType: 'auto' as const,
   includeMarkdown: false,
   includeMdx: false,
+  // Build mode defaults
+  buildMode: 'static' as BuildMode,
 } as const;
+
+// ============================================
+// Merged Options Type
+// ============================================
+
+/**
+ * Internal type for merged static HTML options.
+ * Used by bundler methods after merging user options with defaults.
+ */
+export type MergedStaticHTMLOptions = Required<
+  Pick<
+    StaticHTMLOptions,
+    | 'sourceType'
+    | 'targetPlatform'
+    | 'minify'
+    | 'skipCache'
+    | 'rootId'
+    | 'widgetAccessible'
+    | 'externals'
+    | 'universal'
+    | 'contentType'
+    | 'includeMarkdown'
+    | 'includeMdx'
+    | 'buildMode'
+  >
+> &
+  Pick<
+    StaticHTMLOptions,
+    | 'toolName'
+    | 'input'
+    | 'output'
+    | 'structuredContent'
+    | 'title'
+    | 'security'
+    | 'customCss'
+    | 'customComponents'
+    | 'theme'
+    | 'dynamicOptions'
+    | 'hybridOptions'
+  >;
+
+// ============================================
+// Multi-Platform Build Types
+// ============================================
+
+/**
+ * Options for building for multiple platforms at once.
+ * Extends StaticHTMLOptions but replaces targetPlatform with platforms array.
+ */
+export interface MultiPlatformBuildOptions extends Omit<StaticHTMLOptions, 'targetPlatform'> {
+  /**
+   * Platforms to build for.
+   * @default ALL_PLATFORMS (all 5 platforms)
+   */
+  platforms?: ConcretePlatform[];
+}
+
+/**
+ * Result for a single platform in multi-platform build.
+ * Extends StaticHTMLResult with platform-specific metadata.
+ */
+export interface PlatformBuildResult extends StaticHTMLResult {
+  /**
+   * Platform-specific metadata for tool response _meta field.
+   * Ready to merge into MCP response.
+   *
+   * Contains namespace-prefixed fields like:
+   * - OpenAI: openai/html, openai/mimeType, etc.
+   * - Claude: frontmcp/html, claude/widgetDescription, etc.
+   * - Generic: frontmcp/html, frontmcp/widgetAccessible, etc.
+   * - ext-apps: ui/html, ui/mimeType, ui/csp, etc.
+   */
+  meta: Record<string, unknown>;
+}
+
+/**
+ * Result of building for multiple platforms.
+ * Contains all platform-specific builds with shared metrics.
+ */
+export interface MultiPlatformBuildResult {
+  /**
+   * Results keyed by platform name.
+   * Each platform has its own HTML and metadata.
+   *
+   * @remarks
+   * Only platforms specified in `options.platforms` are included.
+   * If no platforms are specified, all platforms are built.
+   * Use `Object.keys(result.platforms)` to see which platforms were built.
+   */
+  platforms: Partial<Record<ConcretePlatform, PlatformBuildResult>>;
+
+  /**
+   * Shared component code (transpiled once, reused).
+   * All platforms share this code to avoid redundant transpilation.
+   */
+  sharedComponentCode: string;
+
+  /**
+   * Multi-platform build metrics.
+   */
+  metrics: {
+    /** Time to transpile component (once) in ms */
+    transpileTime: number;
+    /** Time to generate all platform variants in ms */
+    generationTime: number;
+    /** Total time in ms */
+    totalTime: number;
+  };
+
+  /**
+   * Whether component was served from cache.
+   */
+  cached: boolean;
+}

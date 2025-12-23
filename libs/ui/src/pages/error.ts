@@ -35,8 +35,6 @@ export interface ErrorPageOptions {
   showHome?: boolean;
   /** Home URL */
   homeUrl?: string;
-  /** Show back button */
-  showBack?: boolean;
   /** Custom actions HTML */
   actions?: string;
   /** Layout options */
@@ -64,7 +62,6 @@ export function errorPage(options: ErrorPageOptions): string {
     retryUrl,
     showHome = true,
     homeUrl = '/',
-    showBack = false,
     actions,
     layout = {},
     requestId,

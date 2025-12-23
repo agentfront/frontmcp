@@ -11,7 +11,7 @@
  * - Resource display (OpenAI SDK)
  */
 
-import { baseLayout, createLayoutBuilder, type BaseLayoutOptions, type PageType, escapeHtml } from './base';
+import { baseLayout, createLayoutBuilder, type BaseLayoutOptions, escapeHtml } from './base';
 
 // ============================================
 // Auth Layout

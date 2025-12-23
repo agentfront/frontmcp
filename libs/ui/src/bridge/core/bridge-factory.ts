@@ -29,19 +29,6 @@ const DEFAULT_CONFIG: BridgeConfig = {
 };
 
 /**
- * Empty capabilities returned when no adapter is active.
- */
-const EMPTY_CAPABILITIES: AdapterCapabilities = {
-  canCallTools: false,
-  canSendMessages: false,
-  canOpenLinks: false,
-  canPersistState: false,
-  hasNetworkAccess: false,
-  supportsDisplayModes: false,
-  supportsTheme: false,
-};
-
-/**
  * FrontMcpBridge - Unified multi-platform bridge for MCP tool widgets.
  *
  * @example Basic usage with auto-detection
@@ -233,56 +220,56 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * Get current theme.
    */
   getTheme(): 'light' | 'dark' {
-    this._ensureInitialized();
-    return this._adapter!.getTheme();
+    const adapter = this._ensureInitialized();
+    return adapter.getTheme();
   }
 
   /**
    * Get current display mode.
    */
   getDisplayMode(): DisplayMode {
-    this._ensureInitialized();
-    return this._adapter!.getDisplayMode();
+    const adapter = this._ensureInitialized();
+    return adapter.getDisplayMode();
   }
 
   /**
    * Get tool input arguments.
    */
   getToolInput(): Record<string, unknown> {
-    this._ensureInitialized();
-    return this._adapter!.getToolInput();
+    const adapter = this._ensureInitialized();
+    return adapter.getToolInput();
   }
 
   /**
    * Get tool output/result.
    */
   getToolOutput(): unknown {
-    this._ensureInitialized();
-    return this._adapter!.getToolOutput();
+    const adapter = this._ensureInitialized();
+    return adapter.getToolOutput();
   }
 
   /**
    * Get structured content (parsed output).
    */
   getStructuredContent(): unknown {
-    this._ensureInitialized();
-    return this._adapter!.getStructuredContent();
+    const adapter = this._ensureInitialized();
+    return adapter.getStructuredContent();
   }
 
   /**
    * Get persisted widget state.
    */
   getWidgetState(): Record<string, unknown> {
-    this._ensureInitialized();
-    return this._adapter!.getWidgetState();
+    const adapter = this._ensureInitialized();
+    return adapter.getWidgetState();
   }
 
   /**
    * Get full host context.
    */
   getHostContext(): HostContext {
-    this._ensureInitialized();
-    return this._adapter!.getHostContext();
+    const adapter = this._ensureInitialized();
+    return adapter.getHostContext();
   }
 
   // ============================================
@@ -295,11 +282,11 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @param args - Tool arguments
    */
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    this._ensureInitialized();
+    const adapter = this._ensureInitialized();
     if (!this.hasCapability('canCallTools')) {
       throw new Error('Tool calls are not supported by the current adapter');
     }
-    return this._adapter!.callTool(name, args);
+    return adapter.callTool(name, args);
   }
 
   /**
@@ -307,11 +294,11 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @param content - Message content
    */
   async sendMessage(content: string): Promise<void> {
-    this._ensureInitialized();
+    const adapter = this._ensureInitialized();
     if (!this.hasCapability('canSendMessages')) {
       throw new Error('Sending messages is not supported by the current adapter');
     }
-    return this._adapter!.sendMessage(content);
+    return adapter.sendMessage(content);
   }
 
   /**
@@ -319,8 +306,8 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @param url - URL to open
    */
   async openLink(url: string): Promise<void> {
-    this._ensureInitialized();
-    return this._adapter!.openLink(url);
+    const adapter = this._ensureInitialized();
+    return adapter.openLink(url);
   }
 
   /**
@@ -328,16 +315,16 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @param mode - Desired display mode
    */
   async requestDisplayMode(mode: DisplayMode): Promise<void> {
-    this._ensureInitialized();
-    return this._adapter!.requestDisplayMode(mode);
+    const adapter = this._ensureInitialized();
+    return adapter.requestDisplayMode(mode);
   }
 
   /**
    * Request widget close.
    */
   async requestClose(): Promise<void> {
-    this._ensureInitialized();
-    return this._adapter!.requestClose();
+    const adapter = this._ensureInitialized();
+    return adapter.requestClose();
   }
 
   /**
@@ -345,8 +332,8 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @param state - State object to persist
    */
   setWidgetState(state: Record<string, unknown>): void {
-    this._ensureInitialized();
-    this._adapter!.setWidgetState(state);
+    const adapter = this._ensureInitialized();
+    adapter.setWidgetState(state);
   }
 
   // ============================================
@@ -359,8 +346,8 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @returns Unsubscribe function
    */
   onContextChange(callback: (changes: Partial<HostContext>) => void): () => void {
-    this._ensureInitialized();
-    return this._adapter!.onContextChange(callback);
+    const adapter = this._ensureInitialized();
+    return adapter.onContextChange(callback);
   }
 
   /**
@@ -369,8 +356,8 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
    * @returns Unsubscribe function
    */
   onToolResult(callback: (result: unknown) => void): () => void {
-    this._ensureInitialized();
-    return this._adapter!.onToolResult(callback);
+    const adapter = this._ensureInitialized();
+    return adapter.onToolResult(callback);
   }
 
   // ============================================
@@ -379,11 +366,13 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
 
   /**
    * Ensure the bridge is initialized before operations.
+   * Returns the adapter for type-safe access.
    */
-  private _ensureInitialized(): void {
+  private _ensureInitialized(): PlatformAdapter {
     if (!this._initialized || !this._adapter) {
       throw new Error('FrontMcpBridge is not initialized. Call initialize() first.');
     }
+    return this._adapter;
   }
 
   /**

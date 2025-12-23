@@ -28,6 +28,26 @@ export type TypeFetchErrorCodeInput = z.input<typeof typeFetchErrorCodeSchema>;
 export type TypeFetchErrorCodeOutput = z.output<typeof typeFetchErrorCodeSchema>;
 
 // ============================================
+// Type File Schema
+// ============================================
+
+/**
+ * Schema for a single .d.ts file with its virtual path.
+ * Used for browser editors that need individual files.
+ * Note: url can be empty for synthesized alias files.
+ */
+export const typeFileSchema = z
+  .object({
+    path: z.string().min(1),
+    url: z.string(), // Allow empty string for synthesized alias files
+    content: z.string(),
+  })
+  .strict();
+
+export type TypeFileInput = z.input<typeof typeFileSchema>;
+export type TypeFileOutput = z.output<typeof typeFileSchema>;
+
+// ============================================
 // Type Fetch Result Schema
 // ============================================
 
@@ -38,8 +58,10 @@ export const typeFetchResultSchema = z
   .object({
     specifier: z.string().min(1),
     resolvedPackage: z.string().min(1),
+    subpath: z.string().optional(),
     version: z.string().min(1),
     content: z.string(),
+    files: z.array(typeFileSchema),
     fetchedUrls: z.array(z.string().url()),
     fetchedAt: z.string().datetime(),
   })

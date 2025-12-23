@@ -18,8 +18,7 @@
  * @see https://github.com/modelcontextprotocol/ext-apps (SEP-1865)
  */
 
-import type { ProviderType, ThemeMode, DisplayMode, HostContext } from './types';
-import { BRIDGE_SCRIPT_TAGS, generateBridgeIIFE } from '../bridge-runtime';
+import { BRIDGE_SCRIPT_TAGS } from '../bridge-runtime';
 
 /**
  * The MCP Bridge runtime script.

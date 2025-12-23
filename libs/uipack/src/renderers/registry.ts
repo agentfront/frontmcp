@@ -6,7 +6,6 @@
  */
 
 import type { TemplateContext } from '../runtime/types';
-import type { PlatformCapabilities } from '../theme';
 import { OPENAI_PLATFORM } from '../theme';
 import type {
   UIRenderer,

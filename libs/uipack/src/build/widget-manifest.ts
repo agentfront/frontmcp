@@ -19,17 +19,15 @@ import type {
   WidgetConfig,
   BuildManifestResult,
   BuildManifestOptions,
-  UIMetaFields,
   OpenAIMetaFields,
   ToolResponseMeta,
 } from '../types/ui-runtime';
 import {
   DEFAULT_CSP_BY_TYPE,
-  DEFAULT_RENDERER_ASSETS,
   isUIType,
   isResourceMode,
 } from '../types/ui-runtime';
-import { getDefaultAssets, buildScriptsForUIType } from './cdn-resources';
+import { getDefaultAssets } from './cdn-resources';
 import type { ThemeConfig } from '../theme';
 import { wrapToolUIUniversal } from '../runtime/wrapper';
 import { rendererRegistry } from '../renderers/registry';
@@ -43,12 +41,10 @@ import { validateTemplate, logValidationWarnings } from '../validation';
 import type {
   CDNPlatformType,
   ComponentBuildManifest,
-  ResolvedDependency,
   TemplateFormat,
 } from '../dependency/types';
-import { resolveTemplate, detectTemplateSource } from '../dependency/template-loader';
+import { resolveTemplate } from '../dependency/template-loader';
 import { processTemplate } from '../dependency/template-processor';
-import { generateDependencyHTML, generateImportMapScriptTag } from '../dependency/import-map';
 
 // ============================================
 // UI Type Detection
@@ -304,7 +300,7 @@ export async function buildToolWidgetManifest<
   Input = Record<string, unknown>,
   Output = unknown,
 >(options: BuildManifestOptions<Input, Output>): Promise<BuildManifestResult> {
-  const { toolName, uiConfig, schema, theme, sampleInput, sampleOutput, outputSchema, inputSchema } = options;
+  const { toolName, uiConfig, schema, theme: _theme, sampleInput, sampleOutput, outputSchema, inputSchema } = options;
 
   // Resolve UI type
   // Use type assertion to handle complex generic template types

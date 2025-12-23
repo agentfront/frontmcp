@@ -18,7 +18,7 @@
 /**
  * Known LLM platform identifiers
  */
-export type PlatformId = 'openai' | 'claude' | 'gemini' | 'ngrok' | 'custom';
+export type PlatformId = 'openai' | 'claude' | 'gemini' | 'custom';
 
 /**
  * Network access mode for the platform
@@ -103,11 +103,11 @@ export const OPENAI_PLATFORM: PlatformCapabilities = {
 export const CLAUDE_PLATFORM: PlatformCapabilities = {
   id: 'claude',
   name: 'Claude (Artifacts)',
-  supportsWidgets: true,
+  supportsWidgets: true, // Claude Artifacts support interactive widgets
   supportsTailwind: true,
   supportsHtmx: false, // Network blocked, HTMX won't work for API calls
-  networkMode: 'blocked',
-  scriptStrategy: 'inline',
+  networkMode: 'limited',
+  scriptStrategy: 'cdn',
   maxInlineSize: 100 * 1024, // 100KB limit for artifacts
   cspRestrictions: ["script-src 'unsafe-inline'", "connect-src 'none'"],
   options: {
@@ -124,29 +124,12 @@ export const GEMINI_PLATFORM: PlatformCapabilities = {
   id: 'gemini',
   name: 'Gemini',
   supportsWidgets: false,
-  supportsTailwind: false,
+  supportsTailwind: true,
   supportsHtmx: false,
-  networkMode: 'blocked',
+  networkMode: 'limited',
   scriptStrategy: 'inline',
   options: {
     fallback: 'markdown', // Fall back to markdown rendering
-  },
-};
-
-/**
- * Ngrok Platform Configuration
- * Bridge/tunnel - essential for HTMX
- */
-export const NGROK_PLATFORM: PlatformCapabilities = {
-  id: 'ngrok',
-  name: 'Ngrok Tunnel',
-  supportsWidgets: true,
-  supportsTailwind: true,
-  supportsHtmx: true,
-  networkMode: 'full',
-  scriptStrategy: 'cdn',
-  options: {
-    tunnelRequired: true,
   },
 };
 
@@ -170,7 +153,6 @@ export const PLATFORM_PRESETS: Record<PlatformId, PlatformCapabilities> = {
   openai: OPENAI_PLATFORM,
   claude: CLAUDE_PLATFORM,
   gemini: GEMINI_PLATFORM,
-  ngrok: NGROK_PLATFORM,
   custom: CUSTOM_PLATFORM,
 };
 

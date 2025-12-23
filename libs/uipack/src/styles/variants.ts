@@ -51,7 +51,7 @@ export const BADGE_VARIANTS: Record<BadgeVariant, string> = {
   success: 'bg-success/10 text-success',
   warning: 'bg-warning/10 text-warning',
   danger: 'bg-danger/10 text-danger',
-  info: 'bg-blue-100 text-blue-800',
+  info: 'bg-info/10 text-info',
   outline: 'border border-border text-text-primary bg-transparent',
 };
 
@@ -74,7 +74,7 @@ export const BADGE_DOT_VARIANTS: Record<BadgeVariant, string> = {
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-danger',
-  info: 'bg-blue-500',
+  info: 'bg-info',
   outline: 'border border-current',
 };
 
@@ -104,7 +104,7 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-primary hover:bg-primary/90 text-white shadow-sm',
   secondary: 'bg-secondary hover:bg-secondary/90 text-white shadow-sm',
-  outline: 'border-2 border-primary text-primary hover:bg-primary/10',
+  outline: 'border-2 border-primary bg-primary hover:bg-primary/90',
   ghost: 'text-text-primary hover:bg-gray-100',
   danger: 'bg-danger hover:bg-danger/90 text-white shadow-sm',
   success: 'bg-success hover:bg-success/90 text-white shadow-sm',
@@ -128,7 +128,7 @@ export const BUTTON_ICON_SIZES: Record<ButtonSize, string> = {
 };
 
 export const BUTTON_BASE_CLASSES =
-  'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2';
+  'cursor-pointer inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2';
 
 export function getButtonVariantClasses(variant: ButtonVariant): string {
   return BUTTON_VARIANTS[variant];
@@ -146,8 +146,8 @@ export type AlertVariant = 'info' | 'success' | 'warning' | 'danger' | 'neutral'
 
 export const ALERT_VARIANTS: Record<AlertVariant, { container: string; icon: string }> = {
   info: {
-    container: 'bg-blue-50 border-blue-200 text-blue-800',
-    icon: 'text-blue-500',
+    container: 'bg-info/10 border-info/30 text-info',
+    icon: 'text-info',
   },
   success: {
     container: 'bg-success/10 border-success/30 text-success',

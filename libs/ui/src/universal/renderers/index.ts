@@ -7,10 +7,10 @@
 
 import type { ClientRenderer, UniversalContent, RenderContext, ContentType } from '../types';
 import { detectContentType } from '../types';
-import { htmlRenderer, safeHtmlRenderer } from './html.renderer';
-import { markdownRenderer, createMarkdownRenderer } from './markdown.renderer';
-import { reactRenderer, isReactComponent } from './react.renderer';
-import { mdxRenderer, isMdxSupported, createMdxRenderer } from './mdx.renderer';
+import { htmlRenderer } from './html.renderer';
+import { markdownRenderer } from './markdown.renderer';
+import { reactRenderer } from './react.renderer';
+import { mdxRenderer } from './mdx.renderer';
 
 // ============================================
 // Registry Class

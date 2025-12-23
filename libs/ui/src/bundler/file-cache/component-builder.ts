@@ -9,7 +9,7 @@
 
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { dirname, resolve, extname } from 'path';
+import { resolve, extname } from 'path';
 import { randomUUID } from 'crypto';
 
 import type {
@@ -18,10 +18,9 @@ import type {
   CDNDependency,
   CDNPlatformType,
   ResolvedDependency,
-  ImportMap,
 } from '@frontmcp/uipack/dependency';
 import type { BuildCacheStorage } from './storage/interface';
-import { calculateComponentHash, generateBuildId } from './hash-calculator';
+import { calculateComponentHash } from './hash-calculator';
 import { DependencyResolver, createImportMap, generateDependencyHTML } from '@frontmcp/uipack/dependency';
 
 // ============================================

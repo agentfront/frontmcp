@@ -26,7 +26,7 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk'],
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '@frontmcp/sdk', '@frontmcp/uipack', '@frontmcp/uipack/*'],
           depConstraints: [
             {
               sourceTag: '*',
@@ -59,6 +59,13 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       'no-unused-private-class-members': 'off',
+    },
+  },
+  {
+    // Allow `any` in .d.ts declaration files for compatibility with external libraries (React, Handlebars, etc.)
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 ];

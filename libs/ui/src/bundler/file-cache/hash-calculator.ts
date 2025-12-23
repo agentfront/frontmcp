@@ -180,7 +180,7 @@ export async function calculateComponentHash(options: ComponentHashOptions): Pro
   const {
     entryPath,
     baseDir = dirname(entryPath),
-    externals = [],
+    externals: _externals = [],
     dependencies = {},
     bundleOptions = {},
     maxDepth = 10,

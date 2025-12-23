@@ -10,13 +10,7 @@
  * - MDX content (Markdown + JSX)
  */
 
-import type {
-  TemplateContext,
-  TemplateBuilderFn,
-  ToolUIConfig,
-  UIContentSecurityPolicy,
-  ToolUITemplate,
-} from '../runtime/types';
+import type { TemplateContext, TemplateBuilderFn, ToolUIConfig, ToolUITemplate } from '../runtime/types';
 import { createTemplateHelpers, wrapToolUI, type WrapToolUIFullOptions } from '../runtime/wrapper';
 import type { ThemeConfig, PlatformCapabilities, DeepPartial } from '../theme';
 import { escapeHtml } from '../utils';

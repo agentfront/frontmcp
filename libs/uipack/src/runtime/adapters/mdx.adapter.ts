@@ -187,8 +187,8 @@ export class MdxRendererAdapter implements RendererAdapter {
     }
 
     try {
-      // Compile MDX to JS
-      const compiled = await this.mdxRuntime.compile(source, {
+      // Compile MDX to JS (result intentionally unused - we fall back to markdown rendering for now)
+      const _compiled = await this.mdxRuntime.compile(source, {
         outputFormat: 'function-body',
         development: false,
       });

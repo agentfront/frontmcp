@@ -46,7 +46,6 @@ import {
   getBadgeSizeClasses,
   getBadgeDotSizeClasses,
   getBadgeDotVariantClasses,
-  CLOSE_ICON,
   cn,
 } from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';

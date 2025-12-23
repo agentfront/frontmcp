@@ -21,7 +21,7 @@
  * @module @frontmcp/ui/react/hooks
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
 import type {
   FrontMcpBridgeInterface,
   BridgeConfig,

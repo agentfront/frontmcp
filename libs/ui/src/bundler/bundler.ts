@@ -15,24 +15,35 @@ import type {
   BundlerOptions,
   SecurityPolicy,
   SourceType,
-  OutputFormat,
   StaticHTMLOptions,
   StaticHTMLResult,
   StaticHTMLExternalConfig,
   TargetPlatform,
   EsbuildTransformOptions,
+  ConcretePlatform,
+  MultiPlatformBuildOptions,
+  PlatformBuildResult,
+  MultiPlatformBuildResult,
+  MergedStaticHTMLOptions,
+  BuildMode,
+  DynamicModeOptions,
+  HybridModeOptions,
 } from './types';
 import {
   DEFAULT_BUNDLE_OPTIONS,
   DEFAULT_BUNDLER_OPTIONS,
-  DEFAULT_SECURITY_POLICY,
   DEFAULT_STATIC_HTML_OPTIONS,
   STATIC_HTML_CDN,
   getCdnTypeForPlatform,
+  ALL_PLATFORMS,
+  HYBRID_DATA_PLACEHOLDER,
+  HYBRID_INPUT_PLACEHOLDER,
 } from './types';
+import { buildUIMeta, type AIPlatformType } from '@frontmcp/uipack/adapters';
+import { DEFAULT_THEME, buildThemeCss, type ThemeConfig } from '@frontmcp/uipack/theme';
 import { BundlerCache, createCacheKey, hashContent } from './cache';
-import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
-import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
+import { validateSource, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
+import { executeDefault, ExecutionError } from './sandbox/executor';
 import { escapeHtml } from '@frontmcp/uipack/utils';
 import type { ContentType } from '../universal/types';
 import { detectContentType as detectUniversalContentType } from '../universal/types';
@@ -42,6 +53,12 @@ import {
   buildDataInjectionCode,
   buildComponentCode,
 } from '../universal/cached-runtime';
+import {
+  buildCDNScriptTag,
+  CLOUDFLARE_CDN,
+  buildUIComponentsRuntime as buildFallbackUIComponents,
+} from '@frontmcp/uipack/build';
+import { getBrowserComponents } from './browser-components';
 
 /**
  * Lazy-loaded esbuild transform function.
@@ -402,10 +419,19 @@ export class InMemoryBundler {
     });
 
     // Build HTML sections
-    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss, theme: opts.theme });
     const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
-    const frontmcpRuntime = this.buildFrontMCPRuntime();
-    const dataScript = this.buildDataInjectionScript(opts.toolName, opts.input, opts.output, opts.structuredContent);
+    const frontmcpRuntime = await this.buildFrontMCPRuntime();
+    const dataScript = this.buildDataInjectionScript(
+      opts.toolName,
+      opts.input,
+      opts.output,
+      opts.structuredContent,
+      opts.buildMode,
+      cdnType,
+      opts.dynamicOptions,
+      opts.hybridOptions,
+    );
     const componentScript = this.buildComponentRenderScript(bundleResult.code, opts.rootId, cdnType);
 
     // Assemble complete HTML document
@@ -422,6 +448,12 @@ export class InMemoryBundler {
 
     const hash = hashContent(html);
 
+    // Determine data placeholders for hybrid mode
+    const dataPlaceholder =
+      opts.buildMode === 'hybrid' ? opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER : undefined;
+    const inputPlaceholder =
+      opts.buildMode === 'hybrid' ? opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER : undefined;
+
     return {
       html,
       componentCode: bundleResult.code,
@@ -434,7 +466,287 @@ export class InMemoryBundler {
       cached: bundleResult.cached,
       sourceType: bundleResult.sourceType,
       targetPlatform: platform,
+      buildMode: opts.buildMode,
+      dataPlaceholder,
+      inputPlaceholder,
     };
+  }
+
+  /**
+   * Bundle a component to static HTML for all target platforms at once.
+   *
+   * This method is optimized for efficiency:
+   * - Transpiles the component source code only once
+   * - Generates platform-specific HTML variations from the shared transpiled code
+   * - Returns complete platform metadata ready for MCP responses
+   *
+   * @param options - Multi-platform build options
+   * @returns Multi-platform build result with all platforms
+   *
+   * @example
+   * ```typescript
+   * const result = await bundler.bundleToStaticHTMLAll({
+   *   source: `
+   *     import { Card, useToolOutput } from '@frontmcp/ui/react';
+   *     export default function Weather() {
+   *       const output = useToolOutput();
+   *       return <Card title="Weather">{output?.temperature}°F</Card>;
+   *     }
+   *   `,
+   *   toolName: 'get_weather',
+   *   output: { temperature: 72 },
+   * });
+   *
+   * // Access platform-specific results
+   * const openaiHtml = result.platforms.openai.html;
+   * const claudeHtml = result.platforms.claude.html;
+   *
+   * // Get metadata for MCP response
+   * const openaiMeta = result.platforms.openai.meta;
+   * ```
+   */
+  async bundleToStaticHTMLAll(options: MultiPlatformBuildOptions): Promise<MultiPlatformBuildResult> {
+    const startTime = performance.now();
+
+    // Merge options with defaults
+    const opts = this.mergeStaticHTMLOptions(options as StaticHTMLOptions);
+    const platforms = options.platforms ?? [...ALL_PLATFORMS];
+
+    // Step 1: Transpile component ONCE (shared across all platforms)
+    const transpileStart = performance.now();
+    let transpiledCode: string | null = null;
+    let bundleResult: BundleResult | null = null;
+
+    // Handle universal mode vs standard component mode
+    const isUniversal = opts.universal;
+    const rawContentType = options.contentType ?? 'auto';
+    const contentType: ContentType = isUniversal
+      ? rawContentType === 'auto'
+        ? detectUniversalContentType(options.source)
+        : rawContentType
+      : 'react';
+
+    // Only transpile if it's a React component
+    if (contentType === 'react' || !isUniversal) {
+      bundleResult = await this.bundle({
+        source: options.source,
+        sourceType: opts.sourceType,
+        format: 'cjs',
+        minify: opts.minify,
+        sourceMaps: false,
+        externals: ['react', 'react-dom', 'react/jsx-runtime', '@frontmcp/ui', '@frontmcp/ui/react'],
+        security: opts.security,
+        skipCache: opts.skipCache,
+      });
+      transpiledCode = bundleResult.code;
+    }
+
+    const transpileTime = performance.now() - transpileStart;
+
+    // Step 2: Generate platform-specific HTML for each target
+    const generationStart = performance.now();
+    const platformResults: Partial<Record<ConcretePlatform, PlatformBuildResult>> = {};
+
+    for (const platform of platforms) {
+      const platformResult = await this.buildForPlatform({
+        options,
+        opts,
+        platform,
+        transpiledCode,
+        bundleResult,
+        contentType,
+        isUniversal,
+      });
+      platformResults[platform] = platformResult;
+    }
+
+    const generationTime = performance.now() - generationStart;
+
+    return {
+      platforms: platformResults,
+      sharedComponentCode: transpiledCode ?? '',
+      metrics: {
+        transpileTime,
+        generationTime,
+        totalTime: performance.now() - startTime,
+      },
+      cached: bundleResult?.cached ?? false,
+    };
+  }
+
+  /**
+   * Build for a specific platform with pre-transpiled code.
+   * Internal helper for bundleToStaticHTMLAll.
+   */
+  private async buildForPlatform(params: {
+    options: MultiPlatformBuildOptions;
+    opts: MergedStaticHTMLOptions;
+    platform: ConcretePlatform;
+    transpiledCode: string | null;
+    bundleResult: BundleResult | null;
+    contentType: ContentType;
+    isUniversal: boolean;
+  }): Promise<PlatformBuildResult> {
+    const { options, opts, platform, transpiledCode, bundleResult, contentType, isUniversal } = params;
+
+    const cdnType = getCdnTypeForPlatform(platform);
+    const buildStart = performance.now();
+
+    let html: string;
+    let componentCode: string;
+
+    if (isUniversal) {
+      // Universal mode: use cached runtime
+      // Include bridge for dynamic/hybrid modes to detect platform data (OpenAI, ext-apps, etc.)
+      const shouldIncludeBridge = opts.buildMode === 'dynamic' || opts.buildMode === 'hybrid';
+      const cachedRuntime = getCachedRuntime({
+        cdnType,
+        includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
+        includeMdx: opts.includeMdx || contentType === 'mdx',
+        minify: opts.minify,
+        includeBridge: shouldIncludeBridge,
+      });
+
+      const componentCodeStr = transpiledCode ? buildComponentCode(transpiledCode) : '';
+      const dataInjectionStr = buildDataInjectionCode(
+        opts.toolName,
+        opts.input,
+        opts.output,
+        opts.structuredContent,
+        contentType,
+        transpiledCode ? null : options.source,
+        transpiledCode !== null,
+        {
+          buildMode: opts.buildMode,
+          cdnType,
+          dynamicOptions: opts.dynamicOptions,
+          hybridOptions: opts.hybridOptions,
+        },
+      );
+      const appScript = buildAppScript(
+        cachedRuntime.appTemplate,
+        componentCodeStr,
+        dataInjectionStr,
+        opts.customComponents ?? '',
+      );
+
+      const head = this.buildStaticHTMLHead({
+        externals: opts.externals,
+        customCss: opts.customCss,
+        theme: opts.theme,
+      });
+      const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+      const renderScript = this.buildUniversalRenderScript(opts.rootId, cdnType);
+
+      html = this.assembleUniversalStaticHTMLCached({
+        title: opts.title || `${opts.toolName} - Widget`,
+        head,
+        reactRuntime,
+        cdnImports: cachedRuntime.cdnImports,
+        vendorScript: cachedRuntime.vendorScript,
+        appScript,
+        renderScript,
+        rootId: opts.rootId,
+        cdnType,
+      });
+
+      componentCode = transpiledCode ?? appScript;
+    } else {
+      // Standard mode - requires transpiled code
+      if (!transpiledCode) {
+        throw new Error('Failed to transpile component source');
+      }
+      const head = this.buildStaticHTMLHead({
+        externals: opts.externals,
+        customCss: opts.customCss,
+        theme: opts.theme,
+      });
+      const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+      const frontmcpRuntime = await this.buildFrontMCPRuntime();
+      const dataScript = this.buildDataInjectionScript(
+        opts.toolName,
+        opts.input,
+        opts.output,
+        opts.structuredContent,
+        opts.buildMode,
+        cdnType,
+        opts.dynamicOptions,
+        opts.hybridOptions,
+      );
+      const componentScript = this.buildComponentRenderScript(transpiledCode, opts.rootId, cdnType);
+
+      html = this.assembleStaticHTML({
+        title: opts.title || `${opts.toolName} - Widget`,
+        head,
+        reactRuntime,
+        frontmcpRuntime,
+        dataScript,
+        componentScript,
+        rootId: opts.rootId,
+        cdnType,
+      });
+
+      componentCode = transpiledCode;
+    }
+
+    const hash = hashContent(html);
+
+    // Build platform-specific metadata
+    const meta = buildUIMeta({
+      uiConfig: {
+        template: () => html,
+        widgetAccessible: opts.widgetAccessible,
+      },
+      platformType: this.mapTargetPlatformToAIPlatform(platform),
+      html,
+    });
+
+    // Determine data placeholders for hybrid mode
+    const dataPlaceholder =
+      opts.buildMode === 'hybrid' ? opts.hybridOptions?.placeholder ?? HYBRID_DATA_PLACEHOLDER : undefined;
+    const inputPlaceholder =
+      opts.buildMode === 'hybrid' ? opts.hybridOptions?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER : undefined;
+
+    return {
+      html,
+      componentCode,
+      metrics: bundleResult?.metrics ?? {
+        transformTime: 0,
+        bundleTime: 0,
+        totalTime: performance.now() - buildStart,
+      },
+      hash,
+      size: html.length,
+      cached: bundleResult?.cached ?? false,
+      sourceType: bundleResult?.sourceType ?? opts.sourceType,
+      targetPlatform: platform,
+      universal: isUniversal,
+      contentType: isUniversal ? contentType : undefined,
+      buildMode: opts.buildMode,
+      dataPlaceholder,
+      inputPlaceholder,
+      meta,
+    };
+  }
+
+  /**
+   * Map TargetPlatform to AIPlatformType for metadata generation.
+   */
+  private mapTargetPlatformToAIPlatform(platform: ConcretePlatform): AIPlatformType {
+    switch (platform) {
+      case 'openai':
+        return 'openai';
+      case 'claude':
+        return 'claude';
+      case 'cursor':
+        return 'cursor';
+      case 'ext-apps':
+        return 'ext-apps';
+      case 'generic':
+        return 'generic-mcp';
+      default:
+        return 'generic-mcp';
+    }
   }
 
   /**
@@ -446,7 +758,7 @@ export class InMemoryBundler {
    */
   private async bundleToStaticHTMLUniversal(
     options: StaticHTMLOptions,
-    opts: ReturnType<typeof this.mergeStaticHTMLOptions>,
+    opts: MergedStaticHTMLOptions,
     platform: TargetPlatform,
     cdnType: 'esm' | 'umd',
     startTime: number,
@@ -482,11 +794,14 @@ export class InMemoryBundler {
     // Custom components for MDX can be provided via opts.customComponents
 
     // Get cached runtime (vendor chunk) - this is pre-built and cached globally
+    // Include bridge for dynamic/hybrid modes to detect platform data (OpenAI, ext-apps, etc.)
+    const shouldIncludeBridge = opts.buildMode === 'dynamic' || opts.buildMode === 'hybrid';
     const cachedRuntime = getCachedRuntime({
       cdnType,
       includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
       includeMdx: opts.includeMdx || contentType === 'mdx',
       minify: opts.minify,
+      includeBridge: shouldIncludeBridge,
     });
 
     // Build app chunk (user-specific code)
@@ -499,6 +814,12 @@ export class InMemoryBundler {
       contentType,
       transpiledCode ? null : options.source, // Pass source only if not a component
       transpiledCode !== null,
+      {
+        buildMode: opts.buildMode,
+        cdnType,
+        dynamicOptions: opts.dynamicOptions,
+        hybridOptions: opts.hybridOptions,
+      },
     );
     const appScript = buildAppScript(
       cachedRuntime.appTemplate,
@@ -508,7 +829,7 @@ export class InMemoryBundler {
     );
 
     // Build HTML sections
-    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss, theme: opts.theme });
     const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
     const renderScript = this.buildUniversalRenderScript(opts.rootId, cdnType);
 
@@ -1010,28 +1331,7 @@ ${parts.appScript}
   /**
    * Merge static HTML options with defaults.
    */
-  private mergeStaticHTMLOptions(
-    options: StaticHTMLOptions,
-  ): Required<
-    Pick<
-      StaticHTMLOptions,
-      | 'sourceType'
-      | 'targetPlatform'
-      | 'minify'
-      | 'skipCache'
-      | 'rootId'
-      | 'widgetAccessible'
-      | 'externals'
-      | 'universal'
-      | 'contentType'
-      | 'includeMarkdown'
-      | 'includeMdx'
-    >
-  > &
-    Pick<
-      StaticHTMLOptions,
-      'toolName' | 'input' | 'output' | 'structuredContent' | 'title' | 'security' | 'customCss' | 'customComponents'
-    > {
+  private mergeStaticHTMLOptions(options: StaticHTMLOptions): MergedStaticHTMLOptions {
     return {
       sourceType: options.sourceType ?? DEFAULT_STATIC_HTML_OPTIONS.sourceType,
       targetPlatform: options.targetPlatform ?? DEFAULT_STATIC_HTML_OPTIONS.targetPlatform,
@@ -1048,6 +1348,10 @@ ${parts.appScript}
       contentType: options.contentType ?? DEFAULT_STATIC_HTML_OPTIONS.contentType,
       includeMarkdown: options.includeMarkdown ?? DEFAULT_STATIC_HTML_OPTIONS.includeMarkdown,
       includeMdx: options.includeMdx ?? DEFAULT_STATIC_HTML_OPTIONS.includeMdx,
+      // Build mode options
+      buildMode: options.buildMode ?? DEFAULT_STATIC_HTML_OPTIONS.buildMode,
+      dynamicOptions: options.dynamicOptions,
+      hybridOptions: options.hybridOptions,
       // Pass-through options
       toolName: options.toolName,
       input: options.input,
@@ -1057,13 +1361,18 @@ ${parts.appScript}
       security: options.security,
       customCss: options.customCss,
       customComponents: options.customComponents,
+      theme: options.theme,
     };
   }
 
   /**
    * Build the <head> section for static HTML.
    */
-  private buildStaticHTMLHead(opts: { externals: StaticHTMLExternalConfig; customCss?: string }): string {
+  private buildStaticHTMLHead(opts: {
+    externals: StaticHTMLExternalConfig;
+    customCss?: string;
+    theme?: ThemeConfig;
+  }): string {
     const parts: string[] = [];
 
     // Meta tags
@@ -1078,14 +1387,17 @@ ${parts.appScript}
     // Font stylesheet
     parts.push(`<link rel="stylesheet" href="${STATIC_HTML_CDN.fonts.inter}">`);
 
-    // Tailwind CSS (same for all platforms - CSS file from cdnjs)
-    const tailwindConfig = opts.externals.tailwind ?? 'cdn';
-    if (tailwindConfig === 'cdn') {
-      parts.push(`<link rel="stylesheet" href="${STATIC_HTML_CDN.tailwind}">`);
-    } else if (tailwindConfig !== 'inline' && tailwindConfig) {
-      // Custom URL
-      parts.push(`<link rel="stylesheet" href="${tailwindConfig}">`);
-    }
+    parts.push(buildCDNScriptTag(CLOUDFLARE_CDN.tailwindCss));
+    // // Tailwind CSS (same for all platforms - CSS file from cdnjs)
+    // const tailwindConfig = opts.externals.tailwind ?? 'cdn';
+    // if (tailwindConfig === 'cdn') {
+    // } else if (tailwindConfig !== 'inline' && tailwindConfig) {
+    //   // Custom URL
+    //   parts.push(`<link rel="stylesheet" href="${tailwindConfig}">`);
+    // }
+
+    // Theme CSS variables (injected as :root variables after Tailwind)
+    parts.push(this.buildThemeStyleBlock(opts.theme));
 
     // Base styles for loading state and common utilities
     parts.push(`<style>
@@ -1095,12 +1407,25 @@ ${parts.appScript}
       @keyframes spin { to { transform: rotate(360deg); } }
     </style>`);
 
-    // Custom CSS (injected after Tailwind)
+    // Custom CSS (injected after Tailwind and theme)
     if (opts.customCss) {
       parts.push(`<style>\n${sanitizeCss(opts.customCss)}\n    </style>`);
     }
 
     return parts.join('\n    ');
+  }
+
+  /**
+   * Build theme CSS variables as a :root style block.
+   * Uses DEFAULT_THEME if no theme is provided.
+   */
+  private buildThemeStyleBlock(theme: ThemeConfig = DEFAULT_THEME): string {
+    const cssVars = buildThemeCss(theme);
+    return `<style>
+      :root {
+        ${cssVars}
+      }
+    </style>`;
   }
 
   /**
@@ -1177,9 +1502,22 @@ ${parts.appScript}
 
   /**
    * Build FrontMCP runtime (hooks and UI components).
+   * Uses esbuild to transpile real React components at first use, then caches.
+   * Falls back to manual implementation if esbuild fails.
    * Always inlined for reliability across platforms.
    */
-  private buildFrontMCPRuntime(): string {
+  private async buildFrontMCPRuntime(): Promise<string> {
+    // Build the browser-compatible UI components (Card, Button, Badge, Alert)
+    // Uses esbuild to transpile the real React components from @frontmcp/ui/react
+    // Falls back to the manual implementation from @frontmcp/uipack/build if esbuild fails
+    let uiComponents: string;
+    try {
+      uiComponents = await getBrowserComponents();
+    } catch {
+      // Fallback to manually-written browser components
+      uiComponents = buildFallbackUIComponents();
+    }
+
     return `
     <!-- FrontMCP Runtime (always inline) -->
     <script>
@@ -1199,8 +1537,8 @@ ${parts.appScript}
           'react-dom/client': function() { return window.ReactDOM; },
           'react/jsx-runtime': function() { return window.jsx_runtime_namespaceObject; },
           'react/jsx-dev-runtime': function() { return window.jsx_runtime_namespaceObject; },
-          '@frontmcp/ui': function() { return window.react_namespaceObject; },
-          '@frontmcp/ui/react': function() { return window.react_namespaceObject; },
+          '@frontmcp/ui': function() { return window.frontmcp_ui_namespaceObject; },
+          '@frontmcp/ui/react': function() { return window.frontmcp_ui_namespaceObject; },
         };
 
         var resolver = moduleMap[moduleName];
@@ -1231,7 +1569,7 @@ ${parts.appScript}
         });
       };
 
-      // FrontMCP Hook implementations
+      // FrontMCP Hook implementations and state
       window.__frontmcp = {
         // Context for MCP bridge
         context: {
@@ -1242,10 +1580,35 @@ ${parts.appScript}
           callTool: null,
         },
 
+        // Theme and display settings
+        theme: 'light',
+        displayMode: 'embedded',
+        hostContext: {},
+        capabilities: {},
+
         // Set context from data injection
         setContext: function(ctx) {
           Object.assign(this.context, ctx);
         },
+
+        // State management (for universal mode compatibility)
+        getState: function() {
+          return {
+            toolName: this.context.toolName,
+            input: this.context.toolInput,
+            output: this.context.toolOutput,
+            structuredContent: this.context.structuredContent,
+            loading: false,
+            error: null
+          };
+        },
+
+        setState: function(partial) {
+          if (partial.toolName !== undefined) this.context.toolName = partial.toolName;
+          if (partial.input !== undefined) this.context.toolInput = partial.input;
+          if (partial.output !== undefined) this.context.toolOutput = partial.output;
+          if (partial.structuredContent !== undefined) this.context.structuredContent = partial.structuredContent;
+        }
       };
 
       // Hook: useToolOutput - returns the tool output data
@@ -1273,75 +1636,42 @@ ${parts.appScript}
           return Promise.resolve(null);
         };
       };
-
-      // UI Components (simplified inline versions)
-      window.Card = function(props) {
-        var children = props.children;
-        var title = props.title;
-        var className = props.className || '';
-        return React.createElement('div', {
-          className: 'bg-white rounded-lg shadow border border-gray-200 overflow-hidden ' + className
-        }, [
-          title && React.createElement('div', {
-            key: 'header',
-            className: 'px-4 py-3 border-b border-gray-200 bg-gray-50'
-          }, React.createElement('h3', { className: 'text-sm font-medium text-gray-900' }, title)),
-          React.createElement('div', { key: 'body', className: 'p-4' }, children)
-        ]);
-      };
-
-      window.Badge = function(props) {
-        var children = props.children;
-        var variant = props.variant || 'default';
-        var variantClasses = {
-          default: 'bg-gray-100 text-gray-800',
-          success: 'bg-green-100 text-green-800',
-          warning: 'bg-yellow-100 text-yellow-800',
-          error: 'bg-red-100 text-red-800',
-          info: 'bg-blue-100 text-blue-800',
-        };
-        return React.createElement('span', {
-          className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' + (variantClasses[variant] || variantClasses.default)
-        }, children);
-      };
-
-      window.Button = function(props) {
-        var children = props.children;
-        var variant = props.variant || 'primary';
-        var onClick = props.onClick;
-        var disabled = props.disabled;
-        var variantClasses = {
-          primary: 'bg-blue-600 text-white hover:bg-blue-700',
-          secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200',
-          outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
-          danger: 'bg-red-600 text-white hover:bg-red-700',
-        };
-        return React.createElement('button', {
-          className: 'px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ' +
-            (disabled ? 'opacity-50 cursor-not-allowed ' : '') +
-            (variantClasses[variant] || variantClasses.primary),
-          onClick: onClick,
-          disabled: disabled,
-        }, children);
-      };
-
-      // Make hooks available on react_namespaceObject for bundled imports
-      window.react_namespaceObject = Object.assign({}, window.React || {}, {
-        useToolOutput: window.useToolOutput,
-        useToolInput: window.useToolInput,
-        useMcpBridgeContext: window.useMcpBridgeContext,
-        useCallTool: window.useCallTool,
-        Card: window.Card,
-        Badge: window.Badge,
-        Button: window.Button,
-      });
+    </script>
+    <!-- UI Components (Full-Featured, Browser-Compatible) -->
+    <script>
+${uiComponents}
     </script>`;
   }
 
   /**
    * Build data injection script for tool input/output.
+   * Dispatches to mode-specific builders based on buildMode.
    */
   private buildDataInjectionScript(
+    toolName: string,
+    input?: Record<string, unknown>,
+    output?: unknown,
+    structuredContent?: unknown,
+    buildMode: BuildMode = 'static',
+    cdnType: 'esm' | 'umd' = 'esm',
+    dynamicOptions?: DynamicModeOptions,
+    hybridOptions?: HybridModeOptions,
+  ): string {
+    switch (buildMode) {
+      case 'dynamic':
+        return this.buildDynamicDataScript(toolName, input, output, structuredContent, cdnType, dynamicOptions);
+      case 'hybrid':
+        return this.buildHybridDataScript(toolName, input, structuredContent, hybridOptions);
+      case 'static':
+      default:
+        return this.buildStaticDataScript(toolName, input, output, structuredContent);
+    }
+  }
+
+  /**
+   * Build static data injection - data baked in at build time (current default).
+   */
+  private buildStaticDataScript(
     toolName: string,
     input?: Record<string, unknown>,
     output?: unknown,
@@ -1356,7 +1686,7 @@ ${parts.appScript}
     };
 
     return `
-    <!-- Tool Data Injection -->
+    <!-- Tool Data Injection (Static Mode) -->
     <script>
       window.__mcpToolName = ${safeJson(toolName)};
       window.__mcpToolInput = ${safeJson(input ?? null)};
@@ -1370,6 +1700,297 @@ ${parts.appScript}
         toolOutput: window.__mcpToolOutput,
         structuredContent: window.__mcpStructuredContent,
       });
+    </script>`;
+  }
+
+  /**
+   * Build dynamic data injection - platform-aware.
+   * For OpenAI (ESM): subscribes to platform events for updates.
+   * For non-OpenAI (UMD/Claude): uses placeholders for data injection.
+   */
+  private buildDynamicDataScript(
+    toolName: string,
+    input?: Record<string, unknown>,
+    output?: unknown,
+    structuredContent?: unknown,
+    cdnType: 'esm' | 'umd' = 'esm',
+    options?: DynamicModeOptions,
+  ): string {
+    // For non-OpenAI platforms (UMD/Claude), use placeholders because they can't subscribe to OpenAI events
+    if (cdnType === 'umd') {
+      return this.buildDynamicWithPlaceholdersScript(toolName, structuredContent, options);
+    }
+
+    // For OpenAI (ESM), use subscription pattern
+    return this.buildDynamicWithSubscriptionScript(toolName, input, output, structuredContent, options);
+  }
+
+  /**
+   * Build dynamic data injection for non-OpenAI platforms using placeholders.
+   * Similar to hybrid mode but with platform-appropriate loading/error states.
+   */
+  private buildDynamicWithPlaceholdersScript(
+    toolName: string,
+    structuredContent?: unknown,
+    options?: DynamicModeOptions,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    const outputPlaceholder = HYBRID_DATA_PLACEHOLDER;
+    const inputPlaceholder = HYBRID_INPUT_PLACEHOLDER;
+    const includeInitialData = options?.includeInitialData !== false;
+
+    return `
+    <!-- Tool Data Injection (Dynamic Mode - Placeholder-based for non-OpenAI) -->
+    <script>
+      window.__mcpToolName = ${safeJson(toolName)};
+      window.__mcpToolInput = "${inputPlaceholder}";
+      window.__mcpToolOutput = "${outputPlaceholder}";
+      window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+      window.__mcpHybridError = null;
+
+      (function() {
+        var outputNotReplaced = false;
+        var includeInitialData = ${includeInitialData};
+
+        // Parse output placeholder
+        var rawOutput = window.__mcpToolOutput;
+        if (typeof rawOutput === 'string' && rawOutput !== "${outputPlaceholder}") {
+          try {
+            window.__mcpToolOutput = JSON.parse(rawOutput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected output data:', e);
+            window.__mcpToolOutput = null;
+            window.__mcpHybridError = 'Failed to parse output data';
+          }
+        } else if (rawOutput === "${outputPlaceholder}") {
+          window.__mcpToolOutput = null;
+          outputNotReplaced = true;
+        }
+
+        // Parse input placeholder
+        var rawInput = window.__mcpToolInput;
+        if (typeof rawInput === 'string' && rawInput !== "${inputPlaceholder}") {
+          try {
+            window.__mcpToolInput = JSON.parse(rawInput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected input data:', e);
+            window.__mcpToolInput = null;
+          }
+        } else if (rawInput === "${inputPlaceholder}") {
+          window.__mcpToolInput = null;
+        }
+
+        // Handle placeholder not replaced - show error if expecting initial data
+        if (outputNotReplaced && includeInitialData) {
+          window.__mcpHybridError = 'No data provided. The output placeholder was not replaced.';
+        }
+      })();
+
+      // Initialize FrontMCP context with appropriate loading/error state
+      if (window.__frontmcp && window.__frontmcp.setContext) {
+        window.__frontmcp.setContext({
+          toolName: window.__mcpToolName,
+          toolInput: window.__mcpToolInput,
+          toolOutput: window.__mcpToolOutput,
+          structuredContent: window.__mcpStructuredContent,
+          loading: ${!includeInitialData} && window.__mcpToolOutput === null && !window.__mcpHybridError,
+          error: window.__mcpHybridError,
+        });
+      }
+    </script>`;
+  }
+
+  /**
+   * Build dynamic data injection for OpenAI using subscription pattern.
+   */
+  private buildDynamicWithSubscriptionScript(
+    toolName: string,
+    input?: Record<string, unknown>,
+    output?: unknown,
+    structuredContent?: unknown,
+    options?: DynamicModeOptions,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    const includeInitial = options?.includeInitialData !== false;
+    const subscribeToUpdates = options?.subscribeToUpdates !== false;
+
+    const initialDataBlock = includeInitial
+      ? `
+      window.__mcpToolOutput = ${safeJson(output ?? null)};
+      if (window.__frontmcp && window.__frontmcp.setState) {
+        window.__frontmcp.setState({
+          output: window.__mcpToolOutput,
+          loading: false,
+        });
+      }`
+      : `
+      window.__mcpToolOutput = null;
+      if (window.__frontmcp && window.__frontmcp.setState) {
+        window.__frontmcp.setState({
+          output: null,
+          loading: true,
+        });
+      }`;
+
+    const subscriptionBlock = subscribeToUpdates
+      ? `
+      // Subscribe to platform tool result updates
+      (function() {
+        function subscribeToUpdates() {
+          // OpenAI Apps SDK
+          if (window.openai && window.openai.canvas && window.openai.canvas.onToolResult) {
+            window.openai.canvas.onToolResult(function(result) {
+              window.__mcpToolOutput = result;
+              if (window.__frontmcp && window.__frontmcp.setState) {
+                window.__frontmcp.setState({
+                  output: result,
+                  loading: false,
+                });
+              }
+              // Dispatch custom event for React hooks
+              window.dispatchEvent(new CustomEvent('frontmcp:toolResult', { detail: result }));
+            });
+            return;
+          }
+
+          // Fallback: listen for custom events (for testing/other platforms)
+          window.addEventListener('frontmcp:injectData', function(e) {
+            if (e.detail && e.detail.output !== undefined) {
+              window.__mcpToolOutput = e.detail.output;
+              if (window.__frontmcp && window.__frontmcp.setState) {
+                window.__frontmcp.setState({
+                  output: e.detail.output,
+                  loading: false,
+                });
+              }
+            }
+          });
+        }
+
+        // Subscribe when DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', subscribeToUpdates);
+        } else {
+          subscribeToUpdates();
+        }
+      })();`
+      : '';
+
+    return `
+    <!-- Tool Data Injection (Dynamic Mode - OpenAI Subscription) -->
+    <script>
+      window.__mcpToolName = ${safeJson(toolName)};
+      window.__mcpToolInput = ${safeJson(input ?? null)};
+      window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+      ${initialDataBlock}
+
+      // Initialize FrontMCP context
+      if (window.__frontmcp && window.__frontmcp.setContext) {
+        window.__frontmcp.setContext({
+          toolName: window.__mcpToolName,
+          toolInput: window.__mcpToolInput,
+          toolOutput: window.__mcpToolOutput,
+          structuredContent: window.__mcpStructuredContent,
+        });
+      }
+      ${subscriptionBlock}
+    </script>`;
+  }
+
+  /**
+   * Build hybrid data injection - shell with placeholders for runtime injection.
+   * Use injectHybridData() or injectHybridDataFull() from @frontmcp/uipack to replace the placeholders.
+   */
+  private buildHybridDataScript(
+    toolName: string,
+    _input?: Record<string, unknown>,
+    structuredContent?: unknown,
+    options?: HybridModeOptions,
+  ): string {
+    const safeJson = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return 'null';
+      }
+    };
+
+    const outputPlaceholder = options?.placeholder ?? HYBRID_DATA_PLACEHOLDER;
+    const inputPlaceholder = options?.inputPlaceholder ?? HYBRID_INPUT_PLACEHOLDER;
+
+    return `
+    <!-- Tool Data Injection (Hybrid Mode - Replace placeholders with JSON) -->
+    <script>
+      window.__mcpToolName = ${safeJson(toolName)};
+      window.__mcpToolInput = "${inputPlaceholder}";
+      window.__mcpToolOutput = "${outputPlaceholder}";
+      window.__mcpStructuredContent = ${safeJson(structuredContent ?? null)};
+      window.__mcpHybridError = null;
+
+      // Parse placeholders if they've been replaced with actual JSON
+      (function() {
+        var outputNotReplaced = false;
+
+        // Parse output placeholder
+        var rawOutput = window.__mcpToolOutput;
+        if (typeof rawOutput === 'string' && rawOutput !== "${outputPlaceholder}") {
+          try {
+            window.__mcpToolOutput = JSON.parse(rawOutput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected output data:', e);
+            window.__mcpToolOutput = null;
+            window.__mcpHybridError = 'Failed to parse output data';
+          }
+        } else if (rawOutput === "${outputPlaceholder}") {
+          // Placeholder not replaced - no data was injected
+          window.__mcpToolOutput = null;
+          outputNotReplaced = true;
+        }
+
+        // Parse input placeholder
+        var rawInput = window.__mcpToolInput;
+        if (typeof rawInput === 'string' && rawInput !== "${inputPlaceholder}") {
+          try {
+            window.__mcpToolInput = JSON.parse(rawInput);
+          } catch (e) {
+            console.warn('[FrontMCP] Failed to parse injected input data:', e);
+            window.__mcpToolInput = null;
+          }
+        } else if (rawInput === "${inputPlaceholder}") {
+          window.__mcpToolInput = null;
+        }
+
+        // Set error if output placeholder was not replaced (no data provided)
+        if (outputNotReplaced) {
+          window.__mcpHybridError = 'No data provided. The output placeholder was not replaced.';
+        }
+      })();
+
+      // Initialize FrontMCP context with appropriate loading/error state
+      if (window.__frontmcp && window.__frontmcp.setContext) {
+        window.__frontmcp.setContext({
+          toolName: window.__mcpToolName,
+          toolInput: window.__mcpToolInput,
+          toolOutput: window.__mcpToolOutput,
+          structuredContent: window.__mcpStructuredContent,
+          loading: false,
+          error: window.__mcpHybridError,
+        });
+      }
     </script>`;
   }
 

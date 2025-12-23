@@ -197,6 +197,16 @@ describe('getCachedRuntime', () => {
       // Should not contain comment markers (but may have some)
       expect(result.vendorScript).not.toContain('// FrontMCP Store (Vendor)');
     });
+
+    it('should preserve URL strings containing // when minifying', () => {
+      const result = getCachedRuntime({ cdnType: 'umd', minify: true });
+
+      // The isSafeUrl function checks for 'http://' and 'https://' URLs
+      // These must not be corrupted by comment-stripping regex
+      expect(result.vendorScript).toContain("'http://'");
+      expect(result.vendorScript).toContain("'https://'");
+      expect(result.vendorScript).toContain("'mailto:'");
+    });
   });
 });
 
