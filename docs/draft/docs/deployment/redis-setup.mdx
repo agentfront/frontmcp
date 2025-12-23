@@ -75,6 +75,41 @@ Already configuring the top-level `redis` block (or `redis.provider: 'vercel-kv'
 
 For complete CachePlugin API documentation, see the [Cache Plugin Guide](/docs/plugins/cache-plugin).
 
+## Transport Persistence Auto-enablement
+
+<Tip>
+Configuring the top-level `redis` block now enables transport persistence automatically. You only need to edit `transport.persistence` when changing TTLs or opting out.
+</Tip>
+
+Whenever `redis` is present, FrontMCP shares that connection with the transport service so Streamable HTTP sessions can be recreated after restarts or across regions. No extra wiring is required for common cases.
+
+```ts
+@FrontMcp({
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT || 6379),
+  },
+  // transport.persistence is automatically enabled with the same Redis store
+})
+```
+
+Need to turn it off for a single deployment? Set `transport.persistence.enabled = false`:
+
+```ts
+@FrontMcp({
+  redis: {
+    host: process.env.REDIS_HOST,
+  },
+  transport: {
+    persistence: { enabled: false },
+  },
+})
+```
+
+<Info>
+Custom stores are still supported—override `transport.persistence.redis` if you need different credentials than the global store.
+</Info>
+
 ## Production Setup
 
 <Warning>

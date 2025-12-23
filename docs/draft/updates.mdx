@@ -5,12 +5,30 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-23" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    🚀 **Hands-free transport persistence** – Add the global `redis` block and the runtime now enables transport session persistence automatically, complete with TTL defaults you can override per deployment.
+
+    ⚡ **Vercel Build Output automation** – `frontmcp build --adapter vercel` detects your package manager, writes `.vercel/output` with Node.js 22 metadata, and copies the bundled handler so deployments work without custom scripts.
+
+    🎨 **MDX client renderer** – Use the new `mdxClientRenderer` from `@frontmcp/uipack/renderers` to compile MDX in the browser with CDN-loaded React instead of bundling React into every tool UI.
+
+    🛡️ **Safer script embeds** – UI helpers now escape closing tags in serialized props to block malicious strings from escaping inline `<script>` blocks.
+
+    #### Features
+    - Automatic `transport.persistence` wiring mirrors your top-level `redis` config and only needs explicit settings when you want a custom TTL or to opt out entirely.
+    - The Vercel adapter now generates `vercel.json` with `installCommand`/`buildCommand`, plus `.vercel/output/config.json` and `.vc-config.json` so the Build Output API routes every request straight to your handler.
+    - `mdxClientRenderer` exposes `containerId`, loading states, and CDN overrides so you can choose React 18 or 19 and keep bundles React-free.
+
+    #### Fixes
+    - Inline script helpers escape `</script>` sequences, preventing template data from prematurely closing `<script>` tags and mitigating copy-paste injection attacks.
+
+    #### Docs
+    - Updated the server, Redis, serverless, and UI template guides to document automatic transport persistence, Vercel Build Output generation, the MDX client renderer, and the new escaping helper.
 
   </Card>
 </Update>

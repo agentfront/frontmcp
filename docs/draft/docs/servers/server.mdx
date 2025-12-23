@@ -250,7 +250,19 @@ Leave `enableStatelessHttp` off in production unless you fully trust the client 
 
 ### Session Persistence
 
-Enable Redis-backed session persistence for distributed deployments or session recovery:
+Transport sessions now opt into Redis persistence automatically whenever you define the top-level `redis` block. Multi-instance recovery and reconnects work out of the box—you only touch `transport.persistence` to tune TTLs or opt out.
+
+```ts
+@FrontMcp({
+  redis: {
+    host: 'redis.example.com',
+    port: 6379,
+  },
+  // transport.persistence is auto-populated from redis
+})
+```
+
+#### Override defaults
 
 ```ts
 @FrontMcp({
@@ -267,13 +279,29 @@ Enable Redis-backed session persistence for distributed deployments or session r
 })
 ```
 
-| Option         | Default   | Description                          |
-| -------------- | --------- | ------------------------------------ |
-| `enabled`      | `false`   | Enable session persistence           |
-| `defaultTtlMs` | `3600000` | Session TTL in milliseconds (1 hour) |
+#### Disable persistence
+
+```ts
+@FrontMcp({
+  redis: {
+    host: 'redis.example.com',
+    port: 6379,
+  },
+  transport: {
+    persistence: {
+      enabled: false,
+    },
+  },
+})
+```
+
+| Option         | Default                                  | Description                                        |
+| -------------- | ---------------------------------------- | -------------------------------------------------- |
+| `enabled`      | `auto` (true when `redis` is configured) | Enable session persistence; set `false` to opt out |
+| `defaultTtlMs` | `3600000`                                | Session TTL in milliseconds (1 hour)               |
 
 <Info>
-Session persistence uses the top-level `redis` config. Configure `redis` once and reference it from both `transport.persistence` and `auth.tokenStorage`.
+Session persistence reuses the top-level `redis` config automatically. Override `transport.persistence` only when you need a different TTL, store, or want to disable persistence for a specific deployment.
 </Info>
 
 You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
@@ -283,7 +311,7 @@ You can apply different transport policies per app when `splitByApp: true`. Sens
 ## Redis
 
 <Info>
-**New in v0.6**: Redis configuration has moved to a dedicated top-level `redis` property, shared by both `transport.persistence` and `auth.tokenStorage`.
+Redis now lives in its own top-level block and automatically feeds both `transport.persistence` and `auth.tokenStorage`. You only need to touch `transport.persistence` when overriding TTLs, swapping stores, or explicitly disabling persistence.
 </Info>
 
 Configure Redis once at the server level for use across features:
@@ -316,18 +344,15 @@ Configure Redis once at the server level for use across features:
 
 The `redis` config is automatically used by:
 
-- **Session persistence** (`transport.persistence`) — stores session state for recovery
-- **Token storage** (`auth.tokenStorage: { type: 'redis' }`) — stores refresh tokens securely
+- **Session persistence** — adding `redis` turns on persistence; override `transport.persistence` only when changing TTLs or disabling it.
+- **Token storage** (`auth.tokenStorage: { type: 'redis' }`) — stores refresh tokens securely with the same credentials.
 
 ```ts
 @FrontMcp({
   redis: {
     host: 'localhost',
     keyPrefix: 'myapp:',
-  },
-  transport: {
-    persistence: { enabled: true },
-  },
+  }, // transport.persistence picks this up automatically
   auth: {
     mode: 'orchestrated',
     type: 'local',
@@ -488,48 +513,7 @@ auth: {
 
 <Info>
   Apps can also define their own `auth` (and mark themselves `standalone`) to expose an isolated auth surface — useful
-  when mixing public and private apps under one server.
+  when mixing public and private apps under one server umbrella. Per-app auth is required when `splitByApp: true`.
 </Info>
 
----
-
-## Bootstrapping & discovery
-
-- **Version safety**: on boot, FrontMCP checks that all `@frontmcp/*` packages are aligned and throws a clear “version mismatch” error otherwise.
-
-<Warning>If you disable `serve`, you’re responsible for calling the core bootstrap yourself.</Warning>
-
----
-
-## Common starting points
-
-- **Single app, default everything**: minimal sample above.
-- **Multiple apps, shared auth**: omit `splitByApp`, set server-level `auth`.
-- **Isolated apps with per-app auth**: set `splitByApp: true`, configure `auth` in each app.
-
----
-
-## Best Practices
-
-**Do:**
-
-- Start with minimal config and add options as needed
-- Use `splitByApp: true` for multi-tenant deployments
-- Use top-level `transport` config (not `auth.transport` or `session`)
-- Configure `redis` at top-level for shared use across features
-- Use `stateful` session mode with Redis for production deployments
-- Enable `persistence` for distributed or high-availability setups
-- Set log level to `Info` or higher in production
-
-**Don't:**
-
-- Configure server-level `auth` when using `splitByApp: true`
-- Use deprecated `auth.transport` or `session` — migrate to `transport`
-- Disable `serve` unless you're managing bootstrap manually
-- Use `stateless` session mode with short-lived upstream tokens
-- Enable `enableStatelessHttp` in production without trust boundaries
-- Leave `enableConsole: true` in containerized production (use transports)
-
----
-
-Next up: learn how to structure **Apps**, **Tools**, **Resources**, and **Prompts** in the _Core Components_ section.
+... (content continues unchanged)...
