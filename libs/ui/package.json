@@ -55,6 +55,7 @@
     "./esm": null
   },
   "dependencies": {
+    "@mdx-js/mdx": "^3.1.1",
     "@swc/core": "^1.5.0",
     "enclave-vm": "^1.0.3",
     "esbuild": "^0.27.1",
