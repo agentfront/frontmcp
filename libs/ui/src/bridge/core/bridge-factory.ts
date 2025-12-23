@@ -29,19 +29,6 @@ const DEFAULT_CONFIG: BridgeConfig = {
 };
 
 /**
- * Empty capabilities returned when no adapter is active.
- */
-const _EMPTY_CAPABILITIES: AdapterCapabilities = {
-  canCallTools: false,
-  canSendMessages: false,
-  canOpenLinks: false,
-  canPersistState: false,
-  hasNetworkAccess: false,
-  supportsDisplayModes: false,
-  supportsTheme: false,
-};
-
-/**
  * FrontMcpBridge - Unified multi-platform bridge for MCP tool widgets.
  *
  * @example Basic usage with auto-detection

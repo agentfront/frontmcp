@@ -558,7 +558,7 @@ export class InMemoryBundler {
     const generationTime = performance.now() - generationStart;
 
     return {
-      platforms: platformResults as Record<ConcretePlatform, PlatformBuildResult>,
+      platforms: platformResults,
       sharedComponentCode: transpiledCode ?? '',
       metrics: {
         transpileTime,

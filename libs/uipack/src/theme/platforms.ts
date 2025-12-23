@@ -106,7 +106,7 @@ export const CLAUDE_PLATFORM: PlatformCapabilities = {
   supportsWidgets: true,
   supportsTailwind: true,
   supportsHtmx: false, // Network blocked, HTMX won't work for API calls
-  networkMode: 'blocked',
+  networkMode: 'limited',
   scriptStrategy: 'cdn',
   maxInlineSize: 100 * 1024, // 100KB limit for artifacts
   cspRestrictions: ["script-src 'unsafe-inline'", "connect-src 'none'"],

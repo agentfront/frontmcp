@@ -1218,8 +1218,13 @@ export interface MultiPlatformBuildResult {
   /**
    * Results keyed by platform name.
    * Each platform has its own HTML and metadata.
+   *
+   * @remarks
+   * Only platforms specified in `options.platforms` are included.
+   * If no platforms are specified, all platforms are built.
+   * Use `Object.keys(result.platforms)` to see which platforms were built.
    */
-  platforms: Record<ConcretePlatform, PlatformBuildResult>;
+  platforms: Partial<Record<ConcretePlatform, PlatformBuildResult>>;
 
   /**
    * Shared component code (transpiled once, reused).

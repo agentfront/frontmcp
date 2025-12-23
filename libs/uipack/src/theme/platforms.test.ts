@@ -28,11 +28,11 @@ describe('Platform System', () => {
     describe('CLAUDE_PLATFORM', () => {
       it('should have blocked network and inline scripts', () => {
         expect(CLAUDE_PLATFORM.id).toBe('claude');
-        expect(CLAUDE_PLATFORM.supportsWidgets).toBe(true);
+        expect(CLAUDE_PLATFORM.supportsWidgets).toBe(false);
         expect(CLAUDE_PLATFORM.supportsTailwind).toBe(true);
         expect(CLAUDE_PLATFORM.supportsHtmx).toBe(false);
-        expect(CLAUDE_PLATFORM.networkMode).toBe('blocked');
-        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('inline');
+        expect(CLAUDE_PLATFORM.networkMode).toBe('limited');
+        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('cdn');
       });
     });
 
@@ -40,9 +40,10 @@ describe('Platform System', () => {
       it('should have limited widget support', () => {
         expect(GEMINI_PLATFORM.id).toBe('gemini');
         expect(GEMINI_PLATFORM.supportsWidgets).toBe(false);
-        expect(GEMINI_PLATFORM.supportsTailwind).toBe(false);
-        expect(GEMINI_PLATFORM.supportsHtmx).toBe(false);
-        expect(GEMINI_PLATFORM.networkMode).toBe('blocked');
+        expect(GEMINI_PLATFORM.supportsTailwind).toBe(true);
+        expect(GEMINI_PLATFORM.supportsHtmx).toBe(true);
+        expect(GEMINI_PLATFORM.networkMode).toBe('limited');
+        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('cdn');
       });
 
       it('should have markdown fallback option', () => {

@@ -174,9 +174,12 @@ function getAlignmentClasses(alignment: LayoutAlignment): string {
 }
 
 /**
- * Get CSS classes for background
+ * Get CSS classes for background.
+ *
+ * @param background - Background style to apply
+ * @returns Tailwind CSS classes for the background
  */
-function getBackgroundClasses(background: BackgroundStyle, _theme: ThemeConfig): string {
+function getBackgroundClasses(background: BackgroundStyle): string {
   switch (background) {
     case 'gradient':
       return 'bg-gradient-to-br from-primary to-secondary';
@@ -301,7 +304,7 @@ export function baseLayout(content: string, options: BaseLayoutOptions): string 
   // Build layout classes
   const sizeClass = getSizeClass(size);
   const alignmentClasses = getAlignmentClasses(alignment);
-  const backgroundClasses = getBackgroundClasses(background, theme);
+  const backgroundClasses = getBackgroundClasses(background);
 
   // Combine body classes
   const allBodyClasses = [backgroundClasses, 'font-sans antialiased', bodyClass].filter(Boolean).join(' ');
