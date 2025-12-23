@@ -30,16 +30,25 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js"
-    }
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./esm": null
   },
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^11.9.3",

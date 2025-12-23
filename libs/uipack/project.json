@@ -40,7 +40,15 @@
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "react",
+            "react/*",
+            "react-dom",
+            "react-dom/*"
+          ]
         }
       }
     },
@@ -53,8 +61,7 @@
         "main": "libs/uipack/src/index.ts",
         "tsConfig": "libs/uipack/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/uipack/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -78,8 +85,16 @@
           "libs/uipack/src/validation/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
-          "external": ["onnxruntime-*", "esbuild", "@huggingface/transformers"]
+          "outExtension": { ".js": ".mjs" },
+          "external": [
+            "onnxruntime-*",
+            "esbuild",
+            "@huggingface/transformers",
+            "react",
+            "react/*",
+            "react-dom",
+            "react-dom/*"
+          ]
         }
       }
     },

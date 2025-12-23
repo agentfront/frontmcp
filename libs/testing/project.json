@@ -5,19 +5,85 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
   "targets": {
-    "build-tsc": {
-      "executor": "@nx/js:tsc",
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/testing/dist",
         "main": "libs/testing/src/index.ts",
         "tsConfig": "libs/testing/tsconfig.lib.json",
-        "assets": ["libs/testing/README.md", "LICENSE", "libs/testing/jest-preset.js"]
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/testing/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/testing/README.md", "LICENSE", "libs/testing/jest-preset.js", "libs/testing/package.json"],
+        "additionalEntryPoints": [
+          "libs/testing/src/setup.ts",
+          "libs/testing/src/fixtures/index.ts",
+          "libs/testing/src/matchers/index.ts",
+          "libs/testing/src/playwright/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": [
+            "@frontmcp/sdk",
+            "@frontmcp/sdk/*",
+            "@frontmcp/ui",
+            "@frontmcp/ui/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "@playwright/test",
+            "jest",
+            "@jest/globals",
+            "jose",
+            "tslib"
+          ]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/testing/dist/esm",
+        "main": "libs/testing/src/index.ts",
+        "tsConfig": "libs/testing/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": [
+          "libs/testing/src/setup.ts",
+          "libs/testing/src/fixtures/index.ts",
+          "libs/testing/src/matchers/index.ts",
+          "libs/testing/src/playwright/index.ts"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "external": [
+            "@frontmcp/sdk",
+            "@frontmcp/sdk/*",
+            "@frontmcp/ui",
+            "@frontmcp/ui/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "@playwright/test",
+            "jest",
+            "@jest/globals",
+            "jose",
+            "tslib"
+          ]
+        }
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-tsc"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/testing/dist/package.json"
       }

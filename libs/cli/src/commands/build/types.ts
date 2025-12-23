@@ -35,12 +35,22 @@ export type AdapterTemplate = {
 
   /**
    * Generate the deployment platform config file content.
+   * @param cwd - Current working directory (for detecting package manager, etc.)
    * @returns Object (for JSON) or string (for TOML/YAML)
    */
-  getConfig?: () => object | string;
+  getConfig?: (cwd: string) => object | string;
 
   /** Name of the config file (e.g., 'vercel.json', 'wrangler.toml') */
   configFileName?: string;
+
+  /**
+   * Post-bundle hook for creating deployment-specific output structure.
+   * Called after bundling is complete.
+   * @param outDir - The output directory (e.g., 'dist')
+   * @param cwd - Current working directory
+   * @param bundleOutput - Name of the bundled file (e.g., 'handler.cjs')
+   */
+  postBundle?: (outDir: string, cwd: string, bundleOutput: string) => Promise<void>;
 };
 
 export type AdapterName = 'node' | 'vercel' | 'lambda' | 'cloudflare';

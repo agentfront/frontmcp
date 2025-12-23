@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ServerRequest } from '../interfaces';
+import { TransportConfig } from '../types';
 
 /* --------------------------------- Schemas --------------------------------- */
 
@@ -50,13 +51,11 @@ export type Decision = {
   debug?: { key: number; channel: number; flags: number };
 };
 
-export interface Config {
-  enableLegacySSE: boolean;
-  enableSseListener: boolean;
-  enableStreamableHttp: boolean;
-  enableStatefulHttp: boolean;
-  enableStatelessHttp: boolean;
-  requireSessionForStreamable: boolean;
+/**
+ * Configuration for request intent decision.
+ * Extends TransportConfig with additional runtime option.
+ */
+export interface Config extends TransportConfig {
   tolerateMissingAccept: boolean;
 }
 

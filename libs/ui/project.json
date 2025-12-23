@@ -54,8 +54,7 @@
         "main": "libs/ui/src/index.ts",
         "tsConfig": "libs/ui/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/ui/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -73,7 +72,7 @@
           "libs/ui/src/widgets/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "onnxruntime-*",
             "esbuild",

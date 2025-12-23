@@ -79,6 +79,3 @@ export type {
   FmcpInputProps,
   FmcpSelectProps,
 } from './types';
-
-// Import types for side-effect (JSX augmentation)
-import './types';

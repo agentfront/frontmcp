@@ -18,7 +18,7 @@ import type {
   TemplateSource,
 } from './types';
 import { HandlebarsRenderer, containsHandlebars, type RenderContext, type HelperFunction } from '../handlebars';
-import { mdxRenderer } from '../renderers/mdx.renderer';
+import { mdxClientRenderer } from '../renderers/mdx-client.renderer';
 import type { TemplateContext } from '../runtime/types';
 import { validateTemplate, logValidationWarnings } from '../validation';
 import { escapeHtml } from '../utils';
@@ -286,7 +286,7 @@ export async function processTemplate(
         helpers: defaultHelpers,
       };
 
-      const html = await mdxRenderer.render(processedContent, templateContext);
+      const html = await mdxClientRenderer.render(processedContent, templateContext);
       return {
         html,
         format: 'mdx',
@@ -443,5 +443,5 @@ export async function processMdxTemplate(
     helpers: defaultHelpers,
   };
 
-  return mdxRenderer.render(processed, templateContext);
+  return mdxClientRenderer.render(processed, templateContext);
 }

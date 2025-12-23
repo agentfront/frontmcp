@@ -11,6 +11,10 @@
 import type { UITemplateConfig, TemplateContext, TemplateBuilderFn } from '../types';
 import { createTemplateHelpers } from '../runtime/wrapper';
 
+// Type-only definitions for React-like component types (no runtime dependency)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ReactComponentType<P = any> = ((props: P) => unknown) & { displayName?: string; name?: string };
+
 /**
  * Check if a string contains MDX syntax (Markdown + JSX).
  *
@@ -237,25 +241,32 @@ export async function renderToolTemplateAsync(options: RenderTemplateOptions): P
   if (isReactComponent(template)) {
     // Get component name for error reporting
     const componentName =
-      (template as React.ComponentType).displayName || (template as React.ComponentType).name || 'UnknownComponent';
+      (template as ReactComponentType).displayName || (template as ReactComponentType).name || 'UnknownComponent';
 
     try {
       // Dynamically import React and ReactDOMServer
+      // Use variable indirection to prevent bundlers from resolving at bundle time
       // This allows UI package to work without React as a hard dependency
+      const reactPkg = 'react';
+      const reactDomServerPkg = 'react-dom/server';
       const [React, ReactDOMServer] = await Promise.all([
-        import('react').catch(() => {
-          throw new Error('React is required for React component templates. Install react as a dependency.');
-        }),
-        import('react-dom/server').catch(() => {
+        import(reactPkg).catch(() => {
           throw new Error(
-            'react-dom/server is required for React component templates. Install react-dom as a dependency.',
+            'React is required for React component templates. ' +
+              'Either install react as a dependency, or use @frontmcp/ui for React component support.',
+          );
+        }),
+        import(reactDomServerPkg).catch(() => {
+          throw new Error(
+            'react-dom/server is required for React component templates. ' +
+              'Either install react-dom as a dependency, or use @frontmcp/ui for React component support.',
           );
         }),
       ]);
 
       // React components receive props, which is our context
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const element = React.createElement(template as React.ComponentType<any>, ctx);
+      const element = React.createElement(template as ReactComponentType<any>, ctx);
       return ReactDOMServer.renderToString(element);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
