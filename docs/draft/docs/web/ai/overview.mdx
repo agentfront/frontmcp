@@ -1,0 +1,211 @@
+---
+title: AI Integration
+sidebarTitle: Overview
+icon: robot
+description: Build with FrontMCP Web and get automatic LLM integration
+---
+
+# AI Integration
+
+**When you use FrontMCP Web as your primary store and API, you automatically get a valid MCP server that any LLM can connect to and interact with your website - no extra work needed.**
+
+## The Key Insight
+
+FrontMCP Web isn't just a state management library - it's a bridge between your application and AI agents. When you build your app with FrontMCP:
+
+| You Use | You Automatically Get |
+|---------|----------------------|
+| `defineStore()` for state | MCP Resources the LLM can read |
+| Store actions | MCP Tools the LLM can call |
+| Event tracking | Real-time notifications to the LLM |
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Your Application                              │
+│                                                                   │
+│  ┌──────────────────────┐    ┌──────────────────────┐           │
+│  │   defineStore()      │    │   BrowserMcpServer   │           │
+│  │   - state            │═══▶│   - resources        │           │
+│  │   - actions          │    │   - tools            │           │
+│  │   - computed         │    │   - notifications    │           │
+│  └──────────────────────┘    └──────────┬───────────┘           │
+│                                          │                       │
+│                                          │ MCP Protocol          │
+│                                          │                       │
+│  ┌───────────────────────────────────────▼───────────────────┐  │
+│  │                    Your LLM Chat UI                        │  │
+│  │  - Lists available tools                                   │  │
+│  │  - Calls actions on your store                             │  │
+│  │  - Reads current state                                     │  │
+│  │  - Receives notifications when things change               │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## What Your LLM Can Do
+
+Once you build with FrontMCP Web, your in-app LLM chat can:
+
+### Read Your Store State
+
+```typescript
+// LLM reads the current state
+const todos = await readResource('store://todos');
+// → { items: [...], filter: 'all' }
+
+const cart = await readResource('store://cart');
+// → { items: [...], total: 99.99 }
+```
+
+### Call Your Store Actions
+
+```typescript
+// LLM adds a todo
+await callTool('todos/addTodo', { text: 'Buy groceries' });
+
+// LLM toggles completion
+await callTool('todos/toggleTodo', { id: 'todo-123' });
+
+// LLM processes checkout
+await callTool('cart/checkout', { paymentMethod: 'card' });
+```
+
+### Receive Real-Time Updates
+
+```typescript
+// When a user interacts with the UI, the LLM is notified
+onNotification('resources/updated', (event) => {
+  console.log('State changed:', event.uri);
+  // LLM can re-read state and respond accordingly
+});
+```
+
+## Complete Example
+
+Here's a todo app where the LLM can see and manage todos:
+
+### 1. Define Your Store (Normal FrontMCP Code)
+
+```typescript
+import { defineStore } from '@frontmcp/browser';
+import { z } from 'zod';
+
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      done: z.boolean(),
+    })),
+  }),
+  initial: { items: [] },
+  actions: {
+    addTodo: (state, text: string) => {
+      state.items.push({ id: crypto.randomUUID(), text, done: false });
+    },
+    toggleTodo: (state, id: string) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+    removeTodo: (state, id: string) => {
+      state.items = state.items.filter(t => t.id !== id);
+    },
+  },
+});
+```
+
+### 2. Create MCP Server (Auto-Exposes Store)
+
+```typescript
+import {
+  BrowserMcpServer,
+  EventTransportAdapter,
+  createSimpleEmitter,
+  createSchemaStoreTools,
+  createSchemaStoreResources,
+} from '@frontmcp/browser';
+
+const emitter = createSimpleEmitter();
+const transport = new EventTransportAdapter(emitter);
+
+const server = new BrowserMcpServer({
+  name: 'todo-app',
+  transport,
+});
+
+// Auto-generate MCP tools from store actions
+const tools = createSchemaStoreTools(todoStore, { prefix: 'todos' });
+tools.forEach(tool => server.addTool(tool));
+
+// Auto-generate MCP resources from store state
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,     // store://todos
+  includeKeys: true,     // store://todos/items
+});
+resources.forEach(resource => server.addResource(resource));
+
+await server.start();
+
+// Export emitter for the chat component
+export { emitter, server };
+```
+
+### 3. Your LLM Chat Can Now Interact
+
+```typescript
+// In your chat component, connect to the same emitter
+import { emitter } from './mcpServer';
+
+// Send MCP request to list available tools
+emitter.emit('mcp:request', {
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list',
+});
+
+// Response: ['todos/addTodo', 'todos/toggleTodo', 'todos/removeTodo']
+
+// LLM decides to add a todo
+emitter.emit('mcp:request', {
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'tools/call',
+  params: {
+    name: 'todos/addTodo',
+    arguments: { text: 'Learn FrontMCP' },
+  },
+});
+
+// Store updates, UI reacts, LLM receives confirmation
+```
+
+## Why This Matters
+
+Traditional approaches require you to:
+1. Build your app
+2. Write separate AI integration code
+3. Maintain two systems
+
+With FrontMCP Web:
+1. Build your app with FrontMCP
+2. **Done** - AI integration comes free
+
+Your store actions ARE your AI tools. Your store state IS your AI context. No duplication, no extra work.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Connecting Your Chat" icon="plug" href="/docs/web/ai/connecting">
+    Wire up your LLM chat component to the MCP server
+  </Card>
+  <Card title="Calling Tools" icon="hammer" href="/docs/web/ai/calling-tools">
+    How your LLM executes actions and reads state
+  </Card>
+  <Card title="Events & Notifications" icon="bell" href="/docs/web/ai/events-notifications">
+    Real-time updates when state changes
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    Define stores that auto-expose to AI
+  </Card>
+</CardGroup>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrontMCP Browser - Component Registration Example</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f0f2f5;
+        color: #333;
+        min-height: 100vh;
+      }
+
+      .app {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      header h1 {
+        font-size: 1.8em;
+        color: #1a1a2e;
+        margin-bottom: 8px;
+      }
+
+      header p {
+        color: #666;
+        font-size: 1.1em;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .card h2 {
+        font-size: 1.2em;
+        color: #1a1a2e;
+        margin-bottom: 8px;
+      }
+
+      .card h3 {
+        font-size: 1em;
+        color: #444;
+        margin: 20px 0 12px;
+      }
+
+      .card h4 {
+        font-size: 0.9em;
+        color: #666;
+        margin-bottom: 8px;
+      }
+
+      .description {
+        color: #666;
+        font-size: 0.9em;
+        margin-bottom: 16px;
+      }
+
+      /* Component list styles */
+      .component-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .component-item {
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+      }
+
+      .component-name {
+        font-weight: 600;
+        color: #0066cc;
+        margin-bottom: 4px;
+      }
+
+      .component-desc {
+        font-size: 0.9em;
+        color: #555;
+        margin-bottom: 8px;
+      }
+
+      .component-tags {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .tag {
+        font-size: 0.75em;
+        padding: 2px 8px;
+        background: #e3f2fd;
+        color: #1976d2;
+        border-radius: 12px;
+      }
+
+      /* DataTable styles */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9em;
+      }
+
+      .data-table th,
+      .data-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .data-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #444;
+      }
+
+      .data-table tr:hover {
+        background: #f8f9fa;
+        cursor: pointer;
+      }
+
+      /* StatCard styles */
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+      }
+
+      .stat-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+      }
+
+      .stat-icon {
+        font-size: 24px;
+      }
+
+      .stat-content {
+        flex: 1;
+      }
+
+      .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #0066cc;
+      }
+
+      .stat-title {
+        font-size: 0.85em;
+        color: #666;
+      }
+
+      /* AlertBox styles */
+      .alert-demos {
+        display: grid;
+        gap: 12px;
+      }
+
+      .alert-box {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-radius: 6px;
+      }
+
+      .dismiss-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        opacity: 0.7;
+        color: inherit;
+      }
+
+      .dismiss-btn:hover {
+        opacity: 1;
+      }
+
+      /* Resource list */
+      .resource-list {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .resource-list button {
+        padding: 8px 16px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        background: white;
+        color: #333;
+        font-size: 0.9em;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .resource-list button:hover {
+        border-color: #0066cc;
+        color: #0066cc;
+      }
+
+      .resource-list button.active {
+        background: #0066cc;
+        border-color: #0066cc;
+        color: white;
+      }
+
+      .resource-output {
+        background: #1e1e1e;
+        border-radius: 8px;
+        padding: 16px;
+        overflow: auto;
+      }
+
+      .resource-output h4 {
+        color: #888;
+        margin-bottom: 12px;
+      }
+
+      .resource-output pre {
+        color: #d4d4d4;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

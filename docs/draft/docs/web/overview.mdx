@@ -1,0 +1,187 @@
+---
+title: FrontMCP Web Overview
+sidebarTitle: Overview
+icon: globe
+description: Browser-native MCP server implementation with React integration, reactive state management, and rich UI capabilities
+---
+
+# FrontMCP Web
+
+**FrontMCP Web** (`@frontmcp/browser`) brings the Model Context Protocol to browser environments. Build AI-powered web applications with reactive state management, React hooks, and seamless MCP integration.
+
+<CardGroup cols={2}>
+  <Card title="Browser-Native MCP" icon="browser">
+    Full MCP server running in the browser with tools, resources, and prompts
+  </Card>
+  <Card title="Reactive Stores" icon="database">
+    Valtio-powered state management with automatic MCP integration
+  </Card>
+  <Card title="React Hooks" icon="atom">
+    First-class React support with hooks for tools, resources, and stores
+  </Card>
+  <Card title="Multiple Transports" icon="network-wired">
+    EventEmitter, postMessage, extension, and cross-tab communication
+  </Card>
+</CardGroup>
+
+## Why FrontMCP Web?
+
+Traditional MCP servers run on the backend. FrontMCP Web flips this model:
+
+| Approach | Use Case |
+|----------|----------|
+| **Backend MCP** | Server-side tools, database access, file system operations |
+| **Browser MCP** | UI state, user interactions, real-time data, form handling |
+| **Hybrid** | Backend for sensitive ops, browser for UI and local state |
+
+Browser-side MCP enables AI agents to:
+- Read and modify UI state directly
+- Interact with forms and user inputs
+- Access browser APIs (localStorage, IndexedDB, etc.)
+- Respond to real-time events
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Your React App                          │
+├─────────────────────────────────────────────────────────────┤
+│  FrontMcpProvider                                           │
+│  ├── BrowserMcpServer (or BrowserScope)                     │
+│  │   ├── Tools (actions the AI can take)                    │
+│  │   ├── Resources (data the AI can read)                   │
+│  │   └── Prompts (templates for AI responses)               │
+│  │                                                          │
+│  ├── Schema Stores (Valtio + Zod)                           │
+│  │   ├── Auto-generated MCP tools                           │
+│  │   └── Auto-generated MCP resources                       │
+│  │                                                          │
+│  └── Transport Layer                                        │
+│      ├── EventTransport (in-app)                            │
+│      ├── PostMessageTransport (iframes)                     │
+│      └── ExtensionTransport (browser extensions)            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Key Features
+
+### Reactive State Management
+
+Define typed stores with Zod schemas that automatically generate MCP tools and resources:
+
+```typescript
+import { defineStore } from '@frontmcp/browser';
+import { z } from 'zod';
+
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      done: z.boolean(),
+    })),
+    filter: z.enum(['all', 'active', 'completed']),
+  }),
+  initial: { items: [], filter: 'all' },
+  actions: {
+    addTodo: (state, text: string) => {
+      state.items.push({ id: crypto.randomUUID(), text, done: false });
+    },
+    toggleTodo: (state, id: string) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+  },
+});
+```
+
+### React Integration
+
+Use hooks to connect your components to MCP:
+
+```tsx
+import { useTool, useResource, useStore } from '@frontmcp/browser/react';
+
+function TodoList() {
+  // Execute MCP tools
+  const { execute: addTodo, loading } = useTool('todos/add');
+
+  // Read MCP resources
+  const { data: todos } = useResource('store://todos/items');
+
+  // Access reactive store
+  const { items, filter } = useStore(todoStore);
+
+  return (
+    <ul>
+      {items.map(todo => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Human-in-the-Loop
+
+Built-in support for AI confirmation dialogs:
+
+```typescript
+import { BrowserHitlManager } from '@frontmcp/browser';
+
+const hitl = new BrowserHitlManager({
+  requireConfirmation: ['deleteUser', 'sendEmail'],
+  onConfirm: async (tool, args) => {
+    // Show confirmation UI
+    return await showConfirmDialog(`Execute ${tool}?`);
+  },
+});
+```
+
+### Telemetry & Observability
+
+Track events with built-in PII filtering:
+
+```typescript
+import { createEventCollector, createBuiltInPiiFilter } from '@frontmcp/browser';
+
+const collector = createEventCollector({
+  onFlush: events => sendToAnalytics(events),
+});
+
+// PII is automatically redacted
+collector.record({
+  category: 'interaction',
+  type: 'click',
+  data: { email: 'user@example.com' }, // → [EMAIL]
+});
+```
+
+## Package Structure
+
+```
+@frontmcp/browser
+├── /              # Main exports (server, stores, transports)
+├── /react         # React hooks and providers
+├── /polyfill      # navigator.modelContext polyfill
+├── /types         # TypeScript types
+└── /host          # App embedding (host/child SDK)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket" href="/docs/web/getting-started">
+    Install and set up FrontMCP Web
+  </Card>
+  <Card title="Quickstart" icon="bolt" href="/docs/web/quickstart">
+    Build your first browser MCP app in 5 minutes
+  </Card>
+  <Card title="Server" icon="server" href="/docs/web/core/server">
+    Learn about BrowserMcpServer
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Explore React integration
+  </Card>
+</CardGroup>

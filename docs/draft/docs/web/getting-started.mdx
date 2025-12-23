@@ -1,0 +1,278 @@
+---
+title: Getting Started with FrontMCP Web
+sidebarTitle: Getting Started
+icon: rocket
+description: Install and configure FrontMCP Web for browser-based MCP applications
+---
+
+# Getting Started
+
+This guide walks you through installing and configuring FrontMCP Web for your browser application.
+
+## Prerequisites
+
+- Node.js 18+ or Bun
+- React 18+ (for React integration)
+- TypeScript recommended
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/browser
+```
+
+```bash pnpm
+pnpm add @frontmcp/browser
+```
+
+```bash yarn
+yarn add @frontmcp/browser
+```
+
+```bash bun
+bun add @frontmcp/browser
+```
+</CodeGroup>
+
+### Peer Dependencies
+
+For React integration, ensure you have React installed:
+
+<CodeGroup>
+```bash npm
+npm install react react-dom
+```
+
+```bash pnpm
+pnpm add react react-dom
+```
+</CodeGroup>
+
+For schema validation (recommended):
+
+<CodeGroup>
+```bash npm
+npm install zod
+```
+
+```bash pnpm
+pnpm add zod
+```
+</CodeGroup>
+
+## Basic Setup
+
+### 1. Initialize Runtime Config
+
+FrontMCP Web requires runtime configuration for browser environments:
+
+```typescript
+import { initializeConfig, generateUUID } from '@frontmcp/browser';
+
+// Initialize once at app startup
+initializeConfig({
+  debug: import.meta.env.DEV,
+  isDevelopment: import.meta.env.DEV,
+  machineId: generateUUID(),
+});
+```
+
+<Warning>
+  Call `initializeConfig()` before creating any MCP servers or stores. This is typically done in your app's entry point (e.g., `main.tsx`).
+</Warning>
+
+### 2. Create a Transport
+
+Transports handle communication between your app and MCP clients:
+
+```typescript
+import { EventTransportAdapter, createSimpleEmitter } from '@frontmcp/browser';
+
+// Create an in-app transport using events
+const emitter = createSimpleEmitter();
+const transport = new EventTransportAdapter(emitter);
+```
+
+<Info>
+  For cross-origin communication (iframes, extensions), use `PostMessageTransportAdapter` instead.
+</Info>
+
+### 3. Create a Server
+
+The `BrowserMcpServer` is the main entry point:
+
+```typescript
+import { BrowserMcpServer } from '@frontmcp/browser';
+
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  version: '1.0.0',
+  transport,
+});
+
+// Add a simple tool
+server.addTool({
+  name: 'greet',
+  description: 'Say hello to someone',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Name to greet' },
+    },
+    required: ['name'],
+  },
+  handler: async ({ name }) => ({
+    content: [{ type: 'text', text: `Hello, ${name}!` }],
+  }),
+});
+
+// Start the server
+await server.start();
+```
+
+### 4. React Integration
+
+Wrap your app with `FrontMcpProvider`:
+
+```tsx
+// App.tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+Now you can use hooks in any component:
+
+```tsx
+import { useTool, useMcp } from '@frontmcp/browser/react';
+
+function Greeter() {
+  const { isConnected } = useMcp();
+  const { execute, loading, error } = useTool('greet');
+
+  const handleGreet = async () => {
+    const result = await execute({ name: 'World' });
+    console.log(result); // "Hello, World!"
+  };
+
+  return (
+    <div>
+      <p>Status: {isConnected ? 'Connected' : 'Disconnected'}</p>
+      <button onClick={handleGreet} disabled={loading}>
+        {loading ? 'Loading...' : 'Greet'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Complete Example
+
+Here's a complete setup with React:
+
+```tsx
+// main.tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { initializeConfig, generateUUID } from '@frontmcp/browser';
+import App from './App';
+
+// Initialize config first
+initializeConfig({
+  debug: import.meta.env.DEV,
+  isDevelopment: import.meta.env.DEV,
+  machineId: generateUUID(),
+});
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+```tsx
+// App.tsx
+import { BrowserMcpServer, EventTransportAdapter, createSimpleEmitter } from '@frontmcp/browser';
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+import { useMemo } from 'react';
+import TodoApp from './TodoApp';
+
+export default function App() {
+  const server = useMemo(() => {
+    const emitter = createSimpleEmitter();
+    const transport = new EventTransportAdapter(emitter);
+
+    const srv = new BrowserMcpServer({
+      name: 'todo-app',
+      version: '1.0.0',
+      transport,
+    });
+
+    // Add your tools and resources here
+    srv.addTool({
+      name: 'getCurrentTime',
+      description: 'Get the current time',
+      handler: async () => ({
+        content: [{ type: 'text', text: new Date().toISOString() }],
+      }),
+    });
+
+    return srv;
+  }, []);
+
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <TodoApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Alternative: Using BrowserScope
+
+For simpler use cases without a full server, use `BrowserScope`:
+
+```typescript
+import { createBrowserScope } from '@frontmcp/browser';
+
+const scope = createBrowserScope({
+  serverInfo: {
+    name: 'simple-app',
+    version: '1.0.0',
+  },
+});
+
+// Register tools directly
+scope.registerTool({
+  name: 'ping',
+  description: 'Ping the server',
+  handler: async () => ({ content: [{ type: 'text', text: 'pong' }] }),
+});
+
+await scope.start();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/docs/web/quickstart">
+    Build a todo app in 5 minutes
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    Learn about reactive state management
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Explore all available hooks
+  </Card>
+  <Card title="Transports" icon="network-wired" href="/docs/web/core/transport">
+    Configure different transport types
+  </Card>
+</CardGroup>

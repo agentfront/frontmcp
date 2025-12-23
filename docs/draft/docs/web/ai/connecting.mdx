@@ -1,0 +1,389 @@
+---
+title: Connecting Your LLM Chat
+sidebarTitle: Connecting
+icon: plug
+description: Wire up your chat component to the browser MCP server
+---
+
+# Connecting Your LLM Chat
+
+This guide shows how to connect your in-app LLM chat component to the FrontMCP browser server, enabling your AI to interact with your application.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Your App                                 │
+│                                                                   │
+│  ┌────────────────────┐        ┌────────────────────┐           │
+│  │   Chat Component   │        │  BrowserMcpServer  │           │
+│  │                    │        │                    │           │
+│  │  - Send requests   │◄──────►│  - Handle requests │           │
+│  │  - Receive responses│  JSON  │  - Execute tools   │           │
+│  │  - Show to user    │  RPC   │  - Read resources  │           │
+│  └────────────────────┘        └────────────────────┘           │
+│            │                              │                      │
+│            └──────────┬───────────────────┘                      │
+│                       │                                          │
+│              ┌────────▼────────┐                                 │
+│              │  EventEmitter   │                                 │
+│              │  (shared)       │                                 │
+│              └─────────────────┘                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### 1. Create the Shared Transport
+
+Both your MCP server and chat component share the same EventEmitter:
+
+```typescript
+import {
+  BrowserMcpServer,
+  EventTransportAdapter,
+  createSimpleEmitter,
+} from '@frontmcp/browser';
+
+// Create shared emitter - this is the communication channel
+const emitter = createSimpleEmitter();
+const transport = new EventTransportAdapter(emitter, {
+  sendEvent: 'mcp:response',   // Server sends responses on this event
+  receiveEvent: 'mcp:request', // Server receives requests on this event
+});
+
+// Create and start the MCP server
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  transport,
+});
+
+await server.start();
+
+// Export emitter for chat component
+export { emitter, server };
+```
+
+### 2. Connect Your Chat Component
+
+Your chat component listens for responses and sends requests:
+
+```typescript
+import { emitter } from './mcpServer';
+
+// Track pending requests
+const pendingRequests = new Map<number, { resolve: Function; reject: Function }>();
+let requestId = 0;
+
+// Listen for responses from the server
+emitter.on('mcp:response', (message) => {
+  const pending = pendingRequests.get(message.id);
+  if (pending) {
+    if (message.error) {
+      pending.reject(new Error(message.error.message));
+    } else {
+      pending.resolve(message.result);
+    }
+    pendingRequests.delete(message.id);
+  }
+});
+
+// Helper to send requests
+function sendRequest(method: string, params?: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const id = ++requestId;
+    pendingRequests.set(id, { resolve, reject });
+
+    emitter.emit('mcp:request', {
+      jsonrpc: '2.0',
+      id,
+      method,
+      params,
+    });
+  });
+}
+
+// Now your chat can interact with the MCP server
+async function listTools() {
+  const result = await sendRequest('tools/list');
+  return result.tools;
+}
+
+async function callTool(name: string, args: any) {
+  const result = await sendRequest('tools/call', { name, arguments: args });
+  return result;
+}
+
+async function readResource(uri: string) {
+  const result = await sendRequest('resources/read', { uri });
+  return result;
+}
+```
+
+### 3. Use in Your Chat UI
+
+```tsx
+function ChatComponent() {
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    // Load available tools on mount
+    listTools().then(setTools);
+  }, []);
+
+  const handleUserMessage = async (userMessage: string) => {
+    // Add user message
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+
+    // Your LLM processes the message and decides to call a tool
+    // This is where you'd integrate with your LLM (Claude, GPT, etc.)
+    const llmDecision = await yourLLM.process(userMessage, { tools });
+
+    if (llmDecision.toolCall) {
+      // Execute the tool
+      const result = await callTool(
+        llmDecision.toolCall.name,
+        llmDecision.toolCall.arguments
+      );
+
+      // Add result to conversation
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Executed ${llmDecision.toolCall.name}: ${JSON.stringify(result)}`,
+      }]);
+    }
+  };
+
+  return (
+    <div className="chat">
+      {messages.map((msg, i) => (
+        <div key={i} className={msg.role}>{msg.content}</div>
+      ))}
+      <ChatInput onSend={handleUserMessage} />
+    </div>
+  );
+}
+```
+
+## React Integration
+
+FrontMCP provides React hooks for easier integration:
+
+### Using useMcp Hook
+
+```tsx
+import { FrontMcpProvider, useMcp } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <ChatComponent />
+    </FrontMcpProvider>
+  );
+}
+
+function ChatComponent() {
+  const {
+    callTool,
+    readResource,
+    listTools,
+    listResources,
+    isConnected,
+  } = useMcp();
+
+  // Now you can use these directly
+  const handleAction = async () => {
+    const result = await callTool('todos/addTodo', { text: 'New todo' });
+    console.log('Tool result:', result);
+  };
+
+  return (
+    <div>
+      <p>Connected: {isConnected ? 'Yes' : 'No'}</p>
+      <button onClick={handleAction}>Add Todo via MCP</button>
+    </div>
+  );
+}
+```
+
+### Building a Chat with useMcp
+
+```tsx
+import { useMcp } from '@frontmcp/browser/react';
+
+function AIChat() {
+  const { callTool, readResource, listTools } = useMcp();
+  const [messages, setMessages] = useState([]);
+  const [availableTools, setAvailableTools] = useState([]);
+
+  useEffect(() => {
+    listTools().then(setAvailableTools);
+  }, [listTools]);
+
+  const processWithLLM = async (userInput: string) => {
+    // 1. Get current context for the LLM
+    const appState = await readResource('store://app');
+
+    // 2. Send to your LLM with tools and context
+    const llmResponse = await fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message: userInput,
+        context: appState,
+        tools: availableTools,
+      }),
+    }).then(r => r.json());
+
+    // 3. Execute any tool calls the LLM requested
+    for (const toolCall of llmResponse.toolCalls || []) {
+      const result = await callTool(toolCall.name, toolCall.arguments);
+      // Feed result back to LLM for the final response
+    }
+
+    // 4. Display the response
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: llmResponse.text,
+    }]);
+  };
+
+  return (
+    <div className="ai-chat">
+      <MessageList messages={messages} />
+      <ChatInput onSubmit={processWithLLM} />
+    </div>
+  );
+}
+```
+
+## MCP Request/Response Format
+
+The communication uses JSON-RPC 2.0:
+
+### Request Format
+
+```typescript
+interface MCPRequest {
+  jsonrpc: '2.0';
+  id: number;
+  method: string;
+  params?: any;
+}
+
+// Example: List tools
+{
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list'
+}
+
+// Example: Call a tool
+{
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'tools/call',
+  params: {
+    name: 'todos/addTodo',
+    arguments: { text: 'Buy milk' }
+  }
+}
+
+// Example: Read a resource
+{
+  jsonrpc: '2.0',
+  id: 3,
+  method: 'resources/read',
+  params: { uri: 'store://todos' }
+}
+```
+
+### Response Format
+
+```typescript
+interface MCPResponse {
+  jsonrpc: '2.0';
+  id: number;
+  result?: any;
+  error?: { code: number; message: string };
+}
+
+// Success response
+{
+  jsonrpc: '2.0',
+  id: 2,
+  result: {
+    content: [{ type: 'text', text: 'Todo added successfully' }]
+  }
+}
+
+// Error response
+{
+  jsonrpc: '2.0',
+  id: 2,
+  error: { code: -32602, message: 'Invalid params: text is required' }
+}
+```
+
+## Connection Lifecycle
+
+```typescript
+// 1. Server starts and waits for initialization
+await server.start();
+
+// 2. Chat sends initialize request
+const initResult = await sendRequest('initialize', {
+  protocolVersion: '2024-11-05',
+  capabilities: {},
+  clientInfo: { name: 'my-chat', version: '1.0.0' }
+});
+
+// 3. Chat acknowledges initialization
+await sendRequest('notifications/initialized');
+
+// 4. Chat can now list and use tools/resources
+const tools = await sendRequest('tools/list');
+const resources = await sendRequest('resources/list');
+
+// 5. Chat interacts with the app
+await sendRequest('tools/call', { name: 'todos/addTodo', arguments: { text: 'Hello' } });
+```
+
+## Error Handling
+
+```typescript
+async function safeCallTool(name: string, args: any) {
+  try {
+    const result = await callTool(name, args);
+
+    // Check for tool-level errors
+    if (result.isError) {
+      console.error('Tool error:', result.content);
+      return { success: false, error: result.content };
+    }
+
+    return { success: true, data: result };
+  } catch (error) {
+    // Transport-level error
+    console.error('MCP error:', error);
+    return { success: false, error: error.message };
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Calling Tools" icon="hammer" href="/docs/web/ai/calling-tools">
+    Execute tools and read resources
+  </Card>
+  <Card title="Events & Notifications" icon="bell" href="/docs/web/ai/events-notifications">
+    Real-time updates
+  </Card>
+  <Card title="Transport Adapters" icon="network-wired" href="/docs/web/core/transport">
+    Different transport options
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    useMcp and other hooks
+  </Card>
+</CardGroup>

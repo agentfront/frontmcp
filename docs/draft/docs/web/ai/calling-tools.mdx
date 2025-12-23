@@ -1,0 +1,441 @@
+---
+title: Calling Tools & Reading Resources
+sidebarTitle: Calling Tools
+icon: hammer
+description: How your LLM interacts with your application
+---
+
+# Calling Tools & Reading Resources
+
+This guide explains how your LLM chat uses MCP to discover capabilities, execute actions, and read application state.
+
+## Discovery: What Can the LLM Do?
+
+Before your LLM can interact with the app, it needs to know what's available:
+
+### List Available Tools
+
+```typescript
+// Request
+{
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list'
+}
+
+// Response
+{
+  jsonrpc: '2.0',
+  id: 1,
+  result: {
+    tools: [
+      {
+        name: 'todos/addTodo',
+        description: 'Add a new todo item',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'The todo text' }
+          },
+          required: ['text']
+        }
+      },
+      {
+        name: 'todos/toggleTodo',
+        description: 'Toggle a todo completion status',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'The todo ID' }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'cart/checkout',
+        description: 'Process checkout',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            paymentMethod: { type: 'string', enum: ['card', 'paypal'] }
+          },
+          required: ['paymentMethod']
+        }
+      }
+    ]
+  }
+}
+```
+
+### List Available Resources
+
+```typescript
+// Request
+{
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'resources/list'
+}
+
+// Response
+{
+  jsonrpc: '2.0',
+  id: 2,
+  result: {
+    resources: [
+      {
+        uri: 'store://todos',
+        name: 'Todo Store',
+        description: 'Current todo list state',
+        mimeType: 'application/json'
+      },
+      {
+        uri: 'store://todos/items',
+        name: 'Todo Items',
+        description: 'Array of todo items',
+        mimeType: 'application/json'
+      },
+      {
+        uri: 'store://cart',
+        name: 'Shopping Cart',
+        description: 'Current cart state',
+        mimeType: 'application/json'
+      }
+    ]
+  }
+}
+```
+
+## Calling Tools
+
+When your LLM decides to perform an action, it calls a tool:
+
+### Basic Tool Call
+
+```typescript
+// Request: Add a todo
+{
+  jsonrpc: '2.0',
+  id: 3,
+  method: 'tools/call',
+  params: {
+    name: 'todos/addTodo',
+    arguments: {
+      text: 'Buy groceries'
+    }
+  }
+}
+
+// Response: Success
+{
+  jsonrpc: '2.0',
+  id: 3,
+  result: {
+    content: [
+      {
+        type: 'text',
+        text: '{"id":"abc-123","text":"Buy groceries","done":false}'
+      }
+    ]
+  }
+}
+```
+
+### Tool Call with Error
+
+```typescript
+// Request: Toggle a non-existent todo
+{
+  jsonrpc: '2.0',
+  id: 4,
+  method: 'tools/call',
+  params: {
+    name: 'todos/toggleTodo',
+    arguments: {
+      id: 'non-existent-id'
+    }
+  }
+}
+
+// Response: Error (but still a successful RPC call)
+{
+  jsonrpc: '2.0',
+  id: 4,
+  result: {
+    content: [
+      {
+        type: 'text',
+        text: 'Todo not found'
+      }
+    ],
+    isError: true
+  }
+}
+```
+
+## Reading Resources
+
+Your LLM can read application state to understand context:
+
+### Read Full Store
+
+```typescript
+// Request
+{
+  jsonrpc: '2.0',
+  id: 5,
+  method: 'resources/read',
+  params: {
+    uri: 'store://todos'
+  }
+}
+
+// Response
+{
+  jsonrpc: '2.0',
+  id: 5,
+  result: {
+    contents: [
+      {
+        uri: 'store://todos',
+        mimeType: 'application/json',
+        text: '{"items":[{"id":"abc-123","text":"Buy groceries","done":false}],"filter":"all"}'
+      }
+    ]
+  }
+}
+```
+
+### Read Specific State
+
+```typescript
+// Request: Just the items array
+{
+  jsonrpc: '2.0',
+  id: 6,
+  method: 'resources/read',
+  params: {
+    uri: 'store://todos/items'
+  }
+}
+
+// Response
+{
+  jsonrpc: '2.0',
+  id: 6,
+  result: {
+    contents: [
+      {
+        uri: 'store://todos/items',
+        mimeType: 'application/json',
+        text: '[{"id":"abc-123","text":"Buy groceries","done":false}]'
+      }
+    ]
+  }
+}
+```
+
+## Store Integration
+
+When you use `createSchemaStoreTools`, your store actions automatically become MCP tools:
+
+### How Store Actions Map to Tools
+
+```typescript
+// Your store definition
+const todoStore = defineStore({
+  name: 'todos',
+  actions: {
+    addTodo: (state, text: string) => { ... },
+    toggleTodo: (state, id: string) => { ... },
+    removeTodo: (state, id: string) => { ... },
+    setFilter: (state, filter: 'all' | 'active' | 'completed') => { ... },
+  },
+});
+
+// Generate tools
+const tools = createSchemaStoreTools(todoStore, { prefix: 'todos' });
+
+// Results in these MCP tools:
+// - todos/addTodo       (args: { text: string })
+// - todos/toggleTodo    (args: { id: string })
+// - todos/removeTodo    (args: { id: string })
+// - todos/setFilter     (args: { filter: 'all' | 'active' | 'completed' })
+```
+
+### How Store State Maps to Resources
+
+```typescript
+// Generate resources
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,
+  includeKeys: true,
+  includeComputed: true,
+});
+
+// Results in these MCP resources:
+// - store://todos                        (full state)
+// - store://todos/items                  (items array)
+// - store://todos/filter                 (filter value)
+// - store://todos/computed/activeCount   (computed value)
+```
+
+## Complete Flow Example
+
+Here's how a typical LLM interaction works:
+
+```typescript
+// 1. User asks: "What's on my todo list?"
+// 2. LLM reads the resource
+const todos = await readResource('store://todos/items');
+// → [{ id: 'abc', text: 'Buy groceries', done: false }]
+
+// 3. LLM responds: "You have 1 todo: Buy groceries (not done)"
+
+// 4. User asks: "Mark it as done"
+// 5. LLM calls the tool
+await callTool('todos/toggleTodo', { id: 'abc' });
+// → { content: [{ type: 'text', text: 'Todo toggled' }] }
+
+// 6. Store updates, UI reacts (checkbox is now checked)
+
+// 7. LLM responds: "Done! I've marked 'Buy groceries' as complete."
+
+// 8. User asks: "Add 'Walk the dog' to my list"
+// 9. LLM calls the tool
+await callTool('todos/addTodo', { text: 'Walk the dog' });
+// → { content: [{ type: 'text', text: '{"id":"def","text":"Walk the dog","done":false}' }] }
+
+// 10. Store updates, UI shows new todo
+// 11. LLM responds: "Added 'Walk the dog' to your todo list."
+```
+
+## Using with React Hooks
+
+```tsx
+import { useMcp } from '@frontmcp/browser/react';
+
+function AIAssistant() {
+  const { callTool, readResource, listTools } = useMcp();
+
+  const handleUserQuery = async (query: string) => {
+    // Get available tools for the LLM
+    const tools = await listTools();
+
+    // Get current context
+    const appState = await readResource('store://app');
+
+    // Send to your LLM backend with tools and context
+    const response = await fetch('/api/llm', {
+      method: 'POST',
+      body: JSON.stringify({
+        query,
+        tools: tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema,
+        })),
+        context: appState,
+      }),
+    }).then(r => r.json());
+
+    // Execute any tool calls
+    for (const call of response.toolCalls) {
+      await callTool(call.name, call.arguments);
+    }
+
+    return response.text;
+  };
+
+  // ... render chat UI
+}
+```
+
+## Best Practices
+
+### Provide Good Tool Descriptions
+
+```typescript
+server.addTool({
+  name: 'cart/addItem',
+  // Good description helps LLM understand when to use it
+  description: 'Add a product to the shopping cart. Use this when the user wants to buy something.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      productId: {
+        type: 'string',
+        description: 'The unique product identifier'
+      },
+      quantity: {
+        type: 'number',
+        description: 'How many to add (default: 1)'
+      }
+    },
+    required: ['productId']
+  },
+  handler: async (args) => { ... }
+});
+```
+
+### Return Useful Results
+
+```typescript
+handler: async ({ productId, quantity = 1 }) => {
+  const product = await getProduct(productId);
+  store.actions.addToCart(productId, quantity);
+
+  // Return helpful information for the LLM
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        success: true,
+        product: product.name,
+        quantity,
+        cartTotal: store.computed.total,
+        itemCount: store.computed.itemCount,
+      })
+    }]
+  };
+}
+```
+
+### Handle Errors Gracefully
+
+```typescript
+handler: async ({ id }) => {
+  const item = store.getState().items.find(i => i.id === id);
+
+  if (!item) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Item with ID "${id}" not found. Available items: ${
+          store.getState().items.map(i => i.id).join(', ')
+        }`
+      }],
+      isError: true
+    };
+  }
+
+  // ... proceed with action
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Events & Notifications" icon="bell" href="/docs/web/ai/events-notifications">
+    Receive real-time updates
+  </Card>
+  <Card title="Connecting" icon="plug" href="/docs/web/ai/connecting">
+    Set up the connection
+  </Card>
+  <Card title="MCP Integration" icon="database" href="/docs/web/store/mcp-integration">
+    Auto-generate from stores
+  </Card>
+  <Card title="Human-in-the-Loop" icon="user-check" href="/docs/web/features/hitl">
+    Add confirmations
+  </Card>
+</CardGroup>

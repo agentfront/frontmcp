@@ -1,0 +1,322 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+icon: bolt
+description: Build your first browser MCP application in 5 minutes
+---
+
+# Quickstart
+
+Build a reactive todo app with MCP integration in under 5 minutes.
+
+## What You'll Build
+
+A todo application where an AI agent can:
+- Read the current list of todos
+- Add new todos
+- Toggle todo completion
+- Filter todos by status
+
+## Step 1: Create Project
+
+<CodeGroup>
+```bash npm
+npm create vite@latest todo-mcp -- --template react-ts
+cd todo-mcp
+npm install @frontmcp/browser zod
+```
+
+```bash pnpm
+pnpm create vite@latest todo-mcp -- --template react-ts
+cd todo-mcp
+pnpm add @frontmcp/browser zod
+```
+</CodeGroup>
+
+## Step 2: Initialize FrontMCP
+
+Update `src/main.tsx`:
+
+```tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { initializeConfig, generateUUID } from '@frontmcp/browser';
+import App from './App';
+import './index.css';
+
+// Initialize FrontMCP config
+initializeConfig({
+  debug: true,
+  isDevelopment: true,
+  machineId: generateUUID(),
+});
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## Step 3: Define Your Store
+
+Create `src/stores/todoStore.ts`:
+
+```typescript
+import { defineStore } from '@frontmcp/browser';
+import { z } from 'zod';
+
+// Define the todo schema
+const todoSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  done: z.boolean(),
+  createdAt: z.number(),
+});
+
+// Define the store
+export const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(todoSchema),
+    filter: z.enum(['all', 'active', 'completed']),
+  }),
+  initial: {
+    items: [],
+    filter: 'all',
+  },
+  actions: {
+    addTodo: (state, text: string) => {
+      state.items.push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+        createdAt: Date.now(),
+      });
+    },
+    toggleTodo: (state, id: string) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) {
+        todo.done = !todo.done;
+      }
+    },
+    removeTodo: (state, id: string) => {
+      state.items = state.items.filter(t => t.id !== id);
+    },
+    setFilter: (state, filter: 'all' | 'active' | 'completed') => {
+      state.filter = filter;
+    },
+    clearCompleted: (state) => {
+      state.items = state.items.filter(t => !t.done);
+    },
+  },
+  computed: {
+    filteredItems: (state) => {
+      switch (state.filter) {
+        case 'active':
+          return state.items.filter(t => !t.done);
+        case 'completed':
+          return state.items.filter(t => t.done);
+        default:
+          return state.items;
+      }
+    },
+    activeCount: (state) => state.items.filter(t => !t.done).length,
+  },
+});
+
+export type TodoStore = typeof todoStore;
+```
+
+## Step 4: Create the MCP Server
+
+Create `src/mcpServer.ts`:
+
+```typescript
+import {
+  BrowserMcpServer,
+  EventTransportAdapter,
+  createSimpleEmitter,
+  createSchemaStoreTools,
+  createSchemaStoreResources,
+} from '@frontmcp/browser';
+import { todoStore } from './stores/todoStore';
+
+export function createMcpServer() {
+  // Create transport
+  const emitter = createSimpleEmitter();
+  const transport = new EventTransportAdapter(emitter);
+
+  // Create server
+  const server = new BrowserMcpServer({
+    name: 'todo-app',
+    version: '1.0.0',
+    transport,
+  });
+
+  // Auto-generate tools from store actions
+  const tools = createSchemaStoreTools(todoStore, {
+    prefix: 'todos',
+    // Expose all actions as MCP tools
+    include: ['addTodo', 'toggleTodo', 'removeTodo', 'setFilter', 'clearCompleted'],
+  });
+
+  tools.forEach(tool => server.addTool(tool));
+
+  // Auto-generate resources from store state
+  const resources = createSchemaStoreResources(todoStore, {
+    includeMain: true,        // store://todos
+    includeKeys: true,        // store://todos/items, store://todos/filter
+    includeComputed: true,    // store://todos/computed/filteredItems
+  });
+
+  resources.forEach(resource => server.addResource(resource));
+
+  return { server, emitter };
+}
+```
+
+## Step 5: Build the UI
+
+Update `src/App.tsx`:
+
+```tsx
+import { useState, useMemo } from 'react';
+import { FrontMcpProvider, useStore } from '@frontmcp/browser/react';
+import { createMcpServer } from './mcpServer';
+import { todoStore } from './stores/todoStore';
+
+function TodoApp() {
+  const [newTodo, setNewTodo] = useState('');
+  const state = useStore(todoStore);
+  const { filteredItems, activeCount } = todoStore.computed;
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTodo.trim()) {
+      todoStore.actions.addTodo(newTodo.trim());
+      setNewTodo('');
+    }
+  };
+
+  return (
+    <div className="todo-app">
+      <h1>MCP Todo App</h1>
+
+      <form onSubmit={handleAdd}>
+        <input
+          type="text"
+          value={newTodo}
+          onChange={e => setNewTodo(e.target.value)}
+          placeholder="What needs to be done?"
+        />
+        <button type="submit">Add</button>
+      </form>
+
+      <div className="filters">
+        {(['all', 'active', 'completed'] as const).map(filter => (
+          <button
+            key={filter}
+            onClick={() => todoStore.actions.setFilter(filter)}
+            className={state.filter === filter ? 'active' : ''}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+
+      <ul className="todo-list">
+        {filteredItems.map(todo => (
+          <li key={todo.id} className={todo.done ? 'done' : ''}>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => todoStore.actions.toggleTodo(todo.id)}
+            />
+            <span>{todo.text}</span>
+            <button onClick={() => todoStore.actions.removeTodo(todo.id)}>×</button>
+          </li>
+        ))}
+      </ul>
+
+      <footer>
+        <span>{activeCount} items left</span>
+        <button onClick={() => todoStore.actions.clearCompleted()}>
+          Clear completed
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+export default function App() {
+  const { server } = useMemo(() => createMcpServer(), []);
+
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <TodoApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Step 6: Run It
+
+```bash
+npm run dev
+```
+
+Your app is now running at `http://localhost:5173` with full MCP support!
+
+## What You Get
+
+### MCP Tools (Auto-Generated)
+
+| Tool | Description |
+|------|-------------|
+| `todos/addTodo` | Add a new todo item |
+| `todos/toggleTodo` | Toggle a todo's completion status |
+| `todos/removeTodo` | Remove a todo by ID |
+| `todos/setFilter` | Set the filter (all/active/completed) |
+| `todos/clearCompleted` | Clear all completed todos |
+
+### MCP Resources (Auto-Generated)
+
+| Resource | Description |
+|----------|-------------|
+| `store://todos` | Complete store state |
+| `store://todos/items` | Array of todo items |
+| `store://todos/filter` | Current filter value |
+| `store://todos/computed/filteredItems` | Filtered items based on current filter |
+| `store://todos/computed/activeCount` | Number of active (incomplete) items |
+
+## Test with an AI Client
+
+Connect any MCP-compatible AI client to your app:
+
+```typescript
+// Example: Reading todos from an AI client
+const todos = await client.readResource('store://todos/items');
+console.log(todos);
+// → [{ id: "...", text: "Learn FrontMCP", done: false, createdAt: 1234567890 }]
+
+// Example: Adding a todo from an AI client
+await client.callTool('todos/addTodo', { text: 'Build amazing apps' });
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/define-store">
+    Deep dive into defineStore()
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Learn about useTool, useResource, and more
+  </Card>
+  <Card title="Human-in-the-Loop" icon="user-check" href="/docs/web/features/hitl">
+    Add confirmation dialogs for sensitive actions
+  </Card>
+  <Card title="Telemetry" icon="chart-line" href="/docs/web/features/telemetry">
+    Track events and user interactions
+  </Card>
+</CardGroup>

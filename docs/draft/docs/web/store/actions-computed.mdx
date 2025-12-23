@@ -1,0 +1,411 @@
+---
+title: Actions & Computed
+sidebarTitle: Actions & Computed
+icon: function
+description: Define state mutations and derived values
+---
+
+# Actions & Computed Values
+
+Actions and computed values are the two primary ways to work with store state beyond direct reads and writes.
+
+## Actions
+
+Actions are named functions that mutate store state. They provide:
+- Named operations for state changes
+- Automatic MCP tool generation
+- Type-safe arguments
+- Encapsulated business logic
+
+### Defining Actions
+
+```typescript
+const store = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      done: z.boolean(),
+      priority: z.enum(['low', 'medium', 'high']),
+    })),
+    filter: z.enum(['all', 'active', 'completed']),
+  }),
+  initial: {
+    items: [],
+    filter: 'all',
+  },
+  actions: {
+    // No arguments
+    clearCompleted: (state) => {
+      state.items = state.items.filter(item => !item.done);
+    },
+
+    // Single primitive argument
+    setFilter: (state, filter: 'all' | 'active' | 'completed') => {
+      state.filter = filter;
+    },
+
+    // Single string argument
+    addTodo: (state, text: string) => {
+      state.items.push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+        priority: 'medium',
+      });
+    },
+
+    // Multiple arguments
+    addTodoWithPriority: (state, text: string, priority: 'low' | 'medium' | 'high') => {
+      state.items.push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+        priority,
+      });
+    },
+
+    // Object argument (recommended for 3+ params)
+    updateTodo: (state, params: {
+      id: string;
+      text?: string;
+      done?: boolean;
+      priority?: 'low' | 'medium' | 'high';
+    }) => {
+      const todo = state.items.find(t => t.id === params.id);
+      if (todo) {
+        if (params.text !== undefined) todo.text = params.text;
+        if (params.done !== undefined) todo.done = params.done;
+        if (params.priority !== undefined) todo.priority = params.priority;
+      }
+    },
+
+    // Array argument
+    addMultiple: (state, todos: Array<{ text: string; priority?: 'low' | 'medium' | 'high' }>) => {
+      todos.forEach(({ text, priority = 'medium' }) => {
+        state.items.push({
+          id: crypto.randomUUID(),
+          text,
+          done: false,
+          priority,
+        });
+      });
+    },
+
+    // Action that finds and modifies
+    toggleTodo: (state, id: string) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) {
+        todo.done = !todo.done;
+      }
+    },
+
+    // Action with complex logic
+    reorderByPriority: (state) => {
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      state.items.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    },
+  },
+});
+```
+
+### Calling Actions
+
+```typescript
+// Call actions directly
+store.actions.addTodo('Buy groceries');
+store.actions.setFilter('active');
+store.actions.updateTodo({ id: 'abc', done: true });
+store.actions.clearCompleted();
+
+// In React components
+function TodoForm() {
+  const [text, setText] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    store.actions.addTodo(text);
+    setText('');
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={text} onChange={e => setText(e.target.value)} />
+      <button type="submit">Add</button>
+    </form>
+  );
+}
+```
+
+### Action Return Values
+
+Actions can return values for immediate feedback:
+
+```typescript
+actions: {
+  addTodo: (state, text: string) => {
+    const newTodo = {
+      id: crypto.randomUUID(),
+      text,
+      done: false,
+    };
+    state.items.push(newTodo);
+    return newTodo; // Return the created item
+  },
+
+  removeTodo: (state, id: string) => {
+    const index = state.items.findIndex(t => t.id === id);
+    if (index === -1) return false;
+    state.items.splice(index, 1);
+    return true;
+  },
+}
+
+// Use return value
+const newTodo = store.actions.addTodo('Test');
+console.log(newTodo.id); // The new todo's ID
+
+const wasRemoved = store.actions.removeTodo('abc');
+if (!wasRemoved) {
+  console.log('Todo not found');
+}
+```
+
+### Async Actions
+
+For async operations, define actions that update state at different stages:
+
+```typescript
+const apiStore = defineStore({
+  name: 'api',
+  schema: z.object({
+    data: z.array(z.any()),
+    loading: z.boolean(),
+    error: z.string().nullable(),
+  }),
+  initial: {
+    data: [],
+    loading: false,
+    error: null,
+  },
+  actions: {
+    setLoading: (state, loading: boolean) => {
+      state.loading = loading;
+      if (loading) state.error = null;
+    },
+    setData: (state, data: any[]) => {
+      state.data = data;
+      state.loading = false;
+    },
+    setError: (state, error: string) => {
+      state.error = error;
+      state.loading = false;
+    },
+  },
+});
+
+// Async function using actions
+async function fetchData() {
+  apiStore.actions.setLoading(true);
+  try {
+    const response = await fetch('/api/data');
+    const data = await response.json();
+    apiStore.actions.setData(data);
+  } catch (error) {
+    apiStore.actions.setError(error.message);
+  }
+}
+```
+
+## Computed Values
+
+Computed values are derived from state and update automatically when dependencies change.
+
+### Defining Computed Values
+
+```typescript
+const cartStore = defineStore({
+  name: 'cart',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      price: z.number(),
+      quantity: z.number(),
+    })),
+    couponCode: z.string().nullable(),
+    couponDiscount: z.number(), // percentage
+  }),
+  initial: {
+    items: [],
+    couponCode: null,
+    couponDiscount: 0,
+  },
+  computed: {
+    // Simple count
+    itemCount: (state) => state.items.length,
+
+    // Total quantity
+    totalQuantity: (state) =>
+      state.items.reduce((sum, item) => sum + item.quantity, 0),
+
+    // Calculated subtotal
+    subtotal: (state) =>
+      state.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+
+    // Discount amount
+    discountAmount: (state) => {
+      const subtotal = state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      return subtotal * (state.couponDiscount / 100);
+    },
+
+    // Final total
+    total: (state) => {
+      const subtotal = state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const discount = subtotal * (state.couponDiscount / 100);
+      return subtotal - discount;
+    },
+
+    // Boolean computed
+    isEmpty: (state) => state.items.length === 0,
+    hasDiscount: (state) => state.couponDiscount > 0,
+
+    // Object computed
+    summary: (state) => {
+      const subtotal = state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const discount = subtotal * (state.couponDiscount / 100);
+      return {
+        itemCount: state.items.length,
+        subtotal,
+        discount,
+        total: subtotal - discount,
+        hasCoupon: state.couponCode !== null,
+      };
+    },
+
+    // Array computed (filtered items)
+    expensiveItems: (state) =>
+      state.items.filter(item => item.price > 100),
+  },
+});
+```
+
+### Accessing Computed Values
+
+```typescript
+// Direct access
+console.log(cartStore.computed.total);        // 0
+console.log(cartStore.computed.isEmpty);      // true
+console.log(cartStore.computed.summary);      // { itemCount: 0, ... }
+
+// In React (automatically reactive)
+function CartSummary() {
+  const { total, itemCount, hasDiscount } = cartStore.computed;
+
+  return (
+    <div>
+      <p>Items: {itemCount}</p>
+      <p>Total: ${total.toFixed(2)}</p>
+      {hasDiscount && <p>Discount applied!</p>}
+    </div>
+  );
+}
+```
+
+### Computed with Parameters
+
+For computed values that need parameters, use a function factory:
+
+```typescript
+computed: {
+  // Returns a function that takes a parameter
+  getItemById: (state) => (id: string) =>
+    state.items.find(item => item.id === id),
+
+  // Filter by category
+  getByCategory: (state) => (category: string) =>
+    state.items.filter(item => item.category === category),
+}
+
+// Usage
+const item = store.computed.getItemById('abc-123');
+const electronics = store.computed.getByCategory('electronics');
+```
+
+## Best Practices
+
+### Action Naming
+
+```typescript
+// ✅ Good - verb-noun pattern
+actions: {
+  addItem: (state, item) => { ... },
+  removeItem: (state, id) => { ... },
+  updateItem: (state, id, updates) => { ... },
+  clearItems: (state) => { ... },
+  setFilter: (state, filter) => { ... },
+}
+
+// ❌ Bad - unclear names
+actions: {
+  item: (state, item) => { ... },
+  delete: (state, id) => { ... },
+  change: (state, updates) => { ... },
+}
+```
+
+### Single Responsibility
+
+```typescript
+// ✅ Good - single responsibility
+actions: {
+  markComplete: (state, id) => {
+    const item = state.items.find(i => i.id === id);
+    if (item) item.done = true;
+  },
+  markIncomplete: (state, id) => {
+    const item = state.items.find(i => i.id === id);
+    if (item) item.done = false;
+  },
+}
+
+// Also good - toggle when it makes sense
+actions: {
+  toggleComplete: (state, id) => {
+    const item = state.items.find(i => i.id === id);
+    if (item) item.done = !item.done;
+  },
+}
+```
+
+### Computed Caching
+
+Computed values are automatically memoized. Avoid expensive operations when possible:
+
+```typescript
+// ✅ Good - efficient
+computed: {
+  activeCount: (state) => state.items.filter(i => !i.done).length,
+}
+
+// ⚠️ Careful - may be expensive with large datasets
+computed: {
+  sortedByDate: (state) =>
+    [...state.items].sort((a, b) => b.createdAt - a.createdAt),
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="defineStore()" icon="code" href="/docs/web/store/define-store">
+    Complete store definition API
+  </Card>
+  <Card title="MCP Integration" icon="plug" href="/docs/web/store/mcp-integration">
+    Auto-generate tools from actions
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Use stores with React
+  </Card>
+</CardGroup>

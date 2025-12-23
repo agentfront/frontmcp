@@ -1,0 +1,317 @@
+---
+title: BrowserScope
+sidebarTitle: Scope
+icon: circle
+description: Lightweight MCP scope for browser environments without full server overhead
+---
+
+# BrowserScope
+
+`BrowserScope` provides a lightweight alternative to `BrowserMcpServer` for simpler use cases. It offers direct tool and resource registration without the full server infrastructure.
+
+## When to Use Scope vs Server
+
+| Feature | BrowserScope | BrowserMcpServer |
+|---------|--------------|------------------|
+| Tool registration | ✓ | ✓ |
+| Resource registration | ✓ | ✓ |
+| Prompt registration | ✓ | ✓ |
+| Store integration | Basic | Full |
+| React hooks | Limited | Full |
+| Component registry | ✗ | ✓ |
+| HiTL support | ✗ | ✓ |
+| Complexity | Low | Medium |
+
+**Use BrowserScope when:**
+- You need a simple MCP endpoint
+- You don't need full React integration
+- You're building a standalone component or library
+
+**Use BrowserMcpServer when:**
+- You need full React hooks support
+- You want store-generated tools/resources
+- You need component registries or HiTL
+
+## Basic Usage
+
+```typescript
+import { createBrowserScope } from '@frontmcp/browser';
+
+const scope = createBrowserScope({
+  serverInfo: {
+    name: 'my-widget',
+    version: '1.0.0',
+    description: 'A simple MCP-enabled widget',
+  },
+});
+
+// Register a tool
+scope.registerTool({
+  name: 'ping',
+  description: 'Check if the scope is responsive',
+  handler: async () => ({
+    content: [{ type: 'text', text: 'pong' }],
+  }),
+});
+
+// Start the scope
+await scope.start();
+```
+
+## Creating a Scope
+
+```typescript
+import { createBrowserScope } from '@frontmcp/browser';
+
+const scope = createBrowserScope({
+  serverInfo: {
+    name: 'app-name',
+    version: '1.0.0',
+    description: 'Optional description',
+  },
+  // Optional: provide a custom transport
+  transport: myTransport,
+  // Optional: provide platform adapters
+  crypto: customCrypto,
+  storage: customStorage,
+  logger: customLogger,
+  // Optional: enable debug logging
+  debug: true,
+});
+```
+
+## Registering Tools
+
+```typescript
+// Simple tool
+scope.registerTool({
+  name: 'echo',
+  description: 'Echo back the input',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  handler: async ({ message }) => ({
+    content: [{ type: 'text', text: message }],
+  }),
+});
+
+// Tool with complex logic
+scope.registerTool({
+  name: 'calculate',
+  description: 'Perform a calculation',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operation: { type: 'string', enum: ['add', 'subtract', 'multiply', 'divide'] },
+      a: { type: 'number' },
+      b: { type: 'number' },
+    },
+    required: ['operation', 'a', 'b'],
+  },
+  handler: async ({ operation, a, b }) => {
+    let result: number;
+    switch (operation) {
+      case 'add': result = a + b; break;
+      case 'subtract': result = a - b; break;
+      case 'multiply': result = a * b; break;
+      case 'divide': result = a / b; break;
+    }
+    return { content: [{ type: 'text', text: String(result) }] };
+  },
+});
+```
+
+## Registering Resources
+
+```typescript
+// Static resource
+scope.registerResource({
+  uri: 'app://version',
+  name: 'App Version',
+  description: 'Current application version',
+  handler: () => ({
+    uri: 'app://version',
+    mimeType: 'application/json',
+    text: JSON.stringify({ version: '1.0.0', build: 123 }),
+  }),
+});
+
+// Dynamic resource
+let counter = 0;
+scope.registerResource({
+  uri: 'app://counter',
+  name: 'Counter Value',
+  description: 'Current counter value',
+  handler: () => ({
+    uri: 'app://counter',
+    mimeType: 'text/plain',
+    text: String(counter),
+  }),
+});
+
+// Increment counter
+scope.registerTool({
+  name: 'increment',
+  description: 'Increment the counter',
+  handler: async () => {
+    counter++;
+    return { content: [{ type: 'text', text: `Counter is now ${counter}` }] };
+  },
+});
+```
+
+## Registering Prompts
+
+```typescript
+scope.registerPrompt({
+  name: 'code-review',
+  description: 'Generate a code review prompt',
+  arguments: [
+    { name: 'code', description: 'Code to review', required: true },
+    { name: 'language', description: 'Programming language', required: false },
+  ],
+  handler: async ({ code, language = 'unknown' }) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: `Please review this ${language} code:\n\n\`\`\`${language}\n${code}\n\`\`\``,
+      },
+    }],
+  }),
+});
+```
+
+## Executing Tools and Reading Resources
+
+```typescript
+// Execute a tool
+const result = await scope.executeTool('calculate', {
+  operation: 'add',
+  a: 5,
+  b: 3,
+});
+console.log(result); // { content: [{ type: 'text', text: '8' }] }
+
+// Read a resource
+const version = await scope.readResource('app://version');
+console.log(version); // { version: '1.0.0', build: 123 }
+```
+
+## Listing Capabilities
+
+```typescript
+// List all tools
+const tools = scope.listTools();
+console.log(tools.map(t => t.name));
+// → ['echo', 'calculate', 'increment']
+
+// List all resources
+const resources = scope.listResources();
+console.log(resources.map(r => r.uri));
+// → ['app://version', 'app://counter']
+```
+
+## Lifecycle
+
+```typescript
+// Start the scope
+await scope.start();
+
+// Stop the scope
+await scope.stop();
+
+// Or use dispose for cleanup
+scope.dispose();
+```
+
+## With React (Limited)
+
+BrowserScope can be used with React, but without the full hooks support:
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider scope={scope}>
+      {/* Basic connection available via useMcp() */}
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+<Warning>
+  When using `BrowserScope` with React, hooks like `useTool` and `useResource` work but with reduced functionality compared to using `BrowserMcpServer`.
+</Warning>
+
+## Example: Standalone Widget
+
+```typescript
+// widget.ts - A self-contained MCP widget
+import { createBrowserScope } from '@frontmcp/browser';
+
+export function createWeatherWidget() {
+  const scope = createBrowserScope({
+    serverInfo: {
+      name: 'weather-widget',
+      version: '1.0.0',
+    },
+  });
+
+  let location = 'New York';
+  let unit = 'celsius';
+
+  scope.registerResource({
+    uri: 'weather://current',
+    name: 'Current Weather',
+    handler: async () => {
+      const weather = await fetchWeather(location);
+      return {
+        uri: 'weather://current',
+        mimeType: 'application/json',
+        text: JSON.stringify(weather),
+      };
+    },
+  });
+
+  scope.registerTool({
+    name: 'setLocation',
+    description: 'Set the weather location',
+    inputSchema: {
+      type: 'object',
+      properties: { city: { type: 'string' } },
+      required: ['city'],
+    },
+    handler: async ({ city }) => {
+      location = city;
+      return { content: [{ type: 'text', text: `Location set to ${city}` }] };
+    },
+  });
+
+  return {
+    scope,
+    start: () => scope.start(),
+    stop: () => scope.stop(),
+  };
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Full-featured MCP server
+  </Card>
+  <Card title="Transport" icon="network-wired" href="/docs/web/core/transport">
+    Configure transport adapters
+  </Card>
+  <Card title="Entries" icon="puzzle-piece" href="/docs/web/core/entries">
+    Learn about entry classes
+  </Card>
+</CardGroup>

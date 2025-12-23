@@ -1,0 +1,390 @@
+---
+title: MCP Integration
+sidebarTitle: MCP Integration
+icon: plug
+description: Auto-generate MCP tools and resources from stores
+---
+
+# MCP Integration
+
+FrontMCP Web can automatically generate MCP tools and resources from your stores, exposing your application state and actions to AI agents.
+
+## Overview
+
+```
+┌─────────────────┐     ┌──────────────────┐
+│   defineStore   │     │  BrowserMcpServer │
+│                 │     │                   │
+│  - actions ─────┼────►│  MCP Tools        │
+│  - state ───────┼────►│  MCP Resources    │
+│  - computed ────┼────►│  MCP Resources    │
+└─────────────────┘     └──────────────────┘
+```
+
+## Creating Store Tools
+
+Use `createSchemaStoreTools` to generate MCP tools from store actions:
+
+```typescript
+import { defineStore, createSchemaStoreTools } from '@frontmcp/browser';
+
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      done: z.boolean(),
+    })),
+  }),
+  initial: { items: [] },
+  actions: {
+    addTodo: (state, text: string) => {
+      state.items.push({ id: crypto.randomUUID(), text, done: false });
+    },
+    removeTodo: (state, id: string) => {
+      state.items = state.items.filter(t => t.id !== id);
+    },
+    toggleTodo: (state, id: string) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) todo.done = !todo.done;
+    },
+  },
+});
+
+// Generate tools from actions
+const tools = createSchemaStoreTools(todoStore, {
+  prefix: 'todos',
+});
+
+// Register with server
+tools.forEach(tool => server.addTool(tool));
+```
+
+### Tool Generation Options
+
+```typescript
+interface CreateStoreToolsOptions {
+  /** Prefix for tool names (e.g., "todos" → "todos/addTodo") */
+  prefix?: string;
+
+  /** Only include specific actions */
+  include?: string[];
+
+  /** Exclude specific actions */
+  exclude?: string[];
+
+  /** Custom descriptions for actions */
+  descriptions?: Record<string, string>;
+
+  /** Add Human-in-the-Loop confirmation */
+  hitl?: boolean | string[];
+}
+```
+
+### Examples
+
+```typescript
+// Include only specific actions
+const tools = createSchemaStoreTools(todoStore, {
+  prefix: 'todos',
+  include: ['addTodo', 'toggleTodo'],
+});
+// → Creates: todos/addTodo, todos/toggleTodo
+
+// Exclude specific actions
+const tools = createSchemaStoreTools(todoStore, {
+  prefix: 'todos',
+  exclude: ['clearAll'],
+});
+
+// Custom descriptions
+const tools = createSchemaStoreTools(todoStore, {
+  prefix: 'todos',
+  descriptions: {
+    addTodo: 'Add a new task to the todo list',
+    toggleTodo: 'Mark a task as complete or incomplete',
+  },
+});
+
+// With Human-in-the-Loop for destructive actions
+const tools = createSchemaStoreTools(todoStore, {
+  prefix: 'todos',
+  hitl: ['removeTodo', 'clearAll'],
+});
+```
+
+## Creating Store Resources
+
+Use `createSchemaStoreResources` to generate MCP resources from store state:
+
+```typescript
+import { createSchemaStoreResources } from '@frontmcp/browser';
+
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,      // store://todos
+  includeKeys: true,      // store://todos/items
+  includeComputed: true,  // store://todos/computed/activeCount
+});
+
+// Register with server
+resources.forEach(resource => server.addResource(resource));
+```
+
+### Resource Generation Options
+
+```typescript
+interface CreateStoreResourcesOptions {
+  /** Include main store resource (store://{name}) */
+  includeMain?: boolean;
+
+  /** Include individual key resources (store://{name}/{key}) */
+  includeKeys?: boolean | string[];
+
+  /** Include computed value resources (store://{name}/computed/{key}) */
+  includeComputed?: boolean | string[];
+
+  /** Custom base URI (default: "store://") */
+  baseUri?: string;
+}
+```
+
+### Generated Resources
+
+For a store defined as:
+
+```typescript
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(todoSchema),
+    filter: z.enum(['all', 'active', 'completed']),
+  }),
+  initial: { items: [], filter: 'all' },
+  computed: {
+    activeCount: (state) => state.items.filter(t => !t.done).length,
+    completedCount: (state) => state.items.filter(t => t.done).length,
+  },
+});
+
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,
+  includeKeys: true,
+  includeComputed: true,
+});
+```
+
+The following resources are created:
+
+| URI | Description |
+|-----|-------------|
+| `store://todos` | Complete store state |
+| `store://todos/items` | Array of todo items |
+| `store://todos/filter` | Current filter value |
+| `store://todos/computed/activeCount` | Number of active items |
+| `store://todos/computed/completedCount` | Number of completed items |
+
+### Selective Resource Generation
+
+```typescript
+// Only specific keys
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,
+  includeKeys: ['items'], // Only items, not filter
+  includeComputed: ['activeCount'], // Only activeCount
+});
+
+// Custom URI scheme
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,
+  baseUri: 'app://state/',
+});
+// → app://state/todos
+```
+
+## Complete Integration Example
+
+```typescript
+import {
+  defineStore,
+  BrowserMcpServer,
+  EventTransportAdapter,
+  createSimpleEmitter,
+  createSchemaStoreTools,
+  createSchemaStoreResources,
+} from '@frontmcp/browser';
+import { z } from 'zod';
+
+// 1. Define the store
+const cartStore = defineStore({
+  name: 'cart',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      productId: z.string(),
+      name: z.string(),
+      price: z.number(),
+      quantity: z.number(),
+    })),
+    couponCode: z.string().nullable(),
+  }),
+  initial: {
+    items: [],
+    couponCode: null,
+  },
+  actions: {
+    addItem: (state, product: { productId: string; name: string; price: number }) => {
+      const existing = state.items.find(i => i.productId === product.productId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        state.items.push({
+          id: crypto.randomUUID(),
+          ...product,
+          quantity: 1,
+        });
+      }
+    },
+    removeItem: (state, itemId: string) => {
+      state.items = state.items.filter(i => i.id !== itemId);
+    },
+    updateQuantity: (state, itemId: string, quantity: number) => {
+      const item = state.items.find(i => i.id === itemId);
+      if (item && quantity > 0) {
+        item.quantity = quantity;
+      }
+    },
+    applyCoupon: (state, code: string) => {
+      state.couponCode = code;
+    },
+    clearCart: (state) => {
+      state.items = [];
+      state.couponCode = null;
+    },
+  },
+  computed: {
+    itemCount: (state) => state.items.reduce((sum, i) => sum + i.quantity, 0),
+    subtotal: (state) => state.items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+    isEmpty: (state) => state.items.length === 0,
+  },
+});
+
+// 2. Create MCP server
+const emitter = createSimpleEmitter();
+const transport = new EventTransportAdapter(emitter);
+const server = new BrowserMcpServer({
+  name: 'shopping-cart',
+  version: '1.0.0',
+  transport,
+});
+
+// 3. Generate and register tools
+const tools = createSchemaStoreTools(cartStore, {
+  prefix: 'cart',
+  descriptions: {
+    addItem: 'Add a product to the shopping cart',
+    removeItem: 'Remove an item from the cart',
+    updateQuantity: 'Change the quantity of an item',
+    applyCoupon: 'Apply a coupon code for discount',
+    clearCart: 'Remove all items from the cart',
+  },
+  hitl: ['clearCart'], // Require confirmation for clearing
+});
+
+tools.forEach(tool => server.addTool(tool));
+
+// 4. Generate and register resources
+const resources = createSchemaStoreResources(cartStore, {
+  includeMain: true,
+  includeKeys: ['items'],
+  includeComputed: true,
+});
+
+resources.forEach(resource => server.addResource(resource));
+
+// 5. Start the server
+await server.start();
+```
+
+## AI Agent Interaction
+
+Once integrated, an AI agent can:
+
+### Read Cart State
+
+```typescript
+// Read full cart
+const cart = await client.readResource('store://cart');
+// → { items: [...], couponCode: null }
+
+// Read just the items
+const items = await client.readResource('store://cart/items');
+// → [{ id: '...', name: 'Product', price: 29.99, quantity: 2 }]
+
+// Read computed values
+const total = await client.readResource('store://cart/computed/subtotal');
+// → 59.98
+```
+
+### Invoke Cart Actions
+
+```typescript
+// Add item to cart
+await client.callTool('cart/addItem', {
+  productId: 'prod-123',
+  name: 'Wireless Mouse',
+  price: 29.99,
+});
+
+// Update quantity
+await client.callTool('cart/updateQuantity', {
+  itemId: 'item-456',
+  quantity: 3,
+});
+
+// Apply coupon
+await client.callTool('cart/applyCoupon', { code: 'SAVE10' });
+```
+
+## Tool Schema Generation
+
+FrontMCP automatically generates JSON Schema for tool inputs based on action signatures:
+
+```typescript
+// Action definition
+addItem: (state, product: { productId: string; name: string; price: number }) => {
+  // ...
+}
+
+// Generated tool schema
+{
+  "name": "cart/addItem",
+  "description": "Add a product to the shopping cart",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "productId": { "type": "string" },
+      "name": { "type": "string" },
+      "price": { "type": "number" }
+    },
+    "required": ["productId", "name", "price"]
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="defineStore()" icon="code" href="/docs/web/store/define-store">
+    Create stores with defineStore
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+  <Card title="Human-in-the-Loop" icon="user-check" href="/docs/web/features/hitl">
+    Add confirmations to tools
+  </Card>
+  <Card title="React Provider" icon="atom" href="/docs/web/react/provider">
+    Integrate with React apps
+  </Card>
+</CardGroup>

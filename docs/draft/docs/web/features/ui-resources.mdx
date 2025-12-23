@@ -1,0 +1,443 @@
+---
+title: UI Resources
+sidebarTitle: UI Resources
+icon: window
+description: Expose UI state and DOM content to AI agents
+---
+
+# UI Resources
+
+UI Resources allow you to expose the current state of your user interface to AI agents, enabling context-aware assistance and intelligent interactions.
+
+## Overview
+
+UI Resources provide AI agents with:
+- Current visible content
+- UI component state
+- Form values
+- Accessibility information
+- Semantic structure
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your Application                      │
+├─────────────────────────────────────────────────────────┤
+│  Components  │  Forms  │  Navigation  │  Content        │
+├─────────────────────────────────────────────────────────┤
+│                  UI Resource Layer                       │
+│  - DOM extraction                                        │
+│  - State serialization                                   │
+│  - Accessibility mapping                                 │
+├─────────────────────────────────────────────────────────┤
+│                  MCP Resources                           │
+│  ui://current  │  ui://forms  │  ui://components        │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+```typescript
+import {
+  BrowserMcpServer,
+  createUIResource,
+} from '@frontmcp/browser';
+
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  transport,
+});
+
+// Add UI resource
+const uiResource = createUIResource({
+  selectors: ['main', 'article'],
+  includeAccessibility: true,
+});
+
+server.addResource(uiResource);
+
+// AI agent can now read the UI
+// await client.readResource('ui://current');
+```
+
+## Resource Types
+
+### Current View Resource
+
+The main UI resource exposing the current visible content:
+
+```typescript
+const uiResource = createUIResource({
+  // Root selectors for content extraction
+  selectors: ['main', '[role="main"]', 'article'],
+
+  // Exclude elements
+  exclude: ['nav', 'footer', '.ads'],
+
+  // Include accessibility information
+  includeAccessibility: true,
+
+  // Include semantic structure
+  includeStructure: true,
+
+  // Maximum content length
+  maxLength: 50000,
+});
+
+server.addResource(uiResource);
+// → Available at ui://current
+```
+
+### Component Registry Resource
+
+Expose registered UI components:
+
+```typescript
+import { createComponentRegistryResource } from '@frontmcp/browser';
+
+const componentResource = createComponentRegistryResource(registry);
+server.addResource(componentResource);
+
+// AI can discover available components
+// await client.readResource('ui://components');
+// → [{ name: 'Button', props: [...] }, { name: 'Card', props: [...] }]
+```
+
+### Form State Resource
+
+Expose all form states:
+
+```typescript
+import { createFormsResource } from '@frontmcp/browser';
+
+const formsResource = createFormsResource({
+  // Exclude sensitive fields
+  excludeFields: ['password', 'token'],
+  // Include validation state
+  includeValidation: true,
+});
+
+server.addResource(formsResource);
+// → Available at ui://forms
+```
+
+## DOM Extraction
+
+### Basic Extraction
+
+```typescript
+import { extractDOM } from '@frontmcp/browser';
+
+const content = extractDOM({
+  root: document.querySelector('main'),
+  includeText: true,
+  includeStructure: true,
+  maxDepth: 5,
+});
+
+// Returns structured content
+// {
+//   tag: 'main',
+//   text: '...',
+//   children: [...],
+//   attributes: {...},
+// }
+```
+
+### With Selectors
+
+```typescript
+const content = extractDOM({
+  selectors: ['h1', 'h2', 'p', '[data-content]'],
+  includeAttributes: ['id', 'class', 'data-*'],
+});
+```
+
+### Custom Extraction
+
+```typescript
+import { createCustomExtractor } from '@frontmcp/browser';
+
+const extractor = createCustomExtractor({
+  // Extract specific elements
+  extract: {
+    title: 'h1',
+    subtitle: 'h2',
+    content: 'article p',
+    images: 'img[src]',
+    links: 'a[href]',
+  },
+
+  // Transform extracted data
+  transform: (data) => ({
+    ...data,
+    wordCount: data.content.split(' ').length,
+  }),
+});
+
+const pageData = extractor.extract(document);
+```
+
+## React Integration
+
+### UIResourceProvider
+
+```tsx
+import { UIResourceProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <UIResourceProvider
+        autoExtract={true}
+        updateOnChange={true}
+        throttle={500}
+      >
+        <YourApp />
+      </UIResourceProvider>
+    </FrontMcpProvider>
+  );
+}
+```
+
+### useUIResource Hook
+
+```tsx
+import { useUIResource } from '@frontmcp/browser/react';
+
+function ContentArea() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Register this element as a UI resource
+  useUIResource(ref, {
+    name: 'content-area',
+    uri: 'ui://content',
+    includeText: true,
+  });
+
+  return (
+    <div ref={ref}>
+      <h1>Content Title</h1>
+      <p>This content is exposed to AI agents.</p>
+    </div>
+  );
+}
+```
+
+### Marking Content
+
+```tsx
+// Use data attributes to mark content
+<div data-ui-resource="product-details">
+  <h2>Product Name</h2>
+  <p>Product description...</p>
+</div>
+
+// Exclude sensitive content
+<div data-ui-resource-exclude>
+  <p>This won't be exposed to AI.</p>
+</div>
+```
+
+## Accessibility Integration
+
+Include accessibility information in UI resources:
+
+```typescript
+const uiResource = createUIResource({
+  selectors: ['main'],
+  includeAccessibility: true,
+  accessibilityOptions: {
+    // Include ARIA attributes
+    includeAria: true,
+    // Include roles
+    includeRoles: true,
+    // Include labels
+    includeLabels: true,
+    // Include keyboard navigation info
+    includeKeyboard: true,
+  },
+});
+```
+
+### Accessibility Output
+
+```typescript
+// AI reads: await client.readResource('ui://current')
+{
+  content: '...',
+  accessibility: {
+    landmarks: [
+      { role: 'main', label: 'Main content' },
+      { role: 'navigation', label: 'Main menu' },
+    ],
+    headings: [
+      { level: 1, text: 'Page Title' },
+      { level: 2, text: 'Section 1' },
+    ],
+    interactiveElements: [
+      { type: 'button', label: 'Submit form' },
+      { type: 'link', label: 'Learn more', href: '/about' },
+    ],
+  },
+}
+```
+
+## Semantic Structure
+
+Extract semantic structure for AI understanding:
+
+```typescript
+const uiResource = createUIResource({
+  selectors: ['article'],
+  includeStructure: true,
+  structureOptions: {
+    // Generate table of contents
+    generateTOC: true,
+    // Extract sections
+    extractSections: true,
+    // Identify lists
+    identifyLists: true,
+    // Extract code blocks
+    extractCode: true,
+  },
+});
+```
+
+### Structure Output
+
+```typescript
+{
+  content: '...',
+  structure: {
+    toc: [
+      { level: 1, text: 'Introduction', id: 'intro' },
+      { level: 2, text: 'Getting Started', id: 'getting-started' },
+    ],
+    sections: [
+      { title: 'Introduction', content: '...', subsections: [...] },
+    ],
+    lists: [
+      { type: 'ordered', items: ['Step 1', 'Step 2', 'Step 3'] },
+    ],
+    codeBlocks: [
+      { language: 'typescript', code: 'const x = 1;' },
+    ],
+  },
+}
+```
+
+## Real-Time Updates
+
+### Mutation Observer
+
+```typescript
+const uiResource = createUIResource({
+  selectors: ['main'],
+  watch: true,
+  watchOptions: {
+    // Debounce updates
+    debounce: 500,
+    // Watch for attribute changes
+    attributes: true,
+    // Watch for text changes
+    characterData: true,
+    // Watch for child changes
+    childList: true,
+    // Recurse into children
+    subtree: true,
+  },
+});
+```
+
+### Event-Based Updates
+
+```typescript
+import { UIResourceEmitter } from '@frontmcp/browser';
+
+const emitter = new UIResourceEmitter();
+
+// Emit updates when content changes
+function updateContent(newContent) {
+  setContent(newContent);
+  emitter.emit('ui:updated', {
+    region: 'content',
+    timestamp: Date.now(),
+  });
+}
+```
+
+## Multiple UI Resources
+
+Register multiple resources for different UI areas:
+
+```typescript
+// Header resource
+server.addResource(createUIResource({
+  uri: 'ui://header',
+  selectors: ['header'],
+}));
+
+// Sidebar resource
+server.addResource(createUIResource({
+  uri: 'ui://sidebar',
+  selectors: ['aside', '[role="complementary"]'],
+}));
+
+// Main content resource
+server.addResource(createUIResource({
+  uri: 'ui://main',
+  selectors: ['main', 'article'],
+}));
+
+// Footer resource
+server.addResource(createUIResource({
+  uri: 'ui://footer',
+  selectors: ['footer'],
+}));
+```
+
+## Security Considerations
+
+<Warning>
+  Be careful about what UI content you expose:
+  - Exclude sensitive data (passwords, tokens)
+  - Don't expose hidden form fields
+  - Consider user privacy
+</Warning>
+
+```typescript
+const uiResource = createUIResource({
+  selectors: ['main'],
+  // Security options
+  security: {
+    // Exclude password fields
+    excludePasswords: true,
+    // Exclude hidden inputs
+    excludeHidden: true,
+    // Sanitize content
+    sanitize: true,
+    // Custom exclusion patterns
+    excludePatterns: [
+      /credit.?card/i,
+      /ssn|social.?security/i,
+    ],
+  },
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Page Context" icon="browser" href="/docs/web/react/page-context">
+    React page context hooks
+  </Card>
+  <Card title="Form Management" icon="rectangle-list" href="/docs/web/features/forms">
+    Form state exposure
+  </Card>
+  <Card title="Component Registry" icon="puzzle-piece" href="/docs/web/advanced/registries">
+    Register UI components
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+</CardGroup>

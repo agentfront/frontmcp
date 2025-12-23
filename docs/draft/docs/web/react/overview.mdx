@@ -1,0 +1,259 @@
+---
+title: React Integration
+sidebarTitle: Overview
+icon: atom
+description: Use FrontMCP Web with React applications
+---
+
+# React Integration
+
+FrontMCP Web provides first-class React support with hooks, providers, and components for building AI-enabled applications.
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpProvider" icon="box">
+    Context provider for MCP server access throughout your app
+  </Card>
+  <Card title="Reactive Hooks" icon="bolt">
+    useTool, useResource, useStore for reactive data binding
+  </Card>
+  <Card title="Page Context" icon="browser">
+    Automatic page context extraction for AI agents
+  </Card>
+  <Card title="Component Discovery" icon="magnifying-glass">
+    Register and expose React components to AI
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+```tsx
+import { FrontMcpProvider, useStore, useTool } from '@frontmcp/browser/react';
+import { createMcpServer } from './mcpServer';
+import { todoStore } from './stores/todoStore';
+
+// Wrap your app with FrontMcpProvider
+function App() {
+  const { server } = useMemo(() => createMcpServer(), []);
+
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <TodoApp />
+    </FrontMcpProvider>
+  );
+}
+
+// Use hooks inside provider
+function TodoApp() {
+  // Reactive store access
+  const state = useStore(todoStore);
+
+  // Tool execution
+  const addTodo = useTool('todos/addTodo');
+
+  return (
+    <div>
+      <h1>Todos ({state.items.length})</h1>
+      <button onClick={() => addTodo.execute({ text: 'New todo' })}>
+        Add Todo
+      </button>
+      {addTodo.loading && <span>Adding...</span>}
+    </div>
+  );
+}
+```
+
+## Available Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useMcp()` | Access MCP server and connection state |
+| `useStore(store)` | Subscribe to store state changes |
+| `useTool(name)` | Execute MCP tools with loading/error state |
+| `useResource(uri)` | Read MCP resources reactively |
+| `usePageContext()` | Get current page context for AI |
+| `usePageElement(ref)` | Extract element context |
+| `useElicit(schema)` | Elicit structured data from AI |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│               FrontMcpProvider                  │
+│  ┌──────────────────────────────────────────┐  │
+│  │            MCP Context                    │  │
+│  │  - server instance                        │  │
+│  │  - connection state                       │  │
+│  │  - tools/resources registries             │  │
+│  └──────────────────────────────────────────┘  │
+│                      │                          │
+│  ┌─────────┬─────────┼─────────┬──────────┐    │
+│  │         │         │         │          │    │
+│  ▼         ▼         ▼         ▼          ▼    │
+│ useMcp  useStore  useTool  useResource  ...    │
+└─────────────────────────────────────────────────┘
+```
+
+## Provider Setup
+
+### Basic Setup
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider
+      server={server}
+      autoStart={true}
+    >
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+### With Store
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider
+      server={server}
+      store={appStore}
+      autoStart
+    >
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+### With Page Context
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider
+      server={server}
+      pageContext={{
+        extractOnMount: true,
+        updateOnChange: true,
+        selectors: ['main', 'article'],
+      }}
+      autoStart
+    >
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Example: Complete Todo App
+
+```tsx
+import { useMemo, useState } from 'react';
+import {
+  FrontMcpProvider,
+  useStore,
+  useMcp,
+} from '@frontmcp/browser/react';
+import { createMcpServer } from './mcpServer';
+import { todoStore } from './stores/todoStore';
+
+function TodoList() {
+  const state = useStore(todoStore);
+  const { filteredItems } = todoStore.computed;
+
+  return (
+    <ul>
+      {filteredItems.map(todo => (
+        <li key={todo.id}>
+          <input
+            type="checkbox"
+            checked={todo.done}
+            onChange={() => todoStore.actions.toggleTodo(todo.id)}
+          />
+          <span>{todo.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AddTodoForm() {
+  const [text, setText] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (text.trim()) {
+      todoStore.actions.addTodo(text.trim());
+      setText('');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="What needs to be done?"
+      />
+      <button type="submit">Add</button>
+    </form>
+  );
+}
+
+function ConnectionStatus() {
+  const { isConnected, connectionState } = useMcp();
+
+  return (
+    <div className="status">
+      {isConnected ? '🟢 Connected' : `🔴 ${connectionState}`}
+    </div>
+  );
+}
+
+function TodoApp() {
+  return (
+    <div className="todo-app">
+      <ConnectionStatus />
+      <h1>MCP Todo App</h1>
+      <AddTodoForm />
+      <TodoList />
+    </div>
+  );
+}
+
+export default function App() {
+  const { server } = useMemo(() => createMcpServer(), []);
+
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <TodoApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpProvider" icon="box" href="/docs/web/react/provider">
+    Complete provider documentation
+  </Card>
+  <Card title="Hooks" icon="anchor" href="/docs/web/react/hooks">
+    All available React hooks
+  </Card>
+  <Card title="Page Context" icon="browser" href="/docs/web/react/page-context">
+    Extract page context for AI
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    State management with stores
+  </Card>
+</CardGroup>

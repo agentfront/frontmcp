@@ -33,6 +33,12 @@
       "import": "./dist/src/index.js",
       "default": "./dist/src/index.js"
     },
+    "./core": {
+      "development": "./src/core/index.ts",
+      "types": "./dist/src/core/index.d.ts",
+      "import": "./dist/src/core/index.js",
+      "default": "./dist/src/core/index.js"
+    },
     "./mcp-apps": {
       "development": "./src/mcp-apps/index.ts",
       "types": "./dist/src/mcp-apps/index.d.ts",

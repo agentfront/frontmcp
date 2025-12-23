@@ -1,0 +1,397 @@
+---
+title: Page Context
+sidebarTitle: Page Context
+icon: browser
+description: Extract page context for AI agents
+---
+
+# Page Context
+
+Page context hooks allow you to extract DOM content and make it available to AI agents, enabling context-aware interactions.
+
+## Overview
+
+Page context provides AI agents with information about:
+- Current page content
+- Visible elements
+- Form states
+- User interactions
+
+```
+┌─────────────────────────────────────────┐
+│              Your React App              │
+│  ┌─────────────────────────────────┐    │
+│  │        usePageContext()         │    │
+│  │  - extracts visible content     │    │
+│  │  - monitors DOM changes         │    │
+│  │  - provides to AI agents        │    │
+│  └─────────────────────────────────┘    │
+│                    │                     │
+│                    ▼                     │
+│  ┌─────────────────────────────────┐    │
+│  │     MCP Resource: page://       │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+## usePageContext
+
+Extract the current page context:
+
+```tsx
+import { usePageContext } from '@frontmcp/browser/react';
+
+function App() {
+  const {
+    context,        // Current page context object
+    isExtracting,   // Whether extraction is in progress
+    lastUpdated,    // Timestamp of last extraction
+    extract,        // Manually trigger extraction
+  } = usePageContext();
+
+  return (
+    <div>
+      <h1>My App</h1>
+      <p>Context extracted at: {lastUpdated?.toISOString()}</p>
+      <button onClick={extract}>Refresh Context</button>
+    </div>
+  );
+}
+```
+
+### Configuration Options
+
+```tsx
+const { context } = usePageContext({
+  // CSS selectors for content extraction
+  selectors: ['main', 'article', '[data-context]'],
+
+  // Exclude certain elements
+  excludeSelectors: ['nav', 'footer', '.sidebar'],
+
+  // Auto-extract on mount
+  extractOnMount: true,
+
+  // Re-extract when DOM changes
+  watchChanges: true,
+
+  // Throttle extraction (ms)
+  throttle: 1000,
+
+  // Maximum content length
+  maxLength: 10000,
+
+  // Include element attributes
+  includeAttributes: true,
+
+  // Custom extraction function
+  extractor: (root) => ({
+    title: root.querySelector('h1')?.textContent,
+    content: root.querySelector('main')?.textContent,
+  }),
+});
+```
+
+## usePageElement
+
+Extract context from a specific element:
+
+```tsx
+import { usePageElement } from '@frontmcp/browser/react';
+
+function Article({ content }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const { context, extract } = usePageElement(ref, {
+    // Element-specific options
+    includeChildren: true,
+    maxDepth: 3,
+  });
+
+  return (
+    <article ref={ref}>
+      <h1>{content.title}</h1>
+      <div>{content.body}</div>
+    </article>
+  );
+}
+```
+
+### Multiple Elements
+
+```tsx
+function Dashboard() {
+  const headerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  const header = usePageElement(headerRef);
+  const main = usePageElement(mainRef);
+  const sidebar = usePageElement(sidebarRef);
+
+  return (
+    <div className="dashboard">
+      <header ref={headerRef}>
+        <h1>Dashboard</h1>
+      </header>
+      <main ref={mainRef}>
+        {/* Main content */}
+      </main>
+      <aside ref={sidebarRef}>
+        {/* Sidebar */}
+      </aside>
+    </div>
+  );
+}
+```
+
+## useElicit
+
+Elicit structured data from AI based on page context:
+
+```tsx
+import { useElicit } from '@frontmcp/browser/react';
+import { z } from 'zod';
+
+function ProductPage() {
+  const { elicit, result, loading } = useElicit(
+    z.object({
+      productName: z.string(),
+      price: z.number(),
+      inStock: z.boolean(),
+      features: z.array(z.string()),
+    })
+  );
+
+  const handleAnalyze = async () => {
+    // AI extracts structured data from current page
+    const data = await elicit({
+      prompt: 'Extract the product information from this page',
+    });
+    console.log('Product:', data);
+  };
+
+  return (
+    <div>
+      <button onClick={handleAnalyze} disabled={loading}>
+        {loading ? 'Analyzing...' : 'Analyze Page'}
+      </button>
+      {result && (
+        <div>
+          <h2>{result.productName}</h2>
+          <p>Price: ${result.price}</p>
+          <p>In Stock: {result.inStock ? 'Yes' : 'No'}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Elicit Options
+
+```tsx
+const { elicit } = useElicit(schema, {
+  // Include specific page elements
+  selectors: ['[data-product]'],
+
+  // Custom prompt template
+  promptTemplate: (schema) =>
+    `Extract data matching this schema: ${JSON.stringify(schema)}`,
+
+  // Validation options
+  strict: true,  // Fail if extraction doesn't match schema
+
+  // Retry configuration
+  maxRetries: 2,
+});
+```
+
+## Context Resource
+
+Page context is automatically exposed as an MCP resource:
+
+```typescript
+// AI agent can read page context
+const pageContext = await client.readResource('page://current');
+// → { title: "...", content: "...", elements: [...] }
+
+// Read specific element
+const header = await client.readResource('page://element/header');
+```
+
+## Provider Configuration
+
+Configure page context at the provider level:
+
+```tsx
+<FrontMcpProvider
+  server={server}
+  pageContext={{
+    // Enable page context extraction
+    enabled: true,
+
+    // Auto-extract on mount
+    extractOnMount: true,
+
+    // Watch for DOM changes
+    watchChanges: true,
+
+    // Selectors to include
+    selectors: ['main', 'article'],
+
+    // Selectors to exclude
+    excludeSelectors: ['nav', '.ads'],
+
+    // Update throttle (ms)
+    throttle: 500,
+
+    // Maximum content size
+    maxLength: 50000,
+
+    // Custom extractor
+    extractor: customExtractor,
+  }}
+  autoStart
+>
+  <App />
+</FrontMcpProvider>
+```
+
+## Marking Elements for Context
+
+Use data attributes to mark elements for inclusion/exclusion:
+
+```tsx
+function App() {
+  return (
+    <div>
+      {/* Include in context */}
+      <main data-mcp-context>
+        <h1>Important Content</h1>
+        <p>This will be included in page context.</p>
+      </main>
+
+      {/* Exclude from context */}
+      <aside data-mcp-context-exclude>
+        <p>This will NOT be included.</p>
+      </aside>
+
+      {/* Named context region */}
+      <section data-mcp-context="product-details">
+        <h2>Product Details</h2>
+        <p>Accessible as page://element/product-details</p>
+      </section>
+    </div>
+  );
+}
+```
+
+## Real-Time Updates
+
+Subscribe to context changes:
+
+```tsx
+function ContextMonitor() {
+  const { context, lastUpdated } = usePageContext({
+    watchChanges: true,
+    throttle: 1000,
+  });
+
+  useEffect(() => {
+    if (context) {
+      console.log('Page context updated:', context);
+    }
+  }, [context]);
+
+  return (
+    <div>
+      <p>Last updated: {lastUpdated?.toLocaleTimeString()}</p>
+      <pre>{JSON.stringify(context, null, 2)}</pre>
+    </div>
+  );
+}
+```
+
+## Form Context
+
+Automatically include form state in context:
+
+```tsx
+import { useFormContext } from '@frontmcp/browser/react';
+
+function ContactForm() {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const { formState, isValid } = useFormContext(formRef, {
+    // Include form values in page context
+    includeInPageContext: true,
+
+    // Validate on change
+    validateOnChange: true,
+
+    // Schema for validation
+    schema: z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      message: z.string().min(10),
+    }),
+  });
+
+  return (
+    <form ref={formRef} data-mcp-context="contact-form">
+      <input name="name" placeholder="Name" />
+      <input name="email" type="email" placeholder="Email" />
+      <textarea name="message" placeholder="Message" />
+      <button type="submit" disabled={!isValid}>
+        Send
+      </button>
+    </form>
+  );
+}
+```
+
+## Security Considerations
+
+<Warning>
+  Page context may contain sensitive information. Configure extraction carefully:
+  - Exclude form inputs with passwords
+  - Don't include elements with user PII
+  - Use excludeSelectors for sensitive regions
+</Warning>
+
+```tsx
+// Secure configuration
+<FrontMcpProvider
+  pageContext={{
+    enabled: true,
+    excludeSelectors: [
+      'input[type="password"]',
+      '[data-sensitive]',
+      '.private-info',
+    ],
+    // Sanitize extracted content
+    sanitize: (content) => {
+      // Remove potential PII
+      return content.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]');
+    },
+  }}
+>
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpProvider" icon="box" href="/docs/web/react/provider">
+    Provider configuration
+  </Card>
+  <Card title="React Hooks" icon="anchor" href="/docs/web/react/hooks">
+    All React hooks
+  </Card>
+  <Card title="UI Resources" icon="window" href="/docs/web/features/ui-resources">
+    UI resource generation
+  </Card>
+  <Card title="Telemetry" icon="chart-line" href="/docs/web/features/telemetry">
+    Event tracking
+  </Card>
+</CardGroup>

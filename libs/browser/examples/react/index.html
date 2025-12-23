@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrontMCP Browser - React Example</title>
+    <style>
+      :root {
+        --bg: #f5f5f5;
+        --card-bg: white;
+        --text: #333;
+        --text-secondary: #666;
+        --border: #ddd;
+        --primary: #0066cc;
+        --primary-hover: #0055aa;
+        --success: #28a745;
+        --error: #dc3545;
+      }
+
+      .theme-dark {
+        --bg: #1a1a2e;
+        --card-bg: #16213e;
+        --text: #eee;
+        --text-secondary: #aaa;
+        --border: #0f3460;
+        --primary: #4da6ff;
+        --primary-hover: #66b3ff;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        transition: background 0.3s, color 0.3s;
+      }
+
+      .app {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+      }
+
+      header h1 {
+        font-size: 1.5em;
+      }
+
+      .theme-switcher button {
+        padding: 8px 16px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: var(--card-bg);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .theme-switcher button:hover {
+        border-color: var(--primary);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .card {
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .card h2 {
+        margin-bottom: 15px;
+        font-size: 1.1em;
+        color: var(--text-secondary);
+      }
+
+      .card h3 {
+        font-size: 0.9em;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+      }
+
+      /* Counter styles */
+      .count {
+        font-size: 48px;
+        font-weight: bold;
+        text-align: center;
+        color: var(--primary);
+        margin: 20px 0;
+      }
+
+      .button-group {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        background: var(--primary);
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Todo styles */
+      .todo-form {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+
+      .todo-form input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .todo-list {
+        list-style: none;
+      }
+
+      .todo-list li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .todo-list li:hover {
+        background: var(--bg);
+      }
+
+      .todo-list li:last-child {
+        border-bottom: none;
+      }
+
+      .todo-list li.completed .text {
+        text-decoration: line-through;
+        color: var(--text-secondary);
+      }
+
+      .todo-list .checkbox {
+        color: var(--success);
+        font-size: 18px;
+      }
+
+      .empty {
+        color: var(--text-secondary);
+        font-style: italic;
+        text-align: center;
+        padding: 20px;
+      }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+      }
+
+      .tabs button {
+        padding: 8px 12px;
+        font-size: 12px;
+        background: var(--bg);
+        color: var(--text);
+        border-radius: 4px;
+      }
+
+      .tabs button.active {
+        background: var(--primary);
+        color: white;
+      }
+
+      /* Resource viewer */
+      .resource-content {
+        background: #1e1e1e;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+        max-height: 200px;
+        overflow: auto;
+      }
+
+      .resource-content pre {
+        color: #d4d4d4;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 12px;
+        margin: 0;
+        white-space: pre-wrap;
+      }
+
+      /* Status grid */
+      .status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      .status-grid ul {
+        list-style: none;
+      }
+
+      .status-grid li {
+        padding: 4px 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+      /* Activity log */
+      .activity-log .action {
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 14px;
+        padding: 10px;
+        background: var(--bg);
+        border-radius: 6px;
+        color: var(--primary);
+      }
+
+      /* Error */
+      .error {
+        color: var(--error);
+        font-size: 12px;
+        margin-top: 10px;
+      }
+
+      /* Elicit Dialog Overlay */
+      .elicit-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .elicit-dialog {
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      .elicit-dialog h3 {
+        margin-bottom: 15px;
+      }
+
+      .elicit-dialog .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        justify-content: flex-end;
+      }
+
+      .elicit-dialog .actions button.secondary {
+        background: var(--bg);
+        color: var(--text);
+      }
+    </style>
+  </head>
+  <body class="theme-light">
+    <div id="root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

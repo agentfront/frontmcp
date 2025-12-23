@@ -1,0 +1,441 @@
+---
+title: App Bridge
+sidebarTitle: App Bridge
+icon: bridge
+description: Embed MCP applications in iframes and communicate across origins
+---
+
+# App Bridge
+
+App Bridge enables communication between MCP applications running in different windows, iframes, or browser contexts, allowing you to embed AI-enabled widgets in your applications.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Host Application                      │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │                  AppBridgeHost                     │  │
+│  │  - Manages child apps                              │  │
+│  │  - Routes MCP messages                             │  │
+│  │  - Handles authentication                          │  │
+│  └───────────────────────────────────────────────────┘  │
+│                          │                               │
+│        ┌─────────────────┼─────────────────┐            │
+│        ▼                 ▼                 ▼            │
+│  ┌──────────┐     ┌──────────┐     ┌──────────┐       │
+│  │ iframe 1 │     │ iframe 2 │     │ popup    │       │
+│  │ (child)  │     │ (child)  │     │ (child)  │       │
+│  └──────────┘     └──────────┘     └──────────┘       │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### Host Application
+
+```typescript
+import { AppBridgeHost } from '@frontmcp/browser';
+
+// Create the host
+const host = new AppBridgeHost({
+  // Allowed child origins
+  allowedOrigins: ['https://widget.example.com'],
+  // Authentication callback
+  authenticate: async (childId) => {
+    return { token: 'auth-token', userId: 'user-123' };
+  },
+});
+
+// Mount child apps
+host.mountChild('weather-widget', {
+  iframe: document.getElementById('weather-frame'),
+  origin: 'https://widget.example.com',
+});
+
+// Start hosting
+await host.start();
+```
+
+### Child Application
+
+```typescript
+import { AppBridgeChild, BrowserMcpServer } from '@frontmcp/browser';
+
+// Create the child bridge
+const bridge = new AppBridgeChild({
+  hostOrigin: 'https://parent.example.com',
+});
+
+// Create MCP server using bridge transport
+const server = new BrowserMcpServer({
+  name: 'weather-widget',
+  transport: bridge.transport,
+});
+
+// Register tools/resources
+server.addTool({
+  name: 'getWeather',
+  handler: async ({ city }) => ({ ... }),
+});
+
+// Connect to host
+await bridge.connect();
+await server.start();
+```
+
+## Host Configuration
+
+```typescript
+interface AppBridgeHostOptions {
+  /** Allowed child origins */
+  allowedOrigins: (string | RegExp)[];
+
+  /** Authentication callback */
+  authenticate?: (childId: string, origin: string) => Promise<AuthContext>;
+
+  /** Maximum concurrent children */
+  maxChildren?: number;
+
+  /** Message timeout (ms) */
+  timeout?: number;
+
+  /** Enable debug logging */
+  debug?: boolean;
+
+  /** Custom message handler */
+  onMessage?: (message: BridgeMessage) => void;
+
+  /** Error handler */
+  onError?: (error: Error, childId: string) => void;
+}
+```
+
+## Child Configuration
+
+```typescript
+interface AppBridgeChildOptions {
+  /** Expected host origin */
+  hostOrigin: string;
+
+  /** Child identifier */
+  childId?: string;
+
+  /** Auto-connect on creation */
+  autoConnect?: boolean;
+
+  /** Reconnect on disconnect */
+  autoReconnect?: boolean;
+
+  /** Reconnect delay (ms) */
+  reconnectDelay?: number;
+
+  /** Maximum reconnect attempts */
+  maxReconnectAttempts?: number;
+}
+```
+
+## Mounting Children
+
+### iframe
+
+```typescript
+// Mount existing iframe
+host.mountChild('widget-1', {
+  iframe: document.getElementById('widget-frame'),
+  origin: 'https://widget.example.com',
+});
+
+// Create and mount new iframe
+const iframe = host.createChild('widget-2', {
+  src: 'https://widget.example.com/app',
+  container: document.getElementById('widget-container'),
+  width: '100%',
+  height: '400px',
+  sandbox: 'allow-scripts allow-same-origin',
+});
+```
+
+### Popup Window
+
+```typescript
+const popup = host.mountPopup('settings', {
+  url: 'https://widget.example.com/settings',
+  width: 600,
+  height: 400,
+  features: 'menubar=no,toolbar=no',
+});
+
+// Handle popup close
+popup.on('close', () => {
+  console.log('Settings popup closed');
+});
+```
+
+### New Tab
+
+```typescript
+const tab = host.mountTab('dashboard', {
+  url: 'https://widget.example.com/dashboard',
+});
+```
+
+## Communication
+
+### Host to Child
+
+```typescript
+// Send message to specific child
+host.sendToChild('widget-1', {
+  type: 'update',
+  data: { theme: 'dark' },
+});
+
+// Broadcast to all children
+host.broadcast({
+  type: 'config-changed',
+  data: { language: 'en' },
+});
+
+// Call child tool from host
+const result = await host.callTool('widget-1', 'getWeather', { city: 'NYC' });
+```
+
+### Child to Host
+
+```typescript
+// Send message to host
+bridge.sendToHost({
+  type: 'ready',
+  data: { version: '1.0.0' },
+});
+
+// Request data from host
+const userData = await bridge.request('getUserData');
+
+// Subscribe to host events
+bridge.on('config-changed', (data) => {
+  updateConfig(data);
+});
+```
+
+## Authentication
+
+### Host-Side Authentication
+
+```typescript
+const host = new AppBridgeHost({
+  allowedOrigins: ['https://trusted.example.com'],
+
+  authenticate: async (childId, origin) => {
+    // Verify the child
+    if (!isAuthorizedChild(childId)) {
+      throw new Error('Unauthorized child');
+    }
+
+    // Return auth context
+    return {
+      token: await generateToken(childId),
+      userId: currentUser.id,
+      permissions: ['read', 'write'],
+    };
+  },
+});
+```
+
+### Child-Side Authentication
+
+```typescript
+const bridge = new AppBridgeChild({
+  hostOrigin: 'https://parent.example.com',
+});
+
+// Auth context is provided after connection
+bridge.on('authenticated', (authContext) => {
+  console.log('Authenticated:', authContext);
+  // Use token for API calls
+  apiClient.setToken(authContext.token);
+});
+```
+
+## MCP Tool Proxying
+
+### Expose Host Tools to Children
+
+```typescript
+// Host exposes its tools to children
+host.exposeTool('createTask', {
+  handler: async (args, childId) => {
+    // Verify child has permission
+    if (!hasPermission(childId, 'tasks.create')) {
+      throw new Error('Permission denied');
+    }
+    return createTask(args);
+  },
+});
+```
+
+### Expose Child Tools to Host
+
+```typescript
+// Child exposes tools that host can call
+bridge.exposeTool('getWidgetState', {
+  handler: async () => {
+    return { state: widgetStore.getState() };
+  },
+});
+```
+
+### Aggregate Child Resources
+
+```typescript
+// Host aggregates resources from all children
+host.addResource({
+  uri: 'children://all/status',
+  handler: async () => {
+    const statuses = await Promise.all(
+      host.children.map(async (child) => ({
+        id: child.id,
+        status: await host.readResource(child.id, 'status://current'),
+      }))
+    );
+    return { contents: [{ text: JSON.stringify(statuses) }] };
+  },
+});
+```
+
+## React Integration
+
+### HostProvider
+
+```tsx
+import { AppBridgeHostProvider, useAppBridge } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <AppBridgeHostProvider
+      allowedOrigins={['https://widget.example.com']}
+      authenticate={handleAuth}
+    >
+      <Dashboard />
+    </AppBridgeHostProvider>
+  );
+}
+
+function Dashboard() {
+  const { children, sendToChild, callTool } = useAppBridge();
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      {children.map(child => (
+        <div key={child.id}>
+          <span>{child.id}: {child.status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### ChildFrame Component
+
+```tsx
+import { ChildFrame } from '@frontmcp/browser/react';
+
+function WidgetContainer() {
+  return (
+    <ChildFrame
+      id="weather-widget"
+      src="https://widget.example.com"
+      width="100%"
+      height={400}
+      onReady={(child) => console.log('Widget ready:', child.id)}
+      onError={(error) => console.error('Widget error:', error)}
+    />
+  );
+}
+```
+
+## Security
+
+### Origin Validation
+
+```typescript
+const host = new AppBridgeHost({
+  allowedOrigins: [
+    'https://trusted.example.com',
+    'https://widgets.example.com',
+    /^https:\/\/.*\.example\.com$/,  // Subdomain pattern
+  ],
+  // Strict mode rejects unknown origins
+  strictMode: true,
+});
+```
+
+### Content Security Policy
+
+```html
+<!-- Host CSP -->
+<meta http-equiv="Content-Security-Policy"
+  content="frame-src https://widget.example.com">
+
+<!-- Child CSP -->
+<meta http-equiv="Content-Security-Policy"
+  content="frame-ancestors https://parent.example.com">
+```
+
+### Sandboxing
+
+```typescript
+host.createChild('widget', {
+  src: 'https://widget.example.com',
+  sandbox: [
+    'allow-scripts',
+    'allow-same-origin',
+    // Restrict capabilities
+    // 'allow-forms',
+    // 'allow-popups',
+  ].join(' '),
+});
+```
+
+## Lifecycle Events
+
+```typescript
+// Host events
+host.on('child:connected', (child) => {
+  console.log('Child connected:', child.id);
+});
+
+host.on('child:disconnected', (child, reason) => {
+  console.log('Child disconnected:', child.id, reason);
+});
+
+host.on('child:error', (child, error) => {
+  console.error('Child error:', child.id, error);
+});
+
+// Child events
+bridge.on('connected', () => {
+  console.log('Connected to host');
+});
+
+bridge.on('disconnected', (reason) => {
+  console.log('Disconnected from host:', reason);
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Transport" icon="network-wired" href="/docs/web/core/transport">
+    Transport adapters
+  </Card>
+  <Card title="PostMessage Transport" icon="message" href="/docs/web/core/transport#postmessagetransportadapter">
+    Cross-origin communication
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+</CardGroup>

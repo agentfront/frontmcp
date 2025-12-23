@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrontMCP Browser - WebWorker Example</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      h1 {
+        color: #333;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .card h2 {
+        margin-top: 0;
+        color: #555;
+        font-size: 1.2em;
+      }
+      .status {
+        padding: 8px 16px;
+        border-radius: 20px;
+        display: inline-block;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .status.idle {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+      .status.processing {
+        background: #fff3e0;
+        color: #ef6c00;
+      }
+      .status.not-ready {
+        background: #fce4ec;
+        color: #c62828;
+      }
+      button {
+        background: #0066cc;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      button:hover {
+        background: #0055aa;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      input {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        width: 120px;
+        margin-right: 10px;
+      }
+      .tool-section {
+        margin-bottom: 20px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #eee;
+      }
+      .tool-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      .tool-section h3 {
+        margin: 0 0 10px 0;
+        color: #333;
+        font-size: 1em;
+      }
+      .tool-section p {
+        margin: 0 0 10px 0;
+        color: #666;
+        font-size: 13px;
+      }
+      .output {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 15px;
+        border-radius: 4px;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .log-entry {
+        margin-bottom: 5px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #333;
+      }
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+      .log-time {
+        color: #888;
+      }
+      .log-type {
+        color: #569cd6;
+      }
+      .log-data {
+        color: #ce9178;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+      }
+      .stat {
+        text-align: center;
+        padding: 15px;
+        background: #f5f5f5;
+        border-radius: 8px;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #0066cc;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+      }
+      .animation-demo {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(45deg, #0066cc, #00cc66);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>FrontMCP Browser - WebWorker Example</h1>
+    <p>Heavy computations run in a Web Worker, keeping the UI responsive.</p>
+
+    <div class="card">
+      <h2>Worker Status</h2>
+      <div style="display: flex; align-items: center; gap: 20px">
+        <span id="worker-status" class="status not-ready">Not Ready</span>
+        <div>
+          <span style="color: #666; font-size: 14px">UI Animation (should stay smooth):</span>
+          <div class="animation-demo" style="display: inline-block; vertical-align: middle; margin-left: 10px"></div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div id="processed-count" class="stat-value">0</div>
+          <div class="stat-label">Computations</div>
+        </div>
+        <div class="stat">
+          <div id="last-duration" class="stat-value">-</div>
+          <div class="stat-label">Last Duration</div>
+        </div>
+        <div class="stat">
+          <div id="worker-state" class="stat-value">-</div>
+          <div class="stat-label">State</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Computation Tools</h2>
+
+      <div class="tool-section">
+        <h3>Fibonacci Calculator</h3>
+        <p>Calculate the nth Fibonacci number (CPU-intensive recursive algorithm)</p>
+        <input type="number" id="fib-n" value="35" min="1" max="40" />
+        <button id="calc-fib">Calculate Fibonacci</button>
+      </div>
+
+      <div class="tool-section">
+        <h3>Prime Checker</h3>
+        <p>Check if a number is prime</p>
+        <input type="number" id="prime-check" value="997" min="1" />
+        <button id="check-prime">Check Prime</button>
+      </div>
+
+      <div class="tool-section">
+        <h3>Prime Finder</h3>
+        <p>Find all prime numbers in a range</p>
+        <input type="number" id="prime-start" value="1" min="1" placeholder="Start" />
+        <input type="number" id="prime-end" value="1000" min="1" placeholder="End" />
+        <button id="find-primes">Find Primes</button>
+      </div>
+
+      <div class="tool-section">
+        <h3>Factorization</h3>
+        <p>Find the prime factors of a number</p>
+        <input type="number" id="factor-num" value="12345" min="2" />
+        <button id="factorize">Factorize</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Results Log</h2>
+      <div id="log" class="output">Waiting for worker to start...</div>
+    </div>
+
+    <script type="module">
+      // Create worker
+      const worker = new Worker('./main.js', { type: 'module' });
+      let requestId = 0;
+      const pendingRequests = new Map();
+      let processedCount = 0;
+
+      // UI elements
+      const statusEl = document.getElementById('worker-status');
+      const processedEl = document.getElementById('processed-count');
+      const durationEl = document.getElementById('last-duration');
+      const stateEl = document.getElementById('worker-state');
+      const logEl = document.getElementById('log');
+
+      function log(type, data) {
+        const time = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-type">${type}</span>: <span class="log-data">${JSON.stringify(
+          data,
+          null,
+          2,
+        )}</span>`;
+        logEl.insertBefore(entry, logEl.firstChild);
+        while (logEl.children.length > 20) {
+          logEl.removeChild(logEl.lastChild);
+        }
+      }
+
+      function updateStatus(status) {
+        statusEl.textContent = status;
+        statusEl.className = 'status ' + status.toLowerCase().replace(' ', '-');
+      }
+
+      // Worker message handler
+      worker.onmessage = (event) => {
+        const { type, id, result, tools, error } = event.data;
+
+        if (type === 'ready') {
+          updateStatus('Idle');
+          log('worker', 'Ready');
+          stateEl.textContent = 'Idle';
+          return;
+        }
+
+        const pending = pendingRequests.get(id);
+        if (pending) {
+          pendingRequests.delete(id);
+          const duration = Date.now() - pending.startTime;
+          durationEl.textContent = duration + 'ms';
+          updateStatus('Idle');
+          stateEl.textContent = 'Idle';
+
+          if (type === 'error') {
+            log('error', error);
+            pending.reject(new Error(error));
+          } else {
+            processedCount++;
+            processedEl.textContent = processedCount;
+            log('result', result || tools);
+            pending.resolve(result || tools);
+          }
+        }
+      };
+
+      // Helper to call worker
+      function callWorker(type, payload) {
+        return new Promise((resolve, reject) => {
+          const id = ++requestId;
+          pendingRequests.set(id, { resolve, reject, startTime: Date.now() });
+          updateStatus('Processing');
+          stateEl.textContent = 'Processing';
+          worker.postMessage({ type, id, ...payload });
+        });
+      }
+
+      // Button handlers
+      document.getElementById('calc-fib').addEventListener('click', async () => {
+        const n = parseInt(document.getElementById('fib-n').value) || 35;
+        log('call', { tool: 'fibonacci', args: { n } });
+        await callWorker('call-tool', { tool: 'fibonacci', args: { n } });
+      });
+
+      document.getElementById('check-prime').addEventListener('click', async () => {
+        const number = parseInt(document.getElementById('prime-check').value) || 997;
+        log('call', { tool: 'is-prime', args: { number } });
+        await callWorker('call-tool', { tool: 'is-prime', args: { number } });
+      });
+
+      document.getElementById('find-primes').addEventListener('click', async () => {
+        const start = parseInt(document.getElementById('prime-start').value) || 1;
+        const end = parseInt(document.getElementById('prime-end').value) || 1000;
+        log('call', { tool: 'find-primes', args: { start, end } });
+        await callWorker('call-tool', { tool: 'find-primes', args: { start, end } });
+      });
+
+      document.getElementById('factorize').addEventListener('click', async () => {
+        const number = parseInt(document.getElementById('factor-num').value) || 12345;
+        log('call', { tool: 'factorize', args: { number } });
+        await callWorker('call-tool', { tool: 'factorize', args: { number } });
+      });
+    </script>
+  </body>
+</html>

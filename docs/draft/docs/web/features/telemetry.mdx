@@ -1,0 +1,444 @@
+---
+title: Telemetry
+sidebarTitle: Telemetry
+icon: chart-line
+description: Track events and user interactions with privacy-first telemetry
+---
+
+# Telemetry
+
+FrontMCP Web includes a privacy-first telemetry system for tracking events, user interactions, and AI agent behavior with automatic PII filtering.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Telemetry System                       │
+├─────────────────────────────────────────────────────────┤
+│  Event Sources    │  Processing       │  Outputs        │
+│  ─────────────    │  ──────────       │  ───────        │
+│  • Tool calls     │  • PII filtering  │  • Console      │
+│  • Resource reads │  • Sampling       │  • HTTP sink    │
+│  • User actions   │  • Batching       │  • Custom sink  │
+│  • AI responses   │  • Enrichment     │  • Analytics    │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+```typescript
+import {
+  createTelemetryCollector,
+  ConsoleTelemetrySink,
+} from '@frontmcp/browser';
+
+// Create collector with console sink
+const telemetry = createTelemetryCollector({
+  sinks: [new ConsoleTelemetrySink()],
+  pii: {
+    enabled: true,
+    patterns: ['email', 'phone', 'ssn'],
+  },
+});
+
+// Track events
+telemetry.track('tool.called', {
+  toolName: 'createUser',
+  duration: 150,
+});
+
+// Track with context
+telemetry.track('user.action', {
+  action: 'button.click',
+  target: 'submit-form',
+}, {
+  userId: 'user-123',
+  sessionId: 'session-456',
+});
+```
+
+## Configuration
+
+```typescript
+interface TelemetryConfig {
+  /** Enable/disable telemetry */
+  enabled?: boolean;
+
+  /** Telemetry sinks (destinations) */
+  sinks: TelemetrySink[];
+
+  /** PII filtering configuration */
+  pii?: PIIFilterConfig;
+
+  /** Event sampling configuration */
+  sampling?: SamplingConfig;
+
+  /** Batch configuration */
+  batching?: BatchConfig;
+
+  /** Context enrichment */
+  enrichment?: EnrichmentConfig;
+
+  /** Debug mode */
+  debug?: boolean;
+}
+```
+
+### Full Configuration Example
+
+```typescript
+const telemetry = createTelemetryCollector({
+  enabled: true,
+
+  sinks: [
+    new ConsoleTelemetrySink({ minLevel: 'info' }),
+    new HttpTelemetrySink({
+      endpoint: '/api/telemetry',
+      headers: { 'X-API-Key': 'your-key' },
+    }),
+  ],
+
+  pii: {
+    enabled: true,
+    patterns: ['email', 'phone', 'ssn', 'credit_card'],
+    customPatterns: [
+      /\b[A-Z]{2}\d{6}\b/g, // Custom ID format
+    ],
+    replacement: '[REDACTED]',
+  },
+
+  sampling: {
+    enabled: true,
+    rate: 0.1, // 10% of events
+    rules: [
+      { event: 'error.*', rate: 1.0 }, // All errors
+      { event: 'tool.called', rate: 0.5 }, // 50% of tool calls
+    ],
+  },
+
+  batching: {
+    enabled: true,
+    maxSize: 100,
+    flushInterval: 5000, // 5 seconds
+  },
+
+  enrichment: {
+    context: {
+      appVersion: '1.0.0',
+      environment: 'production',
+    },
+    addTimestamp: true,
+    addSessionId: true,
+  },
+});
+```
+
+## Event Types
+
+### Automatic Events
+
+FrontMCP automatically tracks these events:
+
+| Event | Description | Data |
+|-------|-------------|------|
+| `mcp.tool.called` | Tool was invoked | toolName, args, duration |
+| `mcp.tool.error` | Tool execution failed | toolName, error |
+| `mcp.resource.read` | Resource was accessed | uri, duration |
+| `mcp.connection.open` | Server connected | serverName |
+| `mcp.connection.close` | Server disconnected | reason |
+
+### Custom Events
+
+Track custom events:
+
+```typescript
+// Simple event
+telemetry.track('feature.used', {
+  feature: 'dark-mode',
+  enabled: true,
+});
+
+// Event with timing
+const startTime = performance.now();
+await performOperation();
+telemetry.track('operation.completed', {
+  operation: 'data-sync',
+  duration: performance.now() - startTime,
+  recordCount: 150,
+});
+
+// Event with user context
+telemetry.track('checkout.completed', {
+  orderId: 'order-123',
+  itemCount: 3,
+  total: 99.99,
+}, {
+  userId: currentUser.id,
+  sessionId: session.id,
+});
+```
+
+## PII Filtering
+
+### Built-in Patterns
+
+```typescript
+const telemetry = createTelemetryCollector({
+  pii: {
+    enabled: true,
+    patterns: [
+      'email',       // email@example.com → [EMAIL]
+      'phone',       // 555-123-4567 → [PHONE]
+      'ssn',         // 123-45-6789 → [SSN]
+      'credit_card', // 4111111111111111 → [CREDIT_CARD]
+      'ip_address',  // 192.168.1.1 → [IP]
+    ],
+  },
+});
+```
+
+### Custom Patterns
+
+```typescript
+const telemetry = createTelemetryCollector({
+  pii: {
+    enabled: true,
+    customPatterns: [
+      {
+        name: 'employee_id',
+        pattern: /\bEMP-\d{6}\b/g,
+        replacement: '[EMPLOYEE_ID]',
+      },
+      {
+        name: 'api_key',
+        pattern: /\bsk_[a-zA-Z0-9]{32}\b/g,
+        replacement: '[API_KEY]',
+      },
+    ],
+  },
+});
+
+// Before filtering
+telemetry.track('user.lookup', {
+  query: 'Find user with email john@example.com and EMP-123456',
+});
+
+// After filtering
+// { query: 'Find user with email [EMAIL] and [EMPLOYEE_ID]' }
+```
+
+### Field-Level Filtering
+
+```typescript
+const telemetry = createTelemetryCollector({
+  pii: {
+    enabled: true,
+    // Never include these fields
+    excludeFields: ['password', 'token', 'secret'],
+    // Hash these fields instead of removing
+    hashFields: ['userId', 'email'],
+  },
+});
+```
+
+## Telemetry Sinks
+
+### Console Sink
+
+```typescript
+import { ConsoleTelemetrySink } from '@frontmcp/browser';
+
+const consoleSink = new ConsoleTelemetrySink({
+  minLevel: 'debug',
+  format: 'pretty', // or 'json'
+  colors: true,
+});
+```
+
+### HTTP Sink
+
+```typescript
+import { HttpTelemetrySink } from '@frontmcp/browser';
+
+const httpSink = new HttpTelemetrySink({
+  endpoint: 'https://telemetry.example.com/events',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer your-token',
+  },
+  // Retry configuration
+  retries: 3,
+  retryDelay: 1000,
+  // Batch mode
+  batch: true,
+  batchSize: 50,
+  flushInterval: 10000,
+});
+```
+
+### Custom Sink
+
+```typescript
+import { TelemetrySink, TelemetryEvent } from '@frontmcp/browser';
+
+class AnalyticsSink implements TelemetrySink {
+  async write(events: TelemetryEvent[]): Promise<void> {
+    for (const event of events) {
+      // Send to your analytics service
+      await analytics.track(event.name, {
+        ...event.data,
+        timestamp: event.timestamp,
+      });
+    }
+  }
+
+  async flush(): Promise<void> {
+    // Flush any buffered events
+  }
+
+  async close(): Promise<void> {
+    // Cleanup resources
+  }
+}
+
+const telemetry = createTelemetryCollector({
+  sinks: [new AnalyticsSink()],
+});
+```
+
+## React Integration
+
+### TelemetryProvider
+
+```tsx
+import { TelemetryProvider, useTelemetry } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <TelemetryProvider collector={telemetry}>
+      <YourApp />
+    </TelemetryProvider>
+  );
+}
+
+function FeatureComponent() {
+  const { track } = useTelemetry();
+
+  const handleClick = () => {
+    track('feature.clicked', { featureId: 'new-feature' });
+    // ... do something
+  };
+
+  return <button onClick={handleClick}>Try New Feature</button>;
+}
+```
+
+### Automatic Component Tracking
+
+```tsx
+import { withTelemetry } from '@frontmcp/browser/react';
+
+const TrackedButton = withTelemetry(Button, {
+  events: {
+    onClick: (props) => ({
+      name: 'button.click',
+      data: { label: props.children },
+    }),
+  },
+});
+
+// Automatically tracks clicks
+<TrackedButton>Submit</TrackedButton>
+```
+
+## Server Integration
+
+Connect telemetry to MCP server:
+
+```typescript
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  transport,
+  telemetry, // Pass collector to server
+});
+
+// Server automatically tracks:
+// - Tool invocations
+// - Resource reads
+// - Connection events
+// - Errors
+```
+
+## Sampling
+
+Control event volume with sampling:
+
+```typescript
+const telemetry = createTelemetryCollector({
+  sampling: {
+    enabled: true,
+    // Default: sample 10% of events
+    rate: 0.1,
+    // Per-event rules
+    rules: [
+      // Always capture errors
+      { event: 'error.*', rate: 1.0 },
+      // Capture all tool calls
+      { event: 'mcp.tool.*', rate: 1.0 },
+      // Sample 50% of user actions
+      { event: 'user.action.*', rate: 0.5 },
+      // Sample 1% of page views
+      { event: 'page.view', rate: 0.01 },
+    ],
+  },
+});
+```
+
+## Debugging
+
+Enable debug mode to troubleshoot telemetry:
+
+```typescript
+const telemetry = createTelemetryCollector({
+  debug: true,
+  sinks: [new ConsoleTelemetrySink({ minLevel: 'debug' })],
+});
+
+// Debug output shows:
+// - Event processing
+// - PII filtering applied
+// - Sampling decisions
+// - Sink delivery status
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Enable PII Filtering" icon="shield-check">
+    Always enable PII filtering in production to protect user privacy
+  </Card>
+  <Card title="Use Sampling" icon="chart-simple">
+    Sample high-volume events to reduce costs and noise
+  </Card>
+  <Card title="Batch Events" icon="layer-group">
+    Enable batching to reduce network requests
+  </Card>
+  <Card title="Add Context" icon="tags">
+    Enrich events with session and user context for debugging
+  </Card>
+</CardGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server integration
+  </Card>
+  <Card title="Human-in-the-Loop" icon="user-check" href="/docs/web/features/hitl">
+    Track user confirmations
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    React integration
+  </Card>
+</CardGroup>

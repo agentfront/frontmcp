@@ -180,6 +180,71 @@
         ]
       },
       {
+        "dropdown": "FrontMCP Web",
+        "icon": "globe",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["docs/web/overview", "docs/web/getting-started", "docs/web/quickstart"]
+          },
+          {
+            "group": "Core",
+            "icon": "cube",
+            "pages": ["docs/web/core/server", "docs/web/core/scope", "docs/web/core/transport", "docs/web/core/entries"]
+          },
+          {
+            "group": "State Management",
+            "icon": "database",
+            "pages": [
+              "docs/web/store/overview",
+              "docs/web/store/define-store",
+              "docs/web/store/actions-computed",
+              "docs/web/store/mcp-integration"
+            ]
+          },
+          {
+            "group": "React",
+            "icon": "atom",
+            "pages": [
+              "docs/web/react/overview",
+              "docs/web/react/provider",
+              "docs/web/react/hooks",
+              "docs/web/react/page-context"
+            ]
+          },
+          {
+            "group": "Features",
+            "icon": "sparkles",
+            "pages": [
+              "docs/web/features/telemetry",
+              "docs/web/features/hitl",
+              "docs/web/features/forms",
+              "docs/web/features/ui-resources"
+            ]
+          },
+          {
+            "group": "AI Integration",
+            "icon": "robot",
+            "pages": [
+              "docs/web/ai/overview",
+              "docs/web/ai/connecting",
+              "docs/web/ai/calling-tools",
+              "docs/web/ai/events-notifications"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "icon": "bolt",
+            "pages": [
+              "docs/web/advanced/app-bridge",
+              "docs/web/advanced/registries",
+              "docs/web/advanced/polyfill",
+              "docs/web/advanced/web-components"
+            ]
+          }
+        ]
+      },
+      {
         "dropdown": "FrontMCP UI",
         "icon": "palette",
         "groups": [

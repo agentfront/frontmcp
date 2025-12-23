@@ -1,0 +1,348 @@
+---
+title: FrontMcpProvider
+sidebarTitle: Provider
+icon: box
+description: React context provider for MCP integration
+---
+
+# FrontMcpProvider
+
+`FrontMcpProvider` is the root component that provides MCP server access to your React application.
+
+## Basic Usage
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+import { server } from './mcpServer';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Props
+
+```typescript
+interface FrontMcpProviderProps {
+  /** The MCP server instance */
+  server: BrowserMcpServer;
+
+  /** Automatically start the server on mount (default: true) */
+  autoStart?: boolean;
+
+  /** Store instance for reactive state */
+  store?: McpStore<any>;
+
+  /** Page context configuration */
+  pageContext?: PageContextConfig;
+
+  /** Component registry for UI discovery */
+  componentRegistry?: ComponentRegistry;
+
+  /** Callback when server connects */
+  onConnect?: () => void;
+
+  /** Callback when server disconnects */
+  onDisconnect?: (reason?: string) => void;
+
+  /** Callback on connection error */
+  onError?: (error: Error) => void;
+
+  /** Children components */
+  children: React.ReactNode;
+}
+```
+
+## Server Lifecycle
+
+### Auto Start (Default)
+
+```tsx
+<FrontMcpProvider server={server} autoStart>
+  {/* Server starts on mount, stops on unmount */}
+  <YourApp />
+</FrontMcpProvider>
+```
+
+### Manual Control
+
+```tsx
+function App() {
+  const [isStarted, setIsStarted] = useState(false);
+
+  return (
+    <FrontMcpProvider server={server} autoStart={false}>
+      <button onClick={() => {
+        server.start();
+        setIsStarted(true);
+      }}>
+        Start Server
+      </button>
+      {isStarted && <YourApp />}
+    </FrontMcpProvider>
+  );
+}
+```
+
+### Lifecycle Callbacks
+
+```tsx
+<FrontMcpProvider
+  server={server}
+  autoStart
+  onConnect={() => {
+    console.log('MCP server connected');
+    analytics.track('mcp_connected');
+  }}
+  onDisconnect={(reason) => {
+    console.log('MCP server disconnected:', reason);
+  }}
+  onError={(error) => {
+    console.error('MCP connection error:', error);
+    errorReporter.capture(error);
+  }}
+>
+  <YourApp />
+</FrontMcpProvider>
+```
+
+## With Store Integration
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+import { server } from './mcpServer';
+import { appStore } from './stores/appStore';
+
+function App() {
+  return (
+    <FrontMcpProvider
+      server={server}
+      store={appStore}
+      autoStart
+    >
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+When a store is provided:
+- Store state is accessible via `useStore()`
+- Store changes trigger component re-renders
+- Store actions can be called from anywhere in the tree
+
+## With Page Context
+
+Enable automatic page context extraction for AI agents:
+
+```tsx
+<FrontMcpProvider
+  server={server}
+  pageContext={{
+    // Extract context when component mounts
+    extractOnMount: true,
+
+    // Update context when DOM changes
+    updateOnChange: true,
+
+    // CSS selectors for content extraction
+    selectors: ['main', 'article', '[data-mcp-context]'],
+
+    // Throttle updates (ms)
+    throttle: 1000,
+
+    // Custom extraction function
+    extractor: (element) => ({
+      text: element.textContent,
+      html: element.innerHTML,
+    }),
+  }}
+  autoStart
+>
+  <YourApp />
+</FrontMcpProvider>
+```
+
+## With Component Registry
+
+Register React components for AI discovery:
+
+```tsx
+import { createComponentRegistry } from '@frontmcp/browser';
+
+const registry = createComponentRegistry();
+
+// Register components
+registry.register('Button', Button, {
+  description: 'A clickable button',
+  props: {
+    onClick: { type: 'function', description: 'Click handler' },
+    children: { type: 'node', description: 'Button content' },
+  },
+});
+
+registry.register('Card', Card, {
+  description: 'A card container',
+  props: {
+    title: { type: 'string', description: 'Card title' },
+    children: { type: 'node' },
+  },
+});
+
+function App() {
+  return (
+    <FrontMcpProvider
+      server={server}
+      componentRegistry={registry}
+      autoStart
+    >
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Nested Providers
+
+You can nest providers for different MCP servers:
+
+```tsx
+function App() {
+  return (
+    <FrontMcpProvider server={mainServer} autoStart>
+      <MainApp />
+      <FrontMcpProvider server={widgetServer} autoStart>
+        <Widget />
+      </FrontMcpProvider>
+    </FrontMcpProvider>
+  );
+}
+```
+
+<Warning>
+  Nested providers create separate MCP contexts. Hooks in child providers access the nearest provider's server.
+</Warning>
+
+## Using BrowserScope
+
+For simpler use cases, you can use `BrowserScope` instead of `BrowserMcpServer`:
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+import { createBrowserScope } from '@frontmcp/browser';
+
+const scope = createBrowserScope({
+  serverInfo: {
+    name: 'my-widget',
+    version: '1.0.0',
+  },
+});
+
+scope.registerTool({
+  name: 'ping',
+  handler: async () => ({ content: [{ type: 'text', text: 'pong' }] }),
+});
+
+function App() {
+  return (
+    <FrontMcpProvider scope={scope}>
+      <YourWidget />
+    </FrontMcpProvider>
+  );
+}
+```
+
+## Context Access
+
+Access the provider's context directly:
+
+```tsx
+import { useMcp } from '@frontmcp/browser/react';
+
+function StatusBar() {
+  const {
+    server,
+    isConnected,
+    connectionState,
+    tools,
+    resources,
+  } = useMcp();
+
+  return (
+    <div className="status-bar">
+      <span>Status: {connectionState}</span>
+      <span>Tools: {tools.length}</span>
+      <span>Resources: {resources.length}</span>
+    </div>
+  );
+}
+```
+
+## Error Boundaries
+
+Wrap with error boundaries to handle MCP errors gracefully:
+
+```tsx
+import { ErrorBoundary } from 'react-error-boundary';
+
+function McpErrorFallback({ error, resetErrorBoundary }) {
+  return (
+    <div className="mcp-error">
+      <h2>MCP Connection Error</h2>
+      <p>{error.message}</p>
+      <button onClick={resetErrorBoundary}>Retry</button>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary FallbackComponent={McpErrorFallback}>
+      <FrontMcpProvider server={server} autoStart>
+        <YourApp />
+      </FrontMcpProvider>
+    </ErrorBoundary>
+  );
+}
+```
+
+## TypeScript
+
+```typescript
+import type { BrowserMcpServer, McpStore } from '@frontmcp/browser';
+
+interface MyAppState {
+  user: User | null;
+  items: Item[];
+}
+
+// Typed provider usage
+<FrontMcpProvider
+  server={server as BrowserMcpServer}
+  store={store as McpStore<MyAppState>}
+  autoStart
+>
+  <App />
+</FrontMcpProvider>
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Hooks" icon="anchor" href="/docs/web/react/hooks">
+    React hooks for MCP
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+  <Card title="BrowserScope" icon="circle" href="/docs/web/core/scope">
+    Lightweight scope alternative
+  </Card>
+  <Card title="Page Context" icon="browser" href="/docs/web/react/page-context">
+    Extract page context
+  </Card>
+</CardGroup>

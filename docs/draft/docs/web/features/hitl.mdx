@@ -1,0 +1,400 @@
+---
+title: Human-in-the-Loop
+sidebarTitle: HiTL
+icon: user-check
+description: Add user confirmations for sensitive AI actions
+---
+
+# Human-in-the-Loop (HiTL)
+
+Human-in-the-Loop enables user confirmation for sensitive or destructive AI actions, ensuring humans maintain control over critical operations.
+
+## Overview
+
+```
+┌────────────┐     ┌─────────────┐     ┌────────────────┐
+│  AI Agent  │────►│  MCP Tool   │────►│  HiTL Check    │
+└────────────┘     └─────────────┘     └───────┬────────┘
+                                               │
+                         ┌─────────────────────┴─────────────────────┐
+                         ▼                                           ▼
+                   ┌──────────┐                                ┌──────────┐
+                   │ Approved │                                │ Denied   │
+                   │ Execute  │                                │ Abort    │
+                   └──────────┘                                └──────────┘
+```
+
+## Quick Start
+
+```typescript
+import { BrowserMcpServer, withHitl } from '@frontmcp/browser';
+
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  transport,
+});
+
+// Add tool with HiTL confirmation
+server.addTool(withHitl({
+  name: 'deleteAccount',
+  description: 'Permanently delete user account',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string' },
+    },
+    required: ['userId'],
+  },
+  handler: async ({ userId }) => {
+    await deleteUser(userId);
+    return { content: [{ type: 'text', text: `Deleted user ${userId}` }] };
+  },
+}, {
+  message: 'Are you sure you want to delete this account?',
+  severity: 'destructive',
+}));
+```
+
+## Configuration Options
+
+```typescript
+interface HitlOptions {
+  /** Confirmation message shown to user */
+  message: string | ((args: Record<string, unknown>) => string);
+
+  /** Severity level affects UI styling */
+  severity?: 'info' | 'warning' | 'destructive';
+
+  /** Timeout for user response (ms) */
+  timeout?: number;
+
+  /** Allow AI to provide a reason */
+  requireReason?: boolean;
+
+  /** Custom confirmation component */
+  component?: React.ComponentType<HitlProps>;
+
+  /** Callback when approved */
+  onApprove?: (args: Record<string, unknown>) => void;
+
+  /** Callback when denied */
+  onDeny?: (args: Record<string, unknown>) => void;
+
+  /** Conditions for when to show HiTL */
+  condition?: (args: Record<string, unknown>) => boolean;
+}
+```
+
+## Dynamic Messages
+
+Create confirmation messages based on tool arguments:
+
+```typescript
+server.addTool(withHitl({
+  name: 'transferFunds',
+  handler: async ({ amount, toAccount }) => { ... },
+}, {
+  message: ({ amount, toAccount }) =>
+    `Transfer $${amount} to account ${toAccount}?`,
+  severity: 'warning',
+}));
+```
+
+## Conditional HiTL
+
+Only require confirmation under certain conditions:
+
+```typescript
+server.addTool(withHitl({
+  name: 'updateUser',
+  handler: async (args) => { ... },
+}, {
+  message: 'Confirm user update?',
+  // Only require confirmation for role changes
+  condition: (args) => args.role !== undefined,
+}));
+```
+
+## Severity Levels
+
+| Severity | Use Case | UI Treatment |
+|----------|----------|--------------|
+| `info` | Informational confirmations | Neutral styling |
+| `warning` | Potentially impactful actions | Yellow/orange warning |
+| `destructive` | Irreversible actions | Red destructive styling |
+
+```typescript
+// Info: Simple confirmations
+withHitl(tool, { message: 'Send email?', severity: 'info' });
+
+// Warning: Impactful but reversible
+withHitl(tool, { message: 'Change settings?', severity: 'warning' });
+
+// Destructive: Irreversible actions
+withHitl(tool, { message: 'Delete data?', severity: 'destructive' });
+```
+
+## React Integration
+
+### HitlProvider
+
+```tsx
+import { HitlProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <HitlProvider
+        position="center"
+        backdrop={true}
+        animation="fade"
+      >
+        <YourApp />
+      </HitlProvider>
+    </FrontMcpProvider>
+  );
+}
+```
+
+### Custom Confirmation Component
+
+```tsx
+import { HitlProps, registerHitlComponent } from '@frontmcp/browser';
+
+function CustomConfirmation({
+  message,
+  severity,
+  onApprove,
+  onDeny,
+  args,
+}: HitlProps) {
+  return (
+    <div className={`confirmation confirmation-${severity}`}>
+      <p>{message}</p>
+      <div className="details">
+        <pre>{JSON.stringify(args, null, 2)}</pre>
+      </div>
+      <div className="actions">
+        <button onClick={onDeny} className="deny">
+          Cancel
+        </button>
+        <button onClick={onApprove} className="approve">
+          Confirm
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Register as default component
+registerHitlComponent(CustomConfirmation);
+
+// Or use per-tool
+withHitl(tool, {
+  message: 'Confirm action?',
+  component: CustomConfirmation,
+});
+```
+
+### useHitl Hook
+
+```tsx
+import { useHitl } from '@frontmcp/browser/react';
+
+function ActionButton() {
+  const { requestConfirmation, pending } = useHitl();
+
+  const handleClick = async () => {
+    const approved = await requestConfirmation({
+      message: 'Perform this action?',
+      severity: 'warning',
+      args: { action: 'custom-action' },
+    });
+
+    if (approved) {
+      await performAction();
+    }
+  };
+
+  return (
+    <button onClick={handleClick} disabled={pending}>
+      {pending ? 'Awaiting confirmation...' : 'Do Action'}
+    </button>
+  );
+}
+```
+
+## Store Integration
+
+Add HiTL to store-generated tools:
+
+```typescript
+import { createSchemaStoreTools } from '@frontmcp/browser';
+
+const tools = createSchemaStoreTools(cartStore, {
+  prefix: 'cart',
+  // Add HiTL to specific actions
+  hitl: {
+    clearCart: {
+      message: 'Clear all items from cart?',
+      severity: 'destructive',
+    },
+    checkout: {
+      message: ({ total }) => `Confirm purchase of $${total}?`,
+      severity: 'warning',
+    },
+  },
+});
+```
+
+## Timeout Handling
+
+Configure timeout behavior:
+
+```typescript
+withHitl(tool, {
+  message: 'Confirm action?',
+  timeout: 30000, // 30 seconds
+  onTimeout: 'deny', // or 'approve'
+});
+```
+
+## Audit Trail
+
+HiTL decisions are automatically logged:
+
+```typescript
+server.on('hitl:decision', (event) => {
+  console.log('HiTL Decision:', {
+    tool: event.toolName,
+    approved: event.approved,
+    args: event.args,
+    timestamp: event.timestamp,
+    userId: event.userId,
+  });
+});
+```
+
+## Programmatic Approval
+
+For testing or automated workflows:
+
+```typescript
+import { HitlManager } from '@frontmcp/browser';
+
+const hitl = new HitlManager();
+
+// Auto-approve in test environment
+if (process.env.NODE_ENV === 'test') {
+  hitl.setAutoApprove(true);
+}
+
+// Or approve specific tools
+hitl.addRule({
+  tool: 'readData',
+  action: 'approve',
+});
+
+// Require explicit approval for destructive tools
+hitl.addRule({
+  tool: /^delete/,
+  action: 'prompt',
+});
+```
+
+## Multiple Confirmations
+
+Chain confirmations for multi-step operations:
+
+```typescript
+withHitl(tool, {
+  steps: [
+    {
+      message: 'Step 1: Confirm you want to proceed',
+      severity: 'info',
+    },
+    {
+      message: 'Step 2: This action is irreversible. Are you sure?',
+      severity: 'destructive',
+    },
+  ],
+});
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use for Destructive Actions" icon="trash">
+    Always add HiTL for delete, remove, or irreversible operations
+  </Card>
+  <Card title="Clear Messages" icon="message">
+    Write clear, specific confirmation messages explaining what will happen
+  </Card>
+  <Card title="Appropriate Severity" icon="triangle-exclamation">
+    Use severity levels consistently to set user expectations
+  </Card>
+  <Card title="Reasonable Timeouts" icon="clock">
+    Set appropriate timeouts based on action complexity
+  </Card>
+</CardGroup>
+
+## Example: Complete Setup
+
+```typescript
+import {
+  BrowserMcpServer,
+  withHitl,
+  createSchemaStoreTools,
+} from '@frontmcp/browser';
+
+const server = new BrowserMcpServer({ name: 'my-app', transport });
+
+// Manual tool with HiTL
+server.addTool(withHitl({
+  name: 'sendEmail',
+  description: 'Send an email to user',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      to: { type: 'string' },
+      subject: { type: 'string' },
+      body: { type: 'string' },
+    },
+    required: ['to', 'subject', 'body'],
+  },
+  handler: async ({ to, subject, body }) => {
+    await emailService.send({ to, subject, body });
+    return { content: [{ type: 'text', text: `Email sent to ${to}` }] };
+  },
+}, {
+  message: ({ to, subject }) => `Send email "${subject}" to ${to}?`,
+  severity: 'info',
+}));
+
+// Store tools with HiTL
+const storeTools = createSchemaStoreTools(userStore, {
+  prefix: 'users',
+  hitl: {
+    deleteUser: {
+      message: ({ id }) => `Permanently delete user ${id}?`,
+      severity: 'destructive',
+    },
+  },
+});
+
+storeTools.forEach(tool => server.addTool(tool));
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="MCP Integration" icon="plug" href="/docs/web/store/mcp-integration">
+    Generate tools from stores
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Use HiTL with React
+  </Card>
+  <Card title="Telemetry" icon="chart-line" href="/docs/web/features/telemetry">
+    Track HiTL decisions
+  </Card>
+</CardGroup>

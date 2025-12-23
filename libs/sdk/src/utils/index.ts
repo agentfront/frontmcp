@@ -49,3 +49,6 @@ export { idFromString } from './string.utils';
 
 // Metadata utilities
 export { getMetadata, setMetadata, hasAsyncWith } from './metadata.utils';
+
+// Platform-agnostic crypto utilities (Web Crypto API)
+export { generateUUID, getRandomBytes, getRandomHex, sha256, sha256Sync, simpleHash } from './platform-crypto';

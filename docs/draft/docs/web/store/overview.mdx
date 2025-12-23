@@ -1,0 +1,158 @@
+---
+title: State Management
+sidebarTitle: Overview
+icon: database
+description: Reactive state management with automatic MCP integration
+---
+
+# State Management
+
+FrontMCP Web includes a powerful state management system built on [Valtio](https://github.com/pmndrs/valtio) with Zod schema validation and automatic MCP tool/resource generation.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Schema-First" icon="shield-check">
+    Define state with Zod schemas for runtime validation and TypeScript inference
+  </Card>
+  <Card title="Auto-Generated MCP" icon="wand-magic-sparkles">
+    Actions become MCP tools, state becomes MCP resources automatically
+  </Card>
+  <Card title="Reactive Updates" icon="bolt">
+    Valtio-powered reactivity with automatic React component updates
+  </Card>
+  <Card title="Computed Values" icon="calculator">
+    Derived state that updates automatically when dependencies change
+  </Card>
+</CardGroup>
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    defineStore()                        │
+├─────────────────────────────────────────────────────────┤
+│  Schema (Zod)  │  Initial State  │  Actions  │ Computed │
+├─────────────────────────────────────────────────────────┤
+│                   Valtio Proxy Store                    │
+├─────────────────────────────────────────────────────────┤
+│     React Hooks      │      MCP Tools/Resources         │
+│  (useStore, etc.)    │  (auto-generated from actions)   │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Example
+
+```typescript
+import { defineStore } from '@frontmcp/browser';
+import { z } from 'zod';
+
+// Define your store with schema
+const counterStore = defineStore({
+  name: 'counter',
+  schema: z.object({
+    count: z.number(),
+    lastUpdated: z.number().nullable(),
+  }),
+  initial: {
+    count: 0,
+    lastUpdated: null,
+  },
+  actions: {
+    increment: (state) => {
+      state.count += 1;
+      state.lastUpdated = Date.now();
+    },
+    decrement: (state) => {
+      state.count -= 1;
+      state.lastUpdated = Date.now();
+    },
+    reset: (state) => {
+      state.count = 0;
+      state.lastUpdated = Date.now();
+    },
+  },
+  computed: {
+    isPositive: (state) => state.count > 0,
+    isZero: (state) => state.count === 0,
+  },
+});
+
+// Use in React
+function Counter() {
+  const state = useStore(counterStore);
+
+  return (
+    <div>
+      <p>Count: {state.count}</p>
+      <button onClick={() => counterStore.actions.increment()}>+</button>
+      <button onClick={() => counterStore.actions.decrement()}>-</button>
+    </div>
+  );
+}
+```
+
+## MCP Integration
+
+When you create a store, FrontMCP can automatically expose it to AI agents:
+
+```typescript
+import {
+  createSchemaStoreTools,
+  createSchemaStoreResources,
+} from '@frontmcp/browser';
+
+// Generate MCP tools from actions
+const tools = createSchemaStoreTools(counterStore, {
+  prefix: 'counter',
+  include: ['increment', 'decrement', 'reset'],
+});
+
+// Generate MCP resources from state
+const resources = createSchemaStoreResources(counterStore, {
+  includeMain: true,      // store://counter
+  includeKeys: true,      // store://counter/count
+  includeComputed: true,  // store://counter/computed/isPositive
+});
+
+// Register with server
+tools.forEach(tool => server.addTool(tool));
+resources.forEach(resource => server.addResource(resource));
+```
+
+Now an AI agent can:
+- Read `store://counter` to get the full state
+- Call `counter/increment` to increment the counter
+- Read `store://counter/computed/isPositive` to check if positive
+
+## Store Types
+
+| Store Type | Use Case | MCP Integration |
+|------------|----------|-----------------|
+| Schema Store | General-purpose state | Full (tools + resources) |
+| Tool Store | Tool-specific state | Tools only |
+| Resource Store | Read-only data | Resources only |
+
+## Why Schema Stores?
+
+1. **Type Safety**: Zod schemas provide runtime validation and TypeScript types
+2. **AI-Friendly**: Schemas describe data structure to AI agents
+3. **Validation**: Invalid state updates are caught immediately
+4. **Documentation**: Schemas serve as living documentation
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="defineStore()" icon="code" href="/docs/web/store/define-store">
+    Complete defineStore API reference
+  </Card>
+  <Card title="Actions & Computed" icon="function" href="/docs/web/store/actions-computed">
+    Learn about actions and computed values
+  </Card>
+  <Card title="MCP Integration" icon="plug" href="/docs/web/store/mcp-integration">
+    Auto-generate MCP tools and resources
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Use stores with React hooks
+  </Card>
+</CardGroup>

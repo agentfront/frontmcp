@@ -1,0 +1,277 @@
+---
+title: BrowserMcpServer
+sidebarTitle: Server
+icon: server
+description: The main browser-native MCP server implementation
+---
+
+# BrowserMcpServer
+
+`BrowserMcpServer` is the core class for running an MCP server in browser environments. It handles tool registration, resource management, and transport communication.
+
+## Basic Usage
+
+```typescript
+import {
+  BrowserMcpServer,
+  EventTransportAdapter,
+  createSimpleEmitter,
+} from '@frontmcp/browser';
+
+// Create transport
+const emitter = createSimpleEmitter();
+const transport = new EventTransportAdapter(emitter);
+
+// Create server
+const server = new BrowserMcpServer({
+  name: 'my-app',
+  version: '1.0.0',
+  transport,
+});
+
+// Start the server
+await server.start();
+```
+
+## Configuration
+
+```typescript
+interface BrowserMcpServerOptions {
+  /** Server name (required) */
+  name: string;
+
+  /** Server version (default: '1.0.0') */
+  version?: string;
+
+  /** Transport adapter for MCP communication */
+  transport?: BrowserTransport;
+
+  /** Reactive store instance */
+  store?: McpStore<any>;
+
+  /** Component registry for UI discovery */
+  componentRegistry?: ComponentRegistry;
+
+  /** Renderer registry for custom rendering */
+  rendererRegistry?: RendererRegistry;
+
+  /** Enable debug logging */
+  debug?: boolean;
+}
+```
+
+## Adding Tools
+
+Tools are actions that AI agents can invoke:
+
+```typescript
+// Simple tool
+server.addTool({
+  name: 'greet',
+  description: 'Greet a user by name',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Name to greet' },
+    },
+    required: ['name'],
+  },
+  handler: async ({ name }) => ({
+    content: [{ type: 'text', text: `Hello, ${name}!` }],
+  }),
+});
+
+// Tool with complex input
+server.addTool({
+  name: 'createUser',
+  description: 'Create a new user account',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      email: { type: 'string', format: 'email' },
+      name: { type: 'string' },
+      role: { type: 'string', enum: ['admin', 'user', 'guest'] },
+    },
+    required: ['email', 'name'],
+  },
+  handler: async (input) => {
+    const user = await createUser(input);
+    return {
+      content: [{ type: 'text', text: `Created user ${user.id}` }],
+    };
+  },
+});
+```
+
+## Adding Resources
+
+Resources are data that AI agents can read:
+
+```typescript
+// Static resource
+server.addResource({
+  uri: 'config://app',
+  name: 'App Configuration',
+  description: 'Current application configuration',
+  mimeType: 'application/json',
+  handler: async () => ({
+    contents: [{
+      uri: 'config://app',
+      mimeType: 'application/json',
+      text: JSON.stringify({ theme: 'dark', language: 'en' }),
+    }],
+  }),
+});
+
+// Dynamic resource with parameters
+server.addResource({
+  uri: 'users://{userId}',
+  name: 'User Profile',
+  description: 'Get user profile by ID',
+  handler: async ({ userId }) => {
+    const user = await getUser(userId);
+    return {
+      contents: [{
+        uri: `users://${userId}`,
+        mimeType: 'application/json',
+        text: JSON.stringify(user),
+      }],
+    };
+  },
+});
+```
+
+## Adding Prompts
+
+Prompts are templates for AI responses:
+
+```typescript
+server.addPrompt({
+  name: 'summarize',
+  description: 'Summarize text content',
+  arguments: [
+    { name: 'text', description: 'Text to summarize', required: true },
+    { name: 'maxLength', description: 'Maximum summary length', required: false },
+  ],
+  handler: async ({ text, maxLength = '100' }) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: `Summarize the following in ${maxLength} words or less:\n\n${text}`,
+      },
+    }],
+  }),
+});
+```
+
+## Server Lifecycle
+
+```typescript
+// Start the server
+await server.start();
+console.log('Server started');
+
+// Check if running
+if (server.isRunning()) {
+  console.log('Server is active');
+}
+
+// Stop the server
+await server.stop();
+console.log('Server stopped');
+```
+
+## Calling Tools Programmatically
+
+You can invoke tools directly from your application:
+
+```typescript
+// Call a tool
+const result = await server.callTool('greet', { name: 'Alice' });
+console.log(result); // { content: [{ type: 'text', text: 'Hello, Alice!' }] }
+
+// Read a resource
+const config = await server.readResource('config://app');
+console.log(config); // { theme: 'dark', language: 'en' }
+```
+
+## Listing Capabilities
+
+```typescript
+// Get all registered tools
+const tools = server.getTools();
+console.log(tools.map(t => t.name));
+// → ['greet', 'createUser']
+
+// Get all registered resources
+const resources = server.getResources();
+console.log(resources.map(r => r.uri));
+// → ['config://app', 'users://{userId}']
+
+// Get all registered prompts
+const prompts = server.getPrompts();
+console.log(prompts.map(p => p.name));
+// → ['summarize']
+```
+
+## Error Handling
+
+```typescript
+server.addTool({
+  name: 'riskyOperation',
+  description: 'An operation that might fail',
+  handler: async (input) => {
+    try {
+      const result = await performOperation(input);
+      return { content: [{ type: 'text', text: result }] };
+    } catch (error) {
+      // Return error as MCP response
+      return {
+        content: [{
+          type: 'text',
+          text: `Error: ${error.message}`,
+        }],
+        isError: true,
+      };
+    }
+  },
+});
+```
+
+## With React
+
+Use `FrontMcpProvider` to integrate with React:
+
+```tsx
+import { FrontMcpProvider } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server} autoStart>
+      <YourApp />
+    </FrontMcpProvider>
+  );
+}
+```
+
+<Info>
+  When using `FrontMcpProvider`, the server is automatically started on mount and stopped on unmount unless `autoStart={false}`.
+</Info>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="BrowserScope" icon="circle" href="/docs/web/core/scope">
+    Lightweight alternative to BrowserMcpServer
+  </Card>
+  <Card title="Transport" icon="network-wired" href="/docs/web/core/transport">
+    Configure different transport types
+  </Card>
+  <Card title="React Provider" icon="atom" href="/docs/web/react/provider">
+    React integration with FrontMcpProvider
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    Auto-generate tools from stores
+  </Card>
+</CardGroup>

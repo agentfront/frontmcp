@@ -1,0 +1,458 @@
+---
+title: Component & Renderer Registries
+sidebarTitle: Registries
+icon: puzzle-piece
+description: Register and discover UI components for AI agents
+---
+
+# Registries
+
+Registries allow you to register UI components and custom renderers, making them discoverable by AI agents for intelligent UI generation and manipulation.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Registries                          │
+├─────────────────────────────────────────────────────────┤
+│  ComponentRegistry        │  RendererRegistry           │
+│  ─────────────────        │  ────────────────           │
+│  • Register React comps   │  • Custom render functions  │
+│  • Expose props/types     │  • Transform MCP responses  │
+│  • AI can discover        │  • Format tool results      │
+│  • Schema generation      │  • Handle content types     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Component Registry
+
+### Creating a Registry
+
+```typescript
+import { createComponentRegistry } from '@frontmcp/browser';
+
+const registry = createComponentRegistry();
+```
+
+### Registering Components
+
+```typescript
+import { Button, Card, Input, Alert } from './components';
+
+// Simple registration
+registry.register('Button', Button);
+
+// With metadata
+registry.register('Card', Card, {
+  description: 'A card container with header and content',
+  category: 'layout',
+  props: {
+    title: {
+      type: 'string',
+      description: 'Card title',
+      required: false,
+    },
+    variant: {
+      type: 'enum',
+      options: ['default', 'elevated', 'outlined'],
+      default: 'default',
+    },
+    children: {
+      type: 'node',
+      description: 'Card content',
+      required: true,
+    },
+  },
+  examples: [
+    {
+      name: 'Basic card',
+      props: { title: 'Hello', children: 'Card content' },
+    },
+  ],
+});
+
+// With TypeScript types
+registry.register<InputProps>('Input', Input, {
+  description: 'Text input field',
+  props: {
+    type: { type: 'enum', options: ['text', 'email', 'password', 'number'] },
+    placeholder: { type: 'string' },
+    value: { type: 'string' },
+    onChange: { type: 'function', description: '(value: string) => void' },
+    disabled: { type: 'boolean', default: false },
+  },
+});
+```
+
+### Component Categories
+
+```typescript
+// Define categories
+registry.defineCategory('layout', {
+  name: 'Layout',
+  description: 'Components for page structure and layout',
+  icon: 'grid',
+});
+
+registry.defineCategory('forms', {
+  name: 'Forms',
+  description: 'Form input and control components',
+  icon: 'edit',
+});
+
+registry.defineCategory('feedback', {
+  name: 'Feedback',
+  description: 'Components for user feedback',
+  icon: 'bell',
+});
+
+// Register with category
+registry.register('Button', Button, { category: 'forms' });
+registry.register('Alert', Alert, { category: 'feedback' });
+```
+
+### Querying Components
+
+```typescript
+// Get all components
+const all = registry.getAll();
+
+// Get by name
+const Button = registry.get('Button');
+
+// Get by category
+const formComponents = registry.getByCategory('forms');
+
+// Search components
+const results = registry.search('input');
+```
+
+## Exposing to MCP
+
+### Component Resource
+
+```typescript
+import { createComponentRegistryResource } from '@frontmcp/browser';
+
+const resource = createComponentRegistryResource(registry);
+server.addResource(resource);
+
+// AI can discover components
+// await client.readResource('ui://components');
+// → [{ name: 'Button', description: '...', props: {...} }, ...]
+```
+
+### Component Schema Tool
+
+```typescript
+import { createComponentSchemaTool } from '@frontmcp/browser';
+
+const tool = createComponentSchemaTool(registry);
+server.addTool(tool);
+
+// AI can get detailed component schema
+// await client.callTool('ui/getComponentSchema', { name: 'Card' });
+// → { props: {...}, examples: [...], ... }
+```
+
+## Renderer Registry
+
+### Creating a Renderer Registry
+
+```typescript
+import { createRendererRegistry } from '@frontmcp/browser';
+
+const renderers = createRendererRegistry();
+```
+
+### Registering Renderers
+
+```typescript
+// Render JSON as formatted output
+renderers.register('json', {
+  mimeTypes: ['application/json'],
+  render: (content) => (
+    <pre className="json-viewer">
+      {JSON.stringify(content, null, 2)}
+    </pre>
+  ),
+});
+
+// Render markdown
+renderers.register('markdown', {
+  mimeTypes: ['text/markdown', 'text/x-markdown'],
+  render: (content) => (
+    <MarkdownRenderer content={content} />
+  ),
+});
+
+// Render images
+renderers.register('image', {
+  mimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+  render: (content, metadata) => (
+    <img
+      src={content}
+      alt={metadata?.alt || 'Image'}
+      className="rendered-image"
+    />
+  ),
+});
+
+// Render code with syntax highlighting
+renderers.register('code', {
+  mimeTypes: ['text/x-python', 'text/javascript', 'text/typescript'],
+  render: (content, metadata) => (
+    <CodeBlock
+      code={content}
+      language={metadata?.language || 'text'}
+      showLineNumbers
+    />
+  ),
+});
+```
+
+### Custom Content Types
+
+```typescript
+// Register custom content type
+renderers.register('tool-result', {
+  contentType: 'tool-result',
+  render: (result) => {
+    if (result.isError) {
+      return <ErrorMessage error={result.content} />;
+    }
+    return <ToolResultDisplay result={result} />;
+  },
+});
+
+// Register for specific tool outputs
+renderers.register('weather-data', {
+  toolName: 'getWeather',
+  render: (data) => (
+    <WeatherCard
+      temperature={data.temperature}
+      conditions={data.conditions}
+      icon={data.icon}
+    />
+  ),
+});
+```
+
+### Fallback Renderer
+
+```typescript
+renderers.setFallback({
+  render: (content, metadata) => (
+    <div className="unknown-content">
+      <p>Unknown content type: {metadata?.mimeType}</p>
+      <pre>{String(content)}</pre>
+    </div>
+  ),
+});
+```
+
+## React Integration
+
+### RegistryProvider
+
+```tsx
+import {
+  ComponentRegistryProvider,
+  RendererRegistryProvider,
+} from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <ComponentRegistryProvider registry={registry}>
+        <RendererRegistryProvider registry={renderers}>
+          <YourApp />
+        </RendererRegistryProvider>
+      </ComponentRegistryProvider>
+    </FrontMcpProvider>
+  );
+}
+```
+
+### useRegistry Hook
+
+```tsx
+import { useComponentRegistry } from '@frontmcp/browser/react';
+
+function ComponentPalette() {
+  const { components, getComponent, categories } = useComponentRegistry();
+
+  return (
+    <div className="palette">
+      {categories.map(category => (
+        <div key={category.name}>
+          <h3>{category.name}</h3>
+          {components
+            .filter(c => c.category === category.name)
+            .map(comp => (
+              <div key={comp.name}>
+                <span>{comp.name}</span>
+                <p>{comp.description}</p>
+              </div>
+            ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### RenderContent Component
+
+```tsx
+import { RenderContent } from '@frontmcp/browser/react';
+
+function ToolOutput({ result }) {
+  return (
+    <RenderContent
+      content={result.content}
+      mimeType={result.mimeType}
+      toolName={result.toolName}
+    />
+  );
+}
+```
+
+### DynamicComponent
+
+```tsx
+import { DynamicComponent } from '@frontmcp/browser/react';
+
+function AIGeneratedUI({ componentName, props }) {
+  return (
+    <DynamicComponent
+      name={componentName}
+      props={props}
+      fallback={<div>Component not found: {componentName}</div>}
+    />
+  );
+}
+```
+
+## Schema Generation
+
+### Auto-generate from TypeScript
+
+```typescript
+import { generateComponentSchema } from '@frontmcp/browser';
+
+// Given TypeScript interface
+interface ButtonProps {
+  /** Button label */
+  label: string;
+  /** Click handler */
+  onClick: () => void;
+  /** Button variant */
+  variant?: 'primary' | 'secondary' | 'danger';
+  /** Disabled state */
+  disabled?: boolean;
+}
+
+// Generate schema
+const schema = generateComponentSchema<ButtonProps>('Button');
+// → { props: { label: {...}, onClick: {...}, variant: {...}, disabled: {...} } }
+```
+
+### JSON Schema Export
+
+```typescript
+// Export all components as JSON Schema
+const jsonSchema = registry.toJsonSchema();
+
+// Export specific component
+const buttonSchema = registry.getJsonSchema('Button');
+```
+
+## AI Integration
+
+### Component Suggestion Tool
+
+```typescript
+import { createComponentSuggestionTool } from '@frontmcp/browser';
+
+const tool = createComponentSuggestionTool(registry, {
+  // AI can ask for component suggestions
+  handler: async ({ description, requirements }) => {
+    const suggestions = registry.search(description, {
+      matchProps: requirements,
+      limit: 5,
+    });
+    return { suggestions };
+  },
+});
+
+server.addTool(tool);
+```
+
+### Dynamic Component Rendering
+
+```typescript
+server.addTool({
+  name: 'ui/renderComponent',
+  description: 'Render a registered component',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      component: { type: 'string' },
+      props: { type: 'object' },
+    },
+  },
+  handler: async ({ component, props }) => {
+    const Component = registry.get(component);
+    if (!Component) {
+      return { content: [{ type: 'text', text: 'Component not found' }], isError: true };
+    }
+
+    // Validate props
+    const validation = registry.validateProps(component, props);
+    if (!validation.valid) {
+      return { content: [{ type: 'text', text: validation.errors.join(', ') }], isError: true };
+    }
+
+    // Return renderable result
+    return {
+      content: [{
+        type: 'component',
+        component,
+        props,
+      }],
+    };
+  },
+});
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Metadata" icon="tag">
+    Always add descriptions to components and props for AI understanding
+  </Card>
+  <Card title="Include Examples" icon="code">
+    Provide usage examples to help AI generate correct component usage
+  </Card>
+  <Card title="Categorize Components" icon="folder">
+    Group components by category for easier discovery
+  </Card>
+  <Card title="Type Safety" icon="shield-check">
+    Use TypeScript types to ensure prop validation
+  </Card>
+</CardGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="UI Resources" icon="window" href="/docs/web/features/ui-resources">
+    Expose UI state
+  </Card>
+  <Card title="React Provider" icon="atom" href="/docs/web/react/provider">
+    Provider configuration
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server setup
+  </Card>
+</CardGroup>

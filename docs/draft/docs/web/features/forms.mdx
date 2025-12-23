@@ -1,0 +1,434 @@
+---
+title: Form Management
+sidebarTitle: Forms
+icon: rectangle-list
+description: Expose form state and validation to AI agents
+---
+
+# Form Management
+
+FrontMCP Web provides utilities for exposing form state to AI agents, enabling intelligent form filling, validation assistance, and guided user interactions.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     Your Form                        │
+│  ┌────────────────────────────────────────────┐     │
+│  │  FormProvider                               │     │
+│  │  - Tracks field values                      │     │
+│  │  - Validates input                          │     │
+│  │  - Exposes as MCP resource                  │     │
+│  └────────────────────────────────────────────┘     │
+│                        │                             │
+│          ┌─────────────┴─────────────┐              │
+│          ▼                           ▼              │
+│  ┌──────────────┐           ┌──────────────┐       │
+│  │ MCP Resource │           │   MCP Tool   │       │
+│  │ form://state │           │ form/submit  │       │
+│  └──────────────┘           └──────────────┘       │
+└─────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+```tsx
+import { FormProvider, useForm } from '@frontmcp/browser/react';
+import { z } from 'zod';
+
+const contactSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email'),
+  message: z.string().min(10, 'Message must be at least 10 characters'),
+});
+
+function ContactForm() {
+  const form = useForm({
+    schema: contactSchema,
+    exposeToMcp: true,
+    resourceUri: 'form://contact',
+  });
+
+  return (
+    <FormProvider form={form}>
+      <form onSubmit={form.handleSubmit}>
+        <input {...form.register('name')} placeholder="Name" />
+        {form.errors.name && <span>{form.errors.name}</span>}
+
+        <input {...form.register('email')} placeholder="Email" />
+        {form.errors.email && <span>{form.errors.email}</span>}
+
+        <textarea {...form.register('message')} placeholder="Message" />
+        {form.errors.message && <span>{form.errors.message}</span>}
+
+        <button type="submit" disabled={!form.isValid}>
+          Send
+        </button>
+      </form>
+    </FormProvider>
+  );
+}
+```
+
+## useForm Hook
+
+### Configuration
+
+```typescript
+interface UseFormOptions<T extends z.ZodType> {
+  /** Zod schema for validation */
+  schema: T;
+
+  /** Initial form values */
+  defaultValues?: Partial<z.infer<T>>;
+
+  /** Expose form state as MCP resource */
+  exposeToMcp?: boolean;
+
+  /** Custom resource URI (default: form://{name}) */
+  resourceUri?: string;
+
+  /** Validation mode */
+  mode?: 'onChange' | 'onBlur' | 'onSubmit';
+
+  /** Create MCP tool for form submission */
+  createSubmitTool?: boolean;
+
+  /** Submit handler */
+  onSubmit?: (data: z.infer<T>) => void | Promise<void>;
+}
+```
+
+### Return Value
+
+```typescript
+interface UseFormReturn<T> {
+  /** Register a form field */
+  register: (name: keyof T) => FieldRegistration;
+
+  /** Current form values */
+  values: T;
+
+  /** Validation errors */
+  errors: Record<keyof T, string | undefined>;
+
+  /** Whether form is valid */
+  isValid: boolean;
+
+  /** Whether form is submitting */
+  isSubmitting: boolean;
+
+  /** Whether form has been modified */
+  isDirty: boolean;
+
+  /** Form submit handler */
+  handleSubmit: (e: React.FormEvent) => Promise<void>;
+
+  /** Set field value programmatically */
+  setValue: (name: keyof T, value: unknown) => void;
+
+  /** Reset form to default values */
+  reset: () => void;
+
+  /** Trigger validation */
+  validate: () => boolean;
+}
+```
+
+## MCP Integration
+
+### Form Resource
+
+When `exposeToMcp: true`, the form state is available as an MCP resource:
+
+```typescript
+// AI agent can read form state
+const formState = await client.readResource('form://contact');
+// → {
+//   values: { name: 'John', email: '', message: '' },
+//   errors: { email: 'Invalid email', message: 'Message must be at least 10 characters' },
+//   isValid: false,
+//   isDirty: true,
+// }
+```
+
+### Form Submit Tool
+
+When `createSubmitTool: true`, a tool is created for form submission:
+
+```typescript
+const form = useForm({
+  schema: contactSchema,
+  exposeToMcp: true,
+  createSubmitTool: true,
+  onSubmit: async (data) => {
+    await submitContactForm(data);
+  },
+});
+
+// AI agent can submit the form
+await client.callTool('form/contact/submit', {});
+```
+
+### Field Update Tool
+
+Create a tool for AI to update form fields:
+
+```typescript
+const form = useForm({
+  schema: contactSchema,
+  exposeToMcp: true,
+  createUpdateTool: true,
+});
+
+// AI agent can fill the form
+await client.callTool('form/contact/update', {
+  name: 'John Doe',
+  email: 'john@example.com',
+  message: 'Hello, I have a question about your services.',
+});
+```
+
+## Multi-Step Forms
+
+```tsx
+import { useMultiStepForm, FormStep } from '@frontmcp/browser/react';
+
+const steps = [
+  {
+    name: 'personal',
+    schema: z.object({
+      firstName: z.string().min(1),
+      lastName: z.string().min(1),
+    }),
+  },
+  {
+    name: 'contact',
+    schema: z.object({
+      email: z.string().email(),
+      phone: z.string().optional(),
+    }),
+  },
+  {
+    name: 'preferences',
+    schema: z.object({
+      newsletter: z.boolean(),
+      notifications: z.enum(['all', 'important', 'none']),
+    }),
+  },
+];
+
+function MultiStepForm() {
+  const form = useMultiStepForm({
+    steps,
+    exposeToMcp: true,
+    resourceUri: 'form://signup',
+  });
+
+  return (
+    <div>
+      <FormStep form={form} step="personal">
+        <input {...form.register('firstName')} placeholder="First Name" />
+        <input {...form.register('lastName')} placeholder="Last Name" />
+      </FormStep>
+
+      <FormStep form={form} step="contact">
+        <input {...form.register('email')} placeholder="Email" />
+        <input {...form.register('phone')} placeholder="Phone" />
+      </FormStep>
+
+      <FormStep form={form} step="preferences">
+        <label>
+          <input type="checkbox" {...form.register('newsletter')} />
+          Subscribe to newsletter
+        </label>
+        <select {...form.register('notifications')}>
+          <option value="all">All notifications</option>
+          <option value="important">Important only</option>
+          <option value="none">None</option>
+        </select>
+      </FormStep>
+
+      <div className="navigation">
+        <button onClick={form.prevStep} disabled={form.isFirstStep}>
+          Previous
+        </button>
+        <button onClick={form.nextStep} disabled={form.isLastStep}>
+          Next
+        </button>
+        {form.isLastStep && (
+          <button onClick={form.submit}>Submit</button>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Dynamic Forms
+
+Create forms from schemas dynamically:
+
+```tsx
+import { DynamicForm, createFormSchema } from '@frontmcp/browser/react';
+
+// Define form structure
+const formConfig = {
+  fields: [
+    { name: 'title', type: 'text', label: 'Title', required: true },
+    { name: 'description', type: 'textarea', label: 'Description' },
+    { name: 'priority', type: 'select', label: 'Priority', options: ['low', 'medium', 'high'] },
+    { name: 'dueDate', type: 'date', label: 'Due Date' },
+  ],
+};
+
+// Generate Zod schema from config
+const schema = createFormSchema(formConfig);
+
+function TaskForm() {
+  return (
+    <DynamicForm
+      config={formConfig}
+      schema={schema}
+      exposeToMcp={true}
+      resourceUri="form://task"
+      onSubmit={handleSubmit}
+    />
+  );
+}
+```
+
+## Form Field Components
+
+### With AI Assistance
+
+```tsx
+import { AIAssistedField } from '@frontmcp/browser/react';
+
+function MessageForm() {
+  const form = useForm({ schema, exposeToMcp: true });
+
+  return (
+    <FormProvider form={form}>
+      <AIAssistedField
+        name="message"
+        label="Message"
+        placeholder="Type your message..."
+        // AI can suggest completions
+        aiSuggestions={true}
+        // AI can rewrite/improve the text
+        aiRewrite={true}
+        // Show AI suggestions inline
+        inline={true}
+      />
+    </FormProvider>
+  );
+}
+```
+
+### Field Validation Feedback
+
+```tsx
+import { ValidatedField } from '@frontmcp/browser/react';
+
+<ValidatedField
+  name="email"
+  label="Email"
+  type="email"
+  // Show validation state
+  showValid={true}
+  // Show hint text
+  hint="We'll never share your email"
+  // Custom error messages
+  errorMessages={{
+    required: 'Please enter your email',
+    email: 'Please enter a valid email address',
+  }}
+/>
+```
+
+## Form Actions
+
+### Pre-built Form Tools
+
+```typescript
+import { createFormTools } from '@frontmcp/browser';
+
+const formTools = createFormTools({
+  formId: 'contact',
+  schema: contactSchema,
+  actions: {
+    validate: true,    // form/contact/validate
+    submit: true,      // form/contact/submit
+    reset: true,       // form/contact/reset
+    fillField: true,   // form/contact/fillField
+    fillAll: true,     // form/contact/fillAll
+  },
+});
+
+formTools.forEach(tool => server.addTool(tool));
+```
+
+### Custom Form Tool
+
+```typescript
+server.addTool({
+  name: 'form/contact/autofill',
+  description: 'Autofill the contact form with user data',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string' },
+    },
+    required: ['userId'],
+  },
+  handler: async ({ userId }) => {
+    const userData = await getUser(userId);
+    form.setValue('name', userData.name);
+    form.setValue('email', userData.email);
+    return {
+      content: [{ type: 'text', text: 'Form autofilled successfully' }],
+    };
+  },
+});
+```
+
+## Security Considerations
+
+<Warning>
+  Be careful when exposing form state to AI agents:
+  - Never expose password fields
+  - Consider excluding sensitive fields from MCP resources
+  - Use HiTL for form submissions with sensitive data
+</Warning>
+
+```tsx
+const form = useForm({
+  schema: loginSchema,
+  exposeToMcp: true,
+  // Exclude sensitive fields
+  mcpExclude: ['password', 'confirmPassword'],
+  // Require confirmation for submit
+  submitHitl: {
+    message: 'Submit login form?',
+    severity: 'warning',
+  },
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    All React hooks
+  </Card>
+  <Card title="Human-in-the-Loop" icon="user-check" href="/docs/web/features/hitl">
+    Add confirmations
+  </Card>
+  <Card title="Page Context" icon="browser" href="/docs/web/react/page-context">
+    Extract page context
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    State management
+  </Card>
+</CardGroup>

@@ -1,0 +1,389 @@
+---
+title: Navigator.modelContext Polyfill
+sidebarTitle: Polyfill
+icon: plug
+description: Polyfill for the emerging navigator.modelContext API
+---
+
+# Navigator.modelContext Polyfill
+
+FrontMCP Web includes a polyfill for the emerging `navigator.modelContext` API, allowing your applications to work with AI models through a standardized browser API.
+
+## Overview
+
+The `navigator.modelContext` API is a proposed web standard for browser-native AI model access. FrontMCP provides a polyfill that bridges this API to MCP servers.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your Application                      │
+│                          │                               │
+│                          ▼                               │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │           navigator.modelContext                   │  │
+│  │           (polyfilled by FrontMCP)                │  │
+│  └───────────────────────────────────────────────────┘  │
+│                          │                               │
+│          ┌───────────────┴───────────────┐              │
+│          ▼                               ▼              │
+│  ┌──────────────┐               ┌──────────────┐       │
+│  │  MCP Server  │               │   Browser    │       │
+│  │  (FrontMCP)  │               │   AI APIs    │       │
+│  └──────────────┘               └──────────────┘       │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+```typescript
+import { installModelContextPolyfill } from '@frontmcp/browser';
+import { server } from './mcpServer';
+
+// Install the polyfill
+installModelContextPolyfill({
+  server,
+  // Use MCP server as the model provider
+  provider: 'mcp',
+});
+
+// Now use the standard API
+async function chat(message: string) {
+  const context = await navigator.modelContext.create({
+    systemPrompt: 'You are a helpful assistant.',
+  });
+
+  const response = await context.prompt(message);
+  console.log(response.text);
+}
+```
+
+## Installation Options
+
+```typescript
+interface PolyfillOptions {
+  /** MCP server instance */
+  server?: BrowserMcpServer;
+
+  /** Model provider */
+  provider: 'mcp' | 'native' | 'hybrid';
+
+  /** Fallback behavior if native not available */
+  fallback?: 'mcp' | 'error';
+
+  /** Model configuration */
+  modelConfig?: {
+    /** Default model to use */
+    model?: string;
+    /** Temperature setting */
+    temperature?: number;
+    /** Maximum tokens */
+    maxTokens?: number;
+  };
+
+  /** Enable debug logging */
+  debug?: boolean;
+}
+```
+
+### Provider Modes
+
+| Provider | Description |
+|----------|-------------|
+| `mcp` | Always use MCP server for model access |
+| `native` | Use browser's native AI if available |
+| `hybrid` | Try native first, fall back to MCP |
+
+```typescript
+// MCP-only mode
+installModelContextPolyfill({
+  server,
+  provider: 'mcp',
+});
+
+// Native with MCP fallback
+installModelContextPolyfill({
+  server,
+  provider: 'hybrid',
+  fallback: 'mcp',
+});
+```
+
+## API Reference
+
+### Creating a Context
+
+```typescript
+const context = await navigator.modelContext.create({
+  // System prompt for the model
+  systemPrompt: 'You are a helpful coding assistant.',
+
+  // Model to use
+  model: 'claude-3-sonnet',
+
+  // Initial messages (optional)
+  messages: [
+    { role: 'user', content: 'Hello!' },
+    { role: 'assistant', content: 'Hi! How can I help?' },
+  ],
+
+  // Temperature (0-1)
+  temperature: 0.7,
+
+  // Maximum response tokens
+  maxTokens: 1000,
+});
+```
+
+### Prompting
+
+```typescript
+// Simple prompt
+const response = await context.prompt('What is TypeScript?');
+console.log(response.text);
+
+// Prompt with options
+const response = await context.prompt('Explain React hooks', {
+  temperature: 0.5,
+  maxTokens: 500,
+});
+
+// Stream response
+const stream = await context.promptStream('Write a story');
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Multi-Turn Conversations
+
+```typescript
+const context = await navigator.modelContext.create({
+  systemPrompt: 'You are a helpful assistant.',
+});
+
+// First message
+await context.prompt('My name is Alice.');
+
+// Context is maintained
+const response = await context.prompt('What is my name?');
+console.log(response.text); // "Your name is Alice."
+
+// Get conversation history
+const history = context.getHistory();
+console.log(history);
+```
+
+### Tool Integration
+
+```typescript
+// Create context with tools from MCP server
+const context = await navigator.modelContext.create({
+  systemPrompt: 'You are a helpful assistant.',
+  // Tools from MCP server are automatically available
+  tools: server.getTools(),
+});
+
+// Model can use tools
+const response = await context.prompt('What is the weather in NYC?', {
+  // Allow tool use
+  toolUse: true,
+});
+
+// Response may include tool calls
+if (response.toolCalls) {
+  for (const call of response.toolCalls) {
+    console.log('Tool called:', call.name, call.arguments);
+  }
+}
+```
+
+## React Integration
+
+### ModelContextProvider
+
+```tsx
+import { ModelContextProvider, useModelContext } from '@frontmcp/browser/react';
+
+function App() {
+  return (
+    <FrontMcpProvider server={server}>
+      <ModelContextProvider>
+        <Chat />
+      </ModelContextProvider>
+    </FrontMcpProvider>
+  );
+}
+
+function Chat() {
+  const { context, isReady, prompt, streaming } = useModelContext();
+  const [response, setResponse] = useState('');
+
+  const handleSend = async (message: string) => {
+    const result = await prompt(message);
+    setResponse(result.text);
+  };
+
+  return (
+    <div>
+      <input onKeyDown={(e) => e.key === 'Enter' && handleSend(e.target.value)} />
+      <div>{response}</div>
+    </div>
+  );
+}
+```
+
+### useChat Hook
+
+```tsx
+import { useChat } from '@frontmcp/browser/react';
+
+function ChatUI() {
+  const {
+    messages,
+    input,
+    setInput,
+    send,
+    isLoading,
+    error,
+    clear,
+  } = useChat({
+    systemPrompt: 'You are a helpful assistant.',
+  });
+
+  return (
+    <div className="chat">
+      <div className="messages">
+        {messages.map((msg, i) => (
+          <div key={i} className={`message ${msg.role}`}>
+            {msg.content}
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); send(); }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={isLoading}
+        />
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Thinking...' : 'Send'}
+        </button>
+      </form>
+
+      {error && <div className="error">{error.message}</div>}
+    </div>
+  );
+}
+```
+
+## Capability Detection
+
+```typescript
+// Check if native API is available
+if ('modelContext' in navigator && !navigator.modelContext.__polyfilled) {
+  console.log('Native navigator.modelContext available');
+} else if (navigator.modelContext?.__polyfilled) {
+  console.log('Using FrontMCP polyfill');
+} else {
+  console.log('No modelContext support');
+}
+
+// Check capabilities
+const capabilities = await navigator.modelContext.getCapabilities();
+console.log('Supported models:', capabilities.models);
+console.log('Max context length:', capabilities.maxContextLength);
+console.log('Supports streaming:', capabilities.streaming);
+console.log('Supports tools:', capabilities.tools);
+```
+
+## Configuration
+
+### Model Defaults
+
+```typescript
+installModelContextPolyfill({
+  server,
+  provider: 'mcp',
+  modelConfig: {
+    model: 'claude-3-sonnet',
+    temperature: 0.7,
+    maxTokens: 2000,
+  },
+});
+```
+
+### Custom Model Routing
+
+```typescript
+installModelContextPolyfill({
+  server,
+  provider: 'mcp',
+  modelRouter: async (request) => {
+    // Route based on request
+    if (request.systemPrompt?.includes('code')) {
+      return { model: 'claude-3-opus' };
+    }
+    return { model: 'claude-3-sonnet' };
+  },
+});
+```
+
+## Error Handling
+
+```typescript
+try {
+  const response = await context.prompt('Hello');
+} catch (error) {
+  if (error.name === 'ModelContextError') {
+    switch (error.code) {
+      case 'RATE_LIMITED':
+        console.log('Too many requests, please wait');
+        break;
+      case 'CONTEXT_LENGTH_EXCEEDED':
+        console.log('Conversation too long, starting new');
+        break;
+      case 'MODEL_NOT_AVAILABLE':
+        console.log('Model not available');
+        break;
+      default:
+        console.log('Unknown error:', error.message);
+    }
+  }
+}
+```
+
+## Cleanup
+
+```typescript
+// Destroy context when done
+await context.destroy();
+
+// Remove polyfill
+import { removeModelContextPolyfill } from '@frontmcp/browser';
+removeModelContextPolyfill();
+```
+
+## Browser Support
+
+| Browser | Native Support | Polyfill Support |
+|---------|---------------|------------------|
+| Chrome | Experimental* | Full |
+| Firefox | No | Full |
+| Safari | No | Full |
+| Edge | Experimental* | Full |
+
+*Native support requires feature flags and may change.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    MCP server configuration
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    React integration
+  </Card>
+  <Card title="Transport" icon="network-wired" href="/docs/web/core/transport">
+    Transport adapters
+  </Card>
+</CardGroup>

@@ -1,0 +1,412 @@
+---
+title: React Hooks
+sidebarTitle: Hooks
+icon: anchor
+description: React hooks for MCP tools, resources, and stores
+---
+
+# React Hooks
+
+FrontMCP Web provides React hooks for interacting with MCP servers, executing tools, reading resources, and managing state.
+
+## useMcp
+
+Access the MCP server and connection state:
+
+```tsx
+import { useMcp } from '@frontmcp/browser/react';
+
+function ConnectionStatus() {
+  const {
+    server,           // BrowserMcpServer instance
+    isConnected,      // boolean
+    connectionState,  // 'disconnected' | 'connecting' | 'connected' | 'error'
+    tools,            // Array of registered tools
+    resources,        // Array of registered resources
+    prompts,          // Array of registered prompts
+  } = useMcp();
+
+  return (
+    <div>
+      <span>{isConnected ? '🟢' : '🔴'} {connectionState}</span>
+      <span>Tools: {tools.length}</span>
+      <span>Resources: {resources.length}</span>
+    </div>
+  );
+}
+```
+
+## useStore
+
+Subscribe to store state with automatic re-renders:
+
+```tsx
+import { useStore } from '@frontmcp/browser/react';
+import { todoStore } from './stores/todoStore';
+
+function TodoList() {
+  // Full state subscription
+  const state = useStore(todoStore);
+
+  return (
+    <ul>
+      {state.items.map(todo => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+// With selector for optimized re-renders
+function TodoCount() {
+  const count = useStore(todoStore, state => state.items.length);
+
+  return <span>{count} items</span>;
+}
+
+// Multiple selectors
+function TodoSummary() {
+  const { total, completed } = useStore(todoStore, state => ({
+    total: state.items.length,
+    completed: state.items.filter(t => t.done).length,
+  }));
+
+  return <span>{completed}/{total} completed</span>;
+}
+```
+
+## useTool
+
+Execute MCP tools with loading and error states:
+
+```tsx
+import { useTool } from '@frontmcp/browser/react';
+
+function AddTodoButton() {
+  const addTodo = useTool('todos/addTodo');
+
+  const handleClick = async () => {
+    const result = await addTodo.execute({ text: 'New todo' });
+    console.log('Result:', result);
+  };
+
+  return (
+    <button onClick={handleClick} disabled={addTodo.loading}>
+      {addTodo.loading ? 'Adding...' : 'Add Todo'}
+      {addTodo.error && <span className="error">{addTodo.error.message}</span>}
+    </button>
+  );
+}
+```
+
+### useTool Return Value
+
+```typescript
+interface UseToolResult<T = unknown> {
+  /** Execute the tool with arguments */
+  execute: (args: Record<string, unknown>) => Promise<T>;
+
+  /** Whether the tool is currently executing */
+  loading: boolean;
+
+  /** Error from the last execution, if any */
+  error: Error | null;
+
+  /** Result from the last execution */
+  result: T | null;
+
+  /** Reset loading/error/result state */
+  reset: () => void;
+}
+```
+
+### Examples
+
+```tsx
+// With typed arguments
+const createUser = useTool<{ id: string }>('users/create');
+
+const handleSubmit = async (data: FormData) => {
+  const result = await createUser.execute({
+    name: data.get('name'),
+    email: data.get('email'),
+  });
+  console.log('Created user:', result.id);
+};
+
+// With error handling
+const deleteTodo = useTool('todos/delete');
+
+const handleDelete = async (id: string) => {
+  try {
+    await deleteTodo.execute({ id });
+  } catch (error) {
+    toast.error('Failed to delete todo');
+  }
+};
+
+// Reset after use
+const submitForm = useTool('forms/submit');
+
+useEffect(() => {
+  if (submitForm.result) {
+    toast.success('Form submitted!');
+    submitForm.reset();
+  }
+}, [submitForm.result]);
+```
+
+## useResource
+
+Read MCP resources reactively:
+
+```tsx
+import { useResource } from '@frontmcp/browser/react';
+
+function UserProfile() {
+  const { data, loading, error, refetch } = useResource('users://current');
+
+  if (loading) return <Spinner />;
+  if (error) return <Error message={error.message} />;
+
+  return (
+    <div>
+      <h1>{data.name}</h1>
+      <p>{data.email}</p>
+      <button onClick={refetch}>Refresh</button>
+    </div>
+  );
+}
+```
+
+### useResource Return Value
+
+```typescript
+interface UseResourceResult<T = unknown> {
+  /** Resource data */
+  data: T | null;
+
+  /** Loading state */
+  loading: boolean;
+
+  /** Error state */
+  error: Error | null;
+
+  /** Refetch the resource */
+  refetch: () => Promise<void>;
+}
+```
+
+### With Parameters
+
+```tsx
+function UserById({ userId }: { userId: string }) {
+  const { data, loading } = useResource(`users://${userId}`);
+
+  if (loading) return <Spinner />;
+  return <UserCard user={data} />;
+}
+```
+
+### With Polling
+
+```tsx
+function LiveStatus() {
+  const { data } = useResource('system://status', {
+    // Refetch every 5 seconds
+    refetchInterval: 5000,
+  });
+
+  return <StatusIndicator status={data?.status} />;
+}
+```
+
+## useToolList
+
+Get all available tools:
+
+```tsx
+import { useToolList } from '@frontmcp/browser/react';
+
+function ToolExplorer() {
+  const tools = useToolList();
+
+  return (
+    <div>
+      <h2>Available Tools ({tools.length})</h2>
+      {tools.map(tool => (
+        <div key={tool.name}>
+          <strong>{tool.name}</strong>
+          <p>{tool.description}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## useResourceList
+
+Get all available resources:
+
+```tsx
+import { useResourceList } from '@frontmcp/browser/react';
+
+function ResourceExplorer() {
+  const resources = useResourceList();
+
+  return (
+    <div>
+      <h2>Available Resources ({resources.length})</h2>
+      {resources.map(resource => (
+        <div key={resource.uri}>
+          <strong>{resource.uri}</strong>
+          <p>{resource.description}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## useConnectionState
+
+Subscribe to connection state changes:
+
+```tsx
+import { useConnectionState } from '@frontmcp/browser/react';
+
+function ConnectionBanner() {
+  const state = useConnectionState();
+
+  if (state === 'connected') return null;
+
+  return (
+    <div className={`banner banner-${state}`}>
+      {state === 'connecting' && 'Connecting to server...'}
+      {state === 'disconnected' && 'Disconnected. Attempting to reconnect...'}
+      {state === 'error' && 'Connection error. Please refresh.'}
+    </div>
+  );
+}
+```
+
+## Combining Hooks
+
+```tsx
+function TodoApp() {
+  // Store state
+  const state = useStore(todoStore);
+
+  // Tools
+  const addTodo = useTool('todos/addTodo');
+  const clearCompleted = useTool('todos/clearCompleted');
+
+  // Resources
+  const { data: stats } = useResource('store://todos/computed/summary');
+
+  // Connection
+  const { isConnected } = useMcp();
+
+  const [newTodo, setNewTodo] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTodo.trim() && isConnected) {
+      await addTodo.execute({ text: newTodo.trim() });
+      setNewTodo('');
+    }
+  };
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={newTodo}
+          onChange={e => setNewTodo(e.target.value)}
+          disabled={!isConnected || addTodo.loading}
+        />
+        <button type="submit" disabled={!isConnected || addTodo.loading}>
+          {addTodo.loading ? 'Adding...' : 'Add'}
+        </button>
+      </form>
+
+      <ul>
+        {state.items.map(todo => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => todoStore.actions.toggleTodo(todo.id)}
+            />
+            {todo.text}
+          </li>
+        ))}
+      </ul>
+
+      {stats && (
+        <footer>
+          <span>{stats.activeCount} items left</span>
+          <button
+            onClick={() => clearCompleted.execute({})}
+            disabled={clearCompleted.loading}
+          >
+            Clear completed
+          </button>
+        </footer>
+      )}
+    </div>
+  );
+}
+```
+
+## Custom Hooks
+
+Create custom hooks for your application:
+
+```tsx
+// hooks/useTodos.ts
+export function useTodos() {
+  const state = useStore(todoStore);
+  const addTodo = useTool('todos/addTodo');
+  const toggleTodo = useTool('todos/toggleTodo');
+  const removeTodo = useTool('todos/removeTodo');
+
+  return {
+    todos: state.items,
+    filter: state.filter,
+    filteredTodos: todoStore.computed.filteredItems,
+    activeCount: todoStore.computed.activeCount,
+
+    add: (text: string) => addTodo.execute({ text }),
+    toggle: (id: string) => toggleTodo.execute({ id }),
+    remove: (id: string) => removeTodo.execute({ id }),
+    setFilter: todoStore.actions.setFilter,
+
+    isAdding: addTodo.loading,
+  };
+}
+
+// Usage
+function TodoApp() {
+  const { todos, add, toggle, isAdding } = useTodos();
+  // ...
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="FrontMcpProvider" icon="box" href="/docs/web/react/provider">
+    Provider setup
+  </Card>
+  <Card title="Page Context" icon="browser" href="/docs/web/react/page-context">
+    Page context hooks
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    Store integration
+  </Card>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+</CardGroup>

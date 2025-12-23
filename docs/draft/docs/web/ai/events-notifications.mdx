@@ -1,0 +1,395 @@
+---
+title: Events & Notifications
+sidebarTitle: Events & Notifications
+icon: bell
+description: Real-time updates when application state changes
+---
+
+# Events & Notifications
+
+Your LLM chat can receive real-time notifications when your application state changes, enabling reactive and context-aware AI interactions.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Your App                                 │
+│                                                                   │
+│  User clicks button                                               │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     │
+│  │ Store Action │────►│ State Change │────►│ Notification │     │
+│  │ (addTodo)    │     │ (Valtio)     │     │ (MCP)        │     │
+│  └──────────────┘     └──────────────┘     └──────┬───────┘     │
+│                                                    │             │
+│                                                    ▼             │
+│                                            ┌──────────────┐     │
+│                                            │  LLM Chat    │     │
+│                                            │  (receives   │     │
+│                                            │   update)    │     │
+│                                            └──────────────┘     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## MCP Notifications
+
+When state changes, the MCP server sends notifications:
+
+### Resource Updated Notification
+
+```typescript
+// Notification sent when a resource changes
+{
+  jsonrpc: '2.0',
+  method: 'notifications/resources/updated',
+  params: {
+    uri: 'store://todos'
+  }
+}
+```
+
+### Listening for Notifications
+
+```typescript
+// In your chat component
+emitter.on('mcp:response', (message) => {
+  // Check if it's a notification (no id)
+  if (!message.id && message.method?.startsWith('notifications/')) {
+    handleNotification(message);
+  }
+});
+
+function handleNotification(notification) {
+  switch (notification.method) {
+    case 'notifications/resources/updated':
+      console.log('Resource changed:', notification.params.uri);
+      // LLM can re-read the resource if needed
+      break;
+
+    case 'notifications/resources/list_changed':
+      console.log('Available resources changed');
+      // Refresh the resource list
+      break;
+
+    case 'notifications/tools/list_changed':
+      console.log('Available tools changed');
+      // Refresh the tool list
+      break;
+  }
+}
+```
+
+## Store Change Notifications
+
+When you use FrontMCP stores with Valtio, state changes are automatically detected:
+
+```typescript
+import { defineStore, createSchemaStoreResources } from '@frontmcp/browser';
+
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(todoSchema),
+  }),
+  initial: { items: [] },
+  actions: {
+    addTodo: (state, text: string) => {
+      state.items.push({ id: crypto.randomUUID(), text, done: false });
+      // Valtio automatically detects this change
+      // MCP notification is sent: notifications/resources/updated { uri: 'store://todos' }
+    },
+  },
+});
+
+// When resources are registered, notifications are automatic
+const resources = createSchemaStoreResources(todoStore, {
+  includeMain: true,
+  notifyOnChange: true, // Enable notifications
+});
+```
+
+## Event Resources
+
+Your LLM can also read event history as resources:
+
+### Available Event Resources
+
+| URI | Description |
+|-----|-------------|
+| `events://recent` | Last 100 events |
+| `events://navigation` | Page navigation history |
+| `events://interactions` | User interactions (clicks, inputs) |
+| `events://errors` | Error events |
+| `events://network` | Network requests |
+| `events://stats` | Aggregated statistics |
+
+### Reading Event History
+
+```typescript
+// LLM reads recent events to understand what happened
+const events = await readResource('events://recent');
+// → [
+//   { type: 'navigation', url: '/products', timestamp: 1234567890 },
+//   { type: 'interaction', action: 'click', target: 'add-to-cart', timestamp: 1234567891 },
+//   { type: 'store:update', store: 'cart', timestamp: 1234567892 },
+// ]
+
+// LLM can understand: "User navigated to products, clicked add to cart"
+```
+
+### Navigation Events
+
+```typescript
+// Read navigation history
+const navEvents = await readResource('events://navigation');
+// → [
+//   { url: '/home', title: 'Home', timestamp: 1234567890 },
+//   { url: '/products', title: 'Products', timestamp: 1234567900 },
+//   { url: '/products/123', title: 'Blue Widget', timestamp: 1234567910 },
+// ]
+
+// LLM knows: "User is looking at the Blue Widget product page"
+```
+
+## React Hooks for Notifications
+
+FrontMCP provides hooks to trigger notifications from React components:
+
+### useNotifyAgent
+
+Manually notify the LLM of important events:
+
+```tsx
+import { useNotifyAgent } from '@frontmcp/browser/react';
+
+function CheckoutForm() {
+  const notify = useNotifyAgent();
+
+  const handleSubmit = async (formData) => {
+    // Process the form
+    await processCheckout(formData);
+
+    // Notify the LLM
+    notify('checkout-completed', {
+      orderId: result.orderId,
+      total: result.total,
+      items: result.items.length,
+    });
+  };
+
+  return <form onSubmit={handleSubmit}>...</form>;
+}
+```
+
+### useNavigationNotifier
+
+Automatically notify on page navigation:
+
+```tsx
+import { useNavigationNotifier } from '@frontmcp/browser/react';
+
+function App() {
+  // Automatically sends notifications when URL changes
+  useNavigationNotifier();
+
+  return <Router>...</Router>;
+}
+```
+
+### useVisibilityNotifier
+
+Notify when the page visibility changes:
+
+```tsx
+import { useVisibilityNotifier } from '@frontmcp/browser/react';
+
+function App() {
+  // Notifies when user switches tabs or minimizes window
+  useVisibilityNotifier();
+
+  return <div>...</div>;
+}
+```
+
+### useFocusNotifier
+
+Notify when the window gains/loses focus:
+
+```tsx
+import { useFocusNotifier } from '@frontmcp/browser/react';
+
+function App() {
+  // Notifies when window focus changes
+  useFocusNotifier();
+
+  return <div>...</div>;
+}
+```
+
+## Building a Reactive LLM Chat
+
+Here's how to build a chat that reacts to application changes:
+
+```tsx
+import { useMcp, useNotifyAgent } from '@frontmcp/browser/react';
+
+function ReactiveAIChat() {
+  const { callTool, readResource } = useMcp();
+  const [messages, setMessages] = useState([]);
+  const [lastKnownState, setLastKnownState] = useState(null);
+
+  // Listen for state changes
+  useEffect(() => {
+    const unsubscribe = emitter.on('mcp:response', async (message) => {
+      if (message.method === 'notifications/resources/updated') {
+        const uri = message.params.uri;
+
+        // Read the updated state
+        const newState = await readResource(uri);
+
+        // Compare with last known state
+        if (hasSignificantChange(lastKnownState, newState)) {
+          // Inform the LLM about the change
+          const changeDescription = describeChange(lastKnownState, newState);
+
+          setMessages(prev => [...prev, {
+            role: 'system',
+            content: `State updated: ${changeDescription}`,
+          }]);
+
+          // Optionally, have the LLM react
+          // await processWithLLM(`The application state changed: ${changeDescription}`);
+        }
+
+        setLastKnownState(newState);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [lastKnownState]);
+
+  // ... rest of chat UI
+}
+
+function describeChange(oldState, newState) {
+  // Logic to describe what changed
+  if (newState.items.length > oldState?.items?.length) {
+    return 'A new item was added';
+  }
+  // ... more logic
+}
+```
+
+## Event Bus Integration
+
+The event bus provides fine-grained events:
+
+```typescript
+import { EventBus, EventType } from '@frontmcp/browser';
+
+const bus = new EventBus();
+
+// Component lifecycle events
+bus.on(EventType.COMPONENT_MOUNTED, (event) => {
+  console.log('Component mounted:', event.component);
+});
+
+bus.on(EventType.COMPONENT_UNMOUNTED, (event) => {
+  console.log('Component unmounted:', event.component);
+});
+
+// Form events
+bus.on(EventType.FORM_SUBMIT, (event) => {
+  console.log('Form submitted:', event.formId, event.data);
+});
+
+bus.on(EventType.FIELD_CHANGED, (event) => {
+  console.log('Field changed:', event.field, event.value);
+});
+
+// Navigation events
+bus.on(EventType.NAV_NAVIGATE, (event) => {
+  console.log('Navigation:', event.from, '→', event.to);
+});
+
+// State events
+bus.on(EventType.INSTANCE_STATE_CHANGED, (event) => {
+  console.log('Store changed:', event.store, event.changes);
+});
+
+// Wildcard subscriptions
+bus.on('form:*', (event) => {
+  console.log('Any form event:', event);
+});
+```
+
+## Practical Example: Order Tracking
+
+```tsx
+function OrderTrackingChat() {
+  const { callTool, readResource } = useMcp();
+  const notify = useNotifyAgent();
+
+  // Notify LLM when order status changes
+  useEffect(() => {
+    const checkStatus = setInterval(async () => {
+      const order = await readResource('store://currentOrder');
+
+      if (order.status !== lastStatus) {
+        notify('order-status-changed', {
+          orderId: order.id,
+          oldStatus: lastStatus,
+          newStatus: order.status,
+        });
+
+        // LLM can proactively inform the user
+        if (order.status === 'shipped') {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `Great news! Your order ${order.id} has been shipped! 📦`,
+          }]);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(checkStatus);
+  }, []);
+
+  // ... chat UI
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Debounce High-Frequency Events" icon="clock">
+    Don't overwhelm the LLM with every keystroke. Batch or debounce frequent events.
+  </Card>
+  <Card title="Provide Context" icon="info">
+    When notifying, include enough context for the LLM to understand what happened.
+  </Card>
+  <Card title="Filter Irrelevant Events" icon="filter">
+    Only send notifications that the LLM can act on or that affect the conversation.
+  </Card>
+  <Card title="Handle Offline Gracefully" icon="wifi">
+    Queue notifications when disconnected and process when reconnected.
+  </Card>
+</CardGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Overview" icon="robot" href="/docs/web/ai/overview">
+    AI integration architecture
+  </Card>
+  <Card title="Calling Tools" icon="hammer" href="/docs/web/ai/calling-tools">
+    Execute actions
+  </Card>
+  <Card title="Telemetry" icon="chart-line" href="/docs/web/features/telemetry">
+    Event tracking system
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    React integration
+  </Card>
+</CardGroup>

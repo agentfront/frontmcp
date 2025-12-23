@@ -1,0 +1,332 @@
+---
+title: Entry Classes
+sidebarTitle: Entries
+icon: puzzle-piece
+description: Browser-specific entry classes for tools, resources, and prompts
+---
+
+# Entry Classes
+
+Entry classes provide an object-oriented way to define MCP tools, resources, and prompts with full TypeScript support and store integration.
+
+## Overview
+
+| Entry Class | Purpose | Store Access |
+|-------------|---------|--------------|
+| `BrowserToolEntry` | Define executable tools | ✓ |
+| `BrowserResourceEntry` | Define readable resources | ✓ |
+| `BrowserPromptEntry` | Define prompt templates | ✓ |
+
+## BrowserToolEntry
+
+Create tools with full type safety and store access:
+
+```typescript
+import { BrowserToolEntry } from '@frontmcp/browser';
+import { z } from 'zod';
+
+// Define input schema
+const CreateUserInput = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  role: z.enum(['admin', 'user', 'guest']).default('user'),
+});
+
+// Create the tool entry
+class CreateUserTool extends BrowserToolEntry<typeof CreateUserInput> {
+  name = 'createUser';
+  description = 'Create a new user account';
+  inputSchema = CreateUserInput;
+
+  async execute(input: z.infer<typeof CreateUserInput>) {
+    const { name, email, role } = input;
+
+    // Access the store if available
+    const users = this.store?.getState()?.users ?? [];
+
+    const newUser = {
+      id: crypto.randomUUID(),
+      name,
+      email,
+      role,
+      createdAt: Date.now(),
+    };
+
+    // Update store
+    this.store?.setState({
+      users: [...users, newUser],
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Created user ${newUser.id} with email ${email}`,
+      }],
+    };
+  }
+}
+
+// Register with server
+const tool = new CreateUserTool();
+server.addTool(tool.toToolDefinition());
+```
+
+### Store Integration
+
+Entry classes can access a reactive store:
+
+```typescript
+class ToggleTodoTool extends BrowserToolEntry {
+  name = 'toggleTodo';
+  description = 'Toggle a todo item completion status';
+
+  inputSchema = z.object({
+    id: z.string(),
+  });
+
+  async execute({ id }: { id: string }) {
+    // Access store through this.store
+    const state = this.store?.getSnapshot();
+    const todo = state?.todos?.find(t => t.id === id);
+
+    if (!todo) {
+      return {
+        content: [{ type: 'text', text: `Todo ${id} not found` }],
+        isError: true,
+      };
+    }
+
+    // Mutate the store
+    this.store?.mutate((draft) => {
+      const item = draft.todos.find(t => t.id === id);
+      if (item) item.done = !item.done;
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Todo ${id} is now ${todo.done ? 'incomplete' : 'complete'}`,
+      }],
+    };
+  }
+}
+```
+
+## BrowserResourceEntry
+
+Create resources with dynamic data:
+
+```typescript
+import { BrowserResourceEntry } from '@frontmcp/browser';
+
+class UserProfileResource extends BrowserResourceEntry {
+  uri = 'users://{userId}';
+  name = 'User Profile';
+  description = 'Get a user profile by ID';
+  mimeType = 'application/json';
+
+  async read(params: { userId: string }) {
+    const { userId } = params;
+
+    // Access store
+    const users = this.store?.getSnapshot()?.users ?? [];
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      throw new Error(`User ${userId} not found`);
+    }
+
+    return {
+      contents: [{
+        uri: `users://${userId}`,
+        mimeType: 'application/json',
+        text: JSON.stringify(user, null, 2),
+      }],
+    };
+  }
+}
+
+// Register with server
+const resource = new UserProfileResource();
+server.addResource(resource.toResourceDefinition());
+```
+
+### List Resource
+
+Resource that returns a list:
+
+```typescript
+class AllUsersResource extends BrowserResourceEntry {
+  uri = 'users://all';
+  name = 'All Users';
+  description = 'Get all user profiles';
+  mimeType = 'application/json';
+
+  async read() {
+    const users = this.store?.getSnapshot()?.users ?? [];
+
+    return {
+      contents: [{
+        uri: 'users://all',
+        mimeType: 'application/json',
+        text: JSON.stringify({ users, count: users.length }, null, 2),
+      }],
+    };
+  }
+}
+```
+
+## BrowserPromptEntry
+
+Create reusable prompt templates:
+
+```typescript
+import { BrowserPromptEntry } from '@frontmcp/browser';
+
+class CodeReviewPrompt extends BrowserPromptEntry {
+  name = 'code-review';
+  description = 'Generate a code review prompt';
+
+  arguments = [
+    { name: 'code', description: 'Code to review', required: true },
+    { name: 'language', description: 'Programming language', required: false },
+    { name: 'focus', description: 'Areas to focus on', required: false },
+  ];
+
+  async execute(args: {
+    code: string;
+    language?: string;
+    focus?: string;
+  }) {
+    const { code, language = 'unknown', focus = 'general quality' } = args;
+
+    return {
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please review this ${language} code with focus on ${focus}:
+
+\`\`\`${language}
+${code}
+\`\`\`
+
+Provide specific feedback on:
+1. Code quality and readability
+2. Potential bugs or issues
+3. Performance considerations
+4. Best practices`,
+          },
+        },
+      ],
+    };
+  }
+}
+```
+
+## Built-in Theme Resource
+
+FrontMCP Web includes a built-in theme resource:
+
+```typescript
+import { createThemeResource } from '@frontmcp/browser';
+
+// Create a theme resource from your theme config
+const themeResource = createThemeResource({
+  colors: {
+    primary: '#3B82F6',
+    secondary: '#10B981',
+    background: '#FFFFFF',
+    text: '#1F2937',
+  },
+  spacing: {
+    small: '0.5rem',
+    medium: '1rem',
+    large: '2rem',
+  },
+  fonts: {
+    body: 'Inter, sans-serif',
+    heading: 'Inter, sans-serif',
+  },
+});
+
+server.addResource(themeResource);
+// → Available at theme://current
+```
+
+## Entry Factory Functions
+
+For simpler cases, use factory functions:
+
+```typescript
+import { createToolEntry, createResourceEntry } from '@frontmcp/browser';
+
+// Tool factory
+const pingTool = createToolEntry({
+  name: 'ping',
+  description: 'Ping the server',
+  handler: async () => ({
+    content: [{ type: 'text', text: 'pong' }],
+  }),
+});
+
+// Resource factory
+const statusResource = createResourceEntry({
+  uri: 'app://status',
+  name: 'App Status',
+  handler: () => ({
+    uri: 'app://status',
+    mimeType: 'application/json',
+    text: JSON.stringify({ status: 'healthy', uptime: process.uptime() }),
+  }),
+});
+```
+
+## Decorators (Experimental)
+
+For decorator-style syntax:
+
+```typescript
+import { Tool, Resource, Prompt } from '@frontmcp/browser/decorators';
+
+class MyEntries {
+  @Tool({
+    description: 'Add two numbers',
+    input: z.object({ a: z.number(), b: z.number() }),
+  })
+  async add({ a, b }: { a: number; b: number }) {
+    return { content: [{ type: 'text', text: String(a + b) }] };
+  }
+
+  @Resource({
+    uri: 'time://now',
+    description: 'Current time',
+  })
+  async getCurrentTime() {
+    return {
+      uri: 'time://now',
+      mimeType: 'text/plain',
+      text: new Date().toISOString(),
+    };
+  }
+}
+```
+
+<Warning>
+  Decorators require TypeScript with `experimentalDecorators` enabled.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Server" icon="server" href="/docs/web/core/server">
+    Register entries with BrowserMcpServer
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    Auto-generate entries from stores
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Use entries with React hooks
+  </Card>
+</CardGroup>

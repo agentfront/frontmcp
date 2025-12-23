@@ -1,5 +1,6 @@
 // errors/mcp.error.ts
-import { randomBytes } from 'crypto';
+import { getRandomHex } from '../utils/platform-crypto';
+import { getConfigValue } from '../config';
 
 /**
  * MCP-specific error codes per JSON-RPC specification.
@@ -54,7 +55,7 @@ export abstract class McpError extends Error {
   }
 
   private generateErrorId(): string {
-    return `err_${randomBytes(8).toString('hex')}`;
+    return `err_${getRandomHex(8)}`;
   }
 
   /**
@@ -459,7 +460,9 @@ export function toMcpError(error: any): McpError {
 /**
  * Format error for MCP response
  */
-export function formatMcpErrorResponse(error: any, isDevelopment: boolean = process.env['NODE_ENV'] !== 'production') {
+export function formatMcpErrorResponse(error: any, isDevelopment?: boolean) {
+  // Use provided value, or fall back to runtime config, or default to false
+  const isDev = isDevelopment ?? getConfigValue('isDevelopment', false);
   const mcpError = toMcpError(error);
-  return mcpError.toMcpError(isDevelopment);
+  return mcpError.toMcpError(isDev);
 }

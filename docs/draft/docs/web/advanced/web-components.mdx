@@ -1,0 +1,544 @@
+---
+title: Web Components
+sidebarTitle: Web Components
+icon: cube
+description: Use FrontMCP Web with custom elements and web components
+---
+
+# Web Components
+
+FrontMCP Web can be integrated with Web Components, allowing you to create MCP-enabled custom elements that work with any framework or vanilla JavaScript.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Custom Element                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │              <mcp-widget>                          │  │
+│  │  - Shadow DOM encapsulation                        │  │
+│  │  - MCP server instance                             │  │
+│  │  - Reactive state                                  │  │
+│  │  - Event communication                             │  │
+│  └───────────────────────────────────────────────────┘  │
+│                          │                               │
+│          ┌───────────────┴───────────────┐              │
+│          ▼                               ▼              │
+│  ┌──────────────┐               ┌──────────────┐       │
+│  │  MCP Tools   │               │ MCP Resources│       │
+│  └──────────────┘               └──────────────┘       │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### Define a Custom Element
+
+```typescript
+import {
+  McpElement,
+  defineStore,
+  createSchemaStoreTools,
+} from '@frontmcp/browser';
+import { z } from 'zod';
+
+// Define the element
+class McpCounter extends McpElement {
+  static tagName = 'mcp-counter';
+
+  // Define store
+  store = defineStore({
+    name: 'counter',
+    schema: z.object({
+      count: z.number(),
+    }),
+    initial: { count: 0 },
+    actions: {
+      increment: (state) => { state.count += 1; },
+      decrement: (state) => { state.count -= 1; },
+      reset: (state) => { state.count = 0; },
+    },
+  });
+
+  // Configure MCP server
+  mcpConfig = {
+    name: 'counter-widget',
+    version: '1.0.0',
+  };
+
+  // Setup MCP tools/resources
+  setupMcp() {
+    const tools = createSchemaStoreTools(this.store, { prefix: 'counter' });
+    tools.forEach(tool => this.server.addTool(tool));
+  }
+
+  // Render template
+  render() {
+    const state = this.store.getState();
+    return `
+      <div class="counter">
+        <button id="dec">-</button>
+        <span>${state.count}</span>
+        <button id="inc">+</button>
+      </div>
+    `;
+  }
+
+  // Setup event listeners
+  connectedCallback() {
+    super.connectedCallback();
+    this.shadowRoot.getElementById('inc').onclick = () => this.store.actions.increment();
+    this.shadowRoot.getElementById('dec').onclick = () => this.store.actions.decrement();
+  }
+}
+
+// Register the element
+McpCounter.register();
+```
+
+### Use the Element
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="module" src="./mcp-counter.js"></script>
+</head>
+<body>
+  <mcp-counter></mcp-counter>
+</body>
+</html>
+```
+
+## McpElement Base Class
+
+### Class Structure
+
+```typescript
+import { McpElement } from '@frontmcp/browser';
+
+class MyWidget extends McpElement {
+  // Tag name for custom element registration
+  static tagName = 'my-widget';
+
+  // Observed attributes (standard web component pattern)
+  static observedAttributes = ['theme', 'disabled'];
+
+  // MCP server configuration
+  mcpConfig = {
+    name: 'my-widget',
+    version: '1.0.0',
+    debug: false,
+  };
+
+  // Store definition (optional)
+  store?: SchemaStore;
+
+  // Transport configuration
+  transportConfig = {
+    type: 'event', // 'event' | 'postMessage' | 'custom'
+    options: {},
+  };
+
+  // Called when MCP is ready
+  setupMcp() {
+    // Register tools, resources, prompts
+  }
+
+  // Template rendering
+  render(): string {
+    return '<div>Content</div>';
+  }
+
+  // Stylesheet
+  styles(): string {
+    return `
+      :host {
+        display: block;
+      }
+    `;
+  }
+
+  // Lifecycle methods
+  connectedCallback() { super.connectedCallback(); }
+  disconnectedCallback() { super.disconnectedCallback(); }
+  attributeChangedCallback(name, oldVal, newVal) {}
+}
+```
+
+### Lifecycle
+
+| Method | When Called |
+|--------|-------------|
+| `constructor()` | Element created |
+| `connectedCallback()` | Element added to DOM |
+| `setupMcp()` | After MCP server is initialized |
+| `render()` | When state changes |
+| `disconnectedCallback()` | Element removed from DOM |
+
+## State Management
+
+### With Schema Store
+
+```typescript
+class TodoWidget extends McpElement {
+  static tagName = 'todo-widget';
+
+  store = defineStore({
+    name: 'todos',
+    schema: z.object({
+      items: z.array(z.object({
+        id: z.string(),
+        text: z.string(),
+        done: z.boolean(),
+      })),
+    }),
+    initial: { items: [] },
+    actions: {
+      add: (state, text: string) => {
+        state.items.push({ id: crypto.randomUUID(), text, done: false });
+      },
+      toggle: (state, id: string) => {
+        const item = state.items.find(i => i.id === id);
+        if (item) item.done = !item.done;
+      },
+    },
+  });
+
+  connectedCallback() {
+    super.connectedCallback();
+
+    // Subscribe to store changes
+    this.store.subscribe(() => {
+      this.requestUpdate();
+    });
+  }
+
+  render() {
+    const { items } = this.store.getState();
+    return `
+      <ul>
+        ${items.map(item => `
+          <li data-id="${item.id}" class="${item.done ? 'done' : ''}">
+            ${item.text}
+          </li>
+        `).join('')}
+      </ul>
+    `;
+  }
+}
+```
+
+### With Attributes
+
+```typescript
+class ConfigurableWidget extends McpElement {
+  static tagName = 'configurable-widget';
+  static observedAttributes = ['theme', 'size'];
+
+  get theme() {
+    return this.getAttribute('theme') || 'light';
+  }
+
+  set theme(value) {
+    this.setAttribute('theme', value);
+  }
+
+  attributeChangedCallback(name: string, oldValue: string, newValue: string) {
+    if (oldValue !== newValue) {
+      this.requestUpdate();
+    }
+  }
+
+  render() {
+    return `
+      <div class="widget theme-${this.theme}">
+        Widget content
+      </div>
+    `;
+  }
+}
+```
+
+## MCP Integration
+
+### Exposing Tools
+
+```typescript
+class DataWidget extends McpElement {
+  static tagName = 'data-widget';
+
+  setupMcp() {
+    // Add custom tool
+    this.server.addTool({
+      name: 'getData',
+      description: 'Get widget data',
+      handler: async () => ({
+        content: [{ type: 'text', text: JSON.stringify(this.data) }],
+      }),
+    });
+
+    // Add tool with input
+    this.server.addTool({
+      name: 'setData',
+      description: 'Set widget data',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          value: { type: 'string' },
+        },
+        required: ['key', 'value'],
+      },
+      handler: async ({ key, value }) => {
+        this.data[key] = value;
+        this.requestUpdate();
+        return { content: [{ type: 'text', text: 'Data updated' }] };
+      },
+    });
+  }
+}
+```
+
+### Exposing Resources
+
+```typescript
+class StateWidget extends McpElement {
+  static tagName = 'state-widget';
+
+  setupMcp() {
+    this.server.addResource({
+      uri: 'widget://state',
+      name: 'Widget State',
+      handler: () => ({
+        contents: [{
+          uri: 'widget://state',
+          mimeType: 'application/json',
+          text: JSON.stringify(this.getState()),
+        }],
+      }),
+    });
+  }
+}
+```
+
+## Communication
+
+### Custom Events
+
+```typescript
+class EventWidget extends McpElement {
+  static tagName = 'event-widget';
+
+  emitChange(data: any) {
+    this.dispatchEvent(new CustomEvent('widget-change', {
+      detail: data,
+      bubbles: true,
+      composed: true, // Cross shadow DOM boundary
+    }));
+  }
+
+  setupMcp() {
+    this.server.addTool({
+      name: 'notify',
+      handler: async ({ message }) => {
+        this.emitChange({ message });
+        return { content: [{ type: 'text', text: 'Notified' }] };
+      },
+    });
+  }
+}
+
+// Usage
+const widget = document.querySelector('event-widget');
+widget.addEventListener('widget-change', (e) => {
+  console.log('Widget changed:', e.detail);
+});
+```
+
+### Cross-Component Communication
+
+```typescript
+// Publisher widget
+class PublisherWidget extends McpElement {
+  static tagName = 'publisher-widget';
+
+  publish(topic: string, data: any) {
+    window.dispatchEvent(new CustomEvent(`mcp:${topic}`, {
+      detail: { source: this.tagName, data },
+    }));
+  }
+}
+
+// Subscriber widget
+class SubscriberWidget extends McpElement {
+  static tagName = 'subscriber-widget';
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('mcp:data-update', this.handleUpdate);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('mcp:data-update', this.handleUpdate);
+  }
+
+  handleUpdate = (e: CustomEvent) => {
+    console.log('Received update:', e.detail);
+  };
+}
+```
+
+## Styling
+
+### Shadow DOM Styles
+
+```typescript
+class StyledWidget extends McpElement {
+  static tagName = 'styled-widget';
+
+  styles() {
+    return `
+      :host {
+        display: block;
+        font-family: system-ui;
+      }
+
+      :host([theme="dark"]) {
+        background: #1a1a1a;
+        color: white;
+      }
+
+      .container {
+        padding: 1rem;
+        border-radius: 8px;
+      }
+
+      ::slotted(*) {
+        margin: 0.5rem 0;
+      }
+    `;
+  }
+
+  render() {
+    return `
+      <div class="container">
+        <slot></slot>
+      </div>
+    `;
+  }
+}
+```
+
+### CSS Custom Properties
+
+```typescript
+class ThemableWidget extends McpElement {
+  static tagName = 'themable-widget';
+
+  styles() {
+    return `
+      :host {
+        --widget-bg: var(--mcp-widget-bg, white);
+        --widget-text: var(--mcp-widget-text, black);
+        --widget-primary: var(--mcp-widget-primary, blue);
+      }
+
+      .widget {
+        background: var(--widget-bg);
+        color: var(--widget-text);
+      }
+
+      button {
+        background: var(--widget-primary);
+      }
+    `;
+  }
+}
+```
+
+## Slots
+
+```typescript
+class SlottedWidget extends McpElement {
+  static tagName = 'slotted-widget';
+
+  render() {
+    return `
+      <div class="widget">
+        <header>
+          <slot name="header">Default Header</slot>
+        </header>
+        <main>
+          <slot>Default Content</slot>
+        </main>
+        <footer>
+          <slot name="footer"></slot>
+        </footer>
+      </div>
+    `;
+  }
+}
+```
+
+```html
+<slotted-widget>
+  <h1 slot="header">Custom Header</h1>
+  <p>Main content goes here</p>
+  <button slot="footer">Action</button>
+</slotted-widget>
+```
+
+## Registration
+
+### Auto-Registration
+
+```typescript
+// Define and register in one step
+@customElement('my-widget')
+class MyWidget extends McpElement {
+  // ...
+}
+```
+
+### Manual Registration
+
+```typescript
+// Define class
+class MyWidget extends McpElement {
+  static tagName = 'my-widget';
+}
+
+// Register later
+MyWidget.register();
+
+// Or with custom name
+customElements.define('custom-widget', MyWidget);
+```
+
+### Lazy Registration
+
+```typescript
+// Register when first used
+if (!customElements.get('my-widget')) {
+  customElements.define('my-widget', MyWidget);
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="BrowserMcpServer" icon="server" href="/docs/web/core/server">
+    Server configuration
+  </Card>
+  <Card title="Schema Stores" icon="database" href="/docs/web/store/overview">
+    State management
+  </Card>
+  <Card title="Transport" icon="network-wired" href="/docs/web/core/transport">
+    Transport adapters
+  </Card>
+  <Card title="App Bridge" icon="bridge" href="/docs/web/advanced/app-bridge">
+    Cross-window communication
+  </Card>
+</CardGroup>

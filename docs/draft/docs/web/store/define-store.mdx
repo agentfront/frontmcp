@@ -1,0 +1,330 @@
+---
+title: defineStore()
+sidebarTitle: Define Store
+icon: code
+description: Create type-safe reactive stores with Zod schemas
+---
+
+# defineStore()
+
+The `defineStore()` function creates a reactive store with Zod schema validation, actions, and computed values.
+
+## Basic Usage
+
+```typescript
+import { defineStore } from '@frontmcp/browser';
+import { z } from 'zod';
+
+const userStore = defineStore({
+  name: 'user',
+  schema: z.object({
+    name: z.string(),
+    email: z.string().email(),
+    preferences: z.object({
+      theme: z.enum(['light', 'dark']),
+      notifications: z.boolean(),
+    }),
+  }),
+  initial: {
+    name: '',
+    email: '',
+    preferences: {
+      theme: 'light',
+      notifications: true,
+    },
+  },
+});
+```
+
+## Configuration Options
+
+```typescript
+interface DefineStoreOptions<T extends z.ZodType> {
+  /** Unique store name (used for MCP resource URIs) */
+  name: string;
+
+  /** Zod schema defining the state structure */
+  schema: T;
+
+  /** Initial state (must match schema) */
+  initial: z.infer<T>;
+
+  /** Actions that can mutate state */
+  actions?: Record<string, (state: z.infer<T>, ...args: any[]) => void>;
+
+  /** Computed values derived from state */
+  computed?: Record<string, (state: z.infer<T>) => any>;
+
+  /** Enable debug logging */
+  debug?: boolean;
+
+  /** Persist state to storage */
+  persist?: PersistOptions;
+}
+```
+
+## Schema Definition
+
+Use Zod to define your state schema:
+
+```typescript
+import { z } from 'zod';
+
+// Simple schema
+const simpleSchema = z.object({
+  count: z.number(),
+  message: z.string(),
+});
+
+// Complex schema with nested objects
+const complexSchema = z.object({
+  user: z.object({
+    id: z.string().uuid(),
+    name: z.string().min(1),
+    email: z.string().email(),
+  }).nullable(),
+  items: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    quantity: z.number().int().positive(),
+    price: z.number().positive(),
+  })),
+  status: z.enum(['idle', 'loading', 'success', 'error']),
+  error: z.string().nullable(),
+});
+```
+
+## Reading State
+
+```typescript
+const store = defineStore({
+  name: 'counter',
+  schema: z.object({ count: z.number() }),
+  initial: { count: 0 },
+});
+
+// Get current state (reactive proxy)
+const state = store.getState();
+console.log(state.count); // 0
+
+// Get snapshot (non-reactive copy)
+const snapshot = store.getSnapshot();
+console.log(snapshot.count); // 0
+
+// Subscribe to changes
+const unsubscribe = store.subscribe((state) => {
+  console.log('State changed:', state);
+});
+```
+
+## Updating State
+
+### Direct Mutation
+
+With Valtio-based stores, you can directly mutate the state:
+
+```typescript
+const state = store.getState();
+state.count = 10; // Triggers reactivity
+```
+
+### setState()
+
+Replace the entire state:
+
+```typescript
+store.setState({
+  count: 100,
+});
+```
+
+### mutate()
+
+Use Immer-style mutations:
+
+```typescript
+store.mutate((draft) => {
+  draft.items.push({ id: '1', name: 'New Item' });
+  draft.count += 1;
+});
+```
+
+## Actions
+
+Actions are named functions that mutate state:
+
+```typescript
+const todoStore = defineStore({
+  name: 'todos',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      done: z.boolean(),
+    })),
+  }),
+  initial: { items: [] },
+  actions: {
+    // Action with no extra arguments
+    clearAll: (state) => {
+      state.items = [];
+    },
+
+    // Action with single argument
+    addTodo: (state, text: string) => {
+      state.items.push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+      });
+    },
+
+    // Action with multiple arguments
+    updateTodo: (state, id: string, updates: { text?: string; done?: boolean }) => {
+      const todo = state.items.find(t => t.id === id);
+      if (todo) {
+        Object.assign(todo, updates);
+      }
+    },
+
+    // Action with object argument
+    addMultiple: (state, todos: Array<{ text: string }>) => {
+      todos.forEach(({ text }) => {
+        state.items.push({
+          id: crypto.randomUUID(),
+          text,
+          done: false,
+        });
+      });
+    },
+  },
+});
+
+// Call actions
+todoStore.actions.addTodo('Buy groceries');
+todoStore.actions.updateTodo('abc-123', { done: true });
+todoStore.actions.clearAll();
+```
+
+## Computed Values
+
+Computed values are derived from state and update automatically:
+
+```typescript
+const cartStore = defineStore({
+  name: 'cart',
+  schema: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      price: z.number(),
+      quantity: z.number(),
+    })),
+    discountPercent: z.number(),
+  }),
+  initial: {
+    items: [],
+    discountPercent: 0,
+  },
+  computed: {
+    // Simple computed
+    itemCount: (state) => state.items.length,
+
+    // Computed with calculation
+    subtotal: (state) =>
+      state.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+
+    // Computed using other computed values (access via state)
+    total: (state) => {
+      const subtotal = state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      return subtotal * (1 - state.discountPercent / 100);
+    },
+
+    // Computed returning complex types
+    summary: (state) => ({
+      items: state.items.length,
+      subtotal: state.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+      isEmpty: state.items.length === 0,
+    }),
+  },
+});
+
+// Access computed values
+console.log(cartStore.computed.itemCount);  // 0
+console.log(cartStore.computed.total);      // 0
+console.log(cartStore.computed.summary);    // { items: 0, subtotal: 0, isEmpty: true }
+```
+
+## Persistence
+
+Persist store state to localStorage or custom storage:
+
+```typescript
+const settingsStore = defineStore({
+  name: 'settings',
+  schema: z.object({
+    theme: z.enum(['light', 'dark', 'system']),
+    language: z.string(),
+    fontSize: z.number(),
+  }),
+  initial: {
+    theme: 'system',
+    language: 'en',
+    fontSize: 14,
+  },
+  persist: {
+    // Storage key (default: store name)
+    key: 'app-settings',
+
+    // Storage backend (default: localStorage)
+    storage: localStorage,
+
+    // Partial persistence - only persist certain keys
+    pick: ['theme', 'language'],
+
+    // Or exclude certain keys
+    // omit: ['fontSize'],
+
+    // Throttle writes (ms)
+    throttle: 1000,
+  },
+});
+```
+
+## Store Methods Reference
+
+| Method | Description |
+|--------|-------------|
+| `getState()` | Get reactive state proxy |
+| `getSnapshot()` | Get non-reactive state copy |
+| `setState(newState)` | Replace entire state |
+| `mutate(fn)` | Mutate state with Immer-style function |
+| `subscribe(fn)` | Subscribe to state changes |
+| `reset()` | Reset to initial state |
+
+## TypeScript Types
+
+```typescript
+// Infer state type from store
+type UserState = typeof userStore extends { getState: () => infer S } ? S : never;
+
+// Or use the schema directly
+type UserState = z.infer<typeof userSchema>;
+
+// Get action types
+type UserActions = typeof userStore.actions;
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Actions & Computed" icon="function" href="/docs/web/store/actions-computed">
+    Deep dive into actions and computed values
+  </Card>
+  <Card title="MCP Integration" icon="plug" href="/docs/web/store/mcp-integration">
+    Generate MCP tools and resources from stores
+  </Card>
+  <Card title="React Hooks" icon="atom" href="/docs/web/react/hooks">
+    Use stores with React
+  </Card>
+</CardGroup>
