@@ -8,7 +8,7 @@ description: Modals display content in an overlay that requires user attention. 
 ## Import
 
 ```typescript
-import { modal, drawer, dialog } from '@frontmcp/ui';
+import { modal, drawer, dialog } from '@frontmcp/ui/components';
 ```
 
 ## Basic Modal
@@ -24,7 +24,7 @@ const html = modal({
 ## With Footer
 
 ```typescript
-import { modal, button } from '@frontmcp/ui';
+import { modal, button } from '@frontmcp/ui/components';
 
 const html = modal({
   id: 'confirm-modal',
@@ -82,7 +82,7 @@ const bottomDrawer = drawer({
 ### With Button
 
 ```typescript
-import { button, modal } from '@frontmcp/ui';
+import { button, modal } from '@frontmcp/ui/components';
 
 // Button to open modal
 const openButton = button('Open Modal', {
@@ -177,7 +177,7 @@ button('Save & Close', {
 A simplified modal for confirmations:
 
 ```typescript
-import { dialog } from '@frontmcp/ui';
+import { dialog } from '@frontmcp/ui/components';
 
 const html = dialog({
   id: 'delete-dialog',
@@ -197,7 +197,7 @@ const html = dialog({
 ## Modal with Form
 
 ```typescript
-import { modal, input, select, button, formGroup } from '@frontmcp/ui';
+import { modal, input, select, button, formGroup } from '@frontmcp/ui/components';
 
 const createUserModal = modal({
   id: 'create-user-modal',
@@ -249,7 +249,7 @@ const childModal = modal({
 ## Complete Example
 
 ```typescript
-import { card, button, modal, input, select, formGroup, alert } from '@frontmcp/ui';
+import { card, button, modal, input, select, formGroup, alert } from '@frontmcp/ui/components';
 
 const userManagement = card(`
   <div class="flex justify-between items-center mb-4">

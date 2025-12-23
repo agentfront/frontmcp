@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import type { ComponentBuildManifest, CacheStats } from '../../../dependency/types';
+import type { ComponentBuildManifest, CacheStats } from '@frontmcp/uipack/dependency';
 
 /**
  * Options for storage initialization.

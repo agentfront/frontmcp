@@ -22,8 +22,8 @@ import {
   buildFontPreconnect,
   buildFontStylesheets,
   buildCdnScripts,
-} from '../theme';
-import { escapeHtml } from '../utils';
+} from '@frontmcp/uipack/theme';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
 // ============================================
 // Layout Types
@@ -142,8 +142,8 @@ export interface BaseLayoutOptions {
 // Utility Functions
 // ============================================
 
-// Re-export escapeHtml from utils for backwards compatibility
-export { escapeHtml } from '../utils';
+// Re-export escapeHtml from uipack/utils for backwards compatibility
+export { escapeHtml } from '@frontmcp/uipack/utils';
 
 /**
  * Get CSS class for layout size

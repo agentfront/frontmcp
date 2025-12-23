@@ -23,9 +23,9 @@ import {
 } from '../../errors';
 import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
-import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/ui/adapters';
-import { isUIRenderFailure } from '@frontmcp/ui/registry';
-import { safeStringify } from '@frontmcp/ui/utils';
+import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
+import { isUIRenderFailure } from '@frontmcp/uipack/registry';
+import { safeStringify } from '@frontmcp/uipack/utils';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,

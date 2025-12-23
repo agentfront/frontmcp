@@ -48,7 +48,7 @@
  */
 
 import { escapeHtml } from '../layouts/base';
-import { validateOptions } from '../validation';
+import { validateOptions } from '@frontmcp/uipack/validation';
 import {
   ButtonOptionsSchema,
   ButtonGroupOptionsSchema,

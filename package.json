@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/source",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.0.0"
@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
-    "docs:live": "cd docs/live && mint dev",
-    "docs:draft": "cd docs/draft && mint dev",
+    "docs:live": "cd docs/live && mint dev --port 4100",
+    "docs:draft": "cd docs/draft && mint dev --port 4200",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -17,13 +17,21 @@
   },
   "private": true,
   "dependencies": {
+    "@apidevtools/json-schema-ref-parser": "^11.9.3",
     "@huggingface/transformers": "^3.2.2",
-    "@modelcontextprotocol/sdk": "1.24.3",
+    "@modelcontextprotocol/sdk": "1.25.1",
+    "@rspack/core": "^1.3.12",
     "axios": "^1.6.0",
+    "enclave-vm": "^1.0.3",
+    "esbuild": "^0.27.1",
+    "handlebars": "^4.7.8",
     "ioredis": "^5.8.0",
     "jose": "^6.1.0",
+    "openapi-types": "^12.1.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
+    "vectoriadb": "^2.0.1",
+    "yaml": "^2.8.1",
     "valtio": "^2.2.0",
     "zod": "^4.0.0",
     "zod-from-json-schema": "^0.5.2"
@@ -31,16 +39,16 @@
   "devDependencies": {
     "@eslint/js": "^9.8.0",
     "@mdx-js/mdx": "^3.1.1",
-    "@nx/esbuild": "22.2.3",
-    "@nx/eslint": "22.2.3",
-    "@nx/eslint-plugin": "22.2.3",
-    "@nx/jest": "22.2.3",
-    "@nx/js": "22.2.3",
-    "@nx/nest": "22.2.3",
-    "@nx/node": "22.2.3",
-    "@nx/web": "22.2.3",
-    "@nx/webpack": "22.2.3",
-    "@nx/workspace": "22.2.3",
+    "@nx/esbuild": "22.3.3",
+    "@nx/eslint": "22.3.3",
+    "@nx/eslint-plugin": "22.3.3",
+    "@nx/jest": "22.3.3",
+    "@nx/js": "22.3.3",
+    "@nx/nest": "22.3.3",
+    "@nx/node": "22.3.3",
+    "@nx/web": "22.3.3",
+    "@nx/webpack": "22.3.3",
+    "@nx/workspace": "22.3.3",
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",
     "@swc/helpers": "~0.5.11",
@@ -57,9 +65,9 @@
     "jest-util": "^30.0.2",
     "jsonc-eslint-parser": "^2.1.0",
     "lint-staged": "^16.2.7",
-    "mint": "^4.2.207",
-    "nx": "22.2.3",
+    "nx": "22.3.3",
     "prettier": "^2.6.2",
+    "snyk": "^1.1301.2",
     "ts-jest": "^29.4.0",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",
@@ -67,6 +75,13 @@
     "typescript-eslint": "^8.40.0",
     "verdaccio": "^6.0.5",
     "webpack-cli": "^5.1.4"
+  },
+  "resolutions": {
+    "body-parser": "^2.2.1",
+    "js-yaml": "^4.1.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "test-exclude": "^7.0.1"
   },
   "workspaces": [
     "apps/*",

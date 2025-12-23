@@ -33,7 +33,7 @@ import {
 import { BundlerCache, createCacheKey, hashContent } from './cache';
 import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
 import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
-import { escapeHtml } from '../utils';
+import { escapeHtml } from '@frontmcp/uipack/utils';
 import type { ContentType } from '../universal/types';
 import { detectContentType as detectUniversalContentType } from '../universal/types';
 import {

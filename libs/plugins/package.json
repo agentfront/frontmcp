@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "FrontMCP plugins to extend the SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -34,10 +34,21 @@
   },
   "dependencies": {
     "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "0.6.0",
+    "@frontmcp/sdk": "0.6.1",
     "enclave-vm": "^1.0.3",
     "vectoriadb": "^2.0.1",
     "zod": "^4.0.0",
-    "@modelcontextprotocol/sdk": "1.24.3"
+    "@modelcontextprotocol/sdk": "1.25.1"
+  },
+  "devDependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "@vercel/kv": "^2.0.0 || ^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vercel/kv": {
+      "optional": true
+    }
   }
 }

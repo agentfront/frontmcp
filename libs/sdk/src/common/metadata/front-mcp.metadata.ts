@@ -14,6 +14,8 @@ import {
   AuthOptionsInput,
   RedisOptionsInput,
   redisOptionsSchema,
+  PubsubOptionsInput,
+  pubsubOptionsSchema,
   TransportOptionsInput,
   transportOptionsSchema,
 } from '../types';
@@ -34,10 +36,18 @@ export interface FrontMcpBaseMetadata {
   serve?: boolean; // default to true
 
   /**
-   * Shared Redis configuration
-   * Used by transport persistence and auth token storage
+   * Shared storage configuration
+   * Used by transport persistence and auth token storage.
+   * Supports both Redis and Vercel KV providers.
    */
   redis?: RedisOptionsInput;
+
+  /**
+   * Pub/Sub configuration (Redis-only)
+   * Required for resource subscriptions when using Vercel KV for sessions.
+   * Falls back to `redis` config if not specified and redis is configured with Redis provider.
+   */
+  pubsub?: PubsubOptionsInput;
 
   /**
    * Transport and session lifecycle configuration
@@ -78,6 +88,7 @@ export const frontMcpBaseSchema = z.object({
   serve: z.boolean().optional().default(true),
   http: httpOptionsSchema.optional(),
   redis: redisOptionsSchema.optional(),
+  pubsub: pubsubOptionsSchema.optional(),
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   session: sessionOptionsSchema.optional(), // @deprecated - kept for backward compatibility
   logging: loggingOptionsSchema.optional(),

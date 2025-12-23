@@ -2,6 +2,7 @@
 export * from './transport-session.types';
 export { TransportSessionManager, InMemorySessionStore } from './transport-session.manager';
 export { RedisSessionStore } from './redis-session.store';
+export { VercelKvSessionStore } from './vercel-kv-session.store';
 
 // Authorization store for OAuth flows
 export * from './authorization.store';

@@ -147,12 +147,12 @@ ui: {
 
 When `servingMode: 'auto'` (default), FrontMCP automatically selects the delivery method based on the client:
 
-| Platform          | Effective Mode | Response Format                             |
-| ----------------- | -------------- | ------------------------------------------- |
-| OpenAI / ext-apps | `inline`       | HTML in `_meta['ui/html']`                  |
-| Claude            | `inline`       | Dual-payload (JSON + markdown-wrapped HTML) |
-| Cursor            | `inline`       | HTML in `_meta['ui/html']`                  |
-| Gemini / Unknown  | (skipped)      | JSON only                                   |
+| Platform | Effective Mode | Response Format |
+|----------|---------------|-----------------|
+| OpenAI / ext-apps | `inline` | HTML in `_meta['ui/html']` |
+| Claude | `inline` | Dual-payload (JSON + markdown-wrapped HTML) |
+| Cursor | `inline` | HTML in `_meta['ui/html']` |
+| Gemini / Unknown | (skipped) | JSON only |
 
 <Warning>
 If `'auto'` mode detects an unsupported client, UI rendering is skipped entirely. The tool returns JSON-only data to avoid broken widget experiences.
@@ -162,13 +162,13 @@ If `'auto'` mode detects an unsupported client, UI rendering is skipped entirely
 
 Customize the text shown before HTML in dual-payload responses (Claude):
 
-````typescript
+```typescript
 ui: {
   template: WeatherWidget,
   htmlResponsePrefix: 'Here is the weather dashboard',
 }
 // Claude output: "Here is the weather dashboard:\n\n```html\n<!DOCTYPE html>...\n```"
-````
+```
 
 Default prefix is `'Here is the visual result'`.
 
@@ -188,7 +188,7 @@ ui: {
 Register components for MDX templates:
 
 ```typescript
-import { card, badge } from '@frontmcp/ui';
+import { card, badge } from '@frontmcp/ui/components';
 
 ui: {
   template: `# {output.title}\n<Card>{output.content}</Card>`,
@@ -218,7 +218,7 @@ ui: {
 
 ```typescript
 import { Tool, ToolContext } from '@frontmcp/sdk';
-import { card, badge, button, descriptionList } from '@frontmcp/ui';
+import { card, badge, button, descriptionList } from '@frontmcp/ui/components';
 import { z } from 'zod';
 
 const inputSchema = {
@@ -347,7 +347,7 @@ Use Zod schema inference for typed templates:
 
 ```typescript
 import { z } from 'zod';
-import { TemplateContext } from '@frontmcp/ui';
+import type { TemplateContext } from '@frontmcp/uipack/types';
 
 const inputSchema = {
   userId: z.string(),

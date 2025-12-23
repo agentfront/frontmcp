@@ -29,8 +29,8 @@ export default class CacheRedisProvider implements CacheStoreInterface {
     this.client.on('error', (err) => console.error('[Redis] Error:', err));
   }
 
-  /** Set any value (auto-stringifies objects) */
-  async setValue(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  /** Set a value (auto-stringifies objects) */
+  async setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     const strValue = typeof value === 'string' ? value : JSON.stringify(value);
     if (ttlSeconds && ttlSeconds > 0) {
       await this.client.set(key, strValue, 'EX', ttlSeconds);
@@ -40,7 +40,7 @@ export default class CacheRedisProvider implements CacheStoreInterface {
   }
 
   /** Get a value and automatically parse JSON if possible */
-  async getValue<T = any>(key: string, defaultValue?: T): Promise<T | undefined> {
+  async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     const raw = await this.client.get(key);
     if (raw === null) return defaultValue;
 

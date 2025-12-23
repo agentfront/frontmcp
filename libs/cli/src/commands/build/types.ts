@@ -15,6 +15,25 @@ export type AdapterTemplate = {
   getEntryTemplate: (mainModulePath: string) => string;
 
   /**
+   * Generate the serverless setup file content.
+   * This file is imported first to set environment variables before decorators run.
+   * @returns The content for serverless-setup.js, or undefined if not needed
+   */
+  getSetupTemplate?: () => string;
+
+  /**
+   * Whether to bundle the output with rspack.
+   * Recommended for serverless deployments to avoid ESM/CJS issues.
+   */
+  shouldBundle?: boolean;
+
+  /**
+   * Output filename for the bundled file (e.g., 'handler.cjs').
+   * Only used when shouldBundle is true.
+   */
+  bundleOutput?: string;
+
+  /**
    * Generate the deployment platform config file content.
    * @returns Object (for JSON) or string (for TOML/YAML)
    */

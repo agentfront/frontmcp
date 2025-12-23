@@ -1,7 +1,18 @@
-import { DynamicPlugin, FlowCtxOf, Plugin, ProviderType, ToolHook } from '@frontmcp/sdk';
+import {
+  DynamicPlugin,
+  FlowCtxOf,
+  Plugin,
+  ProviderType,
+  ToolHook,
+  FrontMcpConfig,
+  FrontMcpConfigType,
+  getGlobalStoreConfig,
+  isVercelKvProvider,
+} from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
-import { CachePluginOptions } from './cache.types';
+import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
+import { CachePluginOptions, GlobalStoreCachePluginOptions } from './cache.types';
 import { CacheStoreToken } from './cache.symbol';
 
 @Plugin({
@@ -21,6 +32,39 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   static override dynamicProviders = (options: CachePluginOptions) => {
     const providers: ProviderType[] = [];
     switch (options.type) {
+      case 'global-store':
+        // Use inject/useFactory to access FrontMcpConfig at runtime
+        providers.push({
+          name: 'cache:global-store',
+          provide: CacheStoreToken,
+          inject: () => [FrontMcpConfig] as const,
+          useFactory: (config: FrontMcpConfigType) => {
+            const storeConfig = getGlobalStoreConfig('CachePlugin', config);
+            const globalOptions = options as GlobalStoreCachePluginOptions;
+
+            if (isVercelKvProvider(storeConfig)) {
+              return new CacheVercelKvProvider({
+                url: storeConfig.url,
+                token: storeConfig.token,
+                keyPrefix: storeConfig.keyPrefix,
+                defaultTTL: globalOptions.defaultTTL,
+              });
+            }
+
+            // Redis provider (including legacy format without provider field)
+            return new CacheRedisProvider({
+              type: 'redis',
+              config: {
+                host: storeConfig.host ?? 'localhost',
+                port: storeConfig.port ?? 6379,
+                password: storeConfig.password,
+                db: storeConfig.db,
+              },
+              defaultTTL: globalOptions.defaultTTL,
+            });
+          },
+        });
+        break;
       case 'redis':
       case 'redis-client':
         providers.push({
@@ -108,15 +152,15 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   }
 }
 
-function hashObject(obj: any) {
+function hashObject(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).sort();
   return keys.reduce((acc, key) => {
     acc += key + ':';
     const val = obj[key];
     if (typeof val === 'object' && val !== null) {
-      acc += hashObject(val);
+      acc += hashObject(val as Record<string, unknown>);
     } else {
-      acc += val;
+      acc += String(val);
     }
     acc += ';';
     return acc;

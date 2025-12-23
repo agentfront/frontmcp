@@ -135,8 +135,5 @@ export interface AlertProps {
   children: ReactNode;
 }
 
-// ============================================
-// Re-export schema types for convenience
-// ============================================
-
-export type { CardOptions, CardVariant, CardSize, BadgeOptions, BadgeVariant, BadgeSize, ButtonOptions, AlertOptions };
+// Note: Schema types (CardOptions, CardVariant, CardSize, etc.) are exported from ../components
+// Import from '@frontmcp/ui/components' or '@frontmcp/ui' for these types

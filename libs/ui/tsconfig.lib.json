@@ -5,7 +5,25 @@
     "rootDir": "./src",
     "declaration": true,
     "declarationMap": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@frontmcp/uipack": ["libs/uipack/dist/index.d.ts"],
+      "@frontmcp/uipack/utils": ["libs/uipack/dist/utils/index.d.ts"],
+      "@frontmcp/uipack/types": ["libs/uipack/dist/types/index.d.ts"],
+      "@frontmcp/uipack/runtime": ["libs/uipack/dist/runtime/index.d.ts"],
+      "@frontmcp/uipack/renderers": ["libs/uipack/dist/renderers/index.d.ts"],
+      "@frontmcp/uipack/dependency": ["libs/uipack/dist/dependency/index.d.ts"],
+      "@frontmcp/uipack/theme": ["libs/uipack/dist/theme/index.d.ts"],
+      "@frontmcp/uipack/build": ["libs/uipack/dist/build/index.d.ts"],
+      "@frontmcp/uipack/bundler": ["libs/uipack/dist/bundler/index.d.ts"],
+      "@frontmcp/uipack/validation": ["libs/uipack/dist/validation/index.d.ts"],
+      "@frontmcp/uipack/registry": ["libs/uipack/dist/registry/index.d.ts"],
+      "@frontmcp/uipack/styles": ["libs/uipack/dist/styles/index.d.ts"],
+      "@frontmcp/uipack/handlebars": ["libs/uipack/dist/handlebars/index.d.ts"],
+      "@frontmcp/uipack/typings": ["libs/uipack/dist/typings/index.d.ts"],
+      "@frontmcp/uipack/adapters": ["libs/uipack/dist/adapters/index.d.ts"],
+      "@frontmcp/uipack/bridge-runtime": ["libs/uipack/dist/bridge-runtime/index.d.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["jest.config.ts", "src/**/*.spec.ts", "src/**/*.test.ts", "src/**/__tests__/**"]

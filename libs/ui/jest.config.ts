@@ -11,17 +11,19 @@ module.exports = {
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
-    '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
+    '^.+\\.[tj]sx?$': ['@swc/jest', swcJestConfig],
   },
-  moduleFileExtensions: ['ts', 'js', 'html'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'html'],
   coverageDirectory: 'test-output/jest/coverage',
-  // Setup file for web component tests - mocks HTMLElement before imports
-  setupFilesAfterEnv: ['<rootDir>/src/web-components/__tests__/setup.ts'],
-  // Exclude web component tests from regular run - they need special setup
   testPathIgnorePatterns: [
     '/node_modules/',
-    // Web component tests are temporarily excluded - they need jsdom or browser environment
+    // Web component tests need jsdom or browser environment
     '/src/web-components/core/base-element.test.ts',
     '/src/web-components/elements/elements.test.ts',
   ],
+  // Map @frontmcp/uipack imports to the built dist for tests
+  moduleNameMapper: {
+    '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',
+    '^@frontmcp/uipack/(.*)$': '<rootDir>/../uipack/dist/$1/index.js',
+  },
 };

@@ -4,6 +4,7 @@ import {
   InvalidInputError,
   InvalidOutputError,
   ToolExecutionError,
+  GlobalConfigNotFoundError,
   isPublicError,
   formatMcpErrorResponse,
 } from '../mcp.error';
@@ -37,6 +38,27 @@ describe('MCP Error Handling', () => {
 
       expect(devResponse.content[0].text).toBe('Tool "my_tool" not found');
       expect(prodResponse.content[0].text).toBe('Tool "my_tool" not found');
+    });
+  });
+
+  describe('Configuration Errors', () => {
+    it('should create GlobalConfigNotFoundError with correct properties', () => {
+      const error = new GlobalConfigNotFoundError('CachePlugin', 'redis');
+
+      expect(error.isPublic).toBe(true);
+      expect(error.code).toBe('GLOBAL_CONFIG_NOT_FOUND');
+      expect(error.statusCode).toBe(500);
+      expect(error.pluginName).toBe('CachePlugin');
+      expect(error.configKey).toBe('redis');
+      expect(error.message).toBe(
+        'Plugin "CachePlugin" requires global "redis" configuration. Add "redis" to your @FrontMcp decorator options.',
+      );
+    });
+
+    it('should create GlobalConfigNotFoundError with unique error ID', () => {
+      const error = new GlobalConfigNotFoundError('MyPlugin', 'someConfig');
+
+      expect(error.errorId).toMatch(/^err_[a-f0-9]{16}$/);
     });
   });
 

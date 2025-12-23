@@ -66,7 +66,7 @@ With hydration, you can use full React features:
 
 ```tsx title="src/widgets/counter.tsx"
 import { useState } from 'react';
-import { TemplateContext } from '@frontmcp/ui';
+import type { TemplateContext } from '@frontmcp/uipack/types';
 
 interface CounterOutput {
   initialCount: number;
@@ -173,7 +173,7 @@ export function ToolInvoker() {
 
 ```tsx title="src/widgets/hooks/use-mcp-bridge.ts"
 import { useEffect, useState, useCallback } from 'react';
-import type { MCPBridge, HostContext } from '@frontmcp/ui';
+import type { MCPBridge, HostContext } from '@frontmcp/uipack/runtime';
 
 export function useMcpBridge() {
   const [bridge, setBridge] = useState<MCPBridge | null>(null);
@@ -279,7 +279,7 @@ ui: {
 For simpler interactions, consider HTMX instead:
 
 ```typescript
-import { button } from '@frontmcp/ui';
+import { button } from '@frontmcp/ui/components';
 
 // No hydration needed
 const html = button('Load More', {

@@ -1,5 +1,5 @@
 import { baseLayout, createLayoutBuilder, escapeHtml } from './base';
-import { OPENAI_PLATFORM, CLAUDE_PLATFORM } from '../theme';
+import { OPENAI_PLATFORM, CLAUDE_PLATFORM } from '@frontmcp/uipack/theme';
 
 describe('Base Layout Module', () => {
   describe('escapeHtml', () => {

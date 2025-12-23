@@ -6,9 +6,9 @@ import { toJSONSchema } from 'zod/v4';
 import { ListToolsRequestSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidMethodError, InvalidInputError } from '../../errors';
 import { hasUIConfig } from '../ui';
-import { buildCDNInfoForUIType, type UIType } from '@frontmcp/ui/build';
-import { isUIType } from '@frontmcp/ui/types';
-import type { AIPlatformType } from '@frontmcp/ui/adapters';
+import { buildCDNInfoForUIType, type UIType } from '@frontmcp/uipack/build';
+import { isUIType } from '@frontmcp/uipack/types';
+import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 

@@ -36,7 +36,13 @@
 
 import React from 'react';
 import type { ReactNode, ReactElement } from 'react';
-import { type CardVariant, type CardSize, getCardVariantClasses, getCardSizeClasses, cn } from '../styles/variants';
+import {
+  type CardVariant,
+  type CardSize,
+  getCardVariantClasses,
+  getCardSizeClasses,
+  cn,
+} from '@frontmcp/uipack/styles';
 import { renderToString, renderToStringSync } from '../render/prerender';
 
 /**
@@ -181,7 +187,6 @@ export function renderCardSync(props: CardRenderProps): string {
   return renderToStringSync(element);
 }
 
-// Re-export types
-export type { CardVariant, CardSize };
+// Note: CardVariant and CardSize types are exported from '../components'
 
 export default Card;

@@ -8,8 +8,8 @@
  * Uses react-dom/server for SSR to HTML.
  */
 
-import type { TemplateContext } from '../runtime/types';
-import type { PlatformCapabilities } from '../theme';
+import type { TemplateContext } from '@frontmcp/uipack/runtime';
+import type { PlatformCapabilities } from '@frontmcp/uipack/theme';
 import type {
   UIRenderer,
   TranspileResult,
@@ -17,11 +17,15 @@ import type {
   RenderOptions,
   RuntimeScripts,
   ToolUIProps,
-} from './types';
-import { isReactComponent, containsJsx } from './utils/detect';
-import { hashString } from './utils/hash';
-import { transpileJsx, executeTranspiledCode } from './utils/transpiler';
-import { transpileCache } from './cache';
+} from '@frontmcp/uipack/renderers';
+import {
+  isReactComponent,
+  containsJsx,
+  hashString,
+  transpileJsx,
+  executeTranspiledCode,
+  transpileCache,
+} from '@frontmcp/uipack/renderers';
 
 /**
  * Types this renderer can handle.

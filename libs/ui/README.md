@@ -1,438 +1,216 @@
 # @frontmcp/ui
 
-Platform-agnostic HTML component library for building authentication and authorization UIs across LLM platforms.
+FrontMCP's platform-aware UI toolkit for building HTML widgets, web components, and React surfaces that run inside MCP transports. It renders plain strings by default (perfect for agents and dual-payload responses) and exposes React renderers, web components, and bundling helpers so you can reuse the same design system everywhere.
 
-## Features
+## Package Split
 
-- **Pure HTML Output** - No React, Vue, or JSX dependencies. Components return HTML strings.
-- **Zod Validation** - All component options validated at runtime with detailed error feedback.
-- **Platform-Aware** - Optimized for OpenAI, Claude, Gemini, and ngrok platforms.
-- **HTMX Support** - Built-in support for dynamic interactions without JavaScript.
-- **Theme System** - Customizable themes with CDN URL configuration.
-- **GitHub/OpenAI Theme** - Default gray-black aesthetic inspired by GitHub and OpenAI.
+| Package            | Purpose                                                         | React Required        |
+| ------------------ | --------------------------------------------------------------- | --------------------- |
+| `@frontmcp/ui`     | HTML components, layouts, widgets, React components/hooks       | Yes (peer dependency) |
+| `@frontmcp/uipack` | Themes, build/render pipelines, runtime helpers, template types | No                    |
+
+Use `@frontmcp/ui` for components and renderers. Pair it with `@frontmcp/uipack` for theming, build-time tooling, validation, and platform adapters.
 
 ## Installation
 
 ```bash
-npm install @frontmcp/ui
+npm install @frontmcp/ui @frontmcp/uipack react react-dom
 # or
-yarn add @frontmcp/ui
+yarn add @frontmcp/ui @frontmcp/uipack react react-dom
 ```
+
+## Features
+
+- **HTML-first components** – Buttons, cards, badges, alerts, forms, tables, layouts, and widgets that return ready-to-stream HTML strings.
+- **React + SSR** – Optional React components, hooks, and renderers so you can hydrate widgets when the host allows it.
+- **MCP Bridge helpers** – Generate bridge bundles, wrap tool responses, and expose follow-up actions from inside widgets.
+- **Web components** – Register `<fmcp-button>`, `<fmcp-card>`, and friends for projects that prefer custom elements.
+- **Validation + error boxes** – Every component validates its options with Zod and renders a friendly error when something is misconfigured.
+- **Works with uipack** – Import themes, runtime helpers, adapters, and build APIs from `@frontmcp/uipack` to keep HTML and React outputs in sync.
 
 ## Quick Start
 
-```typescript
-import { button, card, baseLayout, DEFAULT_THEME } from '@frontmcp/ui';
+### HTML components
 
-// Create a simple button
-const btn = button('Click Me', { variant: 'primary', size: 'md' });
+```ts
+import { card, button } from '@frontmcp/ui/components';
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
 
-// Create a card with content
-const content = card(
+const widget = card(
   `
-  <h2>Welcome</h2>
-  <p>Hello, world!</p>
+  <h2 class="text-lg font-semibold">CRM Access</h2>
+  <p>Grant the orchestrator access to customer data.</p>
+  ${button('Approve', { variant: 'primary', type: 'submit' })}
 `,
-  { variant: 'default' },
+  { variant: 'elevated' },
 );
 
-// Wrap in a page layout
-const page = baseLayout(content, {
-  title: 'My Page',
+const html = baseLayout(widget, {
+  title: 'Authorize CRM',
+  description: 'Let the agent read CRM data for this session.',
   theme: DEFAULT_THEME,
+  width: 'md',
+  align: 'center',
+  scripts: { tailwind: true, htmx: true },
 });
 ```
 
-## Components
+### React components
 
-### Button
+```tsx
+import { Button, Card, Alert, Badge } from '@frontmcp/ui/react';
 
-```typescript
-import { button, primaryButton, dangerButton, buttonGroup } from '@frontmcp/ui';
-
-// Basic button
-button('Submit');
-
-// Button variants
-button('Save', { variant: 'secondary' });
-button('Delete', { variant: 'danger' });
-button('Cancel', { variant: 'outline' });
-
-// Shorthand functions
-primaryButton('Submit');
-dangerButton('Delete');
-
-// Button with HTMX
-button('Load More', {
-  htmx: {
-    get: '/api/items?page=2',
-    target: '#items-list',
-    swap: 'beforeend',
-  },
-});
-
-// Button group
-buttonGroup([button('Edit', { variant: 'outline' }), button('Delete', { variant: 'danger' })], { attached: true });
-```
-
-### Card
-
-```typescript
-import { card, cardGroup } from '@frontmcp/ui';
-
-// Basic card
-card('<p>Card content</p>');
-
-// Card with title and footer
-card('<p>Content</p>', {
-  title: 'Card Title',
-  subtitle: 'Optional subtitle',
-  footer: '<button>Action</button>',
-  variant: 'elevated',
-});
-
-// Card group
-cardGroup([card('Card 1', { title: 'First' }), card('Card 2', { title: 'Second' })], { columns: 2 });
-```
-
-### Form Components
-
-```typescript
-import { form, input, select, textarea, checkbox, radioGroup, formRow, formActions } from '@frontmcp/ui';
-
-// Complete form
-form(
-  `
-  ${input({ name: 'email', type: 'email', label: 'Email Address', required: true })}
-  ${input({ name: 'password', type: 'password', label: 'Password', required: true })}
-  ${checkbox({ name: 'remember', label: 'Remember me' })}
-  ${formActions(button('Sign In', { type: 'submit' }))}
-`,
-  {
-    action: '/login',
-    method: 'post',
-    htmx: { post: '/api/login', target: '#result' },
-  },
-);
-
-// Select dropdown
-select({
-  name: 'country',
-  label: 'Country',
-  options: [
-    { value: 'us', label: 'United States' },
-    { value: 'uk', label: 'United Kingdom' },
-  ],
-});
-
-// Radio group
-radioGroup({
-  name: 'plan',
-  label: 'Select Plan',
-  options: [
-    { value: 'free', label: 'Free' },
-    { value: 'pro', label: 'Pro' },
-  ],
-});
-```
-
-### Alert & Badge
-
-```typescript
-import { alert, successAlert, warningAlert, badge, activeBadge } from '@frontmcp/ui';
-
-// Alerts
-alert('Information message', { variant: 'info' });
-successAlert('Operation completed!');
-warningAlert('Please review your input.');
-
-// Badges
-badge('New');
-badge('Active', { variant: 'success' });
-activeBadge(); // Green "Active" badge
-```
-
-### Modal & Drawer
-
-```typescript
-import { modal, modalTrigger, drawer, confirmModal } from '@frontmcp/ui';
-
-// Basic modal
-modal('<p>Modal content</p>', {
-  id: 'my-modal',
-  title: 'Modal Title',
-  size: 'md',
-});
-
-// Modal trigger button
-modalTrigger({ targetId: 'my-modal', text: 'Open Modal' });
-
-// Confirmation modal
-confirmModal({
-  id: 'delete-confirm',
-  title: 'Confirm Delete',
-  message: 'Are you sure you want to delete this item?',
-  variant: 'danger',
-  onConfirm: { delete: '/api/items/123' },
-});
-
-// Drawer
-drawer('<nav>Navigation</nav>', {
-  id: 'nav-drawer',
-  position: 'left',
-  title: 'Menu',
-});
-```
-
-### Table & Pagination
-
-```typescript
-import { table, pagination } from '@frontmcp/ui';
-
-// Data table
-const data = [
-  { id: 1, name: 'John', email: 'john@example.com' },
-  { id: 2, name: 'Jane', email: 'jane@example.com' },
-];
-
-table(data, {
-  columns: [
-    { key: 'id', header: 'ID', width: '60px' },
-    { key: 'name', header: 'Name', sortable: true },
-    { key: 'email', header: 'Email' },
-  ],
-  selectable: true,
-  hoverable: true,
-});
-
-// Pagination
-pagination({
-  page: 1,
-  totalPages: 10,
-  htmx: { get: '/api/items?page={page}', target: '#table' },
-});
-```
-
-## Theme System
-
-### Using the Default Theme
-
-```typescript
-import { DEFAULT_THEME, GITHUB_OPENAI_THEME, baseLayout } from '@frontmcp/ui';
-
-// DEFAULT_THEME is the GitHub/OpenAI gray-black theme
-const page = baseLayout(content, {
-  theme: DEFAULT_THEME,
-});
-```
-
-### Creating Custom Themes
-
-```typescript
-import { createTheme } from '@frontmcp/ui';
-
-const myTheme = createTheme({
-  name: 'my-brand',
-  colors: {
-    semantic: {
-      primary: '#0969da',
-      secondary: '#8250df',
-      accent: '#bf8700',
-    },
-  },
-  typography: {
-    families: {
-      sans: '"Roboto", system-ui, sans-serif',
-    },
-  },
-  cdn: {
-    fonts: {
-      stylesheets: ['https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap'],
-    },
-  },
-});
-```
-
-### Theme CDN Configuration
-
-Customize external resource URLs for compliance or self-hosting:
-
-```typescript
-const theme = createTheme({
-  cdn: {
-    fonts: {
-      preconnect: ['https://fonts.example.com'],
-      stylesheets: ['https://fonts.example.com/css/roboto.css'],
-    },
-    scripts: {
-      tailwind: 'https://cdn.example.com/tailwind.js',
-      htmx: {
-        url: 'https://cdn.example.com/htmx.min.js',
-        integrity: 'sha512-...',
-      },
-    },
-    icons: {
-      script: { url: 'https://cdn.example.com/lucide.min.js' },
-    },
-  },
-});
-```
-
-## Platform Support
-
-### Platform Detection
-
-```typescript
-import { getPlatform, canUseCdn, needsInlineScripts } from '@frontmcp/ui';
-
-const platform = getPlatform('openai');
-
-if (canUseCdn(platform)) {
-  // Use external CDN scripts
-} else if (needsInlineScripts(platform)) {
-  // Embed scripts inline for blocked-network platforms
+function MyWidget() {
+  return (
+    <Card title="Welcome">
+      <Alert variant="info">Hello, world!</Alert>
+      <Button variant="primary" onClick={handleClick}>
+        Get Started
+      </Button>
+      <Badge variant="success">Active</Badge>
+    </Card>
+  );
 }
 ```
 
-### Building for Specific Platforms
+### MCP Bridge hooks
 
-```typescript
-import { buildCdnScriptsFromTheme, fetchAndCacheScriptsFromTheme, DEFAULT_THEME } from '@frontmcp/ui';
+```tsx
+import { useMcpBridge, useCallTool, useToolInput, useToolOutput } from '@frontmcp/ui/react/hooks';
 
-// For OpenAI, Gemini, ngrok (open network)
-const scripts = buildCdnScriptsFromTheme(DEFAULT_THEME);
+function ToolWidget() {
+  const bridge = useMcpBridge();
+  const { call, loading, error } = useCallTool();
+  const input = useToolInput();
+  const output = useToolOutput();
 
-// For Claude Artifacts (blocked network)
-await fetchAndCacheScriptsFromTheme(DEFAULT_THEME);
-const inlineScripts = buildCdnScriptsFromTheme(DEFAULT_THEME, { inline: true });
-```
+  const handleClick = async () => {
+    await call('my-tool', { data: input.query });
+  };
 
-## Validation
-
-All components validate their options using Zod schemas. Invalid inputs render an error box instead of crashing:
-
-```typescript
-// Valid - renders button
-button('Click', { variant: 'primary' });
-
-// Invalid - renders error box showing "button" component and "variant" param
-button('Click', { variant: 'invalid' as any });
-
-// Unknown properties rejected (strict mode)
-button('Click', { unknownProp: true } as any);
-```
-
-### Using Schemas Directly
-
-```typescript
-import { ButtonOptionsSchema } from '@frontmcp/ui';
-
-// Validate before passing to component
-const result = ButtonOptionsSchema.safeParse(userInput);
-if (result.success) {
-  button('Click', result.data);
-} else {
-  console.error('Validation errors:', result.error.issues);
+  return (
+    <div>
+      <p>Query: {input.query}</p>
+      {loading && <p>Loading...</p>}
+      {error && <p>Error: {error.message}</p>}
+      {output && <pre>{JSON.stringify(output, null, 2)}</pre>}
+      <button onClick={handleClick}>Run Tool</button>
+    </div>
+  );
 }
 ```
 
-## Layouts
+### Universal app shell
 
-### Base Layout
+```tsx
+import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
 
-```typescript
-import { baseLayout } from '@frontmcp/ui';
+function App() {
+  return (
+    <FrontMCPProvider>
+      <UniversalApp>
+        <ToolWidget />
+      </UniversalApp>
+    </FrontMCPProvider>
+  );
+}
+```
 
-const html = baseLayout(content, {
-  title: 'Page Title',
-  description: 'Page description for SEO',
-  theme: DEFAULT_THEME,
-  width: 'md', // 'sm' | 'md' | 'lg' | 'xl' | 'full'
-  align: 'center', // 'left' | 'center' | 'right'
-  scripts: { htmx: true, tailwind: true },
+## Entry points
+
+| Path                          | Exports                                            |
+| ----------------------------- | -------------------------------------------------- |
+| `@frontmcp/ui/components`     | HTML components, helpers, error boxes              |
+| `@frontmcp/ui/layouts`        | Base layouts, consent/error templates              |
+| `@frontmcp/ui/pages`          | High-level page templates                          |
+| `@frontmcp/ui/widgets`        | OpenAI App SDK-style widgets                       |
+| `@frontmcp/ui/react`          | React components                                   |
+| `@frontmcp/ui/react/hooks`    | MCP Bridge React hooks                             |
+| `@frontmcp/ui/renderers`      | ReactRenderer + adapter helpers                    |
+| `@frontmcp/ui/render`         | React 19 static rendering utilities                |
+| `@frontmcp/ui/web-components` | `<fmcp-*>` custom elements                         |
+| `@frontmcp/ui/bridge`         | Bridge registry + adapters                         |
+| `@frontmcp/ui/bundler`        | SSR/component bundler (uses uipack under the hood) |
+
+Use `@frontmcp/uipack/theme`, `@frontmcp/uipack/runtime`, and `@frontmcp/uipack/build` for theming, runtime helpers, and build-time APIs.
+
+## Server-side rendering
+
+### ReactRenderer (SSR)
+
+```ts
+import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
+
+const html = await reactRenderer.render(MyComponent, {
+  input: { query: 'test' },
+  output: { result: 'data' },
 });
 ```
 
-## Testing Tool UI
+### ReactRendererAdapter (client hydration)
 
-When using `@frontmcp/ui` components in Tool UI templates (React, MDX), you can use `@frontmcp/testing` for E2E validation:
+```ts
+import { ReactRendererAdapter, createReactAdapter } from '@frontmcp/ui/renderers';
 
-```typescript
-import { test, expect, UIAssertions } from '@frontmcp/testing';
-
-test.describe('Tool UI with @frontmcp/ui', () => {
-  test('renders UI components correctly', async ({ mcp }) => {
-    const result = await mcp.tools.call('my-tool', { data: 'test' });
-
-    // Verify HTML is rendered (not fallback)
-    expect(result).toHaveRenderedHtml();
-    expect(result).toHaveProperHtmlStructure();
-
-    // Verify data binding
-    const output = result.json();
-    expect(result).toContainBoundValue(output.data);
-
-    // Security validation
-    expect(result).toBeXssSafe();
-
-    // Extract HTML for additional assertions
-    const html = UIAssertions.assertRenderedUI(result);
-
-    // Verify @frontmcp/ui component classes
-    expect(html).toContain('btn-primary'); // Button class
-    expect(html).toContain('card'); // Card component
-  });
-});
+const adapter = createReactAdapter();
+await adapter.hydrate(targetElement, context);
+await adapter.renderToDOM(content, targetElement, context);
+adapter.destroy(targetElement);
 ```
 
-### UI Matchers
+## SSR bundling
 
-| Matcher                       | Description                                     |
-| ----------------------------- | ----------------------------------------------- |
-| `toHaveRenderedHtml()`        | Checks `_meta['ui/html']` exists, not fallback  |
-| `toContainHtmlElement(tag)`   | Checks HTML contains `<tag>` element            |
-| `toContainBoundValue(value)`  | Checks output value appears in HTML             |
-| `toBeXssSafe()`               | No `<script>`, event handlers, `javascript:`    |
-| `toHaveWidgetMetadata()`      | Has platform metadata                           |
-| `toHaveCssClass(className)`   | Checks for specific CSS class                   |
-| `toNotContainRawContent(str)` | Content is NOT present (for fallback detection) |
-| `toHaveProperHtmlStructure()` | HTML has tags, not escaped text                 |
+```ts
+import { InMemoryBundler, createBundler } from '@frontmcp/ui/bundler';
 
-### UIAssertions Helper
-
-```typescript
-import { UIAssertions } from '@frontmcp/testing';
-
-// Extract HTML from result
-const html = UIAssertions.assertRenderedUI(result);
-
-// Validate data binding
-UIAssertions.assertDataBinding(html, output, ['field1', 'field2']);
-
-// Comprehensive validation
-const html = UIAssertions.assertValidUI(result, ['field1', 'field2']);
+const bundler = createBundler({ cache: true });
+const result = await bundler.bundle('./components/MyWidget.tsx');
 ```
 
-See [@frontmcp/testing documentation](../testing/README.md) for full API reference.
+## Using with @frontmcp/uipack
+
+```ts
+// Theme + scripts
+import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
+
+// Build API & adapters
+import { buildToolUI, buildToolDiscoveryMeta } from '@frontmcp/uipack/build';
+
+// Runtime helpers
+import { wrapToolUI, createTemplateHelpers } from '@frontmcp/uipack/runtime';
+
+// Validation + utils
+import { validateOptions } from '@frontmcp/uipack/validation';
+```
+
+`@frontmcp/uipack` lets you configure themes, register cached widgets, wrap templates with CSP, and emit platform-specific metadata without pulling React into HTML-only projects.
+
+## Peer dependencies
+
+```json
+{
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@frontmcp/uipack": "^0.6.1"
+  }
+}
+```
 
 ## Development
 
-### Building
-
 ```bash
 yarn nx build ui
-```
-
-### Testing
-
-```bash
 yarn nx test ui
 ```
 
-### Test Coverage
+## Related packages
 
-The library maintains 95%+ test coverage across all metrics.
+- [`@frontmcp/uipack`](../uipack/README.md) – React-free themes, runtime helpers, build tooling
+- [`@frontmcp/sdk`](../sdk/README.md) – Core SDK
+- [`@frontmcp/testing`](../testing/README.md) – UI assertions and fixtures
 
 ## License
 
-MIT
+Apache-2.0

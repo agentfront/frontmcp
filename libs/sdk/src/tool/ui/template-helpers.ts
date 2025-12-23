@@ -1,16 +1,18 @@
 /**
  * Template Helpers
  *
- * Re-exports template helper utilities from @frontmcp/ui/runtime.
+ * Re-exports template helper utilities from @frontmcp/ui.
  * Also provides individual helper functions for backwards compatibility.
  *
  * @see {@link https://docs.agentfront.dev/docs/servers/tools#tool-ui | Tool UI Documentation}
  */
 
 import type { TemplateHelpers } from '../../common/metadata/tool-ui.metadata';
+// Import escapeHtml from @frontmcp/uipack/utils - single source of truth (no React needed)
+import { escapeHtml } from '@frontmcp/uipack/utils';
 
-// Re-export createTemplateHelpers from @frontmcp/ui
-export { createTemplateHelpers } from '@frontmcp/ui/runtime';
+// Re-export createTemplateHelpers from @frontmcp/uipack (no React needed)
+export { createTemplateHelpers } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Individual Helper Functions (Backwards Compatibility)
@@ -18,22 +20,10 @@ export { createTemplateHelpers } from '@frontmcp/ui/runtime';
 // These are exported individually for SDK consumers who import them directly.
 // For new code, prefer using createTemplateHelpers() instead.
 
-let idCounter = 0;
+// Re-export escapeHtml for backwards compatibility
+export { escapeHtml };
 
-/**
- * Escape HTML special characters to prevent XSS.
- */
-export function escapeHtml(str: string): string {
-  if (typeof str !== 'string') {
-    return String(str ?? '');
-  }
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+let idCounter = 0;
 
 /**
  * Format a date for display.
@@ -92,7 +82,7 @@ export function jsonEmbed(data: unknown): string {
 
 /**
  * Create a TemplateHelpers object with all helper functions.
- * @deprecated Use createTemplateHelpers from @frontmcp/ui/runtime instead
+ * @deprecated Use createTemplateHelpers from @frontmcp/uipack/runtime instead
  */
 export function createTemplateHelpersLocal(): TemplateHelpers {
   return {
