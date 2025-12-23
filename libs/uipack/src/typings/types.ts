@@ -464,7 +464,8 @@ export interface PackageResolution {
  * Default options for TypeFetcher.
  */
 export const DEFAULT_TYPE_FETCHER_OPTIONS: Required<Omit<TypeFetcherOptions, 'fetch'>> = {
-  maxDepth: 2,
+  allowedPackages: ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'],
+  maxDepth: 4,
   timeout: 10000,
   maxConcurrency: 5,
   cdnBaseUrl: 'https://esm.sh',

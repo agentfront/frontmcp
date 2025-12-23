@@ -30,7 +30,6 @@ describe('Theme Module Exports', () => {
       expect(themeModule.OPENAI_PLATFORM).toBeDefined();
       expect(themeModule.CLAUDE_PLATFORM).toBeDefined();
       expect(themeModule.GEMINI_PLATFORM).toBeDefined();
-      expect(themeModule.NGROK_PLATFORM).toBeDefined();
       expect(themeModule.CUSTOM_PLATFORM).toBeDefined();
       expect(themeModule.PLATFORM_PRESETS).toBeDefined();
     });

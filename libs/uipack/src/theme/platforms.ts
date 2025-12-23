@@ -18,7 +18,7 @@
 /**
  * Known LLM platform identifiers
  */
-export type PlatformId = 'openai' | 'claude' | 'gemini' | 'ngrok' | 'custom';
+export type PlatformId = 'openai' | 'claude' | 'gemini' | 'custom';
 
 /**
  * Network access mode for the platform
@@ -124,29 +124,12 @@ export const GEMINI_PLATFORM: PlatformCapabilities = {
   id: 'gemini',
   name: 'Gemini',
   supportsWidgets: false,
-  supportsTailwind: true,
+  supportsTailwind: false,
   supportsHtmx: false,
   networkMode: 'limited',
   scriptStrategy: 'inline',
   options: {
     fallback: 'markdown', // Fall back to markdown rendering
-  },
-};
-
-/**
- * Ngrok Platform Configuration
- * Bridge/tunnel - essential for HTMX
- */
-export const NGROK_PLATFORM: PlatformCapabilities = {
-  id: 'ngrok',
-  name: 'Ngrok Tunnel',
-  supportsWidgets: true,
-  supportsTailwind: true,
-  supportsHtmx: true,
-  networkMode: 'full',
-  scriptStrategy: 'cdn',
-  options: {
-    tunnelRequired: true,
   },
 };
 
@@ -170,7 +153,6 @@ export const PLATFORM_PRESETS: Record<PlatformId, PlatformCapabilities> = {
   openai: OPENAI_PLATFORM,
   claude: CLAUDE_PLATFORM,
   gemini: GEMINI_PLATFORM,
-  ngrok: NGROK_PLATFORM,
   custom: CUSTOM_PLATFORM,
 };
 

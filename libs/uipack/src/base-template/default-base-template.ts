@@ -11,7 +11,6 @@
  * - OpenAI Apps SDK (window.openai.toolOutput)
  * - Claude Artifacts
  * - Custom hosts using MCP protocol
- * - ngrok/iframe scenarios
  */
 
 import { DEFAULT_THEME, type ThemeConfig } from '../theme';

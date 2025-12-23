@@ -2,7 +2,6 @@ import {
   OPENAI_PLATFORM,
   CLAUDE_PLATFORM,
   GEMINI_PLATFORM,
-  NGROK_PLATFORM,
   CUSTOM_PLATFORM,
   getPlatform,
   createPlatform,
@@ -51,16 +50,6 @@ describe('Platform System', () => {
       });
     });
 
-    describe('NGROK_PLATFORM', () => {
-      it('should have full network support', () => {
-        expect(NGROK_PLATFORM.id).toBe('ngrok');
-        expect(NGROK_PLATFORM.supportsWidgets).toBe(true);
-        expect(NGROK_PLATFORM.supportsTailwind).toBe(true);
-        expect(NGROK_PLATFORM.supportsHtmx).toBe(true);
-        expect(NGROK_PLATFORM.networkMode).toBe('full');
-      });
-    });
-
     describe('CUSTOM_PLATFORM', () => {
       it('should have default full capabilities', () => {
         expect(CUSTOM_PLATFORM.id).toBe('custom');
@@ -85,11 +74,6 @@ describe('Platform System', () => {
     it('should return Gemini platform', () => {
       const platform = getPlatform('gemini');
       expect(platform).toEqual(GEMINI_PLATFORM);
-    });
-
-    it('should return Ngrok platform', () => {
-      const platform = getPlatform('ngrok');
-      expect(platform).toEqual(NGROK_PLATFORM);
     });
 
     it('should return Custom platform for custom id', () => {
@@ -124,7 +108,6 @@ describe('Platform System', () => {
   describe('canUseCdn', () => {
     it('should return true for platforms with full network and cdn strategy', () => {
       expect(canUseCdn(OPENAI_PLATFORM)).toBe(true);
-      expect(canUseCdn(NGROK_PLATFORM)).toBe(true);
     });
 
     it('should return false for platforms with blocked network', () => {

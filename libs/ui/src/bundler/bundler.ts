@@ -592,11 +592,14 @@ export class InMemoryBundler {
 
     if (isUniversal) {
       // Universal mode: use cached runtime
+      // Include bridge for dynamic/hybrid modes to detect platform data (OpenAI, ext-apps, etc.)
+      const shouldIncludeBridge = opts.buildMode === 'dynamic' || opts.buildMode === 'hybrid';
       const cachedRuntime = getCachedRuntime({
         cdnType,
         includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
         includeMdx: opts.includeMdx || contentType === 'mdx',
         minify: opts.minify,
+        includeBridge: shouldIncludeBridge,
       });
 
       const componentCodeStr = transpiledCode ? buildComponentCode(transpiledCode) : '';
@@ -786,11 +789,14 @@ export class InMemoryBundler {
     // Custom components for MDX can be provided via opts.customComponents
 
     // Get cached runtime (vendor chunk) - this is pre-built and cached globally
+    // Include bridge for dynamic/hybrid modes to detect platform data (OpenAI, ext-apps, etc.)
+    const shouldIncludeBridge = opts.buildMode === 'dynamic' || opts.buildMode === 'hybrid';
     const cachedRuntime = getCachedRuntime({
       cdnType,
       includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
       includeMdx: opts.includeMdx || contentType === 'mdx',
       minify: opts.minify,
+      includeBridge: shouldIncludeBridge,
     });
 
     // Build app chunk (user-specific code)

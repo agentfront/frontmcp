@@ -12,6 +12,7 @@
 
 import type { CDNType, ContentSecurityOptions } from './types';
 import { UNIVERSAL_CDN } from './types';
+import { getMCPBridgeScript } from '@frontmcp/uipack/runtime';
 
 // ============================================
 // Cache Types
@@ -97,6 +98,7 @@ function generateCacheKey(options: CachedRuntimeOptions): string {
     options.includeMarkdown ? 'md' : '',
     options.includeMdx ? 'mdx' : '',
     options.minify ? 'min' : '',
+    options.includeBridge ? 'bridge' : '',
     securityKey,
   ]
     .filter(Boolean)
@@ -121,6 +123,15 @@ export interface CachedRuntimeOptions {
   minify?: boolean;
   /** Content security / XSS protection options */
   contentSecurity?: ContentSecurityOptions;
+  /**
+   * Include MCP Bridge runtime for platform data detection.
+   * When true, includes the MCP Bridge which:
+   * - Detects data from window.openai.toolOutput (OpenAI Apps SDK)
+   * - Creates window.mcpBridge with unified API
+   * - Provides window.openai polyfill for non-OpenAI platforms
+   * Defaults to true for dynamic/hybrid modes, false for static.
+   */
+  includeBridge?: boolean;
 }
 
 /**
@@ -201,6 +212,32 @@ function buildStoreRuntime(): string {
   window.useContent = function() {
     return window.useFrontMCPStore().content;
   };
+
+  // Connect to MCP Bridge for platform data detection
+  function initFromBridge() {
+    // Check for data from mcpBridge (handles OpenAI, ext-apps, etc.)
+    if (window.mcpBridge && window.mcpBridge.toolOutput != null) {
+      window.__frontmcp.setState({
+        output: window.mcpBridge.toolOutput,
+        loading: false
+      });
+    }
+
+    // Subscribe to bridge updates via onToolResult
+    if (window.mcpBridge && window.mcpBridge.onToolResult) {
+      window.mcpBridge.onToolResult(function(result) {
+        window.__frontmcp.updateOutput(result);
+      });
+    }
+  }
+
+  // Initialize from bridge when ready
+  if (window.mcpBridge) {
+    initFromBridge();
+  } else {
+    // Wait for bridge to be ready
+    window.addEventListener('mcp:bridge-ready', initFromBridge);
+  }
 })();
 `;
 }
@@ -704,7 +741,14 @@ export function getCachedRuntime(options: CachedRuntimeOptions, config: RuntimeC
   }
 
   // Build vendor script
-  const vendorParts: string[] = [buildStoreRuntime(), buildRequireShim()];
+  const vendorParts: string[] = [];
+
+  // Add MCP Bridge runtime first (before store) for platform data detection
+  if (options.includeBridge) {
+    vendorParts.push(getMCPBridgeScript());
+  }
+
+  vendorParts.push(buildStoreRuntime(), buildRequireShim());
 
   // Add markdown parser for UMD (Claude) or when explicitly requested
   // Pass options for content security configuration
