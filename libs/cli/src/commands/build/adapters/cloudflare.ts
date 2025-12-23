@@ -72,7 +72,7 @@ module.exports = {
 };
 `,
 
-  getConfig: () => `name = "frontmcp-worker"
+  getConfig: (_cwd: string) => `name = "frontmcp-worker"
 main = "dist/index.js"
 compatibility_date = "2024-01-01"
 `,

@@ -31,9 +31,16 @@ export async function bundleForServerless(
       '@swc/core': '@swc/core',
       fsevents: 'fsevents',
       esbuild: 'esbuild',
+      // React is optional - only needed for MDX/JSX rendering
+      react: 'react',
+      'react-dom': 'react-dom',
+      'react-dom/server': 'react-dom/server',
+      'react/jsx-runtime': 'react/jsx-runtime',
     },
     resolve: {
       extensions: ['.js', '.mjs', '.cjs', '.json'],
+      // Allow imports without file extensions (TypeScript compiles without .js but ESM requires them)
+      fullySpecified: false,
     },
     // Don't minimize to preserve readability for debugging
     optimization: {

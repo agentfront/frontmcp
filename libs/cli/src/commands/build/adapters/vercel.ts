@@ -1,16 +1,58 @@
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import { AdapterTemplate } from '../types';
+
+type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+
+interface PackageManagerConfig {
+  install: string;
+  run: string;
+}
+
+const PACKAGE_MANAGERS: Record<PackageManager, PackageManagerConfig> = {
+  bun: { install: 'bun install', run: 'bun run build' },
+  pnpm: { install: 'pnpm install', run: 'pnpm run build' },
+  yarn: { install: 'yarn install', run: 'yarn build' },
+  npm: { install: 'npm install', run: 'npm run build' },
+};
+
+const LOCKFILE_TO_PM: Record<string, PackageManager> = {
+  'bun.lockb': 'bun',
+  'pnpm-lock.yaml': 'pnpm',
+  'yarn.lock': 'yarn',
+  'package-lock.json': 'npm',
+};
+
+/**
+ * Detect package manager based on lockfile presence.
+ * Priority: bun > pnpm > yarn > npm (fastest to slowest install times)
+ */
+function detectPackageManager(cwd: string): PackageManager {
+  for (const [lockfile, pm] of Object.entries(LOCKFILE_TO_PM)) {
+    if (existsSync(path.join(cwd, lockfile))) {
+      return pm;
+    }
+  }
+  return 'npm'; // Default fallback
+}
 
 /**
  * Vercel adapter - serverless deployment on Vercel.
  * Compiles to ESM, bundles with rspack to CJS for maximum compatibility.
+ *
+ * Uses Vercel Build Output API for deployment:
+ * - Creates .vercel/output/config.json with routing
+ * - Creates .vercel/output/functions/index.func/ with handler
  *
  * The build process:
  * 1. TypeScript compiles to ESM in dist/
  * 2. serverless-setup.js is generated (sets FRONTMCP_SERVERLESS=1)
  * 3. index.js imports setup first, then main module
  * 4. rspack bundles everything into handler.cjs
+ * 5. Build Output API structure is created in .vercel/output/
  *
- * @see https://vercel.com/docs/frameworks/express
+ * @see https://vercel.com/docs/build-output-api/v3
  */
 export const vercelAdapter: AdapterTemplate = {
   moduleFormat: 'esnext',
@@ -40,11 +82,74 @@ export default async function handler(req, res) {
 }
 `,
 
-  getConfig: () => ({
-    version: 2,
-    builds: [{ src: 'dist/handler.cjs', use: '@vercel/node' }],
-    routes: [{ src: '/(.*)', dest: '/dist/handler.cjs' }],
-  }),
+  // Detect package manager and generate appropriate vercel.json
+  getConfig: (cwd: string) => {
+    const pm = detectPackageManager(cwd);
+    const config = PACKAGE_MANAGERS[pm];
+    return {
+      version: 2,
+      buildCommand: config.run,
+      installCommand: config.install,
+    };
+  },
 
   configFileName: 'vercel.json',
+
+  /**
+   * Create Vercel Build Output API structure after bundling.
+   * This allows Vercel to deploy the function without needing an /api folder.
+   *
+   * Structure created:
+   * .vercel/output/
+   * ├── config.json          (routes all requests to index function)
+   * └── functions/
+   *     └── index.func/
+   *         ├── .vc-config.json  (Node.js 22 runtime config)
+   *         └── handler.cjs      (bundled handler + chunks)
+   */
+  postBundle: async (outDir: string, cwd: string, bundleOutput: string) => {
+    const outputDir = path.join(cwd, '.vercel', 'output');
+    const funcDir = path.join(outputDir, 'functions', 'index.func');
+
+    // Create directories
+    await fs.mkdir(funcDir, { recursive: true });
+
+    // Copy all files from dist to the function directory
+    // This includes handler.cjs and any chunk files (*.handler.cjs)
+    const distFiles = await fs.readdir(outDir);
+    for (const file of distFiles) {
+      const srcPath = path.join(outDir, file);
+      const destPath = path.join(funcDir, file);
+      const stat = await fs.stat(srcPath);
+
+      if (stat.isDirectory()) {
+        // Recursively copy directories
+        await fs.cp(srcPath, destPath, { recursive: true });
+      } else {
+        // Copy files
+        await fs.copyFile(srcPath, destPath);
+      }
+    }
+
+    // Create function config (.vc-config.json)
+    const vcConfig = {
+      runtime: 'nodejs22.x',
+      handler: bundleOutput,
+      launcherType: 'Nodejs',
+    };
+    await fs.writeFile(
+      path.join(funcDir, '.vc-config.json'),
+      JSON.stringify(vcConfig, null, 2),
+    );
+
+    // Create output config (config.json) with routing
+    const outputConfig = {
+      version: 3,
+      routes: [{ src: '/(.*)', dest: '/index' }],
+    };
+    await fs.writeFile(
+      path.join(outputDir, 'config.json'),
+      JSON.stringify(outputConfig, null, 2),
+    );
+  },
 };

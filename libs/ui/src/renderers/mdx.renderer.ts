@@ -1,18 +1,23 @@
 /**
- * MDX Renderer
+ * MDX Server Renderer
  *
  * Handles MDX templates - Markdown with embedded JSX components.
  * Uses @mdx-js/mdx for compilation and react-dom/server for SSR.
+ *
+ * This renderer requires React as a peer dependency.
+ * For React-free client-side MDX rendering, use MdxClientRenderer from @frontmcp/uipack.
  *
  * MDX allows mixing Markdown with React components:
  * - Markdown headings, lists, code blocks
  * - JSX component tags: `<Card />`
  * - JS expressions: `{output.items.map(...)}`
  * - Frontmatter for metadata
+ *
+ * @module @frontmcp/ui/renderers
  */
 
-import type { TemplateContext } from '../runtime/types';
-import type { PlatformCapabilities } from '../theme';
+import type { TemplateContext } from '@frontmcp/uipack/runtime';
+import type { PlatformCapabilities } from '@frontmcp/uipack/theme';
 import type {
   UIRenderer,
   TranspileResult,
@@ -20,10 +25,8 @@ import type {
   RenderOptions,
   RuntimeScripts,
   ToolUIProps,
-} from './types';
-import { containsMdxSyntax } from './utils/detect';
-import { hashString } from './utils/hash';
-import { transpileCache, componentCache } from './cache';
+} from '@frontmcp/uipack/renderers';
+import { containsMdxSyntax, hashString, transpileCache, componentCache } from '@frontmcp/uipack/renderers';
 
 /**
  * Types this renderer can handle - MDX strings.
@@ -48,7 +51,7 @@ console.warn('[FrontMCP] MDX hydration not available on this platform.');
 `;
 
 /**
- * MDX Renderer Implementation.
+ * MDX Server Renderer Implementation.
  *
  * Compiles MDX (Markdown + JSX) to React components using @mdx-js/mdx,
  * then renders to HTML using react-dom/server.
@@ -66,23 +69,6 @@ console.warn('[FrontMCP] MDX hydration not available on this platform.');
  * {output.items.map(item => <ActivityItem key={item.id} {...item} />)}
  *     `,
  *     mdxComponents: { UserCard, ActivityItem }
- *   }
- * })
- * ```
- *
- * @example MDX with frontmatter
- * ```typescript
- * @Tool({
- *   ui: {
- *     template: `
- * ---
- * title: Dashboard
- * ---
- *
- * # {frontmatter.title}
- *
- * <Dashboard data={output} />
- *     `
  *   }
  * })
  * ```
@@ -118,28 +104,21 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
   /**
    * Transpile MDX to executable JavaScript.
-   *
-   * Uses @mdx-js/mdx to compile MDX source to a module.
-   * Note: For MDX, we use evaluate() which combines compile + run,
-   * so this method just returns the source hash for caching purposes.
    */
   async transpile(template: MdxTemplate, _options?: TranspileOptions): Promise<TranspileResult> {
     const hash = hashString(template);
 
-    // Check cache - for MDX, the "code" is just the original source
-    // since we use evaluate() which handles compilation internally
     const cached = transpileCache.getByKey(hash);
     if (cached) {
       return { ...cached, cached: true };
     }
 
     const transpileResult: TranspileResult = {
-      code: template, // Store original MDX for evaluate()
+      code: template,
       hash,
       cached: false,
     };
 
-    // Cache the result
     transpileCache.setByKey(hash, transpileResult);
 
     return transpileResult;
@@ -174,7 +153,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
     if (!Content) {
       // Evaluate MDX source to get the component
-      // evaluate() combines compile + run in one step
       const result = await this.mdxEvaluate(template, {
         ...this.jsxRuntime,
         Fragment: this.React.Fragment,
@@ -189,9 +167,7 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
     // Build component map with custom MDX components
     const mdxComponents = {
-      // User-provided components from tool config
       ...options?.mdxComponents,
-      // Wrapper that provides context to the content
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       wrapper: ({ children }: { children: any }) => {
         return this.React.createElement('div', { className: 'mdx-content' }, children);
@@ -199,7 +175,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
     };
 
     // Create props that MDX can access
-    // These become available in MDX as {props.input}, {props.output}, etc.
     const props: ToolUIProps<In, Out> = {
       input: context.input,
       output: context.output,
@@ -207,8 +182,7 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
       helpers: context.helpers,
     };
 
-    // Also spread output properties at top level for convenience
-    // This allows accessing {output.name} or just {name} in MDX
+    // Spread output properties at top level for convenience
     const spreadProps = {
       ...props,
       ...(typeof context.output === 'object' && context.output !== null ? context.output : {}),
@@ -225,7 +199,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
     // If hydration is enabled, wrap with markers
     if (options?.hydrate) {
-      // Full HTML attribute escaping to prevent XSS
       const escapedProps = JSON.stringify(props)
         .replace(/&/g, '&amp;')
         .replace(/'/g, '&#39;')
@@ -241,7 +214,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
    * Get runtime scripts for client-side functionality.
    */
   getRuntimeScripts(platform: PlatformCapabilities): RuntimeScripts {
-    // For blocked-network platforms (Claude), scripts must be inline
     if (platform.networkMode === 'blocked') {
       return {
         headScripts: '',
@@ -250,7 +222,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
       };
     }
 
-    // For platforms with network access, use CDN (React required for MDX)
     return {
       headScripts: `
         <script crossorigin src="${REACT_CDN.react}"></script>
@@ -285,10 +256,6 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
 
   /**
    * Load @mdx-js/mdx evaluate function.
-   *
-   * evaluate() is the cleanest way to run MDX - it combines
-   * compile and run in a single step, handling all the runtime
-   * injection automatically.
    */
   private async loadMdx(): Promise<void> {
     if (this.mdxEvaluate) {
@@ -315,27 +282,20 @@ export const mdxRenderer = new MdxRenderer();
 
 /**
  * Build MDX hydration script for client-side interactivity.
- *
- * Note: MDX hydration is more complex than React hydration
- * because it needs the MDX runtime and component definitions.
  */
 export function buildMdxHydrationScript(): string {
   return `
 <script>
 (function() {
-  // MDX hydration requires React and component definitions
   if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
     console.warn('[FrontMCP] React not available for MDX hydration');
     return;
   }
 
-  // Find all elements marked for MDX hydration
   document.querySelectorAll('[data-mdx-hydrate]').forEach(function(root) {
     var propsJson = root.getAttribute('data-props');
     var props = propsJson ? JSON.parse(propsJson) : {};
 
-    // MDX content is pre-rendered, hydration mainly attaches event handlers
-    // For full interactivity, components need to be available client-side
     if (window.__frontmcp_mdx_content) {
       try {
         ReactDOM.hydrateRoot(root, React.createElement(

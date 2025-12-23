@@ -25,6 +25,10 @@ import { calculateComponentHash, generateBuildId } from './hash-calculator';
 import { DependencyResolver } from '../../dependency/resolver';
 import { createImportMap, generateDependencyHTML } from '../../dependency/import-map';
 
+// Type-only definition for React-like component types (no runtime dependency)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ReactComponentType<P = any> = ((props: P) => unknown) & { displayName?: string; name?: string };
+
 // ============================================
 // Builder Options
 // ============================================
@@ -445,8 +449,11 @@ export class ComponentBuilder {
 
     try {
       // Dynamic import React for SSR
-      const React = await import('react');
-      const ReactDOMServer = await import('react-dom/server');
+      // Use variable indirection to prevent bundlers from resolving at bundle time
+      const reactPkg = 'react';
+      const reactDomServerPkg = 'react-dom/server';
+      const React = await import(reactPkg);
+      const ReactDOMServer = await import(reactDomServerPkg);
 
       // Create a sandboxed execution context
       const exports: Record<string, unknown> = {};
@@ -473,7 +480,7 @@ export class ComponentBuilder {
       }
 
       // Render to string
-      const element = React.createElement(Component as React.ComponentType<unknown>, context);
+      const element = React.createElement(Component as ReactComponentType<unknown>, context);
       return ReactDOMServer.renderToString(element);
     } catch (error) {
       console.warn(`SSR failed: ${error}`);

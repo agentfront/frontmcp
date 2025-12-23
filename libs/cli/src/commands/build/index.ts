@@ -48,6 +48,13 @@ async function generateAdapterFiles(
     const entryPath = path.join(outDir, 'index.js');
     await bundleForServerless(entryPath, outDir, template.bundleOutput);
     console.log(c('green', `  Created bundle: ${template.bundleOutput}`));
+
+    // Run post-bundle hook if defined (e.g., create Build Output API structure)
+    if (template.postBundle) {
+      console.log(c('cyan', `[build] Creating ${adapter} deployment structure...`));
+      await template.postBundle(outDir, cwd, template.bundleOutput);
+      console.log(c('green', `  Created deployment output structure`));
+    }
   }
 
   // Generate config file if adapter has one (skip if already exists)
@@ -57,7 +64,7 @@ async function generateAdapterFiles(
     if (await fileExists(configPath)) {
       console.log(c('yellow', `  ${template.configFileName} already exists (skipping)`));
     } else {
-      const configContent = template.getConfig();
+      const configContent = template.getConfig(cwd);
 
       if (typeof configContent === 'string') {
         // Write as plain text (e.g., TOML for wrangler.toml)

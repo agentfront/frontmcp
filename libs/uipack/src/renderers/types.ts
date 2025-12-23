@@ -16,9 +16,10 @@ import type { PlatformCapabilities } from '../theme';
  * Supported renderer types for template processing.
  * - 'html': Plain HTML string or template function
  * - 'react': React functional component
- * - 'mdx': MDX content string
+ * - 'mdx': MDX content string (server-side, requires React)
+ * - 'mdx-client': MDX content string (client-side, CDN-loaded React)
  */
-export type RendererType = 'html' | 'react' | 'mdx';
+export type RendererType = 'html' | 'react' | 'mdx' | 'mdx-client';
 
 /**
  * Props passed to React components used as templates.
