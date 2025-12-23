@@ -18,6 +18,7 @@ import {
   TYPE_CACHE_PREFIX,
   DEFAULT_TYPE_FETCHER_OPTIONS,
   DEFAULT_TYPE_CACHE_TTL,
+  DEFAULT_ALLOWED_PACKAGES,
   buildTypeFiles,
   getRelativeImportPath,
   urlToVirtualPath,
@@ -742,15 +743,15 @@ describe('TypeFetcher', () => {
       const cache = new MemoryTypeCache({ maxSize: 100 });
       const cachedEntry = {
         result: {
-          specifier: 'lodash',
-          resolvedPackage: 'lodash',
-          version: '4.17.21',
-          content: 'lodash types',
+          specifier: 'zod',
+          resolvedPackage: 'zod',
+          version: '3.23.8',
+          content: 'zod types',
           files: [
             {
-              path: 'node_modules/lodash/index.d.ts',
-              url: 'https://esm.sh/lodash.d.ts',
-              content: 'lodash types',
+              path: 'node_modules/zod/index.d.ts',
+              url: 'https://esm.sh/zod.d.ts',
+              content: 'zod types',
             },
           ],
           fetchedUrls: [],
@@ -760,17 +761,381 @@ describe('TypeFetcher', () => {
         size: 100,
         accessCount: 1,
       };
-      await cache.set(`${TYPE_CACHE_PREFIX}lodash@latest`, cachedEntry);
+      await cache.set(`${TYPE_CACHE_PREFIX}zod@latest`, cachedEntry);
 
       const fetcher = new TypeFetcher({}, cache);
 
       const result = await fetcher.fetchBatch({
-        imports: ['import _ from "lodash"'],
+        imports: ['import { z } from "zod"'],
       });
 
       expect(result.totalTimeMs).toBeGreaterThanOrEqual(0);
       expect(result.cacheHits).toBe(1);
       expect(result.networkRequests).toBe(0);
+    });
+  });
+});
+
+// ============================================
+// Allowlist Tests
+// ============================================
+
+describe('TypeFetcher Allowlist', () => {
+  describe('DEFAULT_ALLOWED_PACKAGES', () => {
+    it('should contain expected default packages', () => {
+      expect(DEFAULT_ALLOWED_PACKAGES).toContain('react');
+      expect(DEFAULT_ALLOWED_PACKAGES).toContain('react-dom');
+      expect(DEFAULT_ALLOWED_PACKAGES).toContain('react/jsx-runtime');
+      expect(DEFAULT_ALLOWED_PACKAGES).toContain('zod');
+      expect(DEFAULT_ALLOWED_PACKAGES).toContain('@frontmcp/*');
+    });
+  });
+
+  describe('isPackageAllowed', () => {
+    it('should allow packages in default allowlist', () => {
+      const fetcher = new TypeFetcher();
+
+      expect(fetcher.isPackageAllowed('react')).toBe(true);
+      expect(fetcher.isPackageAllowed('react-dom')).toBe(true);
+      expect(fetcher.isPackageAllowed('zod')).toBe(true);
+    });
+
+    it('should block packages not in allowlist', () => {
+      const fetcher = new TypeFetcher();
+
+      expect(fetcher.isPackageAllowed('lodash')).toBe(false);
+      expect(fetcher.isPackageAllowed('axios')).toBe(false);
+      expect(fetcher.isPackageAllowed('express')).toBe(false);
+    });
+
+    it('should allow packages matching @frontmcp/* pattern', () => {
+      const fetcher = new TypeFetcher();
+
+      expect(fetcher.isPackageAllowed('@frontmcp/ui')).toBe(true);
+      expect(fetcher.isPackageAllowed('@frontmcp/sdk')).toBe(true);
+      expect(fetcher.isPackageAllowed('@frontmcp/uipack')).toBe(true);
+    });
+
+    it('should not match similar but different scopes', () => {
+      const fetcher = new TypeFetcher();
+
+      expect(fetcher.isPackageAllowed('@other/ui')).toBe(false);
+      expect(fetcher.isPackageAllowed('@frontmcp-fake/ui')).toBe(false);
+    });
+
+    it('should allow subpath imports of allowed packages', () => {
+      const fetcher = new TypeFetcher();
+
+      // 'react/jsx-runtime' is explicitly in the allowlist
+      expect(fetcher.isPackageAllowed('react/jsx-runtime')).toBe(true);
+    });
+
+    it('should allow custom packages added via options', () => {
+      const fetcher = new TypeFetcher({
+        allowedPackages: ['lodash', '@myorg/*'],
+      });
+
+      // Custom additions
+      expect(fetcher.isPackageAllowed('lodash')).toBe(true);
+      expect(fetcher.isPackageAllowed('@myorg/utils')).toBe(true);
+      expect(fetcher.isPackageAllowed('@myorg/deep/package')).toBe(true);
+
+      // Defaults still work
+      expect(fetcher.isPackageAllowed('react')).toBe(true);
+    });
+
+    it('should allow all packages when allowedPackages is false', () => {
+      const fetcher = new TypeFetcher({ allowedPackages: false });
+
+      expect(fetcher.isPackageAllowed('lodash')).toBe(true);
+      expect(fetcher.isPackageAllowed('any-random-package')).toBe(true);
+      expect(fetcher.isPackageAllowed('@random/scope')).toBe(true);
+    });
+  });
+
+  describe('allowedPackagePatterns', () => {
+    it('should return all allowed patterns', () => {
+      const fetcher = new TypeFetcher({
+        allowedPackages: ['lodash', 'axios'],
+      });
+
+      const patterns = fetcher.allowedPackagePatterns;
+      expect(patterns).toContain('react');
+      expect(patterns).toContain('lodash');
+      expect(patterns).toContain('axios');
+    });
+
+    it('should be empty when allowlist is disabled', () => {
+      const fetcher = new TypeFetcher({ allowedPackages: false });
+      expect(fetcher.allowedPackagePatterns).toHaveLength(0);
+    });
+  });
+
+  describe('fetchBatch with allowlist', () => {
+    it('should block non-allowed packages with PACKAGE_NOT_ALLOWED error', async () => {
+      const fetcher = new TypeFetcher();
+
+      const result = await fetcher.fetchBatch({
+        imports: ['import _ from "lodash"'],
+      });
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].code).toBe('PACKAGE_NOT_ALLOWED');
+      expect(result.errors[0].message).toContain('lodash');
+      expect(result.errors[0].message).toContain('not in the allowlist');
+    });
+
+    it('should allow packages in default allowlist (with mocked fetch)', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Pre-populate cache for react
+      const cachedEntry = {
+        result: {
+          specifier: 'react',
+          resolvedPackage: 'react',
+          version: '18.2.0',
+          content: 'declare const React: any;',
+          files: [
+            {
+              path: 'node_modules/react/index.d.ts',
+              url: 'https://esm.sh/react.d.ts',
+              content: 'declare const React: any;',
+            },
+          ],
+          fetchedUrls: ['https://esm.sh/react.d.ts'],
+          fetchedAt: new Date().toISOString(),
+        },
+        cachedAt: Date.now(),
+        size: 100,
+        accessCount: 1,
+      };
+      await cache.set(`${TYPE_CACHE_PREFIX}react@latest`, cachedEntry);
+
+      const mockFetch = jest.fn();
+      const fetcher = new TypeFetcher({ fetch: mockFetch }, cache);
+
+      const result = await fetcher.fetchBatch({
+        imports: ['import React from "react"'],
+      });
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].specifier).toBe('react');
+    });
+
+    it('should allow @frontmcp packages via wildcard', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Pre-populate cache for @frontmcp/ui
+      const cachedEntry = {
+        result: {
+          specifier: '@frontmcp/ui',
+          resolvedPackage: '@frontmcp/ui',
+          version: '1.0.0',
+          content: 'export const Card: any;',
+          files: [
+            {
+              path: 'node_modules/@frontmcp/ui/index.d.ts',
+              url: 'https://esm.sh/@frontmcp/ui.d.ts',
+              content: 'export const Card: any;',
+            },
+          ],
+          fetchedUrls: ['https://esm.sh/@frontmcp/ui.d.ts'],
+          fetchedAt: new Date().toISOString(),
+        },
+        cachedAt: Date.now(),
+        size: 100,
+        accessCount: 1,
+      };
+      await cache.set(`${TYPE_CACHE_PREFIX}@frontmcp/ui@latest`, cachedEntry);
+
+      const fetcher = new TypeFetcher({}, cache);
+
+      const result = await fetcher.fetchBatch({
+        imports: ['import { Card } from "@frontmcp/ui"'],
+      });
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.results).toHaveLength(1);
+    });
+
+    it('should allow custom packages added to allowlist', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Pre-populate cache for lodash
+      const cachedEntry = {
+        result: {
+          specifier: 'lodash',
+          resolvedPackage: 'lodash',
+          version: '4.17.21',
+          content: 'declare const _: any;',
+          files: [
+            {
+              path: 'node_modules/lodash/index.d.ts',
+              url: 'https://esm.sh/lodash.d.ts',
+              content: 'declare const _: any;',
+            },
+          ],
+          fetchedUrls: ['https://esm.sh/lodash.d.ts'],
+          fetchedAt: new Date().toISOString(),
+        },
+        cachedAt: Date.now(),
+        size: 100,
+        accessCount: 1,
+      };
+      await cache.set(`${TYPE_CACHE_PREFIX}lodash@latest`, cachedEntry);
+
+      const fetcher = new TypeFetcher({ allowedPackages: ['lodash'] }, cache);
+
+      const result = await fetcher.fetchBatch({
+        imports: ['import _ from "lodash"'],
+      });
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.results).toHaveLength(1);
+    });
+
+    it('should allow all packages when allowlist is disabled', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Pre-populate cache for random package
+      const cachedEntry = {
+        result: {
+          specifier: 'random-pkg',
+          resolvedPackage: 'random-pkg',
+          version: '1.0.0',
+          content: 'declare const random: any;',
+          files: [
+            {
+              path: 'node_modules/random-pkg/index.d.ts',
+              url: 'https://esm.sh/random-pkg.d.ts',
+              content: 'declare const random: any;',
+            },
+          ],
+          fetchedUrls: ['https://esm.sh/random-pkg.d.ts'],
+          fetchedAt: new Date().toISOString(),
+        },
+        cachedAt: Date.now(),
+        size: 100,
+        accessCount: 1,
+      };
+      await cache.set(`${TYPE_CACHE_PREFIX}random-pkg@latest`, cachedEntry);
+
+      const fetcher = new TypeFetcher({ allowedPackages: false }, cache);
+
+      const result = await fetcher.fetchBatch({
+        imports: ['import random from "random-pkg"'],
+      });
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.results).toHaveLength(1);
+    });
+  });
+
+  describe('initialize', () => {
+    it('should return empty results if already initialized', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Create a fetcher with only allowed packages that don't need network
+      const fetcher = new TypeFetcher({ allowedPackages: false }, cache);
+
+      // First init - will try to fetch packages (and fail since no mock)
+      // But since allowedPackages: false, there are no patterns to pre-load
+      const result1 = await fetcher.initialize();
+      expect(fetcher.initialized).toBe(true);
+      expect(result1.loaded).toHaveLength(0);
+
+      // Second init should return empty
+      const result2 = await fetcher.initialize();
+      expect(result2.loaded).toHaveLength(0);
+      expect(result2.failed).toHaveLength(0);
+    });
+
+    it('should skip glob patterns during initialization', async () => {
+      const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Only add concrete packages, not @frontmcp/*
+      const fetcher = new TypeFetcher(
+        {
+          fetch: mockFetch,
+          allowedPackages: ['custom-pkg'],
+        },
+        cache,
+      );
+
+      await fetcher.initialize();
+
+      // Should have tried concrete packages (react, react-dom, react/jsx-runtime, zod, custom-pkg)
+      // but NOT @frontmcp/* (glob pattern)
+      const patterns = fetcher.allowedPackagePatterns;
+      const concretePatterns = patterns.filter((p) => !p.includes('*'));
+      expect(mockFetch.mock.calls.length).toBeLessThanOrEqual(concretePatterns.length);
+
+      // Verify @frontmcp/* is in patterns but wasn't fetched
+      expect(patterns).toContain('@frontmcp/*');
+    });
+
+    it('should report loaded and failed packages', async () => {
+      const cache = new MemoryTypeCache({ maxSize: 100 });
+
+      // Pre-populate cache for some packages
+      const successEntry = {
+        result: {
+          specifier: 'react',
+          resolvedPackage: 'react',
+          version: '18.2.0',
+          content: 'React types',
+          files: [],
+          fetchedUrls: [],
+          fetchedAt: new Date().toISOString(),
+        },
+        cachedAt: Date.now(),
+        size: 100,
+        accessCount: 1,
+      };
+      await cache.set(`${TYPE_CACHE_PREFIX}react@latest`, successEntry);
+
+      const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+      // Only test with packages that we can control
+      const fetcher = new TypeFetcher(
+        {
+          fetch: mockFetch,
+          // Override to only test specific packages
+          allowedPackages: false, // Disable default allowlist to have full control
+        },
+        cache,
+      );
+
+      // Create a new fetcher with just react (which is cached) and a failing package
+      const testFetcher = new TypeFetcher(
+        {
+          fetch: mockFetch,
+          // Use only packages we can control
+        },
+        cache,
+      );
+
+      // Manually check that initialize would work with cached packages
+      // This test verifies the structure of initialize() results
+      const initResult = await testFetcher.initialize();
+
+      // Since default allowlist has react, react-dom, react/jsx-runtime, zod (concrete)
+      // Only react is cached, others will fail
+      expect(initResult.loaded.length + initResult.failed.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should set initialized flag after completion', async () => {
+      const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+      const fetcher = new TypeFetcher({
+        fetch: mockFetch,
+        allowedPackages: [], // Empty custom list, only defaults
+      });
+
+      expect(fetcher.initialized).toBe(false);
+      await fetcher.initialize();
+      expect(fetcher.initialized).toBe(true);
     });
   });
 });

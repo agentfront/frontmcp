@@ -18,7 +18,7 @@ import type {
   TypeCacheEntry,
   TypeFile,
 } from './types';
-import { TYPE_CACHE_PREFIX } from './types';
+import { TYPE_CACHE_PREFIX, DEFAULT_ALLOWED_PACKAGES } from './types';
 import type { TypeCacheAdapter } from './cache';
 import { globalTypeCache } from './cache';
 import {
@@ -100,6 +100,9 @@ export class TypeFetcher {
   private readonly cdnBaseUrl: string;
   private readonly fetchFn: typeof globalThis.fetch;
   private readonly cache: TypeCacheAdapter;
+  private readonly allowedPatterns: string[];
+  private readonly allowlistEnabled: boolean;
+  private _initialized = false;
 
   constructor(options: TypeFetcherOptions = {}, cache?: TypeCacheAdapter) {
     this.maxDepth = options.maxDepth ?? 2;
@@ -108,6 +111,103 @@ export class TypeFetcher {
     this.cdnBaseUrl = options.cdnBaseUrl ?? 'https://esm.sh';
     this.fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.cache = cache ?? globalTypeCache;
+
+    // Setup allowlist
+    if (options.allowedPackages === false) {
+      this.allowlistEnabled = false;
+      this.allowedPatterns = [];
+    } else {
+      this.allowlistEnabled = true;
+      this.allowedPatterns = [...DEFAULT_ALLOWED_PACKAGES, ...(options.allowedPackages ?? [])];
+    }
+  }
+
+  /**
+   * Check if a package is allowed by the allowlist.
+   * Supports glob patterns (e.g., '@frontmcp/*' matches '@frontmcp/ui').
+   *
+   * @param packageName - The package name to check
+   * @returns true if the package is allowed
+   */
+  isPackageAllowed(packageName: string): boolean {
+    if (!this.allowlistEnabled) {
+      return true;
+    }
+
+    return this.allowedPatterns.some((pattern) => {
+      if (pattern.includes('*')) {
+        // Glob pattern - convert to regex
+        // Escape special regex chars except *, then convert * to .*
+        const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        const regex = new RegExp(`^${escaped}$`);
+        return regex.test(packageName);
+      }
+      // Exact match or prefix match for subpaths
+      return packageName === pattern || packageName.startsWith(pattern + '/');
+    });
+  }
+
+  /**
+   * Initialize the TypeFetcher by pre-loading allowed packages.
+   * This fetches types for all allowed packages and caches them.
+   *
+   * @param options - Options for initialization
+   * @returns Summary of initialization results
+   */
+  async initialize(options?: {
+    /** Timeout for each package fetch */
+    timeout?: number;
+  }): Promise<{
+    /** Packages that were successfully loaded */
+    loaded: string[];
+    /** Packages that failed to load */
+    failed: string[];
+    /** Number of entries in cache after initialization */
+    cached: number;
+  }> {
+    if (this._initialized) {
+      const stats = await this.cache.getStats();
+      return { loaded: [], failed: [], cached: stats.entries };
+    }
+
+    const loaded: string[] = [];
+    const failed: string[] = [];
+
+    // Filter out glob patterns - we can't expand them
+    const packagesToLoad = this.allowedPatterns.filter((p) => !p.includes('*'));
+
+    // Pre-fetch each package
+    for (const pkg of packagesToLoad) {
+      const result = await this.fetchBatch({
+        imports: [`import * from "${pkg}"`],
+        timeout: options?.timeout ?? this.timeout,
+      });
+
+      if (result.results.length > 0) {
+        loaded.push(pkg);
+      } else if (result.errors.length > 0) {
+        failed.push(pkg);
+      }
+    }
+
+    this._initialized = true;
+    const stats = await this.cache.getStats();
+
+    return { loaded, failed, cached: stats.entries };
+  }
+
+  /**
+   * Whether the fetcher has been initialized.
+   */
+  get initialized(): boolean {
+    return this._initialized;
+  }
+
+  /**
+   * Get the list of allowed package patterns.
+   */
+  get allowedPackagePatterns(): readonly string[] {
+    return this.allowedPatterns;
   }
 
   /**
@@ -146,8 +246,18 @@ export class TypeFetcher {
           return;
         }
 
-        // Check cache first
+        // Check allowlist
         const packageName = getPackageFromSpecifier(specifier);
+        if (!this.isPackageAllowed(packageName)) {
+          errors.push({
+            specifier,
+            code: 'PACKAGE_NOT_ALLOWED',
+            message: `Package "${packageName}" is not in the allowlist`,
+          });
+          return;
+        }
+
+        // Check cache first
         const version = versionOverrides[packageName] ?? 'latest';
         const cacheKey = `${TYPE_CACHE_PREFIX}${packageName}@${version}`;
 

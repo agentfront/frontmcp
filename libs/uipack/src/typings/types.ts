@@ -161,6 +161,7 @@ export type TypeFetchErrorCode =
   | 'NO_TYPES_HEADER'
   | 'INVALID_SPECIFIER'
   | 'PACKAGE_NOT_FOUND'
+  | 'PACKAGE_NOT_ALLOWED'
   | 'PARSE_ERROR';
 
 // ============================================
@@ -409,6 +410,17 @@ export interface TypeFetcherOptions {
    * Custom fetch function (for testing or proxying).
    */
   fetch?: typeof globalThis.fetch;
+
+  /**
+   * Additional packages to allow beyond the default allowlist.
+   * Supports glob patterns (e.g., '@myorg/*').
+   * Set to `false` to disable the allowlist and allow all packages.
+   *
+   * Default allowlist: react, react-dom, react/jsx-runtime, zod, @frontmcp/*
+   *
+   * @default [] (uses default allowlist only)
+   */
+  allowedPackages?: string[] | false;
 }
 
 // ============================================
@@ -467,3 +479,9 @@ export const TYPE_CACHE_PREFIX = 'types:';
  * Default cache TTL in milliseconds (1 hour).
  */
 export const DEFAULT_TYPE_CACHE_TTL = 60 * 60 * 1000;
+
+/**
+ * Default allowed packages for type fetching.
+ * These packages are always allowed unless the allowlist is disabled.
+ */
+export const DEFAULT_ALLOWED_PACKAGES = ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'] as const;

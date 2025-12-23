@@ -59,7 +59,12 @@ export type {
   PackageResolution,
 } from './types';
 
-export { DEFAULT_TYPE_FETCHER_OPTIONS, TYPE_CACHE_PREFIX, DEFAULT_TYPE_CACHE_TTL } from './types';
+export {
+  DEFAULT_TYPE_FETCHER_OPTIONS,
+  TYPE_CACHE_PREFIX,
+  DEFAULT_TYPE_CACHE_TTL,
+  DEFAULT_ALLOWED_PACKAGES,
+} from './types';
 
 // ============================================
 // Schemas
