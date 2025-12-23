@@ -84,3 +84,24 @@ export function escapeJsString(str: string): string {
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
 }
+
+/**
+ * Escape script closing tags in JSON strings to prevent XSS.
+ *
+ * When embedding JSON in a <script> tag, the string `</script>` will
+ * prematurely close the script block. This function escapes the closing
+ * tag by replacing `</` with `<\/`.
+ *
+ * @param jsonString - JSON string (already passed through JSON.stringify)
+ * @returns Escaped JSON string safe for embedding in script tags
+ *
+ * @example
+ * ```typescript
+ * const json = JSON.stringify({ html: '</script><script>alert(1)</script>' });
+ * escapeScriptClose(json);
+ * // Returns: '{"html":"<\\/script><script>alert(1)<\\/script>"}'
+ * ```
+ */
+export function escapeScriptClose(jsonString: string): string {
+  return jsonString.replace(/<\//g, '<\\/');
+}

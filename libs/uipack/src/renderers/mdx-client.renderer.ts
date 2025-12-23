@@ -22,7 +22,7 @@ import type {
 import { containsMdxSyntax } from './utils/detect';
 import { hashString } from './utils/hash';
 import { transpileCache } from './cache';
-import { escapeHtml } from '../utils';
+import { escapeHtml, escapeJsString, escapeScriptClose } from '../utils';
 
 /**
  * Types this renderer can handle - MDX strings.
@@ -205,8 +205,11 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
     };
 
     // Escape content for embedding in script
-    const escapedMdx = JSON.stringify(template);
-    const escapedProps = JSON.stringify(spreadProps);
+    // Use escapeScriptClose to prevent </script> from breaking out of the script tag
+    const escapedMdx = escapeScriptClose(JSON.stringify(template));
+    const escapedProps = escapeScriptClose(JSON.stringify(spreadProps));
+    // Escape containerId for use in JS string literals (prevents quote injection)
+    const safeContainerId = escapeJsString(containerId);
 
     // Build the loading state
     const loadingHtml = showLoading ? `<div class="mdx-loading">${escapeHtml(loadingMessage)}</div>` : '';
@@ -241,14 +244,14 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
     });
 
     // Render to DOM
-    const container = document.getElementById('${escapeHtml(containerId)}');
+    const container = document.getElementById('${safeContainerId}');
     if (container) {
       const root = createRoot(container);
       root.render(React.createElement(Content, props));
     }
   } catch (error) {
     console.error('[FrontMCP] MDX client rendering failed:', error);
-    const container = document.getElementById('${escapeHtml(containerId)}');
+    const container = document.getElementById('${safeContainerId}');
     if (container) {
       container.innerHTML = '<div class="mdx-error">Failed to render MDX content</div>';
     }
