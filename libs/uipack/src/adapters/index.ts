@@ -19,6 +19,7 @@ export {
   buildUIMeta,
   buildToolDiscoveryMeta,
   buildOpenAICSP,
+  buildFrontMCPCSP,
 } from './platform-meta';
 
 export {

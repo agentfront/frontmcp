@@ -385,6 +385,64 @@ describe('Static HTML Generation', () => {
       expect(claudeResult.html).toContain('<!DOCTYPE html>');
       expect(openaiResult.html).toContain('<!DOCTYPE html>');
     });
+
+    it('should inject DEFAULT_THEME CSS variables by default', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: 'export default () => <div>Theme Test</div>;',
+        sourceType: 'jsx',
+        toolName: 'test_tool',
+      });
+
+      // Should contain :root CSS variables from DEFAULT_THEME
+      expect(result.html).toContain(':root');
+      expect(result.html).toContain('--color-primary');
+      expect(result.html).toContain('--color-secondary');
+      expect(result.html).toContain('--color-border');
+      expect(result.html).toContain('--color-background');
+    });
+
+    it('should inject custom theme CSS variables when provided', async () => {
+      const { createTheme } = await import('@frontmcp/uipack/theme');
+
+      const customTheme = createTheme({
+        colors: {
+          semantic: {
+            primary: '#ff0000',
+            secondary: '#00ff00',
+          },
+        },
+      });
+
+      const result = await bundler.bundleToStaticHTML({
+        source: 'export default () => <div>Custom Theme</div>;',
+        sourceType: 'jsx',
+        toolName: 'test_tool',
+        theme: customTheme,
+      });
+
+      // Should contain the custom primary color
+      expect(result.html).toContain(':root');
+      expect(result.html).toContain('#ff0000');
+      expect(result.html).toContain('#00ff00');
+    });
+
+    it('should inject theme CSS after Tailwind and before custom CSS', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: 'export default () => <div>Order Test</div>;',
+        sourceType: 'jsx',
+        toolName: 'test_tool',
+        customCss: '.custom-class { color: purple; }',
+      });
+
+      const tailwindIndex = result.html.indexOf('tailwind');
+      const rootIndex = result.html.indexOf(':root');
+      const customCssIndex = result.html.indexOf('.custom-class');
+
+      // Theme CSS should appear after Tailwind reference
+      expect(rootIndex).toBeGreaterThan(tailwindIndex);
+      // Custom CSS should appear after theme CSS
+      expect(customCssIndex).toBeGreaterThan(rootIndex);
+    });
   });
 });
 
@@ -516,5 +574,210 @@ describe('Integration', () => {
     expect(result.size).toBeGreaterThan(0);
     // Types should be stripped
     expect(result.code).not.toContain('interface Props');
+  });
+});
+
+// ============================================
+// Multi-Platform Build Tests
+// ============================================
+
+describe('bundleToStaticHTMLAll', () => {
+  let bundler: InMemoryBundler;
+
+  beforeEach(() => {
+    bundler = new InMemoryBundler();
+    bundler.clearCache();
+  });
+
+  const simpleComponent = 'export default () => <div>Hello</div>';
+
+  it('should build for all 5 platforms by default', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    expect(Object.keys(result.platforms)).toHaveLength(5);
+    expect(result.platforms.openai).toBeDefined();
+    expect(result.platforms.claude).toBeDefined();
+    expect(result.platforms.cursor).toBeDefined();
+    expect(result.platforms['ext-apps']).toBeDefined();
+    expect(result.platforms.generic).toBeDefined();
+  });
+
+  it('should build for specified platforms only', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+      platforms: ['openai', 'claude'],
+    });
+
+    expect(Object.keys(result.platforms)).toHaveLength(2);
+    expect(result.platforms.openai).toBeDefined();
+    expect(result.platforms.claude).toBeDefined();
+    expect((result.platforms as Record<string, unknown>)['cursor']).toBeUndefined();
+  });
+
+  it('should transpile code only once (shared across platforms)', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    // All platforms should share the same component code
+    expect(result.sharedComponentCode).toBeTruthy();
+    expect(result.platforms.openai.componentCode).toBe(result.sharedComponentCode);
+    expect(result.platforms.claude.componentCode).toBe(result.sharedComponentCode);
+    expect(result.platforms.generic.componentCode).toBe(result.sharedComponentCode);
+  });
+
+  it('should include platform-specific metadata in each result', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    // OpenAI should have openai/* namespace
+    expect(result.platforms.openai.meta['openai/html']).toBeDefined();
+    expect(result.platforms.openai.meta['openai/mimeType']).toBe('text/html+skybridge');
+
+    // Claude should have frontmcp/* + ui/* namespace
+    expect(result.platforms.claude.meta['frontmcp/html']).toBeDefined();
+    expect(result.platforms.claude.meta['ui/html']).toBeDefined();
+
+    // Generic should have frontmcp/* namespace
+    expect(result.platforms.generic.meta['frontmcp/html']).toBeDefined();
+
+    // ext-apps should have ui/* namespace only
+    expect(result.platforms['ext-apps'].meta['ui/html']).toBeDefined();
+    expect(result.platforms['ext-apps'].meta['ui/mimeType']).toBe('text/html+mcp');
+  });
+
+  it('should use different CDN types per platform', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    // Claude uses UMD (cdnjs.cloudflare.com)
+    expect(result.platforms.claude.html).toContain('cdnjs.cloudflare.com');
+
+    // OpenAI uses ESM (esm.sh)
+    expect(result.platforms.openai.html).toContain('esm.sh');
+
+    // Generic uses ESM (esm.sh)
+    expect(result.platforms.generic.html).toContain('esm.sh');
+  });
+
+  it('should include metrics for transpilation and generation', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    expect(result.metrics.transpileTime).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.generationTime).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.totalTime).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.totalTime).toBeGreaterThanOrEqual(result.metrics.transpileTime);
+  });
+
+  it('should return correct targetPlatform for each result', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    expect(result.platforms.openai.targetPlatform).toBe('openai');
+    expect(result.platforms.claude.targetPlatform).toBe('claude');
+    expect(result.platforms.cursor.targetPlatform).toBe('cursor');
+    expect(result.platforms['ext-apps'].targetPlatform).toBe('ext-apps');
+    expect(result.platforms.generic.targetPlatform).toBe('generic');
+  });
+
+  it('should work with universal mode', async () => {
+    const markdownContent = '# Hello World\n\nThis is **bold** text.';
+
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: markdownContent,
+      toolName: 'test_tool',
+      universal: true,
+      contentType: 'markdown',
+    });
+
+    // All platforms should have universal: true
+    expect(result.platforms.openai.universal).toBe(true);
+    expect(result.platforms.claude.universal).toBe(true);
+    expect(result.platforms.generic.universal).toBe(true);
+
+    // All should have contentType: markdown
+    expect(result.platforms.openai.contentType).toBe('markdown');
+    expect(result.platforms.claude.contentType).toBe('markdown');
+  });
+
+  it('should generate different HTML sizes for different platforms', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    // Each platform should have a valid size
+    expect(result.platforms.openai.size).toBeGreaterThan(0);
+    expect(result.platforms.claude.size).toBeGreaterThan(0);
+
+    // HTML content should differ (UMD vs ESM)
+    expect(result.platforms.openai.html).not.toBe(result.platforms.claude.html);
+  });
+
+  it('should include hash for each platform result', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    expect(result.platforms.openai.hash).toBeDefined();
+    expect(result.platforms.claude.hash).toBeDefined();
+    expect(typeof result.platforms.openai.hash).toBe('string');
+    expect(result.platforms.openai.hash.length).toBeGreaterThan(0);
+  });
+
+  it('should include theme CSS variables in all platform outputs', async () => {
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+    });
+
+    // All platforms should contain :root CSS variables
+    for (const platform of ['openai', 'claude', 'cursor', 'ext-apps', 'generic'] as const) {
+      const html = result.platforms[platform].html;
+      expect(html).toContain(':root');
+      expect(html).toContain('--color-primary');
+      expect(html).toContain('--color-secondary');
+    }
+  });
+
+  it('should use custom theme in multi-platform build', async () => {
+    const { createTheme } = await import('@frontmcp/uipack/theme');
+
+    const customTheme = createTheme({
+      colors: {
+        semantic: {
+          primary: '#123456',
+          accent: '#abcdef',
+        },
+      },
+    });
+
+    const result = await bundler.bundleToStaticHTMLAll({
+      source: simpleComponent,
+      toolName: 'test_tool',
+      theme: customTheme,
+    });
+
+    // All platforms should contain the custom colors
+    for (const platform of ['openai', 'claude', 'generic'] as const) {
+      const html = result.platforms[platform].html;
+      expect(html).toContain('#123456');
+      expect(html).toContain('#abcdef');
+    }
   });
 });

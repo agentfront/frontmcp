@@ -245,6 +245,13 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'react',
         version: '18.2.0',
         content: 'declare const React: any;',
+        files: [
+          {
+            path: 'node_modules/react/index.d.ts',
+            url: 'https://esm.sh/react.d.ts',
+            content: 'declare const React: any;',
+          },
+        ],
         fetchedUrls: ['https://esm.sh/react.d.ts'],
         fetchedAt: new Date().toISOString(),
       },
@@ -258,6 +265,8 @@ describe('MemoryTypeCache', () => {
 
     expect(retrieved).toBeDefined();
     expect(retrieved?.result.specifier).toBe('react');
+    expect(retrieved?.result.files).toHaveLength(1);
+    expect(retrieved?.result.files[0].path).toBe('node_modules/react/index.d.ts');
   });
 
   it('should return undefined for missing keys', async () => {
@@ -272,6 +281,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: '',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -292,6 +302,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: '',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -314,6 +325,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: '',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -339,6 +351,7 @@ describe('MemoryTypeCache', () => {
           resolvedPackage: `pkg${i}`,
           version: '1.0.0',
           content: '',
+          files: [],
           fetchedUrls: [],
           fetchedAt: new Date().toISOString(),
         },
@@ -366,6 +379,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: '',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -391,6 +405,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: 'test content',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -421,6 +436,7 @@ describe('MemoryTypeCache', () => {
         resolvedPackage: 'test',
         version: '1.0.0',
         content: '',
+        files: [],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },
@@ -513,6 +529,13 @@ describe('TypeFetcher', () => {
           resolvedPackage: 'react',
           version: '18.2.0',
           content: 'declare const React: any;',
+          files: [
+            {
+              path: 'node_modules/react/index.d.ts',
+              url: 'https://esm.sh/react.d.ts',
+              content: 'declare const React: any;',
+            },
+          ],
           fetchedUrls: ['https://esm.sh/react.d.ts'],
           fetchedAt: new Date().toISOString(),
         },
@@ -531,6 +554,7 @@ describe('TypeFetcher', () => {
 
       expect(result.cacheHits).toBe(1);
       expect(result.results).toHaveLength(1);
+      expect(result.results[0].files).toHaveLength(1);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -544,6 +568,7 @@ describe('TypeFetcher', () => {
           resolvedPackage: 'react',
           version: '18.2.0',
           content: 'cached content',
+          files: [],
           fetchedUrls: ['https://esm.sh/react.d.ts'],
           fetchedAt: new Date().toISOString(),
         },
@@ -576,6 +601,13 @@ describe('TypeFetcher', () => {
           resolvedPackage: 'react',
           version: '17.0.2',
           content: 'React 17 types',
+          files: [
+            {
+              path: 'node_modules/react/index.d.ts',
+              url: 'https://esm.sh/react@17.0.2.d.ts',
+              content: 'React 17 types',
+            },
+          ],
           fetchedUrls: ['https://esm.sh/react@17.0.2.d.ts'],
           fetchedAt: new Date().toISOString(),
         },
@@ -595,6 +627,7 @@ describe('TypeFetcher', () => {
 
       expect(result.cacheHits).toBe(1);
       expect(result.results[0].version).toBe('17.0.2');
+      expect(result.results[0].files).toHaveLength(1);
     });
 
     it('should report timing and counts', async () => {
@@ -605,6 +638,13 @@ describe('TypeFetcher', () => {
           resolvedPackage: 'lodash',
           version: '4.17.21',
           content: 'lodash types',
+          files: [
+            {
+              path: 'node_modules/lodash/index.d.ts',
+              url: 'https://esm.sh/lodash.d.ts',
+              content: 'lodash types',
+            },
+          ],
           fetchedUrls: [],
           fetchedAt: new Date().toISOString(),
         },
@@ -668,6 +708,13 @@ describe('globalTypeCache', () => {
         resolvedPackage: 'global-test',
         version: '1.0.0',
         content: 'test',
+        files: [
+          {
+            path: 'node_modules/global-test/index.d.ts',
+            url: 'https://esm.sh/global-test.d.ts',
+            content: 'test',
+          },
+        ],
         fetchedUrls: [],
         fetchedAt: new Date().toISOString(),
       },

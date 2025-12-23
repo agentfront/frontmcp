@@ -64,9 +64,14 @@ export type {
   TransformContext,
   // Static HTML types
   TargetPlatform,
+  ConcretePlatform,
   StaticHTMLExternalConfig,
   StaticHTMLOptions,
   StaticHTMLResult,
+  // Multi-platform build types
+  MultiPlatformBuildOptions,
+  PlatformBuildResult,
+  MultiPlatformBuildResult,
 } from './types';
 
 export {
@@ -78,6 +83,8 @@ export {
   DEFAULT_STATIC_HTML_OPTIONS,
   STATIC_HTML_CDN,
   getCdnTypeForPlatform,
+  // Multi-platform build constants
+  ALL_PLATFORMS,
 } from './types';
 
 // ============================================

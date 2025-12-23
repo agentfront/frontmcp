@@ -454,14 +454,17 @@ export function buildUniversalRuntime(options: UniversalRuntimeOptions): Univers
 
   let script = parts.join('\n');
 
-  // Minify if requested
+  // Minify if requested (safe minification that preserves strings)
   if (options.minify) {
-    // Basic minification: remove comments and excess whitespace
     script = script
-      .replace(/\/\/[^\n]*/g, '') // Remove single-line comments
-      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
-      .replace(/\n\s*\n/g, '\n') // Remove empty lines
-      .replace(/^\s+/gm, '') // Remove leading whitespace
+      // Remove block comments (safe - /* can't appear in strings without escaping)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Remove full-line comments only (to preserve // in strings like 'http://')
+      .replace(/^\s*\/\/[^\n]*$/gm, '')
+      // Collapse multiple newlines
+      .replace(/\n\s*\n/g, '\n')
+      // Remove leading whitespace
+      .replace(/^\s+/gm, '')
       .trim();
   }
 
@@ -483,8 +486,10 @@ export function buildMinimalRuntime(options: Pick<UniversalRuntimeOptions, 'mini
 
   if (options.minify) {
     script = script
-      .replace(/\/\/[^\n]*/g, '')
+      // Remove block comments (safe)
       .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Remove full-line comments only (preserves // in strings)
+      .replace(/^\s*\/\/[^\n]*$/gm, '')
       .replace(/\n\s*\n/g, '\n')
       .replace(/^\s+/gm, '')
       .trim();

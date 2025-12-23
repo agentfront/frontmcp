@@ -16,6 +16,7 @@ import type {
   TypeFetcherOptions,
   PackageResolution,
   TypeCacheEntry,
+  TypeFile,
 } from './types';
 import { TYPE_CACHE_PREFIX } from './types';
 import type { TypeCacheAdapter } from './cache';
@@ -255,7 +256,10 @@ export class TypeFetcher {
         };
       }
 
-      // Combine all fetched contents
+      // Build individual files array for browser editors
+      const files = buildTypeFiles(contents, resolution.packageName, resolution.version);
+
+      // Combine all fetched contents (deprecated, kept for backwards compatibility)
       const combinedContent = combineDtsContents(contents);
 
       const result: TypeFetchResult = {
@@ -263,6 +267,7 @@ export class TypeFetcher {
         resolvedPackage: resolution.packageName,
         version: resolution.version,
         content: combinedContent,
+        files,
         fetchedUrls,
         fetchedAt: new Date().toISOString(),
       };
@@ -542,6 +547,87 @@ function resolveRelativeUrl(base: string, relative: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Build TypeFile array from fetched contents.
+ * Converts URLs to virtual file paths for browser editor compatibility.
+ *
+ * @param contents - Map of URL to .d.ts content
+ * @param packageName - The resolved package name
+ * @param version - The package version
+ * @returns Array of TypeFile objects with virtual paths
+ */
+function buildTypeFiles(contents: Map<string, string>, packageName: string, version: string): TypeFile[] {
+  const files: TypeFile[] = [];
+
+  for (const [url, content] of contents.entries()) {
+    const virtualPath = urlToVirtualPath(url, packageName, version);
+    files.push({
+      path: virtualPath,
+      url,
+      content,
+    });
+  }
+
+  return files;
+}
+
+/**
+ * Convert a CDN URL to a virtual file path for browser editors.
+ *
+ * Examples:
+ * - https://esm.sh/v135/zod@3.23.8/lib/types.d.ts -> node_modules/zod/lib/types.d.ts
+ * - https://esm.sh/v135/@frontmcp/ui@1.0.0/react/index.d.ts -> node_modules/@frontmcp/ui/react/index.d.ts
+ *
+ * @param url - The CDN URL
+ * @param packageName - The package name (e.g., 'zod', '@frontmcp/ui')
+ * @param version - The package version
+ * @returns Virtual file path
+ */
+function urlToVirtualPath(url: string, packageName: string, version: string): string {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+
+    // Remove /v{number}/ prefix from esm.sh URLs
+    let cleanPath = pathname.replace(/^\/v\d+\//, '/');
+
+    // Find where the package@version starts
+    const versionedPackage = `${packageName}@${version}`;
+    const packageIndex = cleanPath.indexOf(versionedPackage);
+
+    if (packageIndex !== -1) {
+      // Extract the path after package@version
+      const afterPackageVersion = cleanPath.substring(packageIndex + versionedPackage.length);
+      // Build virtual path: node_modules/packageName/...
+      const relativePath = afterPackageVersion.startsWith('/') ? afterPackageVersion.substring(1) : afterPackageVersion;
+      return `node_modules/${packageName}/${relativePath || 'index.d.ts'}`;
+    }
+
+    // Fallback: try to extract path from URL pattern
+    // Handle URLs like /packageName@version/path/to/file.d.ts
+    const packagePattern = new RegExp(`/${escapeRegExp(packageName)}@[^/]+(/.*)?$`);
+    const match = pathname.match(packagePattern);
+
+    if (match) {
+      const filePath = match[1] ? match[1].substring(1) : 'index.d.ts';
+      return `node_modules/${packageName}/${filePath}`;
+    }
+
+    // Last fallback: just use the URL pathname
+    return `node_modules/${packageName}/${pathname.split('/').pop() || 'index.d.ts'}`;
+  } catch {
+    // If URL parsing fails, return a basic path
+    return `node_modules/${packageName}/index.d.ts`;
+  }
+}
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ============================================

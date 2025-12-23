@@ -21,6 +21,11 @@ import type {
   StaticHTMLExternalConfig,
   TargetPlatform,
   EsbuildTransformOptions,
+  ConcretePlatform,
+  MultiPlatformBuildOptions,
+  PlatformBuildResult,
+  MultiPlatformBuildResult,
+  MergedStaticHTMLOptions,
 } from './types';
 import {
   DEFAULT_BUNDLE_OPTIONS,
@@ -29,7 +34,10 @@ import {
   DEFAULT_STATIC_HTML_OPTIONS,
   STATIC_HTML_CDN,
   getCdnTypeForPlatform,
+  ALL_PLATFORMS,
 } from './types';
+import { buildUIMeta, type AIPlatformType } from '@frontmcp/uipack/adapters';
+import { DEFAULT_THEME, buildThemeCss, type ThemeConfig } from '@frontmcp/uipack/theme';
 import { BundlerCache, createCacheKey, hashContent } from './cache';
 import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
 import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
@@ -402,7 +410,7 @@ export class InMemoryBundler {
     });
 
     // Build HTML sections
-    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss, theme: opts.theme });
     const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
     const frontmcpRuntime = this.buildFrontMCPRuntime();
     const dataScript = this.buildDataInjectionScript(opts.toolName, opts.input, opts.output, opts.structuredContent);
@@ -438,6 +446,253 @@ export class InMemoryBundler {
   }
 
   /**
+   * Bundle a component to static HTML for all target platforms at once.
+   *
+   * This method is optimized for efficiency:
+   * - Transpiles the component source code only once
+   * - Generates platform-specific HTML variations from the shared transpiled code
+   * - Returns complete platform metadata ready for MCP responses
+   *
+   * @param options - Multi-platform build options
+   * @returns Multi-platform build result with all platforms
+   *
+   * @example
+   * ```typescript
+   * const result = await bundler.bundleToStaticHTMLAll({
+   *   source: `
+   *     import { Card, useToolOutput } from '@frontmcp/ui/react';
+   *     export default function Weather() {
+   *       const output = useToolOutput();
+   *       return <Card title="Weather">{output?.temperature}°F</Card>;
+   *     }
+   *   `,
+   *   toolName: 'get_weather',
+   *   output: { temperature: 72 },
+   * });
+   *
+   * // Access platform-specific results
+   * const openaiHtml = result.platforms.openai.html;
+   * const claudeHtml = result.platforms.claude.html;
+   *
+   * // Get metadata for MCP response
+   * const openaiMeta = result.platforms.openai.meta;
+   * ```
+   */
+  async bundleToStaticHTMLAll(options: MultiPlatformBuildOptions): Promise<MultiPlatformBuildResult> {
+    const startTime = performance.now();
+
+    // Merge options with defaults
+    const opts = this.mergeStaticHTMLOptions(options as StaticHTMLOptions);
+    const platforms = options.platforms ?? [...ALL_PLATFORMS];
+
+    // Step 1: Transpile component ONCE (shared across all platforms)
+    const transpileStart = performance.now();
+    let transpiledCode: string | null = null;
+    let bundleResult: BundleResult | null = null;
+
+    // Handle universal mode vs standard component mode
+    const isUniversal = opts.universal;
+    const rawContentType = options.contentType ?? 'auto';
+    const contentType: ContentType = isUniversal
+      ? rawContentType === 'auto'
+        ? detectUniversalContentType(options.source)
+        : rawContentType
+      : 'react';
+
+    // Only transpile if it's a React component
+    if (contentType === 'react' || !isUniversal) {
+      bundleResult = await this.bundle({
+        source: options.source,
+        sourceType: opts.sourceType,
+        format: 'cjs',
+        minify: opts.minify,
+        sourceMaps: false,
+        externals: ['react', 'react-dom', 'react/jsx-runtime', '@frontmcp/ui', '@frontmcp/ui/react'],
+        security: opts.security,
+        skipCache: opts.skipCache,
+      });
+      transpiledCode = bundleResult.code;
+    }
+
+    const transpileTime = performance.now() - transpileStart;
+
+    // Step 2: Generate platform-specific HTML for each target
+    const generationStart = performance.now();
+    const platformResults: Partial<Record<ConcretePlatform, PlatformBuildResult>> = {};
+
+    for (const platform of platforms) {
+      const platformResult = await this.buildForPlatform({
+        options,
+        opts,
+        platform,
+        transpiledCode,
+        bundleResult,
+        contentType,
+        isUniversal,
+      });
+      platformResults[platform] = platformResult;
+    }
+
+    const generationTime = performance.now() - generationStart;
+
+    return {
+      platforms: platformResults as Record<ConcretePlatform, PlatformBuildResult>,
+      sharedComponentCode: transpiledCode ?? '',
+      metrics: {
+        transpileTime,
+        generationTime,
+        totalTime: performance.now() - startTime,
+      },
+      cached: bundleResult?.cached ?? false,
+    };
+  }
+
+  /**
+   * Build for a specific platform with pre-transpiled code.
+   * Internal helper for bundleToStaticHTMLAll.
+   */
+  private async buildForPlatform(params: {
+    options: MultiPlatformBuildOptions;
+    opts: MergedStaticHTMLOptions;
+    platform: ConcretePlatform;
+    transpiledCode: string | null;
+    bundleResult: BundleResult | null;
+    contentType: ContentType;
+    isUniversal: boolean;
+  }): Promise<PlatformBuildResult> {
+    const { options, opts, platform, transpiledCode, bundleResult, contentType, isUniversal } = params;
+
+    const cdnType = getCdnTypeForPlatform(platform);
+    const buildStart = performance.now();
+
+    let html: string;
+    let componentCode: string;
+
+    if (isUniversal) {
+      // Universal mode: use cached runtime
+      const cachedRuntime = getCachedRuntime({
+        cdnType,
+        includeMarkdown: opts.includeMarkdown || contentType === 'markdown',
+        includeMdx: opts.includeMdx || contentType === 'mdx',
+        minify: opts.minify,
+      });
+
+      const componentCodeStr = transpiledCode ? buildComponentCode(transpiledCode) : '';
+      const dataInjectionStr = buildDataInjectionCode(
+        opts.toolName,
+        opts.input,
+        opts.output,
+        opts.structuredContent,
+        contentType,
+        transpiledCode ? null : options.source,
+        transpiledCode !== null,
+      );
+      const appScript = buildAppScript(
+        cachedRuntime.appTemplate,
+        componentCodeStr,
+        dataInjectionStr,
+        opts.customComponents ?? '',
+      );
+
+      const head = this.buildStaticHTMLHead({
+        externals: opts.externals,
+        customCss: opts.customCss,
+        theme: opts.theme,
+      });
+      const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+      const renderScript = this.buildUniversalRenderScript(opts.rootId, cdnType);
+
+      html = this.assembleUniversalStaticHTMLCached({
+        title: opts.title || `${opts.toolName} - Widget`,
+        head,
+        reactRuntime,
+        cdnImports: cachedRuntime.cdnImports,
+        vendorScript: cachedRuntime.vendorScript,
+        appScript,
+        renderScript,
+        rootId: opts.rootId,
+        cdnType,
+      });
+
+      componentCode = transpiledCode ?? appScript;
+    } else {
+      // Standard mode
+      const head = this.buildStaticHTMLHead({
+        externals: opts.externals,
+        customCss: opts.customCss,
+        theme: opts.theme,
+      });
+      const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
+      const frontmcpRuntime = this.buildFrontMCPRuntime();
+      const dataScript = this.buildDataInjectionScript(opts.toolName, opts.input, opts.output, opts.structuredContent);
+      const componentScript = this.buildComponentRenderScript(transpiledCode!, opts.rootId, cdnType);
+
+      html = this.assembleStaticHTML({
+        title: opts.title || `${opts.toolName} - Widget`,
+        head,
+        reactRuntime,
+        frontmcpRuntime,
+        dataScript,
+        componentScript,
+        rootId: opts.rootId,
+        cdnType,
+      });
+
+      componentCode = transpiledCode!;
+    }
+
+    const hash = hashContent(html);
+
+    // Build platform-specific metadata
+    const meta = buildUIMeta({
+      uiConfig: {
+        template: () => html,
+        widgetAccessible: opts.widgetAccessible,
+      },
+      platformType: this.mapTargetPlatformToAIPlatform(platform),
+      html,
+    });
+
+    return {
+      html,
+      componentCode,
+      metrics: bundleResult?.metrics ?? {
+        transformTime: 0,
+        bundleTime: 0,
+        totalTime: performance.now() - buildStart,
+      },
+      hash,
+      size: html.length,
+      cached: bundleResult?.cached ?? false,
+      sourceType: bundleResult?.sourceType ?? opts.sourceType,
+      targetPlatform: platform,
+      universal: isUniversal,
+      contentType: isUniversal ? contentType : undefined,
+      meta,
+    };
+  }
+
+  /**
+   * Map TargetPlatform to AIPlatformType for metadata generation.
+   */
+  private mapTargetPlatformToAIPlatform(platform: ConcretePlatform): AIPlatformType {
+    switch (platform) {
+      case 'openai':
+        return 'openai';
+      case 'claude':
+        return 'claude';
+      case 'cursor':
+        return 'cursor';
+      case 'ext-apps':
+        return 'ext-apps';
+      case 'generic':
+        return 'generic-mcp';
+      default:
+        return 'generic-mcp';
+    }
+  }
+
+  /**
    * Bundle to static HTML with universal rendering mode.
    * Uses the universal renderer that can handle multiple content types.
    *
@@ -446,7 +701,7 @@ export class InMemoryBundler {
    */
   private async bundleToStaticHTMLUniversal(
     options: StaticHTMLOptions,
-    opts: ReturnType<typeof this.mergeStaticHTMLOptions>,
+    opts: MergedStaticHTMLOptions,
     platform: TargetPlatform,
     cdnType: 'esm' | 'umd',
     startTime: number,
@@ -508,7 +763,7 @@ export class InMemoryBundler {
     );
 
     // Build HTML sections
-    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss });
+    const head = this.buildStaticHTMLHead({ externals: opts.externals, customCss: opts.customCss, theme: opts.theme });
     const reactRuntime = this.buildReactRuntimeScripts(opts.externals, platform, cdnType);
     const renderScript = this.buildUniversalRenderScript(opts.rootId, cdnType);
 
@@ -1010,28 +1265,7 @@ ${parts.appScript}
   /**
    * Merge static HTML options with defaults.
    */
-  private mergeStaticHTMLOptions(
-    options: StaticHTMLOptions,
-  ): Required<
-    Pick<
-      StaticHTMLOptions,
-      | 'sourceType'
-      | 'targetPlatform'
-      | 'minify'
-      | 'skipCache'
-      | 'rootId'
-      | 'widgetAccessible'
-      | 'externals'
-      | 'universal'
-      | 'contentType'
-      | 'includeMarkdown'
-      | 'includeMdx'
-    >
-  > &
-    Pick<
-      StaticHTMLOptions,
-      'toolName' | 'input' | 'output' | 'structuredContent' | 'title' | 'security' | 'customCss' | 'customComponents'
-    > {
+  private mergeStaticHTMLOptions(options: StaticHTMLOptions): MergedStaticHTMLOptions {
     return {
       sourceType: options.sourceType ?? DEFAULT_STATIC_HTML_OPTIONS.sourceType,
       targetPlatform: options.targetPlatform ?? DEFAULT_STATIC_HTML_OPTIONS.targetPlatform,
@@ -1057,13 +1291,18 @@ ${parts.appScript}
       security: options.security,
       customCss: options.customCss,
       customComponents: options.customComponents,
+      theme: options.theme,
     };
   }
 
   /**
    * Build the <head> section for static HTML.
    */
-  private buildStaticHTMLHead(opts: { externals: StaticHTMLExternalConfig; customCss?: string }): string {
+  private buildStaticHTMLHead(opts: {
+    externals: StaticHTMLExternalConfig;
+    customCss?: string;
+    theme?: ThemeConfig;
+  }): string {
     const parts: string[] = [];
 
     // Meta tags
@@ -1087,6 +1326,9 @@ ${parts.appScript}
       parts.push(`<link rel="stylesheet" href="${tailwindConfig}">`);
     }
 
+    // Theme CSS variables (injected as :root variables after Tailwind)
+    parts.push(this.buildThemeStyleBlock(opts.theme));
+
     // Base styles for loading state and common utilities
     parts.push(`<style>
       body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -1095,12 +1337,25 @@ ${parts.appScript}
       @keyframes spin { to { transform: rotate(360deg); } }
     </style>`);
 
-    // Custom CSS (injected after Tailwind)
+    // Custom CSS (injected after Tailwind and theme)
     if (opts.customCss) {
       parts.push(`<style>\n${sanitizeCss(opts.customCss)}\n    </style>`);
     }
 
     return parts.join('\n    ');
+  }
+
+  /**
+   * Build theme CSS variables as a :root style block.
+   * Uses DEFAULT_THEME if no theme is provided.
+   */
+  private buildThemeStyleBlock(theme: ThemeConfig = DEFAULT_THEME): string {
+    const cssVars = buildThemeCss(theme);
+    return `<style>
+      :root {
+        ${cssVars}
+      }
+    </style>`;
   }
 
   /**

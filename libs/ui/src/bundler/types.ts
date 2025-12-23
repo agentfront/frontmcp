@@ -6,6 +6,8 @@
  * @packageDocumentation
  */
 
+import type { ThemeConfig } from '@frontmcp/uipack/theme';
+
 // ============================================
 // Source Types
 // ============================================
@@ -675,9 +677,28 @@ export const DEFAULT_BUNDLER_OPTIONS: Required<BundlerOptions> = {
  * - 'openai': OpenAI ChatGPT/Plugins - uses esm.sh
  * - 'claude': Claude Artifacts - uses cdnjs.cloudflare.com (only trusted CDN)
  * - 'cursor': Cursor IDE - uses esm.sh
- * - 'generic': Generic platform - uses esm.sh
+ * - 'ext-apps': MCP Apps (SEP-1865) - uses esm.sh
+ * - 'generic': Generic platform - uses esm.sh with frontmcp/* namespace
  */
-export type TargetPlatform = 'auto' | 'openai' | 'claude' | 'cursor' | 'generic';
+export type TargetPlatform = 'auto' | 'openai' | 'claude' | 'cursor' | 'ext-apps' | 'generic';
+
+/**
+ * Concrete platform type (excludes 'auto').
+ * Used for multi-platform builds where a specific platform must be targeted.
+ */
+export type ConcretePlatform = Exclude<TargetPlatform, 'auto'>;
+
+/**
+ * All platforms that can be targeted for multi-platform builds.
+ * Order: OpenAI, Claude, Cursor, ext-apps, Generic
+ */
+export const ALL_PLATFORMS: readonly ConcretePlatform[] = [
+  'openai',
+  'claude',
+  'cursor',
+  'ext-apps',
+  'generic',
+] as const;
 
 /**
  * Configuration for external dependencies in static HTML bundling.
@@ -807,6 +828,28 @@ export interface StaticHTMLOptions {
    * ```
    */
   customCss?: string;
+
+  /**
+   * Theme configuration for CSS variables.
+   * When provided, theme CSS variables (--color-primary, --color-border, etc.)
+   * will be injected into the HTML as :root CSS variables.
+   *
+   * If not provided, uses DEFAULT_THEME from @frontmcp/uipack.
+   *
+   * @example
+   * ```typescript
+   * import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
+   *
+   * // Use default theme
+   * theme: DEFAULT_THEME
+   *
+   * // Or create custom theme
+   * theme: createTheme({
+   *   colors: { semantic: { primary: '#0969da' } }
+   * })
+   * ```
+   */
+  theme?: ThemeConfig;
 
   // ============================================
   // Universal Mode Options
@@ -991,3 +1034,109 @@ export const DEFAULT_STATIC_HTML_OPTIONS = {
   includeMarkdown: false,
   includeMdx: false,
 } as const;
+
+// ============================================
+// Merged Options Type
+// ============================================
+
+/**
+ * Internal type for merged static HTML options.
+ * Used by bundler methods after merging user options with defaults.
+ */
+export type MergedStaticHTMLOptions = Required<
+  Pick<
+    StaticHTMLOptions,
+    | 'sourceType'
+    | 'targetPlatform'
+    | 'minify'
+    | 'skipCache'
+    | 'rootId'
+    | 'widgetAccessible'
+    | 'externals'
+    | 'universal'
+    | 'contentType'
+    | 'includeMarkdown'
+    | 'includeMdx'
+  >
+> &
+  Pick<
+    StaticHTMLOptions,
+    | 'toolName'
+    | 'input'
+    | 'output'
+    | 'structuredContent'
+    | 'title'
+    | 'security'
+    | 'customCss'
+    | 'customComponents'
+    | 'theme'
+  >;
+
+// ============================================
+// Multi-Platform Build Types
+// ============================================
+
+/**
+ * Options for building for multiple platforms at once.
+ * Extends StaticHTMLOptions but replaces targetPlatform with platforms array.
+ */
+export interface MultiPlatformBuildOptions extends Omit<StaticHTMLOptions, 'targetPlatform'> {
+  /**
+   * Platforms to build for.
+   * @default ALL_PLATFORMS (all 5 platforms)
+   */
+  platforms?: ConcretePlatform[];
+}
+
+/**
+ * Result for a single platform in multi-platform build.
+ * Extends StaticHTMLResult with platform-specific metadata.
+ */
+export interface PlatformBuildResult extends StaticHTMLResult {
+  /**
+   * Platform-specific metadata for tool response _meta field.
+   * Ready to merge into MCP response.
+   *
+   * Contains namespace-prefixed fields like:
+   * - OpenAI: openai/html, openai/mimeType, etc.
+   * - Claude: frontmcp/html, claude/widgetDescription, etc.
+   * - Generic: frontmcp/html, frontmcp/widgetAccessible, etc.
+   * - ext-apps: ui/html, ui/mimeType, ui/csp, etc.
+   */
+  meta: Record<string, unknown>;
+}
+
+/**
+ * Result of building for multiple platforms.
+ * Contains all platform-specific builds with shared metrics.
+ */
+export interface MultiPlatformBuildResult {
+  /**
+   * Results keyed by platform name.
+   * Each platform has its own HTML and metadata.
+   */
+  platforms: Record<ConcretePlatform, PlatformBuildResult>;
+
+  /**
+   * Shared component code (transpiled once, reused).
+   * All platforms share this code to avoid redundant transpilation.
+   */
+  sharedComponentCode: string;
+
+  /**
+   * Multi-platform build metrics.
+   */
+  metrics: {
+    /** Time to transpile component (once) in ms */
+    transpileTime: number;
+    /** Time to generate all platform variants in ms */
+    generationTime: number;
+    /** Total time in ms */
+    totalTime: number;
+  };
+
+  /**
+   * Whether component was served from cache.
+   */
+  cached: boolean;
+}

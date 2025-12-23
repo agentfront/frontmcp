@@ -45,6 +45,7 @@
 // ============================================
 
 export type {
+  TypeFile,
   TypeFetchResult,
   TypeFetchError,
   TypeFetchErrorCode,
@@ -67,6 +68,8 @@ export { DEFAULT_TYPE_FETCHER_OPTIONS, TYPE_CACHE_PREFIX, DEFAULT_TYPE_CACHE_TTL
 export {
   // Error codes
   typeFetchErrorCodeSchema,
+  // Type file schema
+  typeFileSchema,
   // Result schemas
   typeFetchResultSchema,
   typeFetchErrorSchema,
@@ -88,6 +91,8 @@ export {
   validateTypeFetcherOptions,
   safeParseTypeFetcherOptions,
   // Types from schemas
+  type TypeFileInput,
+  type TypeFileOutput,
   type TypeFetchErrorCodeInput,
   type TypeFetchErrorCodeOutput,
   type TypeFetchResultInput,

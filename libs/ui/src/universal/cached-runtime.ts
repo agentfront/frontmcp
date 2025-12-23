@@ -753,15 +753,28 @@ function buildAppTemplate(): string {
 }
 
 /**
- * Basic script minification.
+ * Safe script minification that preserves strings.
+ *
+ * Uses a conservative approach to avoid corrupting string literals:
+ * - Only removes full-line comments (lines starting with //)
+ * - Removes block comments (/* ... *\/)
+ * - Removes empty lines and leading whitespace
+ * - Does NOT remove inline // comments (they might be in strings like 'http://')
  */
 function minifyScript(script: string): string {
-  return script
-    .replace(/\/\/[^\n]*/g, '') // Remove single-line comments
-    .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
-    .replace(/\n\s*\n/g, '\n') // Remove empty lines
-    .replace(/^\s+/gm, '') // Remove leading whitespace
-    .trim();
+  return (
+    script
+      // Remove block comments (safe - /* can't appear in strings without escaping)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Remove full-line comments (lines that are ONLY a comment after whitespace)
+      // This is safe because we require the line to start with optional whitespace then //
+      .replace(/^\s*\/\/[^\n]*$/gm, '')
+      // Collapse multiple newlines into single newline
+      .replace(/\n\s*\n/g, '\n')
+      // Remove leading whitespace from each line
+      .replace(/^\s+/gm, '')
+      .trim()
+  );
 }
 
 /**
