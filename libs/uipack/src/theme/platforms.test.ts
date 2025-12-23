@@ -25,24 +25,24 @@ describe('Platform System', () => {
     });
 
     describe('CLAUDE_PLATFORM', () => {
-      it('should have blocked network and inline scripts', () => {
+      it('should have limited network with CDN support', () => {
         expect(CLAUDE_PLATFORM.id).toBe('claude');
-        expect(CLAUDE_PLATFORM.supportsWidgets).toBe(false);
+        expect(CLAUDE_PLATFORM.supportsWidgets).toBe(true); // Claude Artifacts support widgets
         expect(CLAUDE_PLATFORM.supportsTailwind).toBe(true);
-        expect(CLAUDE_PLATFORM.supportsHtmx).toBe(false);
-        expect(CLAUDE_PLATFORM.networkMode).toBe('limited');
-        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('cdn');
+        expect(CLAUDE_PLATFORM.supportsHtmx).toBe(false); // No HTMX - connect-src blocked
+        expect(CLAUDE_PLATFORM.networkMode).toBe('limited'); // Limited to specific CDNs
+        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('cdn'); // Can use cdnjs, esm.sh, etc.
       });
     });
 
     describe('GEMINI_PLATFORM', () => {
-      it('should have limited widget support', () => {
+      it('should have no interactive widget support', () => {
         expect(GEMINI_PLATFORM.id).toBe('gemini');
         expect(GEMINI_PLATFORM.supportsWidgets).toBe(false);
-        expect(GEMINI_PLATFORM.supportsTailwind).toBe(true);
-        expect(GEMINI_PLATFORM.supportsHtmx).toBe(true);
+        expect(GEMINI_PLATFORM.supportsTailwind).toBe(true); // No Tailwind in Gemini
+        expect(GEMINI_PLATFORM.supportsHtmx).toBe(false); // No HTMX in Gemini
         expect(GEMINI_PLATFORM.networkMode).toBe('limited');
-        expect(CLAUDE_PLATFORM.scriptStrategy).toBe('cdn');
+        expect(GEMINI_PLATFORM.scriptStrategy).toBe('inline');
       });
 
       it('should have markdown fallback option', () => {
@@ -120,15 +120,18 @@ describe('Platform System', () => {
   });
 
   describe('needsInlineScripts', () => {
-    it('should return true for inline script strategy', () => {
-      expect(needsInlineScripts(CLAUDE_PLATFORM)).toBe(true);
+    it('should return false for Claude with limited CDN support', () => {
+      // Claude has scriptStrategy: 'cdn' and networkMode: 'limited'
+      // It can use CDN resources from allowed domains
+      expect(needsInlineScripts(CLAUDE_PLATFORM)).toBe(false);
     });
 
     it('should return false for cdn script strategy with full network', () => {
       expect(needsInlineScripts(OPENAI_PLATFORM)).toBe(false);
     });
 
-    it('should return true for blocked network mode', () => {
+    it('should return true for inline script strategy', () => {
+      // Gemini has scriptStrategy: 'inline'
       expect(needsInlineScripts(GEMINI_PLATFORM)).toBe(true);
     });
   });

@@ -103,7 +103,7 @@ export const OPENAI_PLATFORM: PlatformCapabilities = {
 export const CLAUDE_PLATFORM: PlatformCapabilities = {
   id: 'claude',
   name: 'Claude (Artifacts)',
-  supportsWidgets: true,
+  supportsWidgets: false,
   supportsTailwind: true,
   supportsHtmx: false, // Network blocked, HTMX won't work for API calls
   networkMode: 'limited',
@@ -124,7 +124,7 @@ export const GEMINI_PLATFORM: PlatformCapabilities = {
   id: 'gemini',
   name: 'Gemini',
   supportsWidgets: false,
-  supportsTailwind: false,
+  supportsTailwind: true,
   supportsHtmx: false,
   networkMode: 'limited',
   scriptStrategy: 'inline',

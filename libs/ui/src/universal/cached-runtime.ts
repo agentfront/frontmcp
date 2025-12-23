@@ -13,6 +13,7 @@
 import type { CDNType, ContentSecurityOptions } from './types';
 import { UNIVERSAL_CDN } from './types';
 import { getMCPBridgeScript } from '@frontmcp/uipack/runtime';
+import { buildUIComponentsRuntime as buildBrowserUIComponents } from '@frontmcp/uipack/build';
 
 // ============================================
 // Cache Types
@@ -477,73 +478,10 @@ function buildRenderersRuntime(options?: CachedRuntimeOptions): string {
 
 /**
  * Build UI components runtime (static).
+ * Uses the full-featured browser-compatible components from @frontmcp/uipack/build.
  */
 function buildUIComponentsRuntime(): string {
-  return `
-// UI Components (Vendor)
-(function() {
-  window.Card = function(props) {
-    var children = props.children;
-    var title = props.title;
-    var className = props.className || '';
-    return React.createElement('div', {
-      className: 'bg-white rounded-lg shadow border border-gray-200 overflow-hidden ' + className
-    }, [
-      title && React.createElement('div', {
-        key: 'header',
-        className: 'px-4 py-3 border-b border-gray-200 bg-gray-50'
-      }, React.createElement('h3', { className: 'text-sm font-medium text-gray-900' }, title)),
-      React.createElement('div', { key: 'body', className: 'p-4' }, children)
-    ]);
-  };
-
-  window.Badge = function(props) {
-    var children = props.children;
-    var variant = props.variant || 'default';
-    var variantClasses = {
-      default: 'bg-gray-100 text-gray-800',
-      success: 'bg-green-100 text-green-800',
-      warning: 'bg-yellow-100 text-yellow-800',
-      error: 'bg-red-100 text-red-800',
-      info: 'bg-blue-100 text-blue-800'
-    };
-    return React.createElement('span', {
-      className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' + (variantClasses[variant] || variantClasses.default)
-    }, children);
-  };
-
-  window.Button = function(props) {
-    var children = props.children;
-    var variant = props.variant || 'primary';
-    var onClick = props.onClick;
-    var disabled = props.disabled;
-    var variantClasses = {
-      primary: 'bg-blue-600 text-white hover:bg-blue-700',
-      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200',
-      outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
-      danger: 'bg-red-600 text-white hover:bg-red-700'
-    };
-    return React.createElement('button', {
-      className: 'px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ' +
-        (disabled ? 'opacity-50 cursor-not-allowed ' : '') +
-        (variantClasses[variant] || variantClasses.primary),
-      onClick: onClick,
-      disabled: disabled
-    }, children);
-  };
-
-  // Export to namespace
-  window.frontmcp_ui_namespaceObject = Object.assign({}, window.React || {}, {
-    useToolOutput: window.useToolOutput,
-    useToolInput: window.useToolInput,
-    useMcpBridgeContext: function() { return window.__frontmcp.context; },
-    useCallTool: function() { return function() { return Promise.resolve(null); }; },
-    Card: window.Card,
-    Badge: window.Badge,
-    Button: window.Button
-  });
-})();
-`;
+  return buildBrowserUIComponents();
 }
 
 /**

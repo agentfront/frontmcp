@@ -150,3 +150,75 @@ export function getHybridPlaceholders(html: string): {
     hasInput: html.includes(HYBRID_INPUT_PLACEHOLDER),
   };
 }
+
+/**
+ * Inject data into a dynamic/OpenAI shell with a trigger script for preview mode.
+ *
+ * This function:
+ * 1. Replaces data placeholders (like injectHybridDataFull)
+ * 2. Injects a script that calls window.__frontmcp.updateOutput(data) to trigger React re-renders
+ *
+ * Use this for preview mode when there's no actual OpenAI Canvas environment.
+ * In production OpenAI environments, use injectHybridDataFull instead and let
+ * the OpenAI Canvas trigger onToolResult.
+ *
+ * @param shell - HTML shell from bundleToStaticHTML with buildMode='dynamic'
+ * @param input - Input data to inject
+ * @param output - Output data to inject
+ * @returns HTML with data injected and trigger script added
+ *
+ * @example
+ * ```typescript
+ * import { injectHybridDataWithTrigger } from '@frontmcp/uipack/build';
+ *
+ * // For preview mode with dynamic/OpenAI shells
+ * const html = injectHybridDataWithTrigger(shell.html, inputData, outputData);
+ * // The trigger script will call window.__frontmcp.updateOutput(outputData)
+ * // which updates the store and triggers React re-renders
+ * ```
+ */
+export function injectHybridDataWithTrigger(
+  shell: string,
+  input: unknown,
+  output: unknown,
+): string {
+  // First inject the data placeholders
+  let result = injectHybridDataFull(shell, input, output);
+
+  // Safely stringify output for embedding in script
+  let outputJson: string;
+  try {
+    outputJson = JSON.stringify(output);
+  } catch {
+    outputJson = 'null';
+  }
+
+  // Create trigger script that mimics onToolResult
+  const triggerScript = `
+<script>
+(function() {
+  var data = ${outputJson};
+
+  function triggerUpdate() {
+    if (window.__frontmcp && window.__frontmcp.updateOutput) {
+      window.__frontmcp.updateOutput(data);
+    } else if (window.mcpBridge) {
+      // Trigger via bridge listeners
+      window.dispatchEvent(new CustomEvent('frontmcp:toolResult', { detail: data }));
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', triggerUpdate);
+  } else {
+    // Small delay to ensure store is initialized
+    setTimeout(triggerUpdate, 0);
+  }
+})();
+</script>`;
+
+  // Inject trigger script before </body>
+  result = result.replace('</body>', triggerScript + '\n</body>');
+
+  return result;
+}

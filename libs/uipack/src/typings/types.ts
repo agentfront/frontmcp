@@ -461,10 +461,16 @@ export interface PackageResolution {
 // ============================================
 
 /**
+ * Default allowed packages for type fetching.
+ * These packages are always allowed unless the allowlist is disabled.
+ */
+export const DEFAULT_ALLOWED_PACKAGES = ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'] as const;
+
+/**
  * Default options for TypeFetcher.
  */
 export const DEFAULT_TYPE_FETCHER_OPTIONS: Required<Omit<TypeFetcherOptions, 'fetch'>> = {
-  allowedPackages: ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'],
+  allowedPackages: [...DEFAULT_ALLOWED_PACKAGES],
   maxDepth: 4,
   timeout: 10000,
   maxConcurrency: 5,
@@ -480,9 +486,3 @@ export const TYPE_CACHE_PREFIX = 'types:';
  * Default cache TTL in milliseconds (1 hour).
  */
 export const DEFAULT_TYPE_CACHE_TTL = 60 * 60 * 1000;
-
-/**
- * Default allowed packages for type fetching.
- * These packages are always allowed unless the allowlist is disabled.
- */
-export const DEFAULT_ALLOWED_PACKAGES = ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'] as const;

@@ -695,7 +695,26 @@ export {
   // Helper functions
   injectHybridData,
   injectHybridDataFull,
+  injectHybridDataWithTrigger,
   isHybridShell,
   needsInputInjection,
   getHybridPlaceholders,
 } from './hybrid-data';
+
+// ============================================
+// Browser-Compatible UI Components
+// ============================================
+
+export {
+  // Main builder
+  buildUIComponentsRuntime,
+  // Individual builders (for custom composition)
+  buildStyleConstants,
+  buildCardComponent,
+  buildButtonComponent,
+  buildBadgeComponent,
+  buildAlertComponent,
+  buildNamespaceExport,
+} from './ui-components-browser';
+
+export type { BrowserUIComponentsOptions } from './ui-components-browser';

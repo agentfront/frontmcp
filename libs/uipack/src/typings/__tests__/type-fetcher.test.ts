@@ -1146,7 +1146,7 @@ describe('TypeFetcher Allowlist', () => {
 
 describe('Constants', () => {
   it('should have correct default options', () => {
-    expect(DEFAULT_TYPE_FETCHER_OPTIONS.maxDepth).toBe(2);
+    expect(DEFAULT_TYPE_FETCHER_OPTIONS.maxDepth).toBe(4);
     expect(DEFAULT_TYPE_FETCHER_OPTIONS.timeout).toBe(10000);
     expect(DEFAULT_TYPE_FETCHER_OPTIONS.maxConcurrency).toBe(5);
     expect(DEFAULT_TYPE_FETCHER_OPTIONS.cdnBaseUrl).toBe('https://esm.sh');
