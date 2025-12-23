@@ -11,55 +11,162 @@ This guide walks you through installing and configuring FrontMCP Web for your br
 
 ## Prerequisites
 
+**For package manager installation:**
 - Node.js 18+ or Bun
 - React 18+ (for React integration)
 - TypeScript recommended
 
+**For CDN (esm.sh) usage:**
+- Modern browser with ES modules support
+- No build tooling required
+
 ## Installation
 
-<CodeGroup>
-```bash npm
-npm install @frontmcp/browser
-```
+Choose your preferred installation method:
 
-```bash pnpm
-pnpm add @frontmcp/browser
-```
+<Tabs>
+  <Tab title="Package Manager">
+    Install via your preferred package manager:
 
-```bash yarn
-yarn add @frontmcp/browser
-```
+    <CodeGroup>
+    ```bash npm
+    npm install @frontmcp/browser
+    ```
 
-```bash bun
-bun add @frontmcp/browser
-```
-</CodeGroup>
+    ```bash pnpm
+    pnpm add @frontmcp/browser
+    ```
 
-### Peer Dependencies
+    ```bash yarn
+    yarn add @frontmcp/browser
+    ```
 
-For React integration, ensure you have React installed:
+    ```bash bun
+    bun add @frontmcp/browser
+    ```
+    </CodeGroup>
 
-<CodeGroup>
-```bash npm
-npm install react react-dom
-```
+    ### Peer Dependencies
 
-```bash pnpm
-pnpm add react react-dom
-```
-</CodeGroup>
+    For React integration, ensure you have React installed:
 
-For schema validation (recommended):
+    <CodeGroup>
+    ```bash npm
+    npm install react react-dom
+    ```
 
-<CodeGroup>
-```bash npm
-npm install zod
-```
+    ```bash pnpm
+    pnpm add react react-dom
+    ```
+    </CodeGroup>
 
-```bash pnpm
-pnpm add zod
-```
-</CodeGroup>
+    For schema validation (recommended):
+
+    <CodeGroup>
+    ```bash npm
+    npm install zod
+    ```
+
+    ```bash pnpm
+    pnpm add zod
+    ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="CDN (esm.sh)">
+    For quick prototyping or build-free usage, import directly from esm.sh:
+
+    ```html
+    <script type="module">
+      import {
+        BrowserMcpServer,
+        EventTransportAdapter,
+        createSimpleEmitter,
+        initializeConfig,
+        generateUUID,
+      } from 'https://esm.sh/@frontmcp/browser@0.6.0';
+
+      // Your code here
+    </script>
+    ```
+
+    Or with import maps for cleaner imports:
+
+    ```html
+    <script type="importmap">
+    {
+      "imports": {
+        "@frontmcp/browser": "https://esm.sh/@frontmcp/browser@0.6.0",
+        "@frontmcp/browser/react": "https://esm.sh/@frontmcp/browser@0.6.0/react",
+        "@frontmcp/browser/store": "https://esm.sh/@frontmcp/browser@0.6.0/store"
+      }
+    }
+    </script>
+    <script type="module">
+      import { BrowserMcpServer } from '@frontmcp/browser';
+      // Your code here
+    </script>
+    ```
+
+    ### TypeScript Support with esm.sh
+
+    To get full TypeScript support when using esm.sh, you have two options:
+
+    #### Option 1: Type-only installation (Recommended)
+
+    Install the package as a dev dependency for types only:
+
+    ```bash
+    npm install @frontmcp/browser --save-dev
+    ```
+
+    Then configure your `tsconfig.json` to map the CDN URL to local types:
+
+    ```json
+    {
+      "compilerOptions": {
+        "paths": {
+          "https://esm.sh/@frontmcp/browser@*": ["./node_modules/@frontmcp/browser"],
+          "https://esm.sh/@frontmcp/browser@*/react": ["./node_modules/@frontmcp/browser/react"],
+          "https://esm.sh/@frontmcp/browser@*/store": ["./node_modules/@frontmcp/browser/store"]
+        }
+      }
+    }
+    ```
+
+    #### Option 2: Triple-slash reference directive
+
+    esm.sh serves type definitions directly. Add a reference at the top of your file:
+
+    ```typescript
+    /// <reference types="https://esm.sh/@frontmcp/browser@0.6.0?dts" />
+
+    import {
+      BrowserMcpServer,
+      EventTransportAdapter,
+    } from 'https://esm.sh/@frontmcp/browser@0.6.0';
+    ```
+
+    <Note>
+      Some editors like VS Code may require the [Deno extension](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-deno) or similar to resolve remote type references.
+    </Note>
+
+    ### Available CDN Subpaths
+
+    | Module | CDN URL |
+    |--------|---------|
+    | Core | `https://esm.sh/@frontmcp/browser@0.6.0` |
+    | React | `https://esm.sh/@frontmcp/browser@0.6.0/react` |
+    | Store | `https://esm.sh/@frontmcp/browser@0.6.0/store` |
+    | Telemetry | `https://esm.sh/@frontmcp/browser@0.6.0/telemetry` |
+    | Plugins | `https://esm.sh/@frontmcp/browser@0.6.0/plugins` |
+    | A11y | `https://esm.sh/@frontmcp/browser@0.6.0/a11y` |
+
+    <Warning>
+      For production applications, we recommend using a package manager for better caching, version management, and build optimization.
+    </Warning>
+  </Tab>
+</Tabs>
 
 ## Basic Setup
 
@@ -235,6 +342,83 @@ export default function App() {
   );
 }
 ```
+
+## CDN Complete Example
+
+Here's a complete single-file example using esm.sh (no build tools required):
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FrontMCP Browser Demo</title>
+</head>
+<body>
+  <div id="app">
+    <h1>FrontMCP Browser Demo</h1>
+    <button id="greet-btn">Greet</button>
+    <p id="output"></p>
+  </div>
+
+  <script type="module">
+    import {
+      BrowserMcpServer,
+      EventTransportAdapter,
+      createSimpleEmitter,
+      initializeConfig,
+      generateUUID,
+    } from 'https://esm.sh/@frontmcp/browser@0.6.0';
+
+    // Initialize config
+    initializeConfig({
+      debug: true,
+      isDevelopment: true,
+      machineId: generateUUID(),
+    });
+
+    // Create transport and server
+    const emitter = createSimpleEmitter();
+    const transport = new EventTransportAdapter(emitter);
+
+    const server = new BrowserMcpServer({
+      name: 'demo-app',
+      version: '1.0.0',
+      transport,
+    });
+
+    // Add a tool
+    server.addTool({
+      name: 'greet',
+      description: 'Say hello',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        required: ['name'],
+      },
+      handler: async ({ name }) => ({
+        content: [{ type: 'text', text: `Hello, ${name}!` }],
+      }),
+    });
+
+    // Start server
+    await server.start();
+    console.log('MCP Server started!');
+
+    // Wire up UI
+    document.getElementById('greet-btn').addEventListener('click', async () => {
+      const result = await server.executeTool('greet', { name: 'World' });
+      document.getElementById('output').textContent = result.content[0].text;
+    });
+  </script>
+</body>
+</html>
+```
+
+Save this as `index.html` and open it in any modern browser - no server required!
 
 ## Alternative: Using BrowserScope
 
