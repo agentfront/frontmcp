@@ -9,16 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type {
-  CardOptions,
-  CardVariant,
-  CardSize,
-  BadgeOptions,
-  BadgeVariant,
-  BadgeSize,
-  ButtonOptions,
-  AlertOptions,
-} from '../components';
+import type { CardVariant, CardSize, BadgeVariant, BadgeSize } from '../components';
 
 // Re-export element classes for ref typing
 export type { FmcpButton, FmcpCard, FmcpAlert, FmcpBadge, FmcpInput, FmcpSelect } from '../web-components';

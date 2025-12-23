@@ -18,7 +18,6 @@ import {
   DEFAULT_THEME,
   buildThemeCss,
   mergeThemes,
-  CDN,
   buildFontPreconnect,
   buildFontStylesheets,
   buildCdnScripts,
@@ -177,7 +176,7 @@ function getAlignmentClasses(alignment: LayoutAlignment): string {
 /**
  * Get CSS classes for background
  */
-function getBackgroundClasses(background: BackgroundStyle, theme: ThemeConfig): string {
+function getBackgroundClasses(background: BackgroundStyle, _theme: ThemeConfig): string {
   switch (background) {
     case 'gradient':
       return 'bg-gradient-to-br from-primary to-secondary';
@@ -247,7 +246,7 @@ function buildBodyAttrs(attrs?: Record<string, string>): string {
 export function baseLayout(content: string, options: BaseLayoutOptions): string {
   const {
     title,
-    pageType = 'custom',
+    pageType: _pageType = 'custom',
     size = 'md',
     alignment = 'center',
     background = 'solid',

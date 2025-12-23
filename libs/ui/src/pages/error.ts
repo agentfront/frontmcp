@@ -64,7 +64,7 @@ export function errorPage(options: ErrorPageOptions): string {
     retryUrl,
     showHome = true,
     homeUrl = '/',
-    showBack = false,
+    showBack: _showBack = false,
     actions,
     layout = {},
     requestId,

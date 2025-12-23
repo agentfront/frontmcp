@@ -5,7 +5,7 @@
  * Used by bundleToStaticHTML to create self-contained HTML documents.
  */
 
-import type { UniversalRuntimeOptions, UniversalRuntimeResult, CDNType } from './types';
+import type { UniversalRuntimeOptions, UniversalRuntimeResult } from './types';
 import { UNIVERSAL_CDN } from './types';
 
 // ============================================

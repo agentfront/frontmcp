@@ -32,7 +32,6 @@ import type {
 import {
   DEFAULT_BUNDLE_OPTIONS,
   DEFAULT_BUNDLER_OPTIONS,
-  DEFAULT_SECURITY_POLICY,
   DEFAULT_STATIC_HTML_OPTIONS,
   STATIC_HTML_CDN,
   getCdnTypeForPlatform,
@@ -43,8 +42,8 @@ import {
 import { buildUIMeta, type AIPlatformType } from '@frontmcp/uipack/adapters';
 import { DEFAULT_THEME, buildThemeCss, type ThemeConfig } from '@frontmcp/uipack/theme';
 import { BundlerCache, createCacheKey, hashContent } from './cache';
-import { validateSource, validateSize, mergePolicy, throwOnViolations, SecurityError } from './sandbox/policy';
-import { executeCode, executeDefault, ExecutionError } from './sandbox/executor';
+import { validateSource, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
+import { executeDefault, ExecutionError } from './sandbox/executor';
 import { escapeHtml } from '@frontmcp/uipack/utils';
 import type { ContentType } from '../universal/types';
 import { detectContentType as detectUniversalContentType } from '../universal/types';
@@ -645,7 +644,10 @@ export class InMemoryBundler {
 
       componentCode = transpiledCode ?? appScript;
     } else {
-      // Standard mode
+      // Standard mode - requires transpiled code
+      if (!transpiledCode) {
+        throw new Error('Failed to transpile component source');
+      }
       const head = this.buildStaticHTMLHead({
         externals: opts.externals,
         customCss: opts.customCss,
@@ -663,7 +665,7 @@ export class InMemoryBundler {
         opts.dynamicOptions,
         opts.hybridOptions,
       );
-      const componentScript = this.buildComponentRenderScript(transpiledCode!, opts.rootId, cdnType);
+      const componentScript = this.buildComponentRenderScript(transpiledCode, opts.rootId, cdnType);
 
       html = this.assembleStaticHTML({
         title: opts.title || `${opts.toolName} - Widget`,
@@ -676,7 +678,7 @@ export class InMemoryBundler {
         cdnType,
       });
 
-      componentCode = transpiledCode!;
+      componentCode = transpiledCode;
     }
 
     const hash = hashContent(html);

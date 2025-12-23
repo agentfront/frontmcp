@@ -208,7 +208,6 @@ describe('Button Component', () => {
 
   describe('Validation', () => {
     it('should return error box for invalid variant', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = button('Test', { variant: 'invalid' as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="button"');
@@ -216,7 +215,6 @@ describe('Button Component', () => {
     });
 
     it('should return error box for invalid size', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = button('Test', { size: 'huge' as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="button"');
@@ -224,7 +222,6 @@ describe('Button Component', () => {
     });
 
     it('should return error box for invalid type', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = button('Test', { type: 'custom' as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="button"');
@@ -232,14 +229,12 @@ describe('Button Component', () => {
     });
 
     it('should return error box for unknown properties (strict mode)', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = button('Test', { unknownProp: 'value' } as any);
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="button"');
     });
 
     it('should return error box for invalid htmx configuration', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = button('Test', { htmx: { invalidKey: 'value' } as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="button"');
@@ -264,7 +259,6 @@ describe('Button Component', () => {
     const buttons = [button('One'), button('Two')];
 
     it('should return error box for invalid direction', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = buttonGroup(buttons, { direction: 'diagonal' as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="buttonGroup"');
@@ -272,7 +266,6 @@ describe('Button Component', () => {
     });
 
     it('should return error box for invalid gap', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = buttonGroup(buttons, { gap: 'xl' as any });
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="buttonGroup"');
@@ -280,7 +273,6 @@ describe('Button Component', () => {
     });
 
     it('should return error box for unknown properties (strict mode)', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html = buttonGroup(buttons, { unknownProp: true } as any);
       expect(html).toContain('validation-error');
       expect(html).toContain('data-component="buttonGroup"');

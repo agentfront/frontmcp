@@ -22,7 +22,7 @@
  * @module @frontmcp/ui/web-components/elements/fmcp-select
  */
 
-import { FmcpElement, type FmcpElementConfig, getObservedAttributesFromSchema } from '../core';
+import { FmcpElement, type FmcpElementConfig } from '../core';
 import { select, type SelectOptions } from '../../components/form';
 import { SelectOptionsSchema, type SelectOptionItem } from '../../components/form.schema';
 

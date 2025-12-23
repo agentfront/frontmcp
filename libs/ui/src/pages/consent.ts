@@ -5,9 +5,9 @@
  */
 
 import { consentLayout, type ConsentLayoutOptions } from '../layouts';
-import { primaryButton, outlineButton, dangerButton } from '../components/button';
+import { primaryButton, outlineButton } from '../components/button';
 import { permissionList, type PermissionItem } from '../components/list';
-import { form, formActions, csrfInput, hiddenInput } from '../components/form';
+import { csrfInput, hiddenInput } from '../components/form';
 import { alert } from '../components/alert';
 import { escapeHtml } from '../layouts/base';
 
