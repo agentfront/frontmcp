@@ -5,20 +5,72 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
   "targets": {
-    "build-tsc": {
-      "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
       "dependsOn": ["^build"],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/plugins/dist",
         "main": "libs/plugins/src/index.ts",
         "tsConfig": "libs/plugins/tsconfig.lib.json",
-        "assets": ["libs/plugins/**/*.md", "LICENSE"]
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/plugins/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/plugins/README.md", "LICENSE", "libs/plugins/package.json"],
+        "additionalEntryPoints": ["libs/plugins/src/cache/index.ts", "libs/plugins/src/codecall/index.ts"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": [
+            "ioredis",
+            "enclave-vm",
+            "vectoriadb",
+            "@vercel/kv",
+            "@frontmcp/sdk",
+            "@frontmcp/sdk/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "zod"
+          ]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/plugins/dist/esm",
+        "main": "libs/plugins/src/index.ts",
+        "tsConfig": "libs/plugins/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": true,
+        "declarationRootDir": "libs/plugins/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "additionalEntryPoints": ["libs/plugins/src/cache/index.ts", "libs/plugins/src/codecall/index.ts"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": [
+            "ioredis",
+            "enclave-vm",
+            "vectoriadb",
+            "@vercel/kv",
+            "@frontmcp/sdk",
+            "@frontmcp/sdk/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "zod"
+          ]
+        }
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-tsc"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
       }
