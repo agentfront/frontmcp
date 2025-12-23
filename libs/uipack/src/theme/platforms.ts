@@ -103,7 +103,7 @@ export const OPENAI_PLATFORM: PlatformCapabilities = {
 export const CLAUDE_PLATFORM: PlatformCapabilities = {
   id: 'claude',
   name: 'Claude (Artifacts)',
-  supportsWidgets: false,
+  supportsWidgets: true, // Claude Artifacts support interactive widgets
   supportsTailwind: true,
   supportsHtmx: false, // Network blocked, HTMX won't work for API calls
   networkMode: 'limited',
