@@ -30,14 +30,25 @@ import { escapeHtml } from '../utils';
 type MdxTemplate = string;
 
 /**
+ * Build React CDN URLs for a specific version.
+ * @param version React version (e.g., '18', '19')
+ */
+export function buildReactCdnUrls(version: '18' | '19' = '19') {
+  return {
+    react: `https://esm.sh/react@${version}`,
+    reactDom: `https://esm.sh/react-dom@${version}/client`,
+    jsxRuntime: `https://esm.sh/react@${version}/jsx-runtime`,
+  };
+}
+
+/**
  * Default CDN URLs for client-side MDX rendering (esm.sh).
- * These can be overridden via MdxClientRenderer constructor options.
+ * Uses React 19 by default. Override via the `cdn` option in render().
+ * For React 18 compatibility, use: cdn: buildReactCdnUrls('18')
  */
 const DEFAULT_CDN = {
   mdx: 'https://esm.sh/@mdx-js/mdx@3',
-  react: 'https://esm.sh/react@19',
-  reactDom: 'https://esm.sh/react-dom@19/client',
-  jsxRuntime: 'https://esm.sh/react@19/jsx-runtime',
+  ...buildReactCdnUrls('19'),
 } as const;
 
 /**
@@ -125,7 +136,9 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
   }
 
   /**
-   * Transpile MDX - for client-side rendering, we just hash the source.
+   * Prepare MDX template for rendering.
+   * Caches the template hash for deduplication. Actual MDX compilation
+   * happens client-side via CDN-loaded @mdx-js/mdx in the browser.
    */
   async transpile(template: MdxTemplate, _options?: TranspileOptions): Promise<TranspileResult> {
     const hash = hashString(template);
@@ -176,10 +189,19 @@ export class MdxClientRenderer implements UIRenderer<MdxTemplate> {
       helpers: context.helpers,
     };
 
-    // Spread output for convenience
+    // Reserved prop names that should not be overwritten by output properties
+    const reservedProps = new Set(['input', 'output', 'structuredContent', 'helpers', 'components']);
+
+    // Spread output properties at top level for convenience, but preserve reserved props
+    // Output properties are spread first, then reserved props override them
+    const outputProps =
+      typeof context.output === 'object' && context.output !== null
+        ? Object.fromEntries(Object.entries(context.output).filter(([key]) => !reservedProps.has(key)))
+        : {};
+
     const spreadProps = {
+      ...outputProps,
       ...props,
-      ...(typeof context.output === 'object' && context.output !== null ? context.output : {}),
     };
 
     // Escape content for embedding in script

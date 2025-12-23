@@ -62,6 +62,7 @@ export { HtmlRenderer, htmlRenderer } from './html.renderer';
 export {
   MdxClientRenderer,
   mdxClientRenderer,
+  buildReactCdnUrls,
   type MdxClientRenderOptions,
   type MdxClientCdnConfig,
 } from './mdx-client.renderer';

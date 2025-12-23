@@ -79,7 +79,7 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   /**
    * Get transport configuration with all defaults applied.
    * Returns default values when transport is not configured.
-   * Uses DEFAULT_TRANSPORT_CONFIG from transport.deprecated.ts as single source of truth.
+   * Uses DEFAULT_TRANSPORT_CONFIG as single source of truth for defaults.
    */
   get transport(): TransportConfig {
     return this.options.transport ?? DEFAULT_TRANSPORT_CONFIG;

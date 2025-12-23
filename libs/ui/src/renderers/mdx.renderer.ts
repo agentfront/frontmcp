@@ -34,13 +34,22 @@ import { containsMdxSyntax, hashString, transpileCache, componentCache } from '@
 type MdxTemplate = string;
 
 /**
- * Runtime CDN URLs for client-side hydration.
- * Uses React 19 via esm.sh for consistency with mdx-client.renderer.ts.
+ * Build React CDN URLs for a specific version.
+ * @param version React version (e.g., '18', '19')
  */
-const REACT_CDN = {
-  react: 'https://esm.sh/react@19',
-  reactDom: 'https://esm.sh/react-dom@19/client',
-};
+function buildReactCdnUrls(version: '18' | '19' = '19') {
+  return {
+    react: `https://esm.sh/react@${version}`,
+    reactDom: `https://esm.sh/react-dom@${version}/client`,
+  };
+}
+
+/**
+ * Runtime CDN URLs for client-side hydration.
+ * Uses React 19 by default. For React 18 compatibility, modify getRuntimeScripts().
+ * Note: This is used for hydration scripts only. SSR uses the installed React version.
+ */
+const REACT_CDN = buildReactCdnUrls('19');
 
 /**
  * Placeholder for blocked-network platforms.
@@ -104,7 +113,9 @@ export class MdxRenderer implements UIRenderer<MdxTemplate> {
   }
 
   /**
-   * Transpile MDX to executable JavaScript.
+   * Prepare MDX template for rendering.
+   * Caches the template hash for deduplication. Actual MDX compilation
+   * happens during render() via @mdx-js/mdx evaluate().
    */
   async transpile(template: MdxTemplate, _options?: TranspileOptions): Promise<TranspileResult> {
     const hash = hashString(template);
