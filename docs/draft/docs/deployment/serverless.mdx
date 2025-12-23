@@ -79,39 +79,68 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/docs/deployment
 
 ### Setup
 
-1. Build your project:
+<Steps>
+  <Step title="Build your project">
+    ```bash
+    frontmcp build --adapter vercel
+    ```
+  </Step>
+  <Step title="Inspect the generated outputs">
+    ```
+    dist/
+      main.js      # Compiled server entry
+      index.js     # Serverless handler wrapper
+    .vercel/output/
+      config.json
+      functions/
+        index.func/
+          handler.cjs
+          .vc-config.json
+    vercel.json    # Deployment settings
+    ```
 
-   ```bash
-   frontmcp build --adapter vercel
-   ```
+    The CLI now emits a complete [Vercel Build Output API v3](https://vercel.com/docs/build-output-api/v3) tree, so you no longer need to hand-maintain `/api` folders or launch scripts.
 
-2. This generates:
-
-   ```
-   dist/
-     main.js      # Your compiled server
-     index.js     # Vercel handler wrapper
-   vercel.json    # Vercel configuration
-   ```
-
-3. Deploy:
-   ```bash
-   vercel deploy
-   ```
+  </Step>
+  <Step title="Deploy with Vercel CLI or dashboard">
+    ```bash
+    vercel deploy
+    ```
+  </Step>
+</Steps>
 
 ### Generated vercel.json
 
 ```json
 {
   "version": 2,
-  "builds": [{ "src": "dist/index.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "/dist/index.js" }]
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm run build"
 }
 ```
+
+<Info>
+The CLI auto-detects your package manager via lockfiles (`bun.lockb`, `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). If none are present it defaults to npm, so the generated commands always match how you already build locally.
+</Info>
 
 <Note>
 You can customize this file after generation. The build command will not overwrite existing config files.
 </Note>
+
+### Build Output Layout
+
+The generated `.vercel/output` directory matches the structure Vercel expects at deploy time:
+
+```
+.vercel/output/
+├── config.json                # Routes all requests to the index function
+└── functions/
+    └── index.func/
+        ├── handler.cjs        # Bundled handler and chunks
+        └── .vc-config.json    # Node.js 22 runtime definition
+```
+
+Because the CLI writes the Build Output API tree for you, you can upload the folder as-is (for example via `vercel deploy --prebuilt`) without relying on legacy routing fallbacks.
 
 ### How It Works
 
@@ -132,6 +161,8 @@ export default async function handler(req, res) {
   return app(req, res);
 }
 ```
+
+The Vercel adapter now also runs a post-bundle hook that copies every artifact in `dist/` into `.vercel/output/functions/index.func/`, adds `.vc-config.json`, and writes `config.json`. That keeps CI uploads, local `vercel deploy --prebuilt`, and Dockerized builds consistent without extra scripting.
 
 ## AWS Lambda
 
@@ -312,102 +343,5 @@ compatibility_date = "2024-01-01"
 │  6. Express app stored globally via setServerlessHandler()  │
 │  7. index.js calls getServerlessHandlerAsync()              │
 │  8. Requests are forwarded to the Express app               │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Environment Variable
-
-The `FRONTMCP_SERVERLESS=1` environment variable triggers serverless mode:
-
-```typescript
-// In the @FrontMcp decorator
-const isServerless = process.env.FRONTMCP_SERVERLESS === '1';
-
-if (isServerless) {
-  // Don't call listen(), store handler globally instead
-  const handler = await FrontMcpInstance.createHandler(metadata);
-  setServerlessHandler(handler);
-} else {
-  // Normal mode: start HTTP server
-  FrontMcpInstance.bootstrap(metadata);
-}
-```
-
-## Troubleshooting
-
-### "Serverless handler not initialized"
-
-```
-Error: Serverless handler not initialized. Ensure @FrontMcp decorator ran and FRONTMCP_SERVERLESS=1 is set.
-```
-
-**Causes:**
-
-- The `@FrontMcp` decorator wasn't executed before the handler was called
-- `FRONTMCP_SERVERLESS=1` is not set in the entry point
-
-**Solutions:**
-
-- Ensure your main.ts/main.js has the `@FrontMcp` decorator on a class
-- Verify the generated `index.js` sets the environment variable before importing main.js
-
-### "Module not found: @codegenie/serverless-express"
-
-The Lambda adapter requires an additional dependency:
-
-```bash
-npm install @codegenie/serverless-express
-```
-
-### Cold Start Performance
-
-First requests may be slow due to initialization. Strategies:
-
-| Platform   | Solution                                 |
-| ---------- | ---------------------------------------- |
-| Lambda     | Provisioned Concurrency, smaller bundles |
-| Vercel     | Edge Functions (if applicable)           |
-| Cloudflare | Workers are generally fast to cold start |
-
-### TypeScript Compilation Errors
-
-If you see module-related errors:
-
-- The adapter sets the correct module format automatically
-- `--module esnext` for Vercel/Lambda
-- `--module commonjs` for Node.js/Cloudflare
-
-Ensure your `tsconfig.json` doesn't conflict. The CLI arguments override tsconfig settings.
-
-## API Reference
-
-### CLI Commands
-
-```bash
-# Build for Node.js (default, CommonJS)
-frontmcp build
-
-# Build for Vercel (ESM)
-frontmcp build --adapter vercel
-
-# Build for AWS Lambda (ESM)
-frontmcp build --adapter lambda
-
-# Build for Cloudflare Workers (CommonJS)
-frontmcp build --adapter cloudflare
-
-# Specify output directory
-frontmcp build --adapter vercel --outDir build
-```
-
-### SDK Exports
-
-```typescript
-import {
-  getServerlessHandler,      // Get handler synchronously (may be null)
-  getServerlessHandlerAsync, // Get handler with await (throws if not ready)
-  setServerlessHandler,      // Store handler (used by decorator)
-  setServerlessHandlerPromise, // Store handler promise
-  setServerlessHandlerError, // Store initialization error
-} from '@frontmcp/sdk';
+└──────────────────────────────────────────────
 ```
