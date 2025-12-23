@@ -116,7 +116,92 @@ const frontMcpSplitByAppSchema = frontMcpBaseSchema.extend({
 
 export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMetadata;
 
-export const frontMcpMetadataSchema = frontMcpMultiAppSchema.or(frontMcpSplitByAppSchema);
+/**
+ * Type guard for persistence object shape
+ */
+function isPersistenceObject(
+  value: unknown,
+): value is { enabled?: boolean; redis?: unknown; defaultTtlMs?: number } | undefined {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  // Check optional properties have correct types if present (use bracket notation for index signatures)
+  if ('enabled' in obj && typeof obj['enabled'] !== 'boolean') return false;
+  if ('defaultTtlMs' in obj && typeof obj['defaultTtlMs'] !== 'number') return false;
+  return true;
+}
+
+/**
+ * Transform function to auto-populate transport.persistence from global redis config.
+ * This enables automatic transport session persistence when global redis is configured.
+ *
+ * Behavior:
+ * - If redis is set AND transport.persistence is not configured → auto-enable with global redis
+ * - If transport.persistence.enabled=true but no redis → use global redis (if available)
+ * - If transport.persistence.enabled=false → respect explicit disable
+ * - If transport.persistence.redis is explicitly set → use that config
+ */
+function applyAutoTransportPersistence<T extends { redis?: unknown; transport?: { persistence?: unknown } }>(
+  data: T,
+): T {
+  // If no global redis config, nothing to auto-enable
+  if (!data.redis) return data;
+
+  // Safe access with type guard validation
+  const transport = data.transport as { persistence?: unknown } | undefined;
+  const rawPersistence = transport?.persistence;
+
+  // Validate persistence shape at runtime (should always pass after Zod validation)
+  if (!isPersistenceObject(rawPersistence)) {
+    return data; // Invalid shape, don't modify
+  }
+
+  const persistence = rawPersistence;
+
+  // Case 1: persistence explicitly disabled - respect that
+  if (persistence?.enabled === false) {
+    return data;
+  }
+
+  // Case 2: persistence has explicit redis config - use that
+  if (persistence?.redis) {
+    return data;
+  }
+
+  // Case 3: persistence enabled but no redis config - use global redis
+  if (persistence?.enabled === true && !persistence.redis) {
+    return {
+      ...data,
+      transport: {
+        ...transport,
+        persistence: {
+          ...persistence,
+          redis: data.redis,
+        },
+      },
+    };
+  }
+
+  // Case 4: persistence not configured at all - auto-enable with global redis
+  if (persistence === undefined) {
+    return {
+      ...data,
+      transport: {
+        ...transport,
+        persistence: {
+          enabled: true,
+          redis: data.redis,
+        },
+      },
+    };
+  }
+
+  return data;
+}
+
+export const frontMcpMetadataSchema = frontMcpMultiAppSchema
+  .or(frontMcpSplitByAppSchema)
+  .transform(applyAutoTransportPersistence);
 
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;
 export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
