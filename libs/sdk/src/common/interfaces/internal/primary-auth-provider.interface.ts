@@ -2,6 +2,7 @@ import { ServerRequest } from '../server.interface';
 import {
   AuthOptions,
   TransportConfig,
+  DEFAULT_TRANSPORT_CONFIG,
   isPublicMode,
   isTransparentMode,
   isOrchestratedMode,
@@ -76,23 +77,12 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   abstract get issuer(): string;
 
   /**
-   * Default transport configuration when not specified
-   */
-  private static readonly DEFAULT_TRANSPORT: TransportConfig = {
-    enableLegacySSE: false,
-    enableSseListener: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    enableStatefulHttp: false,
-    requireSessionForStreamable: true,
-  };
-
-  /**
    * Get transport configuration with all defaults applied.
    * Returns default values when transport is not configured.
+   * Uses DEFAULT_TRANSPORT_CONFIG from transport.deprecated.ts as single source of truth.
    */
   get transport(): TransportConfig {
-    return this.options.transport ?? FrontMcpAuth.DEFAULT_TRANSPORT;
+    return this.options.transport ?? DEFAULT_TRANSPORT_CONFIG;
   }
 }
 

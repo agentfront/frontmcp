@@ -204,7 +204,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       const { request } = this.rawInput;
       this.logger.verbose(`[${this.requestId}] router: check request decision`);
 
-      // Use transport config directly from auth (already parsed with defaults by Zod)
+      // Use transport config from auth (FrontMcpAuth.transport getter applies defaults)
       const transport = this.scope.auth.transport;
       const decision = decideIntent(request, { ...transport, tolerateMissingAccept: true });
 

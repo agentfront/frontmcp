@@ -1,5 +1,5 @@
 import { FrontMcpAuth, ProviderScope, ScopeEntry, ServerRequest } from '../../common';
-import { TransparentAuthOptions } from '../../common/types/options/auth.options';
+import { TransparentAuthOptions } from '../../common/types/options/auth';
 import { URL } from 'url';
 import ProviderRegistry from '../../provider/provider.registry';
 import { JwksService } from '../jwks';
