@@ -23,22 +23,36 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js"
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      }
     },
     "./mcp-apps": {
       "development": "./src/mcp-apps/index.ts",
-      "types": "./dist/src/mcp-apps/index.d.ts",
-      "import": "./dist/src/mcp-apps/index.js",
-      "default": "./dist/src/mcp-apps/index.js"
-    }
+      "require": {
+        "types": "./dist/mcp-apps/index.d.ts",
+        "default": "./dist/mcp-apps/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/mcp-apps/index.d.ts",
+        "default": "./dist/esm/mcp-apps/index.js"
+      }
+    },
+    "./esm": null
   },
   "peerDependencies": {
     "zod": "^4.0.0",
