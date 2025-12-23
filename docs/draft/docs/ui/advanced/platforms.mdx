@@ -18,6 +18,23 @@ description: FrontMCP UI adapts to different AI platform capabilities. Each plat
 | **Gemini** | Limited | Inline preferred | Basic | JSON only |
 | **generic-mcp** | Varies | CDN/Inline | inline, static | `_meta['ui/html']` |
 
+## Build Modes & Data Injection
+
+FrontMCP supports three build modes that behave differently per platform:
+
+| Mode | OpenAI | Claude/Other |
+|------|--------|--------------|
+| **static** | Data baked in | Data baked in |
+| **dynamic** | Event subscription | Placeholders |
+| **hybrid** | Placeholders | Placeholders |
+
+For OpenAI, **dynamic mode** subscribes to `window.openai.canvas.onToolResult` for real-time updates.
+For Claude and other platforms, **dynamic mode** uses placeholders that must be replaced before sending.
+
+<Card title="Build Modes Documentation" icon="hammer" href="/docs/ui/advanced/build-modes">
+  Learn about static, dynamic, and hybrid build modes with platform-aware data injection.
+</Card>
+
 ## Platform Detection
 
 FrontMCP automatically detects the platform:

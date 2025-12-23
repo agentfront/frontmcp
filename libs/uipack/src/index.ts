@@ -77,6 +77,14 @@ export {
   buildToolUI,
   buildToolUIMulti,
   buildStaticWidget,
+  // Hybrid mode data injection
+  HYBRID_DATA_PLACEHOLDER,
+  HYBRID_INPUT_PLACEHOLDER,
+  injectHybridData,
+  injectHybridDataFull,
+  isHybridShell,
+  needsInputInjection,
+  getHybridPlaceholders,
 } from './build';
 
 // ============================================
