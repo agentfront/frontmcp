@@ -20,20 +20,30 @@ export type { SessionMode, TransportIdMode, PlatformMappingEntry, PlatformDetect
 
 /**
  * Transport persistence configuration
- * Enables session persistence to Redis and automatic transport recreation after server restart
+ * Enables session persistence to Redis/Vercel KV and automatic transport recreation after server restart.
+ *
+ * **Auto-enable behavior**: When top-level `redis` is configured at the `@FrontMcp` level,
+ * transport persistence is automatically enabled using that configuration.
+ * - To disable: explicitly set `enabled: false`
+ * - To use different redis config: explicitly set `redis: {...}`
  */
 export const transportPersistenceConfigSchema = z.object({
   /**
-   * Enable transport persistence to Redis
-   * When enabled, sessions are persisted to Redis and transports can be recreated after restart
-   * @default false
+   * Enable transport persistence to Redis/Vercel KV.
+   * When enabled, sessions are persisted and transports can be recreated after restart.
+   *
+   * **Note**: Automatically set to `true` when top-level `redis` is configured,
+   * unless explicitly disabled.
+   *
+   * @default false (but auto-enabled when global redis is configured)
    */
   enabled: z.boolean().default(false),
 
   /**
-   * Redis configuration for session storage
-   * If omitted when enabled=true, uses top-level redis config
-   * Note: Validation for redis presence happens at runtime when persistence is used
+   * Redis/Vercel KV configuration for session storage.
+   *
+   * **Auto-populated**: If omitted when `enabled: true` (or auto-enabled),
+   * uses the top-level `redis` configuration from `@FrontMcp`.
    */
   redis: redisOptionsSchema.optional(),
 
