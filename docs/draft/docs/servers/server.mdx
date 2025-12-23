@@ -250,7 +250,7 @@ Leave `enableStatelessHttp` off in production unless you fully trust the client 
 
 ### Session Persistence
 
-Enable Redis-backed session persistence for distributed deployments or session recovery:
+FrontMCP automatically wires Redis-backed session persistence any time you define a top-level `redis` block. Declare `transport.persistence` only when you want to customize TTLs or explicitly disable persistence.
 
 ```ts
 @FrontMcp({
@@ -260,21 +260,32 @@ Enable Redis-backed session persistence for distributed deployments or session r
   },
   transport: {
     persistence: {
-      enabled: true,
       defaultTtlMs: 7200000, // 2 hours
     },
   },
 })
 ```
 
-| Option         | Default   | Description                          |
-| -------------- | --------- | ------------------------------------ |
-| `enabled`      | `false`   | Enable session persistence           |
-| `defaultTtlMs` | `3600000` | Session TTL in milliseconds (1 hour) |
+| Option         | Default   | Description                                                                         |
+| -------------- | --------- | ----------------------------------------------------------------------------------- |
+| `enabled`      | `auto`    | Auto-enabled whenever `redis` is configured; set `{ enabled: false }` to opt out.   |
+| `defaultTtlMs` | `3600000` | Session TTL in milliseconds (1 hour). Overrides `redis.defaultTtlMs` when provided. |
 
 <Info>
-Session persistence uses the top-level `redis` config. Configure `redis` once and reference it from both `transport.persistence` and `auth.tokenStorage`.
+The persistence block reuses the top-level `redis` credentials. Set `transport.persistence: { enabled: false }` if you configured Redis for other features (like token storage) but do not want session recovery.
 </Info>
+
+```ts
+@FrontMcp({
+  redis: {
+    host: 'redis.example.com',
+  },
+  transport: {
+    // Disable persistence while keeping Redis for other features
+    persistence: { enabled: false },
+  },
+})
+```
 
 You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
 
@@ -316,7 +327,7 @@ Configure Redis once at the server level for use across features:
 
 The `redis` config is automatically used by:
 
-- **Session persistence** (`transport.persistence`) — stores session state for recovery
+- **Session persistence** (`transport.persistence`) — auto-enabled when `redis` is configured; disable via `transport.persistence: { enabled: false }` if you only need Redis for other features
 - **Token storage** (`auth.tokenStorage: { type: 'redis' }`) — stores refresh tokens securely
 
 ```ts
