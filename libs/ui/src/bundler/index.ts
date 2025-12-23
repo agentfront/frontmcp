@@ -95,29 +95,35 @@ export {
 } from './types';
 
 // ============================================
-// Cache Utilities
+// Cache Utilities (re-exported from @frontmcp/uipack)
 // ============================================
 
-export { BundlerCache, hashContent, createCacheKey } from './cache';
+export { BundlerCache, hashContent, createCacheKey } from '@frontmcp/uipack/bundler';
 
-export type { CacheOptions, CacheStats } from './cache';
-
-// ============================================
-// Security Utilities
-// ============================================
-
-export { validateSource, validateImports, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
+export type { CacheOptions, CacheStats } from '@frontmcp/uipack/bundler';
 
 // ============================================
-// Execution Utilities
+// Security Utilities (re-exported from @frontmcp/uipack)
 // ============================================
 
-export { executeCode, executeDefault, isExecutionError } from './sandbox/executor';
-
-export type { ExecutionContext, ExecutionResult } from './sandbox/executor';
+export {
+  validateSource,
+  validateImports,
+  validateSize,
+  mergePolicy,
+  throwOnViolations,
+} from '@frontmcp/uipack/bundler';
 
 // ============================================
-// File-Based Component Caching
+// Execution Utilities (re-exported from @frontmcp/uipack)
+// ============================================
+
+export { executeCode, executeDefault, isExecutionError } from '@frontmcp/uipack/bundler';
+
+export type { ExecutionContext, ExecutionResult } from '@frontmcp/uipack/bundler';
+
+// ============================================
+// File-Based Component Caching (re-exported from @frontmcp/uipack)
 // ============================================
 
 export {
@@ -154,4 +160,4 @@ export {
   createRedisBuilder,
   type ComponentBuildOptions,
   type ComponentBuildResult,
-} from './file-cache';
+} from '@frontmcp/uipack/bundler';

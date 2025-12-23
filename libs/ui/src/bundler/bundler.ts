@@ -41,9 +41,17 @@ import {
 } from './types';
 import { buildUIMeta, type AIPlatformType } from '@frontmcp/uipack/adapters';
 import { DEFAULT_THEME, buildThemeCss, type ThemeConfig } from '@frontmcp/uipack/theme';
-import { BundlerCache, createCacheKey, hashContent } from './cache';
-import { validateSource, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
-import { executeDefault, ExecutionError } from './sandbox/executor';
+import {
+  BundlerCache,
+  createCacheKey,
+  hashContent,
+  validateSource,
+  validateSize,
+  mergePolicy,
+  throwOnViolations,
+  executeDefault,
+  ExecutionError,
+} from '@frontmcp/uipack/bundler';
 import { escapeHtml } from '@frontmcp/uipack/utils';
 import type { ContentType } from '../universal/types';
 import { detectContentType as detectUniversalContentType } from '../universal/types';
@@ -2119,5 +2127,4 @@ export function createBundler(options?: BundlerOptions): InMemoryBundler {
 }
 
 // Re-export errors for convenience
-export { SecurityError } from './sandbox/policy';
-export { ExecutionError } from './sandbox/executor';
+export { SecurityError, ExecutionError } from '@frontmcp/uipack/bundler';

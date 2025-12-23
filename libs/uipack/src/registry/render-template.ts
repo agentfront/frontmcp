@@ -77,11 +77,11 @@ async function renderMdxContent<In, Out>(
   mdxComponents?: Record<string, any>,
 ): Promise<string> {
   try {
-    // Import the MDX renderer from renderers module
-    const { mdxRenderer } = await import('../renderers/index.js');
+    // Import the MDX client renderer from renderers module
+    const { mdxClientRenderer } = await import('../renderers/index.js');
 
     // Render MDX to HTML with custom components
-    const html = await mdxRenderer.render(mdxContent, context, { mdxComponents });
+    const html = await mdxClientRenderer.render(mdxContent, context, { mdxComponents });
     return html;
   } catch (error) {
     // If MDX rendering fails, warn and return escaped content

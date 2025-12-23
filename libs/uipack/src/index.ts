@@ -85,6 +85,29 @@ export {
   isHybridShell,
   needsInputInjection,
   getHybridPlaceholders,
+  // New Architecture Builders
+  type BuildMode,
+  type CdnMode,
+  type BuilderOptions,
+  type BuildToolOptions,
+  type StaticBuildResult,
+  type HybridBuildResult,
+  type InlineBuildResult,
+  type BuilderResult,
+  type Builder,
+  type IStaticBuilder,
+  type IHybridBuilder,
+  type IInlineBuilder,
+  BaseBuilder,
+  StaticBuilder,
+  HybridBuilder,
+  InlineBuilder,
+  // esbuild configuration
+  DEFAULT_EXTERNALS,
+  CDN_URLS,
+  createTransformConfig,
+  createExternalizedConfig,
+  generateCdnScriptTags,
 } from './build';
 
 // ============================================
@@ -147,6 +170,34 @@ export {
   BRIDGE_SCRIPT_TAGS,
   type IIFEGeneratorOptions,
 } from './bridge-runtime';
+
+// ============================================
+// Preview Handlers (New Architecture)
+// Platform-specific preview generation for
+// OpenAI, Claude, and Generic MCP clients
+// ============================================
+export {
+  // Types
+  type Platform,
+  type AIPlatformType as PreviewPlatformType,
+  type DiscoveryPreviewOptions,
+  type ExecutionPreviewOptions,
+  type BuilderMockData,
+  type DiscoveryMeta,
+  type ExecutionMeta,
+  type PreviewHandler,
+  type OpenAIMetaFields,
+  type ClaudeMetaFields,
+  type FrontMCPMetaFields,
+  type UIMetaFields,
+  // Preview Handlers
+  OpenAIPreview,
+  ClaudePreview,
+  GenericPreview,
+  // Factory Functions
+  createPreviewHandler,
+  detectPlatform as detectPreviewPlatform,
+} from './preview';
 
 // ============================================
 // Tool Template Builder

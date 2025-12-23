@@ -2,12 +2,7 @@
  * IIFE Generator Tests
  */
 
-import {
-  generateBridgeIIFE,
-  generatePlatformBundle,
-  UNIVERSAL_BRIDGE_SCRIPT,
-  BRIDGE_SCRIPT_TAGS,
-} from '../runtime/iife-generator';
+import { generateBridgeIIFE, generatePlatformBundle, UNIVERSAL_BRIDGE_SCRIPT, BRIDGE_SCRIPT_TAGS } from '../runtime';
 
 describe('IIFE Generator', () => {
   describe('generateBridgeIIFE', () => {

@@ -25,13 +25,11 @@
           "libs/ui/src/bundler/index.ts",
           "libs/ui/src/components/index.ts",
           "libs/ui/src/layouts/index.ts",
-          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
           "libs/ui/src/universal/index.ts",
-          "libs/ui/src/web-components/index.ts",
-          "libs/ui/src/widgets/index.ts"
+          "libs/ui/src/web-components/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
@@ -63,13 +61,11 @@
           "libs/ui/src/bundler/index.ts",
           "libs/ui/src/components/index.ts",
           "libs/ui/src/layouts/index.ts",
-          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
           "libs/ui/src/universal/index.ts",
-          "libs/ui/src/web-components/index.ts",
-          "libs/ui/src/widgets/index.ts"
+          "libs/ui/src/web-components/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },

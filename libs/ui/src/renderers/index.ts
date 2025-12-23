@@ -38,14 +38,14 @@ export type {
 } from '@frontmcp/uipack/renderers';
 
 // React Renderer (only available in @frontmcp/ui)
-export { ReactRenderer, reactRenderer, buildHydrationScript } from './react.renderer';
+export { ReactRenderer, reactRenderer } from './react.renderer';
 
 // React Renderer Adapter (client-side rendering)
 export { ReactRendererAdapter, createReactAdapter, loadReactAdapter } from './react.adapter';
 
 // MDX Server Renderer (requires React, uses react-dom/server for SSR)
 // For client-side CDN-based MDX rendering, use MdxClientRenderer from @frontmcp/uipack
-export { MdxRenderer, mdxRenderer, buildMdxHydrationScript } from './mdx.renderer';
+export { MdxRenderer, mdxRenderer } from './mdx.renderer';
 
 // JSX Execution (requires React)
 // For transpilation only (without React), use transpileJsx from @frontmcp/uipack
