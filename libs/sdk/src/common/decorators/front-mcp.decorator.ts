@@ -12,7 +12,10 @@ function getFrontMcpInstance() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _FrontMcpInstance = require('../../front-mcp').FrontMcpInstance;
   }
-  return _FrontMcpInstance!;
+  if (!_FrontMcpInstance) {
+    throw new InternalMcpError('FrontMcpInstance not found in module', 'MODULE_LOAD_FAILED');
+  }
+  return _FrontMcpInstance;
 }
 
 /**
@@ -61,7 +64,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      // Use synchronous require for bundler compatibility (rspack/webpack)
+      // Note: Uses direct require('@frontmcp/sdk') instead of getFrontMcpInstance() because
+      // we need multiple exports (setServerlessHandler, etc.) not just FrontMcpInstance.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const {
         FrontMcpInstance: ServerlessInstance,
