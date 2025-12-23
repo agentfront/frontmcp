@@ -166,6 +166,17 @@ function buildStoreRuntime(): string {
     context: state,
     setContext: function(ctx) {
       this.setState(ctx);
+    },
+    // Dynamic mode: update output and re-render
+    updateOutput: function(output) {
+      this.setState({ output: output, loading: false });
+      // Also update the global window variable for compatibility
+      window.__mcpToolOutput = output;
+    },
+    // Dynamic mode: update input and re-render
+    updateInput: function(input) {
+      this.setState({ input: input });
+      window.__mcpToolInput = input;
     }
   };
 

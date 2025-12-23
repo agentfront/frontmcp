@@ -107,7 +107,7 @@ export const CLAUDE_PLATFORM: PlatformCapabilities = {
   supportsTailwind: true,
   supportsHtmx: false, // Network blocked, HTMX won't work for API calls
   networkMode: 'blocked',
-  scriptStrategy: 'inline',
+  scriptStrategy: 'cdn',
   maxInlineSize: 100 * 1024, // 100KB limit for artifacts
   cspRestrictions: ["script-src 'unsafe-inline'", "connect-src 'none'"],
   options: {
@@ -124,9 +124,9 @@ export const GEMINI_PLATFORM: PlatformCapabilities = {
   id: 'gemini',
   name: 'Gemini',
   supportsWidgets: false,
-  supportsTailwind: false,
+  supportsTailwind: true,
   supportsHtmx: false,
-  networkMode: 'blocked',
+  networkMode: 'limited',
   scriptStrategy: 'inline',
   options: {
     fallback: 'markdown', // Fall back to markdown rendering

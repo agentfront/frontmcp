@@ -683,3 +683,19 @@ export {
 } from './cdn-resources';
 
 export type { CDNInfo, CDNPlatform } from './cdn-resources';
+
+// ============================================
+// Hybrid Mode Data Injection
+// ============================================
+
+export {
+  // Constants
+  HYBRID_DATA_PLACEHOLDER,
+  HYBRID_INPUT_PLACEHOLDER,
+  // Helper functions
+  injectHybridData,
+  injectHybridDataFull,
+  isHybridShell,
+  needsInputInjection,
+  getHybridPlaceholders,
+} from './hybrid-data';

@@ -72,6 +72,10 @@ export type {
   MultiPlatformBuildOptions,
   PlatformBuildResult,
   MultiPlatformBuildResult,
+  // Build mode types
+  BuildMode,
+  DynamicModeOptions,
+  HybridModeOptions,
 } from './types';
 
 export {
@@ -85,6 +89,9 @@ export {
   getCdnTypeForPlatform,
   // Multi-platform build constants
   ALL_PLATFORMS,
+  // Build mode constants
+  HYBRID_DATA_PLACEHOLDER,
+  HYBRID_INPUT_PLACEHOLDER,
 } from './types';
 
 // ============================================

@@ -9,6 +9,68 @@
 import type { ThemeConfig } from '@frontmcp/uipack/theme';
 
 // ============================================
+// Build Mode Types
+// ============================================
+
+/**
+ * Build mode for static HTML generation.
+ * Controls how tool data is injected into the generated HTML.
+ *
+ * - 'static': Data is baked into HTML at build time (current default behavior)
+ * - 'dynamic': HTML subscribes to platform events for data updates (OpenAI onToolResult)
+ * - 'hybrid': Pre-built shell with placeholder for runtime data injection
+ */
+export type BuildMode = 'static' | 'dynamic' | 'hybrid';
+
+/**
+ * Placeholder marker for hybrid mode output.
+ * Used as a string that callers can replace with actual JSON data.
+ */
+export const HYBRID_DATA_PLACEHOLDER = '__FRONTMCP_OUTPUT_PLACEHOLDER__';
+
+/**
+ * Placeholder marker for hybrid mode input.
+ * Used as a string that callers can replace with actual JSON data.
+ */
+export const HYBRID_INPUT_PLACEHOLDER = '__FRONTMCP_INPUT_PLACEHOLDER__';
+
+/**
+ * Dynamic mode configuration options.
+ */
+export interface DynamicModeOptions {
+  /**
+   * Whether to include initial data in the HTML.
+   * If true, component shows data immediately; if false, shows loading state.
+   * @default true
+   */
+  includeInitialData?: boolean;
+
+  /**
+   * Subscribe to platform tool result events.
+   * For OpenAI: window.openai.canvas.onToolResult
+   * @default true
+   */
+  subscribeToUpdates?: boolean;
+}
+
+/**
+ * Hybrid mode configuration options.
+ */
+export interface HybridModeOptions {
+  /**
+   * Custom placeholder string for output data injection.
+   * @default HYBRID_DATA_PLACEHOLDER
+   */
+  placeholder?: string;
+
+  /**
+   * Custom placeholder string for input data injection.
+   * @default HYBRID_INPUT_PLACEHOLDER
+   */
+  inputPlaceholder?: string;
+}
+
+// ============================================
 // Source Types
 // ============================================
 
@@ -911,6 +973,31 @@ export interface StaticHTMLOptions {
    * ```
    */
   customComponents?: string;
+
+  // ============================================
+  // Build Mode Options
+  // ============================================
+
+  /**
+   * Build mode for data injection.
+   * - 'static': Data baked in at build time (default)
+   * - 'dynamic': Subscribes to platform events for updates (OpenAI)
+   * - 'hybrid': Shell with placeholder for runtime data injection
+   * @default 'static'
+   */
+  buildMode?: BuildMode;
+
+  /**
+   * Options for dynamic build mode.
+   * Only used when buildMode is 'dynamic'.
+   */
+  dynamicOptions?: DynamicModeOptions;
+
+  /**
+   * Options for hybrid build mode.
+   * Only used when buildMode is 'hybrid'.
+   */
+  hybridOptions?: HybridModeOptions;
 }
 
 /**
@@ -966,6 +1053,23 @@ export interface StaticHTMLResult {
    * Content type detected/used (when universal mode is enabled).
    */
   contentType?: 'html' | 'markdown' | 'react' | 'mdx';
+
+  /**
+   * Build mode used for data injection.
+   */
+  buildMode?: BuildMode;
+
+  /**
+   * For hybrid mode: the output placeholder string that can be replaced with data.
+   * Use injectHybridData() from @frontmcp/uipack to replace this placeholder.
+   */
+  dataPlaceholder?: string;
+
+  /**
+   * For hybrid mode: the input placeholder string that can be replaced with data.
+   * Use injectHybridDataFull() from @frontmcp/uipack to replace both placeholders.
+   */
+  inputPlaceholder?: string;
 }
 
 /**
@@ -988,11 +1092,6 @@ export const STATIC_HTML_CDN = {
     react: 'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
     reactDom: 'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
   },
-  /**
-   * Tailwind CSS from cdnjs (cloudflare) - works on all platforms
-   * Using CSS file instead of JS browser version to avoid style normalization issues
-   */
-  tailwind: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.css',
   /**
    * Font CDN URLs
    */
@@ -1033,6 +1132,8 @@ export const DEFAULT_STATIC_HTML_OPTIONS = {
   contentType: 'auto' as const,
   includeMarkdown: false,
   includeMdx: false,
+  // Build mode defaults
+  buildMode: 'static' as BuildMode,
 } as const;
 
 // ============================================
@@ -1057,6 +1158,7 @@ export type MergedStaticHTMLOptions = Required<
     | 'contentType'
     | 'includeMarkdown'
     | 'includeMdx'
+    | 'buildMode'
   >
 > &
   Pick<
@@ -1070,6 +1172,8 @@ export type MergedStaticHTMLOptions = Required<
     | 'customCss'
     | 'customComponents'
     | 'theme'
+    | 'dynamicOptions'
+    | 'hybridOptions'
   >;
 
 // ============================================

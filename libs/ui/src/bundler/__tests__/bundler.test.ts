@@ -781,3 +781,312 @@ describe('bundleToStaticHTMLAll', () => {
     }
   });
 });
+
+// ============================================
+// Build Mode Tests
+// ============================================
+
+describe('Build Modes', () => {
+  let bundler: InMemoryBundler;
+
+  beforeEach(() => {
+    bundler = new InMemoryBundler();
+    bundler.clearCache();
+  });
+
+  const simpleComponent = 'export default () => <div>Build Mode Test</div>';
+
+  describe('Static Mode (default)', () => {
+    it('should bake data into HTML at build time', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        output: { temperature: 72 },
+        buildMode: 'static',
+      });
+
+      // Data should be embedded in the HTML
+      expect(result.html).toContain('72');
+      expect(result.html).toContain('__mcpToolOutput');
+      expect(result.html).toContain('Static Mode');
+      expect(result.buildMode).toBe('static');
+    });
+
+    it('should use static mode by default', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        output: { value: 'default' },
+      });
+
+      expect(result.buildMode).toBe('static');
+      expect(result.html).toContain('Static Mode');
+    });
+  });
+
+  describe('Dynamic Mode', () => {
+    it('should include initial data when includeInitialData is true', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        output: { temperature: 72 },
+        buildMode: 'dynamic',
+        dynamicOptions: { includeInitialData: true },
+      });
+
+      expect(result.html).toContain('72');
+      expect(result.html).toContain('Dynamic Mode');
+      expect(result.buildMode).toBe('dynamic');
+    });
+
+    it('should show loading state when includeInitialData is false', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        output: { temperature: 72 },
+        buildMode: 'dynamic',
+        dynamicOptions: { includeInitialData: false },
+      });
+
+      // Should set loading: true
+      expect(result.html).toContain('loading: true');
+      expect(result.html).toContain('Dynamic Mode');
+    });
+
+    it('should subscribe to platform events by default', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'dynamic',
+      });
+
+      // Should include OpenAI event subscription
+      expect(result.html).toContain('window.openai');
+      expect(result.html).toContain('onToolResult');
+    });
+
+    it('should not subscribe to events when subscribeToUpdates is false', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'dynamic',
+        dynamicOptions: { subscribeToUpdates: false },
+      });
+
+      // Should NOT include OpenAI event subscription
+      expect(result.html).not.toContain('window.openai');
+    });
+
+    it('should dispatch custom events on tool result', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'dynamic',
+      });
+
+      expect(result.html).toContain('frontmcp:toolResult');
+    });
+  });
+
+  describe('Hybrid Mode', () => {
+    it('should include placeholder in HTML', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      expect(result.html).toContain('__FRONTMCP_OUTPUT_PLACEHOLDER__');
+      expect(result.html).toContain('Hybrid Mode');
+      expect(result.buildMode).toBe('hybrid');
+      expect(result.dataPlaceholder).toBe('__FRONTMCP_OUTPUT_PLACEHOLDER__');
+    });
+
+    it('should use custom placeholder when provided', async () => {
+      const customPlaceholder = '__CUSTOM_PLACEHOLDER__';
+
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+        hybridOptions: { placeholder: customPlaceholder },
+      });
+
+      expect(result.html).toContain(customPlaceholder);
+      expect(result.dataPlaceholder).toBe(customPlaceholder);
+    });
+
+    it('should include JSON parsing logic for injected data', async () => {
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      // Should include parsing logic
+      expect(result.html).toContain('JSON.parse');
+    });
+
+    it('should include tool name and placeholders in hybrid shell', async () => {
+      const { HYBRID_DATA_PLACEHOLDER, HYBRID_INPUT_PLACEHOLDER } = await import('@frontmcp/uipack/build');
+
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'my_weather_tool',
+        input: { city: 'NYC' }, // Input is ignored in hybrid mode, placeholder is used instead
+        buildMode: 'hybrid',
+      });
+
+      expect(result.html).toContain('my_weather_tool');
+      // In hybrid mode, input and output are placeholders
+      expect(result.html).toContain(HYBRID_INPUT_PLACEHOLDER);
+      expect(result.html).toContain(HYBRID_DATA_PLACEHOLDER);
+    });
+  });
+
+  describe('injectHybridData helper', () => {
+    it('should replace placeholder with JSON data', async () => {
+      const { injectHybridData, HYBRID_DATA_PLACEHOLDER } = await import('@frontmcp/uipack/build');
+
+      // Build a hybrid shell
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      // Verify placeholder exists in the data assignment
+      expect(result.html).toContain(HYBRID_DATA_PLACEHOLDER);
+
+      // Inject data
+      const data = { temperature: 72, humidity: 45 };
+      const injectedHtml = injectHybridData(result.html, data);
+
+      // Count occurrences of placeholder - should be reduced after injection
+      const originalCount = (result.html.match(new RegExp(HYBRID_DATA_PLACEHOLDER, 'g')) || []).length;
+      const injectedCount = (injectedHtml.match(new RegExp(HYBRID_DATA_PLACEHOLDER, 'g')) || []).length;
+      expect(injectedCount).toBeLessThan(originalCount);
+
+      // Data should be present (the JSON is double-escaped for embedding in a string literal)
+      expect(injectedHtml).toContain('temperature');
+      expect(injectedHtml).toContain('humidity');
+    });
+
+    it('should work with nested objects', async () => {
+      const { injectHybridData } = await import('@frontmcp/uipack/build');
+
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      const data = {
+        weather: { temp: 72, conditions: 'sunny' },
+        location: { city: 'NYC', country: 'USA' },
+      };
+
+      const injectedHtml = injectHybridData(result.html, data);
+
+      expect(injectedHtml).toContain('sunny');
+      expect(injectedHtml).toContain('NYC');
+    });
+
+    it('should handle null data', async () => {
+      const { injectHybridData } = await import('@frontmcp/uipack/build');
+
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      const injectedHtml = injectHybridData(result.html, null);
+
+      expect(injectedHtml).toContain('null');
+    });
+
+    it('should inject both input and output with injectHybridDataFull', async () => {
+      const { injectHybridDataFull, HYBRID_DATA_PLACEHOLDER, HYBRID_INPUT_PLACEHOLDER } = await import(
+        '@frontmcp/uipack/build'
+      );
+
+      // Build a hybrid shell
+      const result = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      // Verify both placeholders exist
+      expect(result.html).toContain(HYBRID_DATA_PLACEHOLDER);
+      expect(result.html).toContain(HYBRID_INPUT_PLACEHOLDER);
+      expect(result.dataPlaceholder).toBe(HYBRID_DATA_PLACEHOLDER);
+      expect(result.inputPlaceholder).toBe(HYBRID_INPUT_PLACEHOLDER);
+
+      // Inject both input and output
+      const input = { city: 'NYC', units: 'fahrenheit' };
+      const output = { temperature: 72, humidity: 45 };
+      const injectedHtml = injectHybridDataFull(result.html, input, output);
+
+      // Both input and output data should be present
+      expect(injectedHtml).toContain('NYC');
+      expect(injectedHtml).toContain('fahrenheit');
+      expect(injectedHtml).toContain('temperature');
+      expect(injectedHtml).toContain('humidity');
+    });
+  });
+
+  describe('isHybridShell helper', () => {
+    it('should detect hybrid shell', async () => {
+      const { isHybridShell } = await import('@frontmcp/uipack/build');
+
+      const hybridResult = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      const staticResult = await bundler.bundleToStaticHTML({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'static',
+        output: { temp: 72 },
+      });
+
+      expect(isHybridShell(hybridResult.html)).toBe(true);
+      expect(isHybridShell(staticResult.html)).toBe(false);
+    });
+  });
+
+  describe('Multi-platform with build modes', () => {
+    it('should apply build mode to all platforms', async () => {
+      const result = await bundler.bundleToStaticHTMLAll({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'hybrid',
+      });
+
+      // All platforms should have hybrid mode
+      expect(result.platforms.openai.buildMode).toBe('hybrid');
+      expect(result.platforms.claude.buildMode).toBe('hybrid');
+      expect(result.platforms.generic.buildMode).toBe('hybrid');
+
+      // All platforms should have the placeholder
+      expect(result.platforms.openai.dataPlaceholder).toBe('__FRONTMCP_OUTPUT_PLACEHOLDER__');
+      expect(result.platforms.claude.dataPlaceholder).toBe('__FRONTMCP_OUTPUT_PLACEHOLDER__');
+    });
+
+    it('should support dynamic mode for OpenAI platform', async () => {
+      const result = await bundler.bundleToStaticHTMLAll({
+        source: simpleComponent,
+        toolName: 'test_tool',
+        buildMode: 'dynamic',
+        platforms: ['openai'],
+      });
+
+      expect(result.platforms.openai.buildMode).toBe('dynamic');
+      expect(result.platforms.openai.html).toContain('window.openai');
+    });
+  });
+});

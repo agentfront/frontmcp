@@ -257,7 +257,7 @@ export class TypeFetcher {
       }
 
       // Build individual files array for browser editors
-      const files = buildTypeFiles(contents, resolution.packageName, resolution.version);
+      const files = buildTypeFiles(contents, resolution.packageName, resolution.version, resolution.subpath);
 
       // Combine all fetched contents (deprecated, kept for backwards compatibility)
       const combinedContent = combineDtsContents(contents);
@@ -265,6 +265,7 @@ export class TypeFetcher {
       const result: TypeFetchResult = {
         specifier,
         resolvedPackage: resolution.packageName,
+        subpath: resolution.subpath,
         version: resolution.version,
         content: combinedContent,
         files,
@@ -552,13 +553,20 @@ function resolveRelativeUrl(base: string, relative: string): string | null {
 /**
  * Build TypeFile array from fetched contents.
  * Converts URLs to virtual file paths for browser editor compatibility.
+ * Creates alias entry points for subpath imports.
  *
  * @param contents - Map of URL to .d.ts content
  * @param packageName - The resolved package name
  * @param version - The package version
+ * @param subpath - Optional subpath from the original specifier
  * @returns Array of TypeFile objects with virtual paths
  */
-function buildTypeFiles(contents: Map<string, string>, packageName: string, version: string): TypeFile[] {
+export function buildTypeFiles(
+  contents: Map<string, string>,
+  packageName: string,
+  version: string,
+  subpath?: string,
+): TypeFile[] {
   const files: TypeFile[] = [];
 
   for (const [url, content] of contents.entries()) {
@@ -570,7 +578,43 @@ function buildTypeFiles(contents: Map<string, string>, packageName: string, vers
     });
   }
 
+  // Create alias entry point for subpath imports
+  // This allows editors to resolve imports like "@frontmcp/ui/react" correctly
+  if (subpath) {
+    const aliasPath = `node_modules/${packageName}/${subpath}/index.d.ts`;
+    // Check if this path already exists in files
+    const aliasExists = files.some((f) => f.path === aliasPath);
+
+    if (!aliasExists) {
+      // Create re-export alias that points to the package root
+      const aliasContent = `// Auto-generated alias for ${packageName}/${subpath}
+export * from '${getRelativeImportPath(subpath)}';
+`;
+      files.push({
+        path: aliasPath,
+        url: '', // No actual URL - this is synthesized
+        content: aliasContent,
+      });
+    }
+  }
+
   return files;
+}
+
+/**
+ * Calculate relative import path from subpath to package root.
+ *
+ * @param subpath - The subpath within the package
+ * @returns Relative import path to the package root index
+ *
+ * @example
+ * getRelativeImportPath('react') // '../index'
+ * getRelativeImportPath('components/button') // '../../index'
+ */
+export function getRelativeImportPath(subpath: string): string {
+  const depth = subpath.split('/').length;
+  const prefix = '../'.repeat(depth);
+  return `${prefix}index`;
 }
 
 /**
@@ -585,7 +629,7 @@ function buildTypeFiles(contents: Map<string, string>, packageName: string, vers
  * @param version - The package version
  * @returns Virtual file path
  */
-function urlToVirtualPath(url: string, packageName: string, version: string): string {
+export function urlToVirtualPath(url: string, packageName: string, version: string): string {
   try {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;

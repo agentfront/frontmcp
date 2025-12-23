@@ -73,6 +73,14 @@ export interface TypeFetchResult {
   resolvedPackage: string;
 
   /**
+   * Subpath from the original specifier (if any).
+   * Used for creating alias entry points for nested imports.
+   *
+   * @example 'react' when specifier was '@frontmcp/ui/react'
+   */
+  subpath?: string;
+
+  /**
    * Version of the package used for type fetching.
    *
    * @example '18.2.0', 'latest'

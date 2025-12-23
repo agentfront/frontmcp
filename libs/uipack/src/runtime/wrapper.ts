@@ -2215,7 +2215,7 @@ export function getToolUIMimeType(platform: 'openai' | 'ext-apps' | 'generic' = 
  * These are pre-built files (not JIT compilers).
  */
 const CLOUDFLARE_CDN = {
-  tailwindCss: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css',
+  tailwindCss: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss-browser/4.1.13/index.global.min.js',
   htmx: 'https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js',
   alpinejs: 'https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.3/cdn.min.js',
 } as const;
@@ -2269,8 +2269,7 @@ export function wrapToolUIForClaude(options: WrapToolUIForClaudeOptions): string
   const { content, toolName, input = {}, output, title, includeHtmx = false, includeAlpine = false } = options;
 
   // Build Tailwind CSS link (pre-built, not JIT)
-  const tailwindCss = `<link href="${CLOUDFLARE_CDN.tailwindCss}" rel="stylesheet">`;
-
+  const tailwindCss = `<script src="${CLOUDFLARE_CDN.tailwindCss}" crossorigin="anonymous"></script>`;
   // Optional scripts (only from cloudflare)
   const htmxScript = includeHtmx ? `<script src="${CLOUDFLARE_CDN.htmx}" crossorigin="anonymous"></script>` : '';
 

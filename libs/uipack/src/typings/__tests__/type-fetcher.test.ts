@@ -18,6 +18,9 @@ import {
   TYPE_CACHE_PREFIX,
   DEFAULT_TYPE_FETCHER_OPTIONS,
   DEFAULT_TYPE_CACHE_TTL,
+  buildTypeFiles,
+  getRelativeImportPath,
+  urlToVirtualPath,
 } from '../index';
 
 // ============================================
@@ -224,6 +227,111 @@ import React from 'react';`;
 
       expect(combined).toContain('// Source: https://esm.sh/test.d.ts');
     });
+  });
+});
+
+// ============================================
+// Virtual Path Helper Tests
+// ============================================
+
+describe('getRelativeImportPath', () => {
+  it('should return correct path for single-level subpath', () => {
+    expect(getRelativeImportPath('react')).toBe('../index');
+    expect(getRelativeImportPath('hooks')).toBe('../index');
+  });
+
+  it('should return correct path for multi-level subpath', () => {
+    expect(getRelativeImportPath('components/button')).toBe('../../index');
+    expect(getRelativeImportPath('a/b/c')).toBe('../../../index');
+  });
+});
+
+describe('urlToVirtualPath', () => {
+  it('should convert esm.sh URLs to virtual paths', () => {
+    const url = 'https://esm.sh/v135/zod@3.23.8/lib/types.d.ts';
+    expect(urlToVirtualPath(url, 'zod', '3.23.8')).toBe('node_modules/zod/lib/types.d.ts');
+  });
+
+  it('should handle scoped packages', () => {
+    const url = 'https://esm.sh/v135/@frontmcp/ui@1.0.0/react/index.d.ts';
+    expect(urlToVirtualPath(url, '@frontmcp/ui', '1.0.0')).toBe('node_modules/@frontmcp/ui/react/index.d.ts');
+  });
+
+  it('should handle root index files', () => {
+    const url = 'https://esm.sh/v135/react@18.2.0';
+    expect(urlToVirtualPath(url, 'react', '18.2.0')).toBe('node_modules/react/index.d.ts');
+  });
+
+  it('should handle invalid URLs gracefully', () => {
+    expect(urlToVirtualPath('not-a-url', 'pkg', '1.0.0')).toBe('node_modules/pkg/index.d.ts');
+  });
+});
+
+describe('buildTypeFiles', () => {
+  it('should build files array from contents map', () => {
+    const contents = new Map([['https://esm.sh/v135/react@18.2.0/index.d.ts', 'declare const React: any;']]);
+
+    const files = buildTypeFiles(contents, 'react', '18.2.0');
+
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toBe('node_modules/react/index.d.ts');
+    expect(files[0].url).toBe('https://esm.sh/v135/react@18.2.0/index.d.ts');
+    expect(files[0].content).toBe('declare const React: any;');
+  });
+
+  it('should NOT create alias file when no subpath is provided', () => {
+    const contents = new Map([['https://esm.sh/v135/@frontmcp/ui@1.0.0/index.d.ts', 'export const Card: any;']]);
+
+    const files = buildTypeFiles(contents, '@frontmcp/ui', '1.0.0');
+
+    expect(files).toHaveLength(1);
+    expect(files.find((f) => f.url === '')).toBeUndefined();
+  });
+
+  it('should create alias file for single-level subpath', () => {
+    const contents = new Map([['https://esm.sh/v135/@frontmcp/ui@1.0.0/index.d.ts', 'export const Card: any;']]);
+
+    const files = buildTypeFiles(contents, '@frontmcp/ui', '1.0.0', 'react');
+
+    expect(files).toHaveLength(2);
+
+    // Find the alias file
+    const aliasFile = files.find((f) => f.path === 'node_modules/@frontmcp/ui/react/index.d.ts');
+    expect(aliasFile).toBeDefined();
+    expect(aliasFile?.url).toBe(''); // Synthesized, no actual URL
+    expect(aliasFile?.content).toContain("export * from '../index'");
+    expect(aliasFile?.content).toContain('Auto-generated alias for @frontmcp/ui/react');
+  });
+
+  it('should create alias file for deep subpath', () => {
+    const contents = new Map([['https://esm.sh/v135/@frontmcp/ui@1.0.0/index.d.ts', 'export const Card: any;']]);
+
+    const files = buildTypeFiles(contents, '@frontmcp/ui', '1.0.0', 'components/button');
+
+    expect(files).toHaveLength(2);
+
+    // Find the alias file
+    const aliasFile = files.find((f) => f.path === 'node_modules/@frontmcp/ui/components/button/index.d.ts');
+    expect(aliasFile).toBeDefined();
+    expect(aliasFile?.url).toBe('');
+    expect(aliasFile?.content).toContain("export * from '../../index'");
+  });
+
+  it('should NOT create alias if file already exists at that path', () => {
+    const contents = new Map([
+      ['https://esm.sh/v135/@frontmcp/ui@1.0.0/index.d.ts', 'export const Card: any;'],
+      ['https://esm.sh/v135/@frontmcp/ui@1.0.0/react/index.d.ts', 'export const ReactCard: any;'],
+    ]);
+
+    const files = buildTypeFiles(contents, '@frontmcp/ui', '1.0.0', 'react');
+
+    // Should have 2 files (the original ones), no synthesized alias
+    expect(files).toHaveLength(2);
+
+    // The react/index.d.ts should be from the URL, not synthesized
+    const reactFile = files.find((f) => f.path === 'node_modules/@frontmcp/ui/react/index.d.ts');
+    expect(reactFile?.url).toBe('https://esm.sh/v135/@frontmcp/ui@1.0.0/react/index.d.ts');
+    expect(reactFile?.content).toBe('export const ReactCard: any;');
   });
 });
 

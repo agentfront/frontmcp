@@ -85,13 +85,12 @@ describe('typeFileSchema', () => {
     ).toThrow();
   });
 
-  it('should reject invalid URL', () => {
-    expect(() =>
-      typeFileSchema.parse({
-        ...validFile,
-        url: 'not-a-valid-url',
-      }),
-    ).toThrow();
+  it('should accept empty URL for synthesized alias files', () => {
+    const result = typeFileSchema.parse({
+      ...validFile,
+      url: '',
+    });
+    expect(result.url).toBe('');
   });
 
   it('should reject extra fields with strict mode', () => {
@@ -128,6 +127,22 @@ describe('typeFetchResultSchema', () => {
   it('should accept valid result', () => {
     const result = typeFetchResultSchema.parse(validResult);
     expect(result.specifier).toBe('react');
+  });
+
+  it('should accept result with optional subpath field', () => {
+    const resultWithSubpath = {
+      ...validResult,
+      specifier: '@frontmcp/ui/react',
+      resolvedPackage: '@frontmcp/ui',
+      subpath: 'react',
+    };
+    const result = typeFetchResultSchema.parse(resultWithSubpath);
+    expect(result.subpath).toBe('react');
+  });
+
+  it('should accept result without subpath field', () => {
+    const result = typeFetchResultSchema.parse(validResult);
+    expect(result.subpath).toBeUndefined();
   });
 
   it('should reject missing fields', () => {

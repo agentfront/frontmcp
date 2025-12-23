@@ -147,4 +147,10 @@ export {
 // Type Fetcher
 // ============================================
 
-export { TypeFetcher, createTypeFetcher } from './type-fetcher';
+export {
+  TypeFetcher,
+  createTypeFetcher,
+  buildTypeFiles,
+  getRelativeImportPath,
+  urlToVirtualPath,
+} from './type-fetcher';
