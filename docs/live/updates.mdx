@@ -5,19 +5,65 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="v0.6.2" description="2025-12-24" tags={["Releases"]}>
+<Update label="v0.6.x" description="2025-12-24" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.6.2: Adaptive build modes and zero-config persistence"
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.2"
     cta="View full changlog"
   >
-    🚀 **Build modes everywhere** – Bundle widgets in static, dynamic, or hybrid mode and reuse the same component across OpenAI, Claude, and Gemini without rewriting HTML.
+    🚀 **Build modes everywhere** – Bundle widgets in static, dynamic, or hybrid mode and reuse the same component across
+    OpenAI, Claude, and Gemini without rewriting HTML.
 
-    🧩 **Auto Redis persistence** – Point `redis` at a store once and transport persistence now enables itself so stateful sessions survive restarts and serverless cold starts.
+    🧩 **Auto Redis persistence** – Point `redis` at a store once and transport persistence now enables itself so
+    stateful sessions survive restarts and serverless cold starts.
 
-    ⚡ **Vercel Build Output** – `frontmcp build --adapter vercel` detects npm/yarn/pnpm/bun lockfiles, wires the right install/build commands, and emits a `.vercel/output` tree ready for `vercel deploy --prebuilt`.
+    ⚡ **Vercel Build Output** – `frontmcp build --adapter vercel` detects npm/yarn/pnpm/bun lockfiles, wires the right
+    install/build commands, and emits a `.vercel/output` tree ready for `vercel deploy --prebuilt`.
 
-    🛠️ **Tree-shakable packages** – SDK, adapters, plugins, and CLI publish dual CJS/ESM entries with `sideEffects: false`, eliminating duplicate React imports and keeping bundles slim.
+    🛠️ **Tree-shakable packages** – SDK, adapters, plugins, and CLI publish dual CJS/ESM entries with `sideEffects:
+    false`, eliminating duplicate React imports and keeping bundles slim.
+
+  </Card>
+  <Card
+    title="FrontMCP v0.6.1: Edge storage and UI split"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.1"
+    cta="View full changlog"
+  >
+    🚀 **Vercel KV storage** – Configure `redis.provider: 'vercel-kv'` for sessions, cache, and inspector state without
+    running your own Redis cluster.
+
+    🔄 **Hybrid pub/sub** – Layer Redis pub/sub on top of Vercel KV so resource subscriptions and capability broadcasts
+    stay real-time even when the store lives at the edge.
+
+    🎨 **UI package split** – Import HTML components and template helpers from the new `@frontmcp/uipack` foundation
+    while `@frontmcp/ui` focuses on React hooks and renderers.
+
+    ⚡ **Smarter serverless builds** – Rspack-powered bundling, tighter escaping, and refreshed dependencies keep Vercel,
+    Lambda, and Cloudflare deployments aligned with local builds.
+
+  </Card>
+  <Card
+    title="FrontMCP v0.6.0: Unified transport and serverless targets"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.0"
+    cta="View full changlog"
+  >
+    🚦 **Unified transport controls** – Configure sessions, platform detection, and Redis-backed persistence from one
+    top-level block with per-app overrides.
+
+    ☁️ **Serverless deploy targets** – Scaffold Vercel, AWS Lambda, and Cloudflare Workers bundles via `frontmcp create
+    --target ...` plus generated wrappers and templates.
+
+    🧠 **Context everywhere** – CONTEXT-scoped providers, safer session keys, and the new `FrontMcpContext` helpers keep
+    tracing, auth, and request metadata in sync.
+
+    🧪 **Scenario-rich E2E demos** – Fresh `apps/e2e/**` servers (public auth, CodeCall CRM, cache, notifications,
+    OpenAPI) ship with ready-to-run Jest suites.
+
+    🎨 **Resilient UI renderer** – Universal rendering, dual-payload responses, and hardened platform detection keep tool
+    UIs streaming even when clients fall back.
+
+    🛠️ **CLI & build polish** – Interactive `frontmcp create`, Docker assets, Verdaccio publish fixes, and peer
+    dependency cleanup keep new projects aligned with the framework.
 
   </Card>
 </Update>
@@ -28,11 +74,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single `dist/index.d.ts`.
+    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single
+    `dist/index.d.ts`.
 
-    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters automatically.
+    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters
+    automatically.
 
-    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and adapters consume the converter without overrides.
+    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and
+    adapters consume the converter without overrides.
 
   </Card>
 </Update>
@@ -43,50 +92,18 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    🧱 **Unified exports** – Require or import the generator thanks to the new dual CJS/ESM build, with typings shared across both entry points.
+    🧱 **Unified exports** – Require or import the generator thanks to the new dual CJS/ESM build, with typings shared
+    across both entry points.
 
-    ⚙️ **Tree-shakable helpers** – Marking the package as side-effect free keeps bundlers from pulling the OpenAPI loader when you only need schema utilities.
+    ⚙️ **Tree-shakable helpers** – Marking the package as side-effect free keeps bundlers from pulling the OpenAPI
+    loader when you only need schema utilities.
 
-    🔄 **Version sync** – The library now ships in lockstep with `@frontmcp/adapters`, so generated tools inherit the same input mappers and security metadata.
-
-  </Card>
-</Update>
-
-<Update label="v0.6.x" description="2025-12-22" tags={["Releases"]}>
-  <Card
-    title="FrontMCP v0.6.1: Edge storage and UI split"
-    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.1"
-    cta="View full changlog"
-  >
-    🚀 **Vercel KV storage** – Configure `redis.provider: 'vercel-kv'` for sessions, cache, and inspector state without running your own Redis cluster.
-
-    🔄 **Hybrid pub/sub** – Layer Redis pub/sub on top of Vercel KV so resource subscriptions and capability broadcasts stay real-time even when the store lives at the edge.
-
-    🎨 **UI package split** – Import HTML components and template helpers from the new `@frontmcp/uipack` foundation while `@frontmcp/ui` focuses on React hooks and renderers.
-
-    ⚡ **Smarter serverless builds** – Rspack-powered bundling, tighter escaping, and refreshed dependencies keep Vercel, Lambda, and Cloudflare deployments aligned with local builds.
-
-  </Card>
-
-  <Card
-    title="FrontMCP v0.6.0: Unified transport and serverless targets"
-    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.0"
-    cta="View full changlog"
-  >
-    🚦 **Unified transport controls** – Configure sessions, platform detection, and Redis-backed persistence from one top-level block with per-app overrides.
-
-    ☁️ **Serverless deploy targets** – Scaffold Vercel, AWS Lambda, and Cloudflare Workers bundles via `frontmcp create --target ...` plus generated wrappers and templates.
-
-    🧠 **Context everywhere** – CONTEXT-scoped providers, safer session keys, and the new `FrontMcpContext` helpers keep tracing, auth, and request metadata in sync.
-
-    🧪 **Scenario-rich E2E demos** – Fresh `apps/e2e/**` servers (public auth, CodeCall CRM, cache, notifications, OpenAPI) ship with ready-to-run Jest suites.
-
-    🎨 **Resilient UI renderer** – Universal rendering, dual-payload responses, and hardened platform detection keep tool UIs streaming even when clients fall back.
-
-    🛠️ **CLI & build polish** – Interactive `frontmcp create`, Docker assets, Verdaccio publish fixes, and peer dependency cleanup keep new projects aligned with the framework.
+    🔄 **Version sync** – The library now ships in lockstep with `@frontmcp/adapters`, so generated tools inherit the
+    same input mappers and security metadata.
 
   </Card>
 </Update>
+
 
 <Update label="json-schema-to-zod-v3 v1.0.2" description="2025-12-19" tags={["Independent"]}>
   <Card
@@ -94,11 +111,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer need local overrides.
+    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer
+    need local overrides.
 
-    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without manual file moves.
+    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without
+    manual file moves.
 
-    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the converter into new workspaces.
+    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the
+    converter into new workspaces.
 
   </Card>
 </Update>
@@ -109,11 +129,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    🪵 **Adapter logging** – Plug a logger into the generator to trace request mappers, auth routing, and spec parsing steps.
+    🪵 **Adapter logging** – Plug a logger into the generator to trace request mappers, auth routing, and spec parsing
+    steps.
 
-    🔐 **Security routing** – Expanded helpers automatically map OpenAPI schemes to the right MCP auth metadata for multi-scheme APIs.
+    🔐 **Security routing** – Expanded helpers automatically map OpenAPI schemes to the right MCP auth metadata for
+    multi-scheme APIs.
 
-    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups without guesswork.
+    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups
+    without guesswork.
 
   </Card>
 </Update>
@@ -124,23 +147,32 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.5.0"
     cta="View full changlog"
   >
-    🎨 **Tool UI widgets** – Compose HTML, React, or MDX templates with @frontmcp/ui, static/hybrid serving modes, and OpenAI App SDK resource widgets for richer outputs.
+    🎨 **Tool UI widgets** – Compose HTML, React, or MDX templates with @frontmcp/ui, static/hybrid serving modes, and
+    OpenAI App SDK resource widgets for richer outputs.
 
-    🛡️ **Auth modes** – Mix public, transparent, and orchestrated OAuth flows with consent screens, incremental scopes, stateless/stateful sessions, and runnable demo servers.
+    🛡️ **Auth modes** – Mix public, transparent, and orchestrated OAuth flows with consent screens, incremental scopes,
+    stateless/stateful sessions, and runnable demo servers.
 
-    🧠 **Resources & prompts** – Register ResourceTemplates, prompt catalogs, and capability notifications so clients can browse every tool, resource, and prompt without custom wiring.
+    🧠 **Resources & prompts** – Register ResourceTemplates, prompt catalogs, and capability notifications so clients can
+    browse every tool, resource, and prompt without custom wiring.
 
-    🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool execution guards to keep automated code paths safe.
+    🔌 **Plugins & security** – Ship the CodeCall plugin, VectoriaDB semantic store, AST Guard, and stricter tool
+    execution guards to keep automated code paths safe.
 
-    🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23, Zod 4, Node 24, and refreshed transformer dependencies.
+    🧪 **Testing & upgrades** – Use @frontmcp/testing for Jest fixtures and HTTP mocks while aligning to MCP SDK 1.23,
+    Zod 4, Node 24, and refreshed transformer dependencies.
 
-    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`, Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity.
+    ⚙️ **Protocol-aligned packages** – Every synchronized package now depends on MCP SDK `1.24.3`, VectoriaDB `^2.0.1`,
+    Enclave VM `1.0.3`, and esbuild `0.27.1` for smoother installs and runtime parity.
 
-    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your workspace SDK, adapter, and plugin versions so generators never ship stale dependencies.
+    🧰 **CLI scaffolding** – `frontmcp create` writes `zod@^4.0.0` into new projects and the global CLI now shares your
+    workspace SDK, adapter, and plugin versions so generators never ship stale dependencies.
 
-    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews.
+    📚 **Resource widget docs** – `/docs/ui/overview` and `/docs/ui/components/resource-widgets` now cover tool UI
+    metadata, escaping, and OpenAI App SDK-ready cards, lists, and previews.
 
-    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK expects the 2.x line, keeping semantic search upgrades drop-in.
+    🧠 **Vector search guidance** – The VectoriaDB guide pins installs to `vectoriadb@^2` and explains why the SDK
+    expects the 2.x line, keeping semantic search upgrades drop-in.
 
   </Card>
 </Update>
@@ -151,11 +183,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in Node 22 and 24.
+    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in
+    Node 22 and 24.
 
-    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards green across CI.
+    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards
+    green across CI.
 
-    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and source links more useful.
+    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and
+    source links more useful.
 
   </Card>
 </Update>
@@ -166,11 +201,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the framework upgrade.
+    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the
+    framework upgrade.
 
-    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP requests.
+    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP
+    requests.
 
-    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator aligned with FrontMCP v0.5.
+    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator
+    aligned with FrontMCP v0.5.
 
   </Card>
 </Update>
@@ -181,13 +219,17 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.4.0"
     cta="View full changlog"
   >
-    🚀 **Generator-native adapters** – The OpenAPI adapter now rides on the standalone `mcp-from-openapi` engine so every tool inherits conflict-free params, request mappers, and per-scheme auth scoring.
+    🚀 **Generator-native adapters** – The OpenAPI adapter now rides on the standalone `mcp-from-openapi` engine so every
+    tool inherits conflict-free params, request mappers, and per-scheme auth scoring.
 
-    🧩 **Tool metadata upgrades** – Declare literal primitives, tuple arrays, `resource` / `resource_link` payloads, and a `rawInputSchema` so clients see structured responses without wrapper objects.
+    🧩 **Tool metadata upgrades** – Declare literal primitives, tuple arrays, `resource` / `resource_link` payloads, and
+    a `rawInputSchema` so clients see structured responses without wrapper objects.
 
-    🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically.
+    🛡️ **Typed MCP errors** – Throw `PublicMcpError` / `InternalMcpError` variants and let the new handler stamp
+    traceable IDs, FlowControl-aware stop semantics, and safe production messaging automatically.
 
-    📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how independent libraries ship alongside synchronized packages.
+    📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how
+    independent libraries ship alongside synchronized packages.
 
   </Card>
 </Update>
@@ -198,11 +240,14 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
     cta="Explore the library"
   >
-    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted specs from triggering ReDoS in your adapters.
+    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted
+    specs from triggering ReDoS in your adapters.
 
-    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex shapes without custom parsing code.
+    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex
+    shapes without custom parsing code.
 
-    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public uploads.
+    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public
+    uploads.
 
   </Card>
 </Update>
@@ -213,90 +258,96 @@ mode: 'center'
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path, query, header, or body).
+    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path,
+    query, header, or body).
 
-    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent metadata.
+    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent
+    metadata.
 
-    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can reason about each operation automatically.
+    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can
+    reason about each operation automatically.
 
   </Card>
 </Update>
 
 <Update label="FrontMCP 0.3.0" description="November 2025" tags={["Releases"]}>
-    <Card
-        title="FrontMCP 0.3.0: Hooks everywhere, cache what matters."
-        href="/docs"
-        cta="Read the release notes"
-    >
-        Flow-level hooks now ship with typed Will/Stage/Did/Around helpers, and the Cache plugin can short-circuit repeat tool calls with memory or Redis stores—plus steadier releases out of the box.
+  <Card
+    title="FrontMCP 0.3.0: Hooks everywhere, cache what matters."
+    href="/docs"
+    cta="Read the release notes"
+  >
+    Flow-level hooks now ship with typed Will/Stage/Did/Around helpers, and the Cache plugin can short-circuit repeat
+    tool calls with memory or Redis stores—plus steadier releases out of the box.
 
-        #### Features
-        - Attach Will/Stage/Did/Around hooks across HTTP, transport, auth, and tool flows with the new <code>FlowHooksOf(...)</code> helper, including priority ordering and filters.
-        - Ship the Cache plugin to short-circuit repeat tool calls with memory or Redis stores, per-tool TTLs, and sliding-window refresh.
+    #### Features
+    - Attach Will/Stage/Did/Around hooks across HTTP, transport, auth, and tool flows with the
+    new <code>FlowHooksOf(...)</code> helper, including priority ordering and filters.
+    - Ship the Cache plugin to short-circuit repeat tool calls with memory or Redis stores, per-tool TTLs, and
+    sliding-window refresh.
 
-        #### Fixes
-        - Stringify JSON request bodies before dispatching OpenAPI adapter calls so downstream APIs receive valid payloads.
+    #### Fixes
+    - Stringify JSON request bodies before dispatching OpenAPI adapter calls so downstream APIs receive valid payloads.
 
-        #### Docs
-        - Added guides on customizing flow stages and using the cache plugin, and refreshed plugin references.
+    #### Docs
+    - Added guides on customizing flow stages and using the cache plugin, and refreshed plugin references.
 
-        #### Build/CI
-        - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script.
-    </Card>
+    #### Build/CI
+    - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script.
+  </Card>
 
 </Update>
 
 <Update label="FrontMCP 0.2.0" description="November 2025" tags={["Releases"]}>
-    <Card
-        title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
-        href="/docs/v/0.2/"
-        cta="Read the release notes"
-    >
-        FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,
-        smarter
-        config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
+  <Card
+    title="FrontMCP 0.2.0: Create. Inspect. Dev—faster."
+    href="/docs/v/0.2/"
+    cta="Read the release notes"
+  >
+    FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector,
+    smarter
+    config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
 
-        - 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
-        Example: <code>frontmcp dev --no-auth</code>
-        - 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
-        scripts, and starter files.
-        - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
-        - 🔭 **Inspector, zero setup**: <code>frontmcp
-        inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
-        - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-        - ✨ **Tool schema ergonomics**: pass Zod fields directly
-        (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
-        - ⚡ **Async type checks in dev**: background type-checking while watching files.
-        - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
-        builds to <code>./dist</code> (override with <code>--out-dir</code>).
-        - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
-        session-aware SSE.
-        - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
+    - 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
+    Example: <code>frontmcp dev --no-auth</code>
+    - 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
+    scripts, and starter files.
+    - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
+    - 🔭 **Inspector, zero setup**: <code>frontmcp
+    inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
+    - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
+    - ✨ **Tool schema ergonomics**: pass Zod fields directly
+    (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
+    - ⚡ **Async type checks in dev**: background type-checking while watching files.
+    - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
+    builds to <code>./dist</code> (override with <code>--out-dir</code>).
+    - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
+    session-aware SSE.
+    - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
 
-        <Warning>
-            The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
-            production.
-        </Warning>
-    </Card>
+    <Warning>
+      The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
+      production.
+    </Warning>
+  </Card>
 
 </Update>
 
 <Update label="FrontMCP 0.1.0" description="November 2025" tags={["Releases"]}>
-    <Card
-        title="FrontMCP 0.1.0: Stream it. Scope it. Ship it."
-        href="/docs/v/0.1/"
-        cta="Read the release notes"
-    >
-        FrontMCP 0.1 lands streamlined <strong>Streamable HTTP</strong> transport, scoped <strong>DI-powered
-        invoker</strong> flows,
-        and first-class <strong>adapters/plugins</strong> so you can ship production MCP servers with minimal
-        boilerplate.
+  <Card
+    title="FrontMCP 0.1.0: Stream it. Scope it. Ship it."
+    href="/docs/v/0.1/"
+    cta="Read the release notes"
+  >
+    FrontMCP 0.1 lands streamlined <strong>Streamable HTTP</strong> transport, scoped <strong>DI-powered
+    invoker</strong> flows,
+    and first-class <strong>adapters/plugins</strong> so you can ship production MCP servers with minimal
+    boilerplate.
 
-        - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
-        - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
-        capabilities like caching.
-        - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
-        transforms.
-    </Card>
+    - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
+    - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
+    capabilities like caching.
+    - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
+    transforms.
+  </Card>
 
 </Update>
