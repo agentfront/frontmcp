@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { AdapterTemplate } from '../types';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
@@ -105,7 +106,8 @@ export default async function handler(req, res) {
    * └── functions/
    *     └── index.func/
    *         ├── .vc-config.json  (Node.js 22 runtime config)
-   *         └── handler.cjs      (bundled handler + chunks)
+   *         ├── handler.cjs      (bundled handler + chunks)
+   *         └── node_modules/    (runtime dependencies that can't be bundled)
    */
   postBundle: async (outDir: string, cwd: string, bundleOutput: string) => {
     const outputDir = path.join(cwd, '.vercel', 'output');
@@ -128,6 +130,41 @@ export default async function handler(req, res) {
       } else {
         // Copy files
         await fs.copyFile(srcPath, destPath);
+      }
+    }
+
+    // Install runtime dependencies that can't be statically bundled (dynamic requires)
+    // These are packages loaded via require() inside functions that rspack can't analyze
+    // We install them fresh to ensure correct platform binaries (linux-x64 for Vercel)
+    const runtimeDeps = ['@vercel/kv', 'esbuild', '@swc/core'];
+
+    // Read package.json to get the exact versions
+    const pkgJsonPath = path.join(cwd, 'package.json');
+    const pkgJson = JSON.parse(await fs.readFile(pkgJsonPath, 'utf-8'));
+    const allDeps = { ...pkgJson.dependencies, ...pkgJson.devDependencies };
+
+    // Build list of deps with versions
+    const depsToInstall: string[] = [];
+    for (const dep of runtimeDeps) {
+      const version = allDeps[dep];
+      if (version) {
+        depsToInstall.push(`${dep}@${version}`);
+      }
+    }
+
+    if (depsToInstall.length > 0) {
+      // Create package.json in function directory
+      const funcPkgJson = { name: 'index.func', private: true, dependencies: {} };
+      await fs.writeFile(path.join(funcDir, 'package.json'), JSON.stringify(funcPkgJson, null, 2));
+
+      // Install dependencies using npm (works on all platforms)
+      try {
+        execSync(`npm install ${depsToInstall.join(' ')} --omit=dev`, {
+          cwd: funcDir,
+          stdio: 'pipe',
+        });
+      } catch {
+        // Silently continue if install fails - the dep might not be needed
       }
     }
 

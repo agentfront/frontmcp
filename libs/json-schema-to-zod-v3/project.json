@@ -62,6 +62,14 @@
       "options": {
         "command": "npm publish libs/json-schema-to-zod-v3/dist --access public --registry=https://registry.npmjs.org/"
       }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "cp .npmrc.verdaccio {projectRoot}/dist/.npmrc 2>/dev/null || true && ts=${ALPHA_TS:-$(date +%s)} && base=$(jq -r '.version' {projectRoot}/dist/package.json | sed 's/-.*//') && jq --arg v \"$base-alpha.$ts\" '.version=$v' {projectRoot}/dist/package.json > {projectRoot}/dist/package.tmp.json && mv {projectRoot}/dist/package.tmp.json {projectRoot}/dist/package.json && cd {projectRoot}/dist && npm publish --access public --tag alpha --registry=\"https://verdaccio.ngrok.app\"",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

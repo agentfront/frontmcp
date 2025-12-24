@@ -4,8 +4,10 @@ import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
 import { applyMigration } from '../migrate';
 import { InternalMcpError } from '../../errors/mcp.error';
 
-// Lazy import to avoid circular dependency
-// Uses require() to ensure same module instance (avoids dual-package hazard)
+// Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
+// Uses direct relative paths instead of require('@frontmcp/sdk') which would create
+// a circular dependency since index.ts exports this decorator.
+
 let _FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance | null = null;
 function getFrontMcpInstance() {
   if (!_FrontMcpInstance) {
@@ -16,6 +18,25 @@ function getFrontMcpInstance() {
     throw new InternalMcpError('FrontMcpInstance not found in module', 'MODULE_LOAD_FAILED');
   }
   return _FrontMcpInstance;
+}
+
+// Lazy import for serverless handler functions
+type ServerlessHandlerFns = {
+  setServerlessHandler: (handler: unknown) => void;
+  setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
+  setServerlessHandlerError: (error: Error) => void;
+};
+let _serverlessHandlerFns: ServerlessHandlerFns | null = null;
+
+function getServerlessHandlerFns(): ServerlessHandlerFns {
+  if (!_serverlessHandlerFns) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _serverlessHandlerFns = require('../../front-mcp/serverless-handler');
+  }
+  if (!_serverlessHandlerFns) {
+    throw new InternalMcpError('Serverless handler functions not found', 'MODULE_LOAD_FAILED');
+  }
+  return _serverlessHandlerFns;
 }
 
 /**
@@ -64,27 +85,10 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      // Note: Uses direct require('@frontmcp/sdk') instead of getFrontMcpInstance() because
-      // we need multiple exports (setServerlessHandler, etc.) not just FrontMcpInstance.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const {
-        FrontMcpInstance: ServerlessInstance,
-        setServerlessHandler,
-        setServerlessHandlerPromise,
-        setServerlessHandlerError,
-      }: {
-        FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance;
-        setServerlessHandler: (handler: unknown) => void;
-        setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
-        setServerlessHandlerError: (error: Error) => void;
-      } = require('@frontmcp/sdk');
-
-      if (!ServerlessInstance) {
-        throw new InternalMcpError(
-          '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
-          'SDK_VERSION_MISMATCH',
-        );
-      }
+      // Uses direct relative imports to avoid circular dependency with @frontmcp/sdk
+      const ServerlessInstance = getFrontMcpInstance();
+      const { setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError } =
+        getServerlessHandlerFns();
 
       const handlerPromise = ServerlessInstance.createHandler(metadata);
       setServerlessHandlerPromise(handlerPromise);

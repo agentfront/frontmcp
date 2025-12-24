@@ -214,17 +214,31 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
     const { request, response } = this.rawInput;
     const { token, session } = this.state.required;
 
+    logger.info('onMessage: starting', {
+      sessionId: session.id?.slice(0, 20),
+      hasToken: !!token,
+    });
+
     // 1. Try to get existing transport from memory
     let transport = await transportService.getTransporter('streamable-http', token, session.id);
+    logger.info('onMessage: getTransporter result', { found: !!transport });
 
     // 2. If not in memory, check if session exists in Redis and recreate
     if (!transport) {
       try {
+        logger.info('onMessage: transport not in memory, checking Redis', {
+          sessionId: session.id?.slice(0, 20),
+        });
         const storedSession = await transportService.getStoredSession('streamable-http', token, session.id);
+        logger.info('onMessage: getStoredSession result', {
+          found: !!storedSession,
+          initialized: storedSession?.initialized,
+        });
         if (storedSession) {
           logger.info('Recreating transport from Redis session', {
             sessionId: session.id?.slice(0, 20),
             createdAt: storedSession.createdAt,
+            initialized: storedSession.initialized,
           });
           transport = await transportService.recreateTransporter(
             'streamable-http',
@@ -233,6 +247,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
             storedSession,
             response,
           );
+          logger.info('onMessage: transport recreated successfully');
         }
       } catch (error) {
         // Log and fall through to 404 logic - transport remains undefined

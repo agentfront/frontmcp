@@ -60,6 +60,13 @@ export interface Transporter {
   destroy(reason?: string): Promise<void>;
 
   ping(timeoutMs?: number): Promise<boolean>;
+
+  /**
+   * Marks this transport as pre-initialized for session recreation.
+   * This is needed when recreating a transport from Redis because the
+   * original initialize request was processed by a different transport instance.
+   */
+  markAsInitialized(): void;
 }
 
 export interface TransportRegistryOptions {

@@ -161,6 +161,8 @@ export interface StoredSession {
   createdAt: number;
   /** Last accessed timestamp */
   lastAccessedAt: number;
+  /** Whether the MCP protocol initialization handshake was completed */
+  initialized?: boolean;
 }
 
 /**
