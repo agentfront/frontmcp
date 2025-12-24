@@ -67,7 +67,7 @@ export function containsMdxSyntax(source: string): boolean {
 /**
  * Render MDX content to HTML string.
  *
- * Uses the MDX renderer from @frontmcp/ui.
+ * Uses the MDX client renderer from the local renderers module.
  * Falls back to plain text if MDX rendering is not available.
  */
 async function renderMdxContent<In, Out>(

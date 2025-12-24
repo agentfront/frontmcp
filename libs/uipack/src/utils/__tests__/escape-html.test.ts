@@ -175,15 +175,56 @@ describe('safeJsonForScript', () => {
     expect(result).toBe('["<\\/script>","<script>"]');
   });
 
-  it('should handle null and undefined', () => {
+  it('should handle null', () => {
     expect(safeJsonForScript(null)).toBe('null');
-    // Note: undefined is not valid JSON and will be stringified to undefined
+  });
+
+  it('should handle undefined by returning null', () => {
+    expect(safeJsonForScript(undefined)).toBe('null');
   });
 
   it('should handle primitive values', () => {
     expect(safeJsonForScript(123)).toBe('123');
     expect(safeJsonForScript('hello')).toBe('"hello"');
     expect(safeJsonForScript(true)).toBe('true');
+  });
+
+  it('should handle circular references gracefully', () => {
+    const circular: Record<string, unknown> = { name: 'test' };
+    circular.self = circular;
+    const result = safeJsonForScript(circular);
+    expect(result).toBe('{"error":"Value could not be serialized"}');
+  });
+
+  it('should handle BigInt values by converting to string', () => {
+    const result = safeJsonForScript({ big: BigInt(9007199254740991) });
+    expect(result).toBe('{"big":"9007199254740991"}');
+  });
+
+  it('should handle functions by omitting them', () => {
+    const result = safeJsonForScript({
+      name: 'test',
+      fn: () => {},
+    });
+    expect(result).toBe('{"name":"test"}');
+  });
+
+  it('should handle symbols by omitting them', () => {
+    const result = safeJsonForScript({
+      name: 'test',
+      sym: Symbol('test'),
+    });
+    expect(result).toBe('{"name":"test"}');
+  });
+
+  it('should return null for standalone function', () => {
+    const result = safeJsonForScript(() => {});
+    expect(result).toBe('null');
+  });
+
+  it('should return null for standalone symbol', () => {
+    const result = safeJsonForScript(Symbol('test'));
+    expect(result).toBe('null');
   });
 
   it('should be safe for embedding in script tags', () => {
