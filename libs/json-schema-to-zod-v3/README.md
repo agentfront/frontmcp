@@ -49,7 +49,7 @@ const jsonSchema = {
   properties: {
     name: { type: 'string', minLength: 1 },
     age: { type: 'number', minimum: 0, maximum: 120 },
-    email: { type: 'string', pattern: '^[^@]+@[^@]+\\.[^@]+$' },
+    email: { type: 'string', pattern: '^[^@]+@[^@]+.[^@]+$' },
   },
   required: ['name', 'email'],
 };
@@ -412,7 +412,7 @@ const registrationSchema = {
     },
     email: {
       type: 'string',
-      pattern: '^[^@]+@[^@]+\\.[^@]+$',
+      pattern: '^[^@]+@[^@]+.[^@]+$',
     },
     password: {
       type: 'string',

@@ -589,7 +589,7 @@ class ToolCache {
   private cache = new Map<string, McpOpenAPITool[]>();
 
   async getTools(apiUrl: string): Promise<McpOpenAPITool[]> {
-    if (this.cache.has(apiUrl)) {
+    if (this.cache has(apiUrl)) {
       return this.cache.get(apiUrl)!;
     }
 
