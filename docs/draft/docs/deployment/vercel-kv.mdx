@@ -61,8 +61,12 @@ Vercel KV is an edge-compatible, REST-based key-value store that works seamlessl
   </Step>
   <Step title="Deploy">
     ```bash
-    vercel deploy
+    frontmcp build --adapter vercel
+    vercel deploy --prebuilt
     ```
+    <Info>
+      Build once locally, then use `vercel deploy --prebuilt` to publish the `.vercel/output` folder without triggering another Vercel build.
+    </Info>
   </Step>
 </Steps>
 
@@ -134,7 +138,7 @@ When you connect a Vercel KV store to your project, these environment variables 
   <Step title="Navigate to Storage">
     In your Vercel Dashboard, click **Storage** in the top navigation.
   </Step>
-  <Step title="Create KV Database">
+  <Step title="Create KB Database">
     Click **Create Database** and select **KV** (Durable Redis).
   </Step>
   <Step title="Name Your Store">

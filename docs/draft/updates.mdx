@@ -5,12 +5,27 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-24" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    **Features**
+    🚀 **Platform-aware build modes** – Choose static, dynamic, or hybrid builds per tool while FrontMCP handles OpenAI subscriptions, Claude placeholders, and cached shells for you.
+    🧩 **Claude Artifact widgets** – Deliver interactive widgets inside Claude Artifacts with dual-payload responses, automatic placeholder injection, and clearer error states.
+    🔐 **TypeFetcher allowlists** – Lock remote typings to trusted packages or glob patterns to keep automated schema ingestion safe by default.
+
+    **Fixes**
+    🛡️ **Safer script serialization** – Widget payloads escape `</script>` markers and sanitize component names to prevent injection attacks.
+    🧼 **MDX runtime stability** – The bundler now ships the MDX compiler/runtime and better error handling, reducing hydration failures and noisy warnings.
+
+    **Docs**
+    📚 **Build modes guide** – New advanced UI guide walks through static, dynamic, and hybrid data injection plus helper APIs, with links from the platform matrix.
+    🗺️ **Platform + theme cleanup** – Removed deprecated ngrok references and clarified how each platform treats dynamic data, Claude placeholders, and script loading.
+
+    **Build/CI**
+    ⚡ **Vercel Build Output pipeline** – `frontmcp build --adapter vercel` creates `.vercel/output`, infers your package manager for install/build commands, and deploys cleanly via `vercel deploy --prebuilt` without an `/api` folder.
 
   </Card>
 </Update>
