@@ -105,3 +105,26 @@ export function escapeJsString(str: string): string {
 export function escapeScriptClose(jsonString: string): string {
   return jsonString.replace(/<\//g, '<\\/');
 }
+
+/**
+ * Safely serialize a value to JSON for embedding in HTML <script> tags.
+ *
+ * Combines JSON.stringify with escapeScriptClose to prevent XSS attacks
+ * where malicious data contains `</script>` or other HTML-sensitive sequences.
+ *
+ * @param value - Value to serialize
+ * @returns Escaped JSON string safe for embedding in script tags
+ *
+ * @example
+ * ```typescript
+ * const data = { html: '</script><script>alert("xss")</script>' };
+ * const safe = safeJsonForScript(data);
+ * // Returns: '{"html":"<\\/script><script>alert(\\"xss\\")<\\/script>"}'
+ *
+ * // Safe to use in:
+ * // <script>const data = ${safeJsonForScript(data)};</script>
+ * ```
+ */
+export function safeJsonForScript(value: unknown): string {
+  return escapeScriptClose(JSON.stringify(value));
+}

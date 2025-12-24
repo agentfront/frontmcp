@@ -28,6 +28,47 @@ import type {
 } from '@frontmcp/uipack/renderers';
 import { isReactComponent, containsJsx, hashString, transpileJsx } from '@frontmcp/uipack/renderers';
 
+// ============================================
+// Component Name Validation
+// ============================================
+
+/**
+ * Valid JavaScript identifier pattern.
+ * Matches only alphanumeric characters, underscores, and dollar signs,
+ * and must not start with a digit.
+ */
+const VALID_JS_IDENTIFIER = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+/**
+ * Validate that a component name is a safe JavaScript identifier.
+ *
+ * Prevents code injection attacks where a malicious function name
+ * could break out of the identifier context.
+ *
+ * @param name - Component name to validate
+ * @returns True if the name is a valid JavaScript identifier
+ */
+function isValidComponentName(name: string): boolean {
+  return VALID_JS_IDENTIFIER.test(name);
+}
+
+/**
+ * Sanitize a component name for safe use in generated JavaScript code.
+ *
+ * If the name is not a valid identifier, returns a safe fallback.
+ *
+ * @param name - Component name to sanitize
+ * @returns Safe component name
+ */
+function sanitizeComponentName(name: string): string {
+  if (isValidComponentName(name)) {
+    return name;
+  }
+  // Replace invalid characters with underscores, ensure it starts correctly
+  const sanitized = name.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/^[0-9]/, '_$&');
+  return sanitized || 'Component';
+}
+
 /**
  * Types this renderer can handle.
  */
@@ -180,7 +221,9 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
 
     if (typeof template === 'function') {
       // For imported components, we need the component to be registered
-      componentName = (template as { name?: string }).name || 'Component';
+      // Sanitize the component name to prevent code injection attacks
+      const rawName = (template as { name?: string }).name || 'Component';
+      componentName = sanitizeComponentName(rawName);
 
       // Cache the component function for client-side access
       componentCode = `
@@ -196,8 +239,10 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
       const transpiled = await this.transpile(template);
 
       // Extract component name from transpiled code
+      // The regex only matches valid identifiers, so this is already safe
       const match = transpiled.code.match(/function\s+(\w+)/);
-      componentName = match?.[1] || 'Widget';
+      const rawName = match?.[1] || 'Widget';
+      componentName = sanitizeComponentName(rawName);
 
       componentCode = transpiled.code;
     } else {

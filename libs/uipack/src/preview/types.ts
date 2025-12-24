@@ -8,28 +8,25 @@
 
 import type { BuilderResult } from '../build/builders/types';
 
+// Re-export AIPlatformType from the canonical source for convenience
+export type { AIPlatformType } from '../adapters/platform-meta';
+
 // ============================================
 // Platform Types
 // ============================================
 
 /**
- * Supported MCP platforms.
+ * Supported MCP platforms for preview handlers.
+ *
+ * This is a strict subset used for preview handler routing.
+ * - 'openai': OpenAI ChatGPT platform
+ * - 'claude': Anthropic Claude platform
+ * - 'generic': All other MCP clients
+ *
+ * For broader platform detection (including IDEs), see AIPlatformType
+ * from the adapters module, which is the canonical source for that type.
  */
 export type Platform = 'openai' | 'claude' | 'generic';
-
-/**
- * All known platform types for detection.
- */
-export type AIPlatformType =
-  | 'openai'
-  | 'claude'
-  | 'gemini'
-  | 'cursor'
-  | 'continue'
-  | 'cody'
-  | 'ext-apps'
-  | 'generic-mcp'
-  | 'unknown';
 
 // ============================================
 // Preview Options

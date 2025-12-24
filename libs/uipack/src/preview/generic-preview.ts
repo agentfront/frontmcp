@@ -19,6 +19,21 @@ import type {
   BuilderMockData,
 } from './types';
 import type { BuilderResult, StaticBuildResult, HybridBuildResult, InlineBuildResult } from '../build/builders/types';
+import { safeJsonForScript } from '../utils';
+
+// ============================================
+// Data Injection Placeholders
+// ============================================
+
+/**
+ * Placeholder patterns for hybrid data injection.
+ * Using regex for more robust matching that handles whitespace variations.
+ */
+const DATA_PLACEHOLDERS = {
+  input: /window\.__mcpToolInput\s*=\s*\{\s*\};?/g,
+  output: /window\.__mcpToolOutput\s*=\s*\{\s*\};?/g,
+  structuredContent: /window\.__mcpStructuredContent\s*=\s*\{\s*\};?/g,
+};
 
 // ============================================
 // Generic Preview Handler
@@ -234,21 +249,34 @@ export class GenericPreview implements PreviewHandler {
   // Builder Mode Helpers
   // ============================================
 
+  /**
+   * Inject builder mode mock APIs into HTML.
+   *
+   * Uses safeJsonForScript to prevent XSS attacks from malicious data
+   * containing `</script>` or other HTML-sensitive sequences.
+   */
   private injectBuilderMode(html: string, input: unknown, output: unknown, mockData?: BuilderMockData): string {
     const theme = mockData?.theme || 'light';
     const displayMode = mockData?.displayMode || 'inline';
     const toolResponses = mockData?.toolResponses || {};
+
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeTheme = safeJsonForScript(theme);
+    const safeDisplayMode = safeJsonForScript(displayMode);
+    const safeToolResponses = safeJsonForScript(toolResponses);
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
 
     // Create mock FrontMCP bridge API
     const mockScript = `
       <script>
         // Mock FrontMCP bridge for builder mode
         window.__frontmcpMock = {
-          getTheme: function() { return ${JSON.stringify(theme)}; },
-          getDisplayMode: function() { return ${JSON.stringify(displayMode)}; },
+          getTheme: function() { return ${safeTheme}; },
+          getDisplayMode: function() { return ${safeDisplayMode}; },
           callTool: function(name, args) {
             console.log('[Mock] callTool:', name, args);
-            var responses = ${JSON.stringify(toolResponses)};
+            var responses = ${safeToolResponses};
             return Promise.resolve(responses[name] || { error: 'Tool not mocked' });
           },
           sendMessage: function(text) { console.log('[Mock] sendMessage:', text); return Promise.resolve(); },
@@ -256,9 +284,9 @@ export class GenericPreview implements PreviewHandler {
         };
 
         // Inject data
-        window.__mcpToolInput = ${JSON.stringify(input)};
-        window.__mcpToolOutput = ${JSON.stringify(output)};
-        window.__mcpStructuredContent = ${JSON.stringify(output)};
+        window.__mcpToolInput = ${safeInput};
+        window.__mcpToolOutput = ${safeOutput};
+        window.__mcpStructuredContent = ${safeOutput};
         window.__mcpBuilderMode = true;
       </script>
     `;
@@ -266,6 +294,12 @@ export class GenericPreview implements PreviewHandler {
     return html.replace('<head>', '<head>\n' + mockScript);
   }
 
+  /**
+   * Combine hybrid shell + component for builder mode.
+   *
+   * Uses regex patterns for robust placeholder matching and
+   * safeJsonForScript to prevent XSS attacks.
+   */
   private combineHybridForBuilder(
     result: HybridBuildResult,
     input: unknown,
@@ -274,11 +308,15 @@ export class GenericPreview implements PreviewHandler {
   ): string {
     let html = result.vendorShell;
 
-    // Inject data
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
+
+    // Inject data using regex for robust matching (handles whitespace variations)
     html = html
-      .replace('window.__mcpToolInput = {};', `window.__mcpToolInput = ${JSON.stringify(input)};`)
-      .replace('window.__mcpToolOutput = {};', `window.__mcpToolOutput = ${JSON.stringify(output)};`)
-      .replace('window.__mcpStructuredContent = {};', `window.__mcpStructuredContent = ${JSON.stringify(output)};`);
+      .replace(DATA_PLACEHOLDERS.input, `window.__mcpToolInput = ${safeInput};`)
+      .replace(DATA_PLACEHOLDERS.output, `window.__mcpToolOutput = ${safeOutput};`)
+      .replace(DATA_PLACEHOLDERS.structuredContent, `window.__mcpStructuredContent = ${safeOutput};`);
 
     // Inject component
     const componentScript = `

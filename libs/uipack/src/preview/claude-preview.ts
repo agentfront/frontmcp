@@ -28,6 +28,21 @@ import type {
 import type { BuilderResult, StaticBuildResult, HybridBuildResult, InlineBuildResult } from '../build/builders/types';
 import { injectHybridDataFull } from '../build/hybrid-data';
 import { CLOUDFLARE_CDN_URLS } from '../build/builders/esbuild-config';
+import { safeJsonForScript, escapeHtml } from '../utils';
+
+// ============================================
+// Data Injection Placeholders
+// ============================================
+
+/**
+ * Placeholder patterns for hybrid data injection.
+ * Using regex for more robust matching that handles whitespace variations.
+ */
+const DATA_PLACEHOLDERS = {
+  input: /window\.__mcpToolInput\s*=\s*\{\s*\};?/g,
+  output: /window\.__mcpToolOutput\s*=\s*\{\s*\};?/g,
+  structuredContent: /window\.__mcpStructuredContent\s*=\s*\{\s*\};?/g,
+};
 
 // ============================================
 // Claude Preview Handler
@@ -123,11 +138,15 @@ export class ClaudePreview implements PreviewHandler {
     // Hybrid mode: Combine shell + component + data
     let html = result.vendorShell;
 
-    // Inject data
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
+
+    // Inject data using regex for robust matching (handles whitespace variations)
     html = html
-      .replace('window.__mcpToolInput = {};', `window.__mcpToolInput = ${JSON.stringify(input)};`)
-      .replace('window.__mcpToolOutput = {};', `window.__mcpToolOutput = ${JSON.stringify(output)};`)
-      .replace('window.__mcpStructuredContent = {};', `window.__mcpStructuredContent = ${JSON.stringify(output)};`);
+      .replace(DATA_PLACEHOLDERS.input, `window.__mcpToolInput = ${safeInput};`)
+      .replace(DATA_PLACEHOLDERS.output, `window.__mcpToolOutput = ${safeOutput};`)
+      .replace(DATA_PLACEHOLDERS.structuredContent, `window.__mcpStructuredContent = ${safeOutput};`);
 
     // Inject component
     const componentScript = `
@@ -202,8 +221,18 @@ export class ClaudePreview implements PreviewHandler {
 
   /**
    * Build simple inline HTML for Claude.
+   *
+   * Uses safeJsonForScript for script context and escapeHtml for HTML context
+   * to prevent XSS attacks from malicious data.
    */
   private buildClaudeInlineHtml(input: unknown, output: unknown): string {
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
+
+    // Use escapeHtml for the <pre> tag content to prevent HTML injection
+    const escapedOutputDisplay = escapeHtml(JSON.stringify(output, null, 2));
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -217,15 +246,15 @@ export class ClaudePreview implements PreviewHandler {
 </head>
 <body class="antialiased p-4">
   <script>
-    window.__mcpToolInput = ${JSON.stringify(input)};
-    window.__mcpToolOutput = ${JSON.stringify(output)};
-    window.__mcpStructuredContent = ${JSON.stringify(output)};
+    window.__mcpToolInput = ${safeInput};
+    window.__mcpToolOutput = ${safeOutput};
+    window.__mcpStructuredContent = ${safeOutput};
   </script>
 
   <div id="root" class="min-h-[100px]">
     <div class="bg-white rounded-lg shadow p-4">
       <h3 class="text-lg font-semibold mb-2">Tool Output</h3>
-      <pre class="bg-gray-100 p-3 rounded text-sm overflow-auto">${JSON.stringify(output, null, 2)}</pre>
+      <pre class="bg-gray-100 p-3 rounded text-sm overflow-auto">${escapedOutputDisplay}</pre>
     </div>
   </div>
 </body>

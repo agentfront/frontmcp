@@ -86,7 +86,7 @@ async function renderMdxContent<In, Out>(
   } catch (error) {
     // If MDX rendering fails, warn and return escaped content
     console.error(
-      '[@frontmcp/ui] MDX rendering failed:',
+      '[@frontmcp/uipack] MDX rendering failed:',
       error instanceof Error ? error.stack || error.message : String(error),
     );
 

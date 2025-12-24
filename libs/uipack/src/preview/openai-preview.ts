@@ -25,6 +25,34 @@ import type {
   BuilderMockData,
 } from './types';
 import type { BuilderResult, StaticBuildResult, HybridBuildResult, InlineBuildResult } from '../build/builders/types';
+import { safeJsonForScript } from '../utils';
+
+// ============================================
+// Shared CSP Configuration
+// ============================================
+
+/**
+ * Default CSP domains for OpenAI widgets.
+ * Extracted to avoid DRY violation across discovery handlers.
+ */
+const DEFAULT_WIDGET_CSP: OpenAIMetaFields['openai/widgetCSP'] = {
+  connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
+  resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
+};
+
+// ============================================
+// Data Injection Placeholders
+// ============================================
+
+/**
+ * Placeholder patterns for hybrid data injection.
+ * Using regex for more robust matching that handles whitespace variations.
+ */
+const DATA_PLACEHOLDERS = {
+  input: /window\.__mcpToolInput\s*=\s*\{\s*\};?/g,
+  output: /window\.__mcpToolOutput\s*=\s*\{\s*\};?/g,
+  structuredContent: /window\.__mcpStructuredContent\s*=\s*\{\s*\};?/g,
+};
 
 // ============================================
 // OpenAI Preview Handler
@@ -109,10 +137,7 @@ export class OpenAIPreview implements PreviewHandler {
       'openai/widgetAccessible': true,
       'openai/resultCanProduceWidget': true,
       'openai/displayMode': 'inline',
-      'openai/widgetCSP': {
-        connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
-        resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
-      },
+      'openai/widgetCSP': DEFAULT_WIDGET_CSP,
     };
 
     return {
@@ -129,10 +154,7 @@ export class OpenAIPreview implements PreviewHandler {
       'openai/widgetAccessible': true,
       'openai/resultCanProduceWidget': true,
       'openai/displayMode': 'inline',
-      'openai/widgetCSP': {
-        connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
-        resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
-      },
+      'openai/widgetCSP': DEFAULT_WIDGET_CSP,
     };
 
     return {
@@ -149,10 +171,7 @@ export class OpenAIPreview implements PreviewHandler {
       'openai/widgetAccessible': true,
       'openai/resultCanProduceWidget': true,
       'openai/displayMode': 'inline',
-      'openai/widgetCSP': {
-        connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
-        resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
-      },
+      'openai/widgetCSP': DEFAULT_WIDGET_CSP,
     };
 
     return {
@@ -229,17 +248,24 @@ export class OpenAIPreview implements PreviewHandler {
   }
 
   private forExecutionInline(
-    result: InlineBuildResult,
-    input: unknown,
+    _result: InlineBuildResult,
+    _input: unknown,
     output: unknown,
     _builderMode: boolean,
     _mockData?: BuilderMockData,
   ): ExecutionMeta {
-    // Inline mode: Build and return full widget HTML
-    // Note: buildFullWidget is async, but we need sync here
-    // For now, we'll use a placeholder - real implementation would be async
+    // Inline mode requires async buildFullWidget which this sync interface doesn't support.
+    // This is a known limitation - inline mode should use the async preview API or
+    // pre-build widgets at registration time.
+    //
+    // TODO: Consider making forExecution async or providing a separate async variant.
+    console.warn(
+      '[OpenAIPreview] Inline mode execution is not fully implemented. ' +
+        'Use static or hybrid mode for production, or pre-build widgets.',
+    );
+
     const _meta: OpenAIMetaFields = {
-      'openai/html': '<!-- Full widget will be generated -->',
+      'openai/html': '<!-- Inline mode requires async widget generation. Use static/hybrid mode. -->',
     };
 
     return {
@@ -255,11 +281,21 @@ export class OpenAIPreview implements PreviewHandler {
 
   /**
    * Inject builder mode mock APIs into HTML.
+   *
+   * Uses safeJsonForScript to prevent XSS attacks from malicious data
+   * containing `</script>` or other HTML-sensitive sequences.
    */
   private injectBuilderMode(html: string, input: unknown, output: unknown, mockData?: BuilderMockData): string {
     const theme = mockData?.theme || 'light';
     const displayMode = mockData?.displayMode || 'inline';
     const toolResponses = mockData?.toolResponses || {};
+
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeTheme = safeJsonForScript(theme);
+    const safeDisplayMode = safeJsonForScript(displayMode);
+    const safeToolResponses = safeJsonForScript(toolResponses);
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
 
     // Create mock window.openai object
     const mockScript = `
@@ -267,28 +303,28 @@ export class OpenAIPreview implements PreviewHandler {
         // Mock window.openai for builder mode
         window.openai = {
           canvas: {
-            getTheme: function() { return ${JSON.stringify(theme)}; },
-            getDisplayMode: function() { return ${JSON.stringify(displayMode)}; },
+            getTheme: function() { return ${safeTheme}; },
+            getDisplayMode: function() { return ${safeDisplayMode}; },
             setDisplayMode: function(mode) { console.log('[Mock] setDisplayMode:', mode); return Promise.resolve(); },
             sendMessage: function(text) { console.log('[Mock] sendMessage:', text); return Promise.resolve(); },
             openLink: function(url) { console.log('[Mock] openLink:', url); window.open(url, '_blank'); return Promise.resolve(); },
             callServerTool: function(name, args) {
               console.log('[Mock] callServerTool:', name, args);
-              var responses = ${JSON.stringify(toolResponses)};
+              var responses = ${safeToolResponses};
               return Promise.resolve(responses[name] || { error: 'Tool not mocked' });
             },
             onContextChange: function(cb) { return function() {}; },
             onToolResult: function(cb) { return function() {}; },
             close: function() { console.log('[Mock] close'); return Promise.resolve(); },
           },
-          toolOutput: ${JSON.stringify(output)},
+          toolOutput: ${safeOutput},
           toolResponseMetadata: {},
         };
 
         // Inject data
-        window.__mcpToolInput = ${JSON.stringify(input)};
-        window.__mcpToolOutput = ${JSON.stringify(output)};
-        window.__mcpStructuredContent = ${JSON.stringify(output)};
+        window.__mcpToolInput = ${safeInput};
+        window.__mcpToolOutput = ${safeOutput};
+        window.__mcpStructuredContent = ${safeOutput};
         window.__mcpBuilderMode = true;
       </script>
     `;
@@ -299,6 +335,9 @@ export class OpenAIPreview implements PreviewHandler {
 
   /**
    * Combine hybrid shell + component for builder mode.
+   *
+   * Uses regex patterns for robust placeholder matching and
+   * safeJsonForScript to prevent XSS attacks.
    */
   private combineHybridForBuilder(
     result: HybridBuildResult,
@@ -308,11 +347,15 @@ export class OpenAIPreview implements PreviewHandler {
   ): string {
     let html = result.vendorShell;
 
-    // Inject data
+    // Use safeJsonForScript to escape </script> and other HTML-sensitive sequences
+    const safeInput = safeJsonForScript(input);
+    const safeOutput = safeJsonForScript(output);
+
+    // Inject data using regex for robust matching (handles whitespace variations)
     html = html
-      .replace('window.__mcpToolInput = {};', `window.__mcpToolInput = ${JSON.stringify(input)};`)
-      .replace('window.__mcpToolOutput = {};', `window.__mcpToolOutput = ${JSON.stringify(output)};`)
-      .replace('window.__mcpStructuredContent = {};', `window.__mcpStructuredContent = ${JSON.stringify(output)};`);
+      .replace(DATA_PLACEHOLDERS.input, `window.__mcpToolInput = ${safeInput};`)
+      .replace(DATA_PLACEHOLDERS.output, `window.__mcpToolOutput = ${safeOutput};`)
+      .replace(DATA_PLACEHOLDERS.structuredContent, `window.__mcpStructuredContent = ${safeOutput};`);
 
     // Inject component and builder mode mock
     const componentScript = `

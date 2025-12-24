@@ -179,7 +179,10 @@ export {
 export {
   // Types
   type Platform,
-  type AIPlatformType as PreviewPlatformType,
+  // Note: AIPlatformType is also exported from ./adapters (canonical source).
+  // The preview module re-exports it for convenience. Use either:
+  // - import { AIPlatformType } from '@frontmcp/uipack' (from adapters)
+  // - import { AIPlatformType } from '@frontmcp/uipack/preview' (re-exported)
   type DiscoveryPreviewOptions,
   type ExecutionPreviewOptions,
   type BuilderMockData,
