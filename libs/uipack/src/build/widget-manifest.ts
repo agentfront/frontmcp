@@ -31,7 +31,7 @@ import { getDefaultAssets } from './cdn-resources';
 import type { ThemeConfig } from '../theme';
 import { wrapToolUIUniversal } from '../runtime/wrapper';
 import { rendererRegistry } from '../renderers/registry';
-import { detectTemplateType, mdxRenderer } from '../renderers';
+import { detectTemplateType, mdxClientRenderer } from '../renderers';
 
 // File-based template support
 import { detectTemplateMode, detectFormatFromPath } from '../dependency/types';
@@ -533,9 +533,9 @@ function ensureRenderersRegistered(): void {
   // Note: React renderer is in @frontmcp/ui package
   // For React support, use @frontmcp/ui instead of @frontmcp/uipack
 
-  // Register MDX renderer if not already registered
+  // Register MDX client renderer if not already registered
   if (!rendererRegistry.has('mdx')) {
-    rendererRegistry.register(mdxRenderer);
+    rendererRegistry.register(mdxClientRenderer);
   }
 
   renderersInitialized = true;

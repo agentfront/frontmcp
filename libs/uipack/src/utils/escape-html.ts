@@ -105,3 +105,55 @@ export function escapeJsString(str: string): string {
 export function escapeScriptClose(jsonString: string): string {
   return jsonString.replace(/<\//g, '<\\/');
 }
+
+/**
+ * Safely serialize a value to JSON for embedding in HTML <script> tags.
+ *
+ * Combines JSON.stringify with escapeScriptClose to prevent XSS attacks
+ * where malicious data contains `</script>` or other HTML-sensitive sequences.
+ *
+ * Handles edge cases:
+ * - undefined: Returns 'null' (since undefined is not valid JSON)
+ * - Circular references: Returns error placeholder
+ * - BigInt: Converted to string representation
+ * - Functions/Symbols: Omitted (standard JSON.stringify behavior)
+ *
+ * @param value - Value to serialize
+ * @returns Escaped JSON string safe for embedding in script tags
+ *
+ * @example
+ * ```typescript
+ * const data = { html: '</script><script>alert("xss")</script>' };
+ * const safe = safeJsonForScript(data);
+ * // Returns: '{"html":"<\\/script><script>alert(\\"xss\\")<\\/script>"}'
+ *
+ * // Safe to use in:
+ * // <script>const data = ${safeJsonForScript(data)};</script>
+ * ```
+ */
+export function safeJsonForScript(value: unknown): string {
+  // Handle undefined explicitly since JSON.stringify(undefined) returns undefined
+  if (value === undefined) {
+    return 'null';
+  }
+
+  try {
+    // Use a replacer to handle BigInt values
+    const jsonString = JSON.stringify(value, (_key, val) => {
+      if (typeof val === 'bigint') {
+        return val.toString();
+      }
+      return val;
+    });
+
+    // JSON.stringify can return undefined for some edge cases (pure symbol, function)
+    if (jsonString === undefined) {
+      return 'null';
+    }
+
+    return escapeScriptClose(jsonString);
+  } catch {
+    // Handle circular references and other stringify errors
+    return '{"error":"Value could not be serialized"}';
+  }
+}

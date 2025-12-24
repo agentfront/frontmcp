@@ -67,7 +67,7 @@ export function containsMdxSyntax(source: string): boolean {
 /**
  * Render MDX content to HTML string.
  *
- * Uses the MDX renderer from @frontmcp/ui.
+ * Uses the MDX client renderer from the local renderers module.
  * Falls back to plain text if MDX rendering is not available.
  */
 async function renderMdxContent<In, Out>(
@@ -77,16 +77,16 @@ async function renderMdxContent<In, Out>(
   mdxComponents?: Record<string, any>,
 ): Promise<string> {
   try {
-    // Import the MDX renderer from renderers module
-    const { mdxRenderer } = await import('../renderers/index.js');
+    // Import the MDX client renderer from renderers module
+    const { mdxClientRenderer } = await import('../renderers/index.js');
 
     // Render MDX to HTML with custom components
-    const html = await mdxRenderer.render(mdxContent, context, { mdxComponents });
+    const html = await mdxClientRenderer.render(mdxContent, context, { mdxComponents });
     return html;
   } catch (error) {
     // If MDX rendering fails, warn and return escaped content
     console.error(
-      '[@frontmcp/ui] MDX rendering failed:',
+      '[@frontmcp/uipack] MDX rendering failed:',
       error instanceof Error ? error.stack || error.message : String(error),
     );
 

@@ -718,3 +718,43 @@ export {
 } from './ui-components-browser';
 
 export type { BrowserUIComponentsOptions } from './ui-components-browser';
+
+// ============================================
+// New Builder Architecture
+// ============================================
+
+export {
+  // Types
+  type BuildMode,
+  type CdnMode,
+  type BuilderOptions,
+  type BuildToolOptions,
+  type StaticBuildResult,
+  type HybridBuildResult,
+  type InlineBuildResult,
+  type BuilderResult,
+  type Builder,
+  type IStaticBuilder,
+  type IHybridBuilder,
+  type IInlineBuilder,
+  type TemplateType,
+  type TemplateDetection,
+  type TranspileOptions,
+  type TranspileResult,
+  // Builders
+  BaseBuilder,
+  StaticBuilder,
+  HybridBuilder,
+  InlineBuilder,
+  // esbuild utilities
+  DEFAULT_EXTERNALS,
+  EXTERNAL_GLOBALS,
+  CDN_URLS,
+  CLOUDFLARE_CDN_URLS,
+  createTransformConfig,
+  createExternalizedConfig,
+  createInlineConfig,
+  createExternalsBanner,
+  generateCdnScriptTags,
+  generateGlobalsSetupScript,
+} from './builders';

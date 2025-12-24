@@ -4,7 +4,7 @@
  * Tests for HTML escaping functions to prevent XSS.
  */
 
-import { escapeHtml, escapeHtmlAttr, escapeJsString } from '../escape-html';
+import { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from '../escape-html';
 
 describe('escapeHtml', () => {
   describe('null and undefined handling', () => {
@@ -120,5 +120,123 @@ describe('escapeJsString', () => {
 
   it('should escape unicode line terminators', () => {
     expect(escapeJsString('line\u2028sep\u2029')).toBe('line\\u2028sep\\u2029');
+  });
+});
+
+describe('escapeScriptClose', () => {
+  it('should escape </script> closing tags', () => {
+    const json = JSON.stringify({ html: '</script>' });
+    expect(escapeScriptClose(json)).toBe('{"html":"<\\/script>"}');
+  });
+
+  it('should escape multiple closing tags', () => {
+    const json = JSON.stringify({ html: '</script><script>alert(1)</script>' });
+    expect(escapeScriptClose(json)).toBe('{"html":"<\\/script><script>alert(1)<\\/script>"}');
+  });
+
+  it('should escape any </ sequence', () => {
+    const json = JSON.stringify({ html: '</div></span>' });
+    expect(escapeScriptClose(json)).toBe('{"html":"<\\/div><\\/span>"}');
+  });
+
+  it('should not modify strings without </', () => {
+    const json = JSON.stringify({ name: 'test' });
+    expect(escapeScriptClose(json)).toBe(json);
+  });
+
+  it('should handle empty string', () => {
+    expect(escapeScriptClose('')).toBe('');
+  });
+});
+
+describe('safeJsonForScript', () => {
+  it('should serialize and escape simple objects', () => {
+    const result = safeJsonForScript({ name: 'test' });
+    expect(result).toBe('{"name":"test"}');
+  });
+
+  it('should escape </script> in values', () => {
+    const result = safeJsonForScript({ html: '</script><script>alert("xss")</script>' });
+    expect(result).toContain('<\\/script>');
+    expect(result).not.toContain('</script>');
+  });
+
+  it('should handle nested objects with script tags', () => {
+    const result = safeJsonForScript({
+      outer: {
+        inner: '</script>',
+      },
+    });
+    expect(result).toBe('{"outer":{"inner":"<\\/script>"}}');
+  });
+
+  it('should handle arrays with script tags', () => {
+    const result = safeJsonForScript(['</script>', '<script>']);
+    expect(result).toBe('["<\\/script>","<script>"]');
+  });
+
+  it('should handle null', () => {
+    expect(safeJsonForScript(null)).toBe('null');
+  });
+
+  it('should handle undefined by returning null', () => {
+    expect(safeJsonForScript(undefined)).toBe('null');
+  });
+
+  it('should handle primitive values', () => {
+    expect(safeJsonForScript(123)).toBe('123');
+    expect(safeJsonForScript('hello')).toBe('"hello"');
+    expect(safeJsonForScript(true)).toBe('true');
+  });
+
+  it('should handle circular references gracefully', () => {
+    const circular: Record<string, unknown> = { name: 'test' };
+    circular.self = circular;
+    const result = safeJsonForScript(circular);
+    expect(result).toBe('{"error":"Value could not be serialized"}');
+  });
+
+  it('should handle BigInt values by converting to string', () => {
+    const result = safeJsonForScript({ big: BigInt(9007199254740991) });
+    expect(result).toBe('{"big":"9007199254740991"}');
+  });
+
+  it('should handle functions by omitting them', () => {
+    const result = safeJsonForScript({
+      name: 'test',
+      fn: () => {},
+    });
+    expect(result).toBe('{"name":"test"}');
+  });
+
+  it('should handle symbols by omitting them', () => {
+    const result = safeJsonForScript({
+      name: 'test',
+      sym: Symbol('test'),
+    });
+    expect(result).toBe('{"name":"test"}');
+  });
+
+  it('should return null for standalone function', () => {
+    const result = safeJsonForScript(() => {});
+    expect(result).toBe('null');
+  });
+
+  it('should return null for standalone symbol', () => {
+    const result = safeJsonForScript(Symbol('test'));
+    expect(result).toBe('null');
+  });
+
+  it('should be safe for embedding in script tags', () => {
+    const malicious = { data: '</script><script>alert("xss")</script>' };
+    const result = safeJsonForScript(malicious);
+
+    // The result should not contain unescaped </script>
+    expect(result).not.toMatch(/<\/script>/i);
+
+    // It should be valid JSON when the escape is reversed
+    const unescaped = result.replace(/<\\\//g, '</');
+    expect(() => JSON.parse(unescaped)).not.toThrow();
+    expect(JSON.parse(unescaped)).toEqual(malicious);
   });
 });

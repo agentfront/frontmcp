@@ -40,16 +40,6 @@ export * from './components';
 export * from './layouts';
 
 // ============================================
-// Page Templates
-// ============================================
-export * from './pages';
-
-// ============================================
-// Widgets (OpenAI App SDK, progress, etc.)
-// ============================================
-export * from './widgets';
-
-// ============================================
 // MCP Bridge
 // ============================================
 export {
@@ -100,21 +90,9 @@ export {
 export * from './react';
 
 // ============================================
-// React 19 Static Rendering
-// ============================================
-export * from './render';
-
-// ============================================
 // React Renderer and Adapter
 // ============================================
-export {
-  ReactRenderer,
-  reactRenderer,
-  buildHydrationScript,
-  ReactRendererAdapter,
-  createReactAdapter,
-  loadReactAdapter,
-} from './renderers';
+export { ReactRenderer, reactRenderer, ReactRendererAdapter, createReactAdapter, loadReactAdapter } from './renderers';
 
 // ============================================
 // Universal Renderer (separate import path)

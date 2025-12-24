@@ -102,11 +102,11 @@ export { GenericAdapter, createGenericAdapter } from './adapters/generic.adapter
 
 export { registerBuiltInAdapters } from './adapters';
 
-// Runtime
+// Runtime - Re-exported from @frontmcp/uipack (single source of truth)
 export {
   generateBridgeIIFE,
   generatePlatformBundle,
   UNIVERSAL_BRIDGE_SCRIPT,
   BRIDGE_SCRIPT_TAGS,
   type IIFEGeneratorOptions,
-} from './runtime/iife-generator';
+} from './runtime';

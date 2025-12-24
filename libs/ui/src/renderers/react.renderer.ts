@@ -5,7 +5,15 @@
  * - Imported React components (already transpiled)
  * - JSX string templates (transpiled at runtime with SWC)
  *
- * Uses react-dom/server for SSR to HTML.
+ * Generates HTML for CLIENT-SIDE rendering (no SSR).
+ * React components are rendered in the browser, not on the server.
+ *
+ * @example
+ * ```typescript
+ * // The generated HTML includes React CDN scripts and a render script
+ * // The component is rendered client-side when the page loads
+ * const html = await reactRenderer.render(MyWidget, context);
+ * ```
  */
 
 import type { TemplateContext } from '@frontmcp/uipack/runtime';
@@ -18,14 +26,48 @@ import type {
   RuntimeScripts,
   ToolUIProps,
 } from '@frontmcp/uipack/renderers';
-import {
-  isReactComponent,
-  containsJsx,
-  hashString,
-  transpileJsx,
-  executeTranspiledCode,
-  transpileCache,
-} from '@frontmcp/uipack/renderers';
+import { isReactComponent, containsJsx, hashString, transpileJsx } from '@frontmcp/uipack/renderers';
+
+// ============================================
+// Component Name Validation
+// ============================================
+
+/**
+ * Valid JavaScript identifier pattern.
+ * Matches only alphanumeric characters, underscores, and dollar signs,
+ * and must not start with a digit.
+ */
+const VALID_JS_IDENTIFIER = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+/**
+ * Validate that a component name is a safe JavaScript identifier.
+ *
+ * Prevents code injection attacks where a malicious function name
+ * could break out of the identifier context.
+ *
+ * @param name - Component name to validate
+ * @returns True if the name is a valid JavaScript identifier
+ */
+function isValidComponentName(name: string): boolean {
+  return VALID_JS_IDENTIFIER.test(name);
+}
+
+/**
+ * Sanitize a component name for safe use in generated JavaScript code.
+ *
+ * If the name is not a valid identifier, returns a safe fallback.
+ *
+ * @param name - Component name to sanitize
+ * @returns Safe component name
+ */
+function sanitizeComponentName(name: string): string {
+  if (isValidComponentName(name)) {
+    return name;
+  }
+  // Replace invalid characters with underscores, ensure it starts correctly
+  const sanitized = name.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/^[0-9]/, '_$&');
+  return sanitized || 'Component';
+}
 
 /**
  * Types this renderer can handle.
@@ -60,7 +102,8 @@ console.warn('[FrontMCP] React hydration not available on this platform.');
  * - Imported React components (FC or class)
  * - JSX string templates (transpiled with SWC at runtime)
  *
- * Renders to HTML using react-dom/server's renderToString.
+ * Generates HTML for CLIENT-SIDE rendering. The component is rendered
+ * in the browser using React from CDN, not server-side rendered.
  *
  * @example Imported component
  * ```typescript
@@ -87,14 +130,6 @@ console.warn('[FrontMCP] React hydration not available on this platform.');
 export class ReactRenderer implements UIRenderer<ReactTemplate> {
   readonly type = 'react' as const;
   readonly priority = 20; // Higher priority than HTML
-
-  /**
-   * Lazy-loaded React modules.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private React: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private ReactDOMServer: any = null;
 
   /**
    * Check if this renderer can handle the given template.
@@ -146,49 +181,22 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
   }
 
   /**
-   * Render the template to HTML string using react-dom/server.
+   * Render the template to HTML for client-side rendering.
+   *
+   * Unlike SSR, this method generates HTML that will be rendered
+   * client-side by React in the browser. No server-side React required.
+   *
+   * The generated HTML includes:
+   * - A container div for the React root
+   * - The component code (transpiled if needed)
+   * - Props embedded as a data attribute
+   * - A render script that initializes the component
    */
   async render<In, Out>(
     template: ReactTemplate<In, Out>,
     context: TemplateContext<In, Out>,
-    options?: RenderOptions,
+    _options?: RenderOptions,
   ): Promise<string> {
-    // Ensure React is loaded
-    await this.loadReact();
-
-    // Get the component function
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let Component: (props: ToolUIProps<In, Out>) => any;
-
-    if (typeof template === 'function') {
-      // Already a component function
-      Component = template;
-    } else if (typeof template === 'string') {
-      // Transpile and execute the JSX string
-      const transpiled = await this.transpile(template);
-
-      // Check cache for the executed component
-      const cached = transpileCache.getByKey(`exec:${transpiled.hash}`);
-      if (cached) {
-        Component = cached.code as unknown as typeof Component;
-      } else {
-        // Execute the transpiled code to get the component
-        Component = await executeTranspiledCode(transpiled.code, {
-          // Provide any additional MDX components if specified
-          ...options?.mdxComponents,
-        });
-
-        // Cache the component function
-        transpileCache.setByKey(`exec:${transpiled.hash}`, {
-          code: Component as unknown as string,
-          hash: transpiled.hash,
-          cached: false,
-        });
-      }
-    } else {
-      throw new Error('Invalid template type for ReactRenderer');
-    }
-
     // Build props from context
     const props: ToolUIProps<In, Out> = {
       input: context.input,
@@ -197,25 +205,113 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
       helpers: context.helpers,
     };
 
-    // Create React element
-    const element = this.React.createElement(Component, props);
+    // Escape props for HTML embedding
+    const escapedProps = JSON.stringify(props)
+      .replace(/&/g, '&amp;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
-    // Render to HTML string
-    const html = this.ReactDOMServer.renderToString(element);
+    // Generate unique ID for this render
+    const rootId = `frontmcp-react-${hashString(Date.now().toString()).slice(0, 8)}`;
 
-    // If hydration is enabled, wrap with hydration markers
-    if (options?.hydrate) {
-      const componentName = (Component as { name?: string }).name || 'Component';
-      // Full HTML attribute escaping to prevent XSS
-      const escapedProps = JSON.stringify(props)
-        .replace(/&/g, '&amp;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return `<div data-hydrate="${componentName}" data-props='${escapedProps}'>${html}</div>`;
+    // Get the component code
+    let componentCode: string;
+    let componentName: string;
+
+    if (typeof template === 'function') {
+      // For imported components, we need the component to be registered
+      // Sanitize the component name to prevent code injection attacks
+      const rawName = (template as { name?: string }).name || 'Component';
+      componentName = sanitizeComponentName(rawName);
+
+      // Cache the component function for client-side access
+      componentCode = `
+        // Component should be registered via window.__frontmcp_components['${componentName}']
+        (function() {
+          if (!window.__frontmcp_components || !window.__frontmcp_components['${componentName}']) {
+            console.error('[FrontMCP] Component "${componentName}" not registered. Use buildHydrationScript() to register components.');
+          }
+        })();
+      `;
+    } else if (typeof template === 'string') {
+      // Transpile JSX string to JavaScript
+      const transpiled = await this.transpile(template);
+
+      // Extract component name from transpiled code
+      // The regex only matches valid identifiers, so this is already safe
+      const match = transpiled.code.match(/function\s+(\w+)/);
+      const rawName = match?.[1] || 'Widget';
+      componentName = sanitizeComponentName(rawName);
+
+      componentCode = transpiled.code;
+    } else {
+      throw new Error('Invalid template type for ReactRenderer');
     }
 
-    return html;
+    // Generate HTML with client-side rendering script
+    const html = `
+<div id="${rootId}" data-frontmcp-react data-component="${componentName}" data-props='${escapedProps}'>
+  <div class="flex items-center justify-center p-4 text-gray-500">
+    <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    Loading...
+  </div>
+</div>
+<script type="module">
+(function() {
+  ${componentCode}
+
+  // Wait for React to be available
+  function waitForReact(callback, maxAttempts) {
+    var attempts = 0;
+    var check = function() {
+      if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined') {
+        callback();
+      } else if (attempts < maxAttempts) {
+        attempts++;
+        setTimeout(check, 50);
+      } else {
+        console.error('[FrontMCP] React not loaded after ' + maxAttempts + ' attempts');
+      }
+    };
+    check();
+  }
+
+  waitForReact(function() {
+    try {
+      var root = document.getElementById('${rootId}');
+      if (!root) return;
+
+      var propsJson = root.getAttribute('data-props');
+      var props = propsJson ? JSON.parse(propsJson.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')) : {};
+
+      // Get the component
+      var Component = ${componentName};
+
+      // Check if it's registered globally
+      if (typeof Component === 'undefined' && window.__frontmcp_components) {
+        Component = window.__frontmcp_components['${componentName}'];
+      }
+
+      if (typeof Component === 'function') {
+        var element = React.createElement(Component, props);
+        var reactRoot = ReactDOM.createRoot(root);
+        reactRoot.render(element);
+      } else {
+        console.error('[FrontMCP] Component "${componentName}" not found');
+      }
+    } catch (err) {
+      console.error('[FrontMCP] React render error:', err);
+    }
+  }, 100);
+})();
+</script>
+`;
+
+    return html.trim();
   }
 
   /**
@@ -239,22 +335,6 @@ export class ReactRenderer implements UIRenderer<ReactTemplate> {
       `,
       isInline: false,
     };
-  }
-
-  /**
-   * Load React and ReactDOMServer modules.
-   */
-  private async loadReact(): Promise<void> {
-    if (this.React && this.ReactDOMServer) {
-      return;
-    }
-
-    try {
-      this.React = await import('react');
-      this.ReactDOMServer = await import('react-dom/server');
-    } catch {
-      throw new Error('React is required for ReactRenderer. Install react and react-dom: npm install react react-dom');
-    }
   }
 }
 

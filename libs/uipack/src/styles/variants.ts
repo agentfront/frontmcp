@@ -104,7 +104,7 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-primary hover:bg-primary/90 text-white shadow-sm',
   secondary: 'bg-secondary hover:bg-secondary/90 text-white shadow-sm',
-  outline: 'border-2 border-primary bg-primary hover:bg-primary/90',
+  outline: 'border-2 border-primary text-primary bg-transparent hover:bg-primary/10',
   ghost: 'text-text-primary hover:bg-gray-100',
   danger: 'bg-danger hover:bg-danger/90 text-white shadow-sm',
   success: 'bg-success hover:bg-success/90 text-white shadow-sm',
