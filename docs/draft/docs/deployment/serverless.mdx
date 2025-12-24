@@ -44,6 +44,10 @@ This generates the platform config files (`vercel.json`, `ci/template.yaml`, or 
     vercel deploy
     ```
 
+  <Note>
+    `frontmcp build --adapter vercel` inspects bun.lockb, pnpm-lock.yaml, yarn.lock, and package-lock.json (in that order) so the generated `vercel.json` matches your workspace package manager, and it ships the Build Output API tree under `.vercel/output/`.
+  </Note>
+
   </Tab>
   <Tab title="AWS Lambda">
     ```bash
@@ -91,7 +95,13 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/docs/deployment
    dist/
      main.js      # Your compiled server
      index.js     # Vercel handler wrapper
-   vercel.json    # Vercel configuration
+     serverless-setup.js  # Sets FRONTMCP_SERVERLESS before loading your app
+   .vercel/output/
+     config.json           # Build Output API routing (version 3)
+     functions/index.func/
+       handler.cjs         # Bundled handler + chunks
+       .vc-config.json     # Node.js 22 runtime metadata
+   vercel.json             # Vercel configuration (install/build commands)
    ```
 
 3. Deploy:
@@ -99,19 +109,31 @@ For persistent session storage on Vercel, see [Vercel KV Setup](/docs/deployment
    vercel deploy
    ```
 
+<Note>
+  `frontmcp build --adapter vercel` bundles your handler via rspack, copies it into `.vercel/output/functions/index.func/`, and writes `.vercel/output/config.json` so Vercel receives a complete Build Output API tree. You can run `vercel deploy --prebuilt` to reuse these artifacts instead of rebuilding.
+</Note>
+
 ### Generated vercel.json
 
 ```json
 {
   "version": 2,
-  "builds": [{ "src": "dist/index.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "/dist/index.js" }]
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm run build"
 }
 ```
 
 <Note>
-You can customize this file after generation. The build command will not overwrite existing config files.
+  `vercel.json` now only tells Vercel which install/build commands to run, and the CLI infers the matching package manager from bun.lockb, pnpm-lock.yaml, yarn.lock, or package-lock.json (in that priority). The example above shows pnpm, but projects with bun, yarn, or npm locks get their own commands.
 </Note>
+
+### Build Output API artifacts
+
+`frontmcp build --adapter vercel` copies the rspack bundle and any chunks into `.vercel/output/functions/index.func/`, writes `.vc-config.json` for the Node.js 22 runtime, and emits `.vercel/output/config.json` (version 3) so every request routes to `/index`. Because the tree is ready, you can run `vercel deploy --prebuilt` or let Vercel skip the build step entirely.
+
+- `config.json` routes `/(.*)` to the `index` function.
+- `functions/index.func/handler.cjs` is the bundled handler.
+- `functions/index.func/.vc-config.json` describes the runtime metadata.
 
 ### How It Works
 

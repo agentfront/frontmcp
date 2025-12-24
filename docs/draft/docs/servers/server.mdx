@@ -276,6 +276,10 @@ Enable Redis-backed session persistence for distributed deployments or session r
 Session persistence uses the top-level `redis` config. Configure `redis` once and reference it from both `transport.persistence` and `auth.tokenStorage`.
 </Info>
 
+<Info>
+  New in v0.6.2: Defining top-level `redis` automatically enables `transport.persistence.enabled` and reuses the same connection settings unless you explicitly set `enabled: false`. This keeps persistent transports aligned with your Redis configuration without duplicating options.
+</Info>
+
 You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
 
 ---

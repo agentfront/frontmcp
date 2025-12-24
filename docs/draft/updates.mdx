@@ -5,12 +5,49 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-24" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    🚀 **Build modes everywhere** – Bundle widgets in static, dynamic, or hybrid mode and reuse the same component across OpenAI, Claude, and Gemini without rewriting HTML.
+
+    🧩 **Auto Redis persistence** – Point the top-level `redis` block at a store and transport persistence now enables itself with that config so stateful sessions survive restarts and serverless cold starts.
+
+    ⚡ **Vercel Build Output** – `frontmcp build --adapter vercel` detects bun/pnpm/yarn/npm lockfiles, writes the matching install/build commands, and emits a `.vercel/output` tree so `vercel deploy --prebuilt` skips the rebuild.
+
+    📚 **New Build Modes guide** – Learn when to pick static, dynamic, or hybrid rendering plus how dynamic mode adapts per platform.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 draft" description="2025-12-24" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 draft"
+    href="/docs"
+    cta="Read the release notes"
+  >
+    🧱 **Dual entry points** – Import the converter from ESM or require it from CommonJS while both share the same `dist/index.d.ts` definitions.
+
+    ⚡ **Side-effect free builds** – `sideEffects: false` plus a flattened ESM dist keep bundlers from dragging in unused converters.
+
+    🔄 **Workspace alignment** – Version 1.0.3 now matches the synchronized workspaces so CLI generators and adapters consume the converter without manual overrides.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi draft" description="2025-12-24" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi draft"
+    href="/docs"
+    cta="Read the release notes"
+  >
+    🧱 **Unified exports** – Dual CJS/ESM entry points share typings so every adapter consumes the same generator surface.
+
+    ⚙️ **Tree-shakable helpers** – Marking the package as side-effects free keeps bundlers from importing the OpenAPI loader when only schema helpers are needed.
+
+    🔄 **Version sync** – Release 2.1.1 runs alongside FrontMCP 0.6.2 so generated schemas and auth metadata stay consistent.
 
   </Card>
 </Update>

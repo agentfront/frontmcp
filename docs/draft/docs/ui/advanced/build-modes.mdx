@@ -9,11 +9,11 @@ description: Control how widget data is injected into HTML - static baking, dyna
 
 FrontMCP supports three build modes that control how tool input/output data is injected into the rendered HTML:
 
-| Mode | Description | Best For |
-|------|-------------|----------|
-| **static** | Data baked into HTML at build time | Default, simple widgets |
+| Mode        | Description                                                                  | Best For                          |
+| ----------- | ---------------------------------------------------------------------------- | --------------------------------- |
+| **static**  | Data baked into HTML at build time                                           | Default, simple widgets           |
 | **dynamic** | Platform-aware - subscribes to events (OpenAI) or uses placeholders (Claude) | Real-time updates, multi-platform |
-| **hybrid** | Pre-built shell with placeholders, replace at runtime | Caching, high-performance |
+| **hybrid**  | Pre-built shell with placeholders, replace at runtime                        | Caching, high-performance         |
 
 ## Static Mode (Default)
 
@@ -43,6 +43,7 @@ The generated HTML includes the data inline:
 ```
 
 **Use when:**
+
 - Widget content doesn't change after initial render
 - Simple tool responses
 - No caching requirements
@@ -124,12 +125,13 @@ const html = injectHybridDataFull(
 
 ### Dynamic Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `includeInitialData` | `boolean` | `true` | Include initial data in HTML |
-| `subscribeToUpdates` | `boolean` | `true` | Subscribe to platform events (OpenAI only) |
+| Option               | Type      | Default | Description                                |
+| -------------------- | --------- | ------- | ------------------------------------------ |
+| `includeInitialData` | `boolean` | `true`  | Include initial data in HTML               |
+| `subscribeToUpdates` | `boolean` | `true`  | Subscribe to platform events (OpenAI only) |
 
 **Behavior when `includeInitialData: false`:**
+
 - **OpenAI**: Shows loading state, waits for `onToolResult` event
 - **Claude**: Shows loading state if placeholder not replaced, error if expected data missing
 
@@ -157,10 +159,10 @@ const html2 = injectHybridDataFull(cachedShell, input2, output2);
 
 ### Placeholders
 
-| Placeholder | Purpose |
-|-------------|---------|
+| Placeholder                       | Purpose                        |
+| --------------------------------- | ------------------------------ |
 | `__FRONTMCP_OUTPUT_PLACEHOLDER__` | Replaced with tool output JSON |
-| `__FRONTMCP_INPUT_PLACEHOLDER__` | Replaced with tool input JSON |
+| `__FRONTMCP_INPUT_PLACEHOLDER__`  | Replaced with tool input JSON  |
 
 ### Helper Functions
 
@@ -222,11 +224,11 @@ const claudeHtml = injectHybridDataFull(
 
 ## Platform Behavior Summary
 
-| Mode | OpenAI (ESM) | Claude (UMD) |
-|------|--------------|--------------|
-| **static** | Data baked in | Data baked in |
-| **dynamic** | Event subscription | Placeholders |
-| **hybrid** | Placeholders | Placeholders |
+| Mode        | OpenAI (ESM)       | Claude (UMD)  |
+| ----------- | ------------------ | ------------- |
+| **static**  | Data baked in      | Data baked in |
+| **dynamic** | Event subscription | Placeholders  |
+| **hybrid**  | Placeholders       | Placeholders  |
 
 ## Best Practices
 
