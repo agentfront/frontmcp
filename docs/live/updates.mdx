@@ -5,6 +5,53 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.6.2" description="2025-12-24" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.2: Adaptive build modes and zero-config persistence"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.2"
+    cta="View full changlog"
+  >
+    🚀 **Build modes everywhere** – Bundle widgets in static, dynamic, or hybrid mode and reuse the same component across OpenAI, Claude, and Gemini without rewriting HTML.
+
+    🧩 **Auto Redis persistence** – Point `redis` at a store once and transport persistence now enables itself so stateful sessions survive restarts and serverless cold starts.
+
+    ⚡ **Vercel Build Output** – `frontmcp build --adapter vercel` detects npm/yarn/pnpm/bun lockfiles, wires the right install/build commands, and emits a `.vercel/output` tree ready for `vercel deploy --prebuilt`.
+
+    🛠️ **Tree-shakable packages** – SDK, adapters, plugins, and CLI publish dual CJS/ESM entries with `sideEffects: false`, eliminating duplicate React imports and keeping bundles slim.
+
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 v1.0.3" description="2025-12-24" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.3"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single `dist/index.d.ts`.
+
+    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters automatically.
+
+    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and adapters consume the converter without overrides.
+
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi v2.1.1" description="2025-12-24" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi v2.1.1"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
+    cta="Explore the library"
+  >
+    🧱 **Unified exports** – Require or import the generator thanks to the new dual CJS/ESM build, with typings shared across both entry points.
+
+    ⚙️ **Tree-shakable helpers** – Marking the package as side-effect free keeps bundlers from pulling the OpenAPI loader when you only need schema utilities.
+
+    🔄 **Version sync** – The library now ships in lockstep with `@frontmcp/adapters`, so generated tools inherit the same input mappers and security metadata.
+
+  </Card>
+</Update>
+
 <Update label="v0.6.x" description="2025-12-22" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.6.1: Edge storage and UI split"

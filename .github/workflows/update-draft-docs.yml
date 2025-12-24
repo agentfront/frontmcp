@@ -368,7 +368,7 @@ jobs:
           codex-home: ${{ steps.mcp.outputs.codex_home }}
           prompt-file: .github/codex/prompts/update-draft-docs.md
           output-file: ${{ env.CODEX_OUT }}
-          model: "gpt-5.1-codex"
+          model: "gpt-5.1-codex-mini"
           sandbox: read-only
           safety-strategy: drop-sudo
           output-schema-file: .github/codex/codex-output-schema.json

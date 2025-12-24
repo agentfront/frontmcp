@@ -1,6 +1,6 @@
 {
   "name": "mcp-from-openapi",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Production-ready library for converting OpenAPI specifications into MCP tool definitions",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",

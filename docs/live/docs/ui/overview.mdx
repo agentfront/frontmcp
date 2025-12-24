@@ -9,10 +9,10 @@ description: A platform-agnostic component library for building rich HTML widget
 
 FrontMCP UI is split into two packages to support different use cases:
 
-| Package | Purpose | React Required |
-|---------|---------|----------------|
-| **@frontmcp/uipack** | HTML components, build tools, themes, platform adapters | No |
-| **@frontmcp/ui** | React components, hooks, SSR rendering | Yes |
+| Package              | Purpose                                                 | React Required |
+| -------------------- | ------------------------------------------------------- | -------------- |
+| **@frontmcp/uipack** | HTML components, build tools, themes, platform adapters | No             |
+| **@frontmcp/ui**     | React components, hooks, SSR rendering                  | Yes            |
 
 <Info>
 Use `@frontmcp/uipack` when you only need HTML string components or build tools. Use `@frontmcp/ui` when you need React components or hooks.
@@ -68,13 +68,13 @@ When your MCP tools return data, AI platforms typically display it as raw text o
 
 FrontMCP UI adapts to different AI platform capabilities:
 
-| Platform | Network | Widget Display | Response Format |
-|----------|---------|----------------|-----------------|
-| **OpenAI** | Full | Inline, Fullscreen, PiP | `_meta['ui/html']` |
-| **ext-apps** | Full | Inline, Fullscreen, PiP | `_meta['ui/html']` |
-| **Cursor** | Full | Inline | `_meta['ui/html']` |
-| **Claude** | Blocked | Artifacts | Dual-payload |
-| **Gemini** | Limited | Basic | JSON only |
+| Platform     | Network | Widget Display          | Response Format    |
+| ------------ | ------- | ----------------------- | ------------------ |
+| **OpenAI**   | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **ext-apps** | Full    | Inline, Fullscreen, PiP | `_meta['ui/html']` |
+| **Cursor**   | Full    | Inline                  | `_meta['ui/html']` |
+| **Claude**   | Blocked | Artifacts               | Dual-payload       |
+| **Gemini**   | Limited | Basic                   | JSON only          |
 
 The library automatically detects the platform and selects the appropriate delivery format.
 
@@ -110,14 +110,14 @@ With `servingMode: 'auto'` (default), unsupported platforms automatically receiv
 
 Every `@Tool` exposes a `ui` block that describes how the widget should render across hosts. Configure these settings once and the renderer keeps your UX consistent everywhere.
 
-| Setting            | Controls                                                             | Use it when                                                                 |
-| ------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `displayMode`      | Whether the widget renders inline, fullscreen, or picture-in-picture | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
-| `servingMode`      | How HTML is delivered (`auto`, `inline`, `static`, `hybrid`, URL-based). Default: `'auto'` | Let FrontMCP select the best format per platform, or force a specific mode. |
-| `htmlResponsePrefix` | Text shown before HTML in Claude's dual-payload format | Customize the artifact description for better Claude UX. |
-| `widgetAccessible` | Allows widgets to call tools through the MCP Bridge                  | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
-| `csp`              | Allowed domains for scripts, images, fonts, and network calls        | Restrict remote dependencies per platform and satisfy Claude's strict CSP.  |
-| `hydrate`          | Ships the React runtime for client-side interactivity                | Power forms, tabs, and charts that need local state or event handlers.      |
+| Setting              | Controls                                                                                   | Use it when                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `displayMode`        | Whether the widget renders inline, fullscreen, or picture-in-picture                       | Highlight dashboards inline or promote immersive flows into fullscreen/PiP. |
+| `servingMode`        | How HTML is delivered (`auto`, `inline`, `static`, `hybrid`, URL-based). Default: `'auto'` | Let FrontMCP select the best format per platform, or force a specific mode. |
+| `htmlResponsePrefix` | Text shown before HTML in Claude's dual-payload format                                     | Customize the artifact description for better Claude UX.                    |
+| `widgetAccessible`   | Allows widgets to call tools through the MCP Bridge                                        | Create follow-up actions (retry, escalate, schedule) directly from the UI.  |
+| `csp`                | Allowed domains for scripts, images, fonts, and network calls                              | Restrict remote dependencies per platform and satisfy Claude's strict CSP.  |
+| `hydrate`            | Ships the React runtime for client-side interactivity                                      | Power forms, tabs, and charts that need local state or event handlers.      |
 
 <Tip>
 Pair metadata with a concise `widgetDescription` so clients can preview the UI before rendering it, just like Mintlify recommends leading with the most important context.
@@ -222,8 +222,10 @@ export class GetWeatherTool extends ToolContext {
 npm install @frontmcp/uipack
 
 # For React components and hooks
+
 npm install @frontmcp/ui react react-dom
-```
+
+````
 
 ```bash yarn
 # For HTML components only (no React)
@@ -231,7 +233,7 @@ yarn add @frontmcp/uipack
 
 # For React components and hooks
 yarn add @frontmcp/ui react react-dom
-```
+````
 
 ```bash pnpm
 # For HTML components only (no React)
