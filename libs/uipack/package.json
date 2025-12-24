@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "FrontMCP UIpack - Bundling, build tools, and platform adapters for MCP UI development (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",

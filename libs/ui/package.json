@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/ui",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "FrontMCP UI - React components and hooks for MCP applications",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -63,7 +63,7 @@
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "@frontmcp/uipack": "0.6.1"
+    "@frontmcp/uipack": "0.6.2"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
