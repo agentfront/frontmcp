@@ -99,6 +99,15 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
       return;
     }
 
+    // Verify expected fields exist before setting (SDK version safety)
+    if (!('_initialized' in webTransport) || !('sessionId' in webTransport)) {
+      console.warn(
+        '[RecreateableStreamableHTTPServerTransport] Expected fields not found on internal transport. ' +
+          'This may indicate an incompatible MCP SDK version.',
+      );
+      return;
+    }
+
     webTransport._initialized = true;
     webTransport.sessionId = sessionId;
   }

@@ -421,7 +421,10 @@ export class ComponentBuilder {
         bundlerVersion: this.esbuild.version,
       };
     } catch (error) {
-      throw new Error(`Bundle failed for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`);
+      // Sanitize error message - use basename to avoid exposing internal paths
+      const fileName = entryPath.split('/').pop() ?? 'component';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Bundle failed for ${fileName}: ${errorMessage}`);
     }
   }
 
