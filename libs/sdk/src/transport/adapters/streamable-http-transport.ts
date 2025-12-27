@@ -9,9 +9,6 @@
  * session recreation, avoiding the need to access private properties.
  */
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { ServerResponse } from 'http';
-import type { JSONRPCMessage, RequestId } from '@modelcontextprotocol/sdk/types.js';
-import type { AuthenticatedServerRequest } from '../../server/server.types';
 
 export interface StreamableHTTPServerTransportOptions {
   /**
@@ -57,8 +54,6 @@ export interface StreamableHTTPServerTransportOptions {
  * adding public methods to set initialization state.
  */
 export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPServerTransport {
-  private _preInitializedSessionId: string | undefined;
-
   constructor(options: StreamableHTTPServerTransportOptions = {}) {
     super(options);
   }
@@ -83,8 +78,6 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * @param sessionId - The session ID that was previously assigned to this session
    */
   setInitializationState(sessionId: string): void {
-    this._preInitializedSessionId = sessionId;
-
     // Access the internal WebStandardTransport and set both flags
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webTransport = (this as any)._webStandardTransport;
@@ -92,25 +85,5 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
       webTransport._initialized = true;
       webTransport.sessionId = sessionId;
     }
-  }
-
-  /**
-   * Override handleRequest to handle session recreation scenario.
-   * When we've set initialization state manually, we need to ensure
-   * the transport operates correctly.
-   */
-  override async handleRequest(
-    req: AuthenticatedServerRequest,
-    res: ServerResponse,
-    parsedBody?: unknown,
-  ): Promise<void> {
-    return super.handleRequest(req, res, parsedBody);
-  }
-
-  /**
-   * Sends a JSON-RPC message through the transport.
-   */
-  override async send(message: JSONRPCMessage, options?: { relatedRequestId?: RequestId }): Promise<void> {
-    return super.send(message, options);
   }
 }

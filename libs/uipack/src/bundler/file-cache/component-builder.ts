@@ -389,10 +389,10 @@ export class ComponentBuilder {
   }): Promise<{ code: string; map?: string; bundlerVersion?: string }> {
     const { source, entryPath, externals, bundleOptions } = options;
 
-    // Lazy load esbuild with webpackIgnore to prevent bundler processing
+    // Lazy load esbuild - it's marked as external in project.json so esbuild won't bundle itself
     if (!this.esbuild) {
       try {
-        this.esbuild = await import(/* webpackIgnore: true */ 'esbuild');
+        this.esbuild = await import('esbuild');
       } catch {
         throw new Error('esbuild is required for component building. Install with: npm install esbuild');
       }

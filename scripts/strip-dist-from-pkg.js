@@ -65,7 +65,7 @@ try {
 }
 
 // Generate ESM package.json with type:module and adjusted paths
-const esmDir = path.dirname(pkgPath) + '/esm';
+const esmDir = path.join(path.dirname(pkgPath), 'esm');
 if (fs.existsSync(esmDir)) {
   const esmPkg = JSON.parse(JSON.stringify(pkg)); // Deep clone
 

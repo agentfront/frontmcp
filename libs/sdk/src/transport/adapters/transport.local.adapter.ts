@@ -7,6 +7,7 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
 import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
+import { RecreateableSSEServerTransport } from './sse-transport';
 import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
@@ -15,12 +16,14 @@ import { createMcpHandlers } from '../mcp-handlers';
 /**
  * Base transport type that includes all supported transports.
  * RecreateableStreamableHTTPServerTransport extends StreamableHTTPServerTransport
- * so it's also included in this union.
+ * and RecreateableSSEServerTransport extends SSEServerTransport,
+ * so they're also included in this union.
  */
 export type SupportedTransport =
   | StreamableHTTPServerTransport
   | SSEServerTransport
-  | RecreateableStreamableHTTPServerTransport;
+  | RecreateableStreamableHTTPServerTransport
+  | RecreateableSSEServerTransport;
 
 export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   protected logger: FrontMcpLogger;
