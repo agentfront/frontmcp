@@ -28,7 +28,8 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Recrea
     return new RecreateableStreamableHTTPServerTransport({
       sessionIdGenerator,
       onsessionclosed: () => {
-        // this.destroy();
+        // Note: We don't call this.destroy() here because the adapter
+        // lifecycle is managed by the transport registry, not session events.
       },
       onsessioninitialized: (sessionId) => {
         if (sessionId) {

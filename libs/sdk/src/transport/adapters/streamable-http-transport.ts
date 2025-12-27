@@ -26,7 +26,9 @@ export interface StreamableHTTPServerTransportOptions {
 
   /**
    * Event store for resumability support.
-   * Uses any to avoid complex type extraction from MCP SDK's optional options type.
+   * Type uses `any` because the EventStore interface is not exported from the MCP SDK
+   * and varies between SDK versions. The actual type is defined internally by
+   * StreamableHTTPServerTransport.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   eventStore?: any;
@@ -62,7 +64,8 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * Returns whether the transport has been initialized.
    */
   get isInitialized(): boolean {
-    // Access the internal WebStandardTransport's _initialized flag
+    // Access internal MCP SDK property - may change between SDK versions.
+    // Uses optional chaining with fallback for safety.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (this as any)._webStandardTransport?._initialized ?? false;
   }
@@ -76,14 +79,36 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    * will accept requests with the given session ID.
    *
    * @param sessionId - The session ID that was previously assigned to this session
+   * @throws Error if sessionId is empty or invalid
    */
   setInitializationState(sessionId: string): void {
+    // Validate sessionId
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+      throw new Error('[RecreateableStreamableHTTPServerTransport] sessionId cannot be empty');
+    }
+
     // Access the internal WebStandardTransport and set both flags
+    // Note: This accesses MCP SDK internals which may change between versions
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webTransport = (this as any)._webStandardTransport;
-    if (webTransport) {
-      webTransport._initialized = true;
-      webTransport.sessionId = sessionId;
+    if (!webTransport) {
+      console.warn(
+        '[RecreateableStreamableHTTPServerTransport] Internal transport not found. ' +
+          'This may indicate an incompatible MCP SDK version.',
+      );
+      return;
     }
+
+    // Verify expected fields exist before setting (SDK version safety)
+    if (!('_initialized' in webTransport) || !('sessionId' in webTransport)) {
+      console.warn(
+        '[RecreateableStreamableHTTPServerTransport] Expected fields not found on internal transport. ' +
+          'This may indicate an incompatible MCP SDK version.',
+      );
+      return;
+    }
+
+    webTransport._initialized = true;
+    webTransport.sessionId = sessionId;
   }
 }

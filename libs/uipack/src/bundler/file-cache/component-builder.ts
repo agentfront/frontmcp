@@ -9,7 +9,7 @@
 
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, extname } from 'path';
+import { resolve, extname, basename } from 'path';
 import { randomUUID } from 'crypto';
 
 import type {
@@ -193,7 +193,8 @@ export class ComponentBuilder {
     const absoluteEntryPath = resolve(entryPath);
 
     if (!existsSync(absoluteEntryPath)) {
-      throw new Error(`Entry file not found: ${absoluteEntryPath}`);
+      // Sanitize path - use basename to avoid exposing internal directory structure
+      throw new Error(`Entry file not found: ${basename(absoluteEntryPath)}`);
     }
 
     // Calculate content hash
@@ -421,7 +422,13 @@ export class ComponentBuilder {
         bundlerVersion: this.esbuild.version,
       };
     } catch (error) {
-      throw new Error(`Bundle failed for ${entryPath}: ${error}`);
+      // Sanitize error message - use path.basename for cross-platform compatibility
+      const fileName = basename(entryPath);
+      // Sanitize esbuild errors which may contain absolute paths
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      // Remove absolute paths from error message (matches /path/to/file or C:\path\to\file patterns)
+      const sanitizedMessage = rawMessage.replace(/(?:\/[\w./-]+|[A-Z]:\\[\w.\\-]+)/g, (match) => basename(match));
+      throw new Error(`Bundle failed for ${fileName}: ${sanitizedMessage}`);
     }
   }
 

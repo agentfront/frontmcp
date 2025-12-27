@@ -49,7 +49,9 @@ async function loadSwcTransform(): Promise<typeof swcTransform> {
   }
 
   try {
-    // Dynamic import with webpackIgnore to prevent bundler from processing
+    // Dynamic import with webpackIgnore to prevent webpack from bundling @swc/core.
+    // Note: This directive is webpack-specific. Other bundlers (esbuild, Rollup)
+    // require external dependency configuration in their config files.
     const swc = await import(/* webpackIgnore: true */ '@swc/core');
     swcTransform = swc.transform;
     return swcTransform;
