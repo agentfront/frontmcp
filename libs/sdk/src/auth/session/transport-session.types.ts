@@ -363,11 +363,6 @@ export const sessionJwtPayloadSchema = z.object({
   exp: z.number().optional(),
 });
 
-export const statelessSessionJwtPayloadSchema = sessionJwtPayloadSchema.extend({
-  state: z.string().optional(),
-  tokens: z.string().optional(),
-});
-
 export const encryptedBlobSchema = z.object({
   alg: z.literal('A256GCM'),
   kid: z.string().optional(),
@@ -397,17 +392,3 @@ export const redisConfigSchema = z.object({
   keyPrefix: z.string().optional().default('mcp:session:'),
   defaultTtlMs: z.number().int().positive().optional().default(3600000), // 1 hour default
 });
-
-// Stateful storage options (discriminated by store type)
-const statefulStorageSchema = z.discriminatedUnion('store', [
-  z.object({ store: z.literal('memory') }),
-  z.object({ store: z.literal('redis'), config: redisConfigSchema }),
-]);
-
-// Session storage config using union instead of discriminatedUnion
-// to avoid duplicate mode values
-export const sessionStorageConfigSchema = z.union([
-  z.object({ mode: z.literal('stateless') }),
-  z.object({ mode: z.literal('stateful') }).merge(statefulStorageSchema.options[0]),
-  z.object({ mode: z.literal('stateful') }).merge(statefulStorageSchema.options[1]),
-]);
