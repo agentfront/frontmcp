@@ -187,7 +187,9 @@ export function verifyOrParseSession(data: string, config?: SessionSigningConfig
     return verifySession(data, config);
   }
 
-  // Legacy unsigned session - just parse it
+  // Legacy unsigned session - parse without signature verification.
+  // IMPORTANT: Caller MUST validate the result with storedSessionSchema.safeParse()
+  // to ensure data integrity. See RedisSessionStore.get() for proper usage.
   try {
     return JSON.parse(data) as StoredSession;
   } catch {

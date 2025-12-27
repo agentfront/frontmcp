@@ -11,18 +11,24 @@ import { ServerResponse } from '../../common';
 export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSEServerTransport> {
   sessionId: string;
 
-  override createTransport(sessionId: string, res: ServerResponse): RecreateableSSEServerTransport {
-    this.sessionId = sessionId;
-    this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
-    const scopePath = this.scope.fullPath;
-    const transport = new RecreateableSSEServerTransport(`${scopePath}/message`, res, {
-      sessionId: sessionId,
-    });
+  /**
+   * Configures common error and close handlers for SSE transports.
+   */
+  private configureTransportHandlers(transport: RecreateableSSEServerTransport): void {
     transport.onerror = (error) => {
       // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
       console.error('SSE error:', error instanceof Error ? error.message : 'Unknown error');
     };
     transport.onclose = this.destroy.bind(this);
+  }
+
+  override createTransport(sessionId: string, res: ServerResponse): RecreateableSSEServerTransport {
+    this.sessionId = sessionId;
+    this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
+    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
+      sessionId: sessionId,
+    });
+    this.configureTransportHandlers(transport);
     return transport;
   }
 
@@ -41,15 +47,11 @@ export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSESe
   ): RecreateableSSEServerTransport {
     this.sessionId = sessionId;
     this.logger.info(`recreating transport session: ${sessionId.slice(0, 40)}, lastEventId: ${lastEventId ?? 'none'}`);
-    const scopePath = this.scope.fullPath;
-    const transport = new RecreateableSSEServerTransport(`${scopePath}/message`, res, {
+    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
       sessionId: sessionId,
       initialEventId: lastEventId,
     });
-    transport.onerror = (error) => {
-      console.error('SSE error:', error instanceof Error ? error.message : 'Unknown error');
-    };
-    transport.onclose = this.destroy.bind(this);
+    this.configureTransportHandlers(transport);
     return transport;
   }
 

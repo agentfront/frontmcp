@@ -82,7 +82,8 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
       );
       return;
     }
-    // Access the private _eventIdCounter field
+    // Access internal MCP SDK property _eventIdCounter - may change between SDK versions.
+    // If this breaks after an SDK update, check SSEServerTransport internals.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)._eventIdCounter = eventId;
   }

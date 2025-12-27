@@ -194,7 +194,16 @@ export class SessionRateLimiter {
 }
 
 /**
- * Default shared rate limiter instance.
- * Use this for simple cases where a single limiter is sufficient.
+ * Default shared rate limiter instance for simple single-process scenarios.
+ *
+ * WARNING: This singleton shares state across all usages in the same process.
+ * For most use cases, create a new SessionRateLimiter instance per session store.
+ *
+ * @example
+ * // Preferred: Create instance per store
+ * this.rateLimiter = new SessionRateLimiter({ windowMs: 60000, maxRequests: 100 });
+ *
+ * // Only use default for simple single-tenant scenarios
+ * import { defaultSessionRateLimiter } from './session-rate-limiter';
  */
 export const defaultSessionRateLimiter = new SessionRateLimiter();

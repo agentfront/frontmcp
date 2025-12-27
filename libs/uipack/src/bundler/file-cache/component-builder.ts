@@ -421,7 +421,7 @@ export class ComponentBuilder {
         bundlerVersion: this.esbuild.version,
       };
     } catch (error) {
-      throw new Error(`Bundle failed for ${entryPath}: ${error}`);
+      throw new Error(`Bundle failed for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

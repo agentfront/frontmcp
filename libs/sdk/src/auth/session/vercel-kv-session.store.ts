@@ -160,14 +160,23 @@ export class VercelKvSessionStore implements SessionStore {
    *
    * Note: Vercel KV doesn't support GETEX, so we use GET + PEXPIRE separately.
    * This is slightly less atomic than Redis GETEX but sufficient for most use cases.
+   *
+   * @param sessionId - The session ID to look up
+   * @param options - Optional parameters for rate limiting
+   * @param options.clientIdentifier - Client identifier (e.g., IP address) for rate limiting.
+   *   When provided, rate limiting is applied per-client to prevent session enumeration.
+   *   If not provided, falls back to sessionId which provides DoS protection per-session.
    */
-  async get(sessionId: string): Promise<StoredSession | null> {
+  async get(sessionId: string, options?: { clientIdentifier?: string }): Promise<StoredSession | null> {
     // Check rate limit if enabled
+    // Use clientIdentifier for enumeration protection, fallback to sessionId for DoS protection
     if (this.rateLimiter) {
-      const rateLimitResult = this.rateLimiter.check(sessionId);
+      const rateLimitKey = options?.clientIdentifier || sessionId;
+      const rateLimitResult = this.rateLimiter.check(rateLimitKey);
       if (!rateLimitResult.allowed) {
         this.logger?.warn('[VercelKvSessionStore] Rate limit exceeded for session lookup', {
           sessionId: sessionId.slice(0, 20),
+          clientIdentifier: options?.clientIdentifier ? options.clientIdentifier.slice(0, 20) : undefined,
           retryAfterMs: rateLimitResult.retryAfterMs,
         });
         return null;
