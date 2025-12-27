@@ -5,7 +5,24 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+
+
 <Update label="v0.6.x" description="2025-12-24" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.6.3: Persistent sessions and safer UI builds"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.3"
+    cta="View full changlog"
+  >
+    🚀 **Session recovery** – Persist streamable HTTP sessions in Redis or Vercel KV and rebuild transports automatically so clients reconnect after restarts without re-running the handshake.
+
+    🛡️ **Secure persistence** – Stored sessions gain HMAC signing, rate limiting, and fingerprint guards, letting FrontMCP block tampered tokens while logging mismatches for investigation.
+
+    🧩 **Recreateable transports** – New recreateable streamable HTTP and SSE classes expose helpers plus `markAsInitialized`, so serverless nodes rehydrate streaming connections with the right MCP state.
+
+    🛠️ **UI bundler preflight** – The component builder lazy-loads `esbuild`, sanitizes error paths, and now ships guidance in a dedicated doc so widget builds stay readable and reliable.
+
+  </Card>
+
   <Card
     title="FrontMCP v0.6.2: Adaptive build modes and zero-config persistence"
     href="https://github.com/agentfront/frontmcp/releases/tag/v0.6.2"
@@ -68,25 +85,17 @@ mode: 'center'
   </Card>
 </Update>
 
-<Update label="json-schema-to-zod-v3 v1.0.3" description="2025-12-24" tags={["Independent"]}>
+<Update label="mcp-from-openapi v2.1.x" description="2025-12-27" tags={["Independent"]}>
   <Card
-    title="json-schema-to-zod-v3 v1.0.3"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    title="mcp-from-openapi v2.1.2"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
     cta="Explore the library"
   >
-    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single
-    `dist/index.d.ts`.
+    🧠 **Preview generator builds** – The same `publish-alpha` target publishes early OpenAPI generator builds so you can test tool upgrades before the stable release.
 
-    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters
-    automatically.
-
-    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and
-    adapters consume the converter without overrides.
+    🔄 **Consistent release scripts** – Aligning publishing with the rest of the monorepo keeps the generator, adapters, and CLI in sync during previews.
 
   </Card>
-</Update>
-
-<Update label="mcp-from-openapi v2.1.1" description="2025-12-24" tags={["Independent"]}>
   <Card
     title="mcp-from-openapi v2.1.1"
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
@@ -102,28 +111,6 @@ mode: 'center'
     same input mappers and security metadata.
 
   </Card>
-</Update>
-
-
-<Update label="json-schema-to-zod-v3 v1.0.2" description="2025-12-19" tags={["Independent"]}>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.2"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer
-    need local overrides.
-
-    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without
-    manual file moves.
-
-    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the
-    converter into new workspaces.
-
-  </Card>
-</Update>
-
-<Update label="mcp-from-openapi v2.1.0" description="2025-12-19" tags={["Independent"]}>
   <Card
     title="mcp-from-openapi v2.1.0"
     href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
@@ -137,6 +124,48 @@ mode: 'center'
 
     📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups
     without guesswork.
+
+  </Card>
+</Update>
+<Update label="json-schema-to-zod-v3 v1.0.x" description="2025-12-24" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.4"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    ✨ **Alpha publishing** – Nx's new `publish-alpha` target (shared script) automates preview builds so you can try converter tweaks before the stable line ships.
+
+    🧰 **Aligned metadata** – The shared pipeline keeps exports, typings, and packaging consistent for alpha consumers.
+
+  </Card>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.3"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single
+    `dist/index.d.ts`.
+
+    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters
+    automatically.
+
+    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and
+    adapters consume the converter without overrides.
+
+  </Card>
+  <Card
+    title="json-schema-to-zod-v3 v1.0.2"
+    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    cta="Explore the library"
+  >
+    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer
+    need local overrides.
+
+    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without
+    manual file moves.
+
+    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the
+    converter into new workspaces.
 
   </Card>
 </Update>
@@ -293,6 +322,7 @@ mode: 'center'
 
     #### Build/CI
     - Harden release automation by forcing the npm registry URL and routing publishes through the dedicated script.
+
   </Card>
 
 </Update>
@@ -328,6 +358,7 @@ mode: 'center'
       The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
       production.
     </Warning>
+
   </Card>
 
 </Update>
@@ -348,6 +379,7 @@ mode: 'center'
     capabilities like caching.
     - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
     transforms.
+
   </Card>
 
 </Update>

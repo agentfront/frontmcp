@@ -1,3 +1,25 @@
+## [v0.6.3] - 2025-12-27
+
+### feat
+
+- Introduce recreateable streamable HTTP and SSE transports plus `LocalTransporter.markAsInitialized` so session recovery can rebuild streamable sessions after restarts with the correct MCP SDK state.
+- Harden session persistence metadata with fingerprint logging, optional HMAC signing, rate limiting, and max-lifetime guards so stored sessions reject tampered tokens while still surfacing warnings for mismatches.
+- Ship UI bundler preflight guidance and lazy `esbuild` loading so component compilation surfaces a clear missing-compiler error and sanitizes absolute paths when widgets fail to build.
+
+### fix
+
+- `TransportService.getStoredSession` now enforces fingerprint checks, respects `warnOnFingerprintMismatch`, and marks recreated streamable transports as initialized so clients do not repeat the handshake.
+- The SSE and streamable HTTP adapters use the new recreateable helpers without destroying transports on `onsessionclosed`, keeping stored sessions available for reconnection.
+
+### docs
+
+- Add the Session Recovery and UI Bundler Preflight guides plus navigation entries so operators can find persistence, security, and bundler guidance quickly.
+
+### build
+
+- Align synchronized packages (SDK, CLI, adapters, `@frontmcp/ui`, `@frontmcp/uipack`, and `@frontmcp/testing`) at v0.6.3 with shared dual CJS/ESM exports and sanitized bundler helpers.
+- Independent packages `json-schema-to-zod-v3@1.0.4` and `mcp-from-openapi@2.1.2` add the Nx `publish-alpha` target so preview builds follow the same release script as the core workspace.
+
 ## [v0.6.2] - 2025-12-24
 
 ### feat
