@@ -5,12 +5,17 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-12" tags={["Releases"]}>
+<Update label="draft" description="2025-12-27" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+
+    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+
+    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
 
   </Card>
 </Update>
