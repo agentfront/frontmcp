@@ -37,11 +37,19 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
   constructor(endpoint: string, res: ServerResponse, options?: RecreateableSSEServerTransportOptions) {
     super(endpoint, res, options);
 
-    // If initialEventId is provided, restore the event counter
-    if (options?.initialEventId !== undefined && options.initialEventId > 0) {
+    // If initialEventId is provided and valid, restore the event counter
+    if (options?.initialEventId !== undefined && this.isValidEventId(options.initialEventId)) {
       this.setEventIdCounter(options.initialEventId);
       this._isRecreatedSession = true;
     }
+  }
+
+  /**
+   * Validates that an event ID is a valid non-negative integer.
+   * Protects against negative values, NaN, Infinity, and non-integer values.
+   */
+  private isValidEventId(eventId: number): boolean {
+    return Number.isInteger(eventId) && eventId >= 0 && eventId <= Number.MAX_SAFE_INTEGER;
   }
 
   /**
@@ -64,9 +72,16 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
    * Use this when recreating a session from stored state to maintain
    * event ID continuity for SSE reconnection support.
    *
-   * @param eventId - The event ID to restore (typically the last known event ID + 1)
+   * @param eventId - The event ID to restore (must be a non-negative integer)
    */
   setEventIdCounter(eventId: number): void {
+    // Security: Validate event ID to prevent invalid values
+    if (!this.isValidEventId(eventId)) {
+      console.warn(
+        `[RecreateableSSEServerTransport] Invalid eventId: ${eventId}. ` + `Must be a non-negative integer. Ignoring.`,
+      );
+      return;
+    }
     // Access the private _eventIdCounter field
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)._eventIdCounter = eventId;
@@ -90,7 +105,7 @@ export class RecreateableSSEServerTransport extends SSEServerTransport {
       );
     }
 
-    if (lastEventId !== undefined && lastEventId > 0) {
+    if (lastEventId !== undefined) {
       this.setEventIdCounter(lastEventId);
     }
 

@@ -4,13 +4,21 @@
  * Session store implementation using Vercel KV (edge-compatible REST-based key-value store).
  * Uses dynamic import to avoid bundling @vercel/kv for non-Vercel deployments.
  *
+ * @warning **Atomicity Limitation**: Vercel KV does not support atomic GET+EXPIRE (GETEX).
+ * The `get()` method uses separate GET and PEXPIRE calls, creating a small race window
+ * where the session could expire between these two operations. For mission-critical
+ * session handling requiring strict atomicity guarantees, consider using Redis directly
+ * via `RedisSessionStore`.
+ *
  * @see https://vercel.com/docs/storage/vercel-kv
  */
 
 import { randomUUID } from 'crypto';
-import { SessionStore, StoredSession, storedSessionSchema } from './transport-session.types';
+import { SessionStore, StoredSession, storedSessionSchema, SessionSecurityConfig } from './transport-session.types';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import type { VercelKvProviderOptions } from '../../common/types/options/redis.options';
+import { signSession, verifyOrParseSession } from './session-crypto';
+import { SessionRateLimiter } from './session-rate-limiter';
 
 // Interface for the Vercel KV client (matches @vercel/kv API)
 // Using custom interface to avoid type compatibility issues with optional dependency
@@ -46,6 +54,11 @@ export interface VercelKvSessionConfig {
    * @default 3600000 (1 hour)
    */
   defaultTtlMs?: number;
+
+  /**
+   * Security hardening options
+   */
+  security?: SessionSecurityConfig;
 }
 
 /**
@@ -62,11 +75,26 @@ export class VercelKvSessionStore implements SessionStore {
   private readonly logger?: FrontMcpLogger;
   private readonly config: VercelKvSessionConfig;
 
+  // Security features
+  private readonly security: SessionSecurityConfig;
+  private readonly rateLimiter?: SessionRateLimiter;
+
   constructor(config: VercelKvSessionConfig | VercelKvProviderOptions, logger?: FrontMcpLogger) {
     this.config = config;
     this.keyPrefix = config.keyPrefix ?? 'mcp:session:';
     this.defaultTtlMs = config.defaultTtlMs ?? 3600000;
     this.logger = logger;
+
+    // Initialize security configuration
+    this.security = ('security' in config ? config.security : undefined) ?? {};
+
+    // Initialize rate limiter if enabled
+    if (this.security.enableRateLimiting) {
+      this.rateLimiter = new SessionRateLimiter({
+        windowMs: this.security.rateLimiting?.windowMs,
+        maxRequests: this.security.rateLimiting?.maxRequests,
+      });
+    }
   }
 
   /**
@@ -134,6 +162,18 @@ export class VercelKvSessionStore implements SessionStore {
    * This is slightly less atomic than Redis GETEX but sufficient for most use cases.
    */
   async get(sessionId: string): Promise<StoredSession | null> {
+    // Check rate limit if enabled
+    if (this.rateLimiter) {
+      const rateLimitResult = this.rateLimiter.check(sessionId);
+      if (!rateLimitResult.allowed) {
+        this.logger?.warn('[VercelKvSessionStore] Rate limit exceeded for session lookup', {
+          sessionId: sessionId.slice(0, 20),
+          retryAfterMs: rateLimitResult.retryAfterMs,
+        });
+        return null;
+      }
+    }
+
     const kv = await this.ensureConnected();
     const key = this.key(sessionId);
 
@@ -141,11 +181,34 @@ export class VercelKvSessionStore implements SessionStore {
     const raw = await kv.get<string>(key);
     if (!raw) return null;
 
-    // Extend TTL (fire-and-forget, similar to Redis GETEX behavior)
-    kv.pexpire(key, this.defaultTtlMs).catch(() => void 0);
+    // Extend TTL (fire-and-forget with logging, similar to Redis GETEX behavior)
+    // Note: This is non-atomic - see class-level @warning for details
+    kv.pexpire(key, this.defaultTtlMs).catch((err) => {
+      this.logger?.warn('[VercelKvSessionStore] TTL extension failed', {
+        sessionId: sessionId.slice(0, 20),
+        error: (err as Error).message,
+      });
+    });
 
     try {
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      // If signing is enabled, verify and extract the session
+      // Otherwise, just parse it (supports both signed and unsigned sessions)
+      let parsed: StoredSession | null;
+      const rawStr = typeof raw === 'string' ? raw : JSON.stringify(raw);
+
+      if (this.security.enableSigning) {
+        parsed = verifyOrParseSession(rawStr, { secret: this.security.signingSecret });
+        if (!parsed) {
+          this.logger?.warn('[VercelKvSessionStore] Session signature verification failed', {
+            sessionId: sessionId.slice(0, 20),
+          });
+          this.delete(sessionId).catch(() => void 0);
+          return null;
+        }
+      } else {
+        parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      }
+
       const result = storedSessionSchema.safeParse(parsed);
 
       if (!result.success) {
@@ -160,6 +223,16 @@ export class VercelKvSessionStore implements SessionStore {
 
       const session = result.data;
 
+      // Check absolute maximum lifetime (prevents indefinite session extension)
+      if (session.maxLifetimeAt && session.maxLifetimeAt < Date.now()) {
+        this.logger?.info('[VercelKvSessionStore] Session exceeded max lifetime', {
+          sessionId: sessionId.slice(0, 20),
+          maxLifetimeAt: session.maxLifetimeAt,
+        });
+        await this.delete(sessionId);
+        return null;
+      }
+
       // Check application-level expiration (separate from KV TTL)
       if (session.session.expiresAt && session.session.expiresAt < Date.now()) {
         // Session is logically expired - delete it
@@ -171,8 +244,13 @@ export class VercelKvSessionStore implements SessionStore {
       if (session.session.expiresAt) {
         const ttlMs = Math.min(this.defaultTtlMs, session.session.expiresAt - Date.now());
         if (ttlMs > 0 && ttlMs < this.defaultTtlMs) {
-          // Fire-and-forget - we're only optimizing cache eviction timing
-          kv.pexpire(key, ttlMs).catch(() => void 0);
+          // Fire-and-forget with logging - we're only optimizing cache eviction timing
+          kv.pexpire(key, ttlMs).catch((err) => {
+            this.logger?.warn('[VercelKvSessionStore] TTL bound extension failed', {
+              sessionId: sessionId.slice(0, 20),
+              error: (err as Error).message,
+            });
+          });
         }
       }
 
@@ -200,7 +278,14 @@ export class VercelKvSessionStore implements SessionStore {
   async set(sessionId: string, session: StoredSession, ttlMs?: number): Promise<void> {
     const kv = await this.ensureConnected();
     const key = this.key(sessionId);
-    const value = JSON.stringify(session);
+
+    // Apply HMAC signing if enabled
+    let value: string;
+    if (this.security.enableSigning) {
+      value = signSession(session, { secret: this.security.signingSecret });
+    } else {
+      value = JSON.stringify(session);
+    }
 
     if (ttlMs && ttlMs > 0) {
       // Use px for millisecond precision

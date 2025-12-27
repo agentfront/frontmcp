@@ -176,9 +176,20 @@ export class TransportService {
    * @param type - Transport type
    * @param token - Authorization token
    * @param sessionId - Session ID
+   * @param options - Optional validation options
+   * @param options.clientFingerprint - Client fingerprint for additional validation
+   * @param options.warnOnFingerprintMismatch - If true, log warning on mismatch but still return session
    * @returns Stored session data if exists and token matches, undefined otherwise
    */
-  async getStoredSession(type: TransportType, token: string, sessionId: string): Promise<StoredSession | undefined> {
+  async getStoredSession(
+    type: TransportType,
+    token: string,
+    sessionId: string,
+    options?: {
+      clientFingerprint?: string;
+      warnOnFingerprintMismatch?: boolean;
+    },
+  ): Promise<StoredSession | undefined> {
     if (!this.sessionStore || type !== 'streamable-http') return undefined;
 
     const tokenHash = this.sha256(token);
@@ -193,6 +204,21 @@ export class TransportService {
         requestTokenHash: tokenHash.slice(0, 8),
       });
       return undefined;
+    }
+
+    // Optional: Validate client fingerprint if stored and provided
+    if (options?.clientFingerprint && stored.session.clientFingerprint) {
+      if (stored.session.clientFingerprint !== options.clientFingerprint) {
+        this.scope.logger.warn('[TransportService] Client fingerprint mismatch', {
+          sessionId: sessionId.slice(0, 20),
+          storedFingerprint: stored.session.clientFingerprint.slice(0, 8),
+          requestFingerprint: options.clientFingerprint.slice(0, 8),
+        });
+        // By default, reject mismatched fingerprints unless warnOnFingerprintMismatch is true
+        if (!options.warnOnFingerprintMismatch) {
+          return undefined;
+        }
+      }
     }
 
     return stored;

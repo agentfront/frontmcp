@@ -163,6 +163,12 @@ export interface StoredSession {
   lastAccessedAt: number;
   /** Whether the MCP protocol initialization handshake was completed */
   initialized?: boolean;
+  /**
+   * Absolute maximum lifetime timestamp (epoch ms).
+   * Session is invalid after this time regardless of access patterns.
+   * This prevents indefinite session extension via sliding expiration.
+   */
+  maxLifetimeAt?: number;
 }
 
 /**
@@ -235,6 +241,52 @@ export interface RedisConfig {
   keyPrefix?: string;
   /** Default TTL in milliseconds for session extension on access (sliding expiration) */
   defaultTtlMs?: number;
+}
+
+/**
+ * Security configuration options for session stores.
+ * These options enable additional security hardening features.
+ */
+export interface SessionSecurityConfig {
+  /**
+   * Default maximum session lifetime in milliseconds.
+   * Sessions will be invalidated after this time regardless of access.
+   * Set to prevent indefinite session extension via sliding expiration.
+   * @example 86400000 // 24 hours
+   */
+  maxLifetimeMs?: number;
+
+  /**
+   * Enable HMAC signing for stored sessions.
+   * When enabled, sessions are signed to detect tampering.
+   * Requires MCP_SESSION_SECRET environment variable or signing.secret config.
+   * @default false
+   */
+  enableSigning?: boolean;
+
+  /**
+   * Secret key for HMAC signing.
+   * If not provided, falls back to MCP_SESSION_SECRET environment variable.
+   */
+  signingSecret?: string;
+
+  /**
+   * Enable rate limiting for session lookups.
+   * Protects against session enumeration attacks.
+   * @default false
+   */
+  enableRateLimiting?: boolean;
+
+  /**
+   * Rate limiting configuration.
+   * Only used if enableRateLimiting is true.
+   */
+  rateLimiting?: {
+    /** Time window in milliseconds. @default 60000 */
+    windowMs?: number;
+    /** Maximum requests per window. @default 100 */
+    maxRequests?: number;
+  };
 }
 
 // ============================================
@@ -333,6 +385,7 @@ export const storedSessionSchema = z.object({
   createdAt: z.number(),
   lastAccessedAt: z.number(),
   initialized: z.boolean().optional(),
+  maxLifetimeAt: z.number().optional(),
 });
 
 export const redisConfigSchema = z.object({
