@@ -8,7 +8,6 @@
  * @packageDocumentation
  */
 
-import { transform } from 'esbuild';
 import type {
   BuilderOptions,
   CdnMode,
@@ -139,15 +138,31 @@ export abstract class BaseBuilder {
 
   /**
    * Transpile a component using esbuild.
+   * Uses dynamic import to avoid loading esbuild at module load time.
    *
    * @param source - Source code to transpile
    * @param options - Transpile options
    * @returns Transpile result
+   * @throws Error if esbuild is not installed and transpilation is attempted
    */
   protected async transpile(
     source: string,
     options: TranspileOptions = {}
   ): Promise<TranspileResult> {
+    // Use webpackIgnore to prevent bundler from processing this import
+    // This makes esbuild truly optional - only loaded at runtime when needed
+    let transform: typeof import('esbuild').transform;
+    try {
+      const esbuild = await import(/* webpackIgnore: true */ 'esbuild');
+      transform = esbuild.transform;
+    } catch {
+      throw new Error(
+        'esbuild is required for UI component transpilation but is not installed. ' +
+        'If you are not using UI components, you can ignore this error. ' +
+        'To fix, install esbuild: npm install esbuild'
+      );
+    }
+
     const externals = options.externals || DEFAULT_EXTERNALS;
     const config = options.externals
       ? createExternalizedConfig(options)

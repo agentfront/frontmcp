@@ -52,6 +52,17 @@
         "default": "./dist/esm/mcp-apps/index.mjs"
       }
     },
+    "./transport": {
+      "development": "./src/transport/index.ts",
+      "require": {
+        "types": "./dist/transport/index.d.ts",
+        "default": "./dist/transport/index.js"
+      },
+      "import": {
+        "types": "./dist/transport/index.d.ts",
+        "default": "./dist/esm/transport/index.mjs"
+      }
+    },
     "./esm": null
   },
   "peerDependencies": {

@@ -26,7 +26,7 @@ export async function bundleForServerless(
     },
     // Use node externals preset for built-in modules
     externalsPresets: { node: true },
-    // Exclude problematic optional dependencies
+    // Exclude problematic optional dependencies (native binaries that can't be bundled)
     externals: {
       '@swc/core': '@swc/core',
       fsevents: 'fsevents',
@@ -41,6 +41,18 @@ export async function bundleForServerless(
       extensions: ['.js', '.mjs', '.cjs', '.json'],
       // Allow imports without file extensions (TypeScript compiles without .js but ESM requires them)
       fullySpecified: false,
+    },
+    module: {
+      rules: [],
+      parser: {
+        javascript: {
+          // Handle dynamic requires like require('@vercel/kv') inside functions
+          // by wrapping them instead of externalizing them
+          dynamicImportMode: 'eager',
+          exprContextCritical: false,
+          unknownContextCritical: false,
+        },
+      },
     },
     // Don't minimize to preserve readability for debugging
     optimization: {

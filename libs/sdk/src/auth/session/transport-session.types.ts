@@ -161,6 +161,8 @@ export interface StoredSession {
   createdAt: number;
   /** Last accessed timestamp */
   lastAccessedAt: number;
+  /** Whether the MCP protocol initialization handshake was completed */
+  initialized?: boolean;
 }
 
 /**
@@ -330,6 +332,7 @@ export const storedSessionSchema = z.object({
   tokens: z.record(z.string(), encryptedBlobSchema).optional(),
   createdAt: z.number(),
   lastAccessedAt: z.number(),
+  initialized: z.boolean().optional(),
 });
 
 export const redisConfigSchema = z.object({

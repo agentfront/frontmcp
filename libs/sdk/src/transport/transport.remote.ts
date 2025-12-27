@@ -27,4 +27,8 @@ export class RemoteTransporter implements Transporter {
   async destroy(_reason?: string): Promise<void> {
     throw new Error('RemoteTransporter: destroy() not implemented.');
   }
+
+  markAsInitialized(): void {
+    // No-op for remote transporters - initialization state is managed on the remote node
+  }
 }

@@ -6,12 +6,26 @@ import { InMemoryEventStore } from '../transport.event-store';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
+import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
+import { RecreateableSSEServerTransport } from './sse-transport';
 import { ZodType } from 'zod';
 import { FrontMcpLogger, ServerRequestTokens, ServerResponse } from '../../common';
 import { Scope } from '../../scope';
 import { createMcpHandlers } from '../mcp-handlers';
 
-export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransport | SSEServerTransport> {
+/**
+ * Base transport type that includes all supported transports.
+ * RecreateableStreamableHTTPServerTransport extends StreamableHTTPServerTransport
+ * and RecreateableSSEServerTransport extends SSEServerTransport,
+ * so they're also included in this union.
+ */
+export type SupportedTransport =
+  | StreamableHTTPServerTransport
+  | SSEServerTransport
+  | RecreateableStreamableHTTPServerTransport
+  | RecreateableSSEServerTransport;
+
+export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   protected logger: FrontMcpLogger;
   protected transport: T;
   protected eventStore = new InMemoryEventStore();
@@ -43,6 +57,14 @@ export abstract class LocalTransportAdapter<T extends StreamableHTTPServerTransp
   ): Promise<TypedElicitResult<T>>;
 
   abstract handleRequest(req: AuthenticatedServerRequest, res: ServerResponse): Promise<void>;
+
+  /**
+   * Marks this transport as pre-initialized for session recreation.
+   * Override in subclasses that need to set the MCP SDK's _initialized flag.
+   */
+  markAsInitialized(): void {
+    // Default no-op - override in subclasses
+  }
 
   connectServer() {
     const { info } = this.scope.metadata;

@@ -15,6 +15,7 @@ jest.mock('../transport.local', () => ({
       return Promise.resolve();
     }),
     send: jest.fn(),
+    markAsInitialized: jest.fn(),
     _onDispose: onDispose,
   })),
 }));

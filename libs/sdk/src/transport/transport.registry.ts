@@ -289,6 +289,14 @@ export class TransportService {
     });
 
     await transporter.ready();
+
+    // Mark the transport as initialized since we're recreating from an initialized session
+    // This sets the MCP SDK's _initialized flag so subsequent requests are not rejected
+    // For backwards compatibility, treat missing 'initialized' field as true (old sessions were initialized)
+    if (storedSession.initialized !== false) {
+      transporter.markAsInitialized();
+    }
+
     this.insertLocal(key, transporter);
 
     // Update session access time in Redis
@@ -389,6 +397,7 @@ export class TransportService {
         authorizationId: key.tokenHash,
         createdAt: Date.now(),
         lastAccessedAt: Date.now(),
+        initialized: true, // Mark as initialized for session recreation
       };
       sessionStore.set(sessionId, storedSession, persistenceConfig?.defaultTtlMs).catch((err) => {
         this.scope.logger.warn('[TransportService] Failed to persist session to Redis', {
