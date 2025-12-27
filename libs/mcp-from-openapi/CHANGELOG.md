@@ -1,3 +1,9 @@
+## [2.1.2] - 2025-12-27
+
+### Changed
+
+- Added `publish-alpha` Nx target to enable alpha publishing flow using common script.
+
 ## [2.1.1] - 2025-12-24
 
 ### Fixed

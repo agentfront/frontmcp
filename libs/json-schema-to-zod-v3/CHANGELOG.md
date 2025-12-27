@@ -1,3 +1,9 @@
+## [1.0.4] - 2025-12-27
+
+### Changed
+
+- Added `publish-alpha` Nx target to support alpha publishing via shared script.
+
 ## [1.0.3] - 2025-12-24
 
 ### Fixed
