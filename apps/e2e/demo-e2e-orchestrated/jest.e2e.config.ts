@@ -43,5 +43,14 @@ export default {
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
-  coverageDirectory: 'test-output/jest/coverage-e2e',
+  coverageDirectory: '../../../coverage/e2e/demo-e2e-orchestrated',
+  coverageReporters: ['json'],
+  collectCoverageFrom: [
+    '<rootDir>/../../../libs/sdk/src/**/*.ts',
+    '<rootDir>/../../../libs/adapters/src/**/*.ts',
+    '<rootDir>/../../../libs/plugins/src/**/*.ts',
+    '!**/*.test.ts',
+    '!**/*.spec.ts',
+    '!**/index.ts',
+  ],
 };

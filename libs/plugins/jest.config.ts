@@ -34,5 +34,5 @@ module.exports = {
   moduleNameMapper: {
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
   },
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/plugins',
 };

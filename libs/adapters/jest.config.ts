@@ -31,5 +31,5 @@ module.exports = {
   },
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/adapters',
 };

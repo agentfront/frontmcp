@@ -6,6 +6,6 @@ module.exports = {
     '^.+\\.[tj]s$': ['@swc/jest', { sourceMaps: 'inline' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/libs/testing',
+  coverageDirectory: '../../coverage/unit/testing',
   passWithNoTests: true,
 };

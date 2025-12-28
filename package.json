@@ -10,7 +10,14 @@
     "build": "nx run-many -t build",
     "docs:live": "cd docs/live && mint dev --port 4100",
     "docs:draft": "cd docs/draft && mint dev --port 4200",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:unit": "nx run-many -t test --exclude='demo-e2e-*'",
+    "test:unit:coverage": "nx run-many -t test --exclude='demo-e2e-*' --coverage",
+    "test:e2e": "nx run-many -t test --projects='demo-e2e-*'",
+    "test:e2e:coverage": "nx run-many -t test --projects='demo-e2e-*' --coverage",
+    "coverage:merge": "node scripts/merge-coverage.mjs",
+    "coverage:all": "npm run test:unit:coverage && npm run test:e2e:coverage && npm run coverage:merge",
+    "coverage:check": "npx nyc check-coverage --temp-dir=coverage/merged"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": "prettier --write"
@@ -37,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",
+    "nyc": "^17.1.0",
     "@mdx-js/mdx": "^3.1.1",
     "@nx/esbuild": "22.3.3",
     "@nx/eslint": "22.3.3",

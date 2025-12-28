@@ -32,5 +32,5 @@ module.exports = {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/cli',
 };

@@ -182,3 +182,53 @@ jobs:
       - name: Retry E2E tests (${{ matrix.project }})
         if: steps.test.outcome == 'failure'
         run: npx nx run ${{ matrix.project }}:test
+
+  # Coverage report (runs on main branch only)
+  coverage:
+    name: "Coverage Report"
+    needs: [setup, build, unit-tests, e2e-tests]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      NX_DAEMON: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+
+      - name: Run unit tests with coverage
+        run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
+        continue-on-error: true
+
+      - name: Run E2E tests with coverage
+        run: npx nx run-many -t test --projects='demo-e2e-*' --coverage
+        continue-on-error: true
+
+      - name: Merge coverage reports
+        run: node scripts/merge-coverage.mjs
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/merged/lcov.info
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Check coverage threshold
+        run: npx nyc check-coverage --temp-dir=coverage/merged --statements 95 --branches 95 --functions 95 --lines 95
+        continue-on-error: true

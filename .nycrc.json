@@ -1,0 +1,13 @@
+{
+  "all": true,
+  "include": ["libs/*/src/**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "**/index.ts", "**/*.d.ts", "**/node_modules/**", "**/dist/**"],
+  "reporter": ["json", "lcov", "html", "text-summary"],
+  "report-dir": "coverage/merged",
+  "temp-dir": ".nyc_output",
+  "check-coverage": true,
+  "statements": 95,
+  "branches": 95,
+  "functions": 95,
+  "lines": 95
+}

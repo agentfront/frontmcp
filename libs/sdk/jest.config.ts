@@ -15,7 +15,7 @@ module.exports = {
   },
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/sdk',
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {
     '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',
