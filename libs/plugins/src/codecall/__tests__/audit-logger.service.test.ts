@@ -350,5 +350,131 @@ describe('AuditLoggerService', () => {
       const data = receivedEvents[0].data as any;
       expect(data.error.length).toBeLessThanOrEqual(203);
     });
+
+    it('should remove stack traces from multi-line errors', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      const errorWithStack = `Error: Something went wrong
+    at functionName (/home/user/file.ts:10:5)
+    at anotherFunction (/home/user/other.ts:20:3)
+    at Object.<anonymous> (/home/user/index.ts:1:1)`;
+
+      logger.logExecutionFailure('exec_123', 'code', 50, errorWithStack);
+
+      const data = receivedEvents[0].data as any;
+      expect(data.error).not.toContain('at functionName');
+      expect(data.error).not.toContain('at anotherFunction');
+      expect(data.error).not.toContain('/home/user');
+      expect(data.error).toContain('Error: Something went wrong');
+    });
+
+    it('should remove line numbers independently from paths', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      logger.logExecutionFailure('exec_123', 'code', 50, 'Error at position :15:20 in the code');
+
+      const data = receivedEvents[0].data as any;
+      expect(data.error).not.toContain(':15:20');
+      expect(data.error).toContain('Error at position');
+    });
+
+    it('should handle Windows-style paths', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      logger.logExecutionFailure('exec_123', 'code', 50, 'Error in C:\\Users\\test\\file.ts:10:5');
+
+      const data = receivedEvents[0].data as any;
+      expect(data.error).toContain('[path]');
+      expect(data.error).not.toContain('C:\\Users');
+    });
+  });
+
+  describe('hashScript edge cases', () => {
+    it('should handle empty string', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      logger.logExecutionStart('exec_123', '');
+
+      const data = receivedEvents[0].data as { scriptHash: string; scriptLength: number };
+      expect(data.scriptHash).toMatch(/^sh_[0-9a-f]{8}$/);
+      expect(data.scriptLength).toBe(0);
+    });
+
+    it('should handle very long strings', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      const longScript = 'x'.repeat(100000);
+      logger.logExecutionStart('exec_123', longScript);
+
+      const data = receivedEvents[0].data as { scriptHash: string; scriptLength: number };
+      expect(data.scriptHash).toMatch(/^sh_[0-9a-f]{8}$/);
+      expect(data.scriptLength).toBe(100000);
+    });
+
+    it('should handle unicode characters', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      const unicodeScript = '你好世界 🚀 émoji ñ αβγ';
+      logger.logExecutionStart('exec_123', unicodeScript);
+
+      const data = receivedEvents[0].data as { scriptHash: string; scriptLength: number };
+      expect(data.scriptHash).toMatch(/^sh_[0-9a-f]{8}$/);
+      expect(data.scriptLength).toBe(unicodeScript.length);
+    });
+
+    it('should produce consistent hash for same input', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+      const script = 'const x = 1;';
+
+      logger.logExecutionStart('exec_1', script);
+      logger.logExecutionStart('exec_2', script);
+
+      const data1 = receivedEvents[0].data as { scriptHash: string };
+      const data2 = receivedEvents[1].data as { scriptHash: string };
+      expect(data1.scriptHash).toBe(data2.scriptHash);
+    });
+
+    it('should produce different hashes for different inputs', () => {
+      logger.subscribe((event) => receivedEvents.push(event));
+
+      logger.logExecutionStart('exec_1', 'const x = 1;');
+      logger.logExecutionStart('exec_2', 'const y = 2;');
+
+      const data1 = receivedEvents[0].data as { scriptHash: string };
+      const data2 = receivedEvents[1].data as { scriptHash: string };
+      expect(data1.scriptHash).not.toBe(data2.scriptHash);
+    });
+  });
+
+  describe('generateExecutionId counter behavior', () => {
+    it('should increment counter across many consecutive calls', () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 100; i++) {
+        ids.push(logger.generateExecutionId());
+      }
+
+      // All IDs should be unique
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(100);
+    });
+
+    it('should maintain uniqueness even with rapid consecutive calls', () => {
+      const ids: string[] = [];
+      // Generate many IDs in rapid succession
+      for (let i = 0; i < 1000; i++) {
+        ids.push(logger.generateExecutionId());
+      }
+
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(1000);
+    });
+
+    it('should have monotonically increasing counter component', () => {
+      const id1 = logger.generateExecutionId();
+      const id2 = logger.generateExecutionId();
+      const id3 = logger.generateExecutionId();
+
+      // Extract counter parts (second underscore-separated segment after exec_timestamp_)
+      const counter1 = parseInt(id1.split('_')[2], 36);
+      const counter2 = parseInt(id2.split('_')[2], 36);
+      const counter3 = parseInt(id3.split('_')[2], 36);
+
+      expect(counter2).toBe(counter1 + 1);
+      expect(counter3).toBe(counter2 + 1);
+    });
   });
 });
