@@ -335,6 +335,7 @@ paths:
       const generator = await OpenAPIToolGenerator.fromJSON(openapi);
       const tool = await generator.generateTool('/users/{id}', 'get', {
         namingStrategy: {
+          conflictResolver: (name, loc, idx) => `${name}_${loc}_${idx}`,
           toolNameGenerator: (path, method, opId) => `custom_${method}_${opId}`,
         },
       });

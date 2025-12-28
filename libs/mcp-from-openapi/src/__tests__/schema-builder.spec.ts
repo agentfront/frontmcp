@@ -4,6 +4,8 @@
 
 import { SchemaBuilder } from '../schema-builder';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 describe('SchemaBuilder', () => {
   describe('merge', () => {
     it('should return empty object for empty array', () => {
@@ -12,7 +14,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should return single schema unchanged', () => {
-      const schema = { type: 'object', properties: { id: { type: 'string' } } };
+      const schema = { type: 'object', properties: { id: { type: 'string' } } } as any;
       const result = SchemaBuilder.merge([schema]);
       expect(result).toEqual(schema);
     });
@@ -22,12 +24,12 @@ describe('SchemaBuilder', () => {
         type: 'object',
         properties: { id: { type: 'string' } },
         required: ['id'],
-      };
+      } as any;
       const schema2 = {
         type: 'object',
         properties: { name: { type: 'string' } },
         required: ['name'],
-      };
+      } as any;
       const result = SchemaBuilder.merge([schema1, schema2]);
 
       expect(result.properties).toHaveProperty('id');
@@ -37,16 +39,16 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle schemas without properties', () => {
-      const schema1 = { type: 'object' };
-      const schema2 = { type: 'object', properties: { id: { type: 'string' } } };
+      const schema1 = { type: 'object' } as any;
+      const schema2 = { type: 'object', properties: { id: { type: 'string' } } } as any;
       const result = SchemaBuilder.merge([schema1, schema2]);
 
       expect(result.properties).toHaveProperty('id');
     });
 
     it('should handle schemas without required', () => {
-      const schema1 = { type: 'object', properties: { id: { type: 'string' } } };
-      const schema2 = { type: 'object', properties: { name: { type: 'string' } } };
+      const schema1 = { type: 'object', properties: { id: { type: 'string' } } } as any;
+      const schema2 = { type: 'object', properties: { name: { type: 'string' } } } as any;
       const result = SchemaBuilder.merge([schema1, schema2]);
 
       expect(result.properties).toHaveProperty('id');
@@ -62,13 +64,13 @@ describe('SchemaBuilder', () => {
     });
 
     it('should return single schema unchanged', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.union([schema]);
       expect(result).toEqual(schema);
     });
 
     it('should create oneOf for multiple schemas', () => {
-      const schemas = [{ type: 'string' }, { type: 'number' }];
+      const schemas = [{ type: 'string' }, { type: 'number' }] as any;
       const result = SchemaBuilder.union(schemas);
 
       expect(result.oneOf).toEqual(schemas);
@@ -82,7 +84,7 @@ describe('SchemaBuilder', () => {
         properties: {
           nested: { type: 'object', properties: { value: { type: 'string' } } },
         },
-      };
+      } as any;
       const cloned = SchemaBuilder.clone(schema);
 
       expect(cloned).toEqual(schema);
@@ -99,11 +101,11 @@ describe('SchemaBuilder', () => {
         properties: {
           nested: { $ref: '#/components/schemas/Address' },
         },
-      };
+      } as any;
       const result = SchemaBuilder.removeRefs(schema);
 
       expect(result.$ref).toBeUndefined();
-      expect(result.properties?.nested.$ref).toBeUndefined();
+      expect((result as any).properties?.nested.$ref).toBeUndefined();
     });
 
     it('should handle null and primitive values', () => {
@@ -114,27 +116,27 @@ describe('SchemaBuilder', () => {
           count: 42,
           nullable: null,
         },
-      };
+      } as any;
       const result = SchemaBuilder.removeRefs(schema);
 
       expect(result.type).toBe('object');
-      expect(result.properties?.count).toBe(42);
+      expect((result as any).properties?.count).toBe(42);
     });
 
     it('should handle arrays in schema', () => {
       const schema = {
         type: 'array',
         items: { $ref: '#/components/schemas/Item' },
-      };
+      } as any;
       const result = SchemaBuilder.removeRefs(schema);
 
-      expect(result.items.$ref).toBeUndefined();
+      expect((result as any).items.$ref).toBeUndefined();
     });
   });
 
   describe('withDescription', () => {
     it('should add description to schema', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withDescription(schema, 'A test string');
 
       expect(result.description).toBe('A test string');
@@ -144,14 +146,14 @@ describe('SchemaBuilder', () => {
 
   describe('withExample', () => {
     it('should add example to schema', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withExample(schema, 'example value');
 
       expect(result.examples).toEqual(['example value']);
     });
 
     it('should append to existing examples', () => {
-      const schema = { type: 'string', examples: ['existing'] };
+      const schema = { type: 'string', examples: ['existing'] } as any;
       const result = SchemaBuilder.withExample(schema, 'new example');
 
       expect(result.examples).toEqual(['existing', 'new example']);
@@ -167,7 +169,7 @@ describe('SchemaBuilder', () => {
 
   describe('withDefault', () => {
     it('should add default value', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withDefault(schema, 'default value');
 
       expect(result.default).toBe('default value');
@@ -176,7 +178,7 @@ describe('SchemaBuilder', () => {
 
   describe('withFormat', () => {
     it('should add format', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withFormat(schema, 'email');
 
       expect(result.format).toBe('email');
@@ -185,7 +187,7 @@ describe('SchemaBuilder', () => {
 
   describe('withPattern', () => {
     it('should add pattern', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withPattern(schema, '^[a-z]+$');
 
       expect(result.pattern).toBe('^[a-z]+$');
@@ -194,7 +196,7 @@ describe('SchemaBuilder', () => {
 
   describe('withEnum', () => {
     it('should add enum values', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withEnum(schema, ['a', 'b', 'c']);
 
       expect(result.enum).toEqual(['a', 'b', 'c']);
@@ -203,7 +205,7 @@ describe('SchemaBuilder', () => {
 
   describe('withRange', () => {
     it('should add inclusive minimum and maximum', () => {
-      const schema = { type: 'number' };
+      const schema = { type: 'number' } as any;
       const result = SchemaBuilder.withRange(schema, 0, 100);
 
       expect(result.minimum).toBe(0);
@@ -211,7 +213,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should add exclusive minimum and maximum', () => {
-      const schema = { type: 'number' };
+      const schema = { type: 'number' } as any;
       const result = SchemaBuilder.withRange(schema, 0, 100, { exclusive: true });
 
       expect(result.exclusiveMinimum).toBe(0);
@@ -219,7 +221,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle only minimum', () => {
-      const schema = { type: 'number' };
+      const schema = { type: 'number' } as any;
       const result = SchemaBuilder.withRange(schema, 0, undefined);
 
       expect(result.minimum).toBe(0);
@@ -227,7 +229,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle only maximum', () => {
-      const schema = { type: 'number' };
+      const schema = { type: 'number' } as any;
       const result = SchemaBuilder.withRange(schema, undefined, 100);
 
       expect(result.minimum).toBeUndefined();
@@ -237,7 +239,7 @@ describe('SchemaBuilder', () => {
 
   describe('withLength', () => {
     it('should add minLength and maxLength', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withLength(schema, 1, 100);
 
       expect(result.minLength).toBe(1);
@@ -245,7 +247,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle only minLength', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withLength(schema, 1, undefined);
 
       expect(result.minLength).toBe(1);
@@ -253,7 +255,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle only maxLength', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.withLength(schema, undefined, 100);
 
       expect(result.minLength).toBeUndefined();
@@ -263,7 +265,7 @@ describe('SchemaBuilder', () => {
 
   describe('object', () => {
     it('should create object schema', () => {
-      const result = SchemaBuilder.object({ id: { type: 'string' }, name: { type: 'string' } }, ['id']);
+      const result = SchemaBuilder.object({ id: { type: 'string' }, name: { type: 'string' } } as any, ['id']);
 
       expect(result.type).toBe('object');
       expect(result.properties).toHaveProperty('id');
@@ -273,13 +275,13 @@ describe('SchemaBuilder', () => {
     });
 
     it('should create object without required', () => {
-      const result = SchemaBuilder.object({ id: { type: 'string' } });
+      const result = SchemaBuilder.object({ id: { type: 'string' } } as any);
 
       expect(result.required).toBeUndefined();
     });
 
     it('should create object with empty required', () => {
-      const result = SchemaBuilder.object({ id: { type: 'string' } }, []);
+      const result = SchemaBuilder.object({ id: { type: 'string' } } as any, []);
 
       expect(result.required).toBeUndefined();
     });
@@ -287,14 +289,14 @@ describe('SchemaBuilder', () => {
 
   describe('array', () => {
     it('should create array schema', () => {
-      const result = SchemaBuilder.array({ type: 'string' });
+      const result = SchemaBuilder.array({ type: 'string' } as any);
 
       expect(result.type).toBe('array');
       expect(result.items).toEqual({ type: 'string' });
     });
 
     it('should add constraints', () => {
-      const result = SchemaBuilder.array({ type: 'string' }, { minItems: 1, maxItems: 10, uniqueItems: true });
+      const result = SchemaBuilder.array({ type: 'string' } as any, { minItems: 1, maxItems: 10, uniqueItems: true });
 
       expect(result.minItems).toBe(1);
       expect(result.maxItems).toBe(10);
@@ -388,7 +390,7 @@ describe('SchemaBuilder', () => {
     it('should flatten nested oneOf', () => {
       const schema = {
         oneOf: [{ type: 'string' }, { oneOf: [{ type: 'number' }, { type: 'boolean' }] }],
-      };
+      } as any;
       const result = SchemaBuilder.flatten(schema);
 
       expect(result.oneOf).toHaveLength(3);
@@ -397,7 +399,7 @@ describe('SchemaBuilder', () => {
     it('should flatten nested anyOf', () => {
       const schema = {
         anyOf: [{ type: 'string' }, { anyOf: [{ type: 'number' }, { type: 'boolean' }] }],
-      };
+      } as any;
       const result = SchemaBuilder.flatten(schema);
 
       expect(result.anyOf).toHaveLength(3);
@@ -409,7 +411,7 @@ describe('SchemaBuilder', () => {
           { type: 'object', properties: { a: { type: 'string' } } },
           { allOf: [{ properties: { b: { type: 'number' } } }] },
         ],
-      };
+      } as any;
       const result = SchemaBuilder.flatten(schema);
 
       expect(result.allOf).toHaveLength(2);
@@ -418,7 +420,7 @@ describe('SchemaBuilder', () => {
     it('should respect maxDepth', () => {
       const schema = {
         oneOf: [{ oneOf: [{ oneOf: [{ type: 'string' }] }] }],
-      };
+      } as any;
       const result = SchemaBuilder.flatten(schema, 1);
 
       // Should only flatten one level
@@ -426,7 +428,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should handle schema without composition', () => {
-      const schema = { type: 'string' };
+      const schema = { type: 'string' } as any;
       const result = SchemaBuilder.flatten(schema);
 
       expect(result.type).toBe('string');
@@ -435,28 +437,28 @@ describe('SchemaBuilder', () => {
 
   describe('simplify', () => {
     it('should remove empty required array', () => {
-      const schema = { type: 'object', required: [] };
+      const schema = { type: 'object', required: [] } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.required).toBeUndefined();
     });
 
     it('should remove empty properties object', () => {
-      const schema = { type: 'object', properties: {} };
+      const schema = { type: 'object', properties: {} } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.properties).toBeUndefined();
     });
 
     it('should remove empty examples array', () => {
-      const schema = { type: 'string', examples: [] };
+      const schema = { type: 'string', examples: [] } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.examples).toBeUndefined();
     });
 
     it('should remove duplicate title when matching description', () => {
-      const schema = { type: 'string', title: 'Same', description: 'Same' };
+      const schema = { type: 'string', title: 'Same', description: 'Same' } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.title).toBeUndefined();
@@ -464,7 +466,7 @@ describe('SchemaBuilder', () => {
     });
 
     it('should keep title when different from description', () => {
-      const schema = { type: 'string', title: 'Title', description: 'Desc' };
+      const schema = { type: 'string', title: 'Title', description: 'Desc' } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.title).toBe('Title');
@@ -477,7 +479,7 @@ describe('SchemaBuilder', () => {
         properties: { id: { type: 'string' } },
         required: ['id'],
         examples: ['example'],
-      };
+      } as any;
       const result = SchemaBuilder.simplify(schema);
 
       expect(result.properties).toHaveProperty('id');

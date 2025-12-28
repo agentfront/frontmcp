@@ -81,7 +81,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Bearer my-jwt-token');
+      expect(result.headers['Authorization']).toBe('Bearer my-jwt-token');
     });
 
     it('should resolve basic auth to header', async () => {
@@ -104,7 +104,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
+      expect(result.headers['Authorization']).toBe('Basic dXNlcjpwYXNz');
     });
 
     it('should resolve digest auth to header', async () => {
@@ -138,9 +138,9 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toContain('Digest');
-      expect(result.headers.Authorization).toContain('username="user"');
-      expect(result.headers.Authorization).toContain('realm="example.com"');
+      expect(result.headers['Authorization']).toContain('Digest');
+      expect(result.headers['Authorization']).toContain('username="user"');
+      expect(result.headers['Authorization']).toContain('realm="example.com"');
     });
 
     it('should resolve API key to header', async () => {
@@ -153,7 +153,7 @@ describe('SecurityResolver', () => {
             scheme: 'apiKey',
             type: 'apiKey',
             apiKeyName: 'X-API-Key',
-            in: 'header',
+            apiKeyIn: 'header',
           },
         },
       ];
@@ -177,7 +177,7 @@ describe('SecurityResolver', () => {
             scheme: 'apiKey',
             type: 'apiKey',
             apiKeyName: 'api_key',
-            in: 'query',
+            apiKeyIn: 'query',
           },
         },
       ];
@@ -201,7 +201,7 @@ describe('SecurityResolver', () => {
             scheme: 'apiKey',
             type: 'apiKey',
             apiKeyName: 'session',
-            in: 'cookie',
+            apiKeyIn: 'cookie',
           },
         },
       ];
@@ -297,7 +297,7 @@ describe('SecurityResolver', () => {
             scheme: 'clientId',
             type: 'apiKey',
             apiKeyName: 'X-Client-Id',
-            in: 'header',
+            apiKeyIn: 'header',
           },
         },
       ];
@@ -321,7 +321,7 @@ describe('SecurityResolver', () => {
             scheme: 'customApiKey',
             type: 'apiKey',
             apiKeyName: 'X-Custom-Auth',
-            in: 'header',
+            apiKeyIn: 'header',
           },
         },
       ];
@@ -462,7 +462,7 @@ describe('SecurityResolver', () => {
             scheme: 'apiKey',
             type: 'apiKey',
             apiKeyName: 'X-API-Key',
-            in: 'header',
+            apiKeyIn: 'header',
           },
         },
       ];
