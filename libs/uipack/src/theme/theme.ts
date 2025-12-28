@@ -564,21 +564,68 @@ function emitColorScale(lines: string[], name: string, scale: ColorScale): void 
 }
 
 /**
+ * Common opacity percentages for color variants.
+ * These are used to generate opacity variants like --color-primary-10, --color-primary-30, etc.
+ */
+const OPACITY_VARIANTS = [10, 20, 30, 50, 70, 90] as const;
+
+/**
+ * Emit a color with opacity variants using CSS color-mix().
+ * This generates the base color plus variants at different opacity levels.
+ *
+ * @example
+ * // Input: emitColorWithOpacityVariants(lines, 'primary', '#24292f')
+ * // Output:
+ * //   --color-primary: #24292f;
+ * //   --color-primary-10: color-mix(in oklch, #24292f 10%, transparent);
+ * //   --color-primary-20: color-mix(in oklch, #24292f 20%, transparent);
+ * //   ... etc
+ */
+function emitColorWithOpacityVariants(lines: string[], name: string, value: string): void {
+  lines.push(`--color-${name}: ${value};`);
+  for (const opacity of OPACITY_VARIANTS) {
+    lines.push(`--color-${name}-${opacity}: color-mix(in oklch, ${value} ${opacity}%, transparent);`);
+  }
+}
+
+/**
+ * Emit a brand color with both opacity variants and a hover state.
+ * Used for primary/secondary colors that need hover interactions.
+ *
+ * @example
+ * // Input: emitBrandColorWithVariants(lines, 'primary', '#24292f')
+ * // Output:
+ * //   --color-primary: #24292f;
+ * //   --color-primary-hover: color-mix(in oklch, #24292f 85%, black);
+ * //   --color-primary-10: color-mix(in oklch, #24292f 10%, transparent);
+ * //   ... etc
+ */
+function emitBrandColorWithVariants(lines: string[], name: string, value: string): void {
+  lines.push(`--color-${name}: ${value};`);
+  // Add hover variant (slightly darker)
+  lines.push(`--color-${name}-hover: color-mix(in oklch, ${value} 85%, black);`);
+  // Add opacity variants
+  for (const opacity of OPACITY_VARIANTS) {
+    lines.push(`--color-${name}-${opacity}: color-mix(in oklch, ${value} ${opacity}%, transparent);`);
+  }
+}
+
+/**
  * Build Tailwind @theme CSS from theme configuration
  */
 export function buildThemeCss(theme: ThemeConfig): string {
   const lines: string[] = [];
 
-  // Colors - semantic
+  // Colors - semantic (with opacity and hover variants for commonly used colors)
   const semantic = theme.colors.semantic;
   if (typeof semantic.primary === 'string') {
-    lines.push(`--color-primary: ${semantic.primary};`);
+    emitBrandColorWithVariants(lines, 'primary', semantic.primary);
   } else if (semantic.primary) {
     emitColorScale(lines, 'primary', semantic.primary);
   }
   if (semantic.secondary) {
     if (typeof semantic.secondary === 'string') {
-      lines.push(`--color-secondary: ${semantic.secondary};`);
+      emitBrandColorWithVariants(lines, 'secondary', semantic.secondary);
     } else {
       emitColorScale(lines, 'secondary', semantic.secondary);
     }
@@ -597,10 +644,11 @@ export function buildThemeCss(theme: ThemeConfig): string {
       emitColorScale(lines, 'neutral', semantic.neutral);
     }
   }
-  if (semantic.success) lines.push(`--color-success: ${semantic.success};`);
-  if (semantic.warning) lines.push(`--color-warning: ${semantic.warning};`);
-  if (semantic.danger) lines.push(`--color-danger: ${semantic.danger};`);
-  if (semantic.info) lines.push(`--color-info: ${semantic.info};`);
+  // Status colors with opacity variants (used in badges, alerts, etc.)
+  if (semantic.success) emitColorWithOpacityVariants(lines, 'success', semantic.success);
+  if (semantic.warning) emitColorWithOpacityVariants(lines, 'warning', semantic.warning);
+  if (semantic.danger) emitColorWithOpacityVariants(lines, 'danger', semantic.danger);
+  if (semantic.info) emitColorWithOpacityVariants(lines, 'info', semantic.info);
 
   // Colors - surface
   const surface = theme.colors.surface;

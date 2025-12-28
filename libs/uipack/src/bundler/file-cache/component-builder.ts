@@ -9,7 +9,7 @@
 
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { dirname, resolve, extname } from 'path';
+import { resolve, extname, basename } from 'path';
 import { randomUUID } from 'crypto';
 
 import type {
@@ -18,12 +18,15 @@ import type {
   CDNDependency,
   CDNPlatformType,
   ResolvedDependency,
-  ImportMap,
 } from '../../dependency/types';
 import type { BuildCacheStorage } from './storage/interface';
-import { calculateComponentHash, generateBuildId } from './hash-calculator';
+import { calculateComponentHash } from './hash-calculator';
 import { DependencyResolver } from '../../dependency/resolver';
 import { createImportMap, generateDependencyHTML } from '../../dependency/import-map';
+
+// Type-only definition for React-like component types (no runtime dependency)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ReactComponentType<P = any> = ((props: P) => unknown) & { displayName?: string; name?: string };
 
 // ============================================
 // Builder Options
@@ -190,7 +193,8 @@ export class ComponentBuilder {
     const absoluteEntryPath = resolve(entryPath);
 
     if (!existsSync(absoluteEntryPath)) {
-      throw new Error(`Entry file not found: ${absoluteEntryPath}`);
+      // Sanitize path - use basename to avoid exposing internal directory structure
+      throw new Error(`Entry file not found: ${basename(absoluteEntryPath)}`);
     }
 
     // Calculate content hash
@@ -386,7 +390,7 @@ export class ComponentBuilder {
   }): Promise<{ code: string; map?: string; bundlerVersion?: string }> {
     const { source, entryPath, externals, bundleOptions } = options;
 
-    // Lazy load esbuild
+    // Lazy load esbuild - it's marked as external in project.json so esbuild won't bundle itself
     if (!this.esbuild) {
       try {
         this.esbuild = await import('esbuild');
@@ -418,7 +422,13 @@ export class ComponentBuilder {
         bundlerVersion: this.esbuild.version,
       };
     } catch (error) {
-      throw new Error(`Bundle failed for ${entryPath}: ${error}`);
+      // Sanitize error message - use path.basename for cross-platform compatibility
+      const fileName = basename(entryPath);
+      // Sanitize esbuild errors which may contain absolute paths
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      // Remove absolute paths from error message (matches /path/to/file or C:\path\to\file patterns)
+      const sanitizedMessage = rawMessage.replace(/(?:\/[\w./-]+|[A-Z]:\\[\w.\\-]+)/g, (match) => basename(match));
+      throw new Error(`Bundle failed for ${fileName}: ${sanitizedMessage}`);
     }
   }
 
@@ -445,8 +455,11 @@ export class ComponentBuilder {
 
     try {
       // Dynamic import React for SSR
-      const React = await import('react');
-      const ReactDOMServer = await import('react-dom/server');
+      // Use variable indirection to prevent bundlers from resolving at bundle time
+      const reactPkg = 'react';
+      const reactDomServerPkg = 'react-dom/server';
+      const React = await import(reactPkg);
+      const ReactDOMServer = await import(reactDomServerPkg);
 
       // Create a sandboxed execution context
       const exports: Record<string, unknown> = {};
@@ -473,7 +486,7 @@ export class ComponentBuilder {
       }
 
       // Render to string
-      const element = React.createElement(Component as React.ComponentType<unknown>, context);
+      const element = React.createElement(Component as ReactComponentType<unknown>, context);
       return ReactDOMServer.renderToString(element);
     } catch (error) {
       console.warn(`SSR failed: ${error}`);

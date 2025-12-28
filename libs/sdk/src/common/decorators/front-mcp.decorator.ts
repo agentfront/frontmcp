@@ -1,9 +1,43 @@
 import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
-import { FrontMcpInstance } from '../../front-mcp';
 import { applyMigration } from '../migrate';
 import { InternalMcpError } from '../../errors/mcp.error';
+
+// Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
+// Uses direct relative paths instead of require('@frontmcp/sdk') which would create
+// a circular dependency since index.ts exports this decorator.
+
+let _FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance | null = null;
+function getFrontMcpInstance() {
+  if (!_FrontMcpInstance) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _FrontMcpInstance = require('../../front-mcp').FrontMcpInstance;
+  }
+  if (!_FrontMcpInstance) {
+    throw new InternalMcpError('FrontMcpInstance not found in module', 'MODULE_LOAD_FAILED');
+  }
+  return _FrontMcpInstance;
+}
+
+// Lazy import for serverless handler functions
+type ServerlessHandlerFns = {
+  setServerlessHandler: (handler: unknown) => void;
+  setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
+  setServerlessHandlerError: (error: Error) => void;
+};
+let _serverlessHandlerFns: ServerlessHandlerFns | null = null;
+
+function getServerlessHandlerFns(): ServerlessHandlerFns {
+  if (!_serverlessHandlerFns) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _serverlessHandlerFns = require('../../front-mcp/serverless-handler');
+  }
+  if (!_serverlessHandlerFns) {
+    throw new InternalMcpError('Serverless handler functions not found', 'MODULE_LOAD_FAILED');
+  }
+  return _serverlessHandlerFns;
+}
 
 /**
  * Decorator that marks a class as a FrontMcp Server and provides metadata
@@ -51,26 +85,10 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
 
     if (isServerless) {
       // Serverless mode: bootstrap, prepare (no listen), store handler globally
-      // Use synchronous require for bundler compatibility (rspack/webpack)
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const {
-        FrontMcpInstance: ServerlessInstance,
-        setServerlessHandler,
-        setServerlessHandlerPromise,
-        setServerlessHandlerError,
-      }: {
-        FrontMcpInstance: typeof FrontMcpInstance;
-        setServerlessHandler: (handler: unknown) => void;
-        setServerlessHandlerPromise: (promise: Promise<unknown>) => void;
-        setServerlessHandlerError: (error: Error) => void;
-      } = require('@frontmcp/sdk');
-
-      if (!ServerlessInstance) {
-        throw new InternalMcpError(
-          '@frontmcp/sdk version mismatch, make sure you have the same version for all @frontmcp/* packages',
-          'SDK_VERSION_MISMATCH',
-        );
-      }
+      // Uses direct relative imports to avoid circular dependency with @frontmcp/sdk
+      const ServerlessInstance = getFrontMcpInstance();
+      const { setServerlessHandler, setServerlessHandlerPromise, setServerlessHandlerError } =
+        getServerlessHandlerFns();
 
       const handlerPromise = ServerlessInstance.createHandler(metadata);
       setServerlessHandlerPromise(handlerPromise);
@@ -81,17 +99,8 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       });
     } else if (metadata.serve) {
       // Normal mode: bootstrap and start server
-      const sdk = '@frontmcp/sdk';
-      import(sdk).then(({ FrontMcpInstance }) => {
-        if (!FrontMcpInstance) {
-          throw new InternalMcpError(
-            `${sdk} version mismatch, make sure you have the same version for all @frontmcp/* packages`,
-            'SDK_VERSION_MISMATCH',
-          );
-        }
-
-        FrontMcpInstance.bootstrap(metadata);
-      });
+      // Use lazy require to avoid circular dependency and dual-package hazard
+      getFrontMcpInstance().bootstrap(metadata);
     }
   };
 }

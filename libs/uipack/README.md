@@ -23,6 +23,7 @@ yarn add @frontmcp/uipack
 
 - **Theme system** – Configure Tailwind-style palettes, fonts, and CDN assets, then inline or externalize scripts per platform.
 - **Build API** – Compile tool templates with esbuild/SWC, emit static widgets, and ship cached manifests for serverless environments.
+- **Build modes** – Choose static, dynamic, or hybrid rendering plus multi-platform bundler helpers so the same widget rehydrates on OpenAI, Claude, and Gemini.
 - **Runtime helpers** – Wrap HTML/React/MDX templates with CSP, sanitize user content, and expose MCP Bridge metadata.
 - **Platform adapters** – Generate OpenAI/Claude/Gemini discovery metadata, resolve serving modes, and understand host capabilities.
 - **Validation** – Extract schema paths, validate Handlebars templates, and render error boxes before code hits production.

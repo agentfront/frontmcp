@@ -1,3 +1,49 @@
+## [v0.6.3] - 2025-12-27
+
+### feat
+
+- Introduce recreateable streamable HTTP and SSE transports plus `LocalTransporter.markAsInitialized` so session recovery can rebuild streamable sessions after restarts with the correct MCP SDK state.
+- Harden session persistence metadata with fingerprint logging, optional HMAC signing, rate limiting, and max-lifetime guards so stored sessions reject tampered tokens while still surfacing warnings for mismatches.
+- Ship UI bundler preflight guidance and lazy `esbuild` loading so component compilation surfaces a clear missing-compiler error and sanitizes absolute paths when widgets fail to build.
+
+### fix
+
+- `TransportService.getStoredSession` now enforces fingerprint checks, respects `warnOnFingerprintMismatch`, and marks recreated streamable transports as initialized so clients do not repeat the handshake.
+- The SSE and streamable HTTP adapters use the new recreateable helpers without destroying transports on `onsessionclosed`, keeping stored sessions available for reconnection.
+
+### docs
+
+- Add the Session Recovery and UI Bundler Preflight guides plus navigation entries so operators can find persistence, security, and bundler guidance quickly.
+
+### build
+
+- Align synchronized packages (SDK, CLI, adapters, `@frontmcp/ui`, `@frontmcp/uipack`, and `@frontmcp/testing`) at v0.6.3 with shared dual CJS/ESM exports and sanitized bundler helpers.
+- Independent packages `json-schema-to-zod-v3@1.0.4` and `mcp-from-openapi@2.1.2` add the Nx `publish-alpha` target so preview builds follow the same release script as the core workspace.
+
+## [v0.6.2] - 2025-12-24
+
+### feat
+
+- Add static, dynamic, and hybrid UI build modes plus multi-platform bundling helpers so the same widget can hydrate differently on OpenAI, Claude, or Gemini without duplicate code.
+- Auto-enable transport persistence whenever `redis` is configured, wiring session storage without needing a separate `transport.persistence` block.
+- Teach `frontmcp build --adapter vercel` to detect npm, pnpm, yarn, or bun lockfiles, set the matching install/build commands, and emit Vercel Build Output API artifacts ready for deployment.
+
+### fix
+
+- Resolve dual-package hazards by lazily requiring `FrontMcpInstance` inside the decorator so runtime imports always reference the same module copy.
+- Default primary-auth transport options now reuse `DEFAULT_TRANSPORT_CONFIG`, eliminating drift between schema defaults and runtime behavior.
+- Serverless bundling loosens fully-specified import requirements, aliases optional React dependencies, and filters known rspack warnings so builds stay quiet but accurate.
+
+### build
+
+- All synchronized workspaces (sdk, cli, adapters, plugins) now publish dual CommonJS/ESM artifacts with `sideEffects: false` and shared typings for better tree-shaking.
+- Independent packages `json-schema-to-zod-v3@1.0.3` and `mcp-from-openapi@2.1.1` match the new export map layout, ensuring adapters and downstream CLIs consume a single source of truth.
+
+### docs
+
+- Published the Build Modes guide plus a new callout on the platforms page to explain when to reach for static, dynamic, or hybrid rendering.
+- Refreshed the live updates page with v0.6.2 highlights and links to the independent library releases.
+
 ## [v0.6.1] - 2025-12-22
 
 ### feat
@@ -91,7 +137,7 @@
 
 ### feat
 
-- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits request mappers, conflict-free schemas, and per-scheme authentication analysis.
+- Publish the standalone `mcp-from-openapi` generator and wire the OpenAPI adapter to it so every tool inherits conflict-free params, request mappers, and per-scheme authentication analysis.
 - Allow `@Tool` metadata to declare literal primitives, tuple-style arrays, and MCP resources (plus `rawInputSchema`) so clients get typed responses without wrapping outputs in placeholder objects.
 - Add a typed MCP error hierarchy and error handler so transports emit traceable IDs, consistent public/internal messages, and FlowControl-aware stop semantics.
 - Extract `json-schema-to-zod-v3` with built-in regex guards so adapters and apps can reuse the hardened JSON Schema → Zod converter.

@@ -1,3 +1,16 @@
+## [1.0.4] - 2025-12-27
+
+### Changed
+
+- Added `publish-alpha` Nx target to support alpha publishing via shared script.
+
+## [1.0.3] - 2025-12-24
+
+### Fixed
+
+- Updated build pipeline to output both CJS and ESM bundles with proper export map and sideEffects flag for better tree shaking and package consumption paths.
+- Adjusted package entry points and type declarations to align with new dist layout without changing runtime API.
+
 ## [1.0.2] - 2025-12-19
 
 ### Fixed

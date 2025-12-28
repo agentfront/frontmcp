@@ -166,7 +166,6 @@ export interface UniversalAppProps {
   fallback?: React.ReactNode;
 
   /** Error fallback component */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   errorFallback?: React.ComponentType<{ error: string }>;
 }
 

@@ -15,6 +15,9 @@ import WeatherMcpApp from './apps/weather';
     port: 3002,
   },
   auth: {
+    transport: {
+      enableLegacySSE: true,
+    },
     mode: 'transparent',
     remote: {
       provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
@@ -25,9 +28,6 @@ import WeatherMcpApp from './apps/weather';
     requiredScopes: [],
     allowAnonymous: true, // Allow anonymous access for demo
     anonymousScopes: ['anonymous'],
-    transport: {
-      enableLegacySSE: true,
-    },
   },
 })
 export default class Server {}

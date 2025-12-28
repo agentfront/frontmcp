@@ -317,4 +317,164 @@ describe('Platform Metadata Adapters', () => {
       }
     });
   });
+
+  describe('buildUIMeta - generic-mcp platform uses frontmcp/* namespace', () => {
+    it('should use frontmcp/widgetAccessible NOT openai/widgetAccessible', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          widgetAccessible: true,
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/widgetAccessible']).toBe(true);
+      // Should NOT use openai/* namespace
+      expect(meta['openai/widgetAccessible']).toBeUndefined();
+    });
+
+    it('should use frontmcp/widgetCSP NOT openai/widgetCSP', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          csp: {
+            connectDomains: ['https://api.example.com'],
+            resourceDomains: ['https://cdn.example.com'],
+          },
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/widgetCSP']).toEqual({
+        connectDomains: ['https://api.example.com'],
+        resourceDomains: ['https://cdn.example.com'],
+      });
+      // Should NOT use openai/* namespace
+      expect(meta['openai/widgetCSP']).toBeUndefined();
+    });
+
+    it('should include displayMode in frontmcp/* namespace', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          displayMode: 'fullscreen',
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/displayMode']).toBe('fullscreen');
+    });
+
+    it('should include widgetDescription in frontmcp/* namespace', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          widgetDescription: 'Test widget description',
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/widgetDescription']).toBe('Test widget description');
+    });
+
+    it('should include prefersBorder in frontmcp/* namespace', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          prefersBorder: true,
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/prefersBorder']).toBe(true);
+    });
+
+    it('should include sandboxDomain as frontmcp/domain', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          sandboxDomain: 'sandbox.example.com',
+        },
+        platformType: 'generic-mcp',
+        html,
+      });
+
+      expect(meta['frontmcp/domain']).toBe('sandbox.example.com');
+    });
+  });
+
+  describe('buildUIMeta - claude platform enhanced fields', () => {
+    it('should include displayMode for Claude', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          displayMode: 'inline',
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      expect(meta['claude/displayMode']).toBe('inline');
+    });
+
+    it('should include widgetAccessible for Claude', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          widgetAccessible: true,
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      expect(meta['claude/widgetAccessible']).toBe(true);
+    });
+
+    it('should include prefersBorder for Claude', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          prefersBorder: true,
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      expect(meta['claude/prefersBorder']).toBe(true);
+    });
+
+    it('should include widgetDescription for Claude', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          widgetDescription: 'Claude widget description',
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      expect(meta['claude/widgetDescription']).toBe('Claude widget description');
+    });
+
+    it('should NOT include CSP for Claude (network-blocked)', () => {
+      const meta = buildUIMeta({
+        uiConfig: {
+          ...baseUIConfig,
+          csp: {
+            connectDomains: ['https://api.example.com'],
+          },
+        },
+        platformType: 'claude',
+        html,
+      });
+
+      // Claude is network-blocked, so CSP is not applicable
+      expect(meta['claude/widgetCSP']).toBeUndefined();
+    });
+  });
 });

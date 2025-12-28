@@ -1,3 +1,16 @@
+## [2.1.2] - 2025-12-27
+
+### Changed
+
+- Added `publish-alpha` Nx target to enable alpha publishing flow using common script.
+
+## [2.1.1] - 2025-12-24
+
+### Fixed
+
+- Revised build setup to emit CJS and ESM bundles with corrected export map and sideEffects flag to improve tree shaking.
+- Synced package entry points and type outputs with the new build artifacts while preserving the public API surface.
+
 ## [2.1.0] - 2025-12-19
 
 ### Added

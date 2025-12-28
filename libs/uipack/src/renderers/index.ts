@@ -49,7 +49,7 @@ export type {
 } from './types';
 
 // Cache
-export { TranspileCache, transpileCache, renderCache, type TranspileCacheOptions } from './cache';
+export { TranspileCache, transpileCache, componentCache, type TranspileCacheOptions } from './cache';
 
 // Registry
 export { RendererRegistry, rendererRegistry } from './registry';
@@ -57,10 +57,19 @@ export { RendererRegistry, rendererRegistry } from './registry';
 // HTML Renderer (built-in)
 export { HtmlRenderer, htmlRenderer } from './html.renderer';
 
-// MDX Renderer
-export { MdxRenderer, mdxRenderer, buildMdxHydrationScript } from './mdx.renderer';
+// MDX Client Renderer (CDN-based, no React bundled)
+// For server-side MDX rendering with React, use @frontmcp/ui/renderers
+export {
+  MdxClientRenderer,
+  mdxClientRenderer,
+  buildReactCdnUrls,
+  type MdxClientRenderOptions,
+  type MdxClientCdnConfig,
+} from './mdx-client.renderer';
 
-// Note: React renderer is in @frontmcp/ui package (requires React)
+// Note: React renderer and server-side MDX are in @frontmcp/ui package (requires React)
+// For server-side MDX rendering with React, use:
+// import { MdxRenderer, mdxRenderer } from '@frontmcp/ui/renderers';
 
 // Utilities
 export {

@@ -234,7 +234,8 @@ describe('RendererRegistry', () => {
     });
 
     it('should render template builder functions', async () => {
-      const template = (ctx: TemplateContext<{}, { name: string }>) => `<div>${ctx.output.name}</div>`;
+      const template = (ctx: TemplateContext<Record<string, never>, { name: string }>) =>
+        `<div>${ctx.output.name}</div>`;
       const result = await registry.render(template, createContext({}, { name: 'Test' }));
       expect(result.html).toBe('<div>Test</div>');
     });

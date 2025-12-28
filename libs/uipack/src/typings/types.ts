@@ -12,6 +12,37 @@
 // ============================================
 
 /**
+ * A single .d.ts file with its virtual path and content.
+ * Used for browser editors that need individual files instead of combined content.
+ *
+ * @example
+ * ```typescript
+ * const file: TypeFile = {
+ *   path: 'node_modules/zod/lib/types.d.ts',
+ *   url: 'https://esm.sh/v135/zod@3.23.8/lib/types.d.ts',
+ *   content: 'export declare const string: ...',
+ * };
+ * ```
+ */
+export interface TypeFile {
+  /**
+   * Virtual file path for the browser editor (e.g., 'node_modules/zod/lib/types.d.ts').
+   * Constructed from the package name and URL path.
+   */
+  path: string;
+
+  /**
+   * Original URL where this file was fetched from.
+   */
+  url: string;
+
+  /**
+   * The .d.ts file content.
+   */
+  content: string;
+}
+
+/**
  * Result of fetching types for a single import specifier.
  *
  * @example
@@ -42,6 +73,14 @@ export interface TypeFetchResult {
   resolvedPackage: string;
 
   /**
+   * Subpath from the original specifier (if any).
+   * Used for creating alias entry points for nested imports.
+   *
+   * @example 'react' when specifier was '@frontmcp/ui/react'
+   */
+  subpath?: string;
+
+  /**
    * Version of the package used for type fetching.
    *
    * @example '18.2.0', 'latest'
@@ -51,8 +90,30 @@ export interface TypeFetchResult {
   /**
    * Combined .d.ts content for this import.
    * Includes all resolved dependencies combined into a single string.
+   *
+   * @deprecated Use `files` array for better browser editor compatibility.
+   * Combined content may not work correctly for complex packages like Zod.
    */
   content: string;
+
+  /**
+   * Individual .d.ts files with virtual paths for browser editors.
+   * Each file contains its own content and path, preserving the original structure.
+   *
+   * Use this instead of `content` for browser editor integration.
+   *
+   * @example
+   * ```typescript
+   * // Access individual files for Monaco/CodeMirror integration
+   * for (const file of result.files) {
+   *   monaco.languages.typescript.typescriptDefaults.addExtraLib(
+   *     file.content,
+   *     `file:///${file.path}`
+   *   );
+   * }
+   * ```
+   */
+  files: TypeFile[];
 
   /**
    * All URLs that were fetched to build this result.
@@ -100,6 +161,7 @@ export type TypeFetchErrorCode =
   | 'NO_TYPES_HEADER'
   | 'INVALID_SPECIFIER'
   | 'PACKAGE_NOT_FOUND'
+  | 'PACKAGE_NOT_ALLOWED'
   | 'PARSE_ERROR';
 
 // ============================================
@@ -348,6 +410,17 @@ export interface TypeFetcherOptions {
    * Custom fetch function (for testing or proxying).
    */
   fetch?: typeof globalThis.fetch;
+
+  /**
+   * Additional packages to allow beyond the default allowlist.
+   * Supports glob patterns (e.g., '@myorg/*').
+   * Set to `false` to disable the allowlist and allow all packages.
+   *
+   * Default allowlist: react, react-dom, react/jsx-runtime, zod, @frontmcp/*
+   *
+   * @default [] (uses default allowlist only)
+   */
+  allowedPackages?: string[] | false;
 }
 
 // ============================================
@@ -388,10 +461,17 @@ export interface PackageResolution {
 // ============================================
 
 /**
+ * Default allowed packages for type fetching.
+ * These packages are always allowed unless the allowlist is disabled.
+ */
+export const DEFAULT_ALLOWED_PACKAGES = ['react', 'react-dom', 'react/jsx-runtime', 'zod', '@frontmcp/*'] as const;
+
+/**
  * Default options for TypeFetcher.
  */
 export const DEFAULT_TYPE_FETCHER_OPTIONS: Required<Omit<TypeFetcherOptions, 'fetch'>> = {
-  maxDepth: 2,
+  allowedPackages: [...DEFAULT_ALLOWED_PACKAGES],
+  maxDepth: 4,
   timeout: 10000,
   maxConcurrency: 5,
   cdnBaseUrl: 'https://esm.sh',

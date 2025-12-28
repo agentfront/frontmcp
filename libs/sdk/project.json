@@ -5,19 +5,82 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
   "targets": {
-    "build-tsc": {
-      "executor": "@nx/js:tsc",
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/sdk/dist",
         "main": "libs/sdk/src/index.ts",
         "tsConfig": "libs/sdk/tsconfig.lib.json",
-        "assets": ["README.md", "LICENSE"]
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/sdk/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
+        "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": [
+            "@frontmcp/sdk",
+            "@frontmcp/uipack",
+            "@frontmcp/uipack/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "ioredis",
+            "jose",
+            "reflect-metadata",
+            "zod",
+            "express",
+            "cors",
+            "raw-body",
+            "content-type",
+            "@vercel/kv"
+          ]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/sdk/dist/esm",
+        "main": "libs/sdk/src/index.ts",
+        "tsConfig": "libs/sdk/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "skipTypeCheck": true,
+        "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "external": [
+            "@frontmcp/sdk",
+            "@frontmcp/uipack",
+            "@frontmcp/uipack/*",
+            "@modelcontextprotocol/sdk",
+            "@modelcontextprotocol/sdk/*",
+            "ioredis",
+            "jose",
+            "reflect-metadata",
+            "zod",
+            "express",
+            "cors",
+            "raw-body",
+            "content-type",
+            "@vercel/kv"
+          ]
+        }
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-tsc"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/sdk/dist/package.json"
       }
@@ -27,6 +90,14 @@
       "dependsOn": ["build"],
       "options": {
         "command": "npm publish libs/sdk/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
       }
     }
   }

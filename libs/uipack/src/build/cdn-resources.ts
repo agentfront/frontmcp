@@ -97,8 +97,9 @@ export const CLOUDFLARE_CDN = {
    * Use this instead of TAILWIND_CDN for Claude Artifacts.
    */
   tailwindCss: {
-    url: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css',
-    type: 'stylesheet' as const,
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss-browser/4.1.13/index.global.min.js',
+    integrity: 'sha512-TscjjxDy2iXx5s55Ar78c01JDHUug0K5aw4YKId9Yuocjx3ueX/X9PFyH5XNRVWqagx3TtcQWQVBaHAIPFjiFA==',
+    crossorigin: 'anonymous' as const,
   },
 
   /**
@@ -167,7 +168,7 @@ export function getTailwindForPlatform(platform: CDNPlatform): string {
   }
 
   // Claude and unknown platforms use pre-built CSS from Cloudflare
-  return `<link href="${CLOUDFLARE_CDN.tailwindCss.url}" rel="stylesheet">`;
+  return buildCDNScriptTag(CLOUDFLARE_CDN.tailwindCss);
 }
 
 /**

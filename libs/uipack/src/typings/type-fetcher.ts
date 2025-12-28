@@ -16,8 +16,9 @@ import type {
   TypeFetcherOptions,
   PackageResolution,
   TypeCacheEntry,
+  TypeFile,
 } from './types';
-import { TYPE_CACHE_PREFIX } from './types';
+import { TYPE_CACHE_PREFIX, DEFAULT_ALLOWED_PACKAGES } from './types';
 import type { TypeCacheAdapter } from './cache';
 import { globalTypeCache } from './cache';
 import {
@@ -99,6 +100,9 @@ export class TypeFetcher {
   private readonly cdnBaseUrl: string;
   private readonly fetchFn: typeof globalThis.fetch;
   private readonly cache: TypeCacheAdapter;
+  private readonly allowedPatterns: string[];
+  private readonly allowlistEnabled: boolean;
+  private _initialized = false;
 
   constructor(options: TypeFetcherOptions = {}, cache?: TypeCacheAdapter) {
     this.maxDepth = options.maxDepth ?? 2;
@@ -107,6 +111,103 @@ export class TypeFetcher {
     this.cdnBaseUrl = options.cdnBaseUrl ?? 'https://esm.sh';
     this.fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.cache = cache ?? globalTypeCache;
+
+    // Setup allowlist
+    if (options.allowedPackages === false) {
+      this.allowlistEnabled = false;
+      this.allowedPatterns = [];
+    } else {
+      this.allowlistEnabled = true;
+      this.allowedPatterns = [...DEFAULT_ALLOWED_PACKAGES, ...(options.allowedPackages ?? [])];
+    }
+  }
+
+  /**
+   * Check if a package is allowed by the allowlist.
+   * Supports glob patterns (e.g., '@frontmcp/*' matches '@frontmcp/ui').
+   *
+   * @param packageName - The package name to check
+   * @returns true if the package is allowed
+   */
+  isPackageAllowed(packageName: string): boolean {
+    if (!this.allowlistEnabled) {
+      return true;
+    }
+
+    return this.allowedPatterns.some((pattern) => {
+      if (pattern.includes('*')) {
+        // Glob pattern - convert to regex
+        // Escape special regex chars except *, then convert * to .*
+        const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        const regex = new RegExp(`^${escaped}$`);
+        return regex.test(packageName);
+      }
+      // Exact match or prefix match for subpaths
+      return packageName === pattern || packageName.startsWith(pattern + '/');
+    });
+  }
+
+  /**
+   * Initialize the TypeFetcher by pre-loading allowed packages.
+   * This fetches types for all allowed packages and caches them.
+   *
+   * @param options - Options for initialization
+   * @returns Summary of initialization results
+   */
+  async initialize(options?: {
+    /** Timeout for each package fetch */
+    timeout?: number;
+  }): Promise<{
+    /** Packages that were successfully loaded */
+    loaded: string[];
+    /** Packages that failed to load */
+    failed: string[];
+    /** Number of entries in cache after initialization */
+    cached: number;
+  }> {
+    if (this._initialized) {
+      const stats = await this.cache.getStats();
+      return { loaded: [], failed: [], cached: stats.entries };
+    }
+
+    const loaded: string[] = [];
+    const failed: string[] = [];
+
+    // Filter out glob patterns - we can't expand them
+    const packagesToLoad = this.allowedPatterns.filter((p) => !p.includes('*'));
+
+    // Pre-fetch each package
+    for (const pkg of packagesToLoad) {
+      const result = await this.fetchBatch({
+        imports: [`import * from "${pkg}"`],
+        timeout: options?.timeout ?? this.timeout,
+      });
+
+      if (result.results.length > 0) {
+        loaded.push(pkg);
+      } else if (result.errors.length > 0) {
+        failed.push(pkg);
+      }
+    }
+
+    this._initialized = true;
+    const stats = await this.cache.getStats();
+
+    return { loaded, failed, cached: stats.entries };
+  }
+
+  /**
+   * Whether the fetcher has been initialized.
+   */
+  get initialized(): boolean {
+    return this._initialized;
+  }
+
+  /**
+   * Get the list of allowed package patterns.
+   */
+  get allowedPackagePatterns(): readonly string[] {
+    return this.allowedPatterns;
   }
 
   /**
@@ -145,8 +246,18 @@ export class TypeFetcher {
           return;
         }
 
-        // Check cache first
+        // Check allowlist
         const packageName = getPackageFromSpecifier(specifier);
+        if (!this.isPackageAllowed(packageName)) {
+          errors.push({
+            specifier,
+            code: 'PACKAGE_NOT_ALLOWED',
+            message: `Package "${packageName}" is not in the allowlist`,
+          });
+          return;
+        }
+
+        // Check cache first
         const version = versionOverrides[packageName] ?? 'latest';
         const cacheKey = `${TYPE_CACHE_PREFIX}${packageName}@${version}`;
 
@@ -255,14 +366,19 @@ export class TypeFetcher {
         };
       }
 
-      // Combine all fetched contents
+      // Build individual files array for browser editors
+      const files = buildTypeFiles(contents, resolution.packageName, resolution.version, resolution.subpath);
+
+      // Combine all fetched contents (deprecated, kept for backwards compatibility)
       const combinedContent = combineDtsContents(contents);
 
       const result: TypeFetchResult = {
         specifier,
         resolvedPackage: resolution.packageName,
+        subpath: resolution.subpath,
         version: resolution.version,
         content: combinedContent,
+        files,
         fetchedUrls,
         fetchedAt: new Date().toISOString(),
       };
@@ -542,6 +658,130 @@ function resolveRelativeUrl(base: string, relative: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Build TypeFile array from fetched contents.
+ * Converts URLs to virtual file paths for browser editor compatibility.
+ * Creates alias entry points for subpath imports.
+ *
+ * @param contents - Map of URL to .d.ts content
+ * @param packageName - The resolved package name
+ * @param version - The package version
+ * @param subpath - Optional subpath from the original specifier
+ * @returns Array of TypeFile objects with virtual paths
+ */
+export function buildTypeFiles(
+  contents: Map<string, string>,
+  packageName: string,
+  version: string,
+  subpath?: string,
+): TypeFile[] {
+  const files: TypeFile[] = [];
+
+  for (const [url, content] of contents.entries()) {
+    const virtualPath = urlToVirtualPath(url, packageName, version);
+    files.push({
+      path: virtualPath,
+      url,
+      content,
+    });
+  }
+
+  // Create alias entry point for subpath imports
+  // This allows editors to resolve imports like "@frontmcp/ui/react" correctly
+  if (subpath) {
+    const aliasPath = `node_modules/${packageName}/${subpath}/index.d.ts`;
+    // Check if this path already exists in files
+    const aliasExists = files.some((f) => f.path === aliasPath);
+
+    if (!aliasExists) {
+      // Create re-export alias that points to the package root
+      const aliasContent = `// Auto-generated alias for ${packageName}/${subpath}
+export * from '${getRelativeImportPath(subpath)}';
+`;
+      files.push({
+        path: aliasPath,
+        url: '', // No actual URL - this is synthesized
+        content: aliasContent,
+      });
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Calculate relative import path from subpath to package root.
+ *
+ * @param subpath - The subpath within the package
+ * @returns Relative import path to the package root index
+ *
+ * @example
+ * getRelativeImportPath('react') // '../index'
+ * getRelativeImportPath('components/button') // '../../index'
+ */
+export function getRelativeImportPath(subpath: string): string {
+  const depth = subpath.split('/').length;
+  const prefix = '../'.repeat(depth);
+  return `${prefix}index`;
+}
+
+/**
+ * Convert a CDN URL to a virtual file path for browser editors.
+ *
+ * Examples:
+ * - https://esm.sh/v135/zod@3.23.8/lib/types.d.ts -> node_modules/zod/lib/types.d.ts
+ * - https://esm.sh/v135/@frontmcp/ui@1.0.0/react/index.d.ts -> node_modules/@frontmcp/ui/react/index.d.ts
+ *
+ * @param url - The CDN URL
+ * @param packageName - The package name (e.g., 'zod', '@frontmcp/ui')
+ * @param version - The package version
+ * @returns Virtual file path
+ */
+export function urlToVirtualPath(url: string, packageName: string, version: string): string {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+
+    // Remove /v{number}/ prefix from esm.sh URLs
+    const cleanPath = pathname.replace(/^\/v\d+\//, '/');
+
+    // Find where the package@version starts
+    const versionedPackage = `${packageName}@${version}`;
+    const packageIndex = cleanPath.indexOf(versionedPackage);
+
+    if (packageIndex !== -1) {
+      // Extract the path after package@version
+      const afterPackageVersion = cleanPath.substring(packageIndex + versionedPackage.length);
+      // Build virtual path: node_modules/packageName/...
+      const relativePath = afterPackageVersion.startsWith('/') ? afterPackageVersion.substring(1) : afterPackageVersion;
+      return `node_modules/${packageName}/${relativePath || 'index.d.ts'}`;
+    }
+
+    // Fallback: try to extract path from URL pattern
+    // Handle URLs like /packageName@version/path/to/file.d.ts
+    const packagePattern = new RegExp(`/${escapeRegExp(packageName)}@[^/]+(/.*)?$`);
+    const match = pathname.match(packagePattern);
+
+    if (match) {
+      const filePath = match[1] ? match[1].substring(1) : 'index.d.ts';
+      return `node_modules/${packageName}/${filePath}`;
+    }
+
+    // Last fallback: just use the URL pathname
+    return `node_modules/${packageName}/${pathname.split('/').pop() || 'index.d.ts'}`;
+  } catch {
+    // If URL parsing fails, return a basic path
+    return `node_modules/${packageName}/index.d.ts`;
+  }
+}
+
+/**
+ * Escape special regex characters in a string.
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ============================================

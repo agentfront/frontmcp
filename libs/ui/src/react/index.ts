@@ -111,6 +111,3 @@ export type { AlertProps, AlertRenderProps } from './Alert';
 
 // Legacy web component types (for ref typing)
 export type { FmcpCard, FmcpBadge, FmcpButton, FmcpAlert, FmcpInput, FmcpSelect } from './types';
-
-// Utilities (deprecated, use render/prerender instead)
-export { renderChildrenToString, isBrowser, isServer } from './utils';

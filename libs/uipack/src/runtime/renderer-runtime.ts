@@ -337,8 +337,9 @@ export class RendererRuntime {
    */
   private async getAdapter(type: UIType, content?: string): Promise<RendererAdapter | null> {
     // Check cache
-    if (this.adapters.has(type)) {
-      return this.adapters.get(type)!;
+    const cachedAdapter = this.adapters.get(type);
+    if (cachedAdapter) {
+      return cachedAdapter;
     }
 
     // Auto-detect type from content
@@ -349,8 +350,9 @@ export class RendererRuntime {
     }
 
     // Check cache again with resolved type
-    if (this.adapters.has(resolvedType)) {
-      return this.adapters.get(resolvedType)!;
+    const resolvedAdapter = this.adapters.get(resolvedType);
+    if (resolvedAdapter) {
+      return resolvedAdapter;
     }
 
     // Load adapter

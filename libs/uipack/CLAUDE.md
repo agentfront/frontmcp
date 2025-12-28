@@ -2,17 +2,17 @@
 
 ## Overview
 
-`@frontmcp/uipack` provides **bundling, build tools, HTML components, and platform adapters** for MCP UI development - all without requiring React.
+`@frontmcp/uipack` provides **bundling, build tools, platform adapters, and theming** for MCP UI development - all without requiring React.
 
 This is the React-free core package. For React components and hooks, use `@frontmcp/ui`.
 
 **Key Principles:**
 
 - Zero React dependency
-- Pure HTML string generation
-- Zod schema validation for all component inputs
 - Platform-aware theming and CDN configuration
-- HTMX support for dynamic interactions
+- Build tools for Tool UI generation
+- esbuild/SWC bundling utilities
+- Zod schema validation
 
 ## Architecture
 
@@ -20,17 +20,15 @@ This is the React-free core package. For React components and hooks, use `@front
 libs/uipack/src/
 ├── adapters/           # Platform adapters (OpenAI, Claude, etc.)
 ├── base-template/      # Default HTML wrappers with polyfills
-├── bridge/             # Multi-platform MCP bridge
+├── bridge-runtime/     # MCP bridge runtime generation
 ├── build/              # Build-time API (buildToolUI, etc.)
-├── bundler/            # esbuild/SWC bundling
-├── components/         # HTML string components (button, card, etc.)
+├── bundler/            # esbuild/SWC bundling, caching, sandbox
 ├── dependency/         # CDN resolution and import maps
 ├── handlebars/         # Handlebars template engine
-├── layouts/            # Page layout templates
-├── pages/              # Pre-built pages (consent, error)
+├── preview/            # Preview server utilities
 ├── registry/           # Tool UI registry
-├── renderers/          # HTML/MDX renderers
-├── runtime/            # Runtime utilities (template helpers)
+├── renderers/          # HTML/MDX client renderers
+├── runtime/            # Runtime utilities (wrapper, sanitizer, CSP)
 ├── styles/             # Style variant definitions
 ├── theme/              # Theme system and CDN config
 ├── tool-template/      # Tool template utilities
@@ -38,103 +36,52 @@ libs/uipack/src/
 ├── typings/            # .d.ts type fetching
 ├── utils/              # Utilities (escapeHtml, safeStringify)
 ├── validation/         # Zod validation utilities
-├── web-components/     # Custom HTML elements
-├── widgets/            # OpenAI widget utilities
 └── index.ts            # Main barrel exports
 ```
 
 ## Package Split
 
-| Package            | Purpose                                                   | React Required |
-| ------------------ | --------------------------------------------------------- | -------------- |
-| `@frontmcp/uipack` | Bundling, build tools, HTML components, platform adapters | No             |
-| `@frontmcp/ui`     | React components, hooks, SSR rendering                    | Yes            |
+| Package            | Purpose                                                 | React Required |
+| ------------------ | ------------------------------------------------------- | -------------- |
+| `@frontmcp/uipack` | Bundling, build tools, platform adapters, theme         | No             |
+| `@frontmcp/ui`     | React components, hooks, SSR rendering, HTML components | Yes            |
 
 ## Entry Points
 
-| Path                              | Purpose                               |
-| --------------------------------- | ------------------------------------- |
-| `@frontmcp/uipack`                | Main exports                          |
-| `@frontmcp/uipack/adapters`       | Platform adapters and meta builders   |
-| `@frontmcp/uipack/base-template`  | Default HTML templates with polyfills |
-| `@frontmcp/uipack/bridge`         | MCP bridge for multiple platforms     |
-| `@frontmcp/uipack/build`          | Build-time API                        |
-| `@frontmcp/uipack/bundler`        | esbuild/SWC bundling                  |
-| `@frontmcp/uipack/components`     | HTML string components                |
-| `@frontmcp/uipack/dependency`     | CDN resolution                        |
-| `@frontmcp/uipack/handlebars`     | Handlebars integration                |
-| `@frontmcp/uipack/layouts`        | Page layouts                          |
-| `@frontmcp/uipack/pages`          | Pre-built pages                       |
-| `@frontmcp/uipack/registry`       | Tool UI registry                      |
-| `@frontmcp/uipack/renderers`      | HTML/MDX renderers                    |
-| `@frontmcp/uipack/runtime`        | Runtime utilities                     |
-| `@frontmcp/uipack/styles`         | Style variants                        |
-| `@frontmcp/uipack/theme`          | Theme system                          |
-| `@frontmcp/uipack/types`          | Type definitions                      |
-| `@frontmcp/uipack/utils`          | Utilities                             |
-| `@frontmcp/uipack/validation`     | Zod validation                        |
-| `@frontmcp/uipack/web-components` | Custom elements                       |
-| `@frontmcp/uipack/widgets`        | OpenAI widgets                        |
+| Path                             | Purpose                               |
+| -------------------------------- | ------------------------------------- |
+| `@frontmcp/uipack`               | Main exports                          |
+| `@frontmcp/uipack/adapters`      | Platform adapters and meta builders   |
+| `@frontmcp/uipack/base-template` | Default HTML templates with polyfills |
+| `@frontmcp/uipack/build`         | Build-time API (buildToolUI)          |
+| `@frontmcp/uipack/bundler`       | esbuild/SWC bundling, cache, sandbox  |
+| `@frontmcp/uipack/dependency`    | CDN resolution and import maps        |
+| `@frontmcp/uipack/handlebars`    | Handlebars integration                |
+| `@frontmcp/uipack/preview`       | Preview server utilities              |
+| `@frontmcp/uipack/registry`      | Tool UI registry                      |
+| `@frontmcp/uipack/renderers`     | HTML/MDX client renderers             |
+| `@frontmcp/uipack/runtime`       | Runtime utilities (wrapper, CSP)      |
+| `@frontmcp/uipack/styles`        | Style variants                        |
+| `@frontmcp/uipack/theme`         | Theme system and platform config      |
+| `@frontmcp/uipack/types`         | Type definitions                      |
+| `@frontmcp/uipack/typings`       | TypeScript definition fetching        |
+| `@frontmcp/uipack/utils`         | Utilities                             |
+| `@frontmcp/uipack/validation`    | Zod validation                        |
 
-## Component Development
-
-### 1. Create Schema First
-
-Every component must have a Zod schema with `.strict()` mode:
+## Build API
 
 ```typescript
-// component.schema.ts
-import { z } from 'zod';
+import { buildToolUI, getOutputModeForClient } from '@frontmcp/uipack/build';
 
-export const ComponentOptionsSchema = z
-  .object({
-    variant: z.enum(['primary', 'secondary']).optional(),
-    size: z.enum(['sm', 'md', 'lg']).optional(),
-    disabled: z.boolean().optional(),
-    className: z.string().optional(),
-    htmx: z
-      .object({
-        get: z.string().optional(),
-        post: z.string().optional(),
-        target: z.string().optional(),
-        swap: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict(); // IMPORTANT: Reject unknown properties
+// Build tool UI HTML
+const html = await buildToolUI({
+  template: '<div>{{output.data}}</div>',
+  context: { input: {}, output: { data: 'Hello' } },
+  platform: 'openai',
+});
 
-export type ComponentOptions = z.infer<typeof ComponentOptionsSchema>;
-```
-
-### 2. Validate Inputs in Component
-
-```typescript
-// component.ts
-import { validateOptions } from '../validation';
-import { ComponentOptionsSchema, type ComponentOptions } from './component.schema';
-
-export function component(content: string, options: ComponentOptions = {}): string {
-  const validation = validateOptions<ComponentOptions>(options, {
-    schema: ComponentOptionsSchema,
-    componentName: 'component',
-  });
-
-  if (!validation.success) {
-    return validation.error; // Returns styled error box HTML
-  }
-
-  const { variant = 'primary', size = 'md' } = validation.data;
-  return `<div class="...">${escapeHtml(content)}</div>`;
-}
-```
-
-### 3. Always Escape User Content
-
-```typescript
-import { escapeHtml } from '../utils';
-
-const html = `<div title="${escapeHtml(title)}">${escapeHtml(content)}</div>`;
+// Get output mode for client
+const mode = getOutputModeForClient('openai');
 ```
 
 ## Theme System
@@ -190,20 +137,56 @@ const scripts = buildCdnScriptsFromTheme(DEFAULT_THEME, { inline: false });
 const inlineScripts = buildCdnScriptsFromTheme(DEFAULT_THEME, { inline: true });
 ```
 
-## Build API
+## Renderers
+
+### HTML Renderer
 
 ```typescript
-import { buildToolUI, getOutputModeForClient } from '@frontmcp/uipack/build';
+import { htmlRenderer, HtmlRenderer } from '@frontmcp/uipack/renderers';
 
-// Build tool UI HTML
-const html = await buildToolUI({
-  template: '<div>{{output.data}}</div>',
-  context: { input: {}, output: { data: 'Hello' } },
-  platform: 'openai',
+// Render HTML template
+const html = await htmlRenderer.render(template, context);
+```
+
+### MDX Client Renderer (CDN-based)
+
+```typescript
+import { mdxClientRenderer, MdxClientRenderer } from '@frontmcp/uipack/renderers';
+
+// Render MDX using CDN-based React (no bundled React)
+const html = await mdxClientRenderer.render(mdxContent, context);
+```
+
+> **Note:** For server-side MDX rendering with bundled React, use `@frontmcp/ui/renderers`.
+
+## Bundler Utilities
+
+```typescript
+import { BundlerCache, hashContent, createCacheKey, validateSource, executeCode } from '@frontmcp/uipack/bundler';
+
+// Create cache for bundled results
+const cache = new BundlerCache({ maxSize: 100, ttl: 60000 });
+
+// Hash content for cache keys
+const hash = hashContent(sourceCode);
+
+// Validate source code security
+const violations = validateSource(code, policy);
+```
+
+## Validation
+
+```typescript
+import { validateOptions, createErrorBox } from '@frontmcp/uipack/validation';
+
+const result = validateOptions(options, {
+  schema: MySchema,
+  componentName: 'MyComponent',
 });
 
-// Get output mode for client
-const mode = getOutputModeForClient('openai');
+if (!result.success) {
+  return result.error; // HTML error box
+}
 ```
 
 ## Testing Requirements
@@ -241,6 +224,6 @@ Note: No React dependency!
 
 ## Related Packages
 
-- **@frontmcp/ui** - React components, hooks, SSR rendering
+- **@frontmcp/ui** - React components, hooks, SSR rendering, HTML components
 - **@frontmcp/sdk** - Core FrontMCP SDK
 - **@frontmcp/testing** - E2E testing utilities

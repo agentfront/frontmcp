@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "FrontMCP UIpack - Bundling, build tools, and platform adapters for MCP UI development (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -27,8 +27,9 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
-  "module": "./dist/esm/index.js",
+  "module": "./dist/esm/index.mjs",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     ".": {
@@ -38,8 +39,8 @@
         "default": "./dist/index.js"
       },
       "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
       }
     },
     "./*": {
@@ -49,8 +50,8 @@
         "default": "./dist/*/index.js"
       },
       "import": {
-        "types": "./dist/esm/*/index.d.ts",
-        "default": "./dist/esm/*/index.js"
+        "types": "./dist/*/index.d.ts",
+        "default": "./dist/esm/*/index.mjs"
       }
     },
     "./esm": null

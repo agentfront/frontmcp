@@ -23,7 +23,7 @@
  * @module @frontmcp/ui/web-components/elements/fmcp-input
  */
 
-import { FmcpElement, type FmcpElementConfig, getObservedAttributesFromSchema } from '../core';
+import { FmcpElement, type FmcpElementConfig } from '../core';
 import { input, type InputOptions } from '../../components/form';
 import { InputOptionsSchema } from '../../components/form.schema';
 

@@ -43,11 +43,11 @@ module.exports = {
   testMatch: ['**/*.e2e.ts', '**/*.e2e.js', '**/e2e/**/*.test.ts', '**/e2e/**/*.test.js'],
 
   // Module name mapping for path aliases
-  // Note: These point to dist/src/ since the package exports declare dist/src/index.js
+  // Note: These point to dist/ since the package exports declare dist/index.js
   moduleNameMapper: {
     // Map @frontmcp/testing to the installed package
-    '^@frontmcp/testing$': '<rootDir>/node_modules/@frontmcp/testing/dist/src/index.js',
-    '^@frontmcp/testing/(.*)$': '<rootDir>/node_modules/@frontmcp/testing/dist/src/$1',
+    '^@frontmcp/testing$': '<rootDir>/node_modules/@frontmcp/testing/dist/index.js',
+    '^@frontmcp/testing/(.*)$': '<rootDir>/node_modules/@frontmcp/testing/dist/$1',
   },
 
   // Ignore patterns

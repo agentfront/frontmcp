@@ -1,4 +1,3 @@
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { TransportType, TypedElicitResult } from '../transport.types';
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { LocalTransportAdapter } from './transport.local.adapter';
@@ -7,6 +6,7 @@ import { ZodType } from 'zod';
 import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
+import { RecreateableStreamableHTTPServerTransport } from './streamable-http-transport';
 
 /**
  * Stateless HTTP requests must be able to send multiple initialize calls without
@@ -21,14 +21,15 @@ export const resolveSessionIdGenerator = (
   return transportType === 'stateless-http' ? undefined : () => sessionId;
 };
 
-export class TransportStreamableHttpAdapter extends LocalTransportAdapter<StreamableHTTPServerTransport> {
-  override createTransport(sessionId: string, response: ServerResponse): StreamableHTTPServerTransport {
+export class TransportStreamableHttpAdapter extends LocalTransportAdapter<RecreateableStreamableHTTPServerTransport> {
+  override createTransport(sessionId: string, response: ServerResponse): RecreateableStreamableHTTPServerTransport {
     const sessionIdGenerator = resolveSessionIdGenerator(this.key.type, sessionId);
 
-    return new StreamableHTTPServerTransport({
+    return new RecreateableStreamableHTTPServerTransport({
       sessionIdGenerator,
       onsessionclosed: () => {
-        // this.destroy();
+        // Note: We don't call this.destroy() here because the adapter
+        // lifecycle is managed by the transport registry, not session events.
       },
       onsessioninitialized: (sessionId) => {
         if (sessionId) {
@@ -127,6 +128,22 @@ export class TransportStreamableHttpAdapter extends LocalTransportAdapter<Stream
           this.elicitHandler = undefined;
         },
       };
+    });
+  }
+
+  /**
+   * Marks this transport as pre-initialized for session recreation.
+   * This is needed when recreating a transport from Redis because the
+   * original initialize request was processed by a different transport instance.
+   *
+   * Uses the RecreateableStreamableHTTPServerTransport's public API to set
+   * initialization state, avoiding access to private properties.
+   */
+  override markAsInitialized(): void {
+    this.transport.setInitializationState(this.key.sessionId);
+    this.logger.info('[StreamableHttpAdapter] Marked transport as pre-initialized for session recreation', {
+      sessionId: this.key.sessionId?.slice(0, 20),
+      isInitialized: this.transport.isInitialized,
     });
   }
 }

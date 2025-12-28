@@ -144,7 +144,7 @@ export class ExtAppsAdapter extends BaseAdapter {
     }
 
     // Reject all pending requests
-    for (const [id, pending] of this._pendingRequests) {
+    for (const [_id, pending] of this._pendingRequests) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('Adapter disposed'));
     }

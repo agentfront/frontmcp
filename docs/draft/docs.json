@@ -301,6 +301,7 @@
             "icon": "bolt",
             "pages": [
               "docs/ui/advanced/platforms",
+              "docs/ui/advanced/build-modes",
               "docs/ui/advanced/mcp-bridge",
               "docs/ui/advanced/hydration",
               "docs/ui/advanced/custom-renderers"

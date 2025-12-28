@@ -25,13 +25,11 @@
           "libs/ui/src/bundler/index.ts",
           "libs/ui/src/components/index.ts",
           "libs/ui/src/layouts/index.ts",
-          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
           "libs/ui/src/universal/index.ts",
-          "libs/ui/src/web-components/index.ts",
-          "libs/ui/src/widgets/index.ts"
+          "libs/ui/src/web-components/index.ts"
         ],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
@@ -54,8 +52,7 @@
         "main": "libs/ui/src/index.ts",
         "tsConfig": "libs/ui/tsconfig.lib.json",
         "format": ["esm"],
-        "declaration": true,
-        "declarationRootDir": "libs/ui/src",
+        "declaration": false,
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -64,16 +61,14 @@
           "libs/ui/src/bundler/index.ts",
           "libs/ui/src/components/index.ts",
           "libs/ui/src/layouts/index.ts",
-          "libs/ui/src/pages/index.ts",
           "libs/ui/src/react/index.ts",
           "libs/ui/src/render/index.ts",
           "libs/ui/src/renderers/index.ts",
           "libs/ui/src/universal/index.ts",
-          "libs/ui/src/web-components/index.ts",
-          "libs/ui/src/widgets/index.ts"
+          "libs/ui/src/web-components/index.ts"
         ],
         "esbuildOptions": {
-          "outExtension": { ".js": ".js" },
+          "outExtension": { ".js": ".mjs" },
           "external": [
             "onnxruntime-*",
             "esbuild",
@@ -96,6 +91,14 @@
       "dependsOn": ["build"],
       "options": {
         "command": "npm publish libs/ui/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
       }
     },
     "test": {

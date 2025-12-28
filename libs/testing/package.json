@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/testing",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "E2E testing framework for FrontMCP servers - MCP client, auth mocks, Playwright integration",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -24,47 +24,76 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js"
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
     },
     "./setup": {
       "development": "./src/setup.ts",
-      "types": "./dist/src/setup.d.ts",
-      "import": "./dist/src/setup.js",
-      "default": "./dist/src/setup.js"
+      "require": {
+        "types": "./dist/setup.d.ts",
+        "default": "./dist/setup.js"
+      },
+      "import": {
+        "types": "./dist/setup.d.ts",
+        "default": "./dist/esm/setup.mjs"
+      }
     },
     "./jest-preset": {
       "default": "./jest-preset.js"
     },
     "./fixtures": {
       "development": "./src/fixtures/index.ts",
-      "types": "./dist/src/fixtures/index.d.ts",
-      "import": "./dist/src/fixtures/index.js",
-      "default": "./dist/src/fixtures/index.js"
+      "require": {
+        "types": "./dist/fixtures/index.d.ts",
+        "default": "./dist/fixtures/index.js"
+      },
+      "import": {
+        "types": "./dist/fixtures/index.d.ts",
+        "default": "./dist/esm/fixtures/index.mjs"
+      }
     },
     "./matchers": {
       "development": "./src/matchers/index.ts",
-      "types": "./dist/src/matchers/index.d.ts",
-      "import": "./dist/src/matchers/index.js",
-      "default": "./dist/src/matchers/index.js"
+      "require": {
+        "types": "./dist/matchers/index.d.ts",
+        "default": "./dist/matchers/index.js"
+      },
+      "import": {
+        "types": "./dist/matchers/index.d.ts",
+        "default": "./dist/esm/matchers/index.mjs"
+      }
     },
     "./playwright": {
       "development": "./src/playwright/index.ts",
-      "types": "./dist/src/playwright/index.d.ts",
-      "import": "./dist/src/playwright/index.js",
-      "default": "./dist/src/playwright/index.js"
-    }
+      "require": {
+        "types": "./dist/playwright/index.d.ts",
+        "default": "./dist/playwright/index.js"
+      },
+      "import": {
+        "types": "./dist/playwright/index.d.ts",
+        "default": "./dist/esm/playwright/index.mjs"
+      }
+    },
+    "./esm": null
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "0.6.1",
-    "@frontmcp/ui": "0.6.1",
+    "@frontmcp/sdk": "0.6.3",
+    "@frontmcp/ui": "0.6.3",
     "@playwright/test": "^1.40.0",
     "jest": "^29.0.0",
     "@jest/globals": "^29.0.0"

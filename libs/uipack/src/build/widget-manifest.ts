@@ -19,21 +19,19 @@ import type {
   WidgetConfig,
   BuildManifestResult,
   BuildManifestOptions,
-  UIMetaFields,
   OpenAIMetaFields,
   ToolResponseMeta,
 } from '../types/ui-runtime';
 import {
   DEFAULT_CSP_BY_TYPE,
-  DEFAULT_RENDERER_ASSETS,
   isUIType,
   isResourceMode,
 } from '../types/ui-runtime';
-import { getDefaultAssets, buildScriptsForUIType } from './cdn-resources';
+import { getDefaultAssets } from './cdn-resources';
 import type { ThemeConfig } from '../theme';
 import { wrapToolUIUniversal } from '../runtime/wrapper';
 import { rendererRegistry } from '../renderers/registry';
-import { detectTemplateType, mdxRenderer } from '../renderers';
+import { detectTemplateType, mdxClientRenderer } from '../renderers';
 
 // File-based template support
 import { detectTemplateMode, detectFormatFromPath } from '../dependency/types';
@@ -43,12 +41,10 @@ import { validateTemplate, logValidationWarnings } from '../validation';
 import type {
   CDNPlatformType,
   ComponentBuildManifest,
-  ResolvedDependency,
   TemplateFormat,
 } from '../dependency/types';
-import { resolveTemplate, detectTemplateSource } from '../dependency/template-loader';
+import { resolveTemplate } from '../dependency/template-loader';
 import { processTemplate } from '../dependency/template-processor';
-import { generateDependencyHTML, generateImportMapScriptTag } from '../dependency/import-map';
 
 // ============================================
 // UI Type Detection
@@ -304,7 +300,7 @@ export async function buildToolWidgetManifest<
   Input = Record<string, unknown>,
   Output = unknown,
 >(options: BuildManifestOptions<Input, Output>): Promise<BuildManifestResult> {
-  const { toolName, uiConfig, schema, theme, sampleInput, sampleOutput, outputSchema, inputSchema } = options;
+  const { toolName, uiConfig, schema, theme: _theme, sampleInput, sampleOutput, outputSchema, inputSchema } = options;
 
   // Resolve UI type
   // Use type assertion to handle complex generic template types
@@ -537,9 +533,9 @@ function ensureRenderersRegistered(): void {
   // Note: React renderer is in @frontmcp/ui package
   // For React support, use @frontmcp/ui instead of @frontmcp/uipack
 
-  // Register MDX renderer if not already registered
+  // Register MDX client renderer if not already registered
   if (!rendererRegistry.has('mdx')) {
-    rendererRegistry.register(mdxRenderer);
+    rendererRegistry.register(mdxClientRenderer);
   }
 
   renderersInitialized = true;

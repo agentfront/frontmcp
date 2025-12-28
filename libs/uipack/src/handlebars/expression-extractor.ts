@@ -77,7 +77,7 @@ const PATH_REGEX = /\b(output|input|structuredContent)(\.[a-zA-Z_$][a-zA-Z0-9_$]
 /**
  * Built-in Handlebars helpers that should be recognized.
  */
-const BUILT_IN_HELPERS = new Set(['if', 'unless', 'each', 'with', 'lookup', 'log', 'else']);
+const _BUILT_IN_HELPERS = new Set(['if', 'unless', 'each', 'with', 'lookup', 'log', 'else']);
 
 /**
  * Built-in keywords that are not variable paths.
@@ -102,7 +102,6 @@ const KEYWORDS = new Set(['this', 'else', '@index', '@key', '@first', '@last', '
  */
 export function extractExpressions(template: string): ExtractedExpression[] {
   const expressions: ExtractedExpression[] = [];
-  const lines = template.split('\n');
 
   // Build a map of character positions to line/column
   const positionMap = buildPositionMap(template);

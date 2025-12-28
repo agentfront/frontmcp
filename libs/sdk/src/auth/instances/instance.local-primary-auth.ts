@@ -9,7 +9,7 @@ import {
   isPublicMode,
   isOrchestratedMode,
   isOrchestratedLocal,
-} from '../../common/types/options/auth.options';
+} from '../../common/types/options/auth';
 import ProviderRegistry from '../../provider/provider.registry';
 import WellKnownPrmFlow from '../flows/well-known.prm.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';

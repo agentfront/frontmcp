@@ -9,7 +9,7 @@ import React from 'react';
 import type { UniversalAppProps, UniversalContent, RenderContext, FrontMCPState } from './types';
 import { useFrontMCPStore } from './store';
 import { useComponents, FrontMCPProvider, ComponentsProvider } from './context';
-import { renderContent, detectRenderer } from './renderers';
+import { renderContent } from './renderers';
 import { escapeHtml } from '@frontmcp/uipack/utils';
 
 // ============================================

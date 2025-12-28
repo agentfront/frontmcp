@@ -26,19 +26,45 @@ export async function bundleForServerless(
     },
     // Use node externals preset for built-in modules
     externalsPresets: { node: true },
-    // Exclude problematic optional dependencies
+    // Exclude problematic optional dependencies (native binaries that can't be bundled)
     externals: {
       '@swc/core': '@swc/core',
       fsevents: 'fsevents',
       esbuild: 'esbuild',
+      // React is optional - only needed for MDX/JSX rendering
+      react: 'react',
+      'react-dom': 'react-dom',
+      'react-dom/server': 'react-dom/server',
+      'react/jsx-runtime': 'react/jsx-runtime',
     },
     resolve: {
       extensions: ['.js', '.mjs', '.cjs', '.json'],
+      // Allow imports without file extensions (TypeScript compiles without .js but ESM requires them)
+      fullySpecified: false,
+    },
+    module: {
+      rules: [],
+      parser: {
+        javascript: {
+          // Handle dynamic requires like require('@vercel/kv') inside functions
+          // by wrapping them instead of externalizing them
+          dynamicImportMode: 'eager',
+          exprContextCritical: false,
+          unknownContextCritical: false,
+        },
+      },
     },
     // Don't minimize to preserve readability for debugging
     optimization: {
       minimize: false,
     },
+    // Suppress known third-party library warnings that don't affect runtime
+    ignoreWarnings: [
+      // Express view engine dynamic require - expected behavior, harmless at runtime
+      /Critical dependency: the request of a dependency is an expression/,
+      // Handlebars require.extensions - deprecated Node.js API but works at runtime
+      /require\.extensions is not supported by Rspack/,
+    ],
     // Suppress verbose output
     stats: 'errors-warnings',
   });

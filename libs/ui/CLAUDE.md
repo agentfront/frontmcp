@@ -4,7 +4,7 @@
 
 `@frontmcp/ui` provides **React components, hooks, and rendering utilities** for building interactive MCP widgets.
 
-This package requires React. For React-free utilities (bundling, build tools, HTML components, platform adapters), use `@frontmcp/uipack`.
+This package requires React. For React-free utilities (bundling, build tools, platform adapters, theme), use `@frontmcp/uipack`.
 
 **Key Principles:**
 
@@ -17,41 +17,55 @@ This package requires React. For React-free utilities (bundling, build tools, HT
 
 ```text
 libs/ui/src/
+├── bridge/             # MCP bridge runtime and adapters
+├── bundler/            # SSR component bundling (re-exports from uipack)
+├── components/         # HTML string components (button, card, etc.)
+├── layouts/            # Page layout templates
 ├── react/              # React components and hooks
-│   ├── components/     # Button, Card, Alert, Badge, etc.
+│   ├── Card.tsx        # Card component
+│   ├── Button.tsx      # Button component
+│   ├── Alert.tsx       # Alert component
+│   ├── Badge.tsx       # Badge component
 │   └── hooks/          # useMcpBridge, useCallTool, useToolInput
 ├── render/             # React 19 static rendering utilities
 ├── renderers/          # React renderer for template processing
 │   ├── react.renderer.ts   # SSR renderer (react-dom/server)
-│   └── react.adapter.ts    # Client-side hydration adapter
-├── bundler/            # SSR component bundling
+│   ├── react.adapter.ts    # Client-side hydration adapter
+│   └── mdx.renderer.ts     # MDX server-side renderer
 ├── universal/          # Universal React app shell
+├── web-components/     # Custom HTML elements
 └── index.ts            # Main barrel exports
 ```
 
 ## Package Split
 
-| Package            | Purpose                                                   | React Required |
-| ------------------ | --------------------------------------------------------- | -------------- |
-| `@frontmcp/ui`     | React components, hooks, SSR                              | Yes            |
-| `@frontmcp/uipack` | Bundling, build tools, HTML components, platform adapters | No             |
+| Package            | Purpose                                         | React Required |
+| ------------------ | ----------------------------------------------- | -------------- |
+| `@frontmcp/ui`     | React components, hooks, SSR, HTML components   | Yes            |
+| `@frontmcp/uipack` | Bundling, build tools, platform adapters, theme | No             |
 
 ### Import Patterns
 
 ```typescript
 // React components and hooks (this package)
-import { Button, Card, Alert } from '@frontmcp/ui/react';
-import { useMcpBridge, useCallTool } from '@frontmcp/ui/react/hooks';
+import { Button, Card, Alert, Badge } from '@frontmcp/ui/react';
+import { useMcpBridge, useCallTool, useToolInput } from '@frontmcp/ui/react';
 
 // SSR rendering
-import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
+import { ReactRenderer, reactRenderer, MdxRenderer, mdxRenderer } from '@frontmcp/ui/renderers';
 
 // Universal app shell
 import { UniversalApp, FrontMCPProvider } from '@frontmcp/ui/universal';
 
+// HTML string components
+import { button, card, alert, badge } from '@frontmcp/ui/components';
+
+// MCP bridge
+import { FrontMcpBridge, createBridge } from '@frontmcp/ui/bridge';
+
 // React-free utilities (from @frontmcp/uipack)
 import { buildToolUI } from '@frontmcp/uipack/build';
-import { button, card } from '@frontmcp/uipack/components';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
 import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 ```
 
@@ -60,41 +74,50 @@ import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 ### Available Components
 
 ```typescript
-import {
-  Button,
-  Card,
-  Alert,
-  Badge,
-  // ... more components
-} from '@frontmcp/ui/react';
+import { Card, Badge, Button, Alert } from '@frontmcp/ui/react';
 
 // Usage
 <Button variant="primary" onClick={handleClick}>
   Submit
 </Button>
 
-<Card title="Welcome">
+<Card title="Welcome" variant="elevated">
   <p>Card content</p>
 </Card>
+
+<Badge variant="success">Active</Badge>
+
+<Alert variant="warning" title="Warning">
+  Please check your input
+</Alert>
 ```
 
 ### MCP Bridge Hooks
 
 ```typescript
-import { useMcpBridge, useCallTool, useToolInput, useToolOutput } from '@frontmcp/ui/react/hooks';
+import {
+  McpBridgeProvider,
+  useMcpBridge,
+  useCallTool,
+  useToolInput,
+  useToolOutput,
+  useTheme,
+} from '@frontmcp/ui/react';
 
 function MyWidget() {
-  const bridge = useMcpBridge();
-  const { call, loading, error } = useCallTool();
-  const input = useToolInput();
-  const output = useToolOutput();
+  const input = useToolInput<{ location: string }>();
+  const theme = useTheme();
+  const [getWeather, { data, loading }] = useCallTool('get_weather');
 
+  return <Card title={`Weather for ${input?.location}`}>{loading ? 'Loading...' : data?.temperature}</Card>;
+}
+
+// Wrap your app with the provider
+function App() {
   return (
-    <div>
-      <p>Input: {JSON.stringify(input)}</p>
-      <p>Output: {JSON.stringify(output)}</p>
-      <button onClick={() => call('my-tool', { data: 'test' })}>Call Tool</button>
-    </div>
+    <McpBridgeProvider>
+      <MyWidget />
+    </McpBridgeProvider>
   );
 }
 ```
@@ -108,6 +131,15 @@ import { ReactRenderer, reactRenderer } from '@frontmcp/ui/renderers';
 
 // Render React component to HTML string
 const html = await reactRenderer.render(MyComponent, context);
+```
+
+### MDX Server Rendering
+
+```typescript
+import { MdxRenderer, mdxRenderer } from '@frontmcp/ui/renderers';
+
+// Render MDX to HTML with React components
+const html = await mdxRenderer.render('# Hello {output.name}', context);
 ```
 
 ### Client-Side Hydration
@@ -145,6 +177,8 @@ function App() {
 
 ## SSR Bundling
 
+The bundler re-exports utilities from `@frontmcp/uipack/bundler`:
+
 ```typescript
 import { InMemoryBundler, createBundler } from '@frontmcp/ui/bundler';
 
@@ -178,15 +212,18 @@ const result = await bundler.bundle(componentPath);
 
 ## Entry Points
 
-| Path                       | Purpose                                    |
-| -------------------------- | ------------------------------------------ |
-| `@frontmcp/ui`             | Main exports (React components, renderers) |
-| `@frontmcp/ui/react`       | React components                           |
-| `@frontmcp/ui/react/hooks` | MCP bridge hooks                           |
-| `@frontmcp/ui/renderers`   | ReactRenderer, ReactRendererAdapter        |
-| `@frontmcp/ui/render`      | React 19 static rendering                  |
-| `@frontmcp/ui/universal`   | Universal app shell                        |
-| `@frontmcp/ui/bundler`     | SSR component bundler                      |
+| Path                          | Purpose                                    |
+| ----------------------------- | ------------------------------------------ |
+| `@frontmcp/ui`                | Main exports (React components, renderers) |
+| `@frontmcp/ui/react`          | React components and hooks                 |
+| `@frontmcp/ui/renderers`      | ReactRenderer, MdxRenderer, adapters       |
+| `@frontmcp/ui/render`         | React 19 static rendering                  |
+| `@frontmcp/ui/universal`      | Universal app shell                        |
+| `@frontmcp/ui/bundler`        | SSR component bundler                      |
+| `@frontmcp/ui/bridge`         | MCP bridge runtime                         |
+| `@frontmcp/ui/components`     | HTML string components                     |
+| `@frontmcp/ui/layouts`        | Page layout templates                      |
+| `@frontmcp/ui/web-components` | Custom HTML elements                       |
 
 ## Anti-Patterns to Avoid
 
@@ -198,6 +235,6 @@ const result = await bundler.bundle(componentPath);
 
 ## Related Packages
 
-- **@frontmcp/uipack** - React-free bundling, build tools, HTML components
+- **@frontmcp/uipack** - React-free bundling, build tools, theme, platform adapters
 - **@frontmcp/sdk** - Core FrontMCP SDK
 - **@frontmcp/testing** - E2E testing utilities

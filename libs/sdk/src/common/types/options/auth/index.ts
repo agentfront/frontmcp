@@ -1,0 +1,136 @@
+// common/types/options/auth/index.ts
+// Barrel export for auth options
+
+// ============================================
+// EXPLICIT INTERFACES (for better autocomplete)
+// ============================================
+export type {
+  // Shared config interfaces
+  PublicAccessConfig,
+  LocalSigningConfig,
+  RemoteProviderConfig,
+  TokenStorageConfig,
+  TokenStorageMemory,
+  TokenStorageRedis,
+  TokenRefreshConfig,
+  SkippedAppBehavior,
+  ConsentConfig,
+  IncrementalAuthConfig,
+  TransportRecreationConfig,
+  TransportConfig,
+  // Auth mode interfaces
+  PublicAuthOptionsInterface,
+  TransparentAuthOptionsInterface,
+  OrchestratedLocalOptionsInterface,
+  OrchestratedRemoteOptionsInterface,
+  OrchestratedAuthOptionsInterface,
+  AuthOptionsInterface,
+  AuthMode,
+  OrchestratedType,
+} from './auth.interfaces';
+
+// ============================================
+// SHARED SCHEMAS & TYPES
+// ============================================
+export {
+  // Schemas
+  publicAccessConfigSchema,
+  localSigningConfigSchema,
+  remoteProviderConfigSchema,
+  tokenStorageConfigSchema,
+  tokenRefreshConfigSchema,
+  skippedAppBehaviorSchema,
+  consentConfigSchema,
+  incrementalAuthConfigSchema,
+} from './shared.schemas';
+
+// Re-export shared schema types (these are the Zod-inferred types)
+export type {
+  PublicAccessConfig as PublicAccessConfigZod,
+  PublicAccessConfigInput,
+  LocalSigningConfig as LocalSigningConfigZod,
+  LocalSigningConfigInput,
+  RemoteProviderConfig as RemoteProviderConfigZod,
+  RemoteProviderConfigInput,
+  TokenStorageConfig as TokenStorageConfigZod,
+  TokenStorageConfigInput,
+  TokenRefreshConfig as TokenRefreshConfigZod,
+  TokenRefreshConfigInput,
+  SkippedAppBehavior as SkippedAppBehaviorZod,
+  ConsentConfig as ConsentConfigZod,
+  ConsentConfigInput,
+  IncrementalAuthConfig as IncrementalAuthConfigZod,
+  IncrementalAuthConfigInput,
+  RedisConfig,
+} from './shared.schemas';
+
+// ============================================
+// PUBLIC MODE SCHEMA
+// ============================================
+export { publicAuthOptionsSchema } from './public.schema';
+export type { PublicAuthOptions, PublicAuthOptionsInput } from './public.schema';
+
+// ============================================
+// TRANSPARENT MODE SCHEMA
+// ============================================
+export { transparentAuthOptionsSchema } from './transparent.schema';
+export type { TransparentAuthOptions, TransparentAuthOptionsInput } from './transparent.schema';
+
+// ============================================
+// ORCHESTRATED MODE SCHEMAS
+// ============================================
+export {
+  orchestratedLocalSchema,
+  orchestratedRemoteSchema,
+  orchestratedAuthOptionsSchema,
+} from './orchestrated.schema';
+export type {
+  OrchestratedLocalOptions,
+  OrchestratedLocalOptionsInput,
+  OrchestratedRemoteOptions,
+  OrchestratedRemoteOptionsInput,
+  OrchestratedAuthOptions,
+  OrchestratedAuthOptionsInput,
+  OrchestratedType as OrchestratedTypeZod,
+} from './orchestrated.schema';
+
+// ============================================
+// UNIFIED AUTH SCHEMA
+// ============================================
+export { authOptionsSchema } from './auth.schema';
+export type { AuthOptions, AuthOptionsInput, AuthMode as AuthModeZod } from './auth.schema';
+
+// ============================================
+// APP-LEVEL AUTH SCHEMA
+// ============================================
+export { appAuthOptionsSchema } from './app-auth.schema';
+export type { AppAuthOptions, AppAuthOptionsInput } from './app-auth.schema';
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+export {
+  parseAuthOptions,
+  isPublicMode,
+  isTransparentMode,
+  isOrchestratedMode,
+  isOrchestratedLocal,
+  isOrchestratedRemote,
+  allowsPublicAccess,
+} from './auth.utils';
+
+// ============================================
+// DEPRECATED TRANSPORT SCHEMAS
+// (To be removed in v1.0.0)
+// ============================================
+export {
+  transportConfigSchema,
+  transportRecreationConfigSchema,
+  DEFAULT_TRANSPORT_CONFIG,
+} from './transport.deprecated';
+export type {
+  TransportConfig as TransportConfigZod,
+  TransportConfigInput,
+  TransportRecreationConfig as TransportRecreationConfigZod,
+  TransportRecreationConfigInput,
+} from './transport.deprecated';

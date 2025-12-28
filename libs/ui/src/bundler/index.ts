@@ -64,9 +64,18 @@ export type {
   TransformContext,
   // Static HTML types
   TargetPlatform,
+  ConcretePlatform,
   StaticHTMLExternalConfig,
   StaticHTMLOptions,
   StaticHTMLResult,
+  // Multi-platform build types
+  MultiPlatformBuildOptions,
+  PlatformBuildResult,
+  MultiPlatformBuildResult,
+  // Build mode types
+  BuildMode,
+  DynamicModeOptions,
+  HybridModeOptions,
 } from './types';
 
 export {
@@ -78,32 +87,43 @@ export {
   DEFAULT_STATIC_HTML_OPTIONS,
   STATIC_HTML_CDN,
   getCdnTypeForPlatform,
+  // Multi-platform build constants
+  ALL_PLATFORMS,
+  // Build mode constants
+  HYBRID_DATA_PLACEHOLDER,
+  HYBRID_INPUT_PLACEHOLDER,
 } from './types';
 
 // ============================================
-// Cache Utilities
+// Cache Utilities (re-exported from @frontmcp/uipack)
 // ============================================
 
-export { BundlerCache, hashContent, createCacheKey } from './cache';
+export { BundlerCache, hashContent, createCacheKey } from '@frontmcp/uipack/bundler';
 
-export type { CacheOptions, CacheStats } from './cache';
-
-// ============================================
-// Security Utilities
-// ============================================
-
-export { validateSource, validateImports, validateSize, mergePolicy, throwOnViolations } from './sandbox/policy';
+export type { CacheOptions, CacheStats } from '@frontmcp/uipack/bundler';
 
 // ============================================
-// Execution Utilities
+// Security Utilities (re-exported from @frontmcp/uipack)
 // ============================================
 
-export { executeCode, executeDefault, isExecutionError } from './sandbox/executor';
-
-export type { ExecutionContext, ExecutionResult } from './sandbox/executor';
+export {
+  validateSource,
+  validateImports,
+  validateSize,
+  mergePolicy,
+  throwOnViolations,
+} from '@frontmcp/uipack/bundler';
 
 // ============================================
-// File-Based Component Caching
+// Execution Utilities (re-exported from @frontmcp/uipack)
+// ============================================
+
+export { executeCode, executeDefault, isExecutionError } from '@frontmcp/uipack/bundler';
+
+export type { ExecutionContext, ExecutionResult } from '@frontmcp/uipack/bundler';
+
+// ============================================
+// File-Based Component Caching (re-exported from @frontmcp/uipack)
 // ============================================
 
 export {
@@ -140,4 +160,4 @@ export {
   createRedisBuilder,
   type ComponentBuildOptions,
   type ComponentBuildResult,
-} from './file-cache';
+} from '@frontmcp/uipack/bundler';

@@ -6,6 +6,7 @@
 
 import {
   typeFetchErrorCodeSchema,
+  typeFileSchema,
   typeFetchResultSchema,
   typeFetchErrorSchema,
   typeFetchBatchRequestSchema,
@@ -45,6 +46,64 @@ describe('typeFetchErrorCodeSchema', () => {
 });
 
 // ============================================
+// Type File Schema Tests
+// ============================================
+
+describe('typeFileSchema', () => {
+  const validFile = {
+    path: 'node_modules/react/index.d.ts',
+    url: 'https://esm.sh/v135/react@18.2.0/index.d.ts',
+    content: 'declare const React: any;',
+  };
+
+  it('should accept valid type file', () => {
+    const result = typeFileSchema.parse(validFile);
+    expect(result.path).toBe('node_modules/react/index.d.ts');
+    expect(result.url).toBe('https://esm.sh/v135/react@18.2.0/index.d.ts');
+    expect(result.content).toBe('declare const React: any;');
+  });
+
+  it('should accept empty content', () => {
+    const result = typeFileSchema.parse({
+      ...validFile,
+      content: '',
+    });
+    expect(result.content).toBe('');
+  });
+
+  it('should reject missing path', () => {
+    const { path, ...withoutPath } = validFile;
+    expect(() => typeFileSchema.parse(withoutPath)).toThrow();
+  });
+
+  it('should reject empty path', () => {
+    expect(() =>
+      typeFileSchema.parse({
+        ...validFile,
+        path: '',
+      }),
+    ).toThrow();
+  });
+
+  it('should accept empty URL for synthesized alias files', () => {
+    const result = typeFileSchema.parse({
+      ...validFile,
+      url: '',
+    });
+    expect(result.url).toBe('');
+  });
+
+  it('should reject extra fields with strict mode', () => {
+    expect(() =>
+      typeFileSchema.parse({
+        ...validFile,
+        extraField: 'should fail',
+      }),
+    ).toThrow();
+  });
+});
+
+// ============================================
 // Type Fetch Result Schema Tests
 // ============================================
 
@@ -54,6 +113,13 @@ describe('typeFetchResultSchema', () => {
     resolvedPackage: 'react',
     version: '18.2.0',
     content: 'declare const React: any;',
+    files: [
+      {
+        path: 'node_modules/react/index.d.ts',
+        url: 'https://esm.sh/react.d.ts',
+        content: 'declare const React: any;',
+      },
+    ],
     fetchedUrls: ['https://esm.sh/react.d.ts'],
     fetchedAt: '2024-01-01T00:00:00.000Z',
   };
@@ -61,6 +127,22 @@ describe('typeFetchResultSchema', () => {
   it('should accept valid result', () => {
     const result = typeFetchResultSchema.parse(validResult);
     expect(result.specifier).toBe('react');
+  });
+
+  it('should accept result with optional subpath field', () => {
+    const resultWithSubpath = {
+      ...validResult,
+      specifier: '@frontmcp/ui/react',
+      resolvedPackage: '@frontmcp/ui',
+      subpath: 'react',
+    };
+    const result = typeFetchResultSchema.parse(resultWithSubpath);
+    expect(result.subpath).toBe('react');
+  });
+
+  it('should accept result without subpath field', () => {
+    const result = typeFetchResultSchema.parse(validResult);
+    expect(result.subpath).toBeUndefined();
   });
 
   it('should reject missing fields', () => {
@@ -236,6 +318,13 @@ describe('typeFetchBatchResultSchema', () => {
           resolvedPackage: 'react',
           version: '18.2.0',
           content: 'declare const React: any;',
+          files: [
+            {
+              path: 'node_modules/react/index.d.ts',
+              url: 'https://esm.sh/react.d.ts',
+              content: 'declare const React: any;',
+            },
+          ],
           fetchedUrls: ['https://esm.sh/react.d.ts'],
           fetchedAt: '2024-01-01T00:00:00.000Z',
         },
@@ -280,6 +369,13 @@ describe('typeCacheEntrySchema', () => {
         resolvedPackage: 'lodash',
         version: '4.17.21',
         content: 'declare function debounce(): void;',
+        files: [
+          {
+            path: 'node_modules/lodash/index.d.ts',
+            url: 'https://esm.sh/lodash.d.ts',
+            content: 'declare function debounce(): void;',
+          },
+        ],
         fetchedUrls: ['https://esm.sh/lodash.d.ts'],
         fetchedAt: '2024-01-01T00:00:00.000Z',
       },
@@ -299,6 +395,7 @@ describe('typeCacheEntrySchema', () => {
           resolvedPackage: 'lodash',
           version: '4.17.21',
           content: '',
+          files: [],
           fetchedUrls: [],
           fetchedAt: '2024-01-01T00:00:00.000Z',
         },

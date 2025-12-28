@@ -50,6 +50,14 @@
       "options": {
         "command": "npm publish libs/cli/dist --access public --registry=https://registry.npmjs.org/"
       }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

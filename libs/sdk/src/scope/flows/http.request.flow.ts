@@ -204,9 +204,21 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       const { request } = this.rawInput;
       this.logger.verbose(`[${this.requestId}] router: check request decision`);
 
-      // Use transport config directly from auth (already parsed with defaults by Zod)
-      const transport = this.scope.auth.transport;
+      // Use transport config from scope metadata (top-level transport config)
+      // Fall back to auth.transport for backwards compatibility with deprecated config
+      const transport = this.scope.metadata.transport ?? this.scope.auth.transport;
+      this.logger.debug(`[${this.requestId}] transport config`, {
+        enableLegacySSE: transport.enableLegacySSE,
+        enableStreamableHttp: transport.enableStreamableHttp,
+        path: request.path,
+        accept: request.headers?.['accept'],
+      });
       const decision = decideIntent(request, { ...transport, tolerateMissingAccept: true });
+      this.logger.debug(`[${this.requestId}] decision result`, {
+        intent: decision.intent,
+        reasons: decision.reasons,
+        debug: decision.debug,
+      });
 
       // Handle DELETE method immediately - it's for session termination
       // regardless of what protocol the session was created with

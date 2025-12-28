@@ -1,6 +1,6 @@
 import { AuthenticatedServerRequest } from '../../server/server.types';
 import { TypedElicitResult } from '../transport.types';
-import { SSEServerTransport } from '../legacy/legacy.sse.tranporter';
+import { RecreateableSSEServerTransport } from './sse-transport';
 import { LocalTransportAdapter } from './transport.local.adapter';
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodType } from 'zod';
@@ -8,21 +8,50 @@ import { toJSONSchema } from 'zod/v4';
 import { rpcRequest } from '../transport.error';
 import { ServerResponse } from '../../common';
 
-export class TransportSSEAdapter extends LocalTransportAdapter<SSEServerTransport> {
+export class TransportSSEAdapter extends LocalTransportAdapter<RecreateableSSEServerTransport> {
   sessionId: string;
 
-  override createTransport(sessionId: string, res: ServerResponse): SSEServerTransport {
-    this.sessionId = sessionId;
-    this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
-    const scopePath = this.scope.fullPath;
-    const transport = new SSEServerTransport(`${scopePath}/message`, res, {
-      sessionId: sessionId,
-    });
+  /**
+   * Configures common error and close handlers for SSE transports.
+   */
+  private configureTransportHandlers(transport: RecreateableSSEServerTransport): void {
     transport.onerror = (error) => {
       // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
       console.error('SSE error:', error instanceof Error ? error.message : 'Unknown error');
     };
     transport.onclose = this.destroy.bind(this);
+  }
+
+  override createTransport(sessionId: string, res: ServerResponse): RecreateableSSEServerTransport {
+    this.sessionId = sessionId;
+    this.logger.info(`new transport session: ${sessionId.slice(0, 40)}`);
+    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
+      sessionId: sessionId,
+    });
+    this.configureTransportHandlers(transport);
+    return transport;
+  }
+
+  /**
+   * Recreates a transport with preserved session state.
+   * Use this when restoring a session from Redis or other storage.
+   *
+   * @param sessionId - The session ID to restore
+   * @param res - The new response stream for SSE
+   * @param lastEventId - The last event ID that was sent (for reconnection support)
+   */
+  createTransportFromSession(
+    sessionId: string,
+    res: ServerResponse,
+    lastEventId?: number,
+  ): RecreateableSSEServerTransport {
+    this.sessionId = sessionId;
+    this.logger.info(`recreating transport session: ${sessionId.slice(0, 40)}, lastEventId: ${lastEventId ?? 'none'}`);
+    const transport = new RecreateableSSEServerTransport(`${this.scope.fullPath}/message`, res, {
+      sessionId: sessionId,
+      initialEventId: lastEventId,
+    });
+    this.configureTransportHandlers(transport);
     return transport;
   }
 

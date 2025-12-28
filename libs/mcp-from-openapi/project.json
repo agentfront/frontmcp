@@ -5,19 +5,53 @@
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:independent"],
   "targets": {
-    "build-tsc": {
-      "executor": "@nx/js:tsc",
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "libs/mcp-from-openapi/dist",
         "main": "libs/mcp-from-openapi/src/index.ts",
         "tsConfig": "libs/mcp-from-openapi/tsconfig.lib.json",
-        "assets": ["libs/mcp-from-openapi/README.md", "libs/mcp-from-openapi/CHANGELOG.md", "LICENSE"]
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/mcp-from-openapi/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": [
+          "libs/mcp-from-openapi/README.md",
+          "libs/mcp-from-openapi/CHANGELOG.md",
+          "LICENSE",
+          "libs/mcp-from-openapi/package.json"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": ["@apidevtools/json-schema-ref-parser", "openapi-types", "yaml", "zod"]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/mcp-from-openapi/dist/esm",
+        "main": "libs/mcp-from-openapi/src/index.ts",
+        "tsConfig": "libs/mcp-from-openapi/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "external": ["@apidevtools/json-schema-ref-parser", "openapi-types", "yaml", "zod"]
+        }
       }
     },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-tsc"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/mcp-from-openapi/dist/package.json"
       }
@@ -27,6 +61,14 @@
       "dependsOn": ["build"],
       "options": {
         "command": "npm publish libs/mcp-from-openapi/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
       }
     }
   }

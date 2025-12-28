@@ -161,6 +161,14 @@ export interface StoredSession {
   createdAt: number;
   /** Last accessed timestamp */
   lastAccessedAt: number;
+  /** Whether the MCP protocol initialization handshake was completed */
+  initialized?: boolean;
+  /**
+   * Absolute maximum lifetime timestamp (epoch ms).
+   * Session is invalid after this time regardless of access patterns.
+   * This prevents indefinite session extension via sliding expiration.
+   */
+  maxLifetimeAt?: number;
 }
 
 /**
@@ -233,6 +241,52 @@ export interface RedisConfig {
   keyPrefix?: string;
   /** Default TTL in milliseconds for session extension on access (sliding expiration) */
   defaultTtlMs?: number;
+}
+
+/**
+ * Security configuration options for session stores.
+ * These options enable additional security hardening features.
+ */
+export interface SessionSecurityConfig {
+  /**
+   * Default maximum session lifetime in milliseconds.
+   * Sessions will be invalidated after this time regardless of access.
+   * Set to prevent indefinite session extension via sliding expiration.
+   * @example 86400000 // 24 hours
+   */
+  maxLifetimeMs?: number;
+
+  /**
+   * Enable HMAC signing for stored sessions.
+   * When enabled, sessions are signed to detect tampering.
+   * Requires MCP_SESSION_SECRET environment variable or signing.secret config.
+   * @default false
+   */
+  enableSigning?: boolean;
+
+  /**
+   * Secret key for HMAC signing.
+   * If not provided, falls back to MCP_SESSION_SECRET environment variable.
+   */
+  signingSecret?: string;
+
+  /**
+   * Enable rate limiting for session lookups.
+   * Protects against session enumeration attacks.
+   * @default false
+   */
+  enableRateLimiting?: boolean;
+
+  /**
+   * Rate limiting configuration.
+   * Only used if enableRateLimiting is true.
+   */
+  rateLimiting?: {
+    /** Time window in milliseconds. @default 60000 */
+    windowMs?: number;
+    /** Maximum requests per window. @default 100 */
+    maxRequests?: number;
+  };
 }
 
 // ============================================
@@ -309,11 +363,6 @@ export const sessionJwtPayloadSchema = z.object({
   exp: z.number().optional(),
 });
 
-export const statelessSessionJwtPayloadSchema = sessionJwtPayloadSchema.extend({
-  state: z.string().optional(),
-  tokens: z.string().optional(),
-});
-
 export const encryptedBlobSchema = z.object({
   alg: z.literal('A256GCM'),
   kid: z.string().optional(),
@@ -330,6 +379,8 @@ export const storedSessionSchema = z.object({
   tokens: z.record(z.string(), encryptedBlobSchema).optional(),
   createdAt: z.number(),
   lastAccessedAt: z.number(),
+  initialized: z.boolean().optional(),
+  maxLifetimeAt: z.number().optional(),
 });
 
 export const redisConfigSchema = z.object({
@@ -341,17 +392,3 @@ export const redisConfigSchema = z.object({
   keyPrefix: z.string().optional().default('mcp:session:'),
   defaultTtlMs: z.number().int().positive().optional().default(3600000), // 1 hour default
 });
-
-// Stateful storage options (discriminated by store type)
-const statefulStorageSchema = z.discriminatedUnion('store', [
-  z.object({ store: z.literal('memory') }),
-  z.object({ store: z.literal('redis'), config: redisConfigSchema }),
-]);
-
-// Session storage config using union instead of discriminatedUnion
-// to avoid duplicate mode values
-export const sessionStorageConfigSchema = z.union([
-  z.object({ mode: z.literal('stateless') }),
-  z.object({ mode: z.literal('stateful') }).merge(statefulStorageSchema.options[0]),
-  z.object({ mode: z.literal('stateful') }).merge(statefulStorageSchema.options[1]),
-]);

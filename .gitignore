@@ -61,4 +61,7 @@ docs/docs.backup.json
 .github/codex/
 
 .npmrc
-/libs/ui/.script.local
+/.npmrc.verdaccio
+
+**/.script.local
+**/tsconfig.lib.tsbuildinfo

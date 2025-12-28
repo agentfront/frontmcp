@@ -27,6 +27,12 @@ export class InMemorySessionStore implements SessionStore {
     const stored = this.sessions.get(sessionId);
     if (!stored) return null;
 
+    // Check absolute maximum lifetime (prevents indefinite session extension)
+    if (stored.maxLifetimeAt && stored.maxLifetimeAt < Date.now()) {
+      this.sessions.delete(sessionId);
+      return null;
+    }
+
     // Check expiration
     if (stored.session.expiresAt && stored.session.expiresAt < Date.now()) {
       this.sessions.delete(sessionId);
@@ -53,6 +59,12 @@ export class InMemorySessionStore implements SessionStore {
     const stored = this.sessions.get(sessionId);
     if (!stored) return false;
 
+    // Check absolute maximum lifetime
+    if (stored.maxLifetimeAt && stored.maxLifetimeAt < Date.now()) {
+      this.sessions.delete(sessionId);
+      return false;
+    }
+
     // Check expiration
     if (stored.session.expiresAt && stored.session.expiresAt < Date.now()) {
       this.sessions.delete(sessionId);
@@ -72,6 +84,13 @@ export class InMemorySessionStore implements SessionStore {
     const now = Date.now();
     let cleaned = 0;
     for (const [id, stored] of this.sessions) {
+      // Check max lifetime
+      if (stored.maxLifetimeAt && stored.maxLifetimeAt < now) {
+        this.sessions.delete(id);
+        cleaned++;
+        continue;
+      }
+      // Check session expiration
       if (stored.session.expiresAt && stored.session.expiresAt < now) {
         this.sessions.delete(id);
         cleaned++;

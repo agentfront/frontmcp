@@ -64,17 +64,61 @@ try {
   process.exit(1);
 }
 
-// Also handle ESM subfolder - it only needs { "type": "module" }
-const distDir = path.dirname(pkgPath);
-const esmPkgPath = path.join(distDir, 'esm', 'package.json');
+// Generate ESM package.json with type:module and adjusted paths
+const esmDir = path.join(path.dirname(pkgPath), 'esm');
+if (fs.existsSync(esmDir)) {
+  const esmPkg = JSON.parse(JSON.stringify(pkg)); // Deep clone
 
-if (fs.existsSync(esmPkgPath)) {
+  // Add type: module for ESM
+  esmPkg.type = 'module';
+
+  // Adjust paths: ESM files stay relative (./), CJS/types go up one level (../)
+  const adjustForEsm = (v) => {
+    if (typeof v !== 'string') return v;
+    // ESM files (.mjs) stay relative - they're in this folder
+    if (v.endsWith('.mjs')) {
+      return v.replace('./esm/', './');
+    }
+    // CJS/types files go up one level to parent dist folder
+    if (v.startsWith('./')) {
+      return '..' + v.slice(1);
+    }
+    return v;
+  };
+
+  // Fix top-level fields
+  if (esmPkg.main) esmPkg.main = adjustForEsm(esmPkg.main);
+  if (esmPkg.types) esmPkg.types = adjustForEsm(esmPkg.types);
+  if (esmPkg.module) esmPkg.module = adjustForEsm(esmPkg.module);
+
+  // Fix exports map recursively
+  const walkEsm = (v) => {
+    if (Array.isArray(v)) return v.map(walkEsm);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const [k, val] of Object.entries(v)) {
+        out[k] = walkEsm(val);
+      }
+      return out;
+    }
+    return adjustForEsm(v);
+  };
+
+  if (esmPkg.exports) {
+    esmPkg.exports = walkEsm(esmPkg.exports);
+  }
+
+  // Fix bin paths if present
+  if (esmPkg.bin) {
+    esmPkg.bin = walkEsm(esmPkg.bin);
+  }
+
+  const esmPkgPath = path.join(esmDir, 'package.json');
   try {
-    const esmPkg = { type: 'module' };
     fs.writeFileSync(esmPkgPath, JSON.stringify(esmPkg, null, 2) + '\n');
-    console.log(`✅ Rewrote ${esmPkgPath}: set { "type": "module" } for ESM output.`);
+    console.log(`✅ Generated ${esmPkgPath} with type:module and adjusted paths.`);
   } catch (err) {
-    console.error(`❌ Error writing ${esmPkgPath}:`, err.message);
-    // Non-fatal - continue even if esm package.json update fails
+    console.error(`❌ Error writing ESM package.json:`, err.message);
+    process.exit(1);
   }
 }

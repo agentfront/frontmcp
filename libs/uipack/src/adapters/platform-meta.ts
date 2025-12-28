@@ -85,6 +85,29 @@ export interface UIMetadata {
   // Claude-specific fields
   /** Claude: Widget description */
   'claude/widgetDescription'?: string;
+  /** Claude: Display mode preference */
+  'claude/displayMode'?: string;
+  /** Claude: Whether widget can invoke tools (informational) */
+  'claude/widgetAccessible'?: boolean;
+  /** Claude: Whether to show border around UI */
+  'claude/prefersBorder'?: boolean;
+
+  // FrontMCP-specific fields (generic platform)
+  /** FrontMCP: Whether widget can invoke tools */
+  'frontmcp/widgetAccessible'?: boolean;
+  /** FrontMCP: CSP configuration */
+  'frontmcp/widgetCSP'?: {
+    connectDomains?: string[];
+    resourceDomains?: string[];
+  };
+  /** FrontMCP: Display mode preference */
+  'frontmcp/displayMode'?: string;
+  /** FrontMCP: Widget description */
+  'frontmcp/widgetDescription'?: string;
+  /** FrontMCP: Whether to show border around UI */
+  'frontmcp/prefersBorder'?: boolean;
+  /** FrontMCP: Dedicated sandbox domain */
+  'frontmcp/domain'?: string;
 
   // Gemini-specific fields
   /** Gemini: Widget description */
@@ -278,14 +301,36 @@ export function buildOpenAICSP(csp: UIContentSecurityPolicy): {
 /**
  * Build Claude-specific metadata.
  * Claude widgets are network-blocked, so we don't include URI references.
+ * Uses claude/* namespace for Claude-specific fields.
  */
 function buildClaudeMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
   // Claude uses inline HTML only (network-blocked)
   // Don't include resource URI since Claude can't fetch it
 
+  // Widget description
   if (uiConfig.widgetDescription) {
     meta['claude/widgetDescription'] = uiConfig.widgetDescription;
   }
+
+  // Display mode preference (Claude may respect this for Artifacts)
+  if (uiConfig.displayMode) {
+    meta['claude/displayMode'] = uiConfig.displayMode;
+  }
+
+  // Widget accessibility hint (informational for Claude)
+  // Note: Claude's Artifact system may not support tool callbacks,
+  // but we include this for consistency and future compatibility
+  if (uiConfig.widgetAccessible) {
+    meta['claude/widgetAccessible'] = true;
+  }
+
+  // Border preference (useful for Artifacts visual styling)
+  if (uiConfig.prefersBorder !== undefined) {
+    meta['claude/prefersBorder'] = uiConfig.prefersBorder;
+  }
+
+  // Note: We don't include CSP for Claude since it's network-blocked
+  // and CSP policies aren't applicable in the sandboxed iframe
 
   return meta;
 }
@@ -317,16 +362,60 @@ function buildIDEMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, 
 }
 
 /**
- * Build generic MCP client metadata.
- * For inline mode, HTML is embedded directly in _meta['ui/html'].
+ * Build FrontMCP CSP format (camelCase like MCP Apps spec).
+ * Used for generic-mcp platform metadata.
  */
-function buildGenericMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
-  if (uiConfig.widgetAccessible) {
-    meta['openai/widgetAccessible'] = true;
+export function buildFrontMCPCSP(csp: UIContentSecurityPolicy): {
+  connectDomains?: string[];
+  resourceDomains?: string[];
+} {
+  const result: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+
+  if (csp.connectDomains?.length) {
+    result.connectDomains = csp.connectDomains;
   }
 
+  if (csp.resourceDomains?.length) {
+    result.resourceDomains = csp.resourceDomains;
+  }
+
+  return result;
+}
+
+/**
+ * Build generic MCP client metadata.
+ * Uses frontmcp/* namespace for all fields.
+ * For inline mode, HTML is embedded directly in _meta['frontmcp/html'] and _meta['ui/html'].
+ */
+function buildGenericMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
+  // Widget accessibility (can widget invoke tools?)
+  if (uiConfig.widgetAccessible) {
+    meta['frontmcp/widgetAccessible'] = true;
+  }
+
+  // Content Security Policy
   if (uiConfig.csp) {
-    meta['openai/widgetCSP'] = buildOpenAICSP(uiConfig.csp);
+    meta['frontmcp/widgetCSP'] = buildFrontMCPCSP(uiConfig.csp);
+  }
+
+  // Display mode preference
+  if (uiConfig.displayMode) {
+    meta['frontmcp/displayMode'] = uiConfig.displayMode;
+  }
+
+  // Widget description
+  if (uiConfig.widgetDescription) {
+    meta['frontmcp/widgetDescription'] = uiConfig.widgetDescription;
+  }
+
+  // Border preference
+  if (uiConfig.prefersBorder !== undefined) {
+    meta['frontmcp/prefersBorder'] = uiConfig.prefersBorder;
+  }
+
+  // Sandbox domain
+  if (uiConfig.sandboxDomain) {
+    meta['frontmcp/domain'] = uiConfig.sandboxDomain;
   }
 
   return meta;

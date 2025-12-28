@@ -140,5 +140,30 @@ describe('Theme System', () => {
       const css = buildThemeCss(theme);
       expect(css).toContain('--my-custom: #abcdef');
     });
+
+    it('should generate opacity variants for semantic colors', () => {
+      const css = buildThemeCss(DEFAULT_THEME);
+      // Check that opacity variants are generated using color-mix
+      expect(css).toContain('--color-primary-10');
+      expect(css).toContain('--color-primary-30');
+      expect(css).toContain('--color-success-10');
+      expect(css).toContain('--color-danger-10');
+      expect(css).toContain('color-mix(in oklch');
+    });
+
+    it('should generate hover variants for brand colors', () => {
+      const css = buildThemeCss(DEFAULT_THEME);
+      // Check that hover variants are generated for primary and secondary
+      expect(css).toContain('--color-primary-hover');
+      expect(css).toContain('--color-secondary-hover');
+    });
+
+    it('should generate all opacity levels (10, 20, 30, 50, 70, 90)', () => {
+      const css = buildThemeCss(DEFAULT_THEME);
+      const opacityLevels = [10, 20, 30, 50, 70, 90];
+      for (const level of opacityLevels) {
+        expect(css).toContain(`--color-primary-${level}`);
+      }
+    });
   });
 });

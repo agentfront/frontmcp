@@ -219,7 +219,8 @@ export function generateUMDShim(dependencies: ResolvedDependency[], options: UMD
   }
 
   const entries = depsWithGlobals.map((dep) => {
-    const global = dep.global!;
+    // global is guaranteed to exist due to filter on line 215
+    const global = dep.global;
     return `'${dep.packageName}': { default: window.${global}, ...window.${global} }`;
   });
 

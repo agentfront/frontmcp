@@ -3,9 +3,7 @@ import { AuthenticatedServerRequest } from '../server/server.types';
 import { TransportSSEAdapter } from './adapters/transport.sse.adapter';
 import { TransportStreamableHttpAdapter } from './adapters/transport.streamable-http.adapter';
 import { rpcError } from './transport.error';
-import { LocalTransportAdapter } from './adapters/transport.local.adapter';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from './legacy/legacy.sse.tranporter';
+import { LocalTransportAdapter, SupportedTransport } from './adapters/transport.local.adapter';
 import { ServerResponse } from '../common';
 import { Scope } from '../scope';
 
@@ -14,7 +12,7 @@ export class LocalTransporter implements Transporter {
   readonly tokenHash: string;
   readonly sessionId: string;
 
-  private adapter: LocalTransportAdapter<StreamableHTTPServerTransport | SSEServerTransport>;
+  private adapter: LocalTransportAdapter<SupportedTransport>;
 
   constructor(scope: Scope, key: TransportKey, res: ServerResponse, private readonly onDispose?: () => void) {
     this.type = key.type;
@@ -66,6 +64,15 @@ export class LocalTransporter implements Transporter {
       console.error('MCP POST error:', err instanceof Error ? err.message : 'Unknown error');
       res.status(500).json(rpcError('Internal error'));
     }
+  }
+
+  /**
+   * Marks this transport as pre-initialized for session recreation.
+   * This is needed when recreating a transport from Redis because the
+   * original initialize request was processed by a different transport instance.
+   */
+  markAsInitialized(): void {
+    this.adapter.markAsInitialized();
   }
 
   async destroy(reason: string): Promise<void> {

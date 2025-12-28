@@ -49,8 +49,10 @@ async function loadSwcTransform(): Promise<typeof swcTransform> {
   }
 
   try {
-    // Dynamic import to avoid requiring @swc/core at startup
-    const swc = await import('@swc/core');
+    // Dynamic import with webpackIgnore to prevent webpack from bundling @swc/core.
+    // Note: This directive is webpack-specific. Other bundlers (esbuild, Rollup)
+    // require external dependency configuration in their config files.
+    const swc = await import(/* webpackIgnore: true */ '@swc/core');
     swcTransform = swc.transform;
     return swcTransform;
   } catch {
@@ -156,98 +158,29 @@ export async function isSwcAvailable(): Promise<boolean> {
 /**
  * Execute transpiled JavaScript code and extract the component.
  *
- * Creates a sandboxed environment with React available,
- * executes the code, and returns the exported component.
+ * NOTE: This function has been moved to @frontmcp/ui/renderers.
+ * Use executeTranspiledCode from @frontmcp/ui instead.
  *
- * @param code - Transpiled JavaScript code
- * @param context - Additional context to inject
- * @returns The exported component or default export
- *
- * @example
- * ```typescript
- * const code = `
- *   "use strict";
- *   Object.defineProperty(exports, "__esModule", { value: true });
- *   const jsx_runtime = require("react/jsx-runtime");
- *   function Widget(props) {
- *     return jsx_runtime.jsx("div", { children: props.output.name });
- *   }
- *   exports.default = Widget;
- * `;
- *
- * const Component = await executeTranspiledCode(code);
- * // Component is now a usable React component function
- * ```
+ * @deprecated Use executeTranspiledCode from @frontmcp/ui/renderers
  */
-export async function executeTranspiledCode(
-  code: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context: Record<string, any> = {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
-  // Load React dynamically
-  let React;
-  let jsxRuntime;
-
-  try {
-    React = await import('react');
-    jsxRuntime = await import('react/jsx-runtime');
-  } catch {
-    throw new Error('React is required for JSX templates. Install react: npm install react react-dom');
-  }
-
-  // Create module-like exports object
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const exports: Record<string, any> = {};
-  const module = { exports };
-
-  // Create require function for the sandboxed code
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const require = (id: string): any => {
-    switch (id) {
-      case 'react':
-        return React;
-      case 'react/jsx-runtime':
-        return jsxRuntime;
-      case 'react/jsx-dev-runtime':
-        return jsxRuntime;
-      default:
-        // Check if it's in the context
-        if (context[id]) {
-          return context[id];
-        }
-        throw new Error(`Module '${id}' not available in JSX template context`);
-    }
-  };
-
-  // Execute the code in a function scope
-  try {
-    const fn = new Function('exports', 'require', 'module', '__filename', '__dirname', 'React', 'context', code);
-
-    fn(exports, require, module, 'template.js', '/', React, context);
-
-    // Return the default export or first export
-    return module.exports['default'] || module.exports[Object.keys(module.exports)[0]] || module.exports;
-  } catch (error) {
-    throw new Error(`Failed to execute transpiled JSX: ${error instanceof Error ? error.message : String(error)}`);
-  }
+export async function executeTranspiledCode(_code: string, _context: Record<string, unknown> = {}): Promise<never> {
+  throw new Error(
+    'executeTranspiledCode has been moved to @frontmcp/ui/renderers. ' +
+      'Install @frontmcp/ui and import from there: import { executeTranspiledCode } from "@frontmcp/ui/renderers"',
+  );
 }
 
 /**
  * Transpile and execute a JSX string, returning the component.
  *
- * Convenience function that combines transpileJsx and executeTranspiledCode.
+ * NOTE: This function has been moved to @frontmcp/ui/renderers.
+ * Use transpileAndExecute from @frontmcp/ui instead.
  *
- * @param source - JSX/TSX source code
- * @param context - Additional context for execution
- * @returns The component function
+ * @deprecated Use transpileAndExecute from @frontmcp/ui/renderers
  */
-export async function transpileAndExecute(
-  source: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context: Record<string, any> = {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
-  const result = await transpileJsx(source);
-  return executeTranspiledCode(result.code, context);
+export async function transpileAndExecute(_source: string, _context: Record<string, unknown> = {}): Promise<never> {
+  throw new Error(
+    'transpileAndExecute has been moved to @frontmcp/ui/renderers. ' +
+      'Install @frontmcp/ui and import from there: import { transpileAndExecute } from "@frontmcp/ui/renderers"',
+  );
 }
