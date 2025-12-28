@@ -1,22 +1,14 @@
 import 'reflect-metadata';
-import {
-  AppType,
-  FrontMcpConfigType,
-  ScopeEntry,
-  ScopeRecord,
-  ScopeKind,
-  Token,
-} from '../common';
-import {RegistryAbstract, RegistryBuildMapResult} from '../regsitry';
+import { AppType, FrontMcpConfigType, ScopeEntry, ScopeRecord, ScopeKind, Token } from '../common';
+import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
-import {FrontMcpConfig} from '../front-mcp/front-mcp.tokens';
-import {normalizeApp} from '../app/app.utils';
-import {normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps} from './scope.utils';
-import {tokenName} from '../utils/token.utils';
-import {Scope} from "./scope.instance";
+import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import { normalizeApp } from '../app/app.utils';
+import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
+import { tokenName } from '../utils/token.utils';
+import { Scope } from './scope.instance';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {
-
   constructor(globalProviders: ProviderRegistry) {
     const metadata = globalProviders.get(FrontMcpConfig);
     super('ScopeRegistry', globalProviders, metadata);
@@ -88,7 +80,6 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
   }
 
   protected async initialize() {
-
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
 
@@ -109,4 +100,11 @@ export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, Fro
     }
   }
 
+  /**
+   * Get all initialized scope instances.
+   * Useful for graph visualization and introspection.
+   */
+  getScopes(): ScopeEntry[] {
+    return [...this.instances.values()];
+  }
 }

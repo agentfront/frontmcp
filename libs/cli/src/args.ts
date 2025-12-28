@@ -8,7 +8,8 @@ export type Command =
   | 'help'
   | 'template'
   | 'version'
-  | 'test';
+  | 'test'
+  | 'graph';
 
 export type DeploymentAdapter = 'node' | 'vercel' | 'lambda' | 'cloudflare';
 export type RedisSetupOption = 'docker' | 'existing' | 'none';
@@ -28,6 +29,10 @@ export interface ParsedArgs {
   target?: DeploymentAdapter;
   redis?: RedisSetupOption;
   cicd?: boolean;
+  // Graph command flags
+  open?: boolean;
+  json?: boolean | string;
+  port?: number;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -51,7 +56,19 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;
-    else out._.push(a);
+    // Graph command flags
+    else if (a === '--open') out.open = true;
+    else if (a === '--json') {
+      const next = argv[i + 1];
+      if (next && !next.startsWith('-')) {
+        out.json = argv[++i];
+      } else {
+        out.json = true;
+      }
+    } else if (a === '--port' || a === '-p') {
+      const parsed = parseInt(argv[++i], 10);
+      out.port = Number.isNaN(parsed) ? undefined : parsed;
+    } else out._.push(a);
   }
   return out;
 }
