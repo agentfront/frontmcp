@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
+
 export default {
   displayName: 'demo-e2e-orchestrated',
   preset: '../../../jest.preset.js',
@@ -44,13 +47,5 @@ export default {
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-orchestrated',
-  coverageReporters: ['json'],
-  collectCoverageFrom: [
-    '<rootDir>/../../../libs/sdk/src/**/*.ts',
-    '<rootDir>/../../../libs/adapters/src/**/*.ts',
-    '<rootDir>/../../../libs/plugins/src/**/*.ts',
-    '!**/*.test.ts',
-    '!**/*.spec.ts',
-    '!**/index.ts',
-  ],
+  ...e2eCoveragePreset,
 };

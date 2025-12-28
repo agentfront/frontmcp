@@ -174,6 +174,16 @@ paths:
       });
 
       await expect(OpenAPIToolGenerator.fromURL('https://example.com/api.json')).rejects.toThrow(LoadError);
+
+      // Verify error message contains status information
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+      await expect(OpenAPIToolGenerator.fromURL('https://example.com/api.json')).rejects.toMatchObject({
+        message: expect.stringContaining('404'),
+      });
     });
 
     it('should throw LoadError on network error', async () => {
@@ -306,13 +316,9 @@ paths:
     });
 
     it('should throw LoadError with context on file not found', async () => {
-      try {
-        await OpenAPIToolGenerator.fromFile('/nonexistent/path/api.yaml');
-        fail('Should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(LoadError);
-        expect((e as LoadError).message).toContain('Failed to load OpenAPI spec from file');
-      }
+      await expect(OpenAPIToolGenerator.fromFile('/nonexistent/path/api.yaml')).rejects.toMatchObject({
+        message: expect.stringContaining('Failed to load OpenAPI spec from file'),
+      });
     });
   });
 

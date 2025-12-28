@@ -216,7 +216,7 @@ describe('toJsonSchema', () => {
           },
         },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.properties?.id.type).toBe('string');
       expect(result.properties?.age.exclusiveMaximum).toBe(150);
@@ -234,7 +234,7 @@ describe('toJsonSchema', () => {
           },
         },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.properties?.address.properties?.street.type).toBe('string');
     });
@@ -246,7 +246,7 @@ describe('toJsonSchema', () => {
         type: 'array',
         items: { type: 'string' },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.items?.type).toBe('string');
     });
@@ -256,7 +256,7 @@ describe('toJsonSchema', () => {
         type: 'array',
         items: [{ type: 'string' }, { type: 'number' }],
       } as any;
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(Array.isArray(result.items)).toBe(true);
       expect((result.items as any[])[0].type).toBe('string');
@@ -268,7 +268,7 @@ describe('toJsonSchema', () => {
         type: 'array',
         items: { $ref: '#/components/schemas/User' } as any,
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.items?.$ref).toBe('#/components/schemas/User');
     });
@@ -280,7 +280,7 @@ describe('toJsonSchema', () => {
         type: 'object',
         additionalProperties: { type: 'string' },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.additionalProperties?.type).toBe('string');
     });
@@ -304,7 +304,7 @@ describe('toJsonSchema', () => {
           { type: 'object', properties: { b: { type: 'number' } } },
         ],
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.allOf).toHaveLength(2);
       expect(result.allOf?.[0].properties?.a.type).toBe('string');
@@ -334,7 +334,7 @@ describe('toJsonSchema', () => {
       const schema: SchemaObject = {
         not: { type: 'null' as any },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.not?.type).toBe('null');
     });
@@ -343,7 +343,7 @@ describe('toJsonSchema', () => {
       const schema: SchemaObject = {
         not: { $ref: '#/components/schemas/Forbidden' } as any,
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       expect(result.not?.$ref).toBe('#/components/schemas/Forbidden');
     });
@@ -375,7 +375,7 @@ describe('toJsonSchema', () => {
           },
         },
       };
-      const result = toJsonSchema(schema);
+      const result = toJsonSchema(schema) as any;
 
       const scoreSchema = result.properties?.users.items?.properties?.profile.properties?.score;
       expect(scoreSchema?.exclusiveMinimum).toBe(0);

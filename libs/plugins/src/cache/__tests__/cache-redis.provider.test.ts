@@ -79,7 +79,11 @@ describe('CacheRedisProvider', () => {
         new CacheRedisProvider({
           type: 'invalid' as any,
         } as RedisCacheOptions);
-      }).toThrow('Invalid cache provider type');
+      }).toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('Invalid cache provider type'),
+        }),
+      );
     });
 
     it('should set up event listeners', () => {
@@ -224,6 +228,33 @@ describe('CacheRedisProvider', () => {
       await provider.close();
 
       expect(mockClient.quit).toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should propagate errors from Redis set command', async () => {
+      mockClient.set.mockRejectedValue(new Error('Redis connection lost'));
+      await expect(provider.setValue('key', 'value')).rejects.toThrow('Redis connection lost');
+    });
+
+    it('should propagate errors from Redis get command', async () => {
+      mockClient.get.mockRejectedValue(new Error('Redis timeout'));
+      await expect(provider.getValue('key')).rejects.toThrow('Redis timeout');
+    });
+
+    it('should propagate errors from Redis del command', async () => {
+      mockClient.del.mockRejectedValue(new Error('Redis unavailable'));
+      await expect(provider.delete('key')).rejects.toThrow('Redis unavailable');
+    });
+
+    it('should propagate errors from Redis exists command', async () => {
+      mockClient.exists.mockRejectedValue(new Error('Connection refused'));
+      await expect(provider.exists('key')).rejects.toThrow('Connection refused');
+    });
+
+    it('should propagate errors from Redis quit command', async () => {
+      mockClient.quit.mockRejectedValue(new Error('Shutdown failed'));
+      await expect(provider.close()).rejects.toThrow('Shutdown failed');
     });
   });
 });

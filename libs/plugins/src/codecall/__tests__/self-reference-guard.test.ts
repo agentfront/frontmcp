@@ -128,5 +128,9 @@ describe('getBlockedPatterns', () => {
   it('should return readonly explicit array', () => {
     const patterns = getBlockedPatterns();
     expect(Array.isArray(patterns.explicit)).toBe(true);
+    // The return type is readonly string[] (TypeScript compile-time check)
+    // At runtime, it's a fresh array from Array.from() each call
+    const patterns2 = getBlockedPatterns();
+    expect(patterns.explicit).not.toBe(patterns2.explicit); // Different array instances
   });
 });

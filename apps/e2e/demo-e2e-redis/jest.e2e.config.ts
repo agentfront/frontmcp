@@ -1,5 +1,8 @@
 import type { Config } from '@jest/types';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
+
 const config: Config.InitialOptions = {
   displayName: 'demo-e2e-redis',
   preset: '../../../jest.preset.js',
@@ -34,15 +37,7 @@ const config: Config.InitialOptions = {
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-redis',
-  coverageReporters: ['json'],
-  collectCoverageFrom: [
-    '<rootDir>/../../../libs/sdk/src/**/*.ts',
-    '<rootDir>/../../../libs/adapters/src/**/*.ts',
-    '<rootDir>/../../../libs/plugins/src/**/*.ts',
-    '!**/*.test.ts',
-    '!**/*.spec.ts',
-    '!**/index.ts',
-  ],
+  ...e2eCoveragePreset,
 };
 
 export default config;

@@ -187,6 +187,23 @@ describe('parseArgs', () => {
     });
   });
 
+  describe('--coverage / -c flag', () => {
+    it('should parse --coverage flag', () => {
+      const result = parseArgs(['test', '--coverage']);
+      expect(result.coverage).toBe(true);
+    });
+
+    it('should parse -c short flag', () => {
+      const result = parseArgs(['test', '-c']);
+      expect(result.coverage).toBe(true);
+    });
+
+    it('should not set coverage when flag is absent', () => {
+      const result = parseArgs(['test']);
+      expect(result.coverage).toBeUndefined();
+    });
+  });
+
   describe('combined flags', () => {
     it('should parse multiple flags together', () => {
       const result = parseArgs(['create', 'my-project', '--yes', '--target', 'vercel', '--cicd']);
@@ -205,6 +222,17 @@ describe('parseArgs', () => {
       expect(result.target).toBe('node');
       expect(result.redis).toBe('docker');
       expect(result.cicd).toBe(true);
+    });
+
+    it('should parse test command with all flags', () => {
+      const result = parseArgs(['test', '--runInBand', '--watch', '--verbose', '--coverage', '--timeout', '30000']);
+
+      expect(result._).toEqual(['test']);
+      expect(result.runInBand).toBe(true);
+      expect(result.watch).toBe(true);
+      expect(result.verbose).toBe(true);
+      expect(result.coverage).toBe(true);
+      expect(result.timeout).toBe(30000);
     });
   });
 });

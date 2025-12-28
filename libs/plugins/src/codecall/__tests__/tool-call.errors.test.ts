@@ -175,6 +175,11 @@ describe('ToolAccessDeniedError', () => {
     const error = new ToolAccessDeniedError('secret:tool', 'Unauthorized');
     expect(error).toBeInstanceOf(Error);
   });
+
+  it('should be frozen', () => {
+    const error = new ToolAccessDeniedError('admin:delete', 'reason');
+    expect(Object.isFrozen(error)).toBe(true);
+  });
 });
 
 describe('ToolNotFoundError', () => {
@@ -189,5 +194,10 @@ describe('ToolNotFoundError', () => {
   it('should be an instance of Error', () => {
     const error = new ToolNotFoundError('missing:tool');
     expect(error).toBeInstanceOf(Error);
+  });
+
+  it('should be frozen', () => {
+    const error = new ToolNotFoundError('missing:tool');
+    expect(Object.isFrozen(error)).toBe(true);
   });
 });

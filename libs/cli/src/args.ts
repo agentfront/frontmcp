@@ -22,6 +22,7 @@ export interface ParsedArgs {
   watch?: boolean;
   verbose?: boolean;
   timeout?: number;
+  coverage?: boolean;
   adapter?: DeploymentAdapter;
   // Create command flags
   yes?: boolean;
@@ -44,7 +45,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--timeout' || a === '-t') {
       const parsed = parseInt(argv[++i], 10);
       out.timeout = Number.isNaN(parsed) ? undefined : parsed;
-    }
+    } else if (a === '--coverage' || a === '-c') out.coverage = true;
     // Create command flags
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--target') out.target = argv[++i] as DeploymentAdapter;

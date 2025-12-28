@@ -213,11 +213,9 @@ jobs:
 
       - name: Run unit tests with coverage
         run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
-        continue-on-error: true
 
       - name: Run E2E tests with coverage
         run: npx nx run-many -t test --projects='demo-e2e-*' --coverage
-        continue-on-error: true
 
       - name: Merge coverage reports
         run: node scripts/merge-coverage.mjs
@@ -231,4 +229,3 @@ jobs:
 
       - name: Check coverage threshold
         run: npx nyc check-coverage --temp-dir=coverage/merged --statements 95 --branches 95 --functions 95 --lines 95
-        continue-on-error: true

@@ -144,6 +144,7 @@ export class ToolAccessDeniedError extends Error {
     this.name = 'ToolAccessDeniedError';
     this.toolName = toolName;
     this.reason = reason;
+    Object.freeze(this);
   }
 }
 
@@ -159,5 +160,6 @@ export class ToolNotFoundError extends Error {
     super(`Tool "${toolName}" not found`);
     this.name = 'ToolNotFoundError';
     this.toolName = toolName;
+    Object.freeze(this);
   }
 }
