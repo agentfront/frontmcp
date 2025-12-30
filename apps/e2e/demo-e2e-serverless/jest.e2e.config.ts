@@ -1,4 +1,8 @@
 import type { Config } from '@jest/types';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 
 const config: Config.InitialOptions = {
   displayName: 'demo-e2e-serverless',
@@ -33,6 +37,8 @@ const config: Config.InitialOptions = {
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
+  coverageDirectory: '../../../coverage/e2e/demo-e2e-serverless',
+  ...e2eCoveragePreset,
 };
 
 export default config;

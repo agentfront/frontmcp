@@ -56,6 +56,12 @@ export interface StreamableHTTPServerTransportOptions {
  * adding public methods to set initialization state.
  */
 export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPServerTransport {
+  /**
+   * Stores pending initialization state when setInitializationState is called
+   * before _webStandardTransport is ready. Applied on first handleRequest.
+   */
+  private _pendingInitState?: string;
+
   constructor(options: StreamableHTTPServerTransportOptions = {}) {
     super(options);
   }
@@ -71,12 +77,23 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
   }
 
   /**
+   * Returns whether there's a pending initialization state waiting to be applied.
+   * This is true when setInitializationState was called before _webStandardTransport existed.
+   */
+  get hasPendingInitState(): boolean {
+    return this._pendingInitState !== undefined;
+  }
+
+  /**
    * Sets the transport to an initialized state with the given session ID.
    * Use this when recreating a transport from a stored session.
    *
    * This method allows you to "restore" a session without replaying the
    * initialization handshake. After calling this method, the transport
    * will accept requests with the given session ID.
+   *
+   * If the internal transport is not ready yet (common in serverless cold starts),
+   * the state is stored and applied on the first handleRequest call.
    *
    * @param sessionId - The session ID that was previously assigned to this session
    * @throws Error if sessionId is empty or invalid
@@ -87,28 +104,57 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
       throw new Error('[RecreateableStreamableHTTPServerTransport] sessionId cannot be empty');
     }
 
-    // Access the internal WebStandardTransport and set both flags
+    // Access the internal WebStandardTransport
     // Note: This accesses MCP SDK internals which may change between versions
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webTransport = (this as any)._webStandardTransport;
     if (!webTransport) {
-      console.warn(
-        '[RecreateableStreamableHTTPServerTransport] Internal transport not found. ' +
-          'This may indicate an incompatible MCP SDK version.',
-      );
+      // Transport not ready yet - store for deferred application
+      // This happens during serverless cold starts when recreation occurs
+      // before the first request is processed
+      this._pendingInitState = sessionId;
       return;
     }
 
+    this._applyInitState(webTransport, sessionId);
+  }
+
+  /**
+   * Applies initialization state to the internal transport.
+   * @param webTransport - The internal _webStandardTransport object
+   * @param sessionId - The session ID to set
+   * @throws Error if the MCP SDK version is incompatible
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _applyInitState(webTransport: any, sessionId: string): void {
     // Verify expected fields exist before setting (SDK version safety)
     if (!('_initialized' in webTransport) || !('sessionId' in webTransport)) {
-      console.warn(
+      throw new Error(
         '[RecreateableStreamableHTTPServerTransport] Expected fields not found on internal transport. ' +
           'This may indicate an incompatible MCP SDK version.',
       );
-      return;
     }
 
     webTransport._initialized = true;
     webTransport.sessionId = sessionId;
+  }
+
+  /**
+   * Override handleRequest to apply any pending initialization state before processing.
+   * This handles the case where setInitializationState was called before _webStandardTransport
+   * was created (common in serverless cold start scenarios).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  override async handleRequest(req: any, res: any, body?: any): Promise<void> {
+    // Apply deferred initialization state before processing request
+    if (this._pendingInitState) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const webTransport = (this as any)._webStandardTransport;
+      if (webTransport) {
+        this._applyInitState(webTransport, this._pendingInitState);
+        this._pendingInitState = undefined;
+      }
+    }
+    return super.handleRequest(req, res, body);
   }
 }

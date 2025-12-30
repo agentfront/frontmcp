@@ -332,18 +332,18 @@ describe('buildToolUIMulti (legacy)', () => {
     const result = await buildToolUIMulti({
       template: { template: simpleTemplate },
       toolName: 'test',
-      platforms: ['chatgpt', 'claude', 'mcp-apps'],
+      platforms: ['chatgpt', 'claude', 'universal'],
       sampleOutput: { value: 1 },
     });
 
     // All platforms get the same universal HTML
     expect(result.bundles['chatgpt']).toBeDefined();
     expect(result.bundles['claude']).toBeDefined();
-    expect(result.bundles['mcp-apps']).toBeDefined();
+    expect(result.bundles['universal']).toBeDefined();
 
     // Same HTML content for all
     expect(result.bundles['chatgpt'].html).toBe(result.bundles['claude'].html);
-    expect(result.bundles['claude'].html).toBe(result.bundles['mcp-apps'].html);
+    expect(result.bundles['claude'].html).toBe(result.bundles['universal'].html);
 
     // But legacy mimeType field differs for compatibility
     expect((result.bundles['chatgpt'] as BuildResult & { mimeType: string }).mimeType).toBe(

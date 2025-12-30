@@ -2,10 +2,13 @@
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { ListRootsResultSchema, type LoggingLevel, type Root } from '@modelcontextprotocol/sdk/types.js';
-import { FrontMcpLogger } from '../common';
+import {
+  FrontMcpLogger,
+  type AIPlatformType,
+  type PlatformDetectionConfig,
+  type PlatformMappingEntry,
+} from '../common';
 import type { Scope } from '../scope';
-import type { AIPlatformType } from '../common/types/auth/session.types';
-import type { PlatformDetectionConfig, PlatformMappingEntry } from '../common/types/options/session.options';
 
 /**
  * Re-export Root from MCP SDK for convenience.

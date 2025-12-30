@@ -48,6 +48,7 @@ ${c('bold', 'Test Options')}
   -w, --watch          Run tests in watch mode
   -v, --verbose        Show verbose test output
   -t, --timeout <ms>   Set test timeout (default: 60000ms)
+  -c, --coverage       Collect test coverage
 
 ${c('bold', 'Examples')}
   frontmcp dev

@@ -15,13 +15,7 @@ describe('Security - ReDoS Protection', () => {
 
   describe('validatePattern', () => {
     it('should accept safe patterns', () => {
-      const safePatterns = [
-        '^[a-z]+$',
-        '\\d{3}-\\d{4}',
-        '^[A-Z][a-z]*$',
-        '[0-9]{1,3}\\.[0-9]{1,3}',
-        '^https?://.*',
-      ];
+      const safePatterns = ['^[a-z]+$', '\\d{3}-\\d{4}', '^[A-Z][a-z]*$', '[0-9]{1,3}\\.[0-9]{1,3}', '^https?://.*'];
 
       for (const pattern of safePatterns) {
         const result = validatePattern(pattern);
@@ -32,8 +26,8 @@ describe('Security - ReDoS Protection', () => {
 
     it('should reject patterns with nested quantifiers', () => {
       const dangerousPatterns = [
-        '(a+)*',   // Nested quantifiers
-        '(a*)+',   // Nested quantifiers
+        '(a+)*', // Nested quantifiers
+        '(a*)+', // Nested quantifiers
         '(\\d+)*', // Nested quantifiers
         '(a|ab)*', // Alternation with quantifier
       ];
@@ -61,12 +55,7 @@ describe('Security - ReDoS Protection', () => {
     });
 
     it('should reject invalid regex syntax', () => {
-      const invalidPatterns = [
-        '(unclosed',
-        '[unclosed',
-        '*invalid',
-        '(?P<invalid)',
-      ];
+      const invalidPatterns = ['(unclosed', '[unclosed', '*invalid', '(?P<invalid)'];
 
       for (const pattern of invalidPatterns) {
         const result = validatePattern(pattern);
@@ -207,7 +196,7 @@ describe('Security - ReDoS Protection', () => {
 
       const schema = {
         type: 'string' as const,
-        pattern: '(a+)*'  // Dangerous nested quantifier
+        pattern: '(a+)*', // Dangerous nested quantifier
       };
 
       const zodSchema = convertJsonSchemaToZod(schema);
@@ -221,7 +210,7 @@ describe('Security - ReDoS Protection', () => {
 
       const schema = {
         type: 'string' as const,
-        pattern: '^[a-z]+$'
+        pattern: '^[a-z]+$',
       };
 
       const zodSchema = convertJsonSchemaToZod(schema);
@@ -256,6 +245,142 @@ describe('Security - ReDoS Protection', () => {
 
       // Should reject dangerous patterns quickly
       expect(elapsed).toBeLessThan(50);
+    });
+  });
+
+  describe('Security Config - Disabled Protection', () => {
+    beforeEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    afterEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    it('should allow unsafe patterns when protection is disabled', () => {
+      setSecurityConfig({ enableProtection: false });
+      const regex = createSafeRegExp('(a+)+');
+
+      expect(regex).not.toBeNull();
+    });
+
+    it('should return null for invalid regex syntax when protection is disabled', () => {
+      setSecurityConfig({ enableProtection: false, warnOnUnsafe: false });
+      const regex = createSafeRegExp('(unclosed');
+
+      expect(regex).toBeNull();
+    });
+
+    it('should warn on invalid regex when warnOnUnsafe is true and protection disabled', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      setSecurityConfig({ enableProtection: false, warnOnUnsafe: true });
+
+      createSafeRegExp('(unclosed');
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Security Config - Throw on Unsafe', () => {
+    beforeEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    afterEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    it('should throw error for unsafe patterns when throwOnUnsafe is true', () => {
+      setSecurityConfig({ throwOnUnsafe: true });
+
+      expect(() => createSafeRegExp('(a+)+')).toThrow('Rejected unsafe pattern');
+    });
+
+    it('should not throw for safe patterns even when throwOnUnsafe is true', () => {
+      setSecurityConfig({ throwOnUnsafe: true });
+
+      expect(() => createSafeRegExp('^[a-z]+$')).not.toThrow();
+    });
+  });
+
+  describe('Pattern Validator Timeout Handling', () => {
+    beforeEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    afterEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    it('should handle regex test failures gracefully', () => {
+      // Create a validator and test with warnOnUnsafe enabled
+      setSecurityConfig({ warnOnUnsafe: true });
+      const validator = createSafePatternValidator('^[a-z]+$');
+
+      // Normal usage should work
+      expect(validator('abc')).toBe(true);
+    });
+
+    it('should return false when validator warning is disabled', () => {
+      setSecurityConfig({ warnOnUnsafe: false });
+      const validator = createSafePatternValidator('(a+)+');
+
+      // Unsafe pattern validator should always return false
+      expect(validator('aaa')).toBe(false);
+    });
+  });
+
+  describe('createSafePatternValidator Edge Cases', () => {
+    beforeEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    afterEach(() => {
+      setSecurityConfig(DEFAULT_SECURITY_CONFIG);
+    });
+
+    it('should handle empty string input', () => {
+      const validator = createSafePatternValidator('^$');
+      expect(validator('')).toBe(true);
+      expect(validator('a')).toBe(false);
+    });
+
+    it('should suppress warnings when warnOnUnsafe is false for unsafe patterns', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      setSecurityConfig({ warnOnUnsafe: false });
+
+      createSafePatternValidator('(a+)+');
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should warn when pattern is rejected and warnOnUnsafe is true', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      setSecurityConfig({ warnOnUnsafe: true });
+
+      createSafePatternValidator('(a+)+');
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Pattern rejected'));
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Quantifier Edge Cases', () => {
+    it('should accept patterns with {n} quantifier at max', () => {
+      const result = validatePattern('a{100}');
+      expect(result.safe).toBe(true);
+    });
+
+    it('should accept patterns with {n,m} quantifier at max', () => {
+      const result = validatePattern('a{50,100}');
+      expect(result.safe).toBe(true);
+    });
+
+    it('should reject patterns with single large quantifier', () => {
+      const result = validatePattern('a{101}');
+      expect(result.safe).toBe(false);
     });
   });
 });

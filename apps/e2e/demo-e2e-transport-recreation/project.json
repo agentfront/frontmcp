@@ -1,0 +1,45 @@
+{
+  "name": "demo-e2e-transport-recreation",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-transport-recreation/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:transport-recreation"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-transport-recreation",
+        "main": "apps/e2e/demo-e2e-transport-recreation/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-transport-recreation/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-transport-recreation/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-transport-recreation/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transport-recreation"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-transport-recreation/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    }
+  }
+}

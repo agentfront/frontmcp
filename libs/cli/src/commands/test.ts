@@ -66,8 +66,17 @@ function generateJestConfig(cwd: string, opts: ParsedArgs): object {
     // Ignore patterns
     testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 
-    // Coverage settings (disabled by default for E2E)
-    collectCoverage: false,
+    // Coverage settings
+    collectCoverage: opts.coverage ?? false,
+
+    // Coverage configuration when enabled
+    ...(opts.coverage
+      ? {
+          coverageDirectory: '<rootDir>/coverage',
+          coverageReporters: ['text', 'lcov', 'json'],
+          collectCoverageFrom: ['<rootDir>/src/**/*.ts', '!<rootDir>/src/**/*.test.ts', '!<rootDir>/src/**/*.spec.ts'],
+        }
+      : {}),
 
     // Verbose output
     verbose: opts.verbose ?? true,
@@ -128,6 +137,11 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     jestArgs.push('--verbose');
   }
 
+  // Add coverage flag
+  if (opts.coverage) {
+    jestArgs.push('--coverage');
+  }
+
   // Add any additional positional args (e.g., test file patterns)
   const testPatterns = opts._.slice(1); // Skip 'test' command itself
   if (testPatterns.length > 0) {
@@ -143,6 +157,10 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
 
   if (opts.watch) {
     console.log(`${c('gray', '[test]')} watch mode enabled`);
+  }
+
+  if (opts.coverage) {
+    console.log(`${c('gray', '[test]')} coverage collection enabled`);
   }
 
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop\n`);

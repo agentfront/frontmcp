@@ -1,3 +1,8 @@
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
+
 export default {
   displayName: 'demo-e2e-orchestrated',
   preset: '../../../jest.preset.js',
@@ -43,5 +48,6 @@ export default {
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
   },
-  coverageDirectory: 'test-output/jest/coverage-e2e',
+  coverageDirectory: '../../../coverage/e2e/demo-e2e-orchestrated',
+  ...e2eCoveragePreset,
 };
