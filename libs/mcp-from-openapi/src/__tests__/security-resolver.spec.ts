@@ -188,7 +188,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.query.api_key).toBe('my-api-key');
+      expect(result.query['api_key']).toBe('my-api-key');
     });
 
     it('should resolve API key to cookie', async () => {
@@ -212,7 +212,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.cookies.session).toBe('session-value');
+      expect(result.cookies['session']).toBe('session-value');
     });
 
     it('should resolve OAuth2 auth to header', async () => {
@@ -234,7 +234,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Bearer oauth-access-token');
+      expect(result.headers['Authorization']).toBe('Bearer oauth-access-token');
     });
 
     it('should resolve OpenID Connect auth to header', async () => {
@@ -256,7 +256,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Bearer oidc-token');
+      expect(result.headers['Authorization']).toBe('Bearer oidc-token');
     });
 
     it('should use custom resolver', async () => {
@@ -278,13 +278,13 @@ describe('SecurityResolver', () => {
           if (security.scheme === 'customAuth') {
             return 'CustomToken my-custom-token';
           }
-          return undefined;
+          return '';
         },
       };
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('CustomToken my-custom-token');
+      expect(result.headers['Authorization']).toBe('CustomToken my-custom-token');
     });
 
     it('should use named API keys', async () => {
@@ -395,7 +395,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Auth).toBe('vapid-auth-value');
+      expect(result.headers['Auth']).toBe('vapid-auth-value');
     });
 
     it('should skip when auth value is not available', async () => {
@@ -414,7 +414,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, {}); // No jwt provided
 
-      expect(result.headers.Authorization).toBeUndefined();
+      expect(result.headers['Authorization']).toBeUndefined();
     });
   });
 
@@ -502,7 +502,7 @@ describe('SecurityResolver', () => {
       ];
 
       const context: SecurityContext = {
-        signatureGenerator: (data, security) => {
+        signatureGenerator: (_data, _security) => {
           return `Signature keyId="test",signature="computed-signature"`;
         },
       };
@@ -515,7 +515,7 @@ describe('SecurityResolver', () => {
 
       const signedHeaders = await resolver.signRequest(mappers, signatureData, context);
 
-      expect(signedHeaders.Authorization).toBe('Signature keyId="test",signature="computed-signature"');
+      expect(signedHeaders['Authorization']).toBe('Signature keyId="test",signature="computed-signature"');
       expect(signedHeaders['Content-Type']).toBe('application/json');
     });
 
@@ -569,8 +569,8 @@ describe('SecurityResolver', () => {
       const signedHeaders = await resolver.signRequest(mappers, signatureData, context);
 
       // Should not modify headers for non-signature schemes
-      expect(signedHeaders.Authorization).toBeUndefined();
-      expect(signedHeaders.existing).toBe('header');
+      expect(signedHeaders['Authorization']).toBeUndefined();
+      expect(signedHeaders['existing']).toBe('header');
     });
   });
 
@@ -598,7 +598,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Digest username="user"');
+      expect(result.headers['Authorization']).toBe('Digest username="user"');
     });
   });
 
@@ -618,7 +618,7 @@ describe('SecurityResolver', () => {
       ];
 
       const context: SecurityContext = {
-        customResolver: async (security) => {
+        customResolver: async (_security) => {
           await new Promise((resolve) => setTimeout(resolve, 10));
           return 'AsyncToken async-value';
         },
@@ -626,7 +626,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('AsyncToken async-value');
+      expect(result.headers['Authorization']).toBe('AsyncToken async-value');
     });
 
     it('should handle custom resolver returning undefined', async () => {
@@ -645,12 +645,12 @@ describe('SecurityResolver', () => {
 
       const context: SecurityContext = {
         jwt: 'fallback-token',
-        customResolver: () => undefined, // Returning undefined should fall back to default
+        customResolver: async () => undefined, // Returning undefined should fall back to default
       };
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Bearer fallback-token');
+      expect(result.headers['Authorization']).toBe('Bearer fallback-token');
     });
 
     it('should handle missing httpScheme defaulting to bearer', async () => {
@@ -673,7 +673,7 @@ describe('SecurityResolver', () => {
 
       const result = await resolver.resolve(mappers, context);
 
-      expect(result.headers.Authorization).toBe('Bearer my-token');
+      expect(result.headers['Authorization']).toBe('Bearer my-token');
     });
   });
 });
@@ -690,7 +690,7 @@ describe('createSecurityContext', () => {
   });
 
   it('should handle all auth types', () => {
-    const customResolver = (security: SecurityParameterInfo) => 'custom';
+    const customResolver = (_security: SecurityParameterInfo) => 'custom';
 
     const context = createSecurityContext({
       jwt: 'jwt',
