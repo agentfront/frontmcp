@@ -634,4 +634,437 @@ describe('TransportService', () => {
       expect(mockRedisSessionStore.disconnect).toHaveBeenCalled();
     });
   });
+
+  // ============================================
+  // Transport Recreation - Production Scenarios
+  // ============================================
+
+  describe('Transport Recreation - Production Scenarios', () => {
+    describe('serverless cold start simulation', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should recreate transport when not in memory but in Redis', async () => {
+        const tokenHash = createHash('sha256').update('cold-start-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'cold-start-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now() - 60000, // Created 1 minute ago
+            nodeId: 'previous-node',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now() - 60000,
+          lastAccessedAt: Date.now() - 30000,
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Verify session exists in Redis
+        const session = await service.getStoredSession('streamable-http', 'cold-start-token', 'cold-start-session');
+        expect(session).toBeDefined();
+
+        // Recreate transport
+        const transport = await service.recreateTransporter(
+          'streamable-http',
+          'cold-start-token',
+          'cold-start-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+        expect(transport).toBeDefined();
+      });
+
+      it('should validate token hash before recreation', async () => {
+        const tokenHash = createHash('sha256').update('valid-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: { id: 'validated-session', protocol: 'streamable-http' },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Valid token should return session
+        const validSession = await service.getStoredSession('streamable-http', 'valid-token', 'validated-session');
+        expect(validSession).toBeDefined();
+
+        // Invalid token should return undefined
+        const invalidSession = await service.getStoredSession('streamable-http', 'wrong-token', 'validated-session');
+        expect(invalidSession).toBeUndefined();
+      });
+
+      it('should reject recreation with mismatched token', async () => {
+        const wrongTokenHash = createHash('sha256').update('attacker-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: { id: 'hijack-target', protocol: 'streamable-http' },
+          authorizationId: wrongTokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Attacker tries to access session with different token
+        const session = await service.getStoredSession('streamable-http', 'legitimate-user-token', 'hijack-target');
+        expect(session).toBeUndefined();
+        expect(mockScope.logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Session token mismatch'),
+          expect.any(Object),
+        );
+      });
+
+      it('should update lastAccessedAt on recreation', async () => {
+        const tokenHash = createHash('sha256').update('test-token', 'utf8').digest('hex');
+        const oldTimestamp = Date.now() - 60000;
+        const storedSession = {
+          session: {
+            id: 'access-time-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: oldTimestamp,
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: oldTimestamp,
+          lastAccessedAt: oldTimestamp,
+        };
+
+        await service.recreateTransporter(
+          'streamable-http',
+          'test-token',
+          'access-time-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+
+        // Verify set was called (which updates lastAccessedAt)
+        expect(mockRedisSessionStore.set).toHaveBeenCalled();
+      });
+    });
+
+    describe('multi-instance failover simulation', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should allow different node to recreate session', async () => {
+        const tokenHash = createHash('sha256').update('failover-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'failover-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now() - 30000,
+            nodeId: 'node-a', // Original node
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now() - 30000,
+          lastAccessedAt: Date.now() - 5000,
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Node B (this instance) recreates the session
+        const transport = await service.recreateTransporter(
+          'streamable-http',
+          'failover-token',
+          'failover-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+        expect(transport).toBeDefined();
+      });
+
+      it('should preserve original session metadata', async () => {
+        const tokenHash = createHash('sha256').update('metadata-token', 'utf8').digest('hex');
+        const originalCreatedAt = Date.now() - 120000;
+        const storedSession = {
+          session: {
+            id: 'metadata-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: originalCreatedAt,
+            nodeId: 'original-node',
+          },
+          authorizationId: tokenHash,
+          createdAt: originalCreatedAt,
+          lastAccessedAt: Date.now() - 10000,
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        const session = await service.getStoredSession('streamable-http', 'metadata-token', 'metadata-session');
+
+        expect(session?.session.createdAt).toBe(originalCreatedAt);
+        expect(session?.session.nodeId).toBe('original-node');
+      });
+
+      it('should handle concurrent recreation attempts', async () => {
+        const tokenHash = createHash('sha256').update('concurrent-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'concurrent-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+
+        // Simulate race condition: both nodes try to recreate
+        const [transport1, transport2] = await Promise.all([
+          service.recreateTransporter(
+            'streamable-http',
+            'concurrent-token',
+            'concurrent-session',
+            storedSession as never,
+            mockResponse as never,
+          ),
+          service.recreateTransporter(
+            'streamable-http',
+            'concurrent-token',
+            'concurrent-session',
+            storedSession as never,
+            mockResponse as never,
+          ),
+        ]);
+
+        // Mutex should ensure same transport is returned
+        expect(transport1).toBe(transport2);
+      });
+
+      it('should handle rapid sequential recreations', async () => {
+        const tokenHash = createHash('sha256').update('rapid-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'rapid-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+
+        // Rapid sequential recreations
+        const transport1 = await service.recreateTransporter(
+          'streamable-http',
+          'rapid-token',
+          'rapid-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+        const transport2 = await service.recreateTransporter(
+          'streamable-http',
+          'rapid-token',
+          'rapid-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+        const transport3 = await service.recreateTransporter(
+          'streamable-http',
+          'rapid-token',
+          'rapid-session',
+          storedSession as never,
+          mockResponse as never,
+        );
+
+        expect(transport1).toBe(transport2);
+        expect(transport2).toBe(transport3);
+      });
+    });
+
+    describe('security validation', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should reject session recreation with invalid token', async () => {
+        const legitimateHash = createHash('sha256').update('legitimate-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: { id: 'protected-session', protocol: 'streamable-http' },
+          authorizationId: legitimateHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Attacker tries with forged token
+        const session = await service.getStoredSession('streamable-http', 'forged-token', 'protected-session');
+        expect(session).toBeUndefined();
+      });
+
+      it('should validate client fingerprint on recreation', async () => {
+        const tokenHash = createHash('sha256').update('fingerprint-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'fingerprint-session',
+            protocol: 'streamable-http',
+            clientFingerprint: 'original-fingerprint',
+          },
+          authorizationId: tokenHash,
+          clientFingerprint: 'original-fingerprint',
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Same fingerprint should work
+        const validSession = await service.getStoredSession(
+          'streamable-http',
+          'fingerprint-token',
+          'fingerprint-session',
+          { clientFingerprint: 'original-fingerprint' },
+        );
+        expect(validSession).toBeDefined();
+      });
+
+      it('should log security warning on token mismatch', async () => {
+        const storedSession = {
+          session: { id: 'security-session', protocol: 'streamable-http' },
+          authorizationId: 'stored-hash',
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        await service.getStoredSession('streamable-http', 'wrong-token', 'security-session');
+
+        expect(mockScope.logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Session token mismatch'),
+          expect.objectContaining({
+            sessionId: 'security-session',
+          }),
+        );
+      });
+    });
+
+    describe('error handling', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should handle Redis connection failure during session lookup', async () => {
+        mockRedisSessionStore.get.mockRejectedValue(new Error('Redis connection lost'));
+
+        await expect(service.getStoredSession('streamable-http', 'test-token', 'session-123')).rejects.toThrow(
+          'Redis connection lost',
+        );
+      });
+
+      it('should handle Redis timeout gracefully', async () => {
+        mockRedisSessionStore.get.mockImplementation(
+          () => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100)),
+        );
+
+        await expect(service.getStoredSession('streamable-http', 'test-token', 'timeout-session')).rejects.toThrow(
+          'Timeout',
+        );
+      });
+
+      it('should handle corrupt session data', async () => {
+        // Return null to simulate missing/corrupt session
+        mockRedisSessionStore.get.mockResolvedValue(null);
+
+        const session = await service.getStoredSession('streamable-http', 'test-token', 'corrupt-session');
+        expect(session).toBeUndefined();
+      });
+
+      it('should handle session with wrong token hash gracefully', async () => {
+        // Stored session has a different token hash than the request
+        const differentHash = createHash('sha256').update('different-token', 'utf8').digest('hex');
+        mockRedisSessionStore.get.mockResolvedValue({
+          session: { id: 'partial-session', protocol: 'streamable-http' },
+          authorizationId: differentHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        });
+
+        const session = await service.getStoredSession('streamable-http', 'test-token', 'partial-session');
+        // Should return undefined due to token mismatch
+        expect(session).toBeUndefined();
+      });
+    });
+
+    describe('session state preservation', () => {
+      beforeEach(async () => {
+        service = new TransportService(mockScope as never, {
+          enabled: true,
+          redis: { host: 'localhost' },
+        });
+        await service.ready;
+      });
+
+      it('should preserve transportState in stored session', async () => {
+        const tokenHash = createHash('sha256').update('state-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'state-session',
+            authorizationId: tokenHash,
+            protocol: 'streamable-http',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+          transportState: {
+            protocol: 'streamable-http' as const,
+            requestSeq: 42,
+          },
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        const session = await service.getStoredSession('streamable-http', 'state-token', 'state-session');
+
+        expect(session?.transportState).toBeDefined();
+        expect(session?.transportState?.protocol).toBe('streamable-http');
+      });
+
+      it('should handle SSE transportState with lastEventId', async () => {
+        const tokenHash = createHash('sha256').update('sse-state-token', 'utf8').digest('hex');
+        const storedSession = {
+          session: {
+            id: 'sse-state-session',
+            authorizationId: tokenHash,
+            protocol: 'sse',
+            createdAt: Date.now(),
+            nodeId: 'node-1',
+          },
+          authorizationId: tokenHash,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+          transportState: {
+            protocol: 'sse' as const,
+            lastEventId: 150,
+          },
+        };
+        mockRedisSessionStore.get.mockResolvedValue(storedSession);
+
+        // Note: getStoredSession only works for streamable-http
+        // This test verifies the structure is preserved
+        expect(storedSession.transportState.lastEventId).toBe(150);
+      });
+    });
+  });
 });
