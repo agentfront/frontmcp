@@ -33,21 +33,12 @@
         "cwd": "{workspaceRoot}"
       }
     },
-    "test": {
+    "test:e2e": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transport-recreation"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-transport-recreation/jest.e2e.config.ts",
-        "passWithNoTests": true
-      }
-    },
-    "test:e2e": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-transport-recreation-e2e"],
-      "options": {
-        "jestConfig": "apps/e2e/demo-e2e-transport-recreation/jest.e2e.config.ts",
-        "runInBand": true,
-        "passWithNoTests": true
+        "runInBand": true
       }
     }
   }

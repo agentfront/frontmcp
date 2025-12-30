@@ -24,19 +24,15 @@ export default class GetSessionInfoTool extends ToolContext {
     const sessionId = authInfo.sessionId ?? 'no-session';
     const hasSession = !!authInfo.sessionId;
 
-    // Initialize counter if needed
-    if (!sessionRequestCounts.has(sessionId)) {
-      sessionRequestCounts.set(sessionId, 0);
-    }
-
-    // Increment request count
+    // Get current count and increment
     const currentCount = sessionRequestCounts.get(sessionId) ?? 0;
-    sessionRequestCounts.set(sessionId, currentCount + 1);
+    const newCount = currentCount + 1;
+    sessionRequestCounts.set(sessionId, newCount);
 
     return {
       sessionId,
       hasSession,
-      requestCount: sessionRequestCounts.get(sessionId) ?? 0,
+      requestCount: newCount,
     };
   }
 }
