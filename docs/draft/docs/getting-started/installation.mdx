@@ -130,7 +130,14 @@ After `create` or `init`, you’ll have these scripts:
     "dev": "frontmcp dev",
     "build": "frontmcp build",
     "inspect": "frontmcp inspector",
-    "doctor": "frontmcp doctor"
+    "doctor": "frontmcp doctor",
+    "test:unit": "nx run-many -t test --exclude='demo-e2e-*'",
+    "test:unit:coverage": "nx run-many -t test --exclude='demo-e2e-*' --coverage",
+    "test:e2e": "nx run-many -t test --projects='demo-e2e-*'",
+    "test:e2e:coverage": "nx run-many -t test --projects='demo-e2e-*' --coverage",
+    "coverage:merge": "node scripts/merge-coverage.mjs",
+    "coverage:all": "npm run test:unit:coverage && npm run test:e2e:coverage && npm run coverage:merge",
+    "coverage:check": "npx nyc check-coverage --temp-dir=coverage/merged"
   }
 }
 ```
@@ -141,6 +148,17 @@ After `create` or `init`, you’ll have these scripts:
 - `frontmcp build` — compile your entry with TypeScript (outputs to `./dist` by default)
 - `frontmcp inspector` — launch the MCP Inspector (`npx @modelcontextprotocol/inspector`)
 - `frontmcp doctor` — validate Node/npm versions, tsconfig, and project setup
+- `npm run test:unit` — run every library test target while skipping the `demo-e2e-*` suites so you can focus on unit/adapter coverage.
+- `npm run test:unit:coverage` — same as `test:unit` with coverage enabled so each library writes a `coverage-final.json` value under `coverage/unit/<project>`.
+- `npm run test:e2e` — exercise every `demo-e2e-*` app (CodeCall, cache, notifications, transport recreation, etc.) through Nx’s E2E runner.
+- `npm run test:e2e:coverage` — rerun the demo suites with coverage so each server drops reports inside `coverage/e2e/<app>`.
+- `npm run coverage:merge` — invoke `scripts/merge-coverage.mjs` to combine all collected JSON files into `coverage/merged`, along with LCOV and HTML summaries.
+- `npm run coverage:all` — run both coverage suites and merge them automatically, giving you a single interrogable report before publishing.
+- `npm run coverage:check` — run `nyc check-coverage` against `coverage/merged` to verify your thresholds before merging code.
+
+<Tip>
+  Run `npm run coverage:merge` (or `npm run coverage:all`) before updating your changelog so you can point to the consolidated HTML report (`coverage/merged/index.html`) and reuse the merged LCOV/JSON elsewhere.
+</Tip>
 
 ---
 

@@ -209,6 +209,23 @@ test.use({
 
 ---
 
+## Coverage workflows
+
+FrontMCP includes Nx scripts and a CLI flag so you can gather, merge, and verify coverage across every surface.
+
+1. Run `npm run test:unit:coverage` to collect coverage for library test targets (each project writes `coverage/unit/<project>/coverage-final.json`).
+2. Run `npm run test:e2e:coverage` to collect coverage for the demo suites, dropping files under `coverage/e2e/<app>`.
+3. Run `npm run coverage:merge` to combine every `coverage-final.json` into `coverage/merged` with LCOV, HTML, and JSON reports.
+4. Or run `npm run coverage:all` to run both suites and merge the results in one go.
+5. Run `npm run coverage:check` to let `nyc` enforce the thresholds defined by the merged report.
+6. Add `--coverage` to `npx frontmcp test` when you only need one suite; the CLI logs coverage collection and leaves the report beneath `coverage/<suite>`.
+
+<Tip>
+  Open `coverage/merged/index.html` after merging to inspect the combined report or feed `coverage/merged/lcov.info` into CI tooling before you ship.
+</Tip>
+
+---
+
 ## Demo E2E reference suites
 
 The repository ships scenario-focused Nx projects under `apps/e2e/**`. Each server mirrors a real deployment surface (auth modes, caching, CodeCall, OpenAPI ingestion, notifications) and already includes Jest suites wired to `@frontmcp/testing`.

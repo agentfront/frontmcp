@@ -5,17 +5,24 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2025-12-30" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    **Features**
+    🎯 **Transport recreation lab** – Validate session continuity and counter persistence with the new `demo-e2e-transport-recreation` server, which exposes tools to inspect session IDs and hit counters before and after serverless cold starts.
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+    🛡️ **Serverless transport resilience** – Recreateable streamable transports now queue pending initialization state, replay it before the first request, and fail fast when MCP internals diverge so reconnecting clients stay synchronized.
 
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    **Build/CI**
+    ⚡ **Unified coverage reports** – Nx scripts collect coverage for unit and E2E targets (`test:unit:coverage` and `test:e2e:coverage`), combine them (`coverage:merge` / `coverage:all`), and guard quality with `coverage:check` so you ship a single consolidated report.
+
+    🧪 **CLI coverage toggle** – Append `--coverage` to `npx frontmcp test` whenever you need targeted metrics; the CLI prints a confirmation and drops artifacts under `coverage/` for merging.
+
+    **Docs**
+    📚 **Coverage workflows documented** – The testing guides now explain the Nx coverage scripts, CLI coverage flag, and the transport recreation lab so teams can reproduce the results locally.
 
   </Card>
 </Update>

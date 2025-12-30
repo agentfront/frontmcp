@@ -9,11 +9,12 @@ FrontMCP bundles three ready-to-serve authentication demos under `apps/e2e/**`. 
 
 ## Projects at a glance
 
-| Project                 | Mode                   | Default port | Highlights                                                                      | Serve command                                     |
-| ----------------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `demo-e2e-public`       | `public`               | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback           | `pnpm nx serve demo-e2e-public --port 3003`       |
-| `demo-e2e-orchestrated` | `orchestrated` (local) | `3005`       | Stateful sessions, consent UI, incremental auth controls                        | `pnpm nx serve demo-e2e-orchestrated --port 3005` |
-| `demo-e2e-transparent`  | `transparent`          | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies | `pnpm nx serve demo-e2e-transparent --port 3004`  |
+| Project                         | Mode                     | Default port | Highlights                                                                                                                        | Serve command                                             |
+| ------------------------------- | ------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `demo-e2e-public`               | `public`                 | `3003`       | Anonymous sessions with scoped tools, Streamable HTTP + JSON fallback                                                             | `pnpm nx serve demo-e2e-public --port 3003`               |
+| `demo-e2e-orchestrated`         | `orchestrated` (local)   | `3005`       | Stateful sessions, consent UI, incremental auth controls                                                                          | `pnpm nx serve demo-e2e-orchestrated --port 3005`         |
+| `demo-e2e-transparent`          | `transparent`            | `3004`       | Proxies tokens to a remote IdP while keeping local consent + transport policies                                                   | `pnpm nx serve demo-e2e-transparent --port 3004`          |
+| `demo-e2e-transport-recreation` | `public (transport lab)` | `3020`       | Tools that surface session IDs, request counters, and recreateable Streamable HTTP handshakes so you can audit session continuity | `pnpm nx serve demo-e2e-transport-recreation --port 3020` |
 
 <Note>
 All commands assume `pnpm install` has already been run at the repo root. Replace the port if it conflicts with another service.
@@ -138,6 +139,54 @@ The demo login accepts any email address. Replace it with a real IdP before expo
 <Note>
 If your IdP exposes a JWKS file, frontload the URL in `remote.jwksUri` to skip metadata discovery during tests.
 </Note>
+
+---
+
+## demo-e2e-transport-recreation: session recreation lab
+
+```ts title="apps/e2e/demo-e2e-transport-recreation/src/main.ts"
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import { TransportTestApp } from './apps/transport-test';
+
+const portEnv = process.env['PORT'] ?? '3020';
+const port = parseInt(portEnv, 10);
+if (isNaN(port) || port < 1 || port > 65535) {
+  throw new Error(`Invalid PORT environment variable: "${portEnv}". Must be a number between 1 and 65535.`);
+}
+
+@FrontMcp({
+  info: { name: 'Demo E2E Transport Recreation', version: '0.1.0' },
+  apps: [TransportTestApp],
+  logging: { level: LogLevel.VERBOSE },
+  http: { port },
+  auth: {
+    mode: 'public',
+    sessionTtl: 3600,
+    anonymousScopes: ['anonymous'],
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+      enableLegacySSE: true,
+      enableSseListener: true,
+    },
+  },
+})
+export default class Server {}
+```
+
+- The `TransportTestApp` registers the `get-session-info` and `increment-counter` tools so you can inspect every session ID and track a session-scoped counter through repeated requests.
+- Stateful HTTP, streamable HTTP, and SSE listeners stay on to replay initialization state while the recreateable transport reconnects a client.
+- `LogLevel.VERBOSE` plus the recreateable transport warnings reveal pending initialization state, pending SDK internals, and the first `handleRequest` after a cold start.
+
+<Note>
+  Start the lab with `pnpm nx serve demo-e2e-transport-recreation --port 3020` so you can point `@frontmcp/testing` or the Inspector at a consistent port.
+</Note>
+
+<Tip>
+  Call `get-session-info` and `increment-counter` before and after restarting the server to prove the same session ID carries the counter value even when the transport is recreated.
+</Tip>
 
 ---
 
