@@ -31,5 +31,23 @@ module.exports = {
   },
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/adapters',
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.spec.ts',
+    '!src/**/index.ts',
+    '!src/**/*.d.ts',
+    '!src/**/*.types.ts', // Exclude type definition files from coverage
+  ],
+  // Override coverage thresholds for adapters package
+  // Lower thresholds account for untestable decorator metadata and class properties
+  coverageThreshold: {
+    global: {
+      statements: 90,
+      branches: 85,
+      functions: 80,
+      lines: 90,
+    },
+  },
 };

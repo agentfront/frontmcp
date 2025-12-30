@@ -522,7 +522,7 @@ export async function buildStaticWidget<In = unknown, Out = unknown>(
 /**
  * @deprecated Use BuildConfig instead
  */
-export type BuildTargetPlatform = 'chatgpt' | 'claude' | 'mcp-apps' | 'universal';
+export type BuildTargetPlatform = 'chatgpt' | 'claude' | 'universal';
 
 /**
  * @deprecated Use BuildOptions with config instead

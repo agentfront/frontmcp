@@ -14,7 +14,7 @@ module.exports = {
     '^.+\\.[tj]sx?$': ['@swc/jest', swcJestConfig],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'html'],
-  coverageDirectory: 'test-output/jest/coverage',
+  coverageDirectory: '../../coverage/unit/ui',
   testPathIgnorePatterns: [
     '/node_modules/',
     // Web component tests need jsdom or browser environment

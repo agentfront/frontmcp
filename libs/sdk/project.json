@@ -20,7 +20,6 @@
         "thirdParty": false,
         "platform": "node",
         "assets": ["libs/sdk/README.md", "LICENSE", "libs/sdk/package.json"],
-        "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
           "external": [
@@ -56,7 +55,6 @@
         "thirdParty": false,
         "platform": "node",
         "skipTypeCheck": true,
-        "additionalEntryPoints": ["libs/sdk/src/mcp-apps/index.ts"],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
           "external": [

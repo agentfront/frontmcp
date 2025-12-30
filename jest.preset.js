@@ -1,3 +1,7 @@
 const nxPreset = require('@nx/jest/preset').default;
+const coveragePreset = require('./jest.coverage.preset.js');
 
-module.exports = { ...nxPreset };
+module.exports = {
+  ...nxPreset,
+  ...coveragePreset,
+};

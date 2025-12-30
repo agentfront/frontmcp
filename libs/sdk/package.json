@@ -41,17 +41,6 @@
         "default": "./dist/esm/index.mjs"
       }
     },
-    "./mcp-apps": {
-      "development": "./src/mcp-apps/index.ts",
-      "require": {
-        "types": "./dist/mcp-apps/index.d.ts",
-        "default": "./dist/mcp-apps/index.js"
-      },
-      "import": {
-        "types": "./dist/mcp-apps/index.d.ts",
-        "default": "./dist/esm/mcp-apps/index.mjs"
-      }
-    },
     "./transport": {
       "development": "./src/transport/index.ts",
       "require": {
