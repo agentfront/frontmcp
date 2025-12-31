@@ -865,7 +865,7 @@ describe('ParameterResolver', () => {
         ],
       });
 
-      const schema = inputSchema.properties?.oldParam as any;
+      const schema = inputSchema.properties?.['oldParam'] as any;
       expect(schema['deprecated']).toBe(true);
     });
 
@@ -953,7 +953,7 @@ describe('ParameterResolver', () => {
       const { inputSchema, mapper } = resolver.resolve({ parameters: [] }, undefined, securityRequirements, false);
 
       // Should add to mapper but not to inputSchema
-      expect(inputSchema.properties?.bearerAuth).toBeUndefined();
+      expect(inputSchema.properties?.['bearerAuth']).toBeUndefined();
       expect(mapper.find((m) => m.security?.scheme === 'bearerAuth')).toBeDefined();
     });
 
@@ -965,7 +965,7 @@ describe('ParameterResolver', () => {
 
       const { inputSchema, mapper } = resolver.resolve({ parameters: [] }, undefined, securityRequirements, true);
 
-      const jwtSchema = inputSchema.properties?.jwt as any;
+      const jwtSchema = inputSchema.properties?.['jwt'] as any;
       expect(jwtSchema.description).toContain('JWT');
     });
 
@@ -985,7 +985,7 @@ describe('ParameterResolver', () => {
 
       const { inputSchema, mapper } = resolver.resolve({ parameters: [] }, undefined, securityRequirements, true);
 
-      const oidcSchema = inputSchema.properties?.oidc as any;
+      const oidcSchema = inputSchema.properties?.['oidc'] as any;
       expect(oidcSchema.description).toContain('openid, profile');
     });
 
