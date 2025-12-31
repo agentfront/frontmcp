@@ -7,6 +7,7 @@ import {
   FlowPlan,
   FlowRunOptions,
   ToolContext,
+  ToolCtorArgs,
   ToolEntry,
   isOrchestratedMode,
 } from '../../common';
@@ -25,7 +26,6 @@ import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
-import { safeStringify } from '@frontmcp/uipack/utils';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -137,6 +137,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
 
     const { name } = this.state.required.input;
+    // Agents register themselves as tools in the tool registry (invoke_<agent-id>)
+    // so no special handling is needed here
     const tool = activeTools.find((entry) => {
       return entry.fullName === name || entry.name === name;
     });
@@ -605,11 +607,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
     if (process.env['DEBUG_TOOL_RESPONSE']) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('fs').promises;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const os = require('os');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const path = require('path');
       const debugOutput = {
         timestamp: new Date().toISOString(),

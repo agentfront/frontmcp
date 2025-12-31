@@ -26,10 +26,12 @@ import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import HookRegistry from '../hooks/hook.registry';
 import PromptRegistry from '../prompt/prompt.registry';
+import AgentRegistry from '../agent/agent.registry';
 import { NotificationService } from '../notification';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
+import CallAgentFlow from '../agent/flows/call-agent.flow';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -44,6 +46,7 @@ export class Scope extends ScopeEntry {
   private scopeTools: ToolRegistry;
   private scopeResources: ResourceRegistry;
   private scopePrompts: PromptRegistry;
+  private scopeAgents: AgentRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
@@ -233,12 +236,16 @@ export class Scope extends ScopeEntry {
     this.scopePrompts = new PromptRegistry(this.scopeProviders, [], scopeRef);
     await this.scopePrompts.ready;
 
+    // Initialize agent registry (scope-level agents, typically none but allows for scope-wide agents)
+    this.scopeAgents = new AgentRegistry(this.scopeProviders, [], scopeRef);
+    await this.scopeAgents.ready;
+
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
 
-    // Register logging and completion flows
-    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
+    // Register logging, completion, and agent flows
+    await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow, CallAgentFlow]);
 
     await this.auth.ready;
     this.logger.info('Initializing multi-app scope', this.metadata);
@@ -317,6 +324,10 @@ export class Scope extends ScopeEntry {
 
   get prompts(): PromptRegistry {
     return this.scopePrompts;
+  }
+
+  get agents(): AgentRegistry {
+    return this.scopeAgents;
   }
 
   get notifications(): NotificationService {

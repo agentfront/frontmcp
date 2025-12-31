@@ -8,8 +8,10 @@ import {
   ToolKind,
   Type,
   ToolContext,
+  ToolEntry,
   extendedToolMetadata,
   ParsedToolResult,
+  AgentToolDefinition,
 } from '../common';
 import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
 import { getMetadata } from '../utils/metadata.utils';
@@ -397,10 +399,52 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
     return value.filter(Boolean).map((v) => v as T);
   }
 
-  if (value && typeof value === 'object' && (value as any).type === expectedType) {
+  if (value && typeof value === 'object' && (value as Record<string, unknown>)['type'] === expectedType) {
     return [value as T];
   }
 
   // If the value is null/undefined or doesn't match, we just skip it.
   return [];
+}
+
+// ============================================================================
+// Tool Definition Utilities for Agents
+// ============================================================================
+
+/**
+ * Build agent tool definitions from tool entries.
+ *
+ * Converts `ToolEntry[]` to `AgentToolDefinition[]` format suitable for
+ * passing to an LLM adapter. This is a simpler format than full MCP Tool
+ * definitions, containing only the information needed by the LLM.
+ *
+ * @param tools - Array of tool entries from the tool registry
+ * @returns Array of agent tool definitions
+ *
+ * @example
+ * ```typescript
+ * const tools = scope.tools.getTools(true);
+ * const definitions = buildAgentToolDefinitions(tools);
+ * ```
+ */
+export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefinition[] {
+  return tools.map((tool) => ({
+    name: tool.metadata.id ?? tool.metadata.name,
+    description: tool.metadata.description ?? '',
+    parameters: tool.rawInputSchema ?? { type: 'object', properties: {} },
+  }));
+}
+
+/**
+ * Build a single agent tool definition from a tool entry.
+ *
+ * @param tool - A tool entry from the tool registry
+ * @returns Agent tool definition
+ */
+export function buildAgentToolDefinition(tool: ToolEntry): AgentToolDefinition {
+  return {
+    name: tool.metadata.id ?? tool.metadata.name,
+    description: tool.metadata.description ?? '',
+    parameters: tool.rawInputSchema ?? { type: 'object', properties: {} },
+  };
 }

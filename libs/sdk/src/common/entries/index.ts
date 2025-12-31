@@ -11,3 +11,4 @@ export * from './tool.entry';
 export * from './resource.entry';
 export * from './prompt.entry';
 export * from './logger.entry';
+export * from './agent.entry';

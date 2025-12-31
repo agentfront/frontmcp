@@ -73,6 +73,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const hasPrompts = this.scope.prompts.hasAny();
     const hasResources = this.scope.resources.hasAny();
     const hasTools = this.scope.tools.hasAny();
+    const hasAgents = this.scope.agents.hasAny();
     const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
 
     const serverOptions = {
@@ -81,6 +82,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
         ...this.scope.tools.getCapabilities(),
         ...this.scope.resources.getCapabilities(),
         ...this.scope.prompts.getCapabilities(),
+        ...this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
         ...completionsCapability,
         // MCP logging protocol support - allows clients to set log level via logging/setLevel
         logging: {},
@@ -89,9 +91,10 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     };
 
     this.logger.info('connectServer: advertising capabilities', {
-      hasTools,
+      hasTools: hasTools || hasAgents, // Agents expose themselves as tools
       hasResources,
       hasPrompts,
+      hasAgents,
       capabilities: JSON.stringify(serverOptions.capabilities),
       serverInfo: JSON.stringify(serverOptions.serverInfo),
     });

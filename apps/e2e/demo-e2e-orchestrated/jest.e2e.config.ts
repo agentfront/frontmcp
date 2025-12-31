@@ -1,6 +1,4 @@
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 
 export default {
