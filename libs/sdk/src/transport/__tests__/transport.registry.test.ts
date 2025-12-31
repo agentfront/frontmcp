@@ -1037,8 +1037,10 @@ describe('TransportService', () => {
 
         const session = await service.getStoredSession('streamable-http', 'state-token', 'state-session');
 
-        expect(session?.transportState).toBeDefined();
-        expect(session?.transportState?.protocol).toBe('streamable-http');
+        expect((session as { transportState?: { protocol: string } })?.transportState).toBeDefined();
+        expect((session as { transportState?: { protocol: string } })?.transportState?.protocol).toBe(
+          'streamable-http',
+        );
       });
 
       it('should handle SSE transportState with lastEventId', async () => {

@@ -5,8 +5,14 @@
 // by extracting and testing its logic.
 
 import { z } from 'zod';
-import { redisOptionsSchema } from '../../types/options/redis.options';
+import { redisOptionsSchema, RedisOptions } from '../../types/options/redis.options';
 import { transportOptionsSchema } from '../../types/options/transport.options';
+
+// Helper to safely access redis properties (handles union type with Vercel KV)
+function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
+  if (!redis) return undefined;
+  return (redis as unknown as Record<string, unknown>)[key];
+}
 
 // Type guard for persistence object shape (mirrors front-mcp.metadata.ts)
 function isPersistenceObject(
@@ -105,7 +111,8 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('explicit-host');
+      const redis = result.transport?.persistence?.redis;
+      expect(redis && 'host' in redis ? redis.host : undefined).toBe('explicit-host');
     });
   });
 
@@ -117,7 +124,8 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
+      const redis = result.transport?.persistence?.redis;
+      expect(redis && 'host' in redis ? redis.host : undefined).toBe('global-redis');
     });
 
     it('should respect explicit persistence: { enabled: false }', () => {
@@ -143,8 +151,9 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
-      expect(result.transport?.persistence?.redis?.port).toBe(6380);
+      const redis = result.transport?.persistence?.redis;
+      expect(redis && 'host' in redis ? redis.host : undefined).toBe('global-redis');
+      expect(redis && 'port' in redis ? redis.port : undefined).toBe(6380);
     });
 
     it('should use explicit redis when persistence has its own redis config', () => {
@@ -160,7 +169,7 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('custom-persistence-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('custom-persistence-redis');
     });
 
     it('should preserve other transport options when auto-enabling persistence', () => {
@@ -176,7 +185,7 @@ describe('applyAutoTransportPersistence transform', () => {
       expect(result.transport?.sessionMode).toBe('stateless');
       expect(result.transport?.enableLegacySSE).toBe(true);
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
     });
   });
 
@@ -218,8 +227,8 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('legacy-redis');
-      expect(result.transport?.persistence?.redis?.port).toBe(6379);
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('legacy-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'port')).toBe(6379);
     });
   });
 
@@ -238,7 +247,7 @@ describe('applyAutoTransportPersistence transform', () => {
 
       expect(result.transport?.persistence?.enabled).toBe(true);
       expect(result.transport?.persistence?.defaultTtlMs).toBe(7200000);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
     });
   });
 
@@ -257,7 +266,7 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       // Should use explicit redis, not global
-      expect(result.transport?.persistence?.redis?.host).toBe('explicit-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('explicit-redis');
       expect(result.transport?.persistence?.enabled).toBe(true);
     });
 
@@ -305,12 +314,12 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
-      expect(result.transport?.persistence?.redis?.port).toBe(6380);
-      expect(result.transport?.persistence?.redis?.password).toBe('secret');
-      expect(result.transport?.persistence?.redis?.db).toBe(2);
-      expect(result.transport?.persistence?.redis?.tls).toBe(true);
-      expect(result.transport?.persistence?.redis?.keyPrefix).toBe('myapp:');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'port')).toBe(6380);
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'password')).toBe('secret');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'db')).toBe(2);
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'tls')).toBe(true);
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'keyPrefix')).toBe('myapp:');
     });
 
     it('should handle redis: undefined explicitly', () => {
@@ -332,7 +341,7 @@ describe('applyAutoTransportPersistence transform', () => {
 
       // Should still auto-enable even when transport is undefined
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('global-redis');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
     });
   });
 

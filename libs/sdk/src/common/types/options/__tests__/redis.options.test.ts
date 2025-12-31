@@ -2,6 +2,12 @@
 
 import { redisOptionsSchema, RedisOptions, RedisOptionsInput } from '../redis.options';
 
+// Helper to safely access redis properties (handles union type with Vercel KV)
+function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
+  if (!redis) return undefined;
+  return (redis as unknown as Record<string, unknown>)[key];
+}
+
 describe('redisOptionsSchema', () => {
   describe('required fields', () => {
     it('should require host', () => {
@@ -23,17 +29,17 @@ describe('redisOptionsSchema', () => {
   describe('default values', () => {
     it('should apply default port of 6379', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost' });
-      expect(result.port).toBe(6379);
+      expect(getRedisProperty(result, 'port')).toBe(6379);
     });
 
     it('should apply default db of 0', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost' });
-      expect(result.db).toBe(0);
+      expect(getRedisProperty(result, 'db')).toBe(0);
     });
 
     it('should apply default tls of false', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost' });
-      expect(result.tls).toBe(false);
+      expect(getRedisProperty(result, 'tls')).toBe(false);
     });
 
     it('should apply default keyPrefix of mcp:', () => {
@@ -50,17 +56,17 @@ describe('redisOptionsSchema', () => {
   describe('optional fields', () => {
     it('should accept custom port', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost', port: 6380 });
-      expect(result.port).toBe(6380);
+      expect(getRedisProperty(result, 'port')).toBe(6380);
     });
 
     it('should accept password', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost', password: 'secret' });
-      expect(result.password).toBe('secret');
+      expect(getRedisProperty(result, 'password')).toBe('secret');
     });
 
     it('should accept tls enabled', () => {
       const result = redisOptionsSchema.parse({ host: 'localhost', tls: true });
-      expect(result.tls).toBe(true);
+      expect(getRedisProperty(result, 'tls')).toBe(true);
     });
 
     it('should accept custom keyPrefix', () => {
@@ -110,8 +116,8 @@ describe('redisOptionsSchema', () => {
 
     it('should infer correct output type', () => {
       const result: RedisOptions = redisOptionsSchema.parse({ host: 'localhost' });
-      expect(result.host).toBe('localhost');
-      expect(result.port).toBe(6379); // default applied
+      expect(getRedisProperty(result, 'host')).toBe('localhost');
+      expect(getRedisProperty(result, 'port')).toBe(6379); // default applied
     });
   });
 
@@ -168,17 +174,17 @@ describe('redisOptionsSchema', () => {
     describe('password edge cases', () => {
       it('should accept password with special characters', () => {
         const result = redisOptionsSchema.parse({ host: 'localhost', password: 'p@ss!w0rd#$%^&*()' });
-        expect(result.password).toBe('p@ss!w0rd#$%^&*()');
+        expect(getRedisProperty(result, 'password')).toBe('p@ss!w0rd#$%^&*()');
       });
 
       it('should accept empty string password', () => {
         const result = redisOptionsSchema.parse({ host: 'localhost', password: '' });
-        expect(result.password).toBe('');
+        expect(getRedisProperty(result, 'password')).toBe('');
       });
 
       it('should accept password with unicode characters', () => {
         const result = redisOptionsSchema.parse({ host: 'localhost', password: 'パスワード123' });
-        expect(result.password).toBe('パスワード123');
+        expect(getRedisProperty(result, 'password')).toBe('パスワード123');
       });
     });
 

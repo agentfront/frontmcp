@@ -7,6 +7,12 @@ import {
   resetDeprecationWarning,
 } from '../auth-transport.migrate';
 
+// Helper to safely access redis properties (handles union type with Vercel KV)
+function getRedisProperty<K extends string>(redis: unknown, key: K): unknown {
+  if (!redis || typeof redis !== 'object') return undefined;
+  return (redis as Record<string, unknown>)[key];
+}
+
 describe('auth-transport migration', () => {
   beforeEach(() => {
     // Reset deprecation warning state before each test
@@ -39,7 +45,7 @@ describe('auth-transport migration', () => {
 
     it('should return true when session exists', () => {
       const metadata = {
-        session: { sessionMode: 'stateful' },
+        session: { sessionMode: 'stateful' as const },
       };
       expect(needsMigration(metadata)).toBe(true);
     });
@@ -50,7 +56,7 @@ describe('auth-transport migration', () => {
           mode: 'public',
           transport: { enableStreamableHttp: true },
         },
-        session: { sessionMode: 'stateful' },
+        session: { sessionMode: 'stateful' as const },
       };
       expect(needsMigration(metadata)).toBe(true);
     });
@@ -132,7 +138,7 @@ describe('auth-transport migration', () => {
       const result = migrateAuthTransportConfig(metadata);
 
       expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.host).toBe('localhost');
+      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('localhost');
       expect(result.transport?.persistence?.defaultTtlMs).toBe(7200000);
     });
 
@@ -151,8 +157,8 @@ describe('auth-transport migration', () => {
 
       const result = migrateAuthTransportConfig(metadata);
 
-      expect(result.redis?.host).toBe('redis.example.com');
-      expect(result.redis?.port).toBe(6380);
+      expect(getRedisProperty(result.redis, 'host')).toBe('redis.example.com');
+      expect(getRedisProperty(result.redis, 'port')).toBe(6380);
     });
 
     it('should not overwrite existing top-level redis', () => {

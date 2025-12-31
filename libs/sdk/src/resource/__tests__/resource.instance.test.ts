@@ -3,7 +3,11 @@ import { ResourceInstance } from '../resource.instance';
 import { Resource, ResourceTemplate } from '../../common/decorators/resource.decorator';
 import { normalizeResource, normalizeResourceTemplate } from '../resource.utils';
 import { ResourceKind } from '../../common/records';
-import { ResourceTemplateKind } from '../resource.types';
+
+// Helper to safely access content properties (handles text/blob union)
+function getContentText(content: { uri: string; text?: string; blob?: string }): string | undefined {
+  return 'text' in content ? content.text : undefined;
+}
 
 // Mock the dependencies that ResourceInstance needs
 const createMockProviderRegistry = () => {
@@ -327,7 +331,7 @@ describe('ResourceInstance', () => {
 
       const result = instance.parseOutput('plain text content' as any);
       expect(result.contents).toHaveLength(1);
-      expect(result.contents[0].text).toBe('plain text content');
+      expect(getContentText(result.contents[0])).toBe('plain text content');
     });
 
     it('should convert Buffer to blob content', async () => {
@@ -368,7 +372,7 @@ describe('ResourceInstance', () => {
 
       const result = instance.parseOutput({ key: 'value', num: 42 } as any);
       expect(result.contents).toHaveLength(1);
-      expect(result.contents[0].text).toBe(JSON.stringify({ key: 'value', num: 42 }));
+      expect(getContentText(result.contents[0])).toBe(JSON.stringify({ key: 'value', num: 42 }));
     });
 
     it('should pass through ReadResourceResult format', async () => {

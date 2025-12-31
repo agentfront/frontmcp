@@ -8,6 +8,12 @@ import {
   TransportPersistenceConfig,
 } from '../transport.options';
 
+// Helper to safely access redis properties (handles union type with Vercel KV)
+function getRedisProperty<K extends string>(redis: unknown, key: K): unknown {
+  if (!redis || typeof redis !== 'object') return undefined;
+  return (redis as Record<string, unknown>)[key];
+}
+
 describe('transportPersistenceConfigSchema', () => {
   describe('default values', () => {
     it('should apply default enabled of false', () => {
@@ -152,7 +158,7 @@ describe('transportOptionsSchema', () => {
         },
       });
       expect(result.persistence?.enabled).toBe(true);
-      expect(result.persistence?.redis?.host).toBe('localhost');
+      expect(getRedisProperty(result.persistence?.redis, 'host')).toBe('localhost');
     });
   });
 

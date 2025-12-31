@@ -187,7 +187,7 @@ describe('Dev Key Persistence', () => {
     it('should reject missing kid', async () => {
       const keyPath = path.join(tempDir, 'missing-kid.json');
       const invalidKey = createValidRsaKeyData();
-      delete (invalidKey as Record<string, unknown>)['kid'];
+      delete (invalidKey as unknown as Record<string, unknown>)['kid'];
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -197,7 +197,7 @@ describe('Dev Key Persistence', () => {
     it('should reject missing privateKey', async () => {
       const keyPath = path.join(tempDir, 'missing-private.json');
       const invalidKey = createValidRsaKeyData();
-      delete (invalidKey as Record<string, unknown>)['privateKey'];
+      delete (invalidKey as unknown as Record<string, unknown>)['privateKey'];
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -207,7 +207,7 @@ describe('Dev Key Persistence', () => {
     it('should reject missing publicJwk', async () => {
       const keyPath = path.join(tempDir, 'missing-public.json');
       const invalidKey = createValidRsaKeyData();
-      delete (invalidKey as Record<string, unknown>)['publicJwk'];
+      delete (invalidKey as unknown as Record<string, unknown>)['publicJwk'];
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -217,7 +217,7 @@ describe('Dev Key Persistence', () => {
     it('should reject missing createdAt', async () => {
       const keyPath = path.join(tempDir, 'missing-created.json');
       const invalidKey = createValidRsaKeyData();
-      delete (invalidKey as Record<string, unknown>)['createdAt'];
+      delete (invalidKey as unknown as Record<string, unknown>)['createdAt'];
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -227,7 +227,7 @@ describe('Dev Key Persistence', () => {
     it('should reject missing alg', async () => {
       const keyPath = path.join(tempDir, 'missing-alg.json');
       const invalidKey = createValidRsaKeyData();
-      delete (invalidKey as Record<string, unknown>)['alg'];
+      delete (invalidKey as unknown as Record<string, unknown>)['alg'];
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -237,7 +237,7 @@ describe('Dev Key Persistence', () => {
     it('should reject invalid alg (HS256)', async () => {
       const keyPath = path.join(tempDir, 'invalid-alg-hs256.json');
       const invalidKey = createValidRsaKeyData();
-      (invalidKey as Record<string, unknown>)['alg'] = 'HS256';
+      (invalidKey as unknown as Record<string, unknown>)['alg'] = 'HS256';
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -247,7 +247,7 @@ describe('Dev Key Persistence', () => {
     it('should reject invalid alg (none)', async () => {
       const keyPath = path.join(tempDir, 'invalid-alg-none.json');
       const invalidKey = createValidRsaKeyData();
-      (invalidKey as Record<string, unknown>)['alg'] = 'none';
+      (invalidKey as unknown as Record<string, unknown>)['alg'] = 'none';
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
@@ -267,7 +267,7 @@ describe('Dev Key Persistence', () => {
     it('should reject publicJwk without keys array', async () => {
       const keyPath = path.join(tempDir, 'no-keys-array.json');
       const invalidKey = createValidRsaKeyData();
-      (invalidKey.publicJwk as Record<string, unknown>) = {};
+      (invalidKey as unknown as Record<string, unknown>)['publicJwk'] = {};
       await fs.writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
