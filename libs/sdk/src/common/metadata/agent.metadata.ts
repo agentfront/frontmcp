@@ -23,9 +23,9 @@ declare global {
 // ============================================================================
 
 /**
- * Built-in LLM adapter types supported by the SDK.
+ * Supported LLM providers for the built-in adapter shorthand.
  */
-export type AgentLlmAdapterType = 'langchain' | 'openai' | 'anthropic' | 'openrouter';
+export type AgentLlmProviderType = 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq';
 
 /**
  * Helper type for resolving configuration from app config paths.
@@ -57,14 +57,15 @@ export function withConfig<T = string>(configPath: string, transform?: (value: u
 export type AgentApiKeyConfig = string | { env: string } | WithConfig<string>;
 
 /**
- * Built-in adapter shorthand configuration.
+ * Built-in provider shorthand configuration.
  * Use this for quick setup with standard LLM providers.
+ * The SDK will auto-create the appropriate LangChain adapter.
  */
 export interface AgentLlmBuiltinConfig {
   /**
-   * Built-in adapter type to use.
+   * LLM provider to use.
    */
-  adapter: AgentLlmAdapterType;
+  provider: AgentLlmProviderType;
 
   /**
    * Model identifier (e.g., 'gpt-4-turbo', 'claude-3-opus').
@@ -270,7 +271,7 @@ export interface AgentMetadata<
 > extends ExtendFrontMcpAgentMetadata {
   /**
    * Unique identifier for the agent.
-   * Used for tool routing (invoke_<id>) and swarm discovery.
+   * Used for tool routing (use-agent:<id>) and swarm discovery.
    * If omitted, derived from the class name or 'name' property.
    */
   id?: string;
@@ -397,7 +398,7 @@ const withConfigSchema = z.object({
 const apiKeyConfigSchema = z.union([z.string(), z.object({ env: z.string() }), withConfigSchema]);
 
 const builtinAdapterConfigSchema = z.object({
-  adapter: z.enum(['langchain', 'openai', 'anthropic', 'openrouter']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'mistral', 'groq']),
   model: z.union([z.string(), withConfigSchema]),
   apiKey: apiKeyConfigSchema,
   baseUrl: z.union([z.string(), withConfigSchema]).optional(),

@@ -269,7 +269,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   /**
    * Get tool definitions for all agents.
    *
-   * Each agent is exposed as a tool with name `invoke_<agent_id>`.
+   * Each agent is exposed as a tool with name `use-agent:<agent_id>`.
    */
   getAgentsAsTools(): Tool[] {
     return this.listAllInstances()

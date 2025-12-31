@@ -12,6 +12,7 @@ import {
   AgentExecutionError,
 } from '../../errors';
 import { Scope } from '../../scope';
+import { isAgentToolName, agentIdFromToolName } from '../agent.utils';
 
 // ============================================================================
 // Schemas
@@ -117,7 +118,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       throw new InvalidInputError('Invalid Input', e instanceof z.ZodError ? e.issues : undefined);
     }
 
-    // Agents are invoked via tools/call with the invoke_<agent_id> name
+    // Agents are invoked via tools/call with the use-agent:<agent_id> name
     if (method !== 'tools/call') {
       this.logger.warn(`parseInput: invalid method "${method}"`);
       throw new InvalidMethodError(method, 'tools/call');
@@ -127,14 +128,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const { name: toolName } = params;
     const scope = this.scope as Scope;
 
-    // Check if this is an agent invocation (invoke_<agent_id> pattern)
-    let agentId: string;
-    if (toolName.startsWith('invoke_')) {
-      agentId = toolName.slice('invoke_'.length);
-    } else {
-      // Direct agent name lookup
-      agentId = toolName;
-    }
+    // Extract agent ID from use-agent:<agent_id> pattern or use direct name
+    const agentId = agentIdFromToolName(toolName) ?? toolName;
 
     let agent: AgentEntry | undefined;
     if (scope.agents) {
@@ -168,13 +163,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     const { name: toolName } = this.state.required.input;
 
-    // Extract agent ID from invoke_<agent_id> pattern
-    let agentId: string;
-    if (toolName.startsWith('invoke_')) {
-      agentId = toolName.slice('invoke_'.length);
-    } else {
-      agentId = toolName;
-    }
+    // Extract agent ID from use-agent:<agent_id> pattern or use direct name
+    const agentId = agentIdFromToolName(toolName) ?? toolName;
 
     // Try to find by ID first, then by name
     let agent: AgentEntry | undefined = agents.findById(agentId);

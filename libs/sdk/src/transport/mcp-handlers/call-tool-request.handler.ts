@@ -7,6 +7,7 @@ import {
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 import { formatMcpErrorResponse, InternalMcpError } from '../../errors';
 import { FlowControl } from '../../common';
+import { isAgentToolName } from '../../agent/agent.utils';
 
 export default function callToolRequestHandler({
   scope,
@@ -20,7 +21,9 @@ export default function callToolRequestHandler({
       logger.verbose(`tools/call: ${toolName}`);
 
       try {
-        return await scope.runFlowForOutput('tools:call-tool', { request, ctx });
+        // Route agent invocations (use-agent:*) to the agent flow
+        const flowName = isAgentToolName(toolName) ? 'agents:call-agent' : 'tools:call-tool';
+        return await scope.runFlowForOutput(flowName, { request, ctx });
       } catch (e) {
         // FlowControl is a control flow mechanism, not an error - handle silently
         if (e instanceof FlowControl) {

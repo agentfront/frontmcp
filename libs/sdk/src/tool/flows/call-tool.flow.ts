@@ -137,8 +137,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
 
     const { name } = this.state.required.input;
-    // Agents register themselves as tools in the tool registry (invoke_<agent-id>)
-    // so no special handling is needed here
+    // Agent invocations (use-agent:*) are routed to agents:call-agent flow
+    // by the call-tool-request handler, so they won't reach here
     const tool = activeTools.find((entry) => {
       return entry.fullName === name || entry.name === name;
     });

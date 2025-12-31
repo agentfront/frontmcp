@@ -64,7 +64,7 @@ export {
   AgentExecutionConfig,
   AgentExportsConfig,
   AgentApiKeyConfig,
-  AgentLlmAdapterType,
+  AgentLlmProviderType,
   WithConfig,
   withConfig,
   AgentType,

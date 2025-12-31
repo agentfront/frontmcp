@@ -12,7 +12,7 @@ import WeatherMcpApp from './apps/weather';
   apps: [WeatherMcpApp],
   logging: { level: LogLevel.VERBOSE },
   http: {
-    port: 3002,
+    port: 3003,
   },
   auth: {
     transport: {

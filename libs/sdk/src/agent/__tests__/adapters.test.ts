@@ -312,48 +312,64 @@ describe('LLM Adapters', () => {
   });
 
   describe('createAdapter', () => {
-    it('should throw deprecation error for OpenAI string shortcut', () => {
+    it('should create adapter for OpenAI provider shorthand', () => {
       const config: AgentLlmBuiltinConfig = {
-        adapter: 'openai',
-        model: 'gpt-4-turbo',
+        provider: 'openai',
+        model: 'gpt-4o',
         apiKey: 'test-key',
       };
 
-      expect(() => createAdapter(config)).toThrow(LlmAdapterError);
-      expect(() => createAdapter(config)).toThrow(/deprecated/i);
+      const adapter = createAdapter(config);
+      expect(adapter).toBeDefined();
+      expect(typeof adapter.completion).toBe('function');
     });
 
-    it('should throw deprecation error for Anthropic string shortcut', () => {
+    it('should create adapter for Anthropic provider shorthand', () => {
       const config: AgentLlmBuiltinConfig = {
-        adapter: 'anthropic',
-        model: 'claude-3-opus-20240229',
+        provider: 'anthropic',
+        model: 'claude-3-opus-latest',
         apiKey: 'test-key',
       };
 
-      expect(() => createAdapter(config)).toThrow(LlmAdapterError);
-      expect(() => createAdapter(config)).toThrow(/deprecated/i);
+      const adapter = createAdapter(config);
+      expect(adapter).toBeDefined();
+      expect(typeof adapter.completion).toBe('function');
     });
 
-    it('should throw deprecation error for OpenRouter string shortcut', () => {
+    it('should create adapter for Google provider shorthand', () => {
       const config: AgentLlmBuiltinConfig = {
-        adapter: 'openrouter',
-        model: 'anthropic/claude-3-opus',
+        provider: 'google',
+        model: 'gemini-1.5-pro',
         apiKey: 'test-key',
       };
 
-      expect(() => createAdapter(config)).toThrow(LlmAdapterError);
-      expect(() => createAdapter(config)).toThrow(/deprecated/i);
+      const adapter = createAdapter(config);
+      expect(adapter).toBeDefined();
+      expect(typeof adapter.completion).toBe('function');
     });
 
-    it('should throw deprecation error for LangChain string shortcut', () => {
+    it('should create adapter for Mistral provider shorthand', () => {
       const config: AgentLlmBuiltinConfig = {
-        adapter: 'langchain',
-        model: 'gpt-4-turbo',
+        provider: 'mistral',
+        model: 'mistral-large-latest',
         apiKey: 'test-key',
       };
 
-      expect(() => createAdapter(config)).toThrow(LlmAdapterError);
-      expect(() => createAdapter(config)).toThrow(/deprecated/i);
+      const adapter = createAdapter(config);
+      expect(adapter).toBeDefined();
+      expect(typeof adapter.completion).toBe('function');
+    });
+
+    it('should create adapter for Groq provider shorthand', () => {
+      const config: AgentLlmBuiltinConfig = {
+        provider: 'groq',
+        model: 'llama-3.3-70b-versatile',
+        apiKey: 'test-key',
+      };
+
+      const adapter = createAdapter(config);
+      expect(adapter).toBeDefined();
+      expect(typeof adapter.completion).toBe('function');
     });
 
     it('should use provided adapter instance directly', () => {

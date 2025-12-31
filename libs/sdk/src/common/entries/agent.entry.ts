@@ -152,7 +152,7 @@ export abstract class AgentEntry<
    * Get the tool definition for this agent.
    *
    * Agents are automatically exposed as callable tools with the name
-   * `invoke_<agent_id>`. This method returns the MCP Tool definition
+   * `use-agent:<agent_id>`. This method returns the MCP Tool definition
    * that describes the agent as a tool.
    *
    * @returns MCP Tool definition

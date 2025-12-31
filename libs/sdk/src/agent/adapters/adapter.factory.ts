@@ -7,6 +7,7 @@ import {
   WithConfig,
 } from '../../common';
 import { LlmAdapterError } from './base.adapter';
+import { createProviderAdapterSync } from './providers';
 
 // ============================================================================
 // Configuration Resolution Types
@@ -114,15 +115,15 @@ export function resolveStringValue(value: string | WithConfig<string>, configRes
 // ============================================================================
 
 /**
- * Check if config is a built-in adapter config.
+ * Check if config is a built-in provider config.
  */
 export function isBuiltinConfig(config: AgentLlmConfig): config is AgentLlmBuiltinConfig {
+  if (typeof config !== 'object' || config === null) return false;
+  const obj = config as unknown as Record<string, unknown>;
   return (
-    typeof config === 'object' &&
-    config !== null &&
-    'adapter' in config &&
-    typeof config.adapter === 'string' &&
-    ['langchain', 'openai', 'anthropic', 'openrouter'].includes(config.adapter)
+    'provider' in obj &&
+    typeof obj['provider'] === 'string' &&
+    ['openai', 'anthropic', 'google', 'mistral', 'groq'].includes(obj['provider'])
   );
 }
 
@@ -183,17 +184,16 @@ export interface CreateAdapterOptions {
  * This provides a consistent API, built-in retry logic, and streaming support.
  *
  * Supported configuration types:
- * - Built-in adapter shorthand (`{ adapter: 'langchain', provider: 'openai', ... }`)
+ * - Provider shorthand (`{ provider: 'openai', model: 'gpt-4o', ... }`) - recommended
  * - Direct LangChainAdapter instance (`{ adapter: new LangChainAdapter(...) }`)
  * - Factory function (`{ adapter: (providers) => new LangChainAdapter(...) }`)
  * - DI token (`LLM_ADAPTER` symbol)
  *
- * @example Built-in adapter (recommended)
+ * @example Provider shorthand (recommended)
  * ```typescript
  * const adapter = createAdapter({
- *   adapter: 'langchain',
  *   provider: 'openai',
- *   model: 'gpt-4-turbo',
+ *   model: 'gpt-4o',
  *   apiKey: { env: 'OPENAI_API_KEY' },
  * });
  * ```
@@ -204,17 +204,8 @@ export interface CreateAdapterOptions {
  *
  * const adapter = createAdapter({
  *   adapter: new LangChainAdapter({
- *     model: new ChatOpenAI({ model: 'gpt-4-turbo' }),
+ *     model: new ChatOpenAI({ model: 'gpt-4o' }),
  *   }),
- * });
- * ```
- *
- * @example Legacy shorthand (deprecated, use 'langchain' with provider)
- * ```typescript
- * const adapter = createAdapter({
- *   adapter: 'openai',  // Automatically uses LangChain under the hood
- *   model: 'gpt-4-turbo',
- *   apiKey: { env: 'OPENAI_API_KEY' },
  * });
  * ```
  */
@@ -262,81 +253,39 @@ export function createAdapter(config: AgentLlmConfig, options: CreateAdapterOpti
 }
 
 /**
- * Create a built-in adapter from shorthand configuration.
+ * Create a built-in adapter from provider configuration.
  *
- * FrontMCP uses LangChain as the standard adapter layer. Users should
- * create a LangChainAdapter directly with their preferred LangChain model.
- *
- * @throws LlmAdapterError explaining how to use LangChainAdapter
+ * Automatically creates the appropriate LangChain adapter based on the provider.
  *
  * @example
  * ```typescript
- * import { ChatOpenAI } from '@langchain/openai';
- * import { LangChainAdapter } from '@frontmcp/sdk';
- *
- * const adapter = new LangChainAdapter({
- *   model: new ChatOpenAI({
- *     model: 'gpt-4-turbo',
- *     openAIApiKey: process.env.OPENAI_API_KEY,
- *   }),
- * });
- *
  * @Agent({
  *   name: 'my-agent',
- *   llm: { adapter },
+ *   llm: {
+ *     provider: 'openai',
+ *     model: 'gpt-4o',
+ *     apiKey: { env: 'OPENAI_API_KEY' },
+ *   },
  * })
  * ```
  */
-function createBuiltinAdapter(config: AgentLlmBuiltinConfig, _configResolver?: ConfigResolver): AgentLlmAdapter {
-  const adapterType = config.adapter;
+function createBuiltinAdapter(config: AgentLlmBuiltinConfig, configResolver?: ConfigResolver): AgentLlmAdapter {
+  // Extract provider from the discriminated union
+  const obj = config as unknown as Record<string, unknown>;
+  const provider = obj['provider'] as string;
+  const model = resolveStringValue(config.model as string | WithConfig<string>, configResolver);
+  const apiKey = resolveApiKey(config.apiKey, configResolver);
+  const baseUrl = config.baseUrl
+    ? resolveStringValue(config.baseUrl as string | WithConfig<string>, configResolver)
+    : undefined;
+  const { temperature, maxTokens } = config;
 
-  // Provide helpful error message with usage example
-  const examples: Record<string, string> = {
-    openai: `
-import { ChatOpenAI } from '@langchain/openai';
-import { LangChainAdapter } from '@frontmcp/sdk';
-
-const adapter = new LangChainAdapter({
-  model: new ChatOpenAI({
-    model: '${config.model}',
-    openAIApiKey: process.env.OPENAI_API_KEY,
-  }),
-});`,
-    anthropic: `
-import { ChatAnthropic } from '@langchain/anthropic';
-import { LangChainAdapter } from '@frontmcp/sdk';
-
-const adapter = new LangChainAdapter({
-  model: new ChatAnthropic({
-    model: '${config.model}',
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  }),
-});`,
-    openrouter: `
-import { ChatOpenAI } from '@langchain/openai';
-import { LangChainAdapter } from '@frontmcp/sdk';
-
-const adapter = new LangChainAdapter({
-  model: new ChatOpenAI({
-    model: '${config.model}',
-    openAIApiKey: process.env.OPENROUTER_API_KEY,
-    configuration: { baseURL: 'https://openrouter.ai/api/v1' },
-  }),
-});`,
-    langchain: `
-import { ChatOpenAI } from '@langchain/openai';
-import { LangChainAdapter } from '@frontmcp/sdk';
-
-const adapter = new LangChainAdapter({
-  model: new ChatOpenAI({ model: '${config.model}' }),
-});`,
-  };
-
-  const example = examples[adapterType] ?? examples['openai'];
-
-  throw new LlmAdapterError(
-    `String adapter shortcuts ('${adapterType}') are deprecated. ` + `Create a LangChainAdapter directly:\n${example}`,
-    'config',
-    'deprecated_shortcut',
-  );
+  return createProviderAdapterSync({
+    provider: provider as 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq',
+    model,
+    apiKey,
+    baseUrl,
+    temperature,
+    maxTokens,
+  });
 }

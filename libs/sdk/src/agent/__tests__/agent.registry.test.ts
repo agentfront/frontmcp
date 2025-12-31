@@ -362,7 +362,7 @@ describe('AgentRegistry', () => {
 
       const toolDef = agent?.getToolDefinition();
       expect(toolDef).toBeDefined();
-      expect(toolDef?.name).toBe('invoke_tool-agent');
+      expect(toolDef?.name).toBe('use-agent:tool-agent');
       expect(toolDef?.description).toContain('Agent that can be invoked as a tool');
     });
   });

@@ -18,10 +18,16 @@ import { LlmAdapterError } from './base.adapter';
  * Minimal interface matching LangChain's BaseChatModel.
  * This allows any LangChain model to be used without importing @langchain/core.
  */
-interface LangChainChatModel {
+export interface LangChainChatModel {
   invoke(messages: LangChainMessage[], options?: LangChainInvokeOptions): Promise<LangChainAIMessage>;
 
   stream?(messages: LangChainMessage[], options?: LangChainInvokeOptions): AsyncGenerator<LangChainStreamChunk>;
+
+  /**
+   * Bind tools to the model. Returns a new model instance with tools bound.
+   * This is the preferred way to add tools in LangChain.
+   */
+  bindTools?(tools: LangChainTool[]): LangChainChatModel;
 }
 
 interface LangChainMessage {
@@ -76,37 +82,84 @@ interface LangChainStreamChunk {
 }
 
 // ============================================================================
-// LangChain Message Classes (duck-typed)
+// LangChain Message Classes (dynamically imported)
 // ============================================================================
 
 /**
- * Create LangChain-compatible message objects without importing @langchain/core.
- * These match the structure expected by LangChain models.
+ * Cached message classes from @langchain/core.
  */
-function createSystemMessage(content: string): LangChainMessage {
+let messageClasses: {
+  SystemMessage: new (content: string) => LangChainMessage;
+  HumanMessage: new (content: string) => LangChainMessage;
+  AIMessage: new (fields: {
+    content: string;
+    tool_calls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+  }) => LangChainMessage;
+  ToolMessage: new (fields: { content: string; tool_call_id: string; name?: string }) => LangChainMessage;
+} | null = null;
+
+/**
+ * Load LangChain message classes dynamically.
+ */
+async function loadMessageClasses(): Promise<typeof messageClasses> {
+  if (messageClasses) return messageClasses;
+
+  try {
+    const core = await import('@langchain/core/messages');
+    messageClasses = {
+      SystemMessage: core.SystemMessage,
+      HumanMessage: core.HumanMessage,
+      AIMessage: core.AIMessage,
+      ToolMessage: core.ToolMessage,
+    };
+    return messageClasses;
+  } catch {
+    // Fallback to duck-typed messages if @langchain/core is not available
+    return null;
+  }
+}
+
+/**
+ * Create LangChain-compatible message objects.
+ * Uses actual LangChain classes if available, otherwise falls back to duck-typed objects.
+ */
+function createSystemMessage(content: string, classes: typeof messageClasses): LangChainMessage {
+  if (classes) {
+    return new classes.SystemMessage(content);
+  }
   return {
     _getType: () => 'system',
     content,
     lc_serializable: true,
+    response_metadata: {},
   } as unknown as LangChainMessage;
 }
 
-function createHumanMessage(content: string): LangChainMessage {
+function createHumanMessage(content: string, classes: typeof messageClasses): LangChainMessage {
+  if (classes) {
+    return new classes.HumanMessage(content);
+  }
   return {
     _getType: () => 'human',
     content,
     lc_serializable: true,
+    response_metadata: {},
   } as unknown as LangChainMessage;
 }
 
 function createAIMessage(
   content: string | null,
-  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>,
+  toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> | undefined,
+  classes: typeof messageClasses,
 ): LangChainMessage {
+  if (classes) {
+    return new classes.AIMessage({ content: content ?? '', tool_calls: toolCalls });
+  }
   const msg: Record<string, unknown> = {
     _getType: () => 'ai',
     content: content ?? '',
     lc_serializable: true,
+    response_metadata: {},
   };
   if (toolCalls) {
     msg['tool_calls'] = toolCalls;
@@ -114,13 +167,22 @@ function createAIMessage(
   return msg as unknown as LangChainMessage;
 }
 
-function createToolMessage(content: string, toolCallId: string, name?: string): LangChainMessage {
+function createToolMessage(
+  content: string,
+  toolCallId: string,
+  name: string | undefined,
+  classes: typeof messageClasses,
+): LangChainMessage {
+  if (classes) {
+    return new classes.ToolMessage({ content, tool_call_id: toolCallId, name });
+  }
   return {
     _getType: () => 'tool',
     content,
     tool_call_id: toolCallId,
     name,
     lc_serializable: true,
+    response_metadata: {},
   } as unknown as LangChainMessage;
 }
 
@@ -231,13 +293,66 @@ export class LangChainAdapter implements AgentLlmAdapter {
     tools?: AgentToolDefinition[],
     options?: AgentCompletionOptions,
   ): Promise<AgentCompletion> {
-    const messages = this.buildMessages(prompt);
-    const invokeOptions = this.buildInvokeOptions(tools, options);
+    // Load LangChain message classes for proper message construction
+    const classes = await loadMessageClasses();
+    const messages = this.buildMessages(prompt, classes);
+    const langChainTools = this.buildTools(tools);
 
     try {
-      const response = await this.model.invoke(messages, invokeOptions);
+      // Debug: log invoke options if DEBUG_LANGCHAIN is set
+      if (process.env['DEBUG_LANGCHAIN']) {
+        console.log('[LangChain] Messages:', JSON.stringify(messages, null, 2));
+        console.log('[LangChain] Tools:', JSON.stringify(langChainTools, null, 2));
+      }
+
+      // Use bindTools if available (preferred LangChain pattern), otherwise pass tools in invoke options
+      let model = this.model;
+      let invokeOptions: LangChainInvokeOptions | undefined;
+
+      if (langChainTools && langChainTools.length > 0) {
+        if (model.bindTools) {
+          // Preferred: bind tools to model
+          model = model.bindTools(langChainTools);
+        } else {
+          // Fallback: pass tools in invoke options (older LangChain versions)
+          invokeOptions = { tools: langChainTools };
+        }
+      }
+
+      // Add tool_choice to invoke options if specified
+      if (options?.toolChoice) {
+        invokeOptions = invokeOptions ?? {};
+        if (options.toolChoice === 'auto') {
+          invokeOptions.tool_choice = 'auto';
+        } else if (options.toolChoice === 'none') {
+          invokeOptions.tool_choice = 'none';
+        } else if (options.toolChoice === 'required') {
+          invokeOptions.tool_choice = 'required';
+        } else if (typeof options.toolChoice === 'object' && 'name' in options.toolChoice) {
+          invokeOptions.tool_choice = {
+            type: 'function',
+            function: { name: options.toolChoice.name },
+          };
+        }
+      }
+
+      const response = await model.invoke(messages, invokeOptions);
+
+      // Guard against undefined response (can happen with invalid API keys or network errors)
+      if (!response) {
+        throw new LlmAdapterError(
+          'LLM returned no response. Check your API key and network connection.',
+          'langchain',
+          'empty_response',
+        );
+      }
+
       return this.parseResponse(response);
     } catch (error) {
+      // Debug: log the raw error before wrapping
+      if (process.env['DEBUG_LANGCHAIN']) {
+        console.error('[LangChain] Raw error:', error);
+      }
       throw this.wrapError(error);
     }
   }
@@ -259,14 +374,43 @@ export class LangChainAdapter implements AgentLlmAdapter {
     }
 
     const messages = this.buildMessages(prompt);
-    const invokeOptions = this.buildInvokeOptions(tools, options);
+    const langChainTools = this.buildTools(tools);
+
+    // Use bindTools if available (preferred LangChain pattern)
+    let model = this.model;
+    let invokeOptions: LangChainInvokeOptions | undefined;
+
+    if (langChainTools && langChainTools.length > 0) {
+      if (model.bindTools) {
+        model = model.bindTools(langChainTools);
+      } else {
+        invokeOptions = { tools: langChainTools };
+      }
+    }
+
+    // Add tool_choice to invoke options if specified
+    if (options?.toolChoice) {
+      invokeOptions = invokeOptions ?? {};
+      if (options.toolChoice === 'auto') {
+        invokeOptions.tool_choice = 'auto';
+      } else if (options.toolChoice === 'none') {
+        invokeOptions.tool_choice = 'none';
+      } else if (options.toolChoice === 'required') {
+        invokeOptions.tool_choice = 'required';
+      } else if (typeof options.toolChoice === 'object' && 'name' in options.toolChoice) {
+        invokeOptions.tool_choice = {
+          type: 'function',
+          function: { name: options.toolChoice.name },
+        };
+      }
+    }
 
     let content = '';
     const toolCallsMap = new Map<number, Partial<AgentToolCall> & { rawArgs?: string }>();
     let finishReason: AgentCompletion['finishReason'] = 'stop';
 
     try {
-      const stream = this.model.stream(messages, invokeOptions);
+      const stream = model.stream!(messages, invokeOptions);
 
       for await (const chunk of stream) {
         // Handle content
@@ -419,17 +563,14 @@ export class LangChainAdapter implements AgentLlmAdapter {
   }
 
   /**
-   * Build LangChain invoke options.
+   * Build LangChain tool definitions from AgentToolDefinition[].
    */
-  private buildInvokeOptions(
-    tools?: AgentToolDefinition[],
-    options?: AgentCompletionOptions,
-  ): LangChainInvokeOptions | undefined {
+  private buildTools(tools?: AgentToolDefinition[]): LangChainTool[] | undefined {
     if (!tools || tools.length === 0) {
       return undefined;
     }
 
-    const langChainTools: LangChainTool[] = tools.map((tool) => ({
+    return tools.map((tool) => ({
       type: 'function',
       function: {
         name: tool.name,
@@ -437,28 +578,6 @@ export class LangChainAdapter implements AgentLlmAdapter {
         parameters: tool.parameters,
       },
     }));
-
-    const invokeOptions: LangChainInvokeOptions = {
-      tools: langChainTools,
-    };
-
-    // Handle tool choice
-    if (options?.toolChoice) {
-      if (options.toolChoice === 'auto') {
-        invokeOptions.tool_choice = 'auto';
-      } else if (options.toolChoice === 'none') {
-        invokeOptions.tool_choice = 'none';
-      } else if (options.toolChoice === 'required') {
-        invokeOptions.tool_choice = 'required';
-      } else if (typeof options.toolChoice === 'object' && 'name' in options.toolChoice) {
-        invokeOptions.tool_choice = {
-          type: 'function',
-          function: { name: options.toolChoice.name },
-        };
-      }
-    }
-
-    return invokeOptions;
   }
 
   /**
@@ -538,8 +657,18 @@ export class LangChainAdapter implements AgentLlmAdapter {
       return new LlmAdapterError(message, 'langchain', 'context_length_exceeded', 400);
     }
 
-    if (message.includes('invalid api key') || message.includes('unauthorized')) {
+    if (message.includes('invalid api key') || message.includes('unauthorized') || message.includes('Unauthorized')) {
       return new LlmAdapterError(message, 'langchain', 'authentication', 401);
+    }
+
+    // LangChain internal error when response metadata is undefined (usually due to API errors)
+    if (message.includes("'in' operator") && message.includes('undefined')) {
+      return new LlmAdapterError(
+        'LLM provider returned invalid response. This usually indicates an authentication error or API issue. Check your API key.',
+        'langchain',
+        'invalid_response',
+        401,
+      );
     }
 
     return new LlmAdapterError(message, 'langchain');

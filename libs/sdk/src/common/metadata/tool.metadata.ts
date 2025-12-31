@@ -4,6 +4,12 @@ import type { JSONSchema } from 'zod/v4/core';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
+
+/**
+ * Reserved prefix for agent tool names.
+ * Tools cannot use this prefix - it's reserved for agent invocations.
+ */
+const AGENT_TOOL_PREFIX = 'use-agent:';
 import {
   ImageContentSchema,
   AudioContentSchema,
@@ -247,10 +253,16 @@ const toolExampleSchema = z.object({
   output: z.unknown().optional(),
 });
 
+/**
+ * Validates that a tool name/id doesn't use reserved prefixes.
+ */
+const reservedPrefixCheck = (value: string) => !value.startsWith(AGENT_TOOL_PREFIX);
+const reservedPrefixMessage = `Tool name/id cannot start with "${AGENT_TOOL_PREFIX}" - this prefix is reserved for agent invocations`;
+
 export const frontMcpToolMetadataSchema = z
   .object({
-    id: z.string().optional(),
-    name: z.string().min(1),
+    id: z.string().refine(reservedPrefixCheck, { message: reservedPrefixMessage }).optional(),
+    name: z.string().min(1).refine(reservedPrefixCheck, { message: reservedPrefixMessage }),
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
     rawInputSchema: z.any().optional(),

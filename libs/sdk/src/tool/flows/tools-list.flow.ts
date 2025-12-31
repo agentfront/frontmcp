@@ -11,6 +11,7 @@ import { isUIType } from '@frontmcp/uipack/types';
 import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { agentIdFromToolName } from '../../agent/agent.utils';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -139,7 +140,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         tools.push({ appName: tool.owner.id, tool });
       }
 
-      // Also collect agent tools (agents exposed as invoke_<agent_id> tools)
+      // Also collect agent tools (agents exposed as use-agent:<agent_id> tools)
       const scope = this.scope as Scope;
       if (scope.agents) {
         const agentTools = scope.agents.getAgentsAsTools();
@@ -148,7 +149,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         // Convert MCP Tool definitions to ToolEntry-compatible objects
         for (const agentTool of agentTools) {
           // Find the agent entry to get owner info
-          const agentId = agentTool.name.replace(/^invoke_/, '');
+          const agentId = agentIdFromToolName(agentTool.name) ?? agentTool.name;
           const agent = scope.agents.findById(agentId);
           if (agent) {
             // Create a minimal ToolEntry-like object for agents

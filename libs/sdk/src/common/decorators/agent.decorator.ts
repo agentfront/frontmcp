@@ -166,11 +166,20 @@ type __IsAny<T> = 0 extends 1 & T ? true : false;
 
 // ---------- friendly branded errors ----------
 
-// execute param must exactly match In (and not be any)
+// Check if param is the base class default (indicates no override, using default execute())
+type __IsBaseClassDefault<P> = P extends Record<string, unknown>
+  ? Record<string, unknown> extends P
+    ? true // P is exactly Record<string, unknown> - no override
+    : false
+  : false;
+
+// execute param must exactly match In (and not be any), or be the base class default
 type __MustParam<C extends __Ctor, In> = __IsAny<In> extends true
   ? unknown
   : __IsAny<__Param<C>> extends true
   ? { 'execute() parameter error': "Parameter type must not be 'any'."; expected_input_type: In }
+  : __IsBaseClassDefault<__Param<C>> extends true
+  ? unknown // Allow base class default - user is using default execute()
   : __Param<C> extends In
   ? In extends __Param<C>
     ? unknown

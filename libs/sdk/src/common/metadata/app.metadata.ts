@@ -94,7 +94,7 @@ export interface LocalAppMetadata {
   /**
    * Autonomous AI agents with their own LLM providers and isolated scopes.
    * Each agent is automatically exposed as a callable tool with the name
-   * `invoke_<agent_id>`. Agents can have nested tools, resources, prompts,
+   * `use-agent:<agent_id>`. Agents can have nested tools, resources, prompts,
    * and even other agents.
    */
   agents?: AgentType[];
