@@ -13,8 +13,6 @@
         "main": "libs/uipack/src/index.ts",
         "tsConfig": "libs/uipack/tsconfig.lib.json",
         "format": ["cjs"],
-        "declaration": true,
-        "declarationRootDir": "libs/uipack/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",

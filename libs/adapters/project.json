@@ -21,8 +21,6 @@
         "main": "libs/adapters/src/index.ts",
         "tsConfig": "libs/adapters/tsconfig.lib.json",
         "format": ["cjs"],
-        "declaration": true,
-        "declarationRootDir": "libs/adapters/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",

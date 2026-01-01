@@ -14,8 +14,6 @@
         "main": "libs/sdk/src/index.ts",
         "tsConfig": "libs/sdk/tsconfig.lib.json",
         "format": ["cjs"],
-        "declaration": true,
-        "declarationRootDir": "libs/sdk/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",

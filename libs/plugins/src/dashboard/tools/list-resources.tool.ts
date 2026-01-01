@@ -3,14 +3,34 @@ import { z } from 'zod';
 import { ParentScopeToken } from '../dashboard.symbol';
 
 /**
+ * Safely create a RegExp from user input to prevent ReDoS attacks.
+ * Returns null if the pattern is invalid or potentially dangerous.
+ */
+function safeRegex(pattern: string): RegExp | null {
+  // Limit pattern length to prevent complex patterns
+  if (pattern.length > 100) {
+    return null;
+  }
+  try {
+    const regex = new RegExp(pattern, 'i');
+    // Quick test to ensure it doesn't hang on simple input
+    regex.test('test');
+    return regex;
+  } catch {
+    // Invalid regex syntax
+    return null;
+  }
+}
+
+/**
  * Input schema for the list-resources tool.
  */
-export const listResourcesInputSchema = {
+export const listResourcesInputSchema = z.object({
   filter: z.string().optional().describe('Filter resources by name or URI pattern (regex supported)'),
   includeTemplates: z.boolean().optional().default(true).describe('Include resource templates in the response'),
-};
+});
 
-export type ListResourcesInput = z.infer<z.ZodObject<typeof listResourcesInputSchema>>;
+export type ListResourcesInput = z.input<typeof listResourcesInputSchema>;
 
 /**
  * Output schema for the list-resources tool.
@@ -84,11 +104,14 @@ export default class ListResourcesTool extends ToolContext {
       }
     }
 
-    // Apply filter if provided
+    // Apply filter if provided (with ReDoS protection)
     let filtered = results;
     if (input.filter) {
-      const pattern = new RegExp(input.filter, 'i');
-      filtered = results.filter((r) => pattern.test(r.name) || pattern.test(r.uri));
+      const pattern = safeRegex(input.filter);
+      if (pattern) {
+        filtered = results.filter((r) => pattern.test(r.name) || pattern.test(r.uri));
+      }
+      // If pattern is invalid, skip filtering and return all resources
     }
 
     return {

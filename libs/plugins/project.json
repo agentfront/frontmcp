@@ -21,8 +21,6 @@
         "main": "libs/plugins/src/index.ts",
         "tsConfig": "libs/plugins/tsconfig.lib.json",
         "format": ["cjs"],
-        "declaration": true,
-        "declarationRootDir": "libs/plugins/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RawZodShape, AuthOptions, authOptionsSchema, AuthOptionsInput } from '../types';
+import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
 import {
   ProviderType,
   PromptType,
@@ -161,7 +161,7 @@ export interface RemoteAppMetadata {
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
-  auth?: AuthOptions;
+  auth?: AuthOptionsInput;
 
   /**
    * If true, the app will NOT be included and will act as a separated scope.

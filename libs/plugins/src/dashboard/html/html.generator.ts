@@ -1,6 +1,21 @@
 import type { DashboardPluginOptions } from '../dashboard.types';
 
 /**
+ * Escape a string for safe interpolation into JavaScript string literals.
+ * Prevents XSS by escaping quotes, backslashes, and script-closing sequences.
+ */
+function escapeForJs(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
+
+/**
  * Generate the dashboard HTML page that loads UI from CDN and connects via MCP.
  *
  * The UI connects to the dashboard SSE endpoint and uses MCP protocol to:
@@ -25,7 +40,7 @@ export function generateDashboardHtml(options: DashboardPluginOptions): string {
  */
 function generateExternalEntrypointHtml(options: DashboardPluginOptions): string {
   const { cdn, basePath, auth } = options;
-  const token = auth?.token || '';
+  const token = escapeForJs(auth?.token || '');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -77,7 +92,7 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
  */
 function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
   const { cdn, basePath, auth } = options;
-  const token = auth?.token || '';
+  const token = escapeForJs(auth?.token || '');
   const sseUrl = `${basePath}/sse${token ? `?token=${token}` : ''}`;
 
   return `<!DOCTYPE html>
@@ -288,100 +303,6 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
       auth: { fill: '#78350f', stroke: '#d97706', icon: '🛡️', textColor: '#fcd34d' },
     };
 
-    // MCP Client for SSE communication
-    class McpClient {
-      constructor(sseUrl) {
-        this.sseUrl = sseUrl;
-        this.eventSource = null;
-        this.messageId = 0;
-        this.pendingRequests = new Map();
-        this.messageEndpoint = null;
-        this.onStateChange = null;
-      }
-
-      connect() {
-        return new Promise((resolve, reject) => {
-          this.eventSource = new EventSource(this.sseUrl);
-
-          this.eventSource.onopen = () => {
-            this.onStateChange?.('connected');
-          };
-
-          this.eventSource.onerror = (e) => {
-            this.onStateChange?.('error');
-            reject(new Error('SSE connection failed'));
-          };
-
-          this.eventSource.addEventListener('endpoint', (e) => {
-            let endpoint = JSON.parse(e.data);
-            // For standalone apps, the SSE returns /message but we need /dashboard/message
-            // Prepend basePath if the endpoint doesn't already include it
-            if (config.basePath && !endpoint.startsWith(config.basePath)) {
-              endpoint = config.basePath + endpoint;
-            }
-            this.messageEndpoint = endpoint;
-            resolve();
-          });
-
-          this.eventSource.addEventListener('message', (e) => {
-            try {
-              const msg = JSON.parse(e.data);
-              if (msg.id && this.pendingRequests.has(msg.id)) {
-                const { resolve, reject } = this.pendingRequests.get(msg.id);
-                this.pendingRequests.delete(msg.id);
-                if (msg.error) reject(new Error(msg.error.message));
-                else resolve(msg.result);
-              }
-            } catch (err) {
-              console.error('Failed to parse message:', err);
-            }
-          });
-        });
-      }
-
-      async request(method, params = {}) {
-        if (!this.messageEndpoint) {
-          throw new Error('Not connected');
-        }
-
-        const id = ++this.messageId;
-        const body = JSON.stringify({
-          jsonrpc: '2.0',
-          id,
-          method,
-          params,
-        });
-
-        return new Promise((resolve, reject) => {
-          this.pendingRequests.set(id, { resolve, reject });
-
-          fetch(this.messageEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-          }).catch(reject);
-
-          // Timeout after 30s
-          setTimeout(() => {
-            if (this.pendingRequests.has(id)) {
-              this.pendingRequests.delete(id);
-              reject(new Error('Request timeout'));
-            }
-          }, 30000);
-        });
-      }
-
-      async callTool(name, args = {}) {
-        const result = await this.request('tools/call', { name, arguments: args });
-        return result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
-      }
-
-      disconnect() {
-        this.eventSource?.close();
-        this.eventSource = null;
-      }
-    }
-
     // Custom node component
     function CustomNode({ data, type }) {
       const cfg = nodeConfig[type] || nodeConfig.tool;
@@ -444,7 +365,10 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
       return { nodes, edges };
     }
 
-    // MCP Client for SSE transport
+    /**
+     * MCP Client for SSE transport communication.
+     * Connects to the dashboard SSE endpoint and sends JSON-RPC requests.
+     */
     class McpClient {
       constructor(sseUrl, basePath) {
         this.sseUrl = sseUrl;
@@ -453,21 +377,29 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
         this.eventSource = null;
         this.requestId = 0;
         this.pendingRequests = new Map();
+        this.sessionId = null;
       }
 
+      /**
+       * Connect to the SSE endpoint and wait for the message endpoint URL.
+       * The server sends an 'endpoint' event containing the URL for POST requests.
+       */
       async connect() {
         return new Promise((resolve, reject) => {
           this.eventSource = new EventSource(this.sseUrl);
 
+          // Listen for the endpoint event to get the message URL
           this.eventSource.addEventListener('endpoint', (e) => {
-            // Extract message endpoint from SSE
-            this.messageUrl = this.basePath + e.data.split('?')[0].replace(this.basePath, '');
-            // Also extract sessionId from the URL
+            const endpointPath = e.data.split('?')[0].replace(this.basePath, '');
+            this.messageUrl = this.basePath + endpointPath;
+
+            // Extract sessionId from the endpoint URL (legacy SSE format)
             const match = e.data.match(/sessionId=([^&]+)/);
             this.sessionId = match ? match[1] : null;
             resolve();
           });
 
+          // Listen for responses to our requests
           this.eventSource.addEventListener('message', (e) => {
             try {
               const response = JSON.parse(e.data);
@@ -485,13 +417,13 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
             }
           });
 
-          this.eventSource.onerror = (err) => {
+          this.eventSource.onerror = () => {
             if (!this.messageUrl) {
               reject(new Error('SSE connection failed'));
             }
           };
 
-          // Timeout after 10 seconds
+          // Connection timeout
           setTimeout(() => {
             if (!this.messageUrl) {
               this.close();
@@ -501,6 +433,12 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
         });
       }
 
+      /**
+       * Call an MCP tool via JSON-RPC over HTTP POST.
+       * @param {string} name - The tool name (e.g., 'dashboard:graph')
+       * @param {object} args - The tool arguments
+       * @returns {Promise<object>} The tool result
+       */
       async callTool(name, args = {}) {
         if (!this.messageUrl) {
           throw new Error('Not connected');
@@ -517,6 +455,7 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
         return new Promise((resolve, reject) => {
           this.pendingRequests.set(id, { resolve, reject });
 
+          // Append sessionId to URL for legacy SSE transport
           const url = this.messageUrl + (this.sessionId ? '?sessionId=' + this.sessionId : '');
           fetch(url, {
             method: 'POST',
@@ -526,6 +465,7 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
         });
       }
 
+      /** Close the SSE connection */
       close() {
         if (this.eventSource) {
           this.eventSource.close();

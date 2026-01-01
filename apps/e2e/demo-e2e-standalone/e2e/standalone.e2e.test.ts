@@ -266,9 +266,9 @@ test.describe('Standalone App E2E', () => {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       });
 
-      // Root /message without session should fail with session error (not 404)
+      // Root /message without session should return 404 (session not found)
       // This proves that the root scope IS listening on /message
-      expect(rootResponse.status).toBe(404); // 404 = session not found/initialized
+      expect(rootResponse.status).toBe(404);
 
       const isolatedResponse = await fetch(`${server.info.baseUrl}/isolated/message`, {
         method: 'POST',

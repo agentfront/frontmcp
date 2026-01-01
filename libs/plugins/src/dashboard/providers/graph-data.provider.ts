@@ -1,4 +1,4 @@
-import { Provider, ScopeEntry, ProviderRegistryInterface } from '@frontmcp/sdk';
+import { Provider, ScopeEntry } from '@frontmcp/sdk';
 import type { GraphData, GraphNode, GraphEdge, GraphMetadata } from '../shared/types';
 import { GraphDataProviderToken } from '../dashboard.symbol';
 
@@ -7,16 +7,34 @@ export { GraphDataProviderToken };
 
 /**
  * Provider that extracts graph data from all scopes at runtime.
- * Uses ScopeRegistry to get all scopes and excludes the dashboard scope.
- * Caches the extracted data to avoid expensive extraction on every request.
+ *
+ * This provider introspects the FrontMCP server structure and builds a graph
+ * representation of all registered tools, resources, prompts, and apps.
+ *
+ * Features:
+ * - Traverses all scopes (excluding the dashboard scope itself)
+ * - Caches extracted data for 5 seconds to avoid expensive re-extraction
+ * - Supports standalone apps by traversing the provider hierarchy
+ *
+ * @example
+ * ```typescript
+ * const provider = this.get(GraphDataProvider);
+ * const graph = await provider.getGraphData();
+ * console.log(`Found ${graph.nodes.length} nodes`);
+ * ```
  */
 @Provider({
   name: 'graph-data-provider',
 })
 export class GraphDataProvider {
+  /** Cached graph data to avoid re-extraction on every request */
   private cachedData: GraphData | null = null;
+
+  /** Timestamp of when the cache was last updated */
   private cacheTimestamp = 0;
-  private readonly cacheTTL = 5000; // 5 seconds cache
+
+  /** Cache time-to-live in milliseconds */
+  private readonly cacheTTL = 5000;
 
   constructor(
     private readonly scope: ScopeEntry,
@@ -62,9 +80,13 @@ export class GraphDataProvider {
 
       // If not found locally, traverse up the provider hierarchy
       // This is needed when dashboard is standalone (has its own isolated scope)
-      // Access private parentProviders field via runtime cast
+      // Access private parentProviders field via runtime cast - no public API exists
       if (!scopeRegistries || scopeRegistries.length === 0) {
-        let currentProviders = (this.scope.providers as any).parentProviders;
+        interface ProvidersWithParent {
+          parentProviders?: ProvidersWithParent;
+          getRegistries?: (name: string) => typeof scopeRegistries;
+        }
+        let currentProviders = (this.scope.providers as unknown as ProvidersWithParent).parentProviders;
         while (currentProviders && (!scopeRegistries || scopeRegistries.length === 0)) {
           scopeRegistries = currentProviders.getRegistries?.('ScopeRegistry') || [];
           currentProviders = currentProviders.parentProviders;

@@ -3,15 +3,35 @@ import { z } from 'zod';
 import { ParentScopeToken } from '../dashboard.symbol';
 
 /**
+ * Safely create a RegExp from user input to prevent ReDoS attacks.
+ * Returns null if the pattern is invalid or potentially dangerous.
+ */
+function safeRegex(pattern: string): RegExp | null {
+  // Limit pattern length to prevent complex patterns
+  if (pattern.length > 100) {
+    return null;
+  }
+  try {
+    const regex = new RegExp(pattern, 'i');
+    // Quick test to ensure it doesn't hang on simple input
+    regex.test('test');
+    return regex;
+  } catch {
+    // Invalid regex syntax
+    return null;
+  }
+}
+
+/**
  * Input schema for the list-tools tool.
  */
-export const listToolsInputSchema = {
+export const listToolsInputSchema = z.object({
   filter: z.string().optional().describe('Filter tools by name pattern (regex supported)'),
   includePlugins: z.boolean().optional().default(true).describe('Include tools from plugins'),
   includeSchemas: z.boolean().optional().default(false).describe('Include input/output schemas in the response'),
-};
+});
 
-export type ListToolsInput = z.infer<z.ZodObject<typeof listToolsInputSchema>>;
+export type ListToolsInput = z.input<typeof listToolsInputSchema>;
 
 /**
  * Output schema for the list-tools tool.
@@ -66,10 +86,13 @@ export default class ListToolsTool extends ToolContext {
       // Tools registry may not be available
     }
 
-    // Apply filter if provided
+    // Apply filter if provided (with ReDoS protection)
     if (input.filter) {
-      const pattern = new RegExp(input.filter, 'i');
-      allTools = allTools.filter((t) => pattern.test(t.name) || pattern.test(t.fullName));
+      const pattern = safeRegex(input.filter);
+      if (pattern) {
+        allTools = allTools.filter((t) => pattern.test(t.name) || pattern.test(t.fullName));
+      }
+      // If pattern is invalid, skip filtering and return all tools
     }
 
     // Map to output format

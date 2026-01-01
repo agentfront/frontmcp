@@ -12,9 +12,8 @@ import { z } from 'zod';
     scope: z.literal('isolated'),
   }),
 })
-export default class IsolatedHelloTool extends ToolContext<{ name?: string }, { message: string; scope: 'isolated' }> {
-  async execute() {
-    const { name } = this.input;
+export default class IsolatedHelloTool extends ToolContext {
+  async execute({ name }: { name: string }): Promise<{ message: string; scope: 'isolated' }> {
     return {
       message: `Hello, ${name}! This is from the isolated standalone app.`,
       scope: 'isolated' as const,

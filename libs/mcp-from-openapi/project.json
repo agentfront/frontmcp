@@ -13,8 +13,6 @@
         "main": "libs/mcp-from-openapi/src/index.ts",
         "tsConfig": "libs/mcp-from-openapi/tsconfig.lib.json",
         "format": ["cjs"],
-        "declaration": true,
-        "declarationRootDir": "libs/mcp-from-openapi/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",

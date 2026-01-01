@@ -8,6 +8,7 @@ import {
   ServerRequest,
   ServerResponse,
   ProviderType,
+  NextFn,
   type FrontMcpConfigType,
 } from '@frontmcp/sdk';
 
@@ -44,7 +45,7 @@ const DashboardMiddlewareToken = Symbol('dashboard:middleware');
 function createDashboardMiddleware(options: DashboardPluginOptions) {
   const html = generateDashboardHtml(options);
 
-  return async (req: ServerRequest, res: ServerResponse, next: () => void) => {
+  return async (req: ServerRequest, res: ServerResponse, next: NextFn) => {
     // Skip if dashboard is disabled
     if (!isDashboardEnabled(options)) {
       return next();
@@ -55,7 +56,12 @@ function createDashboardMiddleware(options: DashboardPluginOptions) {
 
     // Only serve HTML for GET requests to the root path
     if (method === 'GET' && (urlPath === '/' || urlPath === '')) {
-      (res as any).setHeader?.('Content-Type', 'text/html');
+      // ServerResponse extends HttpServerResponse which has setHeader
+      // Use optional chaining for environments that may not support it
+      (res as unknown as { setHeader?: (name: string, value: string) => void }).setHeader?.(
+        'Content-Type',
+        'text/html',
+      );
       res.status(200).send(html);
       return;
     }
@@ -108,7 +114,7 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
         useFactory: (server: FrontMcpServer) => {
           const middleware = createDashboardMiddleware(parsedOptions);
           // Register at /dashboard basePath
-          server.registerMiddleware(parsedOptions.basePath, middleware as any);
+          server.registerMiddleware(parsedOptions.basePath, middleware);
           return { registered: true };
         },
       },
@@ -171,7 +177,7 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
   auth: {
     mode: 'public',
   },
-  standalone: true, // - dashboard is part of root scope so GraphDataProvider can access all tools/resources
+  standalone: true, // Dashboard is part of root scope so GraphDataProvider can access all tools/resources
 })
 export class DashboardApp {}
 
