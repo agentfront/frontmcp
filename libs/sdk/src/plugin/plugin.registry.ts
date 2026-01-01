@@ -32,15 +32,22 @@ export default class PluginRegistry
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
   private readonly scope: Scope;
+  private readonly hookScope: Scope;
   private readonly owner?: { kind: 'app' | 'plugin'; id: string; ref: Token };
 
   constructor(
     providers: ProviderRegistry,
     list: PluginType[],
     owner?: { kind: 'app' | 'plugin'; id: string; ref: Token },
+    /**
+     * Optional scope for hook registration. When an app's standalone is false,
+     * this should be the parent scope so HTTP hooks are triggered by the gateway.
+     */
+    hookScope?: Scope,
   ) {
     super('PluginRegistry', providers, list);
     this.scope = providers.getActiveScope();
+    this.hookScope = hookScope ?? this.scope;
     this.owner = owner;
   }
 
@@ -160,7 +167,8 @@ export default class PluginRegistry
             owner: this.owner,
           },
         }));
-        await this.scope.hooks.registerHooks(false, ...hooksWithOwner);
+        // Register hooks to hookScope (which may be parent scope for non-standalone apps)
+        await this.hookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
       pluginInstance.get = providers.get.bind(providers) as any;
       const dynamicProviders = rec.providers;

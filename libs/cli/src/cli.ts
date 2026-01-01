@@ -13,7 +13,6 @@ import { runInspector } from './commands/inspector';
 import { runCreate } from './commands/create';
 import { runTemplate } from './commands/template';
 import { runTest } from './commands/test';
-import { runGraph } from './commands/graph';
 
 function showHelp(): void {
   console.log(`
@@ -29,7 +28,6 @@ ${c('bold', 'Commands')}
   init                Create or fix a tsconfig.json suitable for FrontMCP
   doctor              Check Node/npm versions and tsconfig requirements
   inspector           Launch MCP Inspector (npx @modelcontextprotocol/inspector)
-  graph               Visualize MCP server structure (tools, resources, prompts, apps)
   create [name]       Scaffold a new FrontMCP project (interactive if name omitted)
   template <type>     Scaffold a template by type (e.g., "3rd-party-integration")
   help                Show this help message
@@ -52,11 +50,6 @@ ${c('bold', 'Test Options')}
   -t, --timeout <ms>   Set test timeout (default: 60000ms)
   -c, --coverage       Collect test coverage
 
-${c('bold', 'Graph Options')}
-  --open               Auto-open browser after starting server
-  --json [path]        Export graph as JSON (to stdout or specified file)
-  -p, --port <port>    Dev server port (default: 4200)
-
 ${c('bold', 'Examples')}
   frontmcp dev
   frontmcp build --out-dir build
@@ -68,10 +61,6 @@ ${c('bold', 'Examples')}
   npx frontmcp create my-mcp --yes             # Use defaults
   npx frontmcp create my-mcp --target vercel   # Vercel deployment
   npx frontmcp template marketplace-3rd-tools
-  frontmcp graph                               # Start graph visualization server
-  frontmcp graph --open                        # Open browser automatically
-  frontmcp graph --json                        # Export graph as JSON to stdout
-  frontmcp graph --json graph.json             # Export graph to file
 `);
 }
 
@@ -120,9 +109,6 @@ async function main(): Promise<void> {
       }
       case 'test':
         await runTest(parsed);
-        break;
-      case 'graph':
-        await runGraph(parsed);
         break;
       case 'help':
         showHelp();

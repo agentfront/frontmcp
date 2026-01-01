@@ -143,6 +143,12 @@ describe('runCreate', () => {
       expect(consoleLogs.some((log) => log.includes('e2e/server.e2e.test.ts'))).toBe(true);
     });
 
+    it('should create tsconfig.e2e.json for E2E test typing', async () => {
+      await runCreate('my-app', { yes: true });
+
+      expect(consoleLogs.some((log) => log.includes('tsconfig.e2e.json'))).toBe(true);
+    });
+
     it('should create package.json', async () => {
       await runCreate('my-app', { yes: true });
 
