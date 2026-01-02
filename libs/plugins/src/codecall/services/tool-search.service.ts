@@ -299,11 +299,13 @@ export interface ToolSearchServiceConfig {
  */
 export class ToolSearchService implements ToolSearch {
   private static readonly MAX_SUBSCRIPTION_RETRIES = 100;
+  private static readonly INITIAL_RETRY_DELAY_MS = 10;
+  private static readonly MAX_RETRY_DELAY_MS = 1000;
+
   private vectorDB: TFIDFVectoria<ToolMetadata> | VectoriaDB<ToolMetadata>;
   private strategy: EmbeddingStrategy;
   private initialized = false;
   private mlInitialized = false;
-  private subscriptionRetries = 0;
   private config: Required<Omit<ToolSearchServiceConfig, 'includeTools' | 'mode' | 'synonymExpansion'>> & {
     mode: CodeCallMode;
     includeTools?: IncludeToolsFilter;
@@ -311,6 +313,11 @@ export class ToolSearchService implements ToolSearch {
   private scope: ScopeEntry;
   private unsubscribe?: () => void;
   private synonymService: SynonymExpansionService | null = null;
+
+  // Subscription tracking for async initialization
+  private subscriptionPromise: Promise<void>;
+  private subscriptionResolved = false;
+  private subscriptionResolve: (() => void) | null = null;
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -365,36 +372,75 @@ export class ToolSearchService implements ToolSearch {
       }
     }
 
-    // Defer subscription until scope.tools is available
+    // Create subscription promise - resolves when subscribed to tool changes
+    this.subscriptionPromise = new Promise<void>((resolve) => {
+      this.subscriptionResolve = resolve;
+    });
+
+    // Initiate subscription setup (non-blocking)
     // During plugin initialization, scope.tools may not exist yet
     this.setupSubscription();
   }
 
   /**
-   * Sets up subscription to tool changes. Handles the case where scope.tools
-   * may not be available yet during plugin initialization.
+   * Ensures the service is subscribed to tool changes before proceeding.
+   * Public methods should call this before accessing tools.
    */
-  private setupSubscription(): void {
-    // If tools registry is not yet available, retry after a microtask
-    if (!this.scope.tools) {
-      if (this.subscriptionRetries++ >= ToolSearchService.MAX_SUBSCRIPTION_RETRIES) {
-        console.warn('ToolSearchService: scope.tools not available after max retries');
-        return;
-      }
-      // Use queueMicrotask to defer until after current initialization
-      // setTimeout(() => this.setupSubscription(), 100);
-      queueMicrotask(() => this.setupSubscription());
+  private async ensureSubscribed(): Promise<void> {
+    if (this.subscriptionResolved) {
+      return; // Already subscribed
+    }
+    await this.subscriptionPromise;
+  }
+
+  /**
+   * Sets up subscription to tool changes with exponential backoff retry.
+   * Handles the case where scope.tools may not be available yet during plugin initialization.
+   */
+  private setupSubscription(retryCount = 0, delayMs = ToolSearchService.INITIAL_RETRY_DELAY_MS): void {
+    // If tools registry is available, subscribe immediately
+    if (this.scope.tools) {
+      this.subscribeToToolChanges();
       return;
     }
-    // Reset retry counter on success
-    this.subscriptionRetries = 0;
 
+    // Max retries exceeded
+    if (retryCount >= ToolSearchService.MAX_SUBSCRIPTION_RETRIES) {
+      console.warn('ToolSearchService: scope.tools not available after max retries');
+      // Resolve the promise anyway to prevent indefinite blocking
+      this.markSubscribed();
+      return;
+    }
+
+    // Retry with exponential backoff using setTimeout
+    // Unlike queueMicrotask, setTimeout waits for actual event loop ticks,
+    // allowing async operations (like adapter index pulling) to complete
+    const nextDelay = Math.min(delayMs * 2, ToolSearchService.MAX_RETRY_DELAY_MS);
+    setTimeout(() => this.setupSubscription(retryCount + 1, nextDelay), delayMs);
+  }
+
+  /**
+   * Subscribes to tool changes once scope.tools is available.
+   */
+  private subscribeToToolChanges(): void {
     // Subscribe to tool changes with immediate=true to get current snapshot
     // This ensures tools are indexed as they become available, regardless of loading order
     this.unsubscribe = this.scope.tools.subscribe({ immediate: true }, (event) => {
       // Handle tool change event - reindex all tools from the snapshot
       this.handleToolChange(event.snapshot as unknown as ToolEntry<any, any>[]);
     });
+    this.markSubscribed();
+  }
+
+  /**
+   * Marks the subscription as resolved, allowing pending operations to proceed.
+   */
+  private markSubscribed(): void {
+    this.subscriptionResolved = true;
+    if (this.subscriptionResolve) {
+      this.subscriptionResolve();
+      this.subscriptionResolve = null;
+    }
   }
 
   /**
@@ -653,6 +699,9 @@ export class ToolSearchService implements ToolSearch {
    * Implements the ToolSearch interface
    */
   async search(query: string, options: SymbolToolSearchOptions = {}): Promise<SymbolToolSearchResult[]> {
+    // Ensure we're subscribed to tool changes before searching
+    await this.ensureSubscribed();
+
     const { topK = this.config.defaultTopK, appIds, excludeToolNames = [] } = options;
     const minScore = this.config.defaultSimilarityThreshold;
 
