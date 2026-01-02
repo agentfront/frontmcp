@@ -9,6 +9,8 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
+          // These are optional LangChain providers loaded via dynamic import()
+          ignoredDependencies: ['@langchain/google-genai', '@langchain/mistralai', '@langchain/groq'],
         },
       ],
     },

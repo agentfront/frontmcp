@@ -401,10 +401,25 @@ export default class ToolRegistry
    * the standard token-based initialization flow.
    *
    * @param tool - The tool instance to register
+   * @throws Error if tool is not a valid ToolInstance or already registered
    */
   registerToolInstance(tool: ToolEntry): void {
-    const instance = tool as ToolInstance;
+    // Validate that we have a proper ToolInstance with required properties
+    if (!(tool instanceof ToolInstance)) {
+      throw new Error('registerToolInstance requires a ToolInstance, not a generic ToolEntry');
+    }
+
+    const instance = tool;
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('ToolInstance is missing required record.provide property');
+    }
+
     const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<ToolInstance>)) {
+      return; // Already registered, skip silently
+    }
 
     // Add to instances map
     this.instances.set(token as Token<ToolInstance>, instance);

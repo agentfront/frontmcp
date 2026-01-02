@@ -119,7 +119,10 @@ export async function createProviderAdapter(options: CreateProviderAdapterOption
     case 'mistral':
     case 'groq': {
       // Dynamic import for optional providers
-      const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider]!;
+      const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider];
+      if (!providerInfo) {
+        throw new LlmAdapterError(`Provider ${provider} configuration not found`, 'config', 'missing_config');
+      }
       const providerModule = await importOptionalProvider(provider);
       const ChatModelClass = providerModule[providerInfo.className] as new (config: Record<string, unknown>) => unknown;
 

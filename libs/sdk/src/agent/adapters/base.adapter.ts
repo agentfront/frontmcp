@@ -72,10 +72,28 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
     Omit<BaseLlmAdapterConfig, 'model' | 'apiKey' | 'timeout' | 'maxRetries'>;
 
   constructor(config: BaseLlmAdapterConfig) {
+    // Validate required fields
+    if (!config.model || typeof config.model !== 'string' || config.model.trim() === '') {
+      throw new LlmAdapterError('model is required and must be a non-empty string', 'config', 'invalid_config');
+    }
+    if (!config.apiKey || typeof config.apiKey !== 'string' || config.apiKey.trim() === '') {
+      throw new LlmAdapterError('apiKey is required and must be a non-empty string', 'config', 'invalid_config');
+    }
+
+    // Validate numeric constraints
+    const timeout = config.timeout ?? 60000;
+    const maxRetries = config.maxRetries ?? 3;
+    if (timeout <= 0) {
+      throw new LlmAdapterError('timeout must be a positive number', 'config', 'invalid_config');
+    }
+    if (maxRetries < 0) {
+      throw new LlmAdapterError('maxRetries must be non-negative', 'config', 'invalid_config');
+    }
+
     this.config = {
       ...config,
-      timeout: config.timeout ?? 60000,
-      maxRetries: config.maxRetries ?? 3,
+      timeout,
+      maxRetries,
     };
   }
 

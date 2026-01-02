@@ -55,6 +55,9 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   /** Children registries that we track */
   private children = new Set<AgentRegistry>();
 
+  /** Unsubscribe functions for child registry subscriptions */
+  private childSubscriptions = new Map<AgentRegistry, () => void>();
+
   // ---- O(1) indexes over EFFECTIVE set (local + adopted) ----
   private byQualifiedId = new Map<string, IndexedAgent>();
   private byName = new Map<string, IndexedAgent[]>();
@@ -182,14 +185,34 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     this.adopted.set(child, adoptedRows);
     this.children.add(child);
 
-    // Keep live if child changes
-    child.subscribe({ immediate: false }, () => {
+    // Keep live if child changes - store unsubscribe for cleanup
+    const unsubscribe = child.subscribe({ immediate: false }, () => {
       const latest = child.listAllIndexed().map((r) => this.relineage(r, prepend));
       this.adopted.set(child, latest);
       this.reindex();
       this.bump('reset');
     });
+    this.childSubscriptions.set(child, unsubscribe);
 
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
+   * Remove a child registry and clean up its subscription.
+   */
+  removeChild(child: AgentRegistry): void {
+    if (!this.children.has(child)) return;
+
+    // Unsubscribe from child changes
+    const unsubscribe = this.childSubscriptions.get(child);
+    if (unsubscribe) {
+      unsubscribe();
+      this.childSubscriptions.delete(child);
+    }
+
+    this.adopted.delete(child);
+    this.children.delete(child);
     this.reindex();
     this.bump('reset');
   }
