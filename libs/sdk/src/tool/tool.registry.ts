@@ -416,7 +416,7 @@ export default class ToolRegistry
    * ```
    *
    * @param tool - The tool instance to register (must be created with this registry's providers)
-   * @throws Error if tool is not a valid ToolInstance or already registered
+   * @throws Error if tool is not a valid ToolInstance
    */
   registerToolInstance(tool: ToolEntry): void {
     // Validate that we have a proper ToolInstance with required properties
