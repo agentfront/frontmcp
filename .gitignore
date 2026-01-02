@@ -66,3 +66,9 @@ docs/docs.backup.json
 
 **/.script.local
 **/tsconfig.lib.tsbuildinfo
+
+# Prevent declaration files in source directories (should only be in dist)
+libs/*/src/**/*.d.ts
+libs/*/src/**/*.d.ts.map
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.d.ts.map

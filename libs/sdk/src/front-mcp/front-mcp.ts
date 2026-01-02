@@ -1,4 +1,4 @@
-import { FrontMcpConfigType, FrontMcpInterface, FrontMcpServer } from '../common';
+import { FrontMcpConfigType, FrontMcpInterface, FrontMcpServer, ScopeEntry } from '../common';
 import { ScopeRegistry } from '../scope/scope.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import { createMcpGlobalProviders } from './front-mcp.providers';
@@ -36,6 +36,21 @@ export class FrontMcpInstance implements FrontMcpInterface {
     server.start();
   }
 
+  /**
+   * Get the configuration used to create this FrontMCP instance.
+   */
+  getConfig(): FrontMcpConfigType {
+    return this.config;
+  }
+
+  /**
+   * Get all initialized scope instances.
+   * Useful for graph visualization and introspection.
+   */
+  getScopes(): ScopeEntry[] {
+    return this.scopes.getScopes();
+  }
+
   public static async bootstrap(options: FrontMcpConfigType) {
     const frontMcp = new FrontMcpInstance(options);
     await frontMcp.ready;
@@ -65,5 +80,20 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
     server.prepare();
     return server.getHandler();
+  }
+
+  /**
+   * Creates and initializes a FrontMCP instance without starting any server.
+   * Returns the instance for graph extraction and introspection purposes.
+   *
+   * @example
+   * // For graph visualization
+   * const instance = await FrontMcpInstance.createForGraph(config);
+   * const scopes = instance.getScopes();
+   */
+  public static async createForGraph(options: FrontMcpConfigType): Promise<FrontMcpInstance> {
+    const frontMcp = new FrontMcpInstance(options);
+    await frontMcp.ready;
+    return frontMcp;
   }
 }

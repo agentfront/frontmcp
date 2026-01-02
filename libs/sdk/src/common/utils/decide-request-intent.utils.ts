@@ -145,18 +145,36 @@ function tryDecodeTransportType(sessionId?: string): string | undefined {
 
 // --- Build the 11-bit key ----------------------------------------------------
 
+/** Extract sessionId from query string for legacy SSE /message endpoint */
+function getQuerySessionId(req: ServerRequest): string | undefined {
+  const anyReq = req as any;
+  const raw = anyReq.url ?? anyReq.path ?? '/';
+  try {
+    const u = new URL(String(raw), 'http://local');
+    return u.searchParams.get('sessionId') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function computeBitmap(req: ServerRequest, cfg: Config) {
   const method = req.method.toUpperCase();
   const accept = h(req, 'accept');
-  const sessionId = h(req, 'mcp-session-id');
+  const path = pathOf(req);
+  const postToMessage = method === 'POST' && (path === '/message' || path.endsWith('/message'));
+
+  // For legacy SSE /message endpoint, session ID can be in query param OR header
+  // The SSE transport sends sessionId as query param: /message?sessionId=xxx
+  const headerSessionId = h(req, 'mcp-session-id');
+  const querySessionId = postToMessage ? getQuerySessionId(req) : undefined;
+  const sessionId = headerSessionId ?? querySessionId;
+
   const legacyHeader = h(req, 'x-legacy-sse') === 'true';
   const transportType = tryDecodeTransportType(sessionId);
-  const path = pathOf(req);
 
   const acceptSSE = wantsSSE(accept);
   const acceptJSON = wantsJSON(accept) || (!accept && cfg.tolerateMissingAccept);
   const init = method === 'POST' && isInitialize(req.body);
-  const postToMessage = method === 'POST' && (path === '/message' || path.endsWith('/message'));
   const getToSsePath = method === 'GET' && isLegacySsePath(path);
 
   const channel =
