@@ -35,8 +35,7 @@ export interface CreateProviderAdapterOptions extends ProviderCommonOptions {
   apiKey: string;
   /**
    * Custom base URL for the API endpoint.
-   * **Note: Only supported for OpenAI provider.** This option is silently ignored for other providers.
-   * Use this for OpenAI-compatible APIs or self-hosted endpoints.
+   * Supported by all providers for custom/self-hosted endpoints.
    */
   baseUrl?: string;
 }
@@ -141,6 +140,16 @@ export async function createProviderAdapter(options: CreateProviderAdapterOption
       if (temperature !== undefined) config['temperature'] = temperature;
       if (maxTokens !== undefined) {
         config[provider === 'google' ? 'maxOutputTokens' : 'maxTokens'] = maxTokens;
+      }
+      // Pass baseUrl with provider-specific property names
+      if (baseUrl) {
+        if (provider === 'google') {
+          config['baseUrl'] = baseUrl;
+        } else if (provider === 'mistral') {
+          config['endpoint'] = baseUrl;
+        } else if (provider === 'groq') {
+          config['configuration'] = { baseURL: baseUrl };
+        }
       }
 
       chatModel = new ChatModelClass(config) as LangChainChatModel;

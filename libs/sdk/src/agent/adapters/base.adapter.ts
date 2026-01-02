@@ -80,14 +80,14 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
       throw new LlmAdapterError('apiKey is required and must be a non-empty string', 'config', 'invalid_config');
     }
 
-    // Validate numeric constraints
+    // Validate numeric constraints with type guards
     const timeout = config.timeout ?? 60000;
     const maxRetries = config.maxRetries ?? 3;
-    if (timeout <= 0) {
+    if (typeof timeout !== 'number' || Number.isNaN(timeout) || timeout <= 0) {
       throw new LlmAdapterError('timeout must be a positive number', 'config', 'invalid_config');
     }
-    if (maxRetries < 0) {
-      throw new LlmAdapterError('maxRetries must be non-negative', 'config', 'invalid_config');
+    if (typeof maxRetries !== 'number' || Number.isNaN(maxRetries) || maxRetries < 0) {
+      throw new LlmAdapterError('maxRetries must be a non-negative number', 'config', 'invalid_config');
     }
 
     this.config = {

@@ -217,6 +217,21 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     this.bump('reset');
   }
 
+  /**
+   * Dispose the registry and clean up all child subscriptions.
+   * Call this when the registry is no longer needed to prevent memory leaks.
+   */
+  dispose(): void {
+    // Unsubscribe from all child registries
+    for (const [child, unsubscribe] of this.childSubscriptions) {
+      unsubscribe();
+      this.children.delete(child);
+      this.adopted.delete(child);
+    }
+    this.childSubscriptions.clear();
+    this.reindex();
+  }
+
   // ============================================================================
   // Accessors
   // ============================================================================
