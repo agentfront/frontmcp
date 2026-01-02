@@ -1,11 +1,11 @@
 import 'reflect-metadata';
-import { AppType, FrontMcpConfigType, ScopeEntry, ScopeRecord, ScopeKind, Token } from '../common';
+import { Token, tokenName } from '@frontmcp/di';
+import { AppType, FrontMcpConfigType, ScopeEntry, ScopeRecord, ScopeKind } from '../common';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import { normalizeApp } from '../app/app.utils';
 import { normalizeAppScope, normalizeMultiAppScope, scopeDiscoveryDeps } from './scope.utils';
-import { tokenName } from '../utils/token.utils';
 import { Scope } from './scope.instance';
 
 export class ScopeRegistry extends RegistryAbstract<ScopeEntry, ScopeRecord, FrontMcpConfigType> {

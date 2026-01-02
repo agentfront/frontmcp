@@ -1,6 +1,9 @@
+import { createTokenFactory } from '@frontmcp/di';
+
 export const baseTokenPrefix = 'FrontMcp';
 
-export const tokenFactory = {
-  type: (name: string) => Symbol(`${baseTokenPrefix}:type:${name}`),
-  meta: (name: string) => Symbol(`${baseTokenPrefix}:meta:${name}`),
-}
+/**
+ * Token factory for FrontMCP-specific tokens.
+ * Uses the DI library's createTokenFactory with FrontMcp prefix.
+ */
+export const tokenFactory = createTokenFactory({ prefix: baseTokenPrefix });

@@ -1,9 +1,9 @@
 import 'reflect-metadata';
-import { AppType, Token, AppEntry, AppKind, AppRecord, EntryOwnerRef } from '../common';
+import { Token, tokenName } from '@frontmcp/di';
+import { AppType, AppEntry, AppKind, AppRecord, EntryOwnerRef } from '../common';
 import { appDiscoveryDeps, normalizeApp } from './app.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { tokenName } from '../utils/token.utils';
 import { AppLocalInstance, AppRemoteInstance } from './instances';
 
 export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, AppType[]> {

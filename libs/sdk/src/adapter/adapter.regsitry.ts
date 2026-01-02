@@ -1,20 +1,18 @@
 import 'reflect-metadata';
-import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType, Token } from '../common';
+import { Token, tokenName } from '@frontmcp/di';
+import { AdapterEntry, AdapterRecord, AdapterRegistryInterface, AdapterType } from '../common';
 import { adapterDiscoveryDeps, normalizeAdapter } from './adapter.utils';
-import { tokenName } from '../utils/token.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AdapterInstance } from './adapter.instance';
 
-export default class AdapterRegistry extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]> implements AdapterRegistryInterface {
-
-  constructor(
-    providers: ProviderRegistry,
-    list: AdapterType[],
-  ) {
+export default class AdapterRegistry
+  extends RegistryAbstract<AdapterInstance, AdapterRecord, AdapterType[]>
+  implements AdapterRegistryInterface
+{
+  constructor(providers: ProviderRegistry, list: AdapterType[]) {
     super('AdapterRegistry', providers, list);
   }
-
 
   protected override buildMap(list: AdapterType[]): RegistryBuildMapResult<AdapterRecord> {
     const tokens = new Set<Token>();
@@ -32,7 +30,6 @@ export default class AdapterRegistry extends RegistryAbstract<AdapterInstance, A
     return { tokens, defs, graph };
   }
 
-
   protected buildGraph() {
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
@@ -49,7 +46,6 @@ export default class AdapterRegistry extends RegistryAbstract<AdapterInstance, A
 
   /** Instantiate adapters, run fetch/transform, and populate registries. */
   protected async initialize(): Promise<void> {
-
     const readyArr: Promise<void>[] = [];
     for (const token of this.tokens) {
       const rec = this.defs.get(token)!;
@@ -61,7 +57,6 @@ export default class AdapterRegistry extends RegistryAbstract<AdapterInstance, A
       readyArr.push(instance.ready);
     }
     await Promise.all(readyArr);
-
   }
 
   getAdapters(): AdapterEntry[] {

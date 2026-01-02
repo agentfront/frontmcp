@@ -1,16 +1,15 @@
 // file: libs/sdk/src/resource/resource.registry.ts
 
+import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import {
   EntryLineage,
   EntryOwnerRef,
-  Token,
   ResourceEntry,
   ResourceRecord,
   ResourceTemplateRecord,
   ResourceRegistryInterface,
   ResourceType,
 } from '../common';
-import { getMetadata, tokenName } from '../utils';
 import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {

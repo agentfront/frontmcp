@@ -1,11 +1,5 @@
-import {
-  PluginMetadata,
-  PluginType,
-  FrontMcpPluginTokens,
-  Token, PluginRecord, PluginKind,
-} from '../common';
-import {depsOfClass, isClass, tokenName} from '../utils/token.utils';
-import {getMetadata} from '../utils/metadata.utils';
+import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
+import { PluginMetadata, PluginType, FrontMcpPluginTokens, PluginRecord, PluginKind } from '../common';
 
 export function collectPluginMetadata(cls: PluginType): PluginMetadata {
   return Object.entries(FrontMcpPluginTokens).reduce((metadata, [key, token]) => {
@@ -15,15 +9,14 @@ export function collectPluginMetadata(cls: PluginType): PluginMetadata {
   }, {} as PluginMetadata);
 }
 
-
 export function normalizePlugin(item: PluginType): PluginRecord {
   if (isClass(item)) {
     // read McpPluginMetadata from class
     const metadata = collectPluginMetadata(item);
-    return {kind: PluginKind.CLASS_TOKEN, provide: item, metadata};
+    return { kind: PluginKind.CLASS_TOKEN, provide: item, metadata };
   }
   if (item && typeof item === 'object') {
-    const {provide, useClass, useFactory, useValue, inject, ...metadata} = item as any;
+    const { provide, useClass, useFactory, useValue, inject, ...metadata } = item as any;
 
     if (!provide) {
       const name = (item as any)?.name ?? '[object]';
@@ -32,9 +25,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(
-          `'useClass' on plugin '${tokenName(provide)}' must be a class.`,
-        );
+        throw new Error(`'useClass' on plugin '${tokenName(provide)}' must be a class.`);
       }
       return {
         kind: PluginKind.CLASS,
@@ -46,9 +37,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(
-          `'useFactory' on plugin '${tokenName(provide)}' must be a function.`,
-        );
+        throw new Error(`'useFactory' on plugin '${tokenName(provide)}' must be a function.`);
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -70,15 +59,13 @@ export function normalizePlugin(item: PluginType): PluginRecord {
         provide,
         useValue,
         metadata,
-        providers: (item.providers ?? []) as any
+        providers: (item.providers ?? []) as any,
       };
     }
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(
-    `Invalid plugin '${name}'. Expected a class or a plugin object.`,
-  );
+  throw new Error(`Invalid plugin '${name}'. Expected a class or a plugin object.`);
 }
 
 /**
@@ -87,19 +74,17 @@ export function normalizePlugin(item: PluginType): PluginRecord {
  * - FACTORY: only includes deps that are registered (others will be resolved)
  * - CLASS / CLASS_TOKEN: deps come from the class constructor or static with(...)
  */
-export function pluginDiscoveryDeps(
-  rec: PluginRecord,
-): Token[] {
+export function pluginDiscoveryDeps(rec: PluginRecord): Token[] {
   switch (rec.kind) {
     case PluginKind.VALUE:
-      return []
+      return [];
     case PluginKind.FACTORY: {
       return [...rec.inject()];
     }
     case PluginKind.CLASS:
-      return depsOfClass(rec.useClass, 'discovery').filter(v => v !== null && typeof v === 'object');
+      return depsOfClass(rec.useClass, 'discovery').filter((v) => v !== null && typeof v === 'object');
 
     case PluginKind.CLASS_TOKEN:
-      return depsOfClass(rec.provide, 'discovery').filter(v => v !== null && typeof v === 'object');
+      return depsOfClass(rec.provide, 'discovery').filter((v) => v !== null && typeof v === 'object');
   }
 }

@@ -1,3 +1,20 @@
+// Re-export DI types for backwards compatibility
+export {
+  Type,
+  FuncType,
+  PartialStagesType,
+  CtorType,
+  Ctor,
+  Abstract,
+  Reference,
+  Token,
+  ClassType,
+  ValueType,
+  ClassToken,
+  FactoryType,
+  RequiredByKey,
+} from '@frontmcp/di';
+
 export * from './base.interface';
 export * from './execution-context.interface';
 export * from './front-mcp.interface';

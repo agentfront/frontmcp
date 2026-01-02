@@ -1,4 +1,5 @@
-import { ClassType, FrontMcpAuth, Token, Type, ValueType } from '../interfaces';
+import { ClassType, Token, Type, ValueType } from '@frontmcp/di';
+import { FrontMcpAuth } from '../interfaces';
 import { AuthProviderMetadata } from '../metadata';
 import { AuthOptions } from '../types';
 
@@ -12,7 +13,7 @@ export enum AuthProviderKind {
 
 export interface AuthProviderClassTokenRecord {
   kind: AuthProviderKind.CLASS_TOKEN;
-  provide: Type,
+  provide: Type;
   metadata: AuthProviderMetadata;
 }
 
@@ -41,12 +42,9 @@ export type PrimaryAuthRecord = {
   metadata: AuthOptions;
 };
 
-
 export type AuthProviderRecord =
   | AuthProviderClassTokenRecord
   | AuthProviderClassRecord
   | AuthProviderValueRecord
   | AuthProviderFactoryRecord
-  | PrimaryAuthRecord
-
-
+  | PrimaryAuthRecord;

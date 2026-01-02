@@ -1,0 +1,60 @@
+{
+  "name": "@frontmcp/di",
+  "version": "0.6.3",
+  "description": "Generic dependency injection container and registry utilities for TypeScript applications",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "dependency-injection",
+    "di",
+    "ioc",
+    "container",
+    "registry",
+    "typescript",
+    "decorators",
+    "reflect-metadata",
+    "inversion-of-control"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/di"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/di/README.md",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    },
+    "./esm": null
+  },
+  "dependencies": {
+    "mitt": "^3.0.1"
+  },
+  "peerDependencies": {
+    "reflect-metadata": "^0.2.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "reflect-metadata": "^0.2.2",
+    "typescript": "^5.0.0",
+    "zod": "^3.23.8"
+  }
+}

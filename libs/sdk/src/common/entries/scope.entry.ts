@@ -1,3 +1,4 @@
+import { Token, Type } from '@frontmcp/di';
 import { BaseEntry } from './base.entry';
 import { ScopeRecord } from '../records';
 import {
@@ -6,10 +7,8 @@ import {
   AppRegistryInterface,
   AuthRegistryInterface,
   FrontMcpAuth,
-  Token,
   FlowInputOf,
   FlowOutputOf,
-  Type,
   FlowType,
   FrontMcpLogger,
   ToolRegistryInterface,

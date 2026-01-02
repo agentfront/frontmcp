@@ -1,8 +1,8 @@
+import { Token, Type, tokenName } from '@frontmcp/di';
 import ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
-import { FlowInputOf, FlowName, FlowOutputOf, FlowRecord, FlowType, ScopeEntry, Token, Type } from '../common';
+import { FlowInputOf, FlowName, FlowOutputOf, FlowRecord, FlowType, ScopeEntry } from '../common';
 import { normalizeFlow } from './flow.utils';
-import { tokenName } from '../utils';
 import { FlowInstance } from './flow.instance';
 import { FrontMcpContextStorage } from '../context';
 import { randomUUID } from 'crypto';

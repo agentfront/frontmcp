@@ -1,8 +1,7 @@
 // flows/flow.utils.ts
 
-import { FlowKind, FlowMetadata, FlowRecord, FlowType, FrontMcpFlowTokens, Token } from '../common';
-import { depsOfClass, isClass } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
+import { Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
+import { FlowKind, FlowMetadata, FlowRecord, FlowType, FrontMcpFlowTokens } from '../common';
 
 export function collectFlowMetadata(cls: FlowType): FlowMetadata<never> {
   return Object.entries(FrontMcpFlowTokens).reduce((metadata, [key, token]) => {
@@ -12,7 +11,6 @@ export function collectFlowMetadata(cls: FlowType): FlowMetadata<never> {
   }, {} as FlowMetadata<never>);
 }
 
-
 export function normalizeFlow(item: FlowType): FlowRecord {
   if (isClass(item)) {
     // read McpFlowMetadata from class
@@ -20,9 +18,7 @@ export function normalizeFlow(item: FlowType): FlowRecord {
     return { kind: FlowKind.CLASS_TOKEN, provide: item, metadata };
   }
   const name = (item as any)?.name ?? String(item);
-  throw new Error(
-    `Invalid adapter '${name}'. Expected a class or a adapter object.`,
-  );
+  throw new Error(`Invalid adapter '${name}'. Expected a class or a adapter object.`);
 }
 
 /**
@@ -35,4 +31,3 @@ export function flowDiscoveryDeps(rec: FlowRecord): Token[] {
       return depsOfClass(rec.provide, 'discovery');
   }
 }
-

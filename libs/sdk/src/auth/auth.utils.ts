@@ -1,10 +1,9 @@
 // auth/auth.utils.ts
-import { depsOfClass, isClass, tokenName, getMetadata } from '../utils';
+import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
 import {
   AuthProviderMetadata,
   FrontMcpAuthProviderTokens,
   AuthProviderType,
-  Token,
   AuthProviderRecord,
   AuthProviderKind,
 } from '../common';

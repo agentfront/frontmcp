@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Token, Type } from '@frontmcp/di';
 import {
   AgentMetadata,
   AgentType,
@@ -6,8 +7,6 @@ import {
   extendedAgentMetadata,
   AgentRecord,
   AgentKind,
-  Token,
-  Type,
 } from '../common';
 import { AgentConfigurationError } from '../errors/agent.errors';
 

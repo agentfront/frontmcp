@@ -1,5 +1,6 @@
 // file: libs/sdk/src/resource/resource.utils.ts
 
+import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
 import {
   ResourceMetadata,
   ResourceTemplateMetadata,
@@ -8,16 +9,12 @@ import {
   extendedResourceMetadata,
   extendedResourceTemplateMetadata,
   ResourceType,
-  Token,
   ResourceRecord,
   ResourceKind,
   ResourceTemplateRecord,
   ResourceTemplateKind,
-  Type,
   ResourceEntry,
 } from '../common';
-import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
 import { ResourceTemplateType } from './resource.types';
 
 // Re-export shared naming utilities (ResourceNameCase is exported from resource.types.ts)

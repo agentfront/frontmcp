@@ -1,4 +1,5 @@
-import { ProviderType, Type, Token } from '../interfaces';
+import { Token, Type } from '@frontmcp/di';
+import { ProviderType } from '../interfaces';
 import { AgentMetadata } from '../metadata';
 
 /**

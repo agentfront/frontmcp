@@ -1,4 +1,5 @@
-import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, Ctor, Reference, FrontMcpLogger } from '../common';
+import { Ctor, Reference } from '@frontmcp/di';
+import { AdapterEntry, AdapterInterface, AdapterKind, AdapterRecord, FrontMcpLogger } from '../common';
 import ProviderRegistry from '../provider/provider.registry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';

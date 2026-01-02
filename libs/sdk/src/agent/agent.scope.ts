@@ -1,6 +1,7 @@
 // file: libs/sdk/src/agent/agent.scope.ts
 
 import 'reflect-metadata';
+import { ProviderScope, Token, Type } from '@frontmcp/di';
 import {
   EntryOwnerRef,
   FlowInputOf,
@@ -8,10 +9,7 @@ import {
   FlowOutputOf,
   FlowType,
   FrontMcpLogger,
-  ProviderScope,
   ScopeEntry,
-  Token,
-  Type,
   AgentMetadata,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';

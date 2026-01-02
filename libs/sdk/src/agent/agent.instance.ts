@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { toJSONSchema } from 'zod/v4';
+import { Token } from '@frontmcp/di';
 import {
   EntryOwnerRef,
   AgentCallArgs,
@@ -20,7 +21,6 @@ import {
   AgentOutputOf,
   AgentLlmAdapter,
   AgentToolDefinition,
-  Token,
   ToolEntry,
 } from '../common';
 import ProviderRegistry from '../provider/provider.registry';

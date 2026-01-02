@@ -1,20 +1,17 @@
 // file: libs/sdk/src/tool/tool.utils.ts
+import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
 import {
   ToolMetadata,
   FrontMcpToolTokens,
   ToolType,
-  Token,
   ToolRecord,
   ToolKind,
-  Type,
   ToolContext,
   ToolEntry,
   extendedToolMetadata,
   ParsedToolResult,
   AgentToolDefinition,
 } from '../common';
-import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
 import { toStructuredContent } from '../utils/content.utils';
 import {
   AudioContent,

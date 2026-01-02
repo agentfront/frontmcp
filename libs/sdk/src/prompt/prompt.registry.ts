@@ -1,15 +1,7 @@
 // file: libs/sdk/src/prompt/prompt.registry.ts
 
-import {
-  EntryLineage,
-  EntryOwnerRef,
-  Token,
-  PromptEntry,
-  PromptRecord,
-  PromptRegistryInterface,
-  PromptType,
-} from '../common';
-import { getMetadata } from '../utils/metadata.utils';
+import { Token, tokenName, getMetadata } from '@frontmcp/di';
+import { EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptRegistryInterface, PromptType } from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {
@@ -23,7 +15,6 @@ import {
   sepFor,
   promptDiscoveryDeps,
 } from './prompt.utils';
-import { tokenName } from '../utils/token.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { PromptInstance } from './prompt.instance';
 import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from './prompt.types';

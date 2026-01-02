@@ -22,6 +22,7 @@
     "skipDefaultLibCheck": true,
     "typeRoots": ["./node_modules/@types", "./types"],
     "paths": {
+      "@frontmcp/di": ["libs/di/src/index.ts"],
       "@frontmcp/adapters": ["libs/adapters/src/index.ts"],
       "@frontmcp/plugins": ["libs/plugins/src/index.ts"],
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],

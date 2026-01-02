@@ -1,16 +1,8 @@
-import {
-  FrontMcpLogTransportTokens,
-  LogTransportMetadata,
-  LogTransportType,
-  Type, Token,
-  LogTransportInterface,
-} from '../common';
-import { getMetadata } from '../utils/metadata.utils';
-import { depsOfClass, isClass } from '../utils/token.utils';
+import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
+import { FrontMcpLogTransportTokens, LogTransportMetadata, LogTransportType, LogTransportInterface } from '../common';
 import { LoggerKind, LoggerRecord } from './logger.types';
 
 export function collectLoggerMetadata(cls: LogTransportType): LogTransportMetadata {
-
   return Object.entries(FrontMcpLogTransportTokens).reduce((metadata, [key, token]) => {
     return Object.assign(metadata, {
       [key]: getMetadata(token, cls),

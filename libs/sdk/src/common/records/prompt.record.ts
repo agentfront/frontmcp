@@ -1,4 +1,4 @@
-import { Type } from '../interfaces';
+import { Type } from '@frontmcp/di';
 import { PromptMetadata } from '../metadata';
 import { PromptEntry } from '../entries';
 

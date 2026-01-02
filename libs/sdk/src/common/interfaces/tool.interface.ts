@@ -1,4 +1,4 @@
-import { FuncType, Type } from './base.interface';
+import { FuncType, Type } from '@frontmcp/di';
 import { ProviderRegistryInterface } from './internal';
 import { ToolInputType, ToolMetadata, ToolOutputType } from '../metadata';
 import { FrontMcpLogger } from './logger.interface';

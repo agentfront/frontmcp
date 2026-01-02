@@ -1,22 +1,13 @@
 // plugin-registry.ts
 import 'reflect-metadata';
-import {
-  EntryOwnerRef,
-  PluginEntry,
-  PluginKind,
-  PluginRecord,
-  PluginRegistryInterface,
-  PluginType,
-  Token,
-} from '../common';
+import { Token, tokenName, Ctor } from '@frontmcp/di';
+import { EntryOwnerRef, PluginEntry, PluginKind, PluginRecord, PluginRegistryInterface, PluginType } from '../common';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
-import { tokenName } from '../utils/token.utils';
 import AdapterRegistry from '../adapter/adapter.regsitry';
 import ToolRegistry from '../tool/tool.registry';
 import ResourceRegistry from '../resource/resource.registry';
 import PromptRegistry from '../prompt/prompt.registry';
-import { Ctor } from '../types/token.types';
 import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';

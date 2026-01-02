@@ -1,14 +1,21 @@
 import 'reflect-metadata';
 import {
   Ctor,
-  ProviderInterface,
-  ProviderType,
   ProviderScope,
   Token,
-  ProviderRegistryInterface,
   ProviderRecord,
   ProviderKind,
   ProviderInjectedRecord,
+  tokenName,
+  isClass,
+  isPromise,
+  depsOfClass,
+  hasAsyncWith,
+} from '@frontmcp/di';
+import {
+  ProviderInterface,
+  ProviderType,
+  ProviderRegistryInterface,
   ScopeEntry,
   RegistryKind,
   RegistryType,
@@ -16,8 +23,6 @@ import {
   FrontMcpServer,
 } from '../common';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
-import { depsOfClass, isClass, isPromise, tokenName } from '../utils/token.utils';
-import { hasAsyncWith } from '../utils/metadata.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';

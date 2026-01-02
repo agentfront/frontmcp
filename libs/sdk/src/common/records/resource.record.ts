@@ -1,4 +1,4 @@
-import { Type } from '../interfaces';
+import { Type } from '@frontmcp/di';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ResourceEntry } from '../entries';
 

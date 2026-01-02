@@ -1,4 +1,4 @@
-import { ClassType, FactoryType, Token, Type, ValueType } from './base.interface';
+import { ClassType, FactoryType, Token, Type, ValueType } from '@frontmcp/di';
 import { ToolType } from './tool.interface';
 import { ResourceType } from './resource.interface';
 import { PromptType } from './prompt.interface';

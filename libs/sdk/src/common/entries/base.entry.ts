@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Token } from '../interfaces';
+import { Token } from '@frontmcp/di';
 
 export type EntryOwnerKind = 'scope' | 'app' | 'plugin' | 'adapter' | 'agent';
 export type EntryOwnerRef = { kind: EntryOwnerKind; id: string; ref: Token };

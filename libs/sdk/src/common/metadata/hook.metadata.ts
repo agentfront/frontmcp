@@ -1,4 +1,4 @@
-import { Token } from '../interfaces';
+import { Token } from '@frontmcp/di';
 import { FlowName } from './flow.metadata';
 import { EntryOwnerRef } from '../entries/base.entry';
 

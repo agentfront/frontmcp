@@ -1,17 +1,7 @@
 // file: libs/sdk/src/prompt/prompt.utils.ts
 
-import {
-  PromptMetadata,
-  FrontMcpPromptTokens,
-  PromptType,
-  Token,
-  PromptRecord,
-  PromptKind,
-  Type,
-  PromptEntry,
-} from '../common';
-import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
+import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@frontmcp/di';
+import { PromptMetadata, FrontMcpPromptTokens, PromptType, PromptRecord, PromptKind, PromptEntry } from '../common';
 import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
 // Re-export shared naming utilities

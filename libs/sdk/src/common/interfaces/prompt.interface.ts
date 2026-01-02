@@ -1,8 +1,8 @@
 // file: libs/sdk/src/common/interfaces/prompt.interface.ts
 
 import { randomUUID } from 'crypto';
+import { FuncType, Token, Type } from '@frontmcp/di';
 import { PromptMetadata } from '../metadata';
-import { FuncType, Token, Type } from './base.interface';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';

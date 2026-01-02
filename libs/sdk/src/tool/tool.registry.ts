@@ -1,5 +1,5 @@
-import { EntryLineage, EntryOwnerRef, Token, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
-import { getMetadata, tokenName } from '../utils';
+import { Token, tokenName, getMetadata } from '@frontmcp/di';
+import { EntryLineage, EntryOwnerRef, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
 import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
 import {

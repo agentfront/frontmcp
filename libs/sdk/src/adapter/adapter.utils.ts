@@ -1,13 +1,5 @@
-import {
-  Token,
-  AdapterMetadata,
-  FrontMcpAdapterTokens,
-  AdapterRecord,
-  AdapterType,
-  AdapterKind,
-} from '../common';
-import { getMetadata } from '../utils/metadata.utils';
-import { depsOfClass, isClass, tokenName } from '../utils/token.utils';
+import { Token, depsOfClass, isClass, tokenName, getMetadata } from '@frontmcp/di';
+import { AdapterMetadata, FrontMcpAdapterTokens, AdapterRecord, AdapterType, AdapterKind } from '../common';
 
 export function collectAdapterMetadata(cls: AdapterType): AdapterMetadata {
   return Object.entries(FrontMcpAdapterTokens).reduce((metadata, [key, token]) => {
@@ -32,9 +24,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(
-          `'useClass' on adapter '${tokenName(provide)}' must be a class.`,
-        );
+        throw new Error(`'useClass' on adapter '${tokenName(provide)}' must be a class.`);
       }
       return {
         kind: AdapterKind.CLASS,
@@ -46,9 +36,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(
-          `'useFactory' on adapter '${tokenName(provide)}' must be a function.`,
-        );
+        throw new Error(`'useFactory' on adapter '${tokenName(provide)}' must be a function.`);
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -72,11 +60,8 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(
-    `Invalid adapter '${name}'. Expected a class or a adapter object.`,
-  );
+  throw new Error(`Invalid adapter '${name}'. Expected a class or a adapter object.`);
 }
-
 
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.
@@ -97,6 +82,5 @@ export function adapterDiscoveryDeps(rec: AdapterRecord): Token[] {
 
     case AdapterKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
-
   }
 }
