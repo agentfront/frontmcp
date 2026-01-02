@@ -125,3 +125,34 @@ export class AgentConfigurationError extends PublicMcpError {
     this.configErrors = options?.errors ?? [message];
   }
 }
+
+/**
+ * Agent not configured error - thrown when an agent doesn't have an LLM adapter.
+ */
+export class AgentNotConfiguredError extends InternalMcpError {
+  readonly agentName: string;
+
+  constructor(agentName: string) {
+    super(`Agent "${agentName}" has no LLM adapter configured`, 'AGENT_NOT_CONFIGURED');
+    this.agentName = agentName;
+  }
+}
+
+/**
+ * Agent tool not found error - thrown when a tool is not found in the agent's scope.
+ */
+export class AgentToolNotFoundError extends InternalMcpError {
+  readonly agentName: string;
+  readonly toolName: string;
+  readonly availableTools: string[];
+
+  constructor(agentName: string, toolName: string, availableTools: string[]) {
+    super(
+      `Tool "${toolName}" not found in agent "${agentName}". Available tools: [${availableTools.join(', ')}]`,
+      'AGENT_TOOL_NOT_FOUND',
+    );
+    this.agentName = agentName;
+    this.toolName = toolName;
+    this.availableTools = availableTools;
+  }
+}

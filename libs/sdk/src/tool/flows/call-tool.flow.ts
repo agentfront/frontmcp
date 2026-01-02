@@ -371,6 +371,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('applyUI:start');
     const { tool, rawOutput, input } = this.state;
 
+    // Skip UI for agent tool calls (structured data only)
+    const ctx = this.input.ctx;
+    if (ctx?._skipUI) {
+      this.logger.verbose('applyUI:skip (agent context - structured data only)');
+      return;
+    }
+
     // Skip if no tool or no UI config
     if (!tool || !hasUIConfig(tool.metadata)) {
       this.logger.verbose('applyUI:skip (no UI config)');

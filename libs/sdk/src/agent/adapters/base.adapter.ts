@@ -4,10 +4,9 @@ import {
   AgentMessage,
   AgentCompletion,
   AgentCompletionChunk,
-  AgentToolCall,
   AgentToolDefinition,
   AgentCompletionOptions,
-} from '../../common/interfaces/llm-adapter.interface';
+} from '../../common';
 
 // ============================================================================
 // Common Configuration Types

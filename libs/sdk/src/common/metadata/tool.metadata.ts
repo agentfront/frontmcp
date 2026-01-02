@@ -1,15 +1,11 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
 import type { JSONSchema } from 'zod/v4/core';
+import { AGENT_TOOL_PREFIX } from '../../agent/agent.utils';
 
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
 
-/**
- * Reserved prefix for agent tool names.
- * Tools cannot use this prefix - it's reserved for agent invocations.
- */
-const AGENT_TOOL_PREFIX = 'use-agent:';
 import {
   ImageContentSchema,
   AudioContentSchema,

@@ -9,6 +9,7 @@ import {
   Token,
   Type,
 } from '../common';
+import { AgentConfigurationError } from '../errors/agent.errors';
 
 // ============================================================================
 // Metadata Extraction
@@ -17,7 +18,7 @@ import {
 /**
  * Check if a value is a class decorated with @Agent.
  */
-export function isAgentClass(value: unknown): boolean {
+export function isAgentClass(value: unknown): value is new (...args: unknown[]) => unknown {
   if (typeof value !== 'function') return false;
   return Reflect.getMetadata(FrontMcpAgentTokens.type, value) === true;
 }
@@ -200,6 +201,15 @@ export function agentToolName(agentId: string): string {
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .replace(/_{2,}/g, '_')
     .replace(/^_|_$/g, '');
+
+  // Warn about potential collisions when sanitization modifies the ID
+  if (sanitized !== agentId) {
+    console.warn(
+      `Agent ID "${agentId}" was sanitized to "${sanitized}" for tool name. ` +
+        `Different IDs may produce the same tool name - check for potential collisions.`,
+    );
+  }
+
   return `${AGENT_TOOL_PREFIX}${sanitized}`;
 }
 
@@ -244,11 +254,11 @@ export function agentFullName(agentName: string, ownerPath: string[]): string {
  */
 export function validateAgentMetadata(metadata: AgentMetadata): void {
   if (!metadata.name || metadata.name.trim() === '') {
-    throw new Error('Agent metadata.name is required');
+    throw new AgentConfigurationError('Agent metadata.name is required');
   }
 
   if (!metadata.llm) {
-    throw new Error('Agent metadata.llm is required');
+    throw new AgentConfigurationError('Agent metadata.llm is required', { agentId: metadata.name });
   }
 }
 
@@ -268,8 +278,9 @@ export function canAgentSeeSwarm(metadata: AgentMetadata): boolean {
 
 /**
  * Get the list of visible agent IDs for an agent.
+ * Returns empty array if agent cannot see swarm or has no specific visibility list.
  */
-export function getVisibleAgentIds(metadata: AgentMetadata): string[] | undefined {
+export function getVisibleAgentIds(metadata: AgentMetadata): string[] {
   if (!canAgentSeeSwarm(metadata)) return [];
-  return metadata.swarm?.visibleAgents;
+  return metadata.swarm?.visibleAgents ?? [];
 }

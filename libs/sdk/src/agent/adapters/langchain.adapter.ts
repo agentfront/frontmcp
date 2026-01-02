@@ -1,14 +1,14 @@
 import {
   AgentLlmAdapter,
   AgentPrompt,
-  AgentMessage,
   AgentCompletion,
   AgentCompletionChunk,
   AgentToolCall,
   AgentToolDefinition,
   AgentCompletionOptions,
-} from '../../common/interfaces/llm-adapter.interface';
+} from '../../common';
 import { LlmAdapterError } from './base.adapter';
+import { SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage } from '@langchain/core/messages';
 
 // ============================================================================
 // LangChain Types (minimal interface for duck-typing)
@@ -82,108 +82,38 @@ interface LangChainStreamChunk {
 }
 
 // ============================================================================
-// LangChain Message Classes (dynamically imported)
+// LangChain Message Helpers
 // ============================================================================
 
 /**
- * Cached message classes from @langchain/core.
+ * Create a system message using LangChain's SystemMessage class.
  */
-let messageClasses: {
-  SystemMessage: new (content: string) => LangChainMessage;
-  HumanMessage: new (content: string) => LangChainMessage;
-  AIMessage: new (fields: {
-    content: string;
-    tool_calls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
-  }) => LangChainMessage;
-  ToolMessage: new (fields: { content: string; tool_call_id: string; name?: string }) => LangChainMessage;
-} | null = null;
-
-/**
- * Load LangChain message classes dynamically.
- */
-async function loadMessageClasses(): Promise<typeof messageClasses> {
-  if (messageClasses) return messageClasses;
-
-  try {
-    const core = await import('@langchain/core/messages');
-    messageClasses = {
-      SystemMessage: core.SystemMessage,
-      HumanMessage: core.HumanMessage,
-      AIMessage: core.AIMessage,
-      ToolMessage: core.ToolMessage,
-    };
-    return messageClasses;
-  } catch {
-    // Fallback to duck-typed messages if @langchain/core is not available
-    return null;
-  }
+function createSystemMessage(content: string): BaseMessage {
+  return new SystemMessage(content);
 }
 
 /**
- * Create LangChain-compatible message objects.
- * Uses actual LangChain classes if available, otherwise falls back to duck-typed objects.
+ * Create a human/user message using LangChain's HumanMessage class.
  */
-function createSystemMessage(content: string, classes: typeof messageClasses): LangChainMessage {
-  if (classes) {
-    return new classes.SystemMessage(content);
-  }
-  return {
-    _getType: () => 'system',
-    content,
-    lc_serializable: true,
-    response_metadata: {},
-  } as unknown as LangChainMessage;
+function createHumanMessage(content: string): BaseMessage {
+  return new HumanMessage(content);
 }
 
-function createHumanMessage(content: string, classes: typeof messageClasses): LangChainMessage {
-  if (classes) {
-    return new classes.HumanMessage(content);
-  }
-  return {
-    _getType: () => 'human',
-    content,
-    lc_serializable: true,
-    response_metadata: {},
-  } as unknown as LangChainMessage;
-}
-
+/**
+ * Create an AI/assistant message using LangChain's AIMessage class.
+ */
 function createAIMessage(
   content: string | null,
-  toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> | undefined,
-  classes: typeof messageClasses,
-): LangChainMessage {
-  if (classes) {
-    return new classes.AIMessage({ content: content ?? '', tool_calls: toolCalls });
-  }
-  const msg: Record<string, unknown> = {
-    _getType: () => 'ai',
-    content: content ?? '',
-    lc_serializable: true,
-    response_metadata: {},
-  };
-  if (toolCalls) {
-    msg['tool_calls'] = toolCalls;
-  }
-  return msg as unknown as LangChainMessage;
+  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>,
+): BaseMessage {
+  return new AIMessage({ content: content ?? '', tool_calls: toolCalls });
 }
 
-function createToolMessage(
-  content: string,
-  toolCallId: string,
-  name: string | undefined,
-  classes: typeof messageClasses,
-): LangChainMessage {
-  if (classes) {
-    return new classes.ToolMessage({ content, tool_call_id: toolCallId, name });
-  }
-  return {
-    _getType: () => 'tool',
-    content,
-    tool_call_id: toolCallId,
-    name,
-    lc_serializable: true,
-    response_metadata: {},
-  } as unknown as LangChainMessage;
+/**
+ * Create a tool response message using LangChain's ToolMessage class.
+ */
+function createToolMessage(content: string, toolCallId: string, name?: string): BaseMessage {
+  return new ToolMessage({ content, tool_call_id: toolCallId, name });
 }
 
 // ============================================================================
@@ -293,9 +223,7 @@ export class LangChainAdapter implements AgentLlmAdapter {
     tools?: AgentToolDefinition[],
     options?: AgentCompletionOptions,
   ): Promise<AgentCompletion> {
-    // Load LangChain message classes for proper message construction
-    const classes = await loadMessageClasses();
-    const messages = this.buildMessages(prompt, classes);
+    const messages = this.buildMessages(prompt);
     const langChainTools = this.buildTools(tools);
 
     try {
@@ -514,8 +442,8 @@ export class LangChainAdapter implements AgentLlmAdapter {
   /**
    * Build LangChain messages from AgentPrompt.
    */
-  private buildMessages(prompt: AgentPrompt): LangChainMessage[] {
-    const messages: LangChainMessage[] = [];
+  private buildMessages(prompt: AgentPrompt): BaseMessage[] {
+    const messages: BaseMessage[] = [];
 
     // Add system message if present
     if (prompt.system) {
@@ -648,7 +576,24 @@ export class LangChainAdapter implements AgentLlmAdapter {
     const err = error instanceof Error ? error : new Error(String(error));
     const message = err.message;
 
-    // Try to detect specific error types
+    // Check for LangChain structured error codes first (more reliable than string matching)
+    const lcErrorCode = (error as { lc_error_code?: string })?.lc_error_code;
+    if (lcErrorCode) {
+      switch (lcErrorCode) {
+        case 'MODEL_RATE_LIMIT':
+          return new LlmAdapterError(message, 'langchain', 'rate_limit', 429);
+        case 'MODEL_AUTHENTICATION':
+          return new LlmAdapterError(message, 'langchain', 'authentication', 401);
+        case 'CONTEXT_LENGTH_EXCEEDED':
+          return new LlmAdapterError(message, 'langchain', 'context_length_exceeded', 400);
+        case 'MODEL_NOT_FOUND':
+          return new LlmAdapterError(message, 'langchain', 'model_not_found', 404);
+        case 'INVALID_PROMPT':
+          return new LlmAdapterError(message, 'langchain', 'invalid_prompt', 400);
+      }
+    }
+
+    // Fall back to string matching for errors without structured codes
     if (message.includes('rate limit') || message.includes('429')) {
       return new LlmAdapterError(message, 'langchain', 'rate_limit', 429);
     }

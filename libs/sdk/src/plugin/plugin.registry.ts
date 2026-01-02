@@ -32,12 +32,12 @@ export default class PluginRegistry
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
   private readonly scope: Scope;
-  private readonly owner?: { kind: 'app' | 'plugin'; id: string; ref: Token };
+  private readonly owner?: { kind: 'app' | 'plugin' | 'agent'; id: string; ref: Token };
 
   constructor(
     providers: ProviderRegistry,
     list: PluginType[],
-    owner?: { kind: 'app' | 'plugin'; id: string; ref: Token },
+    owner?: { kind: 'app' | 'plugin' | 'agent'; id: string; ref: Token },
   ) {
     super('PluginRegistry', providers, list);
     this.scope = providers.getActiveScope();

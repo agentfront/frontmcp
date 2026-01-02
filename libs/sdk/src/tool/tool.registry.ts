@@ -396,6 +396,30 @@ export default class ToolRegistry
   }
 
   /**
+   * Register an existing ToolInstance directly (for agent-scoped tools).
+   * This allows pre-constructed tool instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * @param tool - The tool instance to register
+   */
+  registerToolInstance(tool: ToolEntry): void {
+    const instance = tool as ToolInstance;
+    const token = instance.record.provide as Token;
+
+    // Add to instances map
+    this.instances.set(token as Token<ToolInstance>, instance);
+
+    // Create an indexed row for this tool
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Get the MCP capabilities for tools.
    * These are reported to clients during initialization.
    */

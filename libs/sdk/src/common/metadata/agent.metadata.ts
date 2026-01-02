@@ -414,7 +414,15 @@ const llmConfigSchema = z.union([
   builtinAdapterConfigSchema,
   adapterConfigSchema,
   z.custom<symbol>((v) => typeof v === 'symbol', { message: 'Must be a symbol token' }), // Token<AgentLlmAdapter>
-  z.any(), // Allow direct adapter instances
+  // Allow direct adapter instances (must have completion method)
+  z.custom<AgentLlmAdapterLocal>(
+    (v) =>
+      typeof v === 'object' &&
+      v !== null &&
+      'completion' in v &&
+      typeof (v as AgentLlmAdapterLocal).completion === 'function',
+    { message: 'Must be an adapter instance with completion method' },
+  ),
 ]);
 
 const swarmConfigSchema = z.object({

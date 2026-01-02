@@ -8,6 +8,7 @@ import { normalizeAgent, agentDiscoveryDeps } from './agent.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { AgentInstance } from './agent.instance';
 import type { Tool, ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { DependencyNotFoundError } from '../errors/mcp.error';
 
 // ============================================================================
 // Types
@@ -95,13 +96,20 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
 
   protected buildGraph(): void {
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new DependencyNotFoundError('AgentRegistry', tokenName(token));
+      }
       const deps = agentDiscoveryDeps(rec);
 
       for (const d of deps) {
         // Validate against hierarchical providers; throws early if missing
         this.providers.get(d);
-        this.graph.get(token)!.add(d);
+        const graphEntry = this.graph.get(token);
+        if (!graphEntry) {
+          throw new DependencyNotFoundError('AgentRegistry.graph', tokenName(token));
+        }
+        graphEntry.add(d);
       }
     }
   }
@@ -113,7 +121,10 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
   protected override async initialize(): Promise<void> {
     // Instantiate each local agent once
     for (const token of this.tokens) {
-      const rec = this.defs.get(token)!;
+      const rec = this.defs.get(token);
+      if (!rec) {
+        throw new DependencyNotFoundError('AgentRegistry', tokenName(token));
+      }
 
       const ai = new AgentInstance(rec, this.providers, this.owner);
       this.instances.set(token as Token<AgentInstance>, ai);

@@ -2,7 +2,7 @@
  * LLM Provider Factories
  *
  * Auto-creates LangChain adapters based on provider configuration.
- * Uses dynamic imports to only load providers when needed.
+ * OpenAI and Anthropic are included by default, other providers use dynamic imports.
  */
 
 export * from './types';
@@ -19,32 +19,47 @@ import { LlmAdapterError } from '../base.adapter';
 import { LangChainAdapter, LangChainChatModel } from '../langchain.adapter';
 import type { LlmProvider, ProviderCommonOptions } from './types';
 
+// Static imports for built-in providers (OpenAI and Anthropic)
+import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
+
 /**
  * Options for creating a provider-based adapter.
  */
 export interface CreateProviderAdapterOptions extends ProviderCommonOptions {
+  /** The LLM provider to use. */
   provider: LlmProvider;
+  /** The model identifier (e.g., 'gpt-4-turbo', 'claude-3-opus'). */
   model: string;
+  /** API key for the provider. */
   apiKey: string;
+  /**
+   * Custom base URL for the API endpoint.
+   * **Note: Only supported for OpenAI provider.** This option is silently ignored for other providers.
+   * Use this for OpenAI-compatible APIs or self-hosted endpoints.
+   */
   baseUrl?: string;
 }
 
 /**
- * Provider package mapping.
+ * Provider package mapping for optional providers (dynamic import).
  */
-const PROVIDER_PACKAGES: Record<LlmProvider, { package: string; className: string; apiKeyProp: string }> = {
-  openai: { package: '@langchain/openai', className: 'ChatOpenAI', apiKeyProp: 'openAIApiKey' },
-  anthropic: { package: '@langchain/anthropic', className: 'ChatAnthropic', apiKeyProp: 'anthropicApiKey' },
+const OPTIONAL_PROVIDER_PACKAGES: Partial<
+  Record<LlmProvider, { package: string; className: string; apiKeyProp: string }>
+> = {
   google: { package: '@langchain/google-genai', className: 'ChatGoogleGenerativeAI', apiKeyProp: 'apiKey' },
   mistral: { package: '@langchain/mistralai', className: 'ChatMistralAI', apiKeyProp: 'apiKey' },
   groq: { package: '@langchain/groq', className: 'ChatGroq', apiKeyProp: 'apiKey' },
 };
 
 /**
- * Dynamically import a LangChain provider package.
+ * Dynamically import an optional LangChain provider package.
  */
-async function importProvider(provider: LlmProvider): Promise<Record<string, unknown>> {
-  const providerInfo = PROVIDER_PACKAGES[provider];
+async function importOptionalProvider(provider: LlmProvider): Promise<Record<string, unknown>> {
+  const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider];
+  if (!providerInfo) {
+    throw new LlmAdapterError(`Provider ${provider} is not available for dynamic import`, 'config', 'unknown_provider');
+  }
 
   try {
     return await import(providerInfo.package);
@@ -69,60 +84,75 @@ async function importProvider(provider: LlmProvider): Promise<Record<string, unk
 
 /**
  * Create a LangChain adapter for the specified provider.
- * Uses dynamic imports to only load the provider package when needed.
+ * OpenAI and Anthropic are built-in, other providers require package installation.
  */
 export async function createProviderAdapter(options: CreateProviderAdapterOptions): Promise<AgentLlmAdapter> {
   const { provider, model, apiKey, baseUrl, temperature, maxTokens } = options;
 
-  const providerInfo = PROVIDER_PACKAGES[provider];
-  if (!providerInfo) {
-    throw new LlmAdapterError(
-      `Unknown provider: ${provider}. Supported providers: ${Object.keys(PROVIDER_PACKAGES).join(', ')}`,
-      'config',
-      'unknown_provider',
-    );
-  }
+  let chatModel: LangChainChatModel;
 
-  // Dynamically import the provider package
-  const providerModule = await importProvider(provider);
-  const ChatModelClass = providerModule[providerInfo.className] as new (config: Record<string, unknown>) => unknown;
-
-  if (!ChatModelClass) {
-    throw new LlmAdapterError(
-      `Could not find ${providerInfo.className} in ${providerInfo.package}`,
-      'config',
-      'missing_class',
-    );
-  }
-
-  // Build the configuration object
-  const config: Record<string, unknown> = {
-    model,
-    [providerInfo.apiKeyProp]: apiKey,
-  };
-
-  if (temperature !== undefined) {
-    config['temperature'] = temperature;
-  }
-
-  if (maxTokens !== undefined) {
-    // Different providers use different property names
-    if (provider === 'google') {
-      config['maxOutputTokens'] = maxTokens;
-    } else {
-      config['maxTokens'] = maxTokens;
+  switch (provider) {
+    case 'openai': {
+      const config: Record<string, unknown> = {
+        model,
+        openAIApiKey: apiKey,
+      };
+      if (temperature !== undefined) config['temperature'] = temperature;
+      if (maxTokens !== undefined) config['maxTokens'] = maxTokens;
+      if (baseUrl) config['configuration'] = { baseURL: baseUrl };
+      chatModel = new ChatOpenAI(config) as unknown as LangChainChatModel;
+      break;
     }
+
+    case 'anthropic': {
+      const config: Record<string, unknown> = {
+        model,
+        anthropicApiKey: apiKey,
+      };
+      if (temperature !== undefined) config['temperature'] = temperature;
+      if (maxTokens !== undefined) config['maxTokens'] = maxTokens;
+      chatModel = new ChatAnthropic(config) as unknown as LangChainChatModel;
+      break;
+    }
+
+    case 'google':
+    case 'mistral':
+    case 'groq': {
+      // Dynamic import for optional providers
+      const providerInfo = OPTIONAL_PROVIDER_PACKAGES[provider]!;
+      const providerModule = await importOptionalProvider(provider);
+      const ChatModelClass = providerModule[providerInfo.className] as new (config: Record<string, unknown>) => unknown;
+
+      if (!ChatModelClass) {
+        throw new LlmAdapterError(
+          `Could not find ${providerInfo.className} in ${providerInfo.package}`,
+          'config',
+          'missing_class',
+        );
+      }
+
+      const config: Record<string, unknown> = {
+        model,
+        [providerInfo.apiKeyProp]: apiKey,
+      };
+      if (temperature !== undefined) config['temperature'] = temperature;
+      if (maxTokens !== undefined) {
+        config[provider === 'google' ? 'maxOutputTokens' : 'maxTokens'] = maxTokens;
+      }
+
+      chatModel = new ChatModelClass(config) as LangChainChatModel;
+      break;
+    }
+
+    default:
+      throw new LlmAdapterError(
+        `Unknown provider: ${provider}. Supported providers: openai, anthropic, google, mistral, groq`,
+        'config',
+        'unknown_provider',
+      );
   }
 
-  if (baseUrl && provider === 'openai') {
-    config['configuration'] = { baseURL: baseUrl };
-  }
-
-  // Create the chat model instance
-  const chatModel = new ChatModelClass(config);
-
-  // Wrap in LangChainAdapter
-  return new LangChainAdapter({ model: chatModel as LangChainChatModel });
+  return new LangChainAdapter({ model: chatModel });
 }
 
 /**

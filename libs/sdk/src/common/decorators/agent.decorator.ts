@@ -54,6 +54,18 @@ export type FrontMcpAgentExecuteHandler<
 > = (input: In, ctx: AgentContextBase) => Out | Promise<Out>;
 
 /**
+ * Return type for function-based agents created with agent().
+ * Contains the handler function and agent metadata symbols.
+ */
+export type FrontMcpAgentFunction<
+  InSchema extends ToolInputType = ToolInputType,
+  OutSchema extends ToolOutputType = ToolOutputType,
+> = (() => FrontMcpAgentExecuteHandler<InSchema, OutSchema>) & {
+  [FrontMcpAgentTokens.type]: 'function-agent';
+  [FrontMcpAgentTokens.metadata]: AgentMetadata<InSchema, OutSchema>;
+};
+
+/**
  * Function decorator that creates an agent from a handler function.
  *
  * @example
@@ -72,12 +84,14 @@ function frontMcpAgent<
   T extends AgentMetadata<InSchema, OutSchema>,
   InSchema extends ToolInputType = T['inputSchema'] extends ToolInputType ? T['inputSchema'] : ToolInputType,
   OutSchema extends ToolOutputType = T['outputSchema'],
->(providedMetadata: T): (handler: FrontMcpAgentExecuteHandler<InSchema, OutSchema>) => () => void {
+>(
+  providedMetadata: T,
+): (handler: FrontMcpAgentExecuteHandler<InSchema, OutSchema>) => FrontMcpAgentFunction<InSchema, OutSchema> {
   return (execute) => {
     const metadata = frontMcpAgentMetadataSchema.parse(providedMetadata);
     const agentFunction = function () {
       return execute;
-    };
+    } as FrontMcpAgentFunction<InSchema, OutSchema>;
     Object.assign(agentFunction, {
       [FrontMcpAgentTokens.type]: 'function-agent',
       [FrontMcpAgentTokens.metadata]: metadata,

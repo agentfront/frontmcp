@@ -55,4 +55,6 @@ export {
   AgentVisibilityError,
   AgentLlmError,
   AgentConfigurationError,
+  AgentNotConfiguredError,
+  AgentToolNotFoundError,
 } from './agent.errors';

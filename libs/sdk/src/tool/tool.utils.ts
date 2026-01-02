@@ -25,6 +25,7 @@ import {
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 
 // Re-export shared naming utilities for backwards compatibility
 export {
@@ -428,23 +429,29 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
  * ```
  */
 export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefinition[] {
-  return tools.map((tool) => ({
-    name: tool.metadata.id ?? tool.metadata.name,
-    description: tool.metadata.description ?? '',
-    parameters: tool.rawInputSchema ?? { type: 'object', properties: {} },
-  }));
-}
+  return tools.map((tool) => {
+    // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
+    let parameters: Record<string, unknown>;
+    if (tool.rawInputSchema) {
+      // Already converted to JSON Schema
+      parameters = tool.rawInputSchema;
+    } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
+      // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
+      // Convert to JSON Schema using the same approach as tools-list.flow.ts
+      try {
+        parameters = toJSONSchema(z.object(tool.inputSchema)) as Record<string, unknown>;
+      } catch {
+        parameters = { type: 'object', properties: {} };
+      }
+    } else {
+      // No schema defined - use empty object schema
+      parameters = { type: 'object', properties: {} };
+    }
 
-/**
- * Build a single agent tool definition from a tool entry.
- *
- * @param tool - A tool entry from the tool registry
- * @returns Agent tool definition
- */
-export function buildAgentToolDefinition(tool: ToolEntry): AgentToolDefinition {
-  return {
-    name: tool.metadata.id ?? tool.metadata.name,
-    description: tool.metadata.description ?? '',
-    parameters: tool.rawInputSchema ?? { type: 'object', properties: {} },
-  };
+    return {
+      name: tool.metadata.id ?? tool.metadata.name,
+      description: tool.metadata.description ?? '',
+      parameters,
+    };
+  });
 }

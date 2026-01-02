@@ -70,14 +70,14 @@
   "dependencies": {
     "@frontmcp/uipack": "0.6.3",
     "@modelcontextprotocol/sdk": "1.25.1",
+    "@langchain/core": "^1.1.8",
+    "@langchain/openai": "^1.2.0",
+    "@langchain/anthropic": "^1.3.3",
     "ioredis": "^5.8.0",
     "jose": "^6.1.3",
     "reflect-metadata": "^0.2.2"
   },
   "optionalDependencies": {
-    "@langchain/core": "^1.1.8",
-    "@langchain/openai": "^1.2.0",
-    "@langchain/anthropic": "^1.3.3",
     "@langchain/google-genai": "^2.1.3",
     "@langchain/mistralai": "^1.0.2",
     "@langchain/groq": "^1.0.2"

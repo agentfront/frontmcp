@@ -8,6 +8,10 @@ import { Request, Notification, CallToolRequest, CallToolResult, Tool } from '@m
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
+import type { JSONSchema } from 'zod/v4/core';
+
+/** JSON Schema type from Zod v4 */
+type JsonSchema = JSONSchema.JSONSchema;
 
 // ============================================================================
 // Type Definitions
@@ -80,7 +84,7 @@ export abstract class AgentEntry<
   /**
    * Raw JSON schema for the input (used in tool definition).
    */
-  rawInputSchema?: any;
+  rawInputSchema?: JsonSchema;
 
   /**
    * Output schema for the agent.
@@ -138,7 +142,7 @@ export abstract class AgentEntry<
    * @returns Parsed result in MCP format
    * @throws Error if parsing fails
    */
-  abstract parseOutput(result: Out | Partial<Out> | any): ParsedAgentResult;
+  abstract parseOutput(result: Out | Partial<Out> | unknown): ParsedAgentResult;
 
   /**
    * Safely parse the agent's output (returns success/error instead of throwing).
@@ -146,7 +150,7 @@ export abstract class AgentEntry<
    * @param raw - Raw output from agent execution
    * @returns Success with parsed data, or failure with error
    */
-  abstract safeParseOutput(raw: Out | Partial<Out> | any): SafeTransformResult<ParsedAgentResult>;
+  abstract safeParseOutput(raw: Out | Partial<Out> | unknown): SafeTransformResult<ParsedAgentResult>;
 
   /**
    * Get the tool definition for this agent.

@@ -4,10 +4,13 @@ import { z } from 'zod';
 
 @Agent({
   name: 'summary-agent',
-  description: 'Agent that provides weather summaries',
+  systemInstructions: 'Agent that provides weather summaries, use the tool "get-weather" to get weather details',
   inputSchema: {
     location: z.string().describe('City name or location'),
     units: z.enum(['celsius', 'fahrenheit']).optional().describe('Temperature units'),
+  },
+  outputSchema: {
+    summary: z.string().describe('Weather summary for the given location'),
   },
   llm: {
     provider: 'openai',
