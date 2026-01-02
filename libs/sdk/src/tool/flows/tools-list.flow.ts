@@ -11,7 +11,6 @@ import { isUIType } from '@frontmcp/uipack/types';
 import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { agentIdFromToolName } from '../../agent/agent.utils';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -140,34 +139,9 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         tools.push({ appName: tool.owner.id, tool });
       }
 
-      // Also collect agent tools (agents exposed as use-agent:<agent_id> tools)
-      const scope = this.scope as Scope;
-      if (scope.agents) {
-        const agentTools = scope.agents.getAgentsAsTools();
-        this.logger.verbose(`findTools: agent tools=${agentTools.length}`);
-
-        // Convert MCP Tool definitions to ToolEntry-compatible objects
-        for (const agentTool of agentTools) {
-          // Find the agent entry to get owner info
-          const agentId = agentIdFromToolName(agentTool.name) ?? agentTool.name;
-          const agent = scope.agents.findById(agentId);
-          if (agent) {
-            // Create a minimal ToolEntry-like object for agents
-            const agentAsToolEntry = {
-              name: agentTool.name,
-              metadata: {
-                id: agentTool.name,
-                name: agentTool.name,
-                description: agentTool.description,
-              },
-              owner: agent.owner,
-              rawInputSchema: agentTool.inputSchema,
-            } as unknown as ToolEntry;
-
-            tools.push({ appName: agent.owner.id, tool: agentAsToolEntry });
-          }
-        }
-      }
+      // Note: Agent tools (use-agent:*) are now registered as standard ToolInstances
+      // in the ToolRegistry by AgentRegistry.registerAgentToolsInParentScope().
+      // They are included automatically via scope.tools.getTools() above.
 
       this.logger.info(`findTools: total tools collected=${tools.length}`);
       if (tools.length === 0) {

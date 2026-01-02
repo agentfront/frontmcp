@@ -28,8 +28,10 @@ export type AgentType<T = unknown> = Type<T> | FuncType<T>;
 declare global {
   /**
    * Declarative metadata extends to the McpAgent decorator.
+   * Extends ExtendFrontMcpToolMetadata so agents can use plugin metadata
+   * options (e.g., cache, codecall) since agents are exposed as tools.
    */
-  interface ExtendFrontMcpAgentMetadata {}
+  interface ExtendFrontMcpAgentMetadata extends ExtendFrontMcpToolMetadata {}
 }
 
 // ============================================================================
@@ -223,6 +225,14 @@ export interface AgentExecutionConfig {
    * @default true
    */
   useToolFlow?: boolean;
+
+  /**
+   * Whether to inherit plugins from the parent scope.
+   * When true, the agent's tools will benefit from standard plugin extensions
+   * (e.g., cache, codecall) registered in the parent scope.
+   * @default true
+   */
+  inheritPlugins?: boolean;
 }
 
 // ============================================================================
@@ -448,6 +458,9 @@ const executionConfigSchema = z.object({
   notificationInterval: z.number().positive().optional().default(1000),
   inheritParentTools: z.boolean().optional().default(true),
   useToolFlow: z.boolean().optional().default(true),
+  // Default false: inner agent tools use agent's own plugins only.
+  // The agent itself (as use-agent:* tool) goes through parent scope's plugins.
+  inheritPlugins: z.boolean().optional().default(false),
 });
 
 const exportsConfigSchema = z.object({

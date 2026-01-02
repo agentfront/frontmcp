@@ -140,7 +140,7 @@ export class AgentScope {
 
     await this.agentProviders.ready;
 
-    // Initialize hooks registry
+    // Initialize hooks registry (agent's own hooks only)
     this.agentHooks = new HookRegistry(this.agentProviders, []);
     await this.agentHooks.ready;
 

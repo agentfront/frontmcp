@@ -382,6 +382,7 @@ export class ToolSearchService implements ToolSearch {
         return;
       }
       // Use queueMicrotask to defer until after current initialization
+      // setTimeout(() => this.setupSubscription(), 100);
       queueMicrotask(() => this.setupSubscription());
       return;
     }
