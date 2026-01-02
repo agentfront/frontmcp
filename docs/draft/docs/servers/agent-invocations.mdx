@@ -1,0 +1,85 @@
+---
+title: Agent invocation
+slug: servers/agent-invocations
+icon: signal
+description: How FrontMCP exposes agents as tools, reserves the `use-agent:` prefix, and exposes hooks for instrumentation.
+---
+
+When you register an agent via `App.agents`, FrontMCP automatically turns it into an MCP tool that follows the same `tools/call` lifecycle as your other integrations. The agent's tool name starts with `use-agent:` so clients, automation scripts, and other agents can call it without extra discovery work.
+
+```ts
+const result = await mcp.tools.call('use-agent:summary-agent', {
+  location: 'Portland, OR',
+});
+```
+
+FrontMCP sanitizes the agent ID when it builds the tool name, so keep your agent IDs lowercase and only use hyphens or underscores to avoid accidental collisions.
+
+<Warning>
+Do not register a regular tool whose name starts with `use-agent:`. That prefix is reserved for agent invocations and signals the transport handler to route the request through the `agents:call-agent` flow.
+</Warning>
+
+## Tool routing & flows
+
+When you send a `tools/call` request whose name starts with `use-agent:`, the server routes it to the `agents:call-agent` flow instead of the standard `tools:call-tool` pipeline. The handler checks `isAgentToolName`, extracts the agent ID, and looks up the matching `AgentEntry`. You benefit from the same sequence of stages (`parseInput`, `findAgent`, `checkAgentAuthorization`, `createAgentContext`, `acquireQuota`, `acquireSemaphore`, `validateInput`, `execute`, `validateOutput`, `releaseSemaphore`, `releaseQuota`, and `finalize`) that all tools run through, so authorization, telemetry, and plugin hooks keep firing.
+
+Behind the scenes each agent runs inside its own `AgentScope`, which creates provider, tool, prompt, resource, adapter, and hook registries that do not leak across agents. That private scope still uses `tools:call-tool` internally when the agent invokes its own helpers, so plugins, middleware, and adapter features behave the same way they do for parent-level tools.
+
+<Info>
+`AgentScope` keeps agent-specific tooling isolated while still allowing the agent to call nested tools or resources through the normal MCP contract. You can treat each agent as a disposable, self-contained app with its own dependencies.
+</Info>
+
+## Hooks & instrumentation
+
+Use the `AgentHook` decorators when you need to observe or adjust the agent lifecycle from inside the agent class:
+
+```ts
+import { AgentHook } from '@frontmcp/sdk';
+
+@AgentHook.Will.execute()
+logStart() {
+  this.logger.info('Agent execution starting');
+}
+
+@AgentHook.Stage('validateInput')
+enrichInput() {
+  this.logger.debug('Validating input before the LLM runs');
+}
+```
+
+Server-side instrumentation and plugins can also hook every agent invocation through the exported `AgentCallHook`, which mirrors the same stages as the flow plan:
+
+```ts
+import { AgentCallHook } from '@frontmcp/sdk';
+
+class AgentTelemetryPlugin {
+  @AgentCallHook.Will.parseInput()
+  captureRequest({ state }) {
+    this.logger.info(`Calling agent ${state.agent.name}`, state.input);
+  }
+}
+```
+
+<Tip>
+`AgentCallHook` is handy when you are building dashboard widgets, metrics exporters, or policy guards that need to observe agent activity across the entire server.
+</Tip>
+
+## Private scopes keep agents isolated
+
+Because every agent gets its own `AgentScope`, you can register private tools, resources, prompts, providers, and nested agents that only that agent can reach. The agent still invokes them via `callTool`, but they never surface on the parent scope's tool list.
+
+```ts
+@Agent({
+  name: 'worker-agent',
+  tools: [PrivateTool],
+})
+class WorkerAgent extends AgentContext {
+  async execute(payload) {
+    return this.callTool('private-tool', payload);
+  }
+}
+```
+
+<Info>
+The `agents:call-agent` flow still shares the global `AgentRegistry` and hook infrastructure, so you get the safety of isolation plus the observability of the shared pipeline.
+</Info>

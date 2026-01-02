@@ -5,7 +5,7 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-02" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
@@ -16,6 +16,14 @@ mode: 'center'
     🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
 
     🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+
+    🧠 **Agent tooling hooks** – Call `use-agent:<agent-id>` tools through `agents:call-agent`, keep each agent’s scope isolated, and hook every stage for orchestration without wiring the plumbing yourself.
+
+    📊 **Dashboard plugin** – Visualize your entire MCP graph with the CDN-powered dashboard, live SSE updates, optional token gating, and built-in `dashboard:*` tools.
+
+    ⚡ **Coverage-first testing** – Nx wrappers now generate unit and e2e coverage, merge the reports via `scripts/merge-coverage.mjs`, and let `coverage:check` enforce thresholds before you ship.
+
+    🧪 **Agent sandbox E2E** – `apps/e2e/demo-e2e-agents` ships mock Echo, Calculator, and Orchestrator agents alongside the recreateable SSE transport so you can validate swarms in deterministic tests.
 
   </Card>
 </Update>

@@ -1,0 +1,52 @@
+---
+title: Coverage & automation
+slug: testing/coverage
+icon: shield-check
+description: Scripts for running Nx tests, merging coverage, and the agent-focused E2E suite that exercise the new agent tooling.
+---
+
+## Nx scripts & coverage pipeline
+
+You can rely on npm scripts that wrap Nx targets and coverage helpers so a single command runs everything:
+
+- `npm run test:unit` — runs every unit `test` target except the `demo-e2e-*` suites.
+- `npm run test:unit:coverage` — runs the same unit suite with `--coverage`, generating reports under `coverage/unit/<project>`.
+- `npm run test:e2e` — launches every `demo-e2e-*` project via `nx run-many -t test --projects='demo-e2e-*'`.
+- `npm run test:e2e:coverage` — reruns those projects with coverage turned on, writing to `coverage/e2e/<project>`.
+- `npm run coverage:merge` — executes `node scripts/merge-coverage.mjs` to combine the unit and e2e artifacts into `coverage/merged`.
+- `npm run coverage:all` — runs `test:unit:coverage`, `test:e2e:coverage`, then merges the results for a single merged report.
+- `npm run coverage:check` — runs `npx nyc check-coverage --temp-dir=coverage/merged` so you can gate merges against the configured thresholds.
+
+<Note>
+Unit coverage lands under `coverage/unit/<project>` and each demo E2E project writes into `coverage/e2e/<project>`. `coverage:merge` consolidates those reports before `coverage:check` assesses the summary.
+</Note>
+
+<Tip>
+Add `npm run coverage:check` to your CI after `coverage:all` so regressions in the agent tooling or transport layer fail the build before they reach production.
+</Tip>
+
+## Agent-focused E2E sandbox
+
+The new `apps/e2e/demo-e2e-agents` project proves the agent runtime end-to-end with predictable mocks. It registers `EchoAgent`, `CalculatorAgent`, and an `OrchestratorAgent` that coordinates worker visibility, all powered by `AgentsApp` and the `RecreateableStreamableHTTPServerTransport`.
+
+- Mock adapters keep the responses deterministic so you can assert on exact text and numbers.
+- Tests in `apps/e2e/demo-e2e-agents/e2e/agents.e2e.test.ts` cover listing agents, calling them through `use-agent:<id>`, and validating swarming and error handling.
+- The transport stack includes stateful HTTP, streamable HTTP, and legacy SSE so you can exercise session resurrection and reconnection logic.
+- Coverage output for this suite is in `coverage/e2e/demo-e2e-agents`.
+
+```ts
+const result = await mcp.tools.call('use-agent:calculator-agent', {
+  expression: '(10 + 5) * 2',
+});
+
+expect(result).toBeSuccessful();
+expect(result).toHaveTextContent('30');
+```
+
+<Info>
+The suite starts the server in `public` auth mode with SSE and streaming transports enabled so it mirrors the policies your production agents rely on.
+</Info>
+
+<Tip>
+Run this suite as part of `npm run coverage:all` to make sure agent scheduling, swarming, and error paths are covered.
+</Tip>
