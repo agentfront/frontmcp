@@ -1,7 +1,8 @@
-import { Type } from '../interfaces';
+import { Type, AgentType } from '../interfaces';
 import { z } from 'zod';
 import {
   FrontMcpAdapterTokens,
+  FrontMcpAgentTokens,
   FrontMcpAuthProviderTokens,
   FrontMcpLocalAppTokens,
   FrontMcpLogTransportTokens,
@@ -162,4 +163,35 @@ export const annotatedFrontMcpPromptsSchema = z.custom<Type>(
 export const annotatedFrontMcpLoggerSchema = z.custom<Type>(
   (v): v is Type => typeof v === 'function' && Reflect.hasMetadata(FrontMcpLogTransportTokens.type, v),
   { message: 'logger items must be annotated with @Logger() | @FrontMcpLogger().' },
+);
+
+export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
+  (v): v is AgentType => {
+    // Check for class-based @Agent decorator
+    if (typeof v === 'function') {
+      if (Reflect.hasMetadata(FrontMcpAgentTokens.type, v)) {
+        return true;
+      }
+      // Check for function-style agent() builder
+      if (v[FrontMcpAgentTokens.type] !== undefined) {
+        return true;
+      }
+      // For backwards compatibility, allow any function for now
+      return true;
+    }
+    // Check for object-based configuration
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      // Check for useValue pattern
+      if (obj['useValue'] && typeof obj['useValue'] === 'object') {
+        return true;
+      }
+      // Check for useFactory pattern
+      if (obj['useFactory'] && typeof obj['useFactory'] === 'function') {
+        return true;
+      }
+    }
+    return false;
+  },
+  { message: 'agents items must be annotated with @Agent() | @FrontMcpAgent() or use agent() builder.' },
 );

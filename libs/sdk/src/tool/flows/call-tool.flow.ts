@@ -7,6 +7,7 @@ import {
   FlowPlan,
   FlowRunOptions,
   ToolContext,
+  ToolCtorArgs,
   ToolEntry,
   isOrchestratedMode,
 } from '../../common';
@@ -25,7 +26,6 @@ import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
-import { safeStringify } from '@frontmcp/uipack/utils';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -137,6 +137,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.info(`findTool: discovered ${activeTools.length} active tool(s) (including hidden)`);
 
     const { name } = this.state.required.input;
+    // Agent invocations (use-agent:*) are routed to agents:call-agent flow
+    // by the call-tool-request handler, so they won't reach here
     const tool = activeTools.find((entry) => {
       return entry.fullName === name || entry.name === name;
     });
@@ -368,6 +370,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async applyUI() {
     this.logger.verbose('applyUI:start');
     const { tool, rawOutput, input } = this.state;
+
+    // Skip UI for agent tool calls (structured data only)
+    const ctx = this.input.ctx;
+    if (ctx?._skipUI) {
+      this.logger.verbose('applyUI:skip (agent context - structured data only)');
+      return;
+    }
 
     // Skip if no tool or no UI config
     if (!tool || !hasUIConfig(tool.metadata)) {
@@ -602,52 +611,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       metaKeys: result._meta ? Object.keys(result._meta) : [],
       isError: result.isError,
     });
-
-    // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
-    if (process.env['DEBUG_TOOL_RESPONSE']) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const fs = require('fs').promises;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const os = require('os');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const path = require('path');
-      const debugOutput = {
-        timestamp: new Date().toISOString(),
-        tool: tool.metadata.name,
-        rawOutput,
-        uiResult,
-        uiMeta,
-        finalResult: result,
-      };
-      // Use os.tmpdir() for cross-platform compatibility (works on Windows, macOS, Linux)
-      const tempDir = os.tmpdir();
-      const defaultPath = path.join(tempDir, 'tool-response-debug.json');
-      let outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
-
-      // Path traversal protection: ensure custom path is within allowed directories
-      if (process.env['DEBUG_TOOL_RESPONSE_PATH']) {
-        const resolvedPath = path.resolve(outputPath);
-        const resolvedTempDir = path.resolve(tempDir);
-        const cwd = path.resolve(process.cwd());
-
-        // Only allow paths within temp directory or current working directory
-        const isInTempDir = resolvedPath.startsWith(resolvedTempDir + path.sep) || resolvedPath === resolvedTempDir;
-        const isInCwd = resolvedPath.startsWith(cwd + path.sep) || resolvedPath === cwd;
-
-        if (!isInTempDir && !isInCwd) {
-          console.error(
-            `[DEBUG] DEBUG_TOOL_RESPONSE_PATH must be within temp directory (${tempDir}) or current working directory (${cwd}). ` +
-              `Falling back to default path.`,
-          );
-          outputPath = defaultPath;
-        }
-      }
-
-      // Use async write to avoid blocking the event loop (fire-and-forget)
-      fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
-        .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))
-        .catch((err: Error) => console.error(`[DEBUG] Failed to write tool response: ${err.message}`));
-    }
 
     // Respond with the properly formatted MCP result
     this.respond(result);

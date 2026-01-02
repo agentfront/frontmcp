@@ -39,6 +39,33 @@ export {
 // Tool change events for subscription
 export { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from './tool/tool.events';
 
+// Agent exports - only user-facing APIs
+export {
+  // Decorator and builder
+  Agent,
+  FrontMcpAgent,
+  agent,
+  frontMcpAgent,
+  // Context class
+  AgentContext,
+  // Types
+  AgentMetadata,
+  AgentLlmConfig,
+  AgentLlmBuiltinConfig,
+  AgentSwarmConfig,
+  AgentExecutionConfig,
+  AgentType,
+  WithConfig,
+  withConfig,
+  // Adapter interface (for custom adapters)
+  AgentLlmAdapter,
+  AgentPrompt,
+  AgentMessage,
+  AgentCompletion,
+  AgentToolCall,
+  AgentToolDefinition,
+} from './agent';
+
 export const ToolHook = FlowHooksOf('tools:call-tool');
 export const ListToolsHook = FlowHooksOf('tools:list-tools');
 export const HttpHook = FlowHooksOf('http:request');
@@ -47,3 +74,6 @@ export const HttpHook = FlowHooksOf('http:request');
 export const ResourceHook = FlowHooksOf('resources:read-resource');
 export const ListResourcesHook = FlowHooksOf('resources:list-resources');
 export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-templates');
+
+// Agent hooks
+export const AgentCallHook = FlowHooksOf('agents:call-agent');

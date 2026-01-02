@@ -88,6 +88,7 @@
                   "docs/servers/tools",
                   "docs/servers/resources",
                   "docs/servers/prompts",
+                  "docs/servers/agents",
                   "docs/servers/discovery"
                 ]
               },

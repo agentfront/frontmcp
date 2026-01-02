@@ -396,6 +396,60 @@ export default class ToolRegistry
   }
 
   /**
+   * Register an existing ToolInstance directly (for agent-scoped tools).
+   * This allows pre-constructed tool instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * **IMPORTANT: Scope Binding**
+   * The ToolInstance captures its scope and providers at construction time.
+   * The tool will use the scope from its original `providers` argument, NOT this registry's scope.
+   * Therefore, you must create the ToolInstance with the correct providers for the target scope:
+   *
+   * ```typescript
+   * // Correct: Create with agent's providers
+   * const tool = new ToolInstance(record, agentProviders, owner);
+   * agentTools.registerToolInstance(tool);
+   *
+   * // Wrong: Reusing app-scoped tool in agent context
+   * // The tool will still use app's scope/hooks, not agent's!
+   * agentTools.registerToolInstance(existingAppTool);
+   * ```
+   *
+   * @param tool - The tool instance to register (must be created with this registry's providers)
+   * @throws Error if tool is not a valid ToolInstance
+   */
+  registerToolInstance(tool: ToolEntry): void {
+    // Validate that we have a proper ToolInstance with required properties
+    if (!(tool instanceof ToolInstance)) {
+      throw new Error('registerToolInstance requires a ToolInstance, not a generic ToolEntry');
+    }
+
+    const instance = tool;
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('ToolInstance is missing required record.provide property');
+    }
+
+    const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<ToolInstance>)) {
+      return; // Already registered, skip silently
+    }
+
+    // Add to instances map
+    this.instances.set(token as Token<ToolInstance>, instance);
+
+    // Create an indexed row for this tool
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Get the MCP capabilities for tools.
    * These are reported to clients during initialization.
    */

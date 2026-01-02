@@ -2,7 +2,6 @@ import { tokenFactory } from './base.tokens';
 import { RawMetadataShape } from '../types';
 import { LocalAppMetadata, RemoteAppMetadata } from '../metadata';
 
-
 export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   type: tokenFactory.type('app'),
   auth: tokenFactory.meta('auth'),
@@ -16,9 +15,9 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   tools: tokenFactory.meta('tools'),
   resources: tokenFactory.meta('resources'),
   prompts: tokenFactory.meta('prompts'),
+  agents: tokenFactory.meta('agents'),
   standalone: tokenFactory.meta('standalone'),
 } as const;
-
 
 export const FrontMcpRemoteAppTokens: RawMetadataShape<RemoteAppMetadata> = {
   type: tokenFactory.type('app'),
@@ -30,4 +29,3 @@ export const FrontMcpRemoteAppTokens: RawMetadataShape<RemoteAppMetadata> = {
   url: tokenFactory.meta('url'),
   standalone: tokenFactory.meta('standalone'),
 } as const;
-

@@ -45,3 +45,16 @@ export {
 
 // Export error handler utilities
 export { ErrorHandler, ErrorHandlerOptions, createErrorHandler, shouldStopExecution } from './error-handler';
+
+// Export agent errors
+export {
+  AgentNotFoundError,
+  AgentExecutionError,
+  AgentLoopExceededError,
+  AgentTimeoutError,
+  AgentVisibilityError,
+  AgentLlmError,
+  AgentConfigurationError,
+  AgentNotConfiguredError,
+  AgentToolNotFoundError,
+} from './agent.errors';

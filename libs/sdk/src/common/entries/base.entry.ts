@@ -1,12 +1,11 @@
 import 'reflect-metadata';
 import { Token } from '../interfaces';
 
-export type EntryOwnerKind = 'scope' | 'app' | 'plugin' | 'adapter';
-export type EntryOwnerRef = { kind: EntryOwnerKind; id: string, ref: Token };
+export type EntryOwnerKind = 'scope' | 'app' | 'plugin' | 'adapter' | 'agent';
+export type EntryOwnerRef = { kind: EntryOwnerKind; id: string; ref: Token };
 export type EntryLineage = EntryOwnerRef[]; // root -> leaf; e.g. [{kind:'app', id:'Portal'}, {kind:'plugin', id:'Okta'}]
 
-
-export abstract class BaseEntry<Record extends { provide: any, metadata: any }, Interface, Metadata> {
+export abstract class BaseEntry<Record extends { provide: any; metadata: any }, Interface, Metadata> {
   ready: Promise<void>;
   readonly record: Record;
   protected readonly token: Token<Interface>;

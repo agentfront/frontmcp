@@ -8,8 +8,10 @@ import {
   ToolKind,
   Type,
   ToolContext,
+  ToolEntry,
   extendedToolMetadata,
   ParsedToolResult,
+  AgentToolDefinition,
 } from '../common';
 import { depsOfClass, depsOfFunc, isClass } from '../utils/token.utils';
 import { getMetadata } from '../utils/metadata.utils';
@@ -23,6 +25,7 @@ import {
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from 'zod';
+import { toJSONSchema } from 'zod/v4';
 
 // Re-export shared naming utilities for backwards compatibility
 export {
@@ -397,10 +400,58 @@ function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: 
     return value.filter(Boolean).map((v) => v as T);
   }
 
-  if (value && typeof value === 'object' && (value as any).type === expectedType) {
+  if (value && typeof value === 'object' && (value as Record<string, unknown>)['type'] === expectedType) {
     return [value as T];
   }
 
   // If the value is null/undefined or doesn't match, we just skip it.
   return [];
+}
+
+// ============================================================================
+// Tool Definition Utilities for Agents
+// ============================================================================
+
+/**
+ * Build agent tool definitions from tool entries.
+ *
+ * Converts `ToolEntry[]` to `AgentToolDefinition[]` format suitable for
+ * passing to an LLM adapter. This is a simpler format than full MCP Tool
+ * definitions, containing only the information needed by the LLM.
+ *
+ * @param tools - Array of tool entries from the tool registry
+ * @returns Array of agent tool definitions
+ *
+ * @example
+ * ```typescript
+ * const tools = scope.tools.getTools(true);
+ * const definitions = buildAgentToolDefinitions(tools);
+ * ```
+ */
+export function buildAgentToolDefinitions(tools: ToolEntry[]): AgentToolDefinition[] {
+  return tools.map((tool) => {
+    // Get the input schema - prefer rawInputSchema (JSON Schema), then convert from tool.inputSchema
+    let parameters: Record<string, unknown>;
+    if (tool.rawInputSchema) {
+      // Already converted to JSON Schema
+      parameters = tool.rawInputSchema;
+    } else if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
+      // tool.inputSchema is a ZodRawShape (extracted .shape from ZodObject in ToolInstance constructor)
+      // Convert to JSON Schema using the same approach as tools-list.flow.ts
+      try {
+        parameters = toJSONSchema(z.object(tool.inputSchema)) as Record<string, unknown>;
+      } catch {
+        parameters = { type: 'object', properties: {} };
+      }
+    } else {
+      // No schema defined - use empty object schema
+      parameters = { type: 'object', properties: {} };
+    }
+
+    return {
+      name: tool.metadata.id ?? tool.metadata.name,
+      description: tool.metadata.description ?? '',
+      parameters,
+    };
+  });
 }

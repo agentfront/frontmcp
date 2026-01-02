@@ -6,6 +6,7 @@ import ResourceRegistry from '../../resource/resource.registry';
 import PromptRegistry from '../../prompt/prompt.registry';
 import AdapterRegistry from '../../adapter/adapter.regsitry';
 import PluginRegistry from '../../plugin/plugin.registry';
+import AgentRegistry from '../../agent/agent.registry';
 
 export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   override readonly id: string;
@@ -17,6 +18,7 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
   private appTools: ToolRegistry;
   private appResources: ResourceRegistry;
   private appPrompts: PromptRegistry;
+  private appAgents: AgentRegistry;
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
@@ -49,8 +51,9 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     this.appTools = new ToolRegistry(this.appProviders, this.metadata.tools ?? [], appOwner);
     this.appResources = new ResourceRegistry(this.appProviders, this.metadata.resources ?? [], appOwner);
     this.appPrompts = new PromptRegistry(this.appProviders, this.metadata.prompts ?? [], appOwner);
+    this.appAgents = new AgentRegistry(this.appProviders, this.metadata.agents ?? [], appOwner);
 
-    await Promise.all([this.appTools.ready, this.appResources.ready, this.appPrompts.ready]);
+    await Promise.all([this.appTools.ready, this.appResources.ready, this.appPrompts.ready, this.appAgents.ready]);
   }
 
   get providers(): Readonly<ProviderRegistry> {
@@ -75,5 +78,9 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
 
   get prompts(): Readonly<PromptRegistry> {
     return this.appPrompts;
+  }
+
+  get agents(): Readonly<AgentRegistry> {
+    return this.appAgents;
   }
 }

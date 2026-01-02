@@ -40,7 +40,7 @@ describe('ResourceRegistry', () => {
         uri: 'static://uri',
       })
       class StaticResource {
-        execute(uri: string) {
+        async execute(uri: string) {
           return { text: 'content' };
         }
       }
@@ -59,7 +59,7 @@ describe('ResourceRegistry', () => {
         uriTemplate: 'template://{id}',
       })
       class TemplateResource {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 'content' };
         }
       }
@@ -83,21 +83,21 @@ describe('ResourceRegistry', () => {
     it('should register multiple resources', async () => {
       @Resource({ name: 'res1', uri: 'res1://uri' })
       class Res1 {
-        execute() {
+        async execute() {
           return { text: '1' };
         }
       }
 
       @Resource({ name: 'res2', uri: 'res2://uri' })
       class Res2 {
-        execute() {
+        async execute() {
           return { text: '2' };
         }
       }
 
       @ResourceTemplate({ name: 'tmpl1', uriTemplate: 'tmpl1://{id}' })
       class Tmpl1 {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't1' };
         }
       }
@@ -114,14 +114,14 @@ describe('ResourceRegistry', () => {
     it('should return all static resources', async () => {
       @Resource({ name: 'static1', uri: 'static1://uri' })
       class Static1 {
-        execute() {
+        async execute() {
           return { text: 's1' };
         }
       }
 
       @Resource({ name: 'static2', uri: 'static2://uri' })
       class Static2 {
-        execute() {
+        async execute() {
           return { text: 's2' };
         }
       }
@@ -137,14 +137,14 @@ describe('ResourceRegistry', () => {
     it('should exclude templates', async () => {
       @Resource({ name: 'static', uri: 'static://uri' })
       class Static {
-        execute() {
+        async execute() {
           return { text: 's' };
         }
       }
 
       @ResourceTemplate({ name: 'template', uriTemplate: 'template://{id}' })
       class Template {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't' };
         }
       }
@@ -162,14 +162,14 @@ describe('ResourceRegistry', () => {
     it('should return all template resources', async () => {
       @ResourceTemplate({ name: 'tmpl1', uriTemplate: 'tmpl1://{id}' })
       class Tmpl1 {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't1' };
         }
       }
 
       @ResourceTemplate({ name: 'tmpl2', uriTemplate: 'tmpl2://{id}' })
       class Tmpl2 {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't2' };
         }
       }
@@ -184,14 +184,14 @@ describe('ResourceRegistry', () => {
     it('should exclude static resources', async () => {
       @Resource({ name: 'static', uri: 'static://uri' })
       class Static {
-        execute() {
+        async execute() {
           return { text: 's' };
         }
       }
 
       @ResourceTemplate({ name: 'template', uriTemplate: 'template://{id}' })
       class Template {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't' };
         }
       }
@@ -209,7 +209,7 @@ describe('ResourceRegistry', () => {
     it('should find resource by exact URI', async () => {
       @Resource({ name: 'findable', uri: 'findable://exact' })
       class Findable {
-        execute() {
+        async execute() {
           return { text: 'found' };
         }
       }
@@ -225,7 +225,7 @@ describe('ResourceRegistry', () => {
     it('should return undefined for unknown URI', async () => {
       @Resource({ name: 'existing', uri: 'existing://uri' })
       class Existing {
-        execute() {
+        async execute() {
           return { text: 'e' };
         }
       }
@@ -242,8 +242,8 @@ describe('ResourceRegistry', () => {
     it('should match template and extract params', async () => {
       @ResourceTemplate({ name: 'user', uriTemplate: 'users://{userId}' })
       class User {
-        execute(uri: string, params: Record<string, string>) {
-          return { text: `user ${params.userId}` };
+        async execute(uri: string, params: Record<string, string>) {
+          return { text: `user ${params['userId']}` };
         }
       }
 
@@ -259,7 +259,7 @@ describe('ResourceRegistry', () => {
     it('should return undefined for non-matching URI', async () => {
       @ResourceTemplate({ name: 'user', uriTemplate: 'users://{userId}' })
       class User {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 'user' };
         }
       }
@@ -276,7 +276,7 @@ describe('ResourceRegistry', () => {
     it('should find static resource first', async () => {
       @Resource({ name: 'exact', uri: 'exact://match' })
       class Exact {
-        execute() {
+        async execute() {
           return { text: 'exact' };
         }
       }
@@ -293,7 +293,7 @@ describe('ResourceRegistry', () => {
     it('should fallback to template matching', async () => {
       @ResourceTemplate({ name: 'dynamic', uriTemplate: 'dynamic://{id}' })
       class Dynamic {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 'dynamic' };
         }
       }
@@ -310,7 +310,7 @@ describe('ResourceRegistry', () => {
     it('should return undefined if no match', async () => {
       @Resource({ name: 'only', uri: 'only://uri' })
       class Only {
-        execute() {
+        async execute() {
           return { text: 'only' };
         }
       }
@@ -325,14 +325,14 @@ describe('ResourceRegistry', () => {
     it('should prefer static over template match', async () => {
       @Resource({ name: 'static', uri: 'items://123' })
       class StaticItem {
-        execute() {
+        async execute() {
           return { text: 'static' };
         }
       }
 
       @ResourceTemplate({ name: 'dynamic', uriTemplate: 'items://{id}' })
       class DynamicItem {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 'dynamic' };
         }
       }
@@ -351,14 +351,14 @@ describe('ResourceRegistry', () => {
     it('should return all indexed resources', async () => {
       @Resource({ name: 'res1', uri: 'res1://uri' })
       class Res1 {
-        execute() {
+        async execute() {
           return { text: '1' };
         }
       }
 
       @ResourceTemplate({ name: 'tmpl1', uriTemplate: 'tmpl1://{id}' })
       class Tmpl1 {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't1' };
         }
       }
@@ -373,14 +373,14 @@ describe('ResourceRegistry', () => {
     it('should include both static and templates', async () => {
       @Resource({ name: 'static', uri: 'static://uri' })
       class Static {
-        execute() {
+        async execute() {
           return { text: 's' };
         }
       }
 
       @ResourceTemplate({ name: 'template', uriTemplate: 'template://{id}' })
       class Template {
-        execute(uri: string, params: Record<string, string>) {
+        async execute(uri: string, params: Record<string, string>) {
           return { text: 't' };
         }
       }
@@ -403,7 +403,7 @@ describe('ResourceRegistry', () => {
     it('should export with default snake_case', async () => {
       @Resource({ name: 'myResource', uri: 'my://resource' })
       class MyResource {
-        execute() {
+        async execute() {
           return { text: 'content' };
         }
       }
@@ -419,7 +419,7 @@ describe('ResourceRegistry', () => {
     it('should export with kebab-case', async () => {
       @Resource({ name: 'myResource', uri: 'my://resource' })
       class MyResource {
-        execute() {
+        async execute() {
           return { text: 'content' };
         }
       }
@@ -435,14 +435,14 @@ describe('ResourceRegistry', () => {
     it('should handle multiple resources with unique names', async () => {
       @Resource({ name: 'first', uri: 'first://uri' })
       class First {
-        execute() {
+        async execute() {
           return { text: '1' };
         }
       }
 
       @Resource({ name: 'second', uri: 'second://uri' })
       class Second {
-        execute() {
+        async execute() {
           return { text: '2' };
         }
       }
@@ -461,7 +461,7 @@ describe('ResourceRegistry', () => {
     it('should return true when registry has resources', async () => {
       @Resource({ name: 'test', uri: 'test://uri' })
       class Test {
-        execute() {
+        async execute() {
           return { text: 'test' };
         }
       }
@@ -484,7 +484,7 @@ describe('ResourceRegistry', () => {
     it('should return locally registered resources', async () => {
       @Resource({ name: 'inline', uri: 'inline://uri' })
       class Inline {
-        execute() {
+        async execute() {
           return { text: 'inline' };
         }
       }

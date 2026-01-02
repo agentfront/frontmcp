@@ -11,3 +11,4 @@ export * from './tool-ui.metadata';
 export * from './resource.metadata';
 export * from './prompt.metadata';
 export * from './logger.metadata';
+export * from './agent.metadata';

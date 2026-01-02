@@ -1,6 +1,8 @@
 import type { Config } from '@jest/types';
 import { createRequire } from 'module';
 
+// eslint-disable-next-line
+// @ts-ignore
 const require = createRequire(import.meta.url);
 const e2eCoveragePreset = require('../../../jest.e2e.coverage.preset.js');
 

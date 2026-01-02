@@ -26,16 +26,33 @@ export function createMockScope() {
     getHooks: jest.fn().mockReturnValue([]),
   };
 
-  const mockScope = {
+  const mockProviders = {
+    getHooksRegistry: jest.fn().mockReturnValue(mockHookRegistry),
+    get: jest.fn().mockImplementation((token: any) => {
+      if (token === Scope || token?.name === 'Scope') {
+        // Return self-reference for Scope
+        return mockScope;
+      }
+      return undefined;
+    }),
+    tryGet: jest.fn().mockReturnValue(undefined),
+    getActiveScope: jest.fn().mockReturnValue(undefined),
+  };
+
+  const mockScope: any = {
     id: 'test-scope',
     logger: mockLogger,
     hooks: mockHookRegistry,
+    providers: mockProviders,
     registryFlows: jest.fn().mockResolvedValue(undefined),
     metadata: {
       id: 'test-scope',
       http: { port: 3001 },
     },
   };
+
+  // Make getActiveScope return the mockScope itself
+  mockProviders.getActiveScope = jest.fn().mockReturnValue(mockScope);
 
   return mockScope as unknown as Scope;
 }

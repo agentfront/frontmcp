@@ -10,6 +10,7 @@ import {
   ResourceEntry,
   ToolEntry,
   LoggerEntry,
+  AgentEntry,
   EntryOwnerRef,
   HookEntry,
 } from '../../entries';
@@ -162,6 +163,26 @@ export interface LoggerRegistryInterface {
   getLoggers(): LoggerEntry[];
 }
 
+export interface AgentRegistryInterface {
+  // owner reference for the registry
+  owner: EntryOwnerRef;
+
+  // all agents (inline plus discovered from nested registries)
+  getAgents(includeHidden?: boolean): AgentEntry[];
+
+  // inline agents only
+  getInlineAgents(): AgentEntry[];
+
+  // find agent by ID
+  findById(id: string): AgentEntry | undefined;
+
+  // find agent by name
+  findByName(name: string): AgentEntry | undefined;
+
+  // get agents visible to a specific agent
+  getVisibleAgentsFor(agentId: string): AgentEntry[];
+}
+
 export type GlobalRegistryKind = 'LoggerRegistry' | 'ScopeRegistry';
 
 export type ScopedRegistryKind = 'AppRegistry' | 'AuthRegistry' | 'FlowRegistry' | 'HookRegistry';
@@ -172,7 +193,8 @@ export type AppRegistryKind =
   | 'AdapterRegistry'
   | 'ToolRegistry'
   | 'PromptRegistry'
-  | 'ResourceRegistry';
+  | 'ResourceRegistry'
+  | 'AgentRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
 
@@ -189,4 +211,5 @@ export type RegistryType = {
   ToolRegistry: ToolRegistryInterface;
   ResourceRegistry: ResourceRegistryInterface;
   PromptRegistry: PromptRegistryInterface;
+  AgentRegistry: AgentRegistryInterface;
 };

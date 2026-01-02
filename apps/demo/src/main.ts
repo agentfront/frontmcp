@@ -13,7 +13,7 @@ import CrmMcpApp from './apps/crm';
   apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.Verbose },
   http: {
-    port: 3002,
+    port: 3003,
   },
   transport: {
     enableLegacySSE: true,

@@ -454,7 +454,7 @@ describe('RedisSessionStore', () => {
     it('should handle session with large meta field', async () => {
       const storedSession = createValidStoredSession();
       // Add large metadata
-      (storedSession as Record<string, unknown>)['meta'] = {
+      (storedSession as unknown as Record<string, unknown>)['meta'] = {
         largeField: 'x'.repeat(10000),
       };
       mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));

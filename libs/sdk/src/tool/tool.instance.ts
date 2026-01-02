@@ -26,14 +26,25 @@ import type { CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import { buildParsedToolResult } from './tool.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
 
+/**
+ * Concrete implementation of a tool that can be executed.
+ *
+ * **Scope Binding:** The ToolInstance captures its scope and providers at construction time.
+ * All operations (hook registration, tool context creation) use the captured scope.
+ * If you need a tool to operate in a different scope (e.g., agent scope), you must
+ * create a new ToolInstance with that scope's providers.
+ */
 export class ToolInstance<
   InSchema extends ToolInputType = ToolInputType,
   OutSchema extends ToolOutputType = ToolOutputType,
   In = ToolInputOf<{ inputSchema: InSchema }>,
   Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends ToolEntry<InSchema, OutSchema, In, Out> {
+  /** The provider registry this tool is bound to (captured at construction) */
   private readonly providers: ProviderRegistry;
+  /** The scope this tool operates in (captured at construction from providers) */
   readonly scope: Scope;
+  /** The hook registry for this tool's scope (captured at construction) */
   readonly hooks: HookRegistry;
 
   constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {

@@ -14,5 +14,7 @@ export * from './tool.interface';
 export * from './resource.interface';
 export * from './prompt.interface';
 export * from './logger.interface';
+export * from './llm-adapter.interface';
+export * from './agent.interface';
 
 export * from './internal';

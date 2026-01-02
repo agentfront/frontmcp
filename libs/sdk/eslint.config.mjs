@@ -9,6 +9,15 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
+          // LangChain packages are used in agent/adapters but nx checker doesn't trace through internal imports
+          ignoredDependencies: [
+            '@langchain/core', // Used in langchain.adapter.ts
+            '@langchain/openai', // Used in providers/index.ts for built-in OpenAI support
+            '@langchain/anthropic', // Used in providers/index.ts for built-in Anthropic support
+            '@langchain/google-genai', // Optional: dynamic import
+            '@langchain/mistralai', // Optional: dynamic import
+            '@langchain/groq', // Optional: dynamic import
+          ],
         },
       ],
     },
