@@ -39,36 +39,42 @@ export function generateDashboardHtml(options: DashboardPluginOptions): string {
  * Generate HTML that loads dashboard from an external CDN entrypoint.
  */
 function generateExternalEntrypointHtml(options: DashboardPluginOptions): string {
-  const { cdn, basePath, auth } = options;
+  const { cdn, auth } = options;
+  const safeBasePath = escapeForJs(options.basePath);
   const token = escapeForJs(auth?.token || '');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FrontMCP Dashboard</title>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>FrontMCP Dashboard</title>;
   <script type="importmap">
   {
-    "imports": {
-      "react": "${cdn.react}",
-      "react-dom": "${cdn.reactDom}",
-      "react-dom/client": "${cdn.reactDomClient}",
-      "react/jsx-runtime": "${cdn.reactJsxRuntime}",
-      "@xyflow/react": "${cdn.xyflow}",
-      "dagre": "${cdn.dagre}"
+    'imports': {
+      'react': '${cdn.react}',
+      'react-dom': '${cdn.reactDom}',
+      'react-dom/client': '${cdn.reactDomClient}',
+      'react/jsx-runtime': '${cdn.reactJsxRuntime}',
+      '@xyflow/react': '${cdn.xyflow}',
+      'dagre': '${cdn.dagre}'
     }
   }
-  </script>
-  <link rel="stylesheet" href="${cdn.xyflowCss}" />
+  </script>;
+  <link rel="stylesheet" href="${cdn.xyflowCss}" />;
 </head>
 <body>
   <div id="root">Loading dashboard...</div>
   <script type="module">
+    // Escape HTML for safe innerHTML usage
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     // Dashboard configuration
     window.__FRONTMCP_DASHBOARD__ = {
-      basePath: '${basePath}',
-      sseUrl: '${basePath}/sse${token ? `?token=${token}` : ''}',
+      basePath: '${safeBasePath}',
+      sseUrl: '${safeBasePath}/sse${token ? `?token=${token}` : ''}',
       token: '${token}',
     };
 
@@ -79,10 +85,10 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
       }
     }).catch(err => {
       document.getElementById('root').innerHTML =
-        '<div style="color: red; padding: 20px;">Failed to load dashboard: ' + err.message + '</div>';
+        '<div style="color: red; padding: 20px;">Failed to load dashboard: ' + escapeHtml(err.message || 'Unknown error') + '</div>';
     });
   </script>
-</body>
+</body>;
 </html>`;
 }
 
@@ -91,9 +97,10 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
  * Uses MCP protocol via SSE to fetch data from dashboard:graph tool.
  */
 function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
-  const { cdn, basePath, auth } = options;
+  const { cdn, auth } = options;
+  const safeBasePath = escapeForJs(options.basePath);
   const token = escapeForJs(auth?.token || '');
-  const sseUrl = `${basePath}/sse${token ? `?token=${token}` : ''}`;
+  const sseUrl = `${safeBasePath}/sse${token ? `?token=${token}` : ''}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -284,7 +291,7 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
 
     // Configuration
     const config = {
-      basePath: '${basePath}',
+      basePath: '${safeBasePath}',
       sseUrl: '${sseUrl}',
       token: '${token}',
     };

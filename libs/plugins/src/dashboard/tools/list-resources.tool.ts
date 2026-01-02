@@ -27,7 +27,7 @@ function safeRegex(pattern: string): RegExp | null {
  */
 export const listResourcesInputSchema = z.object({
   filter: z.string().optional().describe('Filter resources by name or URI pattern (regex supported)'),
-  includeTemplates: z.boolean().optional().default(true).describe('Include resource templates in the response'),
+  includeTemplates: z.boolean().default(true).describe('Include resource templates in the response'),
 });
 
 export type ListResourcesInput = z.input<typeof listResourcesInputSchema>;

@@ -1,22 +1,30 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
+const inputSchema = z.object({
+  name: z.string().default('World'),
+});
+
+const outputSchema = z.object({
+  message: z.string(),
+  scope: z.literal('isolated'),
+});
+
+type Input = z.output<typeof inputSchema>;
+type Output = z.output<typeof outputSchema>;
+
 @Tool({
   name: 'isolated-hello',
   description: 'A simple hello tool in the isolated standalone app',
-  inputSchema: z.object({
-    name: z.string().optional().default('World'),
-  }),
-  outputSchema: z.object({
-    message: z.string(),
-    scope: z.literal('isolated'),
-  }),
+  inputSchema,
+  outputSchema,
 })
 export default class IsolatedHelloTool extends ToolContext {
-  async execute({ name }: { name: string }): Promise<{ message: string; scope: 'isolated' }> {
+  async execute(input: Input): Promise<Output> {
+    const { name } = input;
     return {
       message: `Hello, ${name}! This is from the isolated standalone app.`,
-      scope: 'isolated' as const,
+      scope: 'isolated',
     };
   }
 }

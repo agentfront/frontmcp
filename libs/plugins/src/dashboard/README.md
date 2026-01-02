@@ -102,7 +102,7 @@ new DashboardPlugin({
 
 The dashboard uses a standalone app architecture:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    FrontMCP Server                               │
 ├─────────────────────────────────────────────────────────────────┤
@@ -169,7 +169,7 @@ npx nx test plugins
 
 ## File Structure
 
-```
+```text
 libs/plugins/src/dashboard/
 ├── index.ts                     # Barrel exports
 ├── dashboard.plugin.ts          # Main plugin class

@@ -27,8 +27,8 @@ function safeRegex(pattern: string): RegExp | null {
  */
 export const listToolsInputSchema = z.object({
   filter: z.string().optional().describe('Filter tools by name pattern (regex supported)'),
-  includePlugins: z.boolean().optional().default(true).describe('Include tools from plugins'),
-  includeSchemas: z.boolean().optional().default(false).describe('Include input/output schemas in the response'),
+  includePlugins: z.boolean().default(true).describe('Include tools from plugins'),
+  includeSchemas: z.boolean().default(false).describe('Include input/output schemas in the response'),
 });
 
 export type ListToolsInput = z.input<typeof listToolsInputSchema>;
