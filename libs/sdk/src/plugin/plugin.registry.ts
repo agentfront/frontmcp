@@ -1,6 +1,14 @@
 // plugin-registry.ts
 import 'reflect-metadata';
-import { PluginEntry, PluginKind, PluginRecord, PluginRegistryInterface, PluginType, Token } from '../common';
+import {
+  EntryOwnerRef,
+  PluginEntry,
+  PluginKind,
+  PluginRecord,
+  PluginRegistryInterface,
+  PluginType,
+  Token,
+} from '../common';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import { tokenName } from '../utils/token.utils';
@@ -33,12 +41,12 @@ export default class PluginRegistry
 
   private readonly scope: Scope;
   private readonly hookScope: Scope;
-  private readonly owner?: { kind: 'app' | 'plugin' | 'agent'; id: string; ref: Token };
+  private readonly owner?: EntryOwnerRef;
 
   constructor(
     providers: ProviderRegistry,
     list: PluginType[],
-    owner?: { kind: 'app' | 'plugin' | 'agent'; id: string; ref: Token },
+    owner?: EntryOwnerRef,
     /**
      * Optional scope for hook registration. When an app's standalone is false,
      * this should be the parent scope so HTTP hooks are triggered by the gateway.

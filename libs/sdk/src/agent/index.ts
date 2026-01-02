@@ -69,8 +69,9 @@ export {
   withConfig,
   AgentType,
   frontMcpAgentMetadataSchema,
-  annotatedFrontMcpAgentsSchema,
 } from '../common/metadata/agent.metadata';
+
+export { annotatedFrontMcpAgentsSchema } from '../common/schemas';
 
 export {
   AgentRecord,

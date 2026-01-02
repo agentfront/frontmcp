@@ -1,8 +1,16 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
-import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType, Token } from '../interfaces';
+// Import from specific interface files to avoid circular dependencies
+import { FuncType, Type, Token } from '../interfaces/base.interface';
+import { ProviderType } from '../interfaces/provider.interface';
+import { PluginType } from '../interfaces/plugin.interface';
+import { AdapterType } from '../interfaces/adapter.interface';
+import { ToolType } from '../interfaces/tool.interface';
+import { ResourceType } from '../interfaces/resource.interface';
+import { PromptType } from '../interfaces/prompt.interface';
 import {
   annotatedFrontMcpAdaptersSchema,
+  annotatedFrontMcpAgentsSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpPromptsSchema,
   annotatedFrontMcpProvidersSchema,
@@ -10,6 +18,12 @@ import {
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
 import { ToolInputType, ToolOutputType } from './tool.metadata';
+
+/**
+ * Agent type definition (class or factory function).
+ * Used in app/plugin metadata for defining agents.
+ */
+export type AgentType<T = unknown> = Type<T> | FuncType<T>;
 
 declare global {
   /**
@@ -380,12 +394,6 @@ export interface AgentMetadata<
   hideFromDiscovery?: boolean;
 }
 
-/**
- * Agent type definition (class, factory, or value).
- * Used in app/plugin metadata for defining agents.
- */
-export type AgentType = unknown; // Will be refined when records are created
-
 // ============================================================================
 // Zod Schemas for Validation
 // ============================================================================
@@ -447,34 +455,6 @@ const exportsConfigSchema = z.object({
   prompts: z.union([z.array(z.any()), z.literal('*')]).optional(),
   providers: z.array(z.any()).optional(),
 });
-
-/**
- * Annotated agent schema for validation in app/plugin metadata.
- */
-export const annotatedFrontMcpAgentsSchema = z.custom<AgentType>(
-  (v): v is AgentType => {
-    // Check for class-based @Agent decorator (will be added after tokens are created)
-    if (typeof v === 'function') {
-      // Check for FrontMcpAgentTokens.type metadata (added by decorator)
-      // For now, allow any function - will be refined when tokens are created
-      return true;
-    }
-    // Check for object-based configuration
-    if (typeof v === 'object' && v !== null) {
-      const obj = v as Record<string, unknown>;
-      // Check for useValue pattern
-      if (obj['useValue'] && typeof obj['useValue'] === 'object') {
-        return true;
-      }
-      // Check for useFactory pattern
-      if (obj['useFactory'] && typeof obj['useFactory'] === 'function') {
-        return true;
-      }
-    }
-    return false;
-  },
-  { message: 'agents items must be annotated with @Agent() | @FrontMcpAgent() or use agent() builder.' },
-);
 
 /**
  * Zod schema for validating AgentMetadata at runtime.

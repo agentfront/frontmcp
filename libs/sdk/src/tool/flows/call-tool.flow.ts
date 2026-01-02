@@ -612,49 +612,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       isError: result.isError,
     });
 
-    // Debug: Write full response to file if DEBUG_TOOL_RESPONSE is set
-    if (process.env['DEBUG_TOOL_RESPONSE']) {
-      const fs = require('fs').promises;
-      const os = require('os');
-      const path = require('path');
-      const debugOutput = {
-        timestamp: new Date().toISOString(),
-        tool: tool.metadata.name,
-        rawOutput,
-        uiResult,
-        uiMeta,
-        finalResult: result,
-      };
-      // Use os.tmpdir() for cross-platform compatibility (works on Windows, macOS, Linux)
-      const tempDir = os.tmpdir();
-      const defaultPath = path.join(tempDir, 'tool-response-debug.json');
-      let outputPath = process.env['DEBUG_TOOL_RESPONSE_PATH'] || defaultPath;
-
-      // Path traversal protection: ensure custom path is within allowed directories
-      if (process.env['DEBUG_TOOL_RESPONSE_PATH']) {
-        const resolvedPath = path.resolve(outputPath);
-        const resolvedTempDir = path.resolve(tempDir);
-        const cwd = path.resolve(process.cwd());
-
-        // Only allow paths within temp directory or current working directory
-        const isInTempDir = resolvedPath.startsWith(resolvedTempDir + path.sep) || resolvedPath === resolvedTempDir;
-        const isInCwd = resolvedPath.startsWith(cwd + path.sep) || resolvedPath === cwd;
-
-        if (!isInTempDir && !isInCwd) {
-          console.error(
-            `[DEBUG] DEBUG_TOOL_RESPONSE_PATH must be within temp directory (${tempDir}) or current working directory (${cwd}). ` +
-              `Falling back to default path.`,
-          );
-          outputPath = defaultPath;
-        }
-      }
-
-      // Use async write to avoid blocking the event loop (fire-and-forget)
-      fs.writeFile(outputPath, JSON.stringify(debugOutput, null, 2))
-        .then(() => console.log(`[DEBUG] Tool response written to: ${outputPath}`))
-        .catch((err: Error) => console.error(`[DEBUG] Failed to write tool response: ${err.message}`));
-    }
-
     // Respond with the properly formatted MCP result
     this.respond(result);
     this.logger.verbose('finalize:done');

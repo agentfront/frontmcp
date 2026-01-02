@@ -1,5 +1,5 @@
 import { ProviderRegistryInterface } from './internal';
-import { ToolInputType, ToolOutputType } from '../metadata';
+import { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../metadata';
 import { FlowControl } from './flow.interface';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
@@ -13,11 +13,11 @@ import {
   AgentCompletionOptions,
   AgentToolCall,
 } from './llm-adapter.interface';
-import { AgentMetadata } from '../metadata';
 import { AgentInputOf, AgentOutputOf } from '../decorators';
 import { AgentExecutionLoop, ToolExecutor } from '../../agent/agent-execution-loop';
 
-// Note: AgentType is defined in agent.metadata.ts to avoid circular dependencies
+// Re-export AgentType for convenience (defined in agent.metadata.ts)
+export { AgentType };
 
 // ============================================================================
 // Agent Context Arguments
