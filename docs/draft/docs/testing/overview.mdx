@@ -207,6 +207,26 @@ test.use({
   Use `port: 0` to automatically select an available port. This prevents conflicts when running multiple test suites in parallel.
 </Tip>
 
+## Coverage & Reporting
+
+npm scripts now orchestrate both unit and E2E coverage so you can merge and audit the results with a single command.
+
+- `npm run test:unit` – Runs every `test` target except the `demo-e2e-*` suites via `nx run-many -t test --exclude='demo-e2e-*'`.
+- `npm run test:unit:coverage` – Runs the same set of projects and emits coverage yields under `coverage/unit/<project>`.
+- `npm run test:e2e` – Executes all `demo-e2e-*` projects (`nx run-many -t test --projects='demo-e2e-*'`).
+- `npm run test:e2e:coverage` – Runs those E2E suites with coverage output written to `coverage/e2e/<project>`.
+- `npm run coverage:merge` – Combines the unit and E2E coverage artifacts using `scripts/merge-coverage.mjs` into `coverage/merged`.
+- `npm run coverage:all` – Runs the unit and E2E coverage suites, then merges the results into the same merged directory.
+- `npm run coverage:check` – Uses `nyc check-coverage` against `coverage/merged` to enforce your thresholds.
+
+<Info>
+  Unit coverage lands inside `coverage/unit/<project>` while E2E coverage writes to `coverage/e2e/<project>`. The merge step produces `coverage/merged`, letting you upload a single artifact to your coverage service.
+</Info>
+
+<Tip>
+  Add `npm run coverage:check` to your CI workflow to halt merges when coverage dips below expectations.
+</Tip>
+
 ---
 
 ## Demo E2E reference suites

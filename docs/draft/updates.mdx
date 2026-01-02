@@ -5,17 +5,20 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-02" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
-
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
-
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
-
+    ### Features
+    - 🚀 **Session resurrection** – Streamable HTTP sessions now persist their state so restarts, scale-outs, and reconnects keep the same stream open.
+    - 🛡️ **Hardened session stores** – Redis and Vercel KV caches can now sign payloads, cap lifetimes, and flag fingerprint mismatches so you can trust persisted sessions.
+    - 🎨 **Safer UI bundling** – `@frontmcp/uipack` lazily loads esbuild, surfaces clearer install errors, and strips absolute paths so your dashboard builds stay readable.
+    - 🧭 **Dashboard plugin** – Bring up the CDN-powered UI to inspect your topology, list every tool/resource, and watch MCP events in real time.
+    ### Fixes
+    - 🛠️ **Legacy SSE reconnections** – Legacy `/message?sessionId=…` flows work again and recreateable transports now stash initialization state until the MCP SDK finishes booting, so cold starts stay resilient.
+    ### Build/CI
+    - ⚡ **Unified coverage pipeline** – Run `test:unit`/`test:e2e`, their `:coverage` variants, `coverage:merge`, `coverage:all`, and `coverage:check` to produce merged coverage reports and enforce thresholds in CI.
   </Card>
 </Update>

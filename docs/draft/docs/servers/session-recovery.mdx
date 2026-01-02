@@ -28,6 +28,21 @@ Look for `onMessage: transport recreated successfully` or the fingerprint-mismat
 Session persistence currently returns data only for the `streamable-http` protocol. SSE flows do not store their own history yet, although `RecreateableSSEServerTransport` exposes helpers for future reconnection logic.
 </Warning>
 
+### Legacy SSE session IDs
+
+`HandleSseFlow` now prioritizes session IDs exactly like this:
+
+1. The `mcp-session-id` header emitted by the client
+2. The `sessionId` query parameter from the legacy `/message` endpoint
+3. The session stored in `authorization.session`
+4. A brand-new session when no ID is provided
+
+If either the header or query parameter is present but fails validation, the flow immediately returns `sessionNotFound`, making it easier to diagnose bad clients.
+
+<Info>
+  The query parameter is parsed with `getQuerySessionId` and validated with `validateMcpSessionHeader`, so legacy SSE clients keep calling `/message?sessionId=...` without rewriting their transports.
+</Info>
+
 ## Configuring persistence
 
 Enable persistence by wiring the top-level `redis` block into `transport.persistence`. The configuration below reuses the same store for token caches and session recovery, lets `GETEX` stretch the TTL atomically, and caps the session lifetime with `maxLifetimeMs`.
@@ -124,3 +139,15 @@ sseTransport.setSessionState(sessionId, lastEventId);
 <Info>
 The recreateable transports warn if they cannot reach MCP SDK internals (missing `_webStandardTransport` or `_initialized` flags), helping you spot version skew between FrontMCP and the upstream SDK.
 </Info>
+
+### Pending initialization state
+
+`RecreateableStreamableHTTPServerTransport.setInitializationState` caches the session ID when the MCP SDK internals have not yet appeared, exposes `hasPendingInitState` so you can detect the deferred setup, and replays the stored ID the first time `handleRequest` runs. That keeps serverless cold starts from rejecting resurrected sessions simply because the transport was still booting.
+
+<Info>
+  Check `transport.hasPendingInitState` before you replay stored sessions manually so you know whether the state is ready.
+</Info>
+
+<Tip>
+  Call `setInitializationState` as soon as you recreate the transport; the pending flag keeps the session live until the MCP SDK finishes initializing.
+</Tip>
