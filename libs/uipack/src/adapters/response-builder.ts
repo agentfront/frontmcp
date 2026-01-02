@@ -154,17 +154,32 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
   // Inline mode: determine format based on platform capabilities
 
   // structuredContent format: raw HTML in content, raw output in structuredContent
-  // Used by all widget-supporting platforms (Claude, OpenAI, etc.)
+  // Used by widget-supporting platforms
   if (useStructuredContent) {
     if (htmlContent) {
-      // Single content block with raw HTML
-      // structuredContent contains the raw tool output
-      return {
-        content: [{ type: 'text', text: htmlContent }],
-        structuredContent: rawOutput,
-        contentCleared: false,
-        format: 'structured-content',
-      };
+      // For OpenAI and ext-apps: put HTML directly in content (they render it)
+      // For other platforms: put JSON in content, HTML stays in _meta['ui/html']
+      const htmlInContent = platformType === 'openai' || platformType === 'ext-apps';
+
+      if (htmlInContent) {
+        // Single content block with raw HTML
+        // structuredContent contains the raw tool output
+        return {
+          content: [{ type: 'text', text: htmlContent }],
+          structuredContent: rawOutput,
+          contentCleared: false,
+          format: 'structured-content',
+        };
+      } else {
+        // JSON in content, HTML available in _meta['ui/html']
+        // This gives unknown clients readable JSON while HTML is still accessible
+        return {
+          content: [{ type: 'text', text: safeStringify(rawOutput) }],
+          structuredContent: rawOutput,
+          contentCleared: false,
+          format: 'structured-content',
+        };
+      }
     }
 
     // Fallback: JSON only (no HTML available)

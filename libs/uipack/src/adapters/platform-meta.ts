@@ -222,19 +222,14 @@ export function buildUIMeta<In = unknown, Out = unknown>(options: BuildUIMetaOpt
     case 'generic-mcp':
     case 'gemini':
     default:
-      // Other platforms use frontmcp/* namespace
-      meta['frontmcp/html'] = html;
-      meta['frontmcp/mimeType'] = 'text/html+mcp';
-      if (rendererType) meta['frontmcp/type'] = rendererType;
-      if (contentHash) meta['frontmcp/contentHash'] = contentHash;
-      if (manifestUri) meta['frontmcp/manifestUri'] = manifestUri;
-      if (token) meta['frontmcp/widgetToken'] = token;
-      if (directUrl) meta['frontmcp/directUrl'] = directUrl;
-
-      // Also add ui/* for compatibility with MCP clients that expect it
+      // All other platforms use ui/* namespace only (no frontmcp/* duplication)
       meta['ui/html'] = html;
       meta['ui/mimeType'] = 'text/html+mcp';
       if (rendererType) meta['ui/type'] = rendererType;
+      if (contentHash) meta['ui/contentHash'] = contentHash;
+      if (manifestUri) meta['ui/manifestUri'] = manifestUri;
+      if (token) meta['ui/widgetToken'] = token;
+      if (directUrl) meta['ui/directUrl'] = directUrl;
 
       // Platform-specific additions
       if (platformType === 'claude') {
@@ -384,38 +379,51 @@ export function buildFrontMCPCSP(csp: UIContentSecurityPolicy): {
 
 /**
  * Build generic MCP client metadata.
- * Uses frontmcp/* namespace for all fields.
- * For inline mode, HTML is embedded directly in _meta['frontmcp/html'] and _meta['ui/html'].
+ * Uses ui/* namespace for all fields.
+ * For inline mode, HTML is embedded directly in _meta['ui/html'].
  */
 function buildGenericMeta<In, Out>(meta: UIMetadata, uiConfig: UITemplateConfig<In, Out>): UIMetadata {
-  // Widget accessibility (can widget invoke tools?)
-  if (uiConfig.widgetAccessible) {
-    meta['frontmcp/widgetAccessible'] = true;
-  }
-
-  // Content Security Policy
+  // Content Security Policy (uses camelCase per MCP Apps spec)
   if (uiConfig.csp) {
-    meta['frontmcp/widgetCSP'] = buildFrontMCPCSP(uiConfig.csp);
+    const csp: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+
+    if (uiConfig.csp.connectDomains?.length) {
+      csp.connectDomains = uiConfig.csp.connectDomains;
+    }
+
+    if (uiConfig.csp.resourceDomains?.length) {
+      csp.resourceDomains = uiConfig.csp.resourceDomains;
+    }
+
+    if (Object.keys(csp).length > 0) {
+      meta['ui/csp'] = csp;
+    }
   }
 
   // Display mode preference
   if (uiConfig.displayMode) {
-    meta['frontmcp/displayMode'] = uiConfig.displayMode;
-  }
-
-  // Widget description
-  if (uiConfig.widgetDescription) {
-    meta['frontmcp/widgetDescription'] = uiConfig.widgetDescription;
+    // Map generic display modes to MCP Apps specific values
+    const displayModeMap: Record<string, 'inline' | 'fullscreen' | 'pip'> = {
+      inline: 'inline',
+      fullscreen: 'fullscreen',
+      pip: 'pip',
+      widget: 'inline',
+      panel: 'fullscreen',
+    };
+    const mappedMode = displayModeMap[uiConfig.displayMode];
+    if (mappedMode) {
+      meta['ui/displayMode'] = mappedMode;
+    }
   }
 
   // Border preference
   if (uiConfig.prefersBorder !== undefined) {
-    meta['frontmcp/prefersBorder'] = uiConfig.prefersBorder;
+    meta['ui/prefersBorder'] = uiConfig.prefersBorder;
   }
 
   // Sandbox domain
   if (uiConfig.sandboxDomain) {
-    meta['frontmcp/domain'] = uiConfig.sandboxDomain;
+    meta['ui/domain'] = uiConfig.sandboxDomain;
   }
 
   return meta;

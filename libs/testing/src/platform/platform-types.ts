@@ -18,13 +18,13 @@
  *
  * - `openai`: OpenAI ChatGPT (uses openai/* meta keys)
  * - `ext-apps`: MCP Apps per SEP-1865 (uses ui/* meta keys)
- * - `claude`: Claude Desktop (uses frontmcp/* + ui/* keys)
- * - `cursor`: Cursor IDE (uses frontmcp/* + ui/* keys)
- * - `continue`: Continue Dev (uses frontmcp/* + ui/* keys)
- * - `cody`: Sourcegraph Cody (uses frontmcp/* + ui/* keys)
- * - `gemini`: Google Gemini (uses frontmcp/* + ui/* keys)
- * - `generic-mcp`: Generic MCP client (uses frontmcp/* + ui/* keys)
- * - `unknown`: Unknown platform (uses frontmcp/* + ui/* keys)
+ * - `claude`: Claude Desktop (uses ui/* keys only)
+ * - `cursor`: Cursor IDE (uses ui/* keys only)
+ * - `continue`: Continue Dev (uses ui/* keys only)
+ * - `cody`: Sourcegraph Cody (uses ui/* keys only)
+ * - `gemini`: Google Gemini (uses ui/* keys only)
+ * - `generic-mcp`: Generic MCP client (uses ui/* keys only)
+ * - `unknown`: Unknown platform (uses ui/* keys only)
  */
 export type TestPlatformType =
   | 'openai'
@@ -41,10 +41,9 @@ export type TestPlatformType =
  * Platform meta namespace used for tool responses.
  *
  * - `openai`: Uses `openai/*` keys only
- * - `ui`: Uses `ui/*` keys only (ext-apps per SEP-1865)
- * - `frontmcp`: Uses `frontmcp/*` + `ui/*` keys for compatibility
+ * - `ui`: Uses `ui/*` keys only (all non-OpenAI platforms)
  */
-export type PlatformMetaNamespace = 'openai' | 'ui' | 'frontmcp';
+export type PlatformMetaNamespace = 'openai' | 'ui';
 
 /**
  * Get the meta namespace for a platform type.
@@ -53,10 +52,9 @@ export function getPlatformMetaNamespace(platform: TestPlatformType): PlatformMe
   switch (platform) {
     case 'openai':
       return 'openai';
-    case 'ext-apps':
-      return 'ui';
     default:
-      return 'frontmcp';
+      // All non-OpenAI platforms use ui/* namespace
+      return 'ui';
   }
 }
 
@@ -85,10 +83,10 @@ export function isExtAppsPlatform(platform: TestPlatformType): boolean {
 }
 
 /**
- * Check if a platform uses FrontMCP meta keys (non-OpenAI, non-ext-apps).
+ * Check if a platform uses ui/* meta keys (non-OpenAI).
  */
-export function isFrontmcpPlatform(platform: TestPlatformType): boolean {
-  return platform !== 'openai' && platform !== 'ext-apps';
+export function isUiPlatform(platform: TestPlatformType): boolean {
+  return platform !== 'openai';
 }
 
 /**
@@ -98,11 +96,9 @@ export function getToolsListMetaPrefixes(platform: TestPlatformType): string[] {
   switch (platform) {
     case 'openai':
       return ['openai/'];
-    case 'ext-apps':
-      return ['ui/'];
     default:
-      // Other platforms use frontmcp/* + ui/* for compatibility
-      return ['frontmcp/', 'ui/'];
+      // All non-OpenAI platforms use ui/* only
+      return ['ui/'];
   }
 }
 
@@ -113,11 +109,9 @@ export function getToolCallMetaPrefixes(platform: TestPlatformType): string[] {
   switch (platform) {
     case 'openai':
       return ['openai/'];
-    case 'ext-apps':
-      return ['ui/'];
     default:
-      // Other platforms use frontmcp/* + ui/* for compatibility
-      return ['frontmcp/', 'ui/'];
+      // All non-OpenAI platforms use ui/* only
+      return ['ui/'];
   }
 }
 
@@ -130,11 +124,8 @@ export function getForbiddenMetaPrefixes(platform: TestPlatformType): string[] {
     case 'openai':
       // OpenAI should NOT have ui/* or frontmcp/* keys
       return ['ui/', 'frontmcp/'];
-    case 'ext-apps':
-      // ext-apps should NOT have openai/* or frontmcp/* keys
-      return ['openai/', 'frontmcp/'];
     default:
-      // Other platforms should NOT have openai/* keys
-      return ['openai/'];
+      // All non-OpenAI platforms should NOT have openai/* or frontmcp/* keys
+      return ['openai/', 'frontmcp/'];
   }
 }

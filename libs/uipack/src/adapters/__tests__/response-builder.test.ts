@@ -117,18 +117,11 @@ describe('buildToolResponseContent', () => {
   });
 
   describe('inline mode - structuredContent format', () => {
-    const structuredContentPlatforms: AIPlatformType[] = [
-      'openai',
-      'ext-apps',
-      'claude',
-      'cursor',
-      'continue',
-      'cody',
-      'generic-mcp',
-    ];
+    // OpenAI and ext-apps get HTML directly in content (they render it)
+    const htmlInContentPlatforms: AIPlatformType[] = ['openai', 'ext-apps'];
 
-    structuredContentPlatforms.forEach((platform) => {
-      it(`should return structured-content format for ${platform} platform with HTML content`, () => {
+    htmlInContentPlatforms.forEach((platform) => {
+      it(`should return HTML in content for ${platform} platform`, () => {
         const result = buildToolResponseContent(
           createOptions({
             servingMode: 'inline',
@@ -145,6 +138,33 @@ describe('buildToolResponseContent', () => {
         // Single content block with raw HTML
         expect(result.content[0].type).toBe('text');
         expect(result.content[0].text).toBe('<!DOCTYPE html><html><body>Weather Widget</body></html>');
+
+        // structuredContent contains the raw output
+        expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
+      });
+    });
+
+    // Other platforms get JSON in content (HTML is in _meta['ui/html'])
+    const jsonInContentPlatforms: AIPlatformType[] = ['claude', 'cursor', 'continue', 'cody', 'generic-mcp'];
+
+    jsonInContentPlatforms.forEach((platform) => {
+      it(`should return JSON in content for ${platform} platform (HTML in _meta)`, () => {
+        const result = buildToolResponseContent(
+          createOptions({
+            servingMode: 'inline',
+            platformType: platform,
+            useStructuredContent: true,
+            htmlContent: '<!DOCTYPE html><html><body>Weather Widget</body></html>',
+          }),
+        );
+
+        expect(result.format).toBe('structured-content');
+        expect(result.contentCleared).toBe(false);
+        expect(result.content).toHaveLength(1);
+
+        // Single content block with JSON (not HTML)
+        expect(result.content[0].type).toBe('text');
+        expect(JSON.parse(result.content[0].text)).toEqual({ temperature: 72, unit: 'F' });
 
         // structuredContent contains the raw output
         expect(result.structuredContent).toEqual({ temperature: 72, unit: 'F' });
@@ -245,7 +265,22 @@ describe('buildToolResponseContent', () => {
   });
 
   describe('XSS prevention', () => {
-    it('should pass HTML content as-is for structured-content format', () => {
+    it('should pass HTML content as-is for structured-content format (OpenAI)', () => {
+      const result = buildToolResponseContent(
+        createOptions({
+          servingMode: 'inline',
+          platformType: 'openai',
+          useStructuredContent: true,
+          htmlContent: '<div><script>alert("xss")</script></div>',
+        }),
+      );
+
+      expect(result.format).toBe('structured-content');
+      // HTML should be included as-is (rendering is client-side in sandbox)
+      expect(result.content[0].text).toContain('<script>');
+    });
+
+    it('should return JSON for non-OpenAI/ext-apps platforms even with HTML content', () => {
       const result = buildToolResponseContent(
         createOptions({
           servingMode: 'inline',
@@ -256,8 +291,9 @@ describe('buildToolResponseContent', () => {
       );
 
       expect(result.format).toBe('structured-content');
-      // HTML should be included as-is (rendering is client-side in sandbox)
-      expect(result.content[0].text).toContain('<script>');
+      // Content should be JSON, not HTML (HTML goes to _meta['ui/html'])
+      expect(result.content[0].text).not.toContain('<script>');
+      expect(JSON.parse(result.content[0].text)).toEqual({ temperature: 72, unit: 'F' });
     });
 
     it('should safely handle event handlers in htmlContent for non-widget platforms', () => {
