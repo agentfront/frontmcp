@@ -1,23 +1,24 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
-import WeatherMcpApp from './apps/weather';
+import { DashboardApp } from '@frontmcp/plugins';
 
 // Other demo apps available but not active:
-// import ExpenseMcpApp from './apps/expenses';
-// import CalculatorMcpApp from './apps/calculator';
-// import EmployeeTimeMcpApp from './apps/employee-time';
-// import CrmMcpApp from './apps/crm';
+import WeatherMcpApp from './apps/weather';
+import ExpenseMcpApp from './apps/expenses';
+import CalculatorMcpApp from './apps/calculator';
+import EmployeeTimeMcpApp from './apps/employee-time';
+import CrmMcpApp from './apps/crm';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [WeatherMcpApp],
-  logging: { level: LogLevel.VERBOSE },
+  apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
+  logging: { level: LogLevel.Verbose },
   http: {
     port: 3003,
   },
+  transport: {
+    enableLegacySSE: true,
+  },
   auth: {
-    transport: {
-      enableLegacySSE: true,
-    },
     mode: 'transparent',
     remote: {
       provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',

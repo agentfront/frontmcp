@@ -39,7 +39,10 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
       ref: this.token,
     };
 
-    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner);
+    // When app is not standalone, pass parent scope for hook registration
+    // This allows HTTP hooks from app plugins to be triggered at the gateway level
+    const hookScope = this.metadata.standalone === false ? this.scopeProviders.getActiveScope() : undefined;
+    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner, hookScope);
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready
 
     this.appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);

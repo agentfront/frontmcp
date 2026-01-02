@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { extractExpressions, extractAll, normalizePath } from '../handlebars/expression-extractor';
+import { extractExpressions, extractAll, normalizePath } from '../handlebars';
 import { extractSchemaPaths, getSchemaPathStrings, type SchemaPath } from './schema-paths';
 
 // ============================================

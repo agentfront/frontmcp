@@ -4,6 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
+    "declarationMap": true,
     "types": ["node"],
     "paths": {
       "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],

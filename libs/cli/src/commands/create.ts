@@ -277,6 +277,16 @@ export default {
 };
 `;
 
+const TEMPLATE_TSCONFIG_E2E = `
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "jest"]
+  },
+  "include": ["e2e/**/*.ts", "jest.e2e.config.ts"]
+}
+`;
+
 const TEMPLATE_DOCKER_COMPOSE = `
 version: '3.8'
 
@@ -469,7 +479,8 @@ See the [Redis Setup Guide](https://docs.agentfront.dev/docs/deployment/redis-se
 │   ├── calc.app.ts    # Example app
 │   └── tools/
 │       └── add.tool.ts # Example tool
-└── tsconfig.json      # TypeScript config
+├── tsconfig.json      # TypeScript config
+└── tsconfig.e2e.json  # TypeScript config for E2E tests
 \`\`\`
 
 ## Learn More
@@ -1151,7 +1162,8 @@ No additional secrets required - uses \`GITHUB_TOKEN\` for GHCR.
 │   ├── calc.app.ts    # Example app
 │   └── tools/
 │       └── add.tool.ts # Example tool
-└── tsconfig.json      # TypeScript config
+├── tsconfig.json      # TypeScript config
+└── tsconfig.e2e.json  # TypeScript config for E2E tests
 \`\`\`
 
 ## Learn More
@@ -1362,6 +1374,7 @@ async function scaffoldProject(options: CreateOptions): Promise<void> {
   // E2E scaffolding
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'e2e', 'server.e2e.test.ts'), TEMPLATE_E2E_TEST_TS);
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'jest.e2e.config.ts'), TEMPLATE_JEST_E2E_CONFIG);
+  await scaffoldFileIfMissing(targetDir, path.join(targetDir, 'tsconfig.e2e.json'), TEMPLATE_TSCONFIG_E2E);
 
   // Git configuration
   await scaffoldFileIfMissing(targetDir, path.join(targetDir, '.gitignore'), TEMPLATE_GITIGNORE);

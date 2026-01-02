@@ -4,6 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
+    "declarationMap": true,
     "types": ["node"],
     "paths": {
       "@frontmcp/sdk": ["../../libs/sdk/src/index.ts"]

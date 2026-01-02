@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { RawZodShape, AuthOptions, authOptionsSchema } from '../types';
+import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
 import {
+  AgentType,
   ProviderType,
   PromptType,
   ResourceType,
@@ -17,8 +18,8 @@ import {
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
   annotatedFrontMcpToolsSchema,
+  annotatedFrontMcpAgentsSchema,
 } from '../schemas';
-import { AgentType, annotatedFrontMcpAgentsSchema } from './agent.metadata';
 
 /**
  * Declarative metadata describing what a local mcp app contributes at app scope.
@@ -103,7 +104,7 @@ export interface LocalAppMetadata {
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
-  auth?: AuthOptions;
+  auth?: AuthOptionsInput;
 
   /**
    * If true, the app will NOT be included and will act as a separated scope.
@@ -114,26 +115,24 @@ export interface LocalAppMetadata {
   standalone?: 'includeInParent' | boolean;
 }
 
-export const frontMcpLocalAppMetadataSchema = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
-    authProviders: z.array(annotatedFrontMcpAuthProvidersSchema).optional().default([]),
-    plugins: z.array(annotatedFrontMcpPluginsSchema).optional(),
-    adapters: z.array(annotatedFrontMcpAdaptersSchema).optional(),
-    tools: z.array(annotatedFrontMcpToolsSchema).optional(),
-    resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
-    prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
-    agents: z.array(annotatedFrontMcpAgentsSchema).optional(),
-    auth: authOptionsSchema.optional(),
-    standalone: z
-      .union([z.literal('includeInParent'), z.boolean()])
-      .optional()
-      .default(false),
-  } satisfies RawZodShape<LocalAppMetadata>)
-  .passthrough();
+export const frontMcpLocalAppMetadataSchema = z.looseObject({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  authProviders: z.array(annotatedFrontMcpAuthProvidersSchema).optional().default([]),
+  plugins: z.array(annotatedFrontMcpPluginsSchema).optional(),
+  adapters: z.array(annotatedFrontMcpAdaptersSchema).optional(),
+  tools: z.array(annotatedFrontMcpToolsSchema).optional(),
+  resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
+  prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
+  agents: z.array(annotatedFrontMcpAgentsSchema).optional(),
+  auth: authOptionsSchema.optional(),
+  standalone: z
+    .union([z.literal('includeInParent'), z.boolean()])
+    .optional()
+    .default(false),
+} satisfies RawZodShape<LocalAppMetadata>);
 
 /**
  * Declarative metadata describing what a remote encapsulated mcp app.
@@ -171,7 +170,7 @@ export interface RemoteAppMetadata {
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
-  auth?: AuthOptions;
+  auth?: AuthOptionsInput;
 
   /**
    * If true, the app will NOT be included and will act as a separated scope.
@@ -182,19 +181,17 @@ export interface RemoteAppMetadata {
   standalone: 'includeInParent' | boolean;
 }
 
-export const frontMcpRemoteAppMetadataSchema = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    urlType: z.enum(['worker', 'url']),
-    url: z.string().url(),
-    auth: authOptionsSchema.optional(),
-    standalone: z
-      .union([z.literal('includeInParent'), z.boolean()])
-      .optional()
-      .default(false),
-  } satisfies RawZodShape<RemoteAppMetadata>)
-  .passthrough();
+export const frontMcpRemoteAppMetadataSchema = z.looseObject({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  urlType: z.enum(['worker', 'url']),
+  url: z.string().url(),
+  auth: authOptionsSchema.optional(),
+  standalone: z
+    .union([z.literal('includeInParent'), z.boolean()])
+    .optional()
+    .default(false),
+} satisfies RawZodShape<RemoteAppMetadata>);
 
 export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
