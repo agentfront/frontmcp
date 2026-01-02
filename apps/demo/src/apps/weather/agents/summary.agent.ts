@@ -19,6 +19,9 @@ import { z } from 'zod';
       env: 'OPENAI_API_KEY',
     },
   },
+  codecall: {
+    visibleInListTools: true,
+  },
   tools: [GetWeatherTool],
 })
 export default class SummaryAgent extends AgentContext {}
