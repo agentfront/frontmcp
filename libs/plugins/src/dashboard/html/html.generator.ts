@@ -43,25 +43,35 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
   const safeBasePath = escapeForJs(options.basePath);
   const token = escapeForJs(auth?.token || '');
 
+  // Escape CDN URLs for safe interpolation
+  const safeReact = escapeForJs(cdn.react);
+  const safeReactDom = escapeForJs(cdn.reactDom);
+  const safeReactDomClient = escapeForJs(cdn.reactDomClient);
+  const safeReactJsxRuntime = escapeForJs(cdn.reactJsxRuntime);
+  const safeXyflow = escapeForJs(cdn.xyflow);
+  const safeDagre = escapeForJs(cdn.dagre);
+  const safeXyflowCss = escapeForJs(cdn.xyflowCss);
+  const safeEntrypoint = escapeForJs(cdn.entrypoint || '');
+
   return `<!DOCTYPE html>
-<html lang='en'>
+<html lang="en">
 <head>
-  <meta charset='UTF-8'>
-  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-  <title>FrontMCP Dashboard</title>;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FrontMCP Dashboard</title>
   <script type="importmap">
   {
-    'imports': {
-      'react': '${cdn.react}',
-      'react-dom': '${cdn.reactDom}',
-      'react-dom/client': '${cdn.reactDomClient}',
-      'react/jsx-runtime': '${cdn.reactJsxRuntime}',
-      '@xyflow/react': '${cdn.xyflow}',
-      'dagre': '${cdn.dagre}'
+    "imports": {
+      "react": "${safeReact}",
+      "react-dom": "${safeReactDom}",
+      "react-dom/client": "${safeReactDomClient}",
+      "react/jsx-runtime": "${safeReactJsxRuntime}",
+      "@xyflow/react": "${safeXyflow}",
+      "dagre": "${safeDagre}"
     }
   }
-  </script>;
-  <link rel="stylesheet" href="${cdn.xyflowCss}" />;
+  </script>
+  <link rel="stylesheet" href="${safeXyflowCss}" />
 </head>
 <body>
   <div id="root">Loading dashboard...</div>
@@ -79,7 +89,7 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
     };
 
     // Load external dashboard UI
-    import('${cdn.entrypoint}').then(mod => {
+    import('${safeEntrypoint}').then(mod => {
       if (mod.mount) {
         mod.mount(document.getElementById('root'), window.__FRONTMCP_DASHBOARD__);
       }
@@ -88,7 +98,7 @@ function generateExternalEntrypointHtml(options: DashboardPluginOptions): string
         '<div style="color: red; padding: 20px;">Failed to load dashboard: ' + escapeHtml(err.message || 'Unknown error') + '</div>';
     });
   </script>
-</body>;
+</body>
 </html>`;
 }
 
@@ -102,6 +112,15 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
   const token = escapeForJs(auth?.token || '');
   const sseUrl = `${safeBasePath}/sse${token ? `?token=${token}` : ''}`;
 
+  // Escape CDN URLs for safe interpolation
+  const safeReact = escapeForJs(cdn.react);
+  const safeReactDom = escapeForJs(cdn.reactDom);
+  const safeReactDomClient = escapeForJs(cdn.reactDomClient);
+  const safeReactJsxRuntime = escapeForJs(cdn.reactJsxRuntime);
+  const safeXyflow = escapeForJs(cdn.xyflow);
+  const safeDagre = escapeForJs(cdn.dagre);
+  const safeXyflowCss = escapeForJs(cdn.xyflowCss);
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,16 +131,16 @@ function generateInlineDashboardHtml(options: DashboardPluginOptions): string {
   <script type="importmap">
   {
     "imports": {
-      "react": "${cdn.react}",
-      "react-dom": "${cdn.reactDom}",
-      "react-dom/client": "${cdn.reactDomClient}",
-      "react/jsx-runtime": "${cdn.reactJsxRuntime}",
-      "@xyflow/react": "${cdn.xyflow}",
-      "dagre": "${cdn.dagre}"
+      "react": "${safeReact}",
+      "react-dom": "${safeReactDom}",
+      "react-dom/client": "${safeReactDomClient}",
+      "react/jsx-runtime": "${safeReactJsxRuntime}",
+      "@xyflow/react": "${safeXyflow}",
+      "dagre": "${safeDagre}"
     }
   }
   </script>
-  <link rel="stylesheet" href="${cdn.xyflowCss}" />
+  <link rel="stylesheet" href="${safeXyflowCss}" />
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }

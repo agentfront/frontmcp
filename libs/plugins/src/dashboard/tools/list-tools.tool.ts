@@ -1,26 +1,7 @@
 import { Tool, ToolContext, ScopeEntry } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { ParentScopeToken } from '../dashboard.symbol';
-
-/**
- * Safely create a RegExp from user input to prevent ReDoS attacks.
- * Returns null if the pattern is invalid or potentially dangerous.
- */
-function safeRegex(pattern: string): RegExp | null {
-  // Limit pattern length to prevent complex patterns
-  if (pattern.length > 100) {
-    return null;
-  }
-  try {
-    const regex = new RegExp(pattern, 'i');
-    // Quick test to ensure it doesn't hang on simple input
-    regex.test('test');
-    return regex;
-  } catch {
-    // Invalid regex syntax
-    return null;
-  }
-}
+import { safeRegex } from '../shared/safe-regex';
 
 /**
  * Input schema for the list-tools tool.
@@ -31,7 +12,7 @@ export const listToolsInputSchema = z.object({
   includeSchemas: z.boolean().default(false).describe('Include input/output schemas in the response'),
 });
 
-export type ListToolsInput = z.input<typeof listToolsInputSchema>;
+export type ListToolsInput = z.output<typeof listToolsInputSchema>;
 
 /**
  * Output schema for the list-tools tool.
