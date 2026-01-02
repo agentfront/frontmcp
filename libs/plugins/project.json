@@ -21,6 +21,8 @@
         "main": "libs/plugins/src/index.ts",
         "tsConfig": "libs/plugins/tsconfig.lib.json",
         "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "libs/plugins/src",
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
@@ -72,17 +74,9 @@
         }
       }
     },
-    "build-types": {
-      "executor": "nx:run-commands",
-      "dependsOn": ["^build"],
-      "outputs": ["{projectRoot}/dist"],
-      "options": {
-        "command": "tsc -p libs/plugins/tsconfig.lib.json --emitDeclarationOnly --declaration --declarationMap --outDir libs/plugins/dist"
-      }
-    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-types", "build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
       }
