@@ -128,6 +128,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const { name: toolName } = params;
     const scope = this.scope as Scope;
 
+    // TODO: why we need to extract agentId if we have another stage of findAgent?
     // Extract agent ID from use-agent:<agent_id> pattern or use direct name
     const agentId = agentIdFromToolName(toolName) ?? toolName;
 

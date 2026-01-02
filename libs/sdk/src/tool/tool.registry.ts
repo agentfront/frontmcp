@@ -400,7 +400,22 @@ export default class ToolRegistry
    * This allows pre-constructed tool instances to be added without going through
    * the standard token-based initialization flow.
    *
-   * @param tool - The tool instance to register
+   * **IMPORTANT: Scope Binding**
+   * The ToolInstance captures its scope and providers at construction time.
+   * The tool will use the scope from its original `providers` argument, NOT this registry's scope.
+   * Therefore, you must create the ToolInstance with the correct providers for the target scope:
+   *
+   * ```typescript
+   * // Correct: Create with agent's providers
+   * const tool = new ToolInstance(record, agentProviders, owner);
+   * agentTools.registerToolInstance(tool);
+   *
+   * // Wrong: Reusing app-scoped tool in agent context
+   * // The tool will still use app's scope/hooks, not agent's!
+   * agentTools.registerToolInstance(existingAppTool);
+   * ```
+   *
+   * @param tool - The tool instance to register (must be created with this registry's providers)
    * @throws Error if tool is not a valid ToolInstance or already registered
    */
   registerToolInstance(tool: ToolEntry): void {
