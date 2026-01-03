@@ -224,7 +224,7 @@ export const EXPECTED_GENERIC_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mime
  * Expected meta keys for generic MCP platforms in tools/call response (Claude, Cursor, etc.).
  * Uses ui/* namespace only.
  */
-export const EXPECTED_GENERIC_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType'] as const;
+export const EXPECTED_GENERIC_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'ui/type'] as const;
 
 /**
  * @deprecated Use EXPECTED_GENERIC_TOOLS_LIST_META_KEYS instead

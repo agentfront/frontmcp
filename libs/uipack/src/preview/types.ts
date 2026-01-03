@@ -216,6 +216,11 @@ export interface ClaudeMetaFields {
  * Generic MCP metadata fields.
  * Uses ui/* namespace for maximum compatibility with MCP clients.
  *
+ * Note: This type includes both legacy frontmcp/* and new ui/* keys
+ * for type compatibility during the migration period. New code should
+ * only emit ui/* keys. The frontmcp/* keys will be removed in a future
+ * major version.
+ *
  * @deprecated frontmcp/* keys are deprecated - use ui/* keys instead
  */
 export interface FrontMCPMetaFields {

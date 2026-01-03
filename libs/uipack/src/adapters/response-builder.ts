@@ -103,16 +103,29 @@ export interface ToolResponseContent {
  *
  * @example
  * ```typescript
- * // Platform with structuredContent (all widget-supporting platforms)
- * const result = buildToolResponseContent({
+ * // OpenAI/ext-apps: HTML goes directly in content
+ * const openaiResult = buildToolResponseContent({
+ *   rawOutput: { temperature: 72 },
+ *   htmlContent: '<!DOCTYPE html>...',
+ *   servingMode: 'inline',
+ *   useStructuredContent: true,
+ *   platformType: 'openai',
+ * });
+ * // result.content = [{ type: 'text', text: '<!DOCTYPE html>...' }]
+ * // result.structuredContent = { temperature: 72 }
+ * // result.format = 'structured-content'
+ *
+ * // Claude/generic platforms: JSON in content, HTML via _meta['ui/html']
+ * const claudeResult = buildToolResponseContent({
  *   rawOutput: { temperature: 72 },
  *   htmlContent: '<!DOCTYPE html>...',
  *   servingMode: 'inline',
  *   useStructuredContent: true,
  *   platformType: 'claude',
  * });
- * // result.content = [{ type: 'text', text: '<!DOCTYPE html>...' }]
+ * // result.content = [{ type: 'text', text: '{"temperature":72}' }]
  * // result.structuredContent = { temperature: 72 }
+ * // Note: HTML is set in _meta['ui/html'] by the call-tool flow, not this function
  * // result.format = 'structured-content'
  *
  * // Platform without widget support (gemini, unknown)
@@ -192,7 +205,8 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
     };
   }
 
-  // Widget platforms without structuredContent: clear content, widget reads from _meta['ui/html']
+  // Widget platforms (Claude, OpenAI, ext-apps, etc.) without structuredContent:
+  // clear content, widget reads from _meta['ui/html']
   const supportsWidgets = platformSupportsWidgets(platformType);
   if (supportsWidgets) {
     return {

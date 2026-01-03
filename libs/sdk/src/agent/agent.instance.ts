@@ -347,6 +347,11 @@ export class AgentInstance<
     // Copy plugin metadata extensions dynamically
     // These are added via ExtendFrontMcpToolMetadata which AgentMetadata now extends
     // Using dynamic approach to support future plugin extensions without code changes
+    //
+    // Note: Double-cast through 'unknown' is required because TypeScript's control flow
+    // analysis cannot track properties added via global interface augmentation
+    // (ExtendFrontMcpToolMetadata). Plugin modules declare their extension keys in global
+    // scope (e.g., 'cache', 'codecall'), which TypeScript doesn't recognize on concrete types.
     const extendedMeta = agentMeta as unknown as Record<string, unknown>;
     const mutableToolMeta = toolMeta as unknown as Record<string, unknown>;
 
@@ -437,7 +442,8 @@ export class AgentInstance<
       throw new AgentNotConfiguredError(this.name);
     }
 
-    const agentCtorArgs = this.buildAgentCtorArgs(input, ctx);
+    // Pass llmAdapter explicitly after the null check to avoid non-null assertion
+    const agentCtorArgs = this.buildAgentCtorArgs(input, ctx, this.llmAdapter);
 
     switch (this.record.kind) {
       case AgentKind.CLASS_TOKEN:
@@ -461,8 +467,16 @@ export class AgentInstance<
 
   /**
    * Build the constructor arguments for creating an AgentContext.
+   *
+   * @param input - The input arguments for the agent
+   * @param ctx - Extra context including authInfo
+   * @param llmAdapter - The LLM adapter (passed explicitly to avoid non-null assertion)
    */
-  private buildAgentCtorArgs(input: AgentCallArgs, ctx: AgentCallExtra): AgentCtorArgs<In> {
+  private buildAgentCtorArgs(
+    input: AgentCallArgs,
+    ctx: AgentCallExtra,
+    llmAdapter: AgentLlmAdapter,
+  ): AgentCtorArgs<In> {
     const scope = this.providers.getActiveScope();
 
     return {
@@ -471,7 +485,7 @@ export class AgentInstance<
       providers: this.providers,
       logger: scope.logger,
       authInfo: ctx.authInfo,
-      llmAdapter: this.llmAdapter!,
+      llmAdapter,
       toolDefinitions: this.getToolDefinitions(),
       toolExecutor: this.createToolExecutor(ctx),
     };

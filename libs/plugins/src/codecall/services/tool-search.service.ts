@@ -318,6 +318,7 @@ export class ToolSearchService implements ToolSearch {
   private subscriptionPromise: Promise<void>;
   private subscriptionResolved = false;
   private subscriptionResolve: (() => void) | null = null;
+  private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -419,7 +420,10 @@ export class ToolSearchService implements ToolSearch {
     // Unlike queueMicrotask, setTimeout waits for actual event loop ticks,
     // allowing async operations (like adapter index pulling) to complete
     const nextDelay = Math.min(delayMs * 2, ToolSearchService.MAX_RETRY_DELAY_MS);
-    setTimeout(() => this.setupSubscription(retryCount + 1, nextDelay), delayMs);
+    this.retryTimeoutId = setTimeout(() => {
+      this.retryTimeoutId = null;
+      this.setupSubscription(retryCount + 1, nextDelay);
+    }, delayMs);
   }
 
   /**
@@ -591,9 +595,15 @@ export class ToolSearchService implements ToolSearch {
   }
 
   /**
-   * Cleanup subscription when service is destroyed
+   * Cleanup subscription and pending retries when service is destroyed
    */
   dispose(): void {
+    // Clear any pending retry timeout to prevent callbacks after disposal
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
+
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = undefined;
