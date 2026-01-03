@@ -1,6 +1,6 @@
 // dynamic-plugin.ts
 import { Reference } from '@frontmcp/di';
-import { PluginType, ProviderType, ProviderRegistryInterface } from '../interfaces';
+import { PluginType, ProviderType } from '../interfaces';
 import { collectDynamicProviders, dedupePluginProviders } from './dynamic.utils';
 
 // InitOptions accepts input type (what users provide to init())

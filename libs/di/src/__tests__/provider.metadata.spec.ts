@@ -123,22 +123,28 @@ describe('providerMetadataSchema', () => {
   });
 
   describe('deprecated scope handling', () => {
-    it('should map SESSION to CONTEXT via transform', () => {
-      // Create schema with transform for backwards compat
+    it('should accept SESSION as a valid scope value', () => {
+      // SESSION is accepted by the schema; transformation happens at container runtime
       const result = providerMetadataSchema.safeParse({
         name: 'SessionProvider',
-        scope: ProviderScope.CONTEXT, // Using CONTEXT since SESSION maps to it
+        scope: ProviderScope.SESSION,
       });
       expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.scope).toBe(ProviderScope.SESSION);
+      }
     });
 
-    it('should map REQUEST to CONTEXT via transform', () => {
-      // Create schema with transform for backwards compat
+    it('should accept REQUEST as a valid scope value', () => {
+      // REQUEST is accepted by the schema; transformation happens at container runtime
       const result = providerMetadataSchema.safeParse({
         name: 'RequestProvider',
-        scope: ProviderScope.CONTEXT, // Using CONTEXT since REQUEST maps to it
+        scope: ProviderScope.REQUEST,
       });
       expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.scope).toBe(ProviderScope.REQUEST);
+      }
     });
   });
 });

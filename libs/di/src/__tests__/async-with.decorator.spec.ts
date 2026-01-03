@@ -52,6 +52,7 @@ describe('AsyncWith decorator', () => {
 
   it('should preserve lazy evaluation of dependencies', () => {
     // This tests TDZ avoidance - factory is called lazily
+    // eslint-disable-next-line prefer-const -- reassigned below
     let DepClass: any;
 
     @AsyncWith(() => [DepClass])

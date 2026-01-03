@@ -1,2 +1,2 @@
-// Metadata utilities are now imported directly from '@frontmcp/di'
-// This file is kept for backwards compatibility but exports nothing.
+// Re-export metadata utilities for backward compatibility
+export { getMetadata, setMetadata, hasAsyncWith } from '@frontmcp/di';

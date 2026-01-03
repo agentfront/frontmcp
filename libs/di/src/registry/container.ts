@@ -547,7 +547,14 @@ export class DiContainer<ParentType extends DiContainer<any> | undefined = undef
       const instance = new (cls as Ctor<any>)();
       const init = (instance as any)?.init;
       if (typeof init === 'function') {
-        init.call(instance); // Sync only
+        const result = init.call(instance);
+        if (isPromise(result)) {
+          throw new Error(
+            `Cannot use resolve() with async init() for ${
+              (cls as any).name ?? 'unknown'
+            }. Use get() after initialize() instead.`,
+          );
+        }
       }
       return instance as T;
     }
@@ -774,6 +781,9 @@ function createBasicNormalizer() {
     const obj = item as any;
 
     if ('useValue' in obj) {
+      if (!obj.provide) {
+        throw new Error(`Provider with useValue must have a 'provide' field`);
+      }
       return {
         kind: ProviderKind.VALUE,
         provide: obj.provide,
@@ -783,6 +793,9 @@ function createBasicNormalizer() {
     }
 
     if ('useFactory' in obj) {
+      if (!obj.provide) {
+        throw new Error(`Provider with useFactory must have a 'provide' field`);
+      }
       return {
         kind: ProviderKind.FACTORY,
         provide: obj.provide,
@@ -793,6 +806,9 @@ function createBasicNormalizer() {
     }
 
     if ('useClass' in obj) {
+      if (!obj.provide) {
+        throw new Error(`Provider with useClass must have a 'provide' field`);
+      }
       return {
         kind: ProviderKind.CLASS,
         provide: obj.provide,

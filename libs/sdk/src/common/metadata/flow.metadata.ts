@@ -69,7 +69,7 @@ export const frontMcpFlowMetadataSchema = z
     inputSchema: z.instanceof(Object),
     outputSchema: z.instanceof(Object).optional(),
     plan: z.instanceof(Object),
-    dependsOn: z.array(z.any()).optional(),
+    dependsOn: z.array(z.unknown()).optional(),
     middleware: z.instanceof(Object).optional(),
   } satisfies RawZodShape<FlowMetadata<never>>)
   .passthrough();

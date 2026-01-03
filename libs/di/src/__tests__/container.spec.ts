@@ -1190,12 +1190,7 @@ describe('DiContainer', () => {
   });
 
   describe('resolveFromViews edge cases', () => {
-    it('should throw when GLOBAL dep is not instantiated in resolveFromViews', async () => {
-      // This tests the error path at line 711
-      // We need a CONTEXT provider that depends on a GLOBAL that's not there
-      // This is hard to trigger since GLOBAL providers are built first
-      // Skip for now - requires internal manipulation
-    });
+    it.todo('should throw when GLOBAL dep is not instantiated in resolveFromViews');
 
     it('should resolve from contextStore first', async () => {
       class ContextA {

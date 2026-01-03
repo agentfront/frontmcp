@@ -1,2 +1,10 @@
-// Token utilities are now imported directly from '@frontmcp/di'
-// This file is kept for backwards compatibility but exports nothing.
+// Re-export token utilities for backward compatibility
+export {
+  tokenName,
+  isClass,
+  isPromise,
+  getAsyncWithTokens,
+  readWithParamTypes,
+  depsOfClass,
+  depsOfFunc,
+} from '@frontmcp/di';

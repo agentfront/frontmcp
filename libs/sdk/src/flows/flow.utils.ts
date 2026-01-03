@@ -18,7 +18,7 @@ export function normalizeFlow(item: FlowType): FlowRecord {
     return { kind: FlowKind.CLASS_TOKEN, provide: item, metadata };
   }
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid adapter '${name}'. Expected a class or a adapter object.`);
+  throw new Error(`Invalid flow '${name}'. Expected a class or a flow object.`);
 }
 
 /**

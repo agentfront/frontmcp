@@ -66,6 +66,7 @@ export type Reference<T = unknown> = string | symbol | Type<T> | Abstract<T> | F
  * A DI token that can be either a class constructor or a logical reference.
  * This is the primary type for identifying dependencies in the DI system.
  */
+// Note: `any` default is intentional - `unknown` breaks type inference in factory providers
 export type Token<T = any> = Type<T> | Reference<T>;
 
 /**
@@ -87,6 +88,7 @@ export interface ValueType<Provide> {
 /**
  * Abstract class token type for dependency references.
  */
+// Note: `any` default is intentional - `unknown` breaks type inference in factory providers
 export type ClassToken<T = any> = abstract new (...a: any) => T;
 
 // Type utilities for resolving token types

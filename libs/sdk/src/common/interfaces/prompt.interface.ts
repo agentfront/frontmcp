@@ -14,7 +14,14 @@ export interface PromptInterface {
   execute(args: Record<string, string>): Promise<GetPromptResult>;
 }
 
-export type PromptType = Type<PromptInterface> | FuncType<PromptInterface>;
+/**
+ * Functional prompt pattern - returned by prompt() builder.
+ * A callable that returns an execute handler, with metadata attached.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type FunctionalPromptType = (() => any) & { [key: symbol]: unknown };
+
+export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType;
 
 type HistoryEntry<T> = {
   at: number;

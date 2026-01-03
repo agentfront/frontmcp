@@ -13,4 +13,4 @@ export const frontMcpProviderMetadataSchema = z
     description: z.string().optional(),
     scope: z.nativeEnum(ProviderScope).optional().default(ProviderScope.GLOBAL),
   } satisfies RawZodShape<ProviderMetadata>)
-  .passthrough();
+  .strict();
