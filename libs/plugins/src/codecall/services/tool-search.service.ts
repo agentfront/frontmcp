@@ -406,7 +406,10 @@ export class ToolSearchService implements ToolSearch {
 
     // Max retries exceeded
     if (retryCount >= ToolSearchService.MAX_SUBSCRIPTION_RETRIES) {
-      console.warn('ToolSearchService: scope.tools not available after max retries');
+      this.scope.logger.warn(
+        'ToolSearchService: scope.tools not available after max retries. ' +
+          'Tool search will return incomplete results until tools are registered.',
+      );
       // Resolve the promise anyway to prevent indefinite blocking
       this.markSubscribed();
       return;

@@ -171,8 +171,9 @@ export function buildToolResponseContent(options: BuildToolResponseOptions): Too
           format: 'structured-content',
         };
       } else {
-        // JSON in content, HTML available in _meta['ui/html']
-        // This gives unknown clients readable JSON while HTML is still accessible
+        // JSON in content for non-OpenAI/ext-apps platforms
+        // Note: HTML is set in _meta['ui/html'] by the call-tool flow, not by this function
+        // This gives unknown clients readable JSON while HTML is accessible via _meta
         return {
           content: [{ type: 'text', text: safeStringify(rawOutput) }],
           structuredContent: rawOutput,

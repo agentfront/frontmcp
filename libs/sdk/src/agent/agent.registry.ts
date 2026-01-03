@@ -194,10 +194,18 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
       const toolInstance = agentInstance.getToolInstance();
 
       if (toolInstance) {
-        // Register the agent's tool in the parent scope's tool registry
-        toolRegistry.registerToolInstance(toolInstance);
-
-        scope.logger.debug(`Registered agent tool ${toolInstance.name} in parent ToolRegistry`);
+        try {
+          // Register the agent's tool in the parent scope's tool registry
+          toolRegistry.registerToolInstance(toolInstance);
+          scope.logger.debug(`Registered agent tool ${toolInstance.name} in parent ToolRegistry`);
+        } catch (error) {
+          // Log warning but don't fail - agent registration failure shouldn't break the system
+          scope.logger.warn(
+            `Failed to register agent tool for ${agentInstance.name}: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
+        }
       }
     }
   }

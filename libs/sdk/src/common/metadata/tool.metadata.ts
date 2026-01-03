@@ -248,10 +248,6 @@ const toolExampleSchema = z.object({
   output: z.unknown().optional(),
 });
 
-// Note: The "use-agent:" prefix is used by AgentInstance.createAgentAsTool() to create
-// agent tools. Unlike regular user-defined tools, agent tools legitimately use this prefix.
-// The prefix check was removed because agents are now registered as standard ToolInstances.
-
 export const frontMcpToolMetadataSchema = z
   .object({
     id: z.string().optional(),

@@ -25,7 +25,7 @@ import {
   ToolMetadata,
   ToolRecord,
 } from '../common';
-import { tool as toolDecorator, ToolInputOf } from '../common/decorators/tool.decorator';
+import { tool as toolDecorator } from '../common/decorators/tool.decorator';
 import { ToolInstance } from '../tool/tool.instance';
 import { normalizeTool } from '../tool/tool.utils';
 import ProviderRegistry from '../provider/provider.registry';
@@ -289,8 +289,12 @@ export class AgentInstance<
    * - Unified hook/plugin execution
    */
   private async createAgentAsTool(): Promise<void> {
-    // Skip if no LLM adapter (agent may use custom implementation)
+    // Skip if no LLM adapter (agent may use custom implementation or failed to initialize)
     if (!this.llmAdapter) {
+      this.scope.logger.debug(
+        `Agent ${this.name} has no LLM adapter configured - skipping tool registration. ` +
+          `Agent will not be callable as a tool via use-agent:${this.id}.`,
+      );
       return;
     }
 
@@ -340,17 +344,18 @@ export class AgentInstance<
       hideFromDiscovery: agentMeta.hideFromDiscovery,
     };
 
-    // Copy plugin metadata extensions (cache, codecall, etc.)
+    // Copy plugin metadata extensions dynamically
     // These are added via ExtendFrontMcpToolMetadata which AgentMetadata now extends
+    // Using dynamic approach to support future plugin extensions without code changes
     const extendedMeta = agentMeta as unknown as Record<string, unknown>;
     const mutableToolMeta = toolMeta as unknown as Record<string, unknown>;
 
-    // Known plugin extensions to copy
-    if ('cache' in extendedMeta && extendedMeta['cache'] !== undefined) {
-      mutableToolMeta['cache'] = extendedMeta['cache'];
-    }
-    if ('codecall' in extendedMeta && extendedMeta['codecall'] !== undefined) {
-      mutableToolMeta['codecall'] = extendedMeta['codecall'];
+    // Known plugin extension keys - copy all that are present
+    const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry'] as const;
+    for (const key of pluginExtensionKeys) {
+      if (key in extendedMeta && extendedMeta[key] !== undefined) {
+        mutableToolMeta[key] = extendedMeta[key];
+      }
     }
 
     return toolMeta;
@@ -371,9 +376,11 @@ export class AgentInstance<
       // Cast is safe because by the time we reach execute, auth has been validated in the flow
       const authInfo = toolCtx.authInfo as import('@modelcontextprotocol/sdk/server/auth/types.js').AuthInfo;
 
-      // Create agent context
-      // Cast to AgentCallExtra is safe because buildAgentCtorArgs only accesses ctx.authInfo
-      const agentContext = this.create(input as AgentCallArgs, { authInfo } as unknown as AgentCallExtra);
+      // Create agent context with minimal AgentCallExtra
+      // Note: buildAgentCtorArgs only accesses ctx.authInfo, so we construct a minimal object
+      // The RequestHandlerExtra properties are not used in the agent execution path
+      const agentCallExtra: Pick<AgentCallExtra, 'authInfo'> = { authInfo };
+      const agentContext = this.create(input as AgentCallArgs, agentCallExtra as AgentCallExtra);
 
       // Execute the agent's LLM loop
       const result = await agentContext.execute(input as In);
