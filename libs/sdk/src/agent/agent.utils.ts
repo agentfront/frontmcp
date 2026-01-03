@@ -183,16 +183,11 @@ export function agentDiscoveryDeps(record: AgentRecord): Token[] {
 // ============================================================================
 
 /**
- * Reserved prefix for agent tool names.
- * Tools cannot use this prefix - it's reserved for agent invocations.
- */
-export const AGENT_TOOL_PREFIX = 'use-agent:';
-
-/**
  * Generate the tool name for an agent.
+ * Agents use standard tool names without any prefix.
  *
  * @param agentId The agent's ID
- * @returns Tool name in format `use-agent:<agentId>`
+ * @returns Sanitized tool name
  */
 export function agentToolName(agentId: string): string {
   // Sanitize the agent ID for use in a tool name
@@ -209,28 +204,7 @@ export function agentToolName(agentId: string): string {
     );
   }
 
-  return `${AGENT_TOOL_PREFIX}${sanitized}`;
-}
-
-/**
- * Check if a tool name is an agent invocation.
- *
- * @param toolName Tool name to check
- * @returns True if the tool name starts with the agent prefix
- */
-export function isAgentToolName(toolName: string): boolean {
-  return toolName.startsWith(AGENT_TOOL_PREFIX);
-}
-
-/**
- * Extract agent ID from a tool name.
- *
- * @param toolName Tool name in format `use-agent:<agentId>`
- * @returns Agent ID or null if not an agent tool
- */
-export function agentIdFromToolName(toolName: string): string | null {
-  if (!isAgentToolName(toolName)) return null;
-  return toolName.slice(AGENT_TOOL_PREFIX.length);
+  return sanitized;
 }
 
 /**

@@ -12,7 +12,6 @@ import {
   AgentExecutionError,
 } from '../../errors';
 import { Scope } from '../../scope';
-import { isAgentToolName, agentIdFromToolName } from '../agent.utils';
 
 // ============================================================================
 // Schemas
@@ -128,9 +127,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     const { name: toolName } = params;
     const scope = this.scope as Scope;
 
-    // TODO: why we need to extract agentId if we have another stage of findAgent?
-    // Extract agent ID from use-agent:<agent_id> pattern or use direct name
-    const agentId = agentIdFromToolName(toolName) ?? toolName;
+    // Agent ID is the tool name (agents use standard tool names)
+    const agentId = toolName;
 
     let agent: AgentEntry | undefined;
     if (scope.agents) {
@@ -164,8 +162,8 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
     const { name: toolName } = this.state.required.input;
 
-    // Extract agent ID from use-agent:<agent_id> pattern or use direct name
-    const agentId = agentIdFromToolName(toolName) ?? toolName;
+    // Agent ID is the tool name (agents use standard tool names)
+    const agentId = toolName;
 
     // Try to find by ID first, then by name
     let agent: AgentEntry | undefined = agents.findById(agentId);
