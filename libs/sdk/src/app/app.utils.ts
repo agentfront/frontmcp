@@ -1,6 +1,5 @@
-import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, Type, Token, AppRecord, AppKind } from '../common';
-import { getMetadata } from '../utils/metadata.utils';
-import { depsOfClass, isClass } from '../utils/token.utils';
+import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
+import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, AppRecord, AppKind } from '../common';
 import { AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {

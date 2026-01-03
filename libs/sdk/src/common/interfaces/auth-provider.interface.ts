@@ -1,6 +1,5 @@
-import { Type, Token, ClassType, ValueType, FactoryType, ClassToken } from './base.interface';
+import { Type, Token, ClassType, ValueType, FactoryType, ClassToken } from '@frontmcp/di';
 import { AuthProviderMetadata } from '../metadata';
-
 
 export interface AuthProviderInterface {
   headers(): Record<string, string>;
@@ -8,23 +7,22 @@ export interface AuthProviderInterface {
   refreshToken?(): Promise<string | undefined>;
 }
 
-
 export type AuthProviderClassType<Provide> = ClassType<Provide> & AuthProviderMetadata;
 export type AuthProviderValueType<Provide> = ValueType<Provide> & AuthProviderMetadata;
-export type AuthProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> =
-  FactoryType<Provide, Tokens>
-  & AuthProviderMetadata;
-
+export type AuthProviderFactoryType<Provide, Tokens extends readonly (ClassToken | Token)[]> = FactoryType<
+  Provide,
+  Tokens
+> &
+  AuthProviderMetadata;
 
 export type AuthProviderType<
   Provide extends AuthProviderInterface = any,
-  Tokens extends readonly (ClassToken | Token)[] = readonly (ClassToken | Token)[]
+  Tokens extends readonly (ClassToken | Token)[] = readonly (ClassToken | Token)[],
 > =
   | Type<Provide>
   | AuthProviderClassType<Provide>
   | AuthProviderValueType<Provide>
-  | AuthProviderFactoryType<Provide, Tokens>
-
+  | AuthProviderFactoryType<Provide, Tokens>;
 
 /**
  * Helper to define factory providers without tuple widening.

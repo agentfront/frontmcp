@@ -1,4 +1,4 @@
-import { Type, Token, ValueType, ClassType, FactoryType } from './base.interface';
+import { Type, Token, ValueType, ClassType, FactoryType } from '@frontmcp/di';
 import { PluginMetadata } from '../metadata';
 
 export interface PluginInterface {}

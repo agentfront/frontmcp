@@ -1,4 +1,5 @@
-import { FrontMcpConfigType, ProviderScope, FrontMcpServer, ProviderValueType, AsyncProvider } from '../common';
+import { ProviderScope } from '@frontmcp/di';
+import { FrontMcpConfigType, FrontMcpServer, ProviderValueType, AsyncProvider } from '../common';
 import { FrontMcpServerInstance } from '../server/server.instance';
 import { FrontMcpConfig } from './front-mcp.tokens';
 import { FrontMcpContextStorage } from '../context';

@@ -1,4 +1,4 @@
-import { Token, Type } from './base.interface';
+import { Token, Type } from '@frontmcp/di';
 import { FlowMetadata, FlowName } from '../metadata';
 import { z } from 'zod';
 import { HookEntry, ScopeEntry } from '../entries';

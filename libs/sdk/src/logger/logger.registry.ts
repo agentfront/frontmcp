@@ -1,20 +1,12 @@
 import 'reflect-metadata';
-import {
-  FrontMcpLogger,
-  LogLevel,
-  LogTransportType,
-  LogTransportInterface,
-  LoggingConfigType,
-  ProviderScope,
-  Token,
-} from '../common';
+import { ProviderScope, Token, tokenName } from '@frontmcp/di';
+import { FrontMcpLogger, LogLevel, LogTransportType, LogTransportInterface, LoggingConfigType } from '../common';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
 import { LoggerKind, LoggerRecord } from './logger.types';
 import { loggerDiscoveryDeps, normalizeLogger } from './logger.utils';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import { ConsoleLogTransportInstance } from './instances/instance.console-logger';
-import { tokenName } from '../utils/token.utils';
 import { GetTransports, LoggerInstance } from './instances/instance.logger';
 
 export default class LoggerRegistry extends RegistryAbstract<LogTransportInterface, LoggerRecord, LogTransportType[]> {

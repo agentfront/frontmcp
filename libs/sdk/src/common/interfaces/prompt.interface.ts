@@ -1,8 +1,8 @@
 // file: libs/sdk/src/common/interfaces/prompt.interface.ts
 
 import { randomUUID } from 'crypto';
+import { FuncType, Token, Type } from '@frontmcp/di';
 import { PromptMetadata } from '../metadata';
-import { FuncType, Token, Type } from './base.interface';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
@@ -14,7 +14,14 @@ export interface PromptInterface {
   execute(args: Record<string, string>): Promise<GetPromptResult>;
 }
 
-export type PromptType = Type<PromptInterface> | FuncType<PromptInterface>;
+/**
+ * Functional prompt pattern - returned by prompt() builder.
+ * A callable that returns an execute handler, with metadata attached.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type FunctionalPromptType = (() => any) & { [key: symbol]: unknown };
+
+export type PromptType = Type<PromptInterface> | FuncType<PromptInterface> | FunctionalPromptType;
 
 type HistoryEntry<T> = {
   at: number;

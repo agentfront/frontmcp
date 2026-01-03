@@ -1,7 +1,6 @@
 import { z } from 'zod';
+import { FuncType, Type, Token } from '@frontmcp/di';
 import { RawZodShape } from '../types';
-// Import from specific interface files to avoid circular dependencies
-import { FuncType, Type, Token } from '../interfaces/base.interface';
 import { ProviderType } from '../interfaces/provider.interface';
 import { PluginType } from '../interfaces/plugin.interface';
 import { AdapterType } from '../interfaces/adapter.interface';

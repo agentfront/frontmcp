@@ -1,4 +1,5 @@
-import { ClassType, FactoryType, ProviderType, Type, ValueType } from '../interfaces';
+import { ClassType, FactoryType, Type, ValueType } from '@frontmcp/di';
+import { ProviderType } from '../interfaces';
 import { PluginMetadata } from '../metadata';
 
 export enum PluginKind {

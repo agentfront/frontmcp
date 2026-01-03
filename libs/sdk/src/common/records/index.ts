@@ -1,3 +1,14 @@
+// Re-export DI provider record types for backwards compatibility
+export {
+  ProviderKind,
+  ProviderRecord,
+  ProviderClassTokenRecord,
+  ProviderClassRecord,
+  ProviderValueRecord,
+  ProviderFactoryRecord,
+  ProviderInjectedRecord,
+} from '@frontmcp/di';
+
 export * from './scope.record';
 export * from './flow.record';
 export * from './hook.record';

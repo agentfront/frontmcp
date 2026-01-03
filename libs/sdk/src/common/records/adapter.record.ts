@@ -1,5 +1,5 @@
+import { ClassType, FactoryType, Type, ValueType } from '@frontmcp/di';
 import { AdapterMetadata } from '../metadata';
-import { ClassType, FactoryType, Type, ValueType } from '../interfaces';
 
 export enum AdapterKind {
   CLASS_TOKEN = 'CLASS_TOKEN',
@@ -10,7 +10,7 @@ export enum AdapterKind {
 
 export interface AdapterClassTokenRecord {
   kind: AdapterKind.CLASS_TOKEN;
-  provide: Type,
+  provide: Type;
   metadata: AdapterMetadata;
 }
 
@@ -29,9 +29,4 @@ export interface AdapterFactoryRecord extends FactoryType<any, any> {
   metadata: AdapterMetadata;
 }
 
-export type AdapterRecord =
-  | AdapterClassTokenRecord
-  | AdapterClassRecord
-  | AdapterValueRecord
-  | AdapterFactoryRecord
-
+export type AdapterRecord = AdapterClassTokenRecord | AdapterClassRecord | AdapterValueRecord | AdapterFactoryRecord;

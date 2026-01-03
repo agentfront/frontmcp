@@ -1,7 +1,7 @@
 // file: libs/sdk/src/agent/agent.registry.ts
 
-import { EntryLineage, EntryOwnerRef, Token, AgentEntry, AgentRecord, AgentType } from '../common';
-import { tokenName } from '../utils';
+import { Token, tokenName } from '@frontmcp/di';
+import { EntryLineage, EntryOwnerRef, AgentEntry, AgentRecord, AgentType } from '../common';
 import { AgentChangeEvent, AgentEmitter } from './agent.events';
 import ProviderRegistry from '../provider/provider.registry';
 import { normalizeAgent, agentDiscoveryDeps } from './agent.utils';

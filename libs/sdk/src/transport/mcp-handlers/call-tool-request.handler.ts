@@ -20,9 +20,8 @@ export default function callToolRequestHandler({
       logger.verbose(`tools/call: ${toolName}`);
 
       try {
-        // All tools (including agents as use-agent:*) go through the standard tools:call-tool flow.
-        // Agents are registered as standard ToolInstances in the ToolRegistry, enabling
-        // plugin metadata extensions (cache, codecall) and unified hook/plugin execution.
+        // All tool calls go through the standard tool flow
+        // Agents are registered as regular tools with custom execute functions
         return await scope.runFlowForOutput('tools:call-tool', { request, ctx });
       } catch (e) {
         // FlowControl is a control flow mechanism, not an error - handle silently

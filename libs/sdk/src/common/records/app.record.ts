@@ -1,4 +1,4 @@
-import { Token, Type } from '../interfaces';
+import { Token, Type } from '@frontmcp/di';
 import { LocalAppMetadata, RemoteAppMetadata } from '../metadata';
 import { AppEntry } from '../entries';
 
@@ -10,16 +10,14 @@ export enum AppKind {
 export type AppClassToken = {
   kind: AppKind.LOCAL_CLASS;
   provide: Type<AppEntry>;
-  metadata: LocalAppMetadata
+  metadata: LocalAppMetadata;
 };
 
 export type AppValue = {
   kind: AppKind.REMOTE_VALUE;
   provide: Token<AppEntry>;
   useValue: AppEntry;
-  metadata: RemoteAppMetadata
+  metadata: RemoteAppMetadata;
 };
 
-export type AppRecord =
-  | AppClassToken
-  | AppValue
+export type AppRecord = AppClassToken | AppValue;

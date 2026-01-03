@@ -1,4 +1,4 @@
-import {Token, Type} from '../interfaces';
+import { Token, Type } from '@frontmcp/di';
 import { AppScopeMetadata, MultiAppScopeMetadata } from '../metadata';
 import { ScopeEntry } from '../entries';
 
@@ -19,7 +19,4 @@ export type MultiAppScope = {
   metadata: MultiAppScopeMetadata;
 };
 
-
-export type ScopeRecord =
-  | SplitByAppScope
-  | MultiAppScope
+export type ScopeRecord = SplitByAppScope | MultiAppScope;

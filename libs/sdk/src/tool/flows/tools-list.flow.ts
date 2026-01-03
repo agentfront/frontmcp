@@ -139,10 +139,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         tools.push({ appName: tool.owner.id, tool });
       }
 
-      // Note: Agent tools (use-agent:*) are now registered as standard ToolInstances
-      // in the ToolRegistry by AgentRegistry.registerAgentToolsInParentScope().
-      // They are included automatically via scope.tools.getTools() above.
-
       this.logger.info(`findTools: total tools collected=${tools.length}`);
       if (tools.length === 0) {
         this.logger.warn('findTools: no tools found across apps');

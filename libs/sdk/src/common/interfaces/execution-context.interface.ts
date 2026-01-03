@@ -1,7 +1,7 @@
 // file: libs/sdk/src/common/interfaces/execution-context.interface.ts
 
 import { randomUUID } from 'crypto';
-import { Token } from './base.interface';
+import { Token } from '@frontmcp/di';
 import { ProviderRegistryInterface } from './internal';
 import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';

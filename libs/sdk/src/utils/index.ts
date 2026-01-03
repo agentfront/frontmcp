@@ -1,6 +1,20 @@
 // file: libs/sdk/src/utils/index.ts
 // Centralized exports for SDK utilities
 
+// Re-export DI utilities for backwards compatibility
+export {
+  tokenName,
+  isClass,
+  isPromise,
+  depsOfClass,
+  depsOfFunc,
+  getAsyncWithTokens,
+  readWithParamTypes,
+  getMetadata,
+  setMetadata,
+  hasAsyncWith,
+} from '@frontmcp/di';
+
 // Naming and case conversion utilities
 export {
   NameCase,
@@ -30,9 +44,6 @@ export { isValidMcpUri, extractUriScheme, isValidMcpUriTemplate } from './uri-va
 // URI template parsing and matching utilities
 export { parseUriTemplate, matchUriTemplate, expandUriTemplate } from './uri-template.utils';
 
-// Token utilities
-export { tokenName, isClass, isPromise, depsOfClass, depsOfFunc } from './token.utils';
-
 // Content utilities
 export {
   sanitizeToJson,
@@ -46,6 +57,3 @@ export {
 
 // String utilities
 export { idFromString } from './string.utils';
-
-// Metadata utilities
-export { getMetadata, setMetadata, hasAsyncWith } from './metadata.utils';

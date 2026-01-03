@@ -1,12 +1,12 @@
 // auth/auth.registry.ts
 import 'reflect-metadata';
+import { Token, tokenName } from '@frontmcp/di';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import ProviderRegistry from '../provider/provider.registry';
 import {
   FrontMcpAuth,
   FrontMcpLogger,
   AuthProviderType,
-  Token,
   AuthProviderEntry,
   AuthRegistryInterface,
   AuthProviderRecord,
@@ -25,7 +25,6 @@ import {
   AppType,
 } from '../common';
 import { authDiscoveryDeps, normalizeAuth } from './auth.utils';
-import { tokenName } from '../utils';
 import { RemotePrimaryAuth } from './instances/instance.remote-primary-auth';
 import { LocalPrimaryAuth } from './instances/instance.local-primary-auth';
 import { detectAuthProviders, AuthProviderDetectionResult, AppAuthInfo } from './detection';

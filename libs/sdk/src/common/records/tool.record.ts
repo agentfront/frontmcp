@@ -1,4 +1,5 @@
-import { ToolContext, Type } from '../interfaces';
+import { Type } from '@frontmcp/di';
+import { ToolContext } from '../interfaces';
 import { ToolMetadata } from '../metadata';
 
 export enum ToolKind {

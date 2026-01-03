@@ -1,3 +1,4 @@
+import { Token } from '@frontmcp/di';
 import {
   ScopeEntry,
   FlowEntry,
@@ -14,7 +15,6 @@ import {
   EntryOwnerRef,
   HookEntry,
 } from '../../entries';
-import { Token } from '../base.interface';
 import { FrontMcpAuth } from './primary-auth-provider.interface';
 import { FlowName } from '../../metadata';
 import { FlowCtxOf, FlowInputOf, FlowStagesOf } from '../flow.interface';

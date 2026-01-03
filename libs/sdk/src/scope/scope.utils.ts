@@ -1,16 +1,15 @@
+import { Token, depsOfClass } from '@frontmcp/di';
 import {
   AppScopeMetadata,
   AppType,
   FrontMcpMultiAppConfig,
   FrontMcpSplitByAppConfig,
   MultiAppScopeMetadata,
-  Token,
   ScopeRecord,
   ScopeKind,
 } from '../common';
-import {normalizeApp} from '../app/app.utils';
-import {depsOfClass} from '../utils/token.utils';
-import {Scope} from './scope.instance';
+import { normalizeApp } from '../app/app.utils';
+import { Scope } from './scope.instance';
 
 /**
  * Normalize a raw scope metadata list into useful maps/sets.
@@ -19,7 +18,10 @@ import {Scope} from './scope.instance';
  * - graph: initialized adjacency map (empty sets)
  */
 
-export function normalizeAppScope(appItem: AppType, metadata: FrontMcpMultiAppConfig | FrontMcpSplitByAppConfig): ScopeRecord {
+export function normalizeAppScope(
+  appItem: AppType,
+  metadata: FrontMcpMultiAppConfig | FrontMcpSplitByAppConfig,
+): ScopeRecord {
   const app = normalizeApp(appItem);
   const appMetadata = app.metadata;
 
@@ -30,14 +32,14 @@ export function normalizeAppScope(appItem: AppType, metadata: FrontMcpMultiAppCo
   if (metadata.splitByApp === true && appMetadata.standalone === 'includeInParent') {
     throw new Error('standalone: includeInParent is not supported for splitByApp scope');
   }
-  const scopeId = appMetadata.id ?? appMetadata.name
-  const token:Token<AppType> = Symbol(scopeId)
+  const scopeId = appMetadata.id ?? appMetadata.name;
+  const token: Token<AppType> = Symbol(scopeId);
   return {
     kind: ScopeKind.SPLIT_BY_APP,
     provide: token,
     metadata: {
       ...metadata,
-      id:scopeId,
+      id: scopeId,
       apps: [appItem],
       auth: appMetadata.auth,
     } as AppScopeMetadata,
@@ -64,6 +66,6 @@ export function scopeDiscoveryDeps(rec: ScopeRecord): Token[] {
     case ScopeKind.MULTI_APP:
       return depsOfClass(rec.provide, 'discovery').slice(1);
     case ScopeKind.SPLIT_BY_APP:
-      return [] // no deps for splitByApp scope;
+      return []; // no deps for splitByApp scope;
   }
 }

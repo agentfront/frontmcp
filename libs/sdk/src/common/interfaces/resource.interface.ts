@@ -1,9 +1,7 @@
 // file: libs/sdk/src/common/interfaces/resource.interface.ts
 
+import { Type } from '@frontmcp/di';
 import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
-import { FuncType, Type } from './base.interface';
-import { ProviderRegistryInterface } from './internal';
-import { FrontMcpLogger } from './logger.interface';
 import { FlowControl } from './flow.interface';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
@@ -18,13 +16,23 @@ export interface ResourceInterface<Params extends Record<string, string> = Recor
 }
 
 /**
+ * Function-style resource type.
+ * This represents resources created via resource() or resourceTemplate() builders.
+ * The function returns a handler that will be invoked for the resource.
+ */
+export type FunctionResourceType = (...args: any[]) => any;
+
+/**
  * Type for resource class or function.
+ * Supports both class-based resources (implementing ResourceInterface)
+ * and function-style resources (created via resource/resourceTemplate builders).
+ *
  * @template Params - Type for URI template parameters
  * @template Out - Type for the resource output
  */
 export type ResourceType<Params extends Record<string, string> = Record<string, string>, Out = unknown> =
   | Type<ResourceInterface<Params, Out>>
-  | FuncType<ResourceInterface<Params, Out>>;
+  | FunctionResourceType;
 
 type HistoryEntry<T> = {
   at: number;

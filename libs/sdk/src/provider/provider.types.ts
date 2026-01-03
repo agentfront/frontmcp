@@ -1,4 +1,4 @@
-import { Token } from '../common';
+import { Token } from '@frontmcp/di';
 
 /**
  * Provider instance views for different scopes.

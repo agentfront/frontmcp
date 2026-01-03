@@ -1,7 +1,6 @@
-import { FrontMcpFlowHookTokens, HookKind, HookMetadata, HookRecord, Token } from '../common';
+import { Token, getMetadata, isClass } from '@frontmcp/di';
+import { FrontMcpFlowHookTokens, HookKind, HookMetadata, HookRecord } from '../common';
 import { resolvePendingTC39HooksForClass } from '../common/decorators/hook.decorator';
-import { getMetadata } from '../utils/metadata.utils';
-import { isClass } from '../utils/token.utils';
 
 export function collectHook(cls: Token): HookMetadata[] {
   return (getMetadata(FrontMcpFlowHookTokens.hooks, cls) ?? []) as HookMetadata[];

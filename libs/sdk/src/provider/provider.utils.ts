@@ -1,14 +1,5 @@
-import {
-  ProviderMetadata,
-  FrontMcpProviderTokens,
-  Type,
-  Token,
-  ProviderRecord,
-  ProviderKind,
-} from '../common';
-import { isClass, tokenName } from '../utils/token.utils';
-import { getMetadata } from '../utils/metadata.utils';
-
+import { Type, Token, ProviderKind, isClass, tokenName, getMetadata } from '@frontmcp/di';
+import { ProviderMetadata, FrontMcpProviderTokens, ProviderRecord } from '../common';
 
 function collectProviderMetadata(cls: Type): ProviderMetadata {
   return Object.entries(FrontMcpProviderTokens).reduce((metadata, [key, token]) => {
@@ -34,9 +25,7 @@ export function normalizeProvider(item: any): ProviderRecord {
 
     if (useClass) {
       if (!isClass(useClass)) {
-        throw new Error(
-          `'useClass' on provider '${tokenName(provide)}' must be a class.`,
-        );
+        throw new Error(`'useClass' on provider '${tokenName(provide)}' must be a class.`);
       }
       return {
         kind: ProviderKind.CLASS,
@@ -48,9 +37,7 @@ export function normalizeProvider(item: any): ProviderRecord {
 
     if (useFactory) {
       if (typeof useFactory !== 'function') {
-        throw new Error(
-          `'useFactory' on provider '${tokenName(provide)}' must be a function.`,
-        );
+        throw new Error(`'useFactory' on provider '${tokenName(provide)}' must be a function.`);
       }
       const inj = typeof inject === 'function' ? inject : () => [] as const;
       return {
@@ -73,11 +60,8 @@ export function normalizeProvider(item: any): ProviderRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(
-    `Invalid provider '${name}'. Expected a class or a provider object.`,
-  );
+  throw new Error(`Invalid provider '${name}'. Expected a class or a provider object.`);
 }
-
 
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.
