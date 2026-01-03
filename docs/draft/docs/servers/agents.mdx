@@ -14,13 +14,13 @@ Agents build on the MCP Tools specification—each agent is automatically expose
 
 In the Model Context Protocol, agents serve a distinct purpose from tools, resources, and prompts:
 
-| Aspect           | Agent                                 | Tool                     | Resource         | Prompt                         |
-| ---------------- | ------------------------------------- | ------------------------ | ---------------- | ------------------------------ |
-| **Purpose**      | Autonomous AI execution               | Execute actions          | Provide data     | Provide templated instructions |
-| **Has LLM**      | Yes (own LLM provider)                | No                       | No               | No                             |
-| **Direction**    | Model or user triggers execution      | Model triggers execution | Model pulls data | Model uses messages            |
-| **Side effects** | Yes (LLM calls, tool execution)       | Yes (mutations, API calls)| No (read-only)  | No (message generation)        |
-| **Use case**     | Complex reasoning, multi-step tasks   | Actions, integrations    | Context loading  | Conversation templates         |
+| Aspect           | Agent                               | Tool                       | Resource         | Prompt                         |
+| ---------------- | ----------------------------------- | -------------------------- | ---------------- | ------------------------------ |
+| **Purpose**      | Autonomous AI execution             | Execute actions            | Provide data     | Provide templated instructions |
+| **Has LLM**      | Yes (own LLM provider)              | No                         | No               | No                             |
+| **Direction**    | Model or user triggers execution    | Model triggers execution   | Model pulls data | Model uses messages            |
+| **Side effects** | Yes (LLM calls, tool execution)     | Yes (mutations, API calls) | No (read-only)   | No (message generation)        |
+| **Use case**     | Complex reasoning, multi-step tasks | Actions, integrations      | Context loading  | Conversation templates         |
 
 Agents are ideal for:
 
@@ -36,6 +36,7 @@ Agents are ideal for:
 ### Class Style (Default Behavior)
 
 The simplest agent requires **no `execute()` method**. The default behavior automatically:
+
 - Runs the execution loop with the LLM
 - Connects tools and executes them as needed
 - Sends notifications on tool calls and output
@@ -133,6 +134,7 @@ class MyApp {}
 ```
 
 Each agent is automatically exposed as a tool:
+
 - `invoke_research-agent`
 - `invoke_calculator-agent`
 - `invoke_writer-agent`
@@ -361,6 +363,7 @@ class LongRunningAgent extends AgentContext { ... }
 ### Tool Execution Mode
 
 By default, agents execute tools through the full `call-tool` flow, which includes:
+
 - Plugin hooks (caching, rate limiting, audit logging)
 - Authorization checks
 - Tool middleware and transformations

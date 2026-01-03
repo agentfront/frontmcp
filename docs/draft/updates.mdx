@@ -5,17 +5,46 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-03" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
+    ### Features
     🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
 
     🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
 
     🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+
+    🧩 **Agent-tool orchestration** – Agents now participate in the standard tool lifecycle, surface the same plugin hooks, and register as first-class tools so you can mix agents and tools without custom wiring.
+
+    📊 **Dashboard plugin** – Observe your server graph, tool/resource lists, and live SSE stream through the built-in DashboardApp or the configurable DashboardPlugin.
+
+    🧱 **UI metadata compatibility** – Tool metadata now emits `ui/*` keys so Claude, OpenAI, and other MCP clients render widgets without relying on deprecated `frontmcp/*` fallbacks.
+
+    ### Docs
+    📚 **Docs** – Added guides for the Dashboard plugin, dependency injection primitives, and coverage-first testing so teams can adopt the new tooling with confidence.
+
+    ### Build/CI
+    ⚙️ **Coverage-first CI** – `test:unit:coverage`, `test:e2e:coverage`, `coverage:merge`, and `coverage:check` keep unit and E2E reports in sync before deployments.
+
+  </Card>
+</Update>
+
+<Update label="@frontmcp/di draft" description="2026-01-03" tags={["Independent"]}>
+  <Card
+    title="@frontmcp/di draft"
+    href="/docs"
+    cta="Read the release notes"
+  >
+    ### Features
+    🚀 **Token factories** – `createTokenFactory` generates unique symbols so your plugins and tools never clash with other packages.
+
+    🧱 **Hierarchical registries** – `DiContainer` and `IndexedRegistry` provide adoption hooks, change events, and fast lookups for scoped services.
+
+    🔄 **Scope-aware wiring** – `ProviderScope`, `Reference`, and factory providers give you reproducible GLOBAL/CONTEXT lifetimes that match FrontMCP’s runtime.
 
   </Card>
 </Update>
