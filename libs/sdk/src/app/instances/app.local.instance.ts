@@ -5,7 +5,7 @@ import ToolRegistry from '../../tool/tool.registry';
 import ResourceRegistry from '../../resource/resource.registry';
 import PromptRegistry from '../../prompt/prompt.registry';
 import AdapterRegistry from '../../adapter/adapter.regsitry';
-import PluginRegistry from '../../plugin/plugin.registry';
+import PluginRegistry, { PluginScopeInfo } from '../../plugin/plugin.registry';
 import AgentRegistry from '../../agent/agent.registry';
 
 export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
@@ -39,10 +39,16 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
       ref: this.token,
     };
 
-    // When app is not standalone, pass parent scope for hook registration
-    // This allows HTTP hooks from app plugins to be triggered at the gateway level
-    const hookScope = this.metadata.standalone === false ? this.scopeProviders.getActiveScope() : undefined;
-    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner, hookScope);
+    // Build scope info for plugin hook registration
+    // This determines where plugin hooks are registered based on plugin's scope setting:
+    // - scope='app' (default): hooks register to app's own scope
+    // - scope='server': hooks register to parent scope (gateway-level)
+    const scopeInfo: PluginScopeInfo = {
+      ownScope: this.appProviders.getActiveScope(),
+      parentScope: this.metadata.standalone === false ? this.scopeProviders.getActiveScope() : undefined,
+      isStandaloneApp: this.metadata.standalone === true,
+    };
+    this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner, scopeInfo);
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready
 
     this.appAdapters = new AdapterRegistry(this.appProviders, this.metadata.adapters ?? []);

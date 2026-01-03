@@ -3,11 +3,13 @@
  */
 
 import 'reflect-metadata';
-import PluginRegistry from '../plugin.registry';
+import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
 import { PluginInterface } from '../../common/interfaces';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
 import { createClassProvider, createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
-import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
+import { InvalidPluginScopeError } from '../../errors';
+import { Scope } from '../../scope';
 
 describe('PluginRegistry', () => {
   describe('Basic Registration', () => {
@@ -485,6 +487,648 @@ describe('PluginRegistry', () => {
 
       expect(plugin).toBeInstanceOf(DynamicPlugin);
       expect(typeof plugin.get).toBe('function');
+    });
+  });
+
+  describe('Plugin Scope', () => {
+    it('should default to app scope when no scope is specified', async () => {
+      @FrontMcpPlugin({
+        name: 'DefaultScopePlugin',
+        description: 'Plugin without explicit scope',
+      })
+      class DefaultScopePlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [DefaultScopePlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeInstanceOf(DefaultScopePlugin);
+    });
+
+    it('should register plugin with explicit app scope', async () => {
+      @FrontMcpPlugin({
+        name: 'AppScopePlugin',
+        description: 'Plugin with app scope',
+        scope: 'app',
+      })
+      class AppScopePlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [AppScopePlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeInstanceOf(AppScopePlugin);
+    });
+
+    it('should register plugin with server scope in non-standalone app', async () => {
+      @FrontMcpPlugin({
+        name: 'ServerScopePlugin',
+        description: 'Plugin with server scope',
+        scope: 'server',
+      })
+      class ServerScopePlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const parentScope = createMockScope();
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [ServerScopePlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeInstanceOf(ServerScopePlugin);
+    });
+
+    it('should throw InvalidPluginScopeError when server scope plugin is used in standalone app', async () => {
+      @FrontMcpPlugin({
+        name: 'ServerScopePlugin',
+        description: 'Plugin with server scope',
+        scope: 'server',
+      })
+      class ServerScopePlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true, // Standalone app
+      };
+
+      const registry = new PluginRegistry(providers, [ServerScopePlugin], undefined, scopeInfo);
+
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+      await expect(registry.ready).rejects.toThrow(/scope='server'/);
+      await expect(registry.ready).rejects.toThrow(/standalone app/);
+    });
+
+    it('should allow app scope plugin in standalone app', async () => {
+      @FrontMcpPlugin({
+        name: 'AppScopePlugin',
+        description: 'Plugin with app scope',
+        scope: 'app',
+      })
+      class AppScopePlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true, // Standalone app
+      };
+
+      const registry = new PluginRegistry(providers, [AppScopePlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeInstanceOf(AppScopePlugin);
+    });
+
+    it('should register mixed scope plugins correctly', async () => {
+      @FrontMcpPlugin({
+        name: 'AppPlugin',
+        description: 'App scope plugin',
+        scope: 'app',
+      })
+      class AppPlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'ServerPlugin',
+        description: 'Server scope plugin',
+        scope: 'server',
+      })
+      class ServerPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const parentScope = createMockScope();
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [AppPlugin, ServerPlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(2);
+      expect(plugins[0]).toBeInstanceOf(AppPlugin);
+      expect(plugins[1]).toBeInstanceOf(ServerPlugin);
+    });
+
+    it('should work without scopeInfo (backward compatibility)', async () => {
+      @FrontMcpPlugin({
+        name: 'LegacyPlugin',
+        description: 'Plugin without scopeInfo',
+      })
+      class LegacyPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+
+      // No scopeInfo passed - should use default behavior
+      const registry = new PluginRegistry(providers, [LegacyPlugin]);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+      expect(plugins[0]).toBeInstanceOf(LegacyPlugin);
+    });
+
+    it('should validate server scope plugin with object-based registration', async () => {
+      const PLUGIN_TOKEN = Symbol('SERVER_PLUGIN');
+
+      class ServerPlugin implements PluginInterface {
+        get: any;
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true, // Standalone app
+      };
+
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useValue: new ServerPlugin(),
+            name: 'ServerPlugin',
+            scope: 'server',
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+    });
+
+    it('should validate server scope plugin with useClass registration', async () => {
+      const PLUGIN_TOKEN = Symbol('SERVER_PLUGIN');
+
+      @FrontMcpPlugin({
+        name: 'DecoratedServerPlugin',
+        scope: 'app', // Decorator says app
+      })
+      class DecoratedServerPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      // Inline config overrides decorator - sets scope to 'server'
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useClass: DecoratedServerPlugin,
+            name: 'ServerPlugin',
+            scope: 'server', // Override decorator's 'app' scope
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+    });
+
+    it('should use decorator scope when inline scope is not specified for useClass', async () => {
+      const PLUGIN_TOKEN = Symbol('APP_PLUGIN');
+
+      @FrontMcpPlugin({
+        name: 'DecoratedAppPlugin',
+        scope: 'app',
+      })
+      class DecoratedAppPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      // No scope in inline config - should use decorator's 'app' scope
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useClass: DecoratedAppPlugin,
+            name: 'AppPlugin',
+            // scope not specified - should inherit from decorator
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await registry.ready;
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+  });
+
+  describe('Nested Plugins Scope Inheritance', () => {
+    it('should propagate scopeInfo to nested plugins', async () => {
+      @FrontMcpPlugin({
+        name: 'NestedServerPlugin',
+        scope: 'server',
+      })
+      class NestedServerPlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'ParentPlugin',
+        plugins: [NestedServerPlugin],
+      })
+      class ParentPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true, // Standalone app - nested server-scoped plugin should fail
+      };
+
+      const registry = new PluginRegistry(providers, [ParentPlugin], undefined, scopeInfo);
+
+      // Should fail because nested plugin has scope='server' in a standalone app
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+      await expect(registry.ready).rejects.toThrow(/NestedServerPlugin/);
+    });
+
+    it('should allow nested app-scoped plugins in standalone app', async () => {
+      @FrontMcpPlugin({
+        name: 'NestedAppPlugin',
+        scope: 'app',
+      })
+      class NestedAppPlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'ParentPlugin',
+        plugins: [NestedAppPlugin],
+      })
+      class ParentPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      const registry = new PluginRegistry(providers, [ParentPlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+
+    it('should allow nested server-scoped plugins in non-standalone app', async () => {
+      @FrontMcpPlugin({
+        name: 'NestedServerPlugin',
+        scope: 'server',
+      })
+      class NestedServerPlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'ParentPlugin',
+        plugins: [NestedServerPlugin],
+      })
+      class ParentPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const parentScope = createMockScope();
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [ParentPlugin], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+
+    it('should validate deeply nested plugins with server scope', async () => {
+      @FrontMcpPlugin({
+        name: 'DeeplyNestedServerPlugin',
+        scope: 'server',
+      })
+      class DeeplyNestedServerPlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'MiddlePlugin',
+        plugins: [DeeplyNestedServerPlugin],
+      })
+      class MiddlePlugin implements PluginInterface {}
+
+      @FrontMcpPlugin({
+        name: 'TopPlugin',
+        plugins: [MiddlePlugin],
+      })
+      class TopPlugin implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      const registry = new PluginRegistry(providers, [TopPlugin], undefined, scopeInfo);
+
+      // Should fail because deeply nested plugin has scope='server' in standalone app
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+      await expect(registry.ready).rejects.toThrow(/DeeplyNestedServerPlugin/);
+    });
+  });
+
+  describe('Scope Fallback Behavior', () => {
+    it('should register hooks to own scope when scope is app', async () => {
+      @FrontMcpPlugin({
+        name: 'AppScopePluginWithHooks',
+        scope: 'app',
+      })
+      class AppScopePluginWithHooks implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const parentScope = createMockScope();
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [AppScopePluginWithHooks], undefined, scopeInfo);
+      await registry.ready;
+
+      // Hooks should be registered to own scope, not parent scope
+      expect(ownScope.hooks.registerHooks).not.toHaveBeenCalled(); // No hooks in this plugin
+    });
+
+    it('should register hooks to parent scope when scope is server and parentScope exists', async () => {
+      @FrontMcpPlugin({
+        name: 'ServerScopePluginWithHooks',
+        scope: 'server',
+      })
+      class ServerScopePluginWithHooks implements PluginInterface {}
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const parentScope = createMockScope();
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope,
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [ServerScopePluginWithHooks], undefined, scopeInfo);
+      await registry.ready;
+
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+  });
+
+  describe('Metadata Merging Edge Cases', () => {
+    it('should prefer inline scope over decorator scope for useValue', async () => {
+      const PLUGIN_TOKEN = Symbol('PLUGIN');
+
+      @FrontMcpPlugin({
+        name: 'DecoratorAppPlugin',
+        scope: 'app',
+      })
+      class DecoratorAppPlugin implements PluginInterface {
+        get: any;
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      // Inline scope='server' should override decorator's scope='app'
+      // This should fail in standalone app
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useValue: new DecoratorAppPlugin(),
+            name: 'OverriddenPlugin',
+            scope: 'server',
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+    });
+
+    it('should use decorator scope when inline metadata is empty for useValue', async () => {
+      const PLUGIN_TOKEN = Symbol('PLUGIN');
+
+      @FrontMcpPlugin({
+        name: 'DecoratorAppPlugin',
+        scope: 'app',
+      })
+      class DecoratorAppPlugin implements PluginInterface {
+        get: any;
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      // No inline scope - should use decorator's 'app' scope
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useValue: new DecoratorAppPlugin(),
+            name: 'InheritedScopePlugin',
+            // scope not specified
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await registry.ready;
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+
+    it('should default to app scope when no scope is defined anywhere', async () => {
+      const PLUGIN_TOKEN = Symbol('PLUGIN');
+
+      // No @FrontMcpPlugin decorator
+      class PlainPlugin implements PluginInterface {
+        get: any;
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      // No scope in decorator or inline - should default to 'app'
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            useValue: new PlainPlugin(),
+            name: 'NoScopePlugin',
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      // Should succeed because default scope is 'app'
+      await registry.ready;
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
+    });
+  });
+
+  describe('Factory Plugin Edge Cases', () => {
+    it('should use inline scope for factory plugins', async () => {
+      const PLUGIN_TOKEN = Symbol('FACTORY_PLUGIN');
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            inject: () => [] as const,
+            useFactory: () => ({ name: 'FactoryPlugin' }),
+            name: 'FactoryPlugin',
+            scope: 'server', // Factory plugin with server scope
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await expect(registry.ready).rejects.toThrow(InvalidPluginScopeError);
+    });
+
+    it('should default to app scope for factory plugins without scope', async () => {
+      const PLUGIN_TOKEN = Symbol('FACTORY_PLUGIN');
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined,
+        isStandaloneApp: true,
+      };
+
+      const registry = new PluginRegistry(
+        providers,
+        [
+          {
+            provide: PLUGIN_TOKEN,
+            inject: () => [] as const,
+            useFactory: () => ({ name: 'FactoryPlugin' }),
+            name: 'FactoryPlugin',
+            // No scope - should default to 'app'
+          },
+        ],
+        undefined,
+        scopeInfo,
+      );
+
+      await registry.ready;
+      const plugins = registry.getPlugins();
+      expect(plugins).toHaveLength(1);
     });
   });
 });

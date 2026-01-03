@@ -27,11 +27,15 @@ export function normalizePlugin(item: PluginType): PluginRecord {
       if (!isClass(useClass)) {
         throw new Error(`'useClass' on plugin '${tokenName(provide)}' must be a class.`);
       }
+      // Merge inline metadata with decorator metadata (inline takes precedence)
+      // This ensures scope and other fields from inline config override decorators
+      const decoratorMetadata = collectPluginMetadata(useClass);
+      const mergedMetadata = { ...decoratorMetadata, ...metadata };
       return {
         kind: PluginKind.CLASS,
         provide,
         useClass,
-        metadata,
+        metadata: mergedMetadata,
       };
     }
 
@@ -53,12 +57,14 @@ export function normalizePlugin(item: PluginType): PluginRecord {
       if (useValue === undefined || useValue === null) {
         throw new Error(`'useValue' on plugin '${tokenName(provide)}' must be defined.`);
       }
-      const metadata = collectPluginMetadata(useValue.constructor);
+      // Merge inline metadata with decorator metadata (inline takes precedence)
+      const decoratorMetadata = collectPluginMetadata(useValue.constructor);
+      const mergedMetadata = { ...decoratorMetadata, ...metadata };
       return {
         kind: PluginKind.VALUE,
         provide,
         useValue,
-        metadata,
+        metadata: mergedMetadata,
         providers: (item.providers ?? []) as any,
       };
     }
