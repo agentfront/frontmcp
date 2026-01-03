@@ -2,7 +2,6 @@ import { tokenFactory } from './base.tokens';
 import { RawMetadataShape } from '../types';
 import { PluginMetadata } from '../metadata';
 
-
 export const FrontMcpPluginTokens = {
   type: tokenFactory.type('plugin'),
   id: tokenFactory.meta('id'),
@@ -15,5 +14,5 @@ export const FrontMcpPluginTokens = {
   tools: tokenFactory.meta('tools'),
   resources: tokenFactory.meta('resources'),
   prompts: tokenFactory.meta('prompts'),
+  scope: tokenFactory.meta('scope'),
 } as const satisfies RawMetadataShape<PluginMetadata>;
-

@@ -1,15 +1,13 @@
 import { RawZodShape } from '../types';
 import { z } from 'zod';
-import {
-  ProviderType,
-  PluginType,
-  AdapterType,
-  ToolType, ResourceType, PromptType,
-} from '../interfaces';
+import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
-  annotatedFrontMcpPluginsSchema, annotatedFrontMcpPromptsSchema,
-  annotatedFrontMcpProvidersSchema, annotatedFrontMcpResourcesSchema, annotatedFrontMcpToolsSchema,
+  annotatedFrontMcpPluginsSchema,
+  annotatedFrontMcpPromptsSchema,
+  annotatedFrontMcpProvidersSchema,
+  annotatedFrontMcpResourcesSchema,
+  annotatedFrontMcpToolsSchema,
 } from '../schemas';
 
 /**
@@ -77,17 +75,28 @@ export interface PluginMetadata {
 
   prompts?: PromptType[];
 
+  /**
+   * Determines where plugin hooks are registered:
+   * - 'app' (default): Hooks fire only for requests to this app
+   * - 'server': Hooks fire at gateway level for all apps
+   *
+   * Note: Plugins with scope='server' cannot be used in standalone apps.
+   */
+  scope?: 'app' | 'server';
 }
 
-export const frontMcpPluginMetadataSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  providers: z.array(annotatedFrontMcpProvidersSchema).optional(),
-  exports: z.array(annotatedFrontMcpProvidersSchema).optional(),
-  plugins: z.array(annotatedFrontMcpPluginsSchema).optional(),
-  adapters: z.array(annotatedFrontMcpAdaptersSchema).optional(),
-  tools: z.array(annotatedFrontMcpToolsSchema).optional(),
-  resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
-  prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
-} satisfies RawZodShape<PluginMetadata>).passthrough();
+export const frontMcpPluginMetadataSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    providers: z.array(annotatedFrontMcpProvidersSchema).optional(),
+    exports: z.array(annotatedFrontMcpProvidersSchema).optional(),
+    plugins: z.array(annotatedFrontMcpPluginsSchema).optional(),
+    adapters: z.array(annotatedFrontMcpAdaptersSchema).optional(),
+    tools: z.array(annotatedFrontMcpToolsSchema).optional(),
+    resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
+    prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
+    scope: z.enum(['app', 'server']).optional().default('app'),
+  } satisfies RawZodShape<PluginMetadata>)
+  .passthrough();

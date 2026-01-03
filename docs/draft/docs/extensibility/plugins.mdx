@@ -332,6 +332,82 @@ Tools can then use this metadata:
 })
 ```
 
+## Plugin Scope
+
+By default, plugins operate at the **app scope** - their hooks only fire for requests to that specific app.
+For cross-app functionality, you can use **server scope**.
+
+### App Scope (Default)
+
+Hooks fire only for requests to the app where the plugin is registered:
+
+```ts
+@Plugin({
+  name: 'my-plugin',
+  scope: 'app', // Default - can be omitted
+})
+export default class MyPlugin {
+  @ToolHook.Will('execute')
+  async beforeTool(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Only fires for tools in this app
+  }
+}
+```
+
+### Server Scope
+
+Hooks fire at the gateway level for **all apps** in the server:
+
+```ts
+@Plugin({
+  name: 'global-logger',
+  scope: 'server', // Hooks fire for all apps
+})
+export default class GlobalLoggerPlugin {
+  @ToolHook.Did('execute')
+  async logToolCall(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Fires for every tool call across all apps
+    console.log(`Tool called: ${ctx.state.tool?.fullName}`);
+  }
+}
+```
+
+<Warning>
+  Server-scoped plugins can only be used in non-standalone apps (`standalone: false`).
+  Using `scope: 'server'` in a standalone app will throw an `InvalidPluginScopeError`.
+</Warning>
+
+### When to Use Each Scope
+
+| Use Case                 | Scope    | Example                            |
+| ------------------------ | -------- | ---------------------------------- |
+| App-specific caching     | `app`    | Cache responses for one app only   |
+| Per-app rate limiting    | `app`    | Different limits per app           |
+| Global audit logging     | `server` | Log all tool calls across apps     |
+| Cross-app orchestration  | `server` | Access tools from multiple apps    |
+| Authentication gateway   | `server` | Validate tokens before any app     |
+
+### Accessing Other Apps (Server Scope)
+
+Server-scoped plugins can access other apps via `scope.apps`:
+
+```ts
+@Plugin({
+  name: 'cross-app-plugin',
+  scope: 'server',
+})
+export default class CrossAppPlugin {
+  @ToolHook.Will('execute')
+  async checkOtherApps(ctx: FlowCtxOf<'tools:call-tool'>) {
+    // Access all registered apps
+    const apps = ctx.scope.apps.getAll();
+
+    // Get a specific app by ID
+    const otherApp = ctx.scope.apps.get('other-app-id');
+  }
+}
+```
+
 ### Composition
 
 Plugins compose **depth-first** at the app level. Later plugins can depend on providers exported by earlier ones.

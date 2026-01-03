@@ -32,6 +32,7 @@ import SetLevelFlow from '../logging/flows/set-level.flow';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
+import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -47,6 +48,7 @@ export class Scope extends ScopeEntry {
   private scopeResources: ResourceRegistry;
   private scopePrompts: PromptRegistry;
   private scopeAgents: AgentRegistry;
+  private scopePlugins?: PluginRegistry;
 
   transportService: TransportService; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
@@ -96,6 +98,20 @@ export class Scope extends ScopeEntry {
 
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
     await this.scopeApps.ready;
+
+    // Initialize server-level plugins (from @FrontMcp decorator)
+    // Each scope gets its own instance of these plugins
+    const serverPlugins = this.metadata.plugins ?? [];
+    if (serverPlugins.length > 0) {
+      const serverPluginScopeInfo: PluginScopeInfo = {
+        ownScope: this,
+        parentScope: undefined, // Server plugins are already at top level
+        isStandaloneApp: false,
+      };
+
+      this.scopePlugins = new PluginRegistry(this.scopeProviders, serverPlugins, scopeRef, serverPluginScopeInfo);
+      await this.scopePlugins.ready;
+    }
 
     this.scopeTools = new ToolRegistry(this.scopeProviders, [], scopeRef);
     await this.scopeTools.ready;
@@ -328,6 +344,10 @@ export class Scope extends ScopeEntry {
 
   get agents(): AgentRegistry {
     return this.scopeAgents;
+  }
+
+  get plugins(): PluginRegistry | undefined {
+    return this.scopePlugins;
   }
 
   get notifications(): NotificationService {
