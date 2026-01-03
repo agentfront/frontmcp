@@ -237,6 +237,19 @@ describe('provider utils', () => {
           /Cannot normalize provider: unrecognized format/,
         );
       });
+
+      it('should throw when useValue provider is missing provide field', () => {
+        expect(() => normalizeProvider({ useValue: 42 } as any)).toThrow(/is missing 'provide'/);
+      });
+
+      it('should throw when useFactory provider is missing provide field', () => {
+        expect(() => normalizeProvider({ useFactory: () => 42 } as any)).toThrow(/is missing 'provide'/);
+      });
+
+      it('should throw when useClass provider is missing provide field', () => {
+        class Impl {}
+        expect(() => normalizeProvider({ useClass: Impl } as any)).toThrow(/is missing 'provide'/);
+      });
     });
   });
 
@@ -267,21 +280,41 @@ describe('provider utils', () => {
       expect(deps).toEqual([]);
     });
 
-    it('should return inject() result for FACTORY providers', () => {
+    it('should return inject() result filtered by localTokens for FACTORY providers', () => {
       class DepA {}
       class DepB {}
+      class DepC {}
+      // Only DepA and DepB are in localTokens, DepC is not
+      const localTokens = new Set([DepA, DepB]);
       const deps = providerDiscoveryDeps(
         {
           kind: ProviderKind.FACTORY,
           provide: Symbol('f'),
-          inject: () => [DepA, DepB],
+          inject: () => [DepA, DepB, DepC],
           useFactory: () => ({}),
           metadata: { name: 'F' },
         },
-        new Set(),
+        localTokens,
         mockDepsOfClass,
       );
+      // Should only return deps that are in localTokens
       expect(deps).toEqual([DepA, DepB]);
+    });
+
+    it('should return empty array for FACTORY when no deps in localTokens', () => {
+      class DepA {}
+      const deps = providerDiscoveryDeps(
+        {
+          kind: ProviderKind.FACTORY,
+          provide: Symbol('f'),
+          inject: () => [DepA],
+          useFactory: () => ({}),
+          metadata: { name: 'F' },
+        },
+        new Set(), // Empty set - no deps match
+        mockDepsOfClass,
+      );
+      expect(deps).toEqual([]);
     });
 
     it('should call depsOfClass for CLASS providers', () => {

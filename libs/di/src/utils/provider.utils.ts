@@ -102,7 +102,17 @@ export function createProviderNormalizer(options: ProviderNormalizerOptions) {
     }
 
     // Object-style provider definitions
+    // Using 'any' is justified: we perform runtime type checks ('useValue' in obj, etc.)
+    // and the input type ProviderType already constrains the expected shapes
     const obj = item as any;
+
+    // Validate provide field for object-style providers
+    if ('useValue' in obj || 'useFactory' in obj || 'useClass' in obj) {
+      if (!obj.provide) {
+        const name = obj.name ?? '[object]';
+        throw new Error(`Provider '${name}' is missing 'provide'.`);
+      }
+    }
 
     // useValue
     if ('useValue' in obj) {
@@ -131,7 +141,7 @@ export function createProviderNormalizer(options: ProviderNormalizerOptions) {
         kind: ProviderKind.CLASS,
         provide: obj.provide,
         useClass: obj.useClass,
-        metadata: obj.metadata ?? { name: (obj.useClass as any)?.name ?? 'ClassProvider' },
+        metadata: obj.metadata ?? { name: obj.useClass?.name ?? 'ClassProvider' },
       } satisfies ProviderClassRecord;
     }
 
@@ -163,8 +173,11 @@ export function providerDiscoveryDeps(
     case ProviderKind.INJECTED:
       return [];
 
-    case ProviderKind.FACTORY:
-      return [...rec.inject()];
+    case ProviderKind.FACTORY: {
+      // Filter by locally registered tokens for graph detection
+      const all = [...rec.inject()];
+      return all.filter((d) => localTokens.has(d));
+    }
 
     case ProviderKind.CLASS:
       return depsOfClassFn(rec.useClass, 'discovery');
