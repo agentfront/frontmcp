@@ -43,10 +43,14 @@ export class AppLocalInstance extends AppEntry<LocalAppMetadata> {
     // This determines where plugin hooks are registered based on plugin's scope setting:
     // - scope='app' (default): hooks register to app's own scope
     // - scope='server': hooks register to parent scope (gateway-level)
+    //
+    // Note: When standalone is undefined, we treat it as standalone (true) for safety.
+    // This ensures server-scoped plugins require explicit `standalone: false` to access parent scope.
+    const isStandalone = this.metadata.standalone !== false;
     const scopeInfo: PluginScopeInfo = {
       ownScope: this.appProviders.getActiveScope(),
-      parentScope: this.metadata.standalone === false ? this.scopeProviders.getActiveScope() : undefined,
-      isStandaloneApp: this.metadata.standalone === true,
+      parentScope: !isStandalone ? this.scopeProviders.getActiveScope() : undefined,
+      isStandaloneApp: isStandalone,
     };
     this.appPlugins = new PluginRegistry(this.appProviders, this.metadata.plugins ?? [], appOwner, scopeInfo);
     await this.appPlugins.ready; // wait for plugins and it's providers/adapters/tools/resource/prompts to be ready

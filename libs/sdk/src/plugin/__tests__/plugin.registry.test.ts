@@ -4,12 +4,16 @@
 
 import 'reflect-metadata';
 import PluginRegistry, { PluginScopeInfo } from '../plugin.registry';
-import { PluginInterface } from '../../common/interfaces';
+import { PluginInterface, FlowCtxOf } from '../../common/interfaces';
 import { FrontMcpPlugin } from '../../common/decorators/plugin.decorator';
+import { FlowHooksOf } from '../../common/decorators/hook.decorator';
 import { createClassProvider, createValueProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 import { createProviderRegistryWithScope, createMockScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { InvalidPluginScopeError } from '../../errors';
 import { Scope } from '../../scope';
+
+// Create ToolHook for tests (same as exported from index.ts)
+const ToolHook = FlowHooksOf('tools:call-tool');
 
 describe('PluginRegistry', () => {
   describe('Basic Registration', () => {
@@ -906,7 +910,12 @@ describe('PluginRegistry', () => {
         name: 'AppScopePluginWithHooks',
         scope: 'app',
       })
-      class AppScopePluginWithHooks implements PluginInterface {}
+      class AppScopePluginWithHooks implements PluginInterface {
+        @ToolHook.Will('execute')
+        async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
+          // App-scoped hook
+        }
+      }
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -922,7 +931,8 @@ describe('PluginRegistry', () => {
       await registry.ready;
 
       // Hooks should be registered to own scope, not parent scope
-      expect(ownScope.hooks.registerHooks).not.toHaveBeenCalled(); // No hooks in this plugin
+      expect(ownScope.hooks.registerHooks).toHaveBeenCalled();
+      expect(parentScope.hooks.registerHooks).not.toHaveBeenCalled();
     });
 
     it('should register hooks to parent scope when scope is server and parentScope exists', async () => {
@@ -930,7 +940,12 @@ describe('PluginRegistry', () => {
         name: 'ServerScopePluginWithHooks',
         scope: 'server',
       })
-      class ServerScopePluginWithHooks implements PluginInterface {}
+      class ServerScopePluginWithHooks implements PluginInterface {
+        @ToolHook.Will('execute')
+        async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
+          // Server-scoped hook
+        }
+      }
 
       const providers = await createProviderRegistryWithScope();
       const ownScope = providers.get(Scope);
@@ -945,8 +960,41 @@ describe('PluginRegistry', () => {
       const registry = new PluginRegistry(providers, [ServerScopePluginWithHooks], undefined, scopeInfo);
       await registry.ready;
 
-      const plugins = registry.getPlugins();
-      expect(plugins).toHaveLength(1);
+      // Hooks should be registered to parent scope, not own scope
+      expect(parentScope.hooks.registerHooks).toHaveBeenCalled();
+      expect(ownScope.hooks.registerHooks).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to own scope when scope is server but no parentScope exists', async () => {
+      @FrontMcpPlugin({
+        name: 'ServerScopePluginNoParent',
+        scope: 'server',
+      })
+      class ServerScopePluginNoParent implements PluginInterface {
+        @ToolHook.Will('execute')
+        async beforeExecute(_ctx: FlowCtxOf<'tools:call-tool'>) {
+          // Server-scoped hook with no parent
+        }
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const ownScope = providers.get(Scope);
+      const warnSpy = jest.spyOn(ownScope.logger, 'warn').mockImplementation(() => {});
+
+      const scopeInfo: PluginScopeInfo = {
+        ownScope,
+        parentScope: undefined, // No parent scope
+        isStandaloneApp: false,
+      };
+
+      const registry = new PluginRegistry(providers, [ServerScopePluginNoParent], undefined, scopeInfo);
+      await registry.ready;
+
+      // Should log a warning and register to own scope
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ServerScopePluginNoParent'));
+      expect(ownScope.hooks.registerHooks).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
     });
   });
 

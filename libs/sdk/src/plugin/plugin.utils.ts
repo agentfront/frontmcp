@@ -29,7 +29,7 @@ export function normalizePlugin(item: PluginType): PluginRecord {
       }
       // Merge inline metadata with decorator metadata (inline takes precedence)
       // This ensures scope and other fields from inline config override decorators
-      const decoratorMetadata = collectPluginMetadata(useClass);
+      const decoratorMetadata = collectPluginMetadata(useClass as PluginType);
       const mergedMetadata = { ...decoratorMetadata, ...metadata };
       return {
         kind: PluginKind.CLASS,
