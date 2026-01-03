@@ -63,6 +63,35 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
 
 <Note>More official plugins are coming soon! Authentication, rate limiting, observability, and validation plugins are in development.</Note>
 
+## Server-Level Plugins
+
+Use the `plugins` array on `@FrontMcp` to register plugins that must run once for the entire server:
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { DashboardPlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'Ops Console', version: '1.0.0' },
+  plugins: [
+    DashboardPlugin.init({
+      enabled: true,
+      basePath: '/dashboard',
+    }),
+  ],
+  apps: [BillingApp, AnalyticsApp],
+})
+export default class Server {}
+```
+
+<Info>
+  Server-scoped plugins execute before app-level plugins and can contribute providers/hooks that span every app, tool, resource, and agent.
+</Info>
+
+<Tip>
+  Plugins that declare `scope: 'server'` must register via `@FrontMcp`. Standalone apps that include them throw `InvalidPluginScopeError`.
+</Tip>
+
 ## Community Plugins
 
 Community plugins are created and maintained by the FrontMCP community. While not officially supported, they extend FrontMCP's capabilities with specialized features.
