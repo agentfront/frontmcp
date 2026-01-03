@@ -318,7 +318,9 @@ export class ToolSearchService implements ToolSearch {
   private subscriptionPromise: Promise<void>;
   private subscriptionResolved = false;
   private subscriptionResolve: (() => void) | null = null;
+  private subscriptionReject: ((reason?: Error) => void) | null = null;
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
 
   constructor(config: ToolSearchServiceConfig = {}, scope: ScopeEntry) {
     this.scope = scope;
@@ -373,9 +375,10 @@ export class ToolSearchService implements ToolSearch {
       }
     }
 
-    // Create subscription promise - resolves when subscribed to tool changes
-    this.subscriptionPromise = new Promise<void>((resolve) => {
+    // Create subscription promise - resolves when subscribed to tool changes, rejects on disposal
+    this.subscriptionPromise = new Promise<void>((resolve, reject) => {
       this.subscriptionResolve = resolve;
+      this.subscriptionReject = reject;
     });
 
     // Initiate subscription setup (non-blocking)
@@ -422,6 +425,10 @@ export class ToolSearchService implements ToolSearch {
     const nextDelay = Math.min(delayMs * 2, ToolSearchService.MAX_RETRY_DELAY_MS);
     this.retryTimeoutId = setTimeout(() => {
       this.retryTimeoutId = null;
+      // Check if service was disposed during the timeout to prevent continuing after disposal
+      if (this.disposed) {
+        return;
+      }
       this.setupSubscription(retryCount + 1, nextDelay);
     }, delayMs);
   }
@@ -598,10 +605,21 @@ export class ToolSearchService implements ToolSearch {
    * Cleanup subscription and pending retries when service is destroyed
    */
   dispose(): void {
+    // Mark as disposed to prevent any further callbacks or operations
+    this.disposed = true;
+
     // Clear any pending retry timeout to prevent callbacks after disposal
     if (this.retryTimeoutId) {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
+    }
+
+    // Reject the subscription promise if it hasn't resolved yet
+    // This prevents callers from waiting indefinitely on a disposed service
+    if (this.subscriptionReject) {
+      this.subscriptionReject(new Error('ToolSearchService disposed before subscription completed'));
+      this.subscriptionReject = null;
+      this.subscriptionResolve = null;
     }
 
     if (this.unsubscribe) {
