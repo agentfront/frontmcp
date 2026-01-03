@@ -135,7 +135,13 @@ export function createProviderNormalizer(options: ProviderNormalizerOptions) {
       } satisfies ProviderClassRecord;
     }
 
-    throw new Error(`Cannot normalize provider: unrecognized format ${JSON.stringify(item)}`);
+    let itemStr: string;
+    try {
+      itemStr = JSON.stringify(item);
+    } catch {
+      itemStr = String(item);
+    }
+    throw new Error(`Cannot normalize provider: unrecognized format ${itemStr}`);
   };
 }
 

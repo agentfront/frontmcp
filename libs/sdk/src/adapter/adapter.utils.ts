@@ -60,7 +60,7 @@ export function normalizeAdapter(item: AdapterType): AdapterRecord {
   }
 
   const name = (item as any)?.name ?? String(item);
-  throw new Error(`Invalid adapter '${name}'. Expected a class or a adapter object.`);
+  throw new Error(`Invalid adapter '${name}'. Expected a class or an adapter object.`);
 }
 
 /**
