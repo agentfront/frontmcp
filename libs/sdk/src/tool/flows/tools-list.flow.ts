@@ -232,7 +232,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         };
 
         // Add _meta for tools with UI configuration
-        // OpenAI platforms use openai/* keys, other platforms use frontmcp/* keys
+        // OpenAI platforms use openai/* keys, other platforms use ui/* keys only
         if (hasUIConfig(tool.metadata)) {
           const uiConfig = tool.metadata.ui;
           if (!uiConfig) {
@@ -277,7 +277,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           // Build meta keys based on platform type:
           // - OpenAI: openai/* keys only (ChatGPT proprietary format)
           // - ext-apps: ui/* keys only per SEP-1865 MCP Apps specification
-          // - Other platforms: frontmcp/* keys + ui/* for compatibility
+          // - Other platforms: ui/* keys only (Claude, Cursor, etc.)
           const meta: Record<string, unknown> = {};
           const isExtApps = platformType === 'ext-apps';
           const widgetUri = `ui://widget/${encodeURIComponent(finalName)}.html`;
@@ -312,20 +312,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
               meta['ui/type'] = uiType;
             }
           } else {
-            // FrontMCP meta keys for other platforms (Claude, Cursor, etc.)
-            meta['frontmcp/outputTemplate'] = widgetUri;
-            meta['frontmcp/resultCanProduceWidget'] = true;
-            meta['frontmcp/widgetAccessible'] = uiConfig.widgetAccessible ?? false;
+            // Generic MCP clients (Claude, Cursor, etc.) - use ui/* namespace only
+            meta['ui/resourceUri'] = widgetUri;
+            meta['ui/mimeType'] = 'text/html+mcp';
 
-            // Add invocation status if configured
+            // Add invocation status if configured (use ui/* namespace)
             if (uiConfig.invocationStatus?.invoking) {
-              meta['frontmcp/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
+              meta['ui/toolInvocation/invoking'] = uiConfig.invocationStatus.invoking;
             }
             if (uiConfig.invocationStatus?.invoked) {
-              meta['frontmcp/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
+              meta['ui/toolInvocation/invoked'] = uiConfig.invocationStatus.invoked;
             }
 
-            // Add ui/* keys for compatibility with generic MCP clients
+            // Add manifest/CDN info
             meta['ui/cdn'] = buildCDNInfoForUIType(uiType);
             if (manifest) {
               meta['ui/type'] = manifest.uiType;

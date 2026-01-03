@@ -279,12 +279,12 @@ export const UIAssertions = {
   },
 
   /**
-   * Assert tool result has correct meta keys for FrontMCP platforms (Claude, Cursor, etc.).
-   * Verifies frontmcp/* + ui/* keys are present and openai/* keys are absent.
+   * Assert tool result has correct meta keys for ui/* platforms (Claude, Cursor, etc.).
+   * Verifies ui/* keys are present and openai/*, frontmcp/* keys are absent.
    * @param result - The tool result wrapper
-   * @throws Error if meta keys don't match FrontMCP expectations
+   * @throws Error if meta keys don't match ui/* expectations
    */
-  assertFrontmcpMeta(result: ToolResultWrapper): void {
+  assertUiMeta(result: ToolResultWrapper): void {
     UIAssertions.assertPlatformMeta(result, 'claude');
   },
 
@@ -370,11 +370,9 @@ export const UIAssertions = {
       case 'openai':
         mimeTypeKey = 'openai/mimeType';
         break;
-      case 'ext-apps':
-        mimeTypeKey = 'ui/mimeType';
-        break;
       default:
-        mimeTypeKey = 'frontmcp/mimeType';
+        // All non-OpenAI platforms use ui/* namespace
+        mimeTypeKey = 'ui/mimeType';
     }
 
     const actualMimeType = meta[mimeTypeKey];
@@ -407,11 +405,9 @@ export const UIAssertions = {
       case 'openai':
         htmlKey = 'openai/html';
         break;
-      case 'ext-apps':
-        htmlKey = 'ui/html';
-        break;
       default:
-        htmlKey = 'frontmcp/html';
+        // All non-OpenAI platforms use ui/* namespace
+        htmlKey = 'ui/html';
     }
 
     const html = meta[htmlKey];

@@ -641,12 +641,13 @@ describe('bundleToStaticHTMLAll', () => {
     expect(result.platforms.openai.meta['openai/html']).toBeDefined();
     expect(result.platforms.openai.meta['openai/mimeType']).toBe('text/html+skybridge');
 
-    // Claude should have frontmcp/* + ui/* namespace
-    expect(result.platforms.claude.meta['frontmcp/html']).toBeDefined();
+    // Claude should have ui/* namespace only (no frontmcp/* duplication)
     expect(result.platforms.claude.meta['ui/html']).toBeDefined();
+    expect(result.platforms.claude.meta['frontmcp/html']).toBeUndefined();
 
-    // Generic should have frontmcp/* namespace
-    expect(result.platforms.generic.meta['frontmcp/html']).toBeDefined();
+    // Generic should have ui/* namespace only (no frontmcp/* duplication)
+    expect(result.platforms.generic.meta['ui/html']).toBeDefined();
+    expect(result.platforms.generic.meta['frontmcp/html']).toBeUndefined();
 
     // ext-apps should have ui/* namespace only
     expect(result.platforms['ext-apps'].meta['ui/html']).toBeDefined();

@@ -179,8 +179,12 @@ export default class HookRegistry
   getFlowHooks<Name extends FlowName>(
     flow: Name,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
-    const list = this.hooksByFlow.get(flow) ?? [];
-    return list as HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+    return (this.hooksByFlow.get(flow) ?? []) as HookEntry<
+      FlowInputOf<Name>,
+      Name,
+      FlowStagesOf<Name>,
+      FlowCtxOf<Name>
+    >[];
   }
 
   /** Hooks for a specific *flow + stage*, sorted by priority (desc). */
@@ -189,7 +193,11 @@ export default class HookRegistry
     stage: FlowStagesOf<Name> | string,
   ): HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[] {
     const byStage = this.hooksByFlowStage.get(flow);
-    const list = byStage?.get(String(stage)) ?? [];
-    return list as HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[];
+    return (byStage?.get(String(stage)) ?? []) as HookEntry<
+      FlowInputOf<Name>,
+      Name,
+      FlowStagesOf<Name>,
+      FlowCtxOf<Name>
+    >[];
   }
 }

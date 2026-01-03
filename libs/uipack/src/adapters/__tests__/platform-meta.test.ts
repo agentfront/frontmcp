@@ -195,14 +195,14 @@ describe('Platform Metadata Adapters', () => {
       expect(extAppsMeta['ui/html']).toBe(html);
       expect(extAppsMeta['openai/html']).toBeUndefined();
 
-      // Other platforms use frontmcp/* + ui/* for compatibility
+      // Other platforms use ui/* namespace only (no frontmcp/*)
       const claudeMeta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'claude',
         html,
       });
-      expect(claudeMeta['frontmcp/html']).toBe(html);
-      expect(claudeMeta['ui/html']).toBe(html); // compatibility
+      expect(claudeMeta['ui/html']).toBe(html);
+      expect(claudeMeta['frontmcp/html']).toBeUndefined();
       expect(claudeMeta['openai/html']).toBeUndefined();
     });
 
@@ -225,14 +225,15 @@ describe('Platform Metadata Adapters', () => {
       });
       expect(openaiMeta['openai/widgetToken']).toBe('test-token-456');
 
-      // Other platforms
+      // Other platforms use ui/* namespace
       const claudeMeta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'claude',
         html,
         token: 'test-token-789',
       });
-      expect(claudeMeta['frontmcp/widgetToken']).toBe('test-token-789');
+      expect(claudeMeta['ui/widgetToken']).toBe('test-token-789');
+      expect(claudeMeta['frontmcp/widgetToken']).toBeUndefined();
     });
 
     it('should include direct URL in platform-specific namespace', () => {
@@ -256,14 +257,15 @@ describe('Platform Metadata Adapters', () => {
       });
       expect(openaiMeta['openai/directUrl']).toBe(directUrl);
 
-      // Other platforms
+      // Other platforms use ui/* namespace
       const claudeMeta = buildUIMeta({
         uiConfig: baseUIConfig,
         platformType: 'claude',
         html,
         directUrl,
       });
-      expect(claudeMeta['frontmcp/directUrl']).toBe(directUrl);
+      expect(claudeMeta['ui/directUrl']).toBe(directUrl);
+      expect(claudeMeta['frontmcp/directUrl']).toBeUndefined();
     });
   });
 
@@ -297,7 +299,7 @@ describe('Platform Metadata Adapters', () => {
       expect(meta['frontmcp/mimeType']).toBeUndefined();
     });
 
-    it('should use frontmcp/* and ui/* namespaces with text/html+mcp for other platforms', () => {
+    it('should use ui/* namespace only with text/html+mcp for other platforms', () => {
       const platforms: AIPlatformType[] = ['claude', 'gemini', 'cursor', 'continue', 'cody', 'generic-mcp'];
 
       for (const platformType of platforms) {
@@ -307,34 +309,19 @@ describe('Platform Metadata Adapters', () => {
           html,
         });
 
-        // Other platforms use frontmcp/* namespace + ui/* for compatibility
-        expect(meta['frontmcp/mimeType']).toBe('text/html+mcp');
-        expect(meta['frontmcp/html']).toBe(html);
+        // Other platforms use ui/* namespace only (no frontmcp/*)
         expect(meta['ui/mimeType']).toBe('text/html+mcp');
         expect(meta['ui/html']).toBe(html);
-        // Should NOT have openai/* keys
+        // Should NOT have frontmcp/* or openai/* keys
+        expect(meta['frontmcp/mimeType']).toBeUndefined();
+        expect(meta['frontmcp/html']).toBeUndefined();
         expect(meta['openai/mimeType']).toBeUndefined();
       }
     });
   });
 
-  describe('buildUIMeta - generic-mcp platform uses frontmcp/* namespace', () => {
-    it('should use frontmcp/widgetAccessible NOT openai/widgetAccessible', () => {
-      const meta = buildUIMeta({
-        uiConfig: {
-          ...baseUIConfig,
-          widgetAccessible: true,
-        },
-        platformType: 'generic-mcp',
-        html,
-      });
-
-      expect(meta['frontmcp/widgetAccessible']).toBe(true);
-      // Should NOT use openai/* namespace
-      expect(meta['openai/widgetAccessible']).toBeUndefined();
-    });
-
-    it('should use frontmcp/widgetCSP NOT openai/widgetCSP', () => {
+  describe('buildUIMeta - generic-mcp platform uses ui/* namespace', () => {
+    it('should include CSP in ui/* namespace', () => {
       const meta = buildUIMeta({
         uiConfig: {
           ...baseUIConfig,
@@ -347,15 +334,16 @@ describe('Platform Metadata Adapters', () => {
         html,
       });
 
-      expect(meta['frontmcp/widgetCSP']).toEqual({
+      expect(meta['ui/csp']).toEqual({
         connectDomains: ['https://api.example.com'],
         resourceDomains: ['https://cdn.example.com'],
       });
-      // Should NOT use openai/* namespace
+      // Should NOT use openai/* or frontmcp/* namespace
       expect(meta['openai/widgetCSP']).toBeUndefined();
+      expect(meta['frontmcp/widgetCSP']).toBeUndefined();
     });
 
-    it('should include displayMode in frontmcp/* namespace', () => {
+    it('should include displayMode in ui/* namespace', () => {
       const meta = buildUIMeta({
         uiConfig: {
           ...baseUIConfig,
@@ -365,23 +353,11 @@ describe('Platform Metadata Adapters', () => {
         html,
       });
 
-      expect(meta['frontmcp/displayMode']).toBe('fullscreen');
+      expect(meta['ui/displayMode']).toBe('fullscreen');
+      expect(meta['frontmcp/displayMode']).toBeUndefined();
     });
 
-    it('should include widgetDescription in frontmcp/* namespace', () => {
-      const meta = buildUIMeta({
-        uiConfig: {
-          ...baseUIConfig,
-          widgetDescription: 'Test widget description',
-        },
-        platformType: 'generic-mcp',
-        html,
-      });
-
-      expect(meta['frontmcp/widgetDescription']).toBe('Test widget description');
-    });
-
-    it('should include prefersBorder in frontmcp/* namespace', () => {
+    it('should include prefersBorder in ui/* namespace', () => {
       const meta = buildUIMeta({
         uiConfig: {
           ...baseUIConfig,
@@ -391,10 +367,11 @@ describe('Platform Metadata Adapters', () => {
         html,
       });
 
-      expect(meta['frontmcp/prefersBorder']).toBe(true);
+      expect(meta['ui/prefersBorder']).toBe(true);
+      expect(meta['frontmcp/prefersBorder']).toBeUndefined();
     });
 
-    it('should include sandboxDomain as frontmcp/domain', () => {
+    it('should include sandboxDomain as ui/domain', () => {
       const meta = buildUIMeta({
         uiConfig: {
           ...baseUIConfig,
@@ -404,7 +381,8 @@ describe('Platform Metadata Adapters', () => {
         html,
       });
 
-      expect(meta['frontmcp/domain']).toBe('sandbox.example.com');
+      expect(meta['ui/domain']).toBe('sandbox.example.com');
+      expect(meta['frontmcp/domain']).toBeUndefined();
     });
   });
 

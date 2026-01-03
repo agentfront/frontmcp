@@ -22,7 +22,12 @@ import {
   AgentLlmAdapter,
   AgentToolDefinition,
   ToolEntry,
+  ToolMetadata,
+  ToolRecord,
 } from '../common';
+import { tool as toolDecorator } from '../common/decorators/tool.decorator';
+import { ToolInstance } from '../tool/tool.instance';
+import { normalizeTool } from '../tool/tool.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
@@ -93,6 +98,13 @@ export class AgentInstance<
   /** Agent's private scope (like a private app with its own registries) */
   private agentScope: AgentScope | null = null;
 
+  /**
+   * The agent exposed as a standard tool for registration in parent scope.
+   * This allows the agent to be called like any other tool (use-agent:*) and
+   * go through the standard tools:call-tool flow with all plugins/hooks.
+   */
+  private agentToolInstance: ToolInstance | null = null;
+
   constructor(record: AgentRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
@@ -130,6 +142,9 @@ export class AgentInstance<
 
     // Register hooks from the agent class
     await this.registerHooks();
+
+    // Create the agent as a standard tool for parent scope registration
+    await this.createAgentAsTool();
   }
 
   /**
@@ -257,6 +272,141 @@ export class AgentInstance<
   }
 
   // ============================================================================
+  // Agent as Tool
+  // ============================================================================
+
+  /**
+   * Create the agent as a standard ToolInstance for registration in parent scope.
+   *
+   * This follows the same pattern as OpenAPI adapters that create dynamic tools
+   * with a prebuilt execute function. The agent's execute handler internally calls
+   * the agent's LLM execution loop.
+   *
+   * Benefits:
+   * - Agent tools go through standard tools:call-tool flow
+   * - Plugin metadata extensions (cache, codecall) work on agents
+   * - CodeCall can discover and search for agent tools
+   * - Unified hook/plugin execution
+   */
+  private async createAgentAsTool(): Promise<void> {
+    // Skip if no LLM adapter (agent may use custom implementation or failed to initialize)
+    if (!this.llmAdapter) {
+      this.scope.logger.debug(
+        `Agent ${this.name} has no LLM adapter configured - skipping tool registration. ` +
+          `Agent will not be callable as a tool via use-agent:${this.id}.`,
+      );
+      return;
+    }
+
+    try {
+      // Build tool metadata from agent metadata
+      const toolMetadata = this.buildAgentToolMetadata();
+
+      // Create the tool using the tool() decorator pattern
+      const agentToolFunction = toolDecorator(toolMetadata)(this.createAgentToolExecuteHandler());
+
+      // Normalize to ToolRecord
+      const toolRecord = normalizeTool(agentToolFunction);
+
+      // Create ToolInstance with parent scope's providers
+      this.agentToolInstance = new ToolInstance(toolRecord, this.providers, this.owner);
+      await this.agentToolInstance.ready;
+
+      this.scope.logger.debug(`Created agent tool instance: ${this.agentToolInstance.name} for agent ${this.name}`);
+    } catch (error) {
+      this.scope.logger.error(`Failed to create agent tool instance for ${this.name}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Build ToolMetadata from AgentMetadata.
+   *
+   * Includes plugin metadata extensions (cache, codecall) from agent metadata
+   * so plugins can apply to agent tools.
+   */
+  private buildAgentToolMetadata(): ToolMetadata {
+    const agentMeta = this.record.metadata;
+
+    // Build the base tool metadata
+    const toolMeta: ToolMetadata = {
+      id: agentToolName(this.id),
+      name: agentToolName(this.id),
+      description: this.buildToolDescription(agentMeta),
+      inputSchema: this.inputSchema ?? {},
+      outputSchema: agentMeta.outputSchema,
+      tags: [...(agentMeta.tags ?? []), 'agent'],
+      annotations: {
+        title: agentMeta.name,
+        readOnlyHint: false,
+        openWorldHint: true,
+      },
+      hideFromDiscovery: agentMeta.hideFromDiscovery,
+    };
+
+    // Copy plugin metadata extensions dynamically
+    // These are added via ExtendFrontMcpToolMetadata which AgentMetadata now extends
+    // Using dynamic approach to support future plugin extensions without code changes
+    //
+    // Note: Double-cast through 'unknown' is required because TypeScript's control flow
+    // analysis cannot track properties added via global interface augmentation
+    // (ExtendFrontMcpToolMetadata). Plugin modules declare their extension keys in global
+    // scope (e.g., 'cache', 'codecall'), which TypeScript doesn't recognize on concrete types.
+    const extendedMeta = agentMeta as unknown as Record<string, unknown>;
+    const mutableToolMeta = toolMeta as unknown as Record<string, unknown>;
+
+    // Known plugin extension keys - copy all that are present
+    const pluginExtensionKeys = ['cache', 'codecall', 'auth', 'rateLimit', 'retry'] as const;
+    for (const key of pluginExtensionKeys) {
+      if (key in extendedMeta && extendedMeta[key] !== undefined) {
+        mutableToolMeta[key] = extendedMeta[key];
+      }
+    }
+
+    return toolMeta;
+  }
+
+  /**
+   * Create the execute handler for the agent tool.
+   *
+   * This handler is called when the tool is invoked through the standard
+   * tools:call-tool flow. It creates an AgentContext and runs the LLM loop.
+   */
+  private createAgentToolExecuteHandler(): (
+    input: Record<string, unknown>,
+    ctx: import('../common').ToolContext,
+  ) => Promise<unknown> {
+    return async (input, toolCtx) => {
+      // Get auth info from tool context
+      // Cast is safe because by the time we reach execute, auth has been validated in the flow
+      const authInfo = toolCtx.authInfo as import('@modelcontextprotocol/sdk/server/auth/types.js').AuthInfo;
+
+      // Create agent context with minimal AgentCallExtra
+      // Note: buildAgentCtorArgs only accesses ctx.authInfo, so we construct a minimal object
+      // The RequestHandlerExtra properties are not used in the agent execution path
+      const agentCallExtra: Pick<AgentCallExtra, 'authInfo'> = { authInfo };
+      const agentContext = this.create(input as AgentCallArgs, agentCallExtra as AgentCallExtra);
+
+      // Execute the agent's LLM loop
+      const result = await agentContext.execute(input as In);
+
+      return result;
+    };
+  }
+
+  /**
+   * Get the ToolInstance representing this agent.
+   *
+   * This is used by AgentRegistry to register the agent tool in the parent
+   * scope's ToolRegistry, enabling standard tool flow with plugins/hooks.
+   *
+   * @returns The agent's ToolInstance, or null if not created
+   */
+  getToolInstance(): ToolInstance | null {
+    return this.agentToolInstance;
+  }
+
+  // ============================================================================
   // Entry Methods
   // ============================================================================
 
@@ -292,7 +442,8 @@ export class AgentInstance<
       throw new AgentNotConfiguredError(this.name);
     }
 
-    const agentCtorArgs = this.buildAgentCtorArgs(input, ctx);
+    // Pass llmAdapter explicitly after the null check to avoid non-null assertion
+    const agentCtorArgs = this.buildAgentCtorArgs(input, ctx, this.llmAdapter);
 
     switch (this.record.kind) {
       case AgentKind.CLASS_TOKEN:
@@ -316,8 +467,16 @@ export class AgentInstance<
 
   /**
    * Build the constructor arguments for creating an AgentContext.
+   *
+   * @param input - The input arguments for the agent
+   * @param ctx - Extra context including authInfo
+   * @param llmAdapter - The LLM adapter (passed explicitly to avoid non-null assertion)
    */
-  private buildAgentCtorArgs(input: AgentCallArgs, ctx: AgentCallExtra): AgentCtorArgs<In> {
+  private buildAgentCtorArgs(
+    input: AgentCallArgs,
+    ctx: AgentCallExtra,
+    llmAdapter: AgentLlmAdapter,
+  ): AgentCtorArgs<In> {
     const scope = this.providers.getActiveScope();
 
     return {
@@ -326,7 +485,7 @@ export class AgentInstance<
       providers: this.providers,
       logger: scope.logger,
       authInfo: ctx.authInfo,
-      llmAdapter: this.llmAdapter!,
+      llmAdapter,
       toolDefinitions: this.getToolDefinitions(),
       toolExecutor: this.createToolExecutor(ctx),
     };

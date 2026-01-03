@@ -319,8 +319,7 @@ const toHaveProperHtmlStructure: MatcherFunction<[]> = function (received) {
  *
  * This matcher verifies:
  * - OpenAI: Has openai/* keys, no ui/* or frontmcp/* keys
- * - ext-apps: Has ui/* keys, no openai/* or frontmcp/* keys
- * - Others: Has frontmcp/* + ui/* keys, no openai/* keys
+ * - Others (ext-apps, claude, cursor, etc.): Has ui/* keys, no openai/* or frontmcp/* keys
  */
 const toHavePlatformMeta: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);
@@ -495,12 +494,9 @@ const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = fu
     case 'openai':
       mimeTypeKey = 'openai/mimeType';
       break;
-    case 'ext-apps':
-      mimeTypeKey = 'ui/mimeType';
-      break;
     default:
-      // For other platforms, check frontmcp/mimeType (primary) or ui/mimeType (compatibility)
-      mimeTypeKey = 'frontmcp/mimeType';
+      // All non-OpenAI platforms use ui/* namespace
+      mimeTypeKey = 'ui/mimeType';
   }
 
   const actualMimeType = meta[mimeTypeKey];
@@ -521,8 +517,7 @@ const toHavePlatformMimeType: MatcherFunction<[platform: TestPlatformType]> = fu
  *
  * HTML keys:
  * - OpenAI: openai/html
- * - ext-apps: ui/html
- * - Others: frontmcp/html (or ui/html for compatibility)
+ * - Others (ext-apps, claude, cursor, etc.): ui/html
  */
 const toHavePlatformHtml: MatcherFunction<[platform: TestPlatformType]> = function (received, platform) {
   const meta = extractMeta(received);
@@ -540,11 +535,9 @@ const toHavePlatformHtml: MatcherFunction<[platform: TestPlatformType]> = functi
     case 'openai':
       htmlKey = 'openai/html';
       break;
-    case 'ext-apps':
-      htmlKey = 'ui/html';
-      break;
     default:
-      htmlKey = 'frontmcp/html';
+      // All non-OpenAI platforms use ui/* namespace
+      htmlKey = 'ui/html';
   }
 
   const html = meta[htmlKey];
