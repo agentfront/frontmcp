@@ -215,21 +215,23 @@ export const EXPECTED_EXTAPPS_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mime
 export const EXPECTED_EXTAPPS_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'ui/type'] as const;
 
 /**
- * Expected meta keys for FrontMCP platforms in tools/list response (Claude, Cursor, etc.).
+ * Expected meta keys for generic MCP platforms in tools/list response (Claude, Cursor, etc.).
+ * Uses ui/* namespace only.
  */
-export const EXPECTED_FRONTMCP_TOOLS_LIST_META_KEYS = [
-  'frontmcp/outputTemplate',
-  'frontmcp/resultCanProduceWidget',
-  'ui/cdn',
-  'ui/type',
-] as const;
+export const EXPECTED_GENERIC_TOOLS_LIST_META_KEYS = ['ui/resourceUri', 'ui/mimeType', 'ui/cdn', 'ui/type'] as const;
 
 /**
- * Expected meta keys for FrontMCP platforms in tools/call response (Claude, Cursor, etc.).
+ * Expected meta keys for generic MCP platforms in tools/call response (Claude, Cursor, etc.).
+ * Uses ui/* namespace only.
  */
-export const EXPECTED_FRONTMCP_TOOL_CALL_META_KEYS = [
-  'frontmcp/html',
-  'frontmcp/mimeType',
-  'ui/html',
-  'ui/mimeType',
-] as const;
+export const EXPECTED_GENERIC_TOOL_CALL_META_KEYS = ['ui/html', 'ui/mimeType', 'ui/type'] as const;
+
+/**
+ * @deprecated Use EXPECTED_GENERIC_TOOLS_LIST_META_KEYS instead
+ */
+export const EXPECTED_FRONTMCP_TOOLS_LIST_META_KEYS = EXPECTED_GENERIC_TOOLS_LIST_META_KEYS;
+
+/**
+ * @deprecated Use EXPECTED_GENERIC_TOOL_CALL_META_KEYS instead
+ */
+export const EXPECTED_FRONTMCP_TOOL_CALL_META_KEYS = EXPECTED_GENERIC_TOOL_CALL_META_KEYS;

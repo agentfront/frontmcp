@@ -159,8 +159,8 @@ test.describe('Platform Meta Keys E2E', () => {
     });
   });
 
-  test.describe('FrontMCP Platforms Meta Keys (Claude, Cursor, etc.)', () => {
-    test('should have frontmcp/* AND ui/* keys for Claude', async ({ server }) => {
+  test.describe('Other Platforms Meta Keys (Claude, Cursor, etc.)', () => {
+    test('should have ui/* keys only for Claude (no frontmcp/* duplication)', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'claude-desktop', version: '1.0.0' },
@@ -168,21 +168,20 @@ test.describe('Platform Meta Keys E2E', () => {
 
       const result = await client.tools.call('html-card', {
         title: 'Claude Test',
-        content: 'Testing FrontMCP meta keys',
+        content: 'Testing ui/* meta keys',
       });
 
       expect(result).toBeSuccessful();
 
-      // Verify frontmcp/* keys are present
-      expect(result).toHaveMetaKey('frontmcp/html');
-      expect(result).toHaveMetaKey('frontmcp/mimeType');
-
-      // Verify ui/* keys for compatibility
+      // Verify ui/* keys are present
       expect(result).toHaveMetaKey('ui/html');
       expect(result).toHaveMetaKey('ui/mimeType');
 
+      // Verify NO frontmcp/* keys (no duplication)
+      expect(result).toNotHaveMetaKey('frontmcp/html');
+      expect(result).toNotHaveMetaKey('frontmcp/mimeType');
+
       // Verify correct MIME type
-      expect(result).toHaveMetaValue('frontmcp/mimeType', 'text/html+mcp');
       expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
 
       await client.disconnect();
@@ -208,7 +207,7 @@ test.describe('Platform Meta Keys E2E', () => {
       await client.disconnect();
     });
 
-    test('should have frontmcp/* AND ui/* keys for Cursor', async ({ server }) => {
+    test('should have ui/* keys only for Cursor (no frontmcp/* duplication)', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'cursor', version: '1.0.0' },
@@ -221,13 +220,13 @@ test.describe('Platform Meta Keys E2E', () => {
 
       expect(result).toBeSuccessful();
 
-      // Verify frontmcp/* keys
-      expect(result).toHaveMetaKey('frontmcp/html');
-      expect(result).toHaveMetaKey('frontmcp/mimeType');
-
-      // Verify ui/* keys for compatibility
+      // Verify ui/* keys are present
       expect(result).toHaveMetaKey('ui/html');
       expect(result).toHaveMetaKey('ui/mimeType');
+
+      // Verify NO frontmcp/* keys (no duplication)
+      expect(result).toNotHaveMetaKey('frontmcp/html');
+      expect(result).toNotHaveMetaKey('frontmcp/mimeType');
 
       // Verify NO openai/* keys
       expect(result).toNotHaveMetaKey('openai/html');
@@ -256,7 +255,7 @@ test.describe('Platform Meta Keys E2E', () => {
   });
 
   test.describe('Unknown Platform Meta Keys', () => {
-    test('should have frontmcp/* AND ui/* keys for unknown platforms', async ({ server }) => {
+    test('should have ui/* keys only for unknown platforms (no frontmcp/* duplication)', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'UnknownClient', version: '1.0.0' },
@@ -269,9 +268,9 @@ test.describe('Platform Meta Keys E2E', () => {
 
       expect(result).toBeSuccessful();
 
-      // Unknown platforms get frontmcp/* + ui/* keys
-      expect(result).toHaveMetaKey('frontmcp/html');
+      // Unknown platforms get ui/* keys only (no frontmcp/* duplication)
       expect(result).toHaveMetaKey('ui/html');
+      expect(result).toNotHaveMetaKey('frontmcp/html');
 
       // Verify NO openai/* keys
       expect(result).toNotHaveMetaKey('openai/html');
@@ -309,14 +308,14 @@ test.describe('Platform Meta Keys E2E', () => {
       expect(openaiResult).toNotHaveMetaKey('ui/html');
       expect(openaiResult).toNotHaveMetaKey('frontmcp/html');
 
-      // Claude: frontmcp/* + ui/* keys
-      expect(claudeResult).toHaveMetaKey('frontmcp/html');
+      // Claude: ui/* keys only (no frontmcp/* duplication)
       expect(claudeResult).toHaveMetaKey('ui/html');
+      expect(claudeResult).toNotHaveMetaKey('frontmcp/html');
       expect(claudeResult).toNotHaveMetaKey('openai/html');
 
-      // Cursor: frontmcp/* + ui/* keys (same as Claude)
-      expect(cursorResult).toHaveMetaKey('frontmcp/html');
+      // Cursor: ui/* keys only (same as Claude, no frontmcp/* duplication)
       expect(cursorResult).toHaveMetaKey('ui/html');
+      expect(cursorResult).toNotHaveMetaKey('frontmcp/html');
       expect(cursorResult).toNotHaveMetaKey('openai/html');
 
       await Promise.all([openaiClient.disconnect(), claudeClient.disconnect(), cursorClient.disconnect()]);
@@ -385,8 +384,9 @@ test.describe('Platform Meta Keys E2E', () => {
       const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
 
       expect(result).toBeSuccessful();
-      expect(result).toHaveMetaValue('frontmcp/mimeType', 'text/html+mcp');
+      // Claude uses ui/* namespace only (no frontmcp/* duplication)
       expect(result).toHaveMetaValue('ui/mimeType', 'text/html+mcp');
+      expect(result).toNotHaveMetaKey('frontmcp/mimeType');
 
       await client.disconnect();
     });

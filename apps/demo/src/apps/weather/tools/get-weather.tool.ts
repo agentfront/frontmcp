@@ -53,6 +53,9 @@ const iconMap: Record<string, string> = {
     openWorldHint: true,
   },
   ui: {
+    widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
+    displayMode: 'inline',
+    servingMode: 'static',
     template: (ctx) => {
       // ctx.input and ctx.output are typed from inputSchema and outputSchema
       const { output, helpers } = ctx;
@@ -97,8 +100,9 @@ const iconMap: Record<string, string> = {
         className: 'p-4 max-w-sm mx-auto',
       });
     },
-    widgetDescription: 'Displays current weather conditions with temperature, humidity, and wind speed.',
-    displayMode: 'inline',
+  },
+  codecall: {
+    visibleInListTools: true,
   },
 })
 export default class GetWeatherTool extends ToolContext<typeof inputSchema, typeof outputSchema> {

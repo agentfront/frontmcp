@@ -225,7 +225,7 @@ export {
   getPlatformMimeType,
   isOpenAIPlatform,
   isExtAppsPlatform,
-  isFrontmcpPlatform,
+  isUiPlatform,
   getToolsListMetaPrefixes,
   getToolCallMetaPrefixes,
   getForbiddenMetaPrefixes,

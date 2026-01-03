@@ -2,9 +2,8 @@
  * Generic Preview Handler
  *
  * Generates metadata for generic MCP clients.
- * Uses frontmcp/* namespace with ui/* fallback for compatibility.
- *
- * Behaves like OpenAI but with different metadata namespaces.
+ * Uses ui/* namespace for maximum compatibility with MCP clients
+ * (Claude, Cursor, etc.).
  *
  * @packageDocumentation
  */
@@ -42,8 +41,8 @@ const DATA_PLACEHOLDERS = {
 /**
  * Preview handler for generic MCP clients.
  *
- * Uses the same patterns as OpenAI but with frontmcp/* namespace
- * and ui/* fallback for maximum compatibility.
+ * Uses the ui/* namespace for maximum compatibility with
+ * MCP clients (Claude, Cursor, etc.).
  *
  * @example
  * ```typescript
@@ -116,13 +115,12 @@ export class GenericPreview implements PreviewHandler {
     const resourceUri = `resource://widget/${toolName}`;
 
     const _meta: FrontMCPMetaFields = {
-      // Primary namespace
-      'frontmcp/outputTemplate': resourceUri,
-      'frontmcp/widgetCSP': {
-        connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
-        resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
+      // Use ui/* namespace for generic MCP clients
+      'ui/resourceUri': resourceUri,
+      'ui/widgetCSP': {
+        connectDomains: ['esm.sh', 'cdn.tailwindcss.com'],
+        resourceDomains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
       },
-      // Fallback for compatibility
       'ui/mimeType': 'text/html+mcp',
     };
 
@@ -135,10 +133,11 @@ export class GenericPreview implements PreviewHandler {
 
   private forDiscoveryHybrid(result: HybridBuildResult, _toolName: string, _description?: string): DiscoveryMeta {
     const _meta: FrontMCPMetaFields = {
-      'frontmcp/outputTemplate': result.shellResourceUri,
-      'frontmcp/widgetCSP': {
-        connect_domains: ['esm.sh', 'cdn.tailwindcss.com'],
-        resource_domains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
+      // Use ui/* namespace for generic MCP clients
+      'ui/resourceUri': result.shellResourceUri,
+      'ui/widgetCSP': {
+        connectDomains: ['esm.sh', 'cdn.tailwindcss.com'],
+        resourceDomains: ['esm.sh', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'],
       },
       'ui/mimeType': 'text/html+mcp',
     };
@@ -152,7 +151,7 @@ export class GenericPreview implements PreviewHandler {
 
   private forDiscoveryInline(result: InlineBuildResult, _toolName: string, _description?: string): DiscoveryMeta {
     const _meta: FrontMCPMetaFields = {
-      'frontmcp/html': result.loaderShell,
+      // Use ui/* namespace for generic MCP clients
       'ui/html': result.loaderShell,
       'ui/mimeType': 'text/html+mcp',
     };
@@ -177,7 +176,6 @@ export class GenericPreview implements PreviewHandler {
       const html = this.injectBuilderMode(result.html, input, output, mockData);
       return {
         _meta: {
-          'frontmcp/html': html,
           'ui/html': html,
         },
         html,
@@ -202,14 +200,13 @@ export class GenericPreview implements PreviewHandler {
     mockData?: BuilderMockData,
   ): ExecutionMeta {
     const _meta: FrontMCPMetaFields = {
-      'frontmcp/component': result.componentChunk,
+      'ui/component': result.componentChunk,
     };
 
     if (builderMode) {
       const html = this.combineHybridForBuilder(result, input, output, mockData);
       return {
         _meta: {
-          'frontmcp/html': html,
           'ui/html': html,
         },
         html,
@@ -234,7 +231,6 @@ export class GenericPreview implements PreviewHandler {
   ): ExecutionMeta {
     // Inline mode returns full HTML
     const _meta: FrontMCPMetaFields = {
-      'frontmcp/html': '<!-- Full widget will be generated -->',
       'ui/html': '<!-- Full widget will be generated -->',
     };
 
