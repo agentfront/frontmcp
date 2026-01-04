@@ -188,24 +188,76 @@ export class AgentContext<
     // Build user message from input
     const userMessage = this.buildUserMessage(input);
 
+    // Determine if auto progress is enabled
+    const enableAutoProgress =
+      this.metadata.execution?.enableAutoProgress === true && this.metadata.execution?.enableNotifications !== false;
+    const maxIterations = this.metadata.execution?.maxIterations ?? 10;
+
+    // Track progress state for monotonic updates
+    let currentProgress = 0;
+
     // Create execution loop
     const loop = new AgentExecutionLoop({
       adapter: this.llmAdapter,
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
-      maxIterations: this.metadata.execution?.maxIterations ?? 10,
+      maxIterations,
       timeout: this.metadata.execution?.timeout ?? 120000,
       logger: this.logger,
 
-      // Notification callbacks
+      // Auto progress callbacks (only when enabled)
+      onLlmStart: enableAutoProgress
+        ? (iteration: number, maxIter: number) => {
+            // Each iteration gets ~8% of progress (80% total for 10 iterations)
+            currentProgress = Math.round(((iteration - 1) / maxIter) * 80);
+            this.progress(currentProgress, 100, `Starting LLM call (iteration ${iteration}/${maxIter})`);
+          }
+        : undefined,
+
+      onLlmComplete: enableAutoProgress
+        ? (iteration: number, usage?: { promptTokens?: number; completionTokens?: number }) => {
+            currentProgress = Math.round(((iteration - 0.5) / maxIterations) * 80);
+            const usageStr = usage ? ` (${usage.promptTokens ?? 0}P + ${usage.completionTokens ?? 0}C tokens)` : '';
+            this.progress(currentProgress, 100, `LLM response received${usageStr}`);
+          }
+        : undefined,
+
+      onToolsIdentified: enableAutoProgress
+        ? (count: number, names: string[]) => {
+            this.notify(`Identified ${count} tool call(s): ${names.join(', ')}`, 'info');
+          }
+        : undefined,
+
+      onToolStart: enableAutoProgress
+        ? (toolCall: AgentToolCall, index: number, total: number) => {
+            const toolProgress = currentProgress + Math.round(((index + 1) / total) * 10);
+            this.progress(toolProgress, 100, `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
+          }
+        : undefined,
+
+      onComplete: enableAutoProgress
+        ? (content: string | null, error?: Error) => {
+            if (error) {
+              this.progress(100, 100, `Agent failed: ${error.message}`);
+            } else {
+              this.progress(100, 100, 'Agent completed');
+            }
+          }
+        : undefined,
+
+      // Standard notification callbacks (always active when notifications enabled)
       onToolCall: (toolCall: AgentToolCall) => {
-        this.notify(`Calling tool: ${toolCall.name}`, 'info');
+        if (this.metadata.execution?.enableNotifications !== false) {
+          this.notify(`Calling tool: ${toolCall.name}`, 'info');
+        }
         this.logger.debug(`Tool call: ${toolCall.name}`, { args: toolCall.arguments });
       },
 
       onToolResult: (toolCall: AgentToolCall, result: unknown, error?: Error) => {
         if (error) {
-          this.notify(`Tool ${toolCall.name} failed: ${error.message}`, 'error');
+          if (this.metadata.execution?.enableNotifications !== false) {
+            this.notify(`Tool ${toolCall.name} failed: ${error.message}`, 'error');
+          }
           this.logger.error(`Tool ${toolCall.name} failed`, error);
         } else {
           this.logger.debug(`Tool ${toolCall.name} completed`, { result });

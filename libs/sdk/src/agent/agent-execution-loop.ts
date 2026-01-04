@@ -76,6 +76,31 @@ export interface AgentExecutionLoopConfig {
    * Callback for each iteration.
    */
   onIteration?: (iteration: number, message: AgentMessage) => void;
+
+  /**
+   * Callback when LLM request starts.
+   */
+  onLlmStart?: (iteration: number, maxIterations: number) => void;
+
+  /**
+   * Callback when LLM response is received (with usage stats).
+   */
+  onLlmComplete?: (iteration: number, usage?: { promptTokens?: number; completionTokens?: number }) => void;
+
+  /**
+   * Callback when tool calls are extracted from LLM response.
+   */
+  onToolsIdentified?: (count: number, names: string[]) => void;
+
+  /**
+   * Callback before a tool starts execution.
+   */
+  onToolStart?: (toolCall: AgentToolCall, index: number, total: number) => void;
+
+  /**
+   * Callback when agent execution is complete.
+   */
+  onComplete?: (content: string | null, error?: Error) => void;
 }
 
 /**
@@ -334,6 +359,9 @@ export class AgentExecutionLoop {
     for (let iteration = 1; iteration <= this.config.maxIterations; iteration++) {
       this.config.logger?.debug(`Agent loop iteration ${iteration}/${this.config.maxIterations}`);
 
+      // Notify LLM start
+      this.config.onLlmStart?.(iteration, this.config.maxIterations);
+
       // Build prompt
       const prompt: AgentPrompt = {
         system: this.config.systemInstructions,
@@ -347,6 +375,9 @@ export class AgentExecutionLoop {
         this.config.completionOptions,
       );
 
+      // Notify LLM complete with usage
+      this.config.onLlmComplete?.(iteration, completion.usage);
+
       // Track usage
       if (completion.usage) {
         callbacks.onUsage(completion.usage.promptTokens, completion.usage.completionTokens);
@@ -354,6 +385,12 @@ export class AgentExecutionLoop {
 
       // Process response
       if (completion.finishReason === 'tool_calls' && completion.toolCalls?.length) {
+        // Notify tool calls identified
+        this.config.onToolsIdentified?.(
+          completion.toolCalls.length,
+          completion.toolCalls.map((tc) => tc.name),
+        );
+
         // Add assistant message with tool calls
         const assistantMessage: AgentMessage = {
           role: 'assistant',
@@ -364,7 +401,10 @@ export class AgentExecutionLoop {
         callbacks.onIteration(iteration, assistantMessage);
 
         // Execute tool calls
-        for (const toolCall of completion.toolCalls) {
+        const totalTools = completion.toolCalls.length;
+        for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+          const toolCall = completion.toolCalls[toolIndex];
+          this.config.onToolStart?.(toolCall, toolIndex, totalTools);
           this.config.onToolCall?.(toolCall);
 
           let result: unknown;
@@ -398,16 +438,19 @@ export class AgentExecutionLoop {
         callbacks.onIteration(iteration, assistantMessage);
 
         this.config.onContent?.(completion.content ?? '');
+        this.config.onComplete?.(completion.content, undefined);
 
         return { content: completion.content };
       }
     }
 
     // Max iterations reached
-    throw new AgentMaxIterationsError(
+    const error = new AgentMaxIterationsError(
       `Agent reached maximum iterations (${this.config.maxIterations}) without completing`,
       this.config.maxIterations,
     );
+    this.config.onComplete?.(null, error);
+    throw error;
   }
 
   private async *executeLoopStreaming(
@@ -418,6 +461,9 @@ export class AgentExecutionLoop {
 
     for (let iteration = 1; iteration <= this.config.maxIterations; iteration++) {
       this.config.logger?.debug(`Agent loop iteration ${iteration}/${this.config.maxIterations}`);
+
+      // Notify LLM start
+      this.config.onLlmStart?.(iteration, this.config.maxIterations);
 
       yield { type: 'iteration', iteration };
 
@@ -433,6 +479,7 @@ export class AgentExecutionLoop {
         let content = '';
         const toolCalls: AgentToolCall[] = [];
         let finishReason: AgentCompletion['finishReason'] = 'stop';
+        let completionUsage: { promptTokens?: number; completionTokens?: number } | undefined;
 
         for await (const chunk of adapter.streamCompletion(
           prompt,
@@ -459,6 +506,7 @@ export class AgentExecutionLoop {
           if (chunk.type === 'done' && chunk.completion) {
             finishReason = chunk.completion.finishReason;
             if (chunk.completion.usage) {
+              completionUsage = chunk.completion.usage;
               yield {
                 type: 'usage',
                 promptTokens: chunk.completion.usage.promptTokens,
@@ -468,8 +516,17 @@ export class AgentExecutionLoop {
           }
         }
 
+        // Notify LLM complete
+        this.config.onLlmComplete?.(iteration, completionUsage);
+
         // Process the accumulated response
         if (finishReason === 'tool_calls' && toolCalls.length > 0) {
+          // Notify tool calls identified
+          this.config.onToolsIdentified?.(
+            toolCalls.length,
+            toolCalls.map((tc) => tc.name),
+          );
+
           // Add assistant message with tool calls
           const assistantMessage: AgentMessage = {
             role: 'assistant',
@@ -479,7 +536,10 @@ export class AgentExecutionLoop {
           messages.push(assistantMessage);
 
           // Execute tool calls
-          for (const toolCall of toolCalls) {
+          const totalTools = toolCalls.length;
+          for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+            const toolCall = toolCalls[toolIndex];
+            this.config.onToolStart?.(toolCall, toolIndex, totalTools);
             this.config.onToolCall?.(toolCall);
             yield { type: 'tool_start', toolCall };
 
@@ -512,6 +572,7 @@ export class AgentExecutionLoop {
             content: content || null,
           };
           messages.push(assistantMessage);
+          this.config.onComplete?.(content || null, undefined);
           return;
         }
       } else {
@@ -522,6 +583,9 @@ export class AgentExecutionLoop {
           this.config.completionOptions,
         );
 
+        // Notify LLM complete
+        this.config.onLlmComplete?.(iteration, completion.usage);
+
         if (completion.usage) {
           yield {
             type: 'usage',
@@ -531,6 +595,12 @@ export class AgentExecutionLoop {
         }
 
         if (completion.finishReason === 'tool_calls' && completion.toolCalls?.length) {
+          // Notify tool calls identified
+          this.config.onToolsIdentified?.(
+            completion.toolCalls.length,
+            completion.toolCalls.map((tc) => tc.name),
+          );
+
           // Add assistant message with tool calls
           const assistantMessage: AgentMessage = {
             role: 'assistant',
@@ -540,7 +610,10 @@ export class AgentExecutionLoop {
           messages.push(assistantMessage);
 
           // Execute tool calls
-          for (const toolCall of completion.toolCalls) {
+          const totalTools = completion.toolCalls.length;
+          for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+            const toolCall = completion.toolCalls[toolIndex];
+            this.config.onToolStart?.(toolCall, toolIndex, totalTools);
             this.config.onToolCall?.(toolCall);
             yield { type: 'tool_start', toolCall };
 
@@ -578,16 +651,19 @@ export class AgentExecutionLoop {
             content: completion.content,
           };
           messages.push(assistantMessage);
+          this.config.onComplete?.(completion.content, undefined);
           return;
         }
       }
     }
 
     // Max iterations reached
-    throw new AgentMaxIterationsError(
+    const error = new AgentMaxIterationsError(
       `Agent reached maximum iterations (${this.config.maxIterations}) without completing`,
       this.config.maxIterations,
     );
+    this.config.onComplete?.(null, error);
+    throw error;
   }
 }
 
