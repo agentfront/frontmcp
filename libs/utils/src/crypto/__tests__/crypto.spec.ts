@@ -299,10 +299,10 @@ describe('Crypto Module', () => {
       expect(timingSafeEqual(a, b)).toBe(false);
     });
 
-    it('should return false for arrays of different lengths', () => {
+    it('should throw for arrays of different lengths', () => {
       const a = new Uint8Array([1, 2, 3, 4, 5]);
       const b = new Uint8Array([1, 2, 3, 4]);
-      expect(timingSafeEqual(a, b)).toBe(false);
+      expect(() => timingSafeEqual(a, b)).toThrow('timingSafeEqual requires equal-length arrays');
     });
 
     it('should produce identical results from Node and browser implementations', () => {

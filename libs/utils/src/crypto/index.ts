@@ -43,8 +43,13 @@ export function randomUUID(): string {
 
 /**
  * Generate cryptographically secure random bytes.
+ * @param length - Number of bytes to generate (must be a positive integer)
+ * @throws Error if length is not a positive integer
  */
 export function randomBytes(length: number): Uint8Array {
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error(`randomBytes length must be a positive integer, got ${length}`);
+  }
   return getCrypto().randomBytes(length);
 }
 
@@ -69,10 +74,24 @@ export function hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
   return getCrypto().hmacSha256(key, data);
 }
 
+// HKDF-SHA256 maximum output length: 255 * hash_length (255 * 32 = 8160 bytes)
+const HKDF_SHA256_MAX_LENGTH = 255 * 32;
+
 /**
  * HKDF-SHA256 key derivation (RFC 5869).
+ * @param ikm - Input keying material
+ * @param salt - Salt value (can be empty)
+ * @param info - Context and application specific information
+ * @param length - Length of output keying material in bytes (1 to 8160)
+ * @throws Error if length is not a positive integer or exceeds HKDF limits
  */
 export function hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, length: number): Uint8Array {
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error(`HKDF length must be a positive integer, got ${length}`);
+  }
+  if (length > HKDF_SHA256_MAX_LENGTH) {
+    throw new Error(`HKDF-SHA256 length cannot exceed ${HKDF_SHA256_MAX_LENGTH} bytes, got ${length}`);
+  }
   return getCrypto().hkdfSha256(ikm, salt, info, length);
 }
 
@@ -120,8 +139,14 @@ export function decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8
 
 /**
  * Constant-time comparison to prevent timing attacks.
+ * @param a - First byte array to compare
+ * @param b - Second byte array to compare
+ * @throws Error if arrays have different lengths
  */
 export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    throw new Error(`timingSafeEqual requires equal-length arrays, got ${a.length} and ${b.length} bytes`);
+  }
   return getCrypto().timingSafeEqual(a, b);
 }
 
