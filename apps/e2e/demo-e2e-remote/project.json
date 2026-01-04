@@ -1,0 +1,82 @@
+{
+  "name": "demo-e2e-remote",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-remote/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:remote"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-remote",
+        "main": "apps/e2e/demo-e2e-remote/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-remote/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-remote/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "build-local": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-remote-local",
+        "main": "apps/e2e/demo-e2e-remote/src/local-mcp-server/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-remote/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-remote/webpack.local.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-remote/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "serve-local": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-local"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-remote-local/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-remote"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-remote/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-remote-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-remote/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

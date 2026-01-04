@@ -1,5 +1,5 @@
 import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
-import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, AppRecord, AppKind } from '../common';
+import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, AppRecord, AppKind, RemoteAppMetadata } from '../common';
 import { AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
@@ -8,6 +8,17 @@ export function collectAppMetadata(cls: AppType): LocalAppMetadata {
       [key]: getMetadata(token, cls),
     });
   }, {} as LocalAppMetadata);
+}
+
+/**
+ * Check if an object is a remote app configuration
+ */
+function isRemoteAppConfig(item: unknown): item is RemoteAppMetadata {
+  if (!item || typeof item !== 'object') {
+    return false;
+  }
+  const obj = item as Record<string, unknown>;
+  return typeof obj['urlType'] === 'string' && typeof obj['url'] === 'string' && typeof obj['name'] === 'string';
 }
 
 /**
@@ -21,6 +32,21 @@ export function normalizeApp(item: AppType): AppRecord {
     const metadata = collectAppMetadata(item);
     return { kind: AppKind.LOCAL_CLASS, provide: item as Type<AppLocalInstance>, metadata };
   }
+
+  // Check for remote app configuration (has urlType, url, and name)
+  if (isRemoteAppConfig(item)) {
+    const metadata = item as RemoteAppMetadata;
+    const appId = metadata.id ?? metadata.name;
+    const provide: Token = Symbol(`remote:${appId}`);
+
+    return {
+      kind: AppKind.REMOTE_VALUE,
+      provide,
+      useValue: null as any, // Remote instances are created in AppRegistry.initialize
+      metadata,
+    };
+  }
+
   if (item && typeof item === 'object') {
     const { provide, useValue, ...metadata } = item as any;
     if (!provide) {
