@@ -12,6 +12,21 @@ import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
+import { InvalidPluginScopeError } from '../errors';
+
+/**
+ * Scope information for plugin hook registration.
+ * Used to determine where plugin hooks should be registered based on
+ * the plugin's scope setting and whether the app is standalone.
+ */
+export interface PluginScopeInfo {
+  /** The scope where the plugin is defined (app's own scope) */
+  ownScope: Scope;
+  /** Parent scope for non-standalone apps (gateway scope) */
+  parentScope?: Scope;
+  /** Whether the app is standalone (standalone: true) */
+  isStandaloneApp: boolean;
+}
 
 export default class PluginRegistry
   extends RegistryAbstract<PluginEntry, PluginRecord, PluginType[]>
@@ -31,7 +46,7 @@ export default class PluginRegistry
   private readonly pPrompts: Map<Token, PromptRegistry> = new Map();
 
   private readonly scope: Scope;
-  private readonly hookScope: Scope;
+  private readonly scopeInfo?: PluginScopeInfo;
   private readonly owner?: EntryOwnerRef;
 
   constructor(
@@ -39,14 +54,16 @@ export default class PluginRegistry
     list: PluginType[],
     owner?: EntryOwnerRef,
     /**
-     * Optional scope for hook registration. When an app's standalone is false,
-     * this should be the parent scope so HTTP hooks are triggered by the gateway.
+     * Scope information for hook registration. Determines where plugin hooks
+     * are registered based on the plugin's scope setting ('app' or 'server').
+     * - scope='app' (default): hooks register to ownScope
+     * - scope='server': hooks register to parentScope (if available)
      */
-    hookScope?: Scope,
+    scopeInfo?: PluginScopeInfo,
   ) {
     super('PluginRegistry', providers, list);
     this.scope = providers.getActiveScope();
-    this.hookScope = hookScope ?? this.scope;
+    this.scopeInfo = scopeInfo;
     this.owner = owner;
   }
 
@@ -100,7 +117,9 @@ export default class PluginRegistry
         ref: token,
       };
 
-      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], pluginOwner);
+      // Pass scopeInfo to nested plugins to ensure scope validation is consistent
+      // throughout the plugin hierarchy
+      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], pluginOwner, this.scopeInfo);
       await plugins.ready;
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
@@ -156,8 +175,39 @@ export default class PluginRegistry
         throw Error('Invalid plugin kind');
       }
 
+      // Determine the plugin's scope setting (defaults to 'app')
+      const pluginScope = rec.metadata.scope ?? 'app';
+
+      // Validate: standalone apps cannot have server-scoped plugins
+      // This validation runs regardless of whether the plugin has hooks,
+      // to catch configuration errors early
+      if (this.scopeInfo?.isStandaloneApp && pluginScope === 'server') {
+        throw new InvalidPluginScopeError(
+          `Plugin "${rec.metadata.name}" has scope='server' but is used in a standalone app. ` +
+            `Server-scoped plugins can only be used in non-standalone apps.`,
+        );
+      }
+
       const hooks = normalizeHooksFromCls(pluginInstance);
       if (hooks.length > 0) {
+        // Determine which scope to use for hook registration:
+        // - scope='app' (default): register hooks to own scope (app-level)
+        // - scope='server': register hooks to parent scope (gateway-level) if available
+        let targetHookScope: Scope;
+        if (pluginScope === 'server' && this.scopeInfo?.parentScope) {
+          targetHookScope = this.scopeInfo.parentScope;
+        } else {
+          targetHookScope = this.scope;
+          // Warn if server scope was requested but no parent scope is available
+          if (pluginScope === 'server' && !this.scopeInfo?.parentScope) {
+            this.scope.logger.warn(
+              `Plugin "${rec.metadata.name}" has scope='server' but no parent scope is available. ` +
+                `Hooks will be registered to the current scope instead. ` +
+                `This may happen for server-level plugins or standalone apps.`,
+            );
+          }
+        }
+
         // Add owner information to each hook before registering
         const hooksWithOwner = hooks.map((hook) => ({
           ...hook,
@@ -166,8 +216,8 @@ export default class PluginRegistry
             owner: this.owner,
           },
         }));
-        // Register hooks to hookScope (which may be parent scope for non-standalone apps)
-        await this.hookScope.hooks.registerHooks(false, ...hooksWithOwner);
+        // Register hooks to the determined target scope
+        await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
       pluginInstance.get = providers.get.bind(providers) as any;
       const dynamicProviders = rec.providers;
