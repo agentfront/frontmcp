@@ -18,12 +18,18 @@ let _provider: CryptoProvider | null = null;
 export function getCrypto(): CryptoProvider {
   if (!_provider) {
     if (isNode()) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./node').nodeCrypto as CryptoProvider;
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }
-  return _provider!;
+  // Provider is always initialized in the if block above
+  if (!_provider) {
+    throw new Error('Failed to initialize crypto provider');
+  }
+  return _provider;
 }
 
 // Convenience function exports - delegate to provider
@@ -72,19 +78,43 @@ export function hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, 
 
 /**
  * Encrypt using AES-256-GCM.
+ * @param key - 32-byte encryption key (AES-256)
+ * @param plaintext - Data to encrypt
+ * @param iv - 12-byte initialization vector (96 bits, recommended for GCM)
+ * @throws Error if key is not 32 bytes or IV is not 12 bytes
  */
 export function encryptAesGcm(
   key: Uint8Array,
   plaintext: Uint8Array,
   iv: Uint8Array,
 ): { ciphertext: Uint8Array; tag: Uint8Array } {
+  if (key.length !== 32) {
+    throw new Error(`AES-256-GCM requires a 32-byte key, got ${key.length} bytes`);
+  }
+  if (iv.length !== 12) {
+    throw new Error(`AES-GCM requires a 12-byte IV, got ${iv.length} bytes`);
+  }
   return getCrypto().encryptAesGcm(key, plaintext, iv);
 }
 
 /**
  * Decrypt using AES-256-GCM.
+ * @param key - 32-byte encryption key (AES-256)
+ * @param ciphertext - Encrypted data
+ * @param iv - 12-byte initialization vector (96 bits)
+ * @param tag - 16-byte authentication tag
+ * @throws Error if key is not 32 bytes, IV is not 12 bytes, or tag is not 16 bytes
  */
 export function decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8Array, tag: Uint8Array): Uint8Array {
+  if (key.length !== 32) {
+    throw new Error(`AES-256-GCM requires a 32-byte key, got ${key.length} bytes`);
+  }
+  if (iv.length !== 12) {
+    throw new Error(`AES-GCM requires a 12-byte IV, got ${iv.length} bytes`);
+  }
+  if (tag.length !== 16) {
+    throw new Error(`AES-GCM requires a 16-byte authentication tag, got ${tag.length} bytes`);
+  }
   return getCrypto().decryptAesGcm(key, ciphertext, iv, tag);
 }
 

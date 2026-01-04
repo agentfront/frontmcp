@@ -41,6 +41,9 @@ function getSpawn(): typeof import('child_process').spawn {
   return _spawn!;
 }
 
+// fs.constants.F_OK is always 0 in Node.js - define locally to avoid lazy-load in fileExists
+const F_OK = 0;
+
 /**
  * Check if a file exists asynchronously.
  *
@@ -54,9 +57,8 @@ function getSpawn(): typeof import('child_process').spawn {
  */
 export async function fileExists(p: string): Promise<boolean> {
   try {
-    const fs = getFs();
     const fsp = getFsp();
-    await fsp.access(p, fs.constants.F_OK);
+    await fsp.access(p, F_OK);
     return true;
   } catch {
     return false;

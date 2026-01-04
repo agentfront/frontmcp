@@ -29,8 +29,9 @@ declare global {
    * Declarative metadata extends to the McpAgent decorator.
    * Extends ExtendFrontMcpToolMetadata so agents can use plugin metadata
    * options (e.g., cache, codecall) since agents are exposed as tools.
+   * Uses interface for declaration merging support.
    */
-  type ExtendFrontMcpAgentMetadata = ExtendFrontMcpToolMetadata;
+  interface ExtendFrontMcpAgentMetadata extends ExtendFrontMcpToolMetadata {}
 }
 
 // ============================================================================

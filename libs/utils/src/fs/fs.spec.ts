@@ -89,7 +89,7 @@ describe('FS Utils', () => {
     });
 
     it('should not throw if directory exists', async () => {
-      await expect(ensureDir(tempDir)).resolves.not.toThrow();
+      await expect(ensureDir(tempDir)).resolves.toBeUndefined();
     });
   });
 
@@ -113,7 +113,7 @@ describe('FS Utils', () => {
 
   describe('runCmd', () => {
     it('should resolve for successful command', async () => {
-      await expect(runCmd('echo', ['hello'])).resolves.not.toThrow();
+      await expect(runCmd('echo', ['hello'])).resolves.toBeUndefined();
     });
 
     it('should reject for failed command', async () => {
@@ -125,7 +125,8 @@ describe('FS Utils', () => {
     });
 
     it('should use cwd option', async () => {
-      await expect(runCmd('pwd', [], { cwd: tempDir })).resolves.not.toThrow();
+      // Use node instead of pwd for cross-platform compatibility
+      await expect(runCmd('node', ['-e', 'console.log(process.cwd())'], { cwd: tempDir })).resolves.toBeUndefined();
     });
   });
 });

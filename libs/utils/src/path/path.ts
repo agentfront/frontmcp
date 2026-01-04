@@ -7,7 +7,7 @@
 /**
  * Trim leading and trailing slashes from a string.
  *
- * @param s - The string to trim
+ * @param s - The string to trim (null/undefined treated as empty string)
  * @returns String with leading/trailing slashes removed
  *
  * @example
@@ -15,7 +15,7 @@
  * trimSlashes('no-slashes') // 'no-slashes'
  * trimSlashes('///multiple///') // 'multiple'
  */
-export function trimSlashes(s: string): string {
+export function trimSlashes(s: string | null | undefined): string {
   return (s ?? '').replace(/^\/+|\/+$/g, '');
 }
 
