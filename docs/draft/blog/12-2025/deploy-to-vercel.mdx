@@ -265,17 +265,26 @@ Vercel serverless functions have timeout limits:
 If your MCP operations take longer than 60 seconds on Hobby tier, they'll fail. For long-running agent tasks, consider Pro tier or chunking the work.
 </Warning>
 
-Configure max duration in `vercel.json`:
+FrontMCP uses Vercel's Build Output API, so max duration is configured in the function's `.vc-config.json`. You can customize this via the CLI:
+
+```bash
+frontmcp build --adapter vercel --max-duration 300
+```
+
+This generates `.vercel/output/functions/index.func/.vc-config.json`:
 
 ```json
 {
-  "functions": {
-    "api/**/*.js": {
-      "maxDuration": 60
-    }
-  }
+  "runtime": "nodejs22.x",
+  "handler": "handler.cjs",
+  "launcherType": "Nodejs",
+  "maxDuration": 300
 }
 ```
+
+<Note>
+The `maxDuration` value must not exceed your Vercel tier limit. Hobby tier caps at 60 seconds.
+</Note>
 
 ### Cold Starts
 
