@@ -252,7 +252,8 @@ export type McpNotificationMethod =
   | 'notifications/tools/list_changed'
   | 'notifications/prompts/list_changed'
   | 'notifications/resources/updated'
-  | 'notifications/message';
+  | 'notifications/message'
+  | 'notifications/progress';
 
 /**
  * Information about a registered MCP server/transport connection.
@@ -711,6 +712,52 @@ export class NotificationService {
     }
 
     this.sendNotificationToServer(registered.server, sessionId, 'notifications/message', params);
+    return true;
+  }
+
+  // =====================================================
+  // Progress Notifications (MCP 2025-11-25)
+  // =====================================================
+
+  /**
+   * Send a progress notification to a specific session.
+   * Per MCP 2025-11-25 spec, this sends a 'notifications/progress' notification
+   * using the progressToken from the original request.
+   *
+   * @param sessionId - The target session
+   * @param progressToken - The progress token from the original request's _meta
+   * @param progress - Current progress value (should increase monotonically)
+   * @param total - Total progress value (optional)
+   * @param message - Progress message (optional)
+   * @returns true if the notification was sent
+   */
+  sendProgressNotification(
+    sessionId: string,
+    progressToken: string | number,
+    progress: number,
+    total?: number,
+    message?: string,
+  ): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
+      this.logger.warn(`Cannot send progress notification to unregistered session: ${sessionId.slice(0, 20)}...`);
+      return false;
+    }
+
+    const params: Record<string, unknown> = {
+      progressToken,
+      progress,
+    };
+
+    if (total !== undefined) {
+      params['total'] = total;
+    }
+
+    if (message !== undefined) {
+      params['message'] = message;
+    }
+
+    this.sendNotificationToServer(registered.server, sessionId, 'notifications/progress', params);
     return true;
   }
 

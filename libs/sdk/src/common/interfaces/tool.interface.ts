@@ -6,7 +6,7 @@ import { FlowControl } from './flow.interface';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import type { AIPlatformType, ClientInfo } from '../../notification';
+import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 
 export type ToolType<T = any> = Type<T> | FuncType<T>;
 
@@ -20,6 +20,8 @@ type HistoryEntry<T> = {
 export type ToolCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: ToolMetadata;
   input: In;
+  /** Progress token from the request's _meta, used for progress notifications */
+  progressToken?: string | number;
 };
 
 export abstract class ToolContext<
@@ -44,8 +46,11 @@ export abstract class ToolContext<
   private readonly _inputHistory: HistoryEntry<In>[] = [];
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
+  // ---- Progress token from request's _meta (for progress notifications)
+  private readonly _progressToken?: string | number;
+
   constructor(args: ToolCtorArgs<In>) {
-    const { metadata, input, providers, logger } = args;
+    const { metadata, input, providers, logger, progressToken } = args;
     super({
       providers,
       logger: logger.child(`tool:${metadata.id ?? metadata.name}`),
@@ -55,6 +60,7 @@ export abstract class ToolContext<
     this.toolId = metadata.id ?? metadata.name;
     this.metadata = metadata;
     this._input = input;
+    this._progressToken = progressToken;
   }
 
   abstract execute(input: In): Promise<Out>;
@@ -93,6 +99,80 @@ export abstract class ToolContext<
     // record validated output and surface the value via control flow
     this.output = value;
     FlowControl.respond<Out>(value);
+  }
+
+  // ============================================
+  // Notification Methods
+  // ============================================
+
+  /**
+   * Send a notification message to the current session.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec.
+   *
+   * @param message - The notification message (string) or structured data (object)
+   * @param level - Log level: 'debug', 'info', 'warning', or 'error' (default: 'info')
+   * @returns true if the notification was sent, false if session unavailable
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   await this.notify('Starting processing...', 'info');
+   *   await this.notify({ step: 1, total: 5, status: 'in_progress' });
+   *   // ... processing
+   *   await this.notify('Processing complete', 'info');
+   *   return result;
+   * }
+   * ```
+   */
+  protected async notify(message: string | Record<string, unknown>, level: McpLoggingLevel = 'info'): Promise<boolean> {
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      this.logger.warn('Cannot send notification: no session ID');
+      return false;
+    }
+
+    const data = typeof message === 'string' ? { message } : message;
+    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.toolName, data);
+  }
+
+  /**
+   * Send a progress notification to the current session.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   *
+   * Only works if the client requested progress updates by including a
+   * progressToken in the request's _meta field. If no progressToken was
+   * provided, this method logs a debug message and returns false.
+   *
+   * @param progress - Current progress value (should increase monotonically)
+   * @param total - Total progress value (optional)
+   * @param message - Progress message (optional)
+   * @returns true if the notification was sent, false if no progressToken or session
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   const items = input.items;
+   *   for (let i = 0; i < items.length; i++) {
+   *     await this.progress(i + 1, items.length, `Processing item ${i + 1}`);
+   *     await processItem(items[i]);
+   *   }
+   *   return { processed: items.length };
+   * }
+   * ```
+   */
+  protected async progress(progress: number, total?: number, message?: string): Promise<boolean> {
+    if (!this._progressToken) {
+      this.logger.debug('Cannot send progress: no progressToken in request');
+      return false;
+    }
+
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      this.logger.warn('Cannot send progress: no session ID');
+      return false;
+    }
+
+    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
   }
 
   // ============================================
