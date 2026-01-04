@@ -146,25 +146,10 @@ export default class EnclaveService {
               },
             }
           : {}),
-        // Provide console if allowed
-        ...(this.vmOptions.allowConsole
-          ? {
-              console: {
-                log: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[log] ${message}`);
-                },
-                warn: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[warn] ${message}`);
-                },
-                error: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[error] ${message}`);
-                },
-              },
-            }
-          : {}),
+        // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
+        // and output size limits. Passing console in globals causes "Cannot redefine property"
+        // errors due to Double VM architecture. Console output from user scripts goes to stdout
+        // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
       },
     });
 

@@ -27,6 +27,8 @@ export type AgentCallArgs = CallToolRequest['params']['arguments'];
  */
 export type AgentCallExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
+  /** Progress token from the request's _meta, used for progress notifications */
+  progressToken?: string | number;
 };
 
 /**

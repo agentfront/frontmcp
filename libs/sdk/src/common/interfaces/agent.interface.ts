@@ -1,9 +1,8 @@
 import { ProviderRegistryInterface } from './internal';
 import { ToolInputType, ToolOutputType, AgentMetadata, AgentType } from '../metadata';
 import { FlowControl } from './flow.interface';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ExecutionContextBase, ExecutionContextBaseArgs } from './execution-context.interface';
-import type { AIPlatformType, ClientInfo } from '../../notification';
+import type { AIPlatformType, ClientInfo, McpLoggingLevel } from '../../notification';
 import {
   AgentLlmAdapter,
   AgentPrompt,
@@ -45,6 +44,8 @@ export type AgentCtorArgs<In> = ExecutionContextBaseArgs & {
   toolDefinitions?: AgentToolDefinition[];
   /** Function to execute tools - provided by AgentInstance */
   toolExecutor?: ToolExecutor;
+  /** Progress token from the request's _meta, used for progress notifications */
+  progressToken?: string | number;
 };
 
 // ============================================================================
@@ -123,8 +124,12 @@ export class AgentContext<
   private readonly _inputHistory: HistoryEntry<In>[] = [];
   private readonly _outputHistory: HistoryEntry<Out>[] = [];
 
+  // ---- Progress token from request's _meta (for progress notifications)
+  private readonly _progressToken?: string | number;
+
   constructor(args: AgentCtorArgs<In>) {
-    const { metadata, input, providers, logger, llmAdapter, agentScope, toolDefinitions, toolExecutor } = args;
+    const { metadata, input, providers, logger, llmAdapter, agentScope, toolDefinitions, toolExecutor, progressToken } =
+      args;
     super({
       providers,
       logger: logger.child(`agent:${metadata.id ?? metadata.name}`),
@@ -139,6 +144,7 @@ export class AgentContext<
     this.systemInstructions = metadata.systemInstructions ?? '';
     this.toolDefinitions = toolDefinitions ?? [];
     this.toolExecutor = toolExecutor;
+    this._progressToken = progressToken;
   }
 
   /**
@@ -182,24 +188,76 @@ export class AgentContext<
     // Build user message from input
     const userMessage = this.buildUserMessage(input);
 
+    // Determine if auto progress is enabled
+    const enableAutoProgress =
+      this.metadata.execution?.enableAutoProgress === true && this.metadata.execution?.enableNotifications !== false;
+    const maxIterations = this.metadata.execution?.maxIterations ?? 10;
+
+    // Track progress state for monotonic updates
+    let currentProgress = 0;
+
     // Create execution loop
     const loop = new AgentExecutionLoop({
       adapter: this.llmAdapter,
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
-      maxIterations: this.metadata.execution?.maxIterations ?? 10,
+      maxIterations,
       timeout: this.metadata.execution?.timeout ?? 120000,
       logger: this.logger,
 
-      // Notification callbacks
+      // Auto progress callbacks (only when enabled)
+      onLlmStart: enableAutoProgress
+        ? (iteration: number, maxIter: number) => {
+            // Each iteration gets ~8% of progress (80% total for 10 iterations)
+            currentProgress = Math.round(((iteration - 1) / maxIter) * 80);
+            this.progress(currentProgress, 100, `Starting LLM call (iteration ${iteration}/${maxIter})`);
+          }
+        : undefined,
+
+      onLlmComplete: enableAutoProgress
+        ? (iteration: number, usage?: { promptTokens?: number; completionTokens?: number }) => {
+            currentProgress = Math.round(((iteration - 0.5) / maxIterations) * 80);
+            const usageStr = usage ? ` (${usage.promptTokens ?? 0}P + ${usage.completionTokens ?? 0}C tokens)` : '';
+            this.progress(currentProgress, 100, `LLM response received${usageStr}`);
+          }
+        : undefined,
+
+      onToolsIdentified: enableAutoProgress
+        ? (count: number, names: string[]) => {
+            this.notify(`Identified ${count} tool call(s): ${names.join(', ')}`, 'info');
+          }
+        : undefined,
+
+      onToolStart: enableAutoProgress
+        ? (toolCall: AgentToolCall, index: number, total: number) => {
+            const toolProgress = currentProgress + Math.round(((index + 1) / total) * 10);
+            this.progress(toolProgress, 100, `Executing tool ${index + 1}/${total}: ${toolCall.name}`);
+          }
+        : undefined,
+
+      onComplete: enableAutoProgress
+        ? (content: string | null, error?: Error) => {
+            if (error) {
+              this.progress(100, 100, `Agent failed: ${error.message}`);
+            } else {
+              this.progress(100, 100, 'Agent completed');
+            }
+          }
+        : undefined,
+
+      // Standard notification callbacks (always active when notifications enabled)
       onToolCall: (toolCall: AgentToolCall) => {
-        this.notify(`Calling tool: ${toolCall.name}`, 'info');
+        if (this.metadata.execution?.enableNotifications !== false) {
+          this.notify(`Calling tool: ${toolCall.name}`, 'info');
+        }
         this.logger.debug(`Tool call: ${toolCall.name}`, { args: toolCall.arguments });
       },
 
       onToolResult: (toolCall: AgentToolCall, result: unknown, error?: Error) => {
         if (error) {
-          this.notify(`Tool ${toolCall.name} failed: ${error.message}`, 'error');
+          if (this.metadata.execution?.enableNotifications !== false) {
+            this.notify(`Tool ${toolCall.name} failed: ${error.message}`, 'error');
+          }
           this.logger.error(`Tool ${toolCall.name} failed`, error);
         } else {
           this.logger.debug(`Tool ${toolCall.name} completed`, { result });
@@ -378,22 +436,83 @@ export class AgentContext<
   // ============================================================================
 
   /**
-   * Send a notification message to the client.
+   * Send a notification message to the current session.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec.
    *
    * Use this to report progress during long-running operations.
    *
-   * @param message - The notification message
-   * @param level - Notification level: 'info' (default), 'warning', or 'error'
+   * @param message - The notification message (string) or structured data (object)
+   * @param level - Log level: 'debug', 'info', 'warning', or 'error' (default: 'info')
+   * @returns true if the notification was sent, false if session unavailable
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   await this.notify('Starting agent processing...', 'info');
+   *   await this.notify({ step: 1, total: 5, status: 'in_progress' });
+   *   // ... processing
+   *   return result;
+   * }
+   * ```
    */
-  protected async notify(message: string, level: 'info' | 'warning' | 'error' = 'info'): Promise<void> {
-    // TODO: Integrate with notification service
+  protected async notify(message: string | Record<string, unknown>, level: McpLoggingLevel = 'info'): Promise<boolean> {
+    // Log locally
+    const logMessage = typeof message === 'string' ? message : JSON.stringify(message);
     if (level === 'error') {
-      this.logger.error(message);
+      this.logger.error(logMessage);
     } else if (level === 'warning') {
-      this.logger.warn(message);
+      this.logger.warn(logMessage);
     } else {
-      this.logger.info(message);
+      this.logger.info(logMessage);
     }
+
+    // Send to client
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      return false;
+    }
+
+    const data = typeof message === 'string' ? { message } : message;
+    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.agentName, data);
+  }
+
+  /**
+   * Send a progress notification to the current session.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   *
+   * Only works if the client requested progress updates by including a
+   * progressToken in the request's _meta field. If no progressToken was
+   * provided, this method logs a debug message and returns false.
+   *
+   * @param progress - Current progress value (should increase monotonically)
+   * @param total - Total progress value (optional)
+   * @param message - Progress message (optional)
+   * @returns true if the notification was sent, false if no progressToken or session
+   *
+   * @example
+   * ```typescript
+   * async execute(input: Input): Promise<Output> {
+   *   for (let i = 0; i < 10; i++) {
+   *     await this.progress(i + 1, 10, `Step ${i + 1} of 10`);
+   *     await doWork();
+   *   }
+   *   return result;
+   * }
+   * ```
+   */
+  protected async progress(progress: number, total?: number, message?: string): Promise<boolean> {
+    if (!this._progressToken) {
+      this.logger.debug('Cannot send progress: no progressToken in request');
+      return false;
+    }
+
+    const sessionId = this.authInfo.sessionId;
+    if (!sessionId) {
+      this.logger.warn('Cannot send progress: no session ID');
+      return false;
+    }
+
+    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
   }
 
   /**

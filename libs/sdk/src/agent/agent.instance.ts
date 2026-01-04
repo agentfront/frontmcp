@@ -488,6 +488,7 @@ export class AgentInstance<
       llmAdapter,
       toolDefinitions: this.getToolDefinitions(),
       toolExecutor: this.createToolExecutor(ctx),
+      progressToken: ctx.progressToken,
     };
   }
 

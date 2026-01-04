@@ -110,6 +110,7 @@ export class ToolInstance<
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
+    const progressToken = ctx.progressToken;
 
     const toolCtorArgs: ToolCtorArgs<In> = {
       metadata,
@@ -117,6 +118,7 @@ export class ToolInstance<
       providers,
       logger,
       authInfo,
+      progressToken,
     };
     switch (this.record.kind) {
       case ToolKind.CLASS_TOKEN:

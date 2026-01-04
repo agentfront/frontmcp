@@ -196,20 +196,6 @@ if (!result.success) {
 - **XSS Tests**: Test HTML escaping for user-provided content
 - **Platform Tests**: Test behavior across platform configurations
 
-## Dependencies
-
-```json
-{
-  "dependencies": {
-    "@swc/core": "^1.5.0",
-    "enclave-vm": "^1.0.3",
-    "esbuild": "^0.27.1",
-    "handlebars": "^4.7.8",
-    "zod": "^4.0.0"
-  }
-}
-```
-
 Note: No React dependency!
 
 ## Anti-Patterns to Avoid
