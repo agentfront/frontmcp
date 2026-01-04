@@ -379,13 +379,13 @@ export default class GlobalLoggerPlugin {
 
 ### When to Use Each Scope
 
-| Use Case                 | Scope    | Example                            |
-| ------------------------ | -------- | ---------------------------------- |
-| App-specific caching     | `app`    | Cache responses for one app only   |
-| Per-app rate limiting    | `app`    | Different limits per app           |
-| Global audit logging     | `server` | Log all tool calls across apps     |
-| Cross-app orchestration  | `server` | Access tools from multiple apps    |
-| Authentication gateway   | `server` | Validate tokens before any app     |
+| Use Case                | Scope    | Example                          |
+| ----------------------- | -------- | -------------------------------- |
+| App-specific caching    | `app`    | Cache responses for one app only |
+| Per-app rate limiting   | `app`    | Different limits per app         |
+| Global audit logging    | `server` | Log all tool calls across apps   |
+| Cross-app orchestration | `server` | Access tools from multiple apps  |
+| Authentication gateway  | `server` | Validate tokens before any app   |
 
 ### Accessing Other Apps (Server Scope)
 
@@ -416,3 +416,69 @@ Plugins compose **depth-first** at the app level. Later plugins can depend on pr
   Put organization-wide concerns (auth, audit, tracing) in plugins so all generated and inline components inherit the
   behavior without boilerplate.
 </Tip>
+
+## Dashboard plugin
+
+`@frontmcp/plugins` now ships a dashboard that streams your server graph over SSE, exposes MCP tools for introspection, and loads the UI from CDN so you can monitor every tool, resource, prompt, and app in one place.
+
+### DashboardApp (Recommended)
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { DashboardApp } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [DashboardApp],
+})
+class MyServer {}
+```
+
+Visit `/dashboard` for the HTML UI, `/dashboard/sse` for the SSE feed, and `/dashboard/message` to send MCP requests from the browser.
+
+<Tip>DashboardApp is marked `standalone: true`, which keeps the dashboard inside the parent scope so its graph provider can observe every scope without extra wiring.</Tip>
+
+### DashboardPlugin (Advanced)
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { DashboardPlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'Secure Server', version: '1.0.0' },
+  plugins: [
+    new DashboardPlugin({
+      enabled: true,
+      basePath: '/dashboard',
+      auth: {
+        enabled: true,
+        token: process.env.DASHBOARD_TOKEN,
+      },
+      cdn: {
+        entrypoint: 'https://cdn.example.com/frontmcp-dashboard@1.0.0/index.js',
+      },
+    }),
+  ],
+})
+class MyServer {}
+```
+
+#### DashboardPlugin options
+
+- `enabled` (`boolean | 'auto'`) – toggles the dashboard (auto = enabled in dev, disabled in prod).
+- `basePath` (`string`) – HTTP mount point for `/dashboard`, `/dashboard/sse`, and `/dashboard/message`.
+- `auth.enabled` / `auth.token` – gate UI access with a query token (pass `token` as `?token=` in production).
+- `cdn.entrypoint`, `cdn.react`, `cdn.xyflow` – override CDN URLs for the React + React Flow bundles.
+
+<Note>Always supply `auth.token` when you expose the dashboard outside a secure network to keep the tool list and SSE stream private.</Note>
+
+### Tools & graph data
+
+The dashboard UI drives two layers of observability:
+
+- `dashboard:graph` returns a `GraphData` payload with nodes, edges, and optional schemas so you can render the structure in React Flow.
+- `dashboard:list-tools` and `dashboard:list-resources` walk every registered tool and resource, support optional `filter` and `includeSchemas`/`includeTemplates`, and power audit workflows.
+
+The UI keeps the view fresh via an SSE connection to `/dashboard/sse` and issues MCP calls against `/dashboard/message` for those tools.
+
+<Tip>Enable `includeSchemas` when calling `dashboard:graph` or `dashboard:list-tools` if you want to validate schema drift as part of your monitoring playbook.</Tip>

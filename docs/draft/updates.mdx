@@ -5,17 +5,25 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-04" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    ## Features
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+    🚀 **Agent orchestration upgrades** – Agents now act as first-class tools with advanced hooks, scoped visibility, and orchestrator demos so multi-agent flows stay deterministic and debuggable.
 
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    🧩 **Dashboard plugin** – Add the new Dashboard app/plugin to stream your server graph via SSE, list tools/resources, and protect the CDN UI with optional token auth.
+
+    🧰 **Shared utils library** – `@frontmcp/utils` centralizes naming, URI, path, content, HTTP, fs, escaping, serialization, and crypto helpers so apps and plugins share one trusted toolkit.
+
+    🛡️ **Scoped plugin control** – Register plugins with app or server scope (with standalone checks) so hooks and providers run only where you expect them, keeping cross-app behavior predictable.
+
+    ## Build/CI
+
+    🧪 **Coverage automation** – Nx scripts `test:unit:coverage`, `test:e2e:coverage`, `coverage:merge`, `coverage:all`, and `coverage:check` merge unit and E2E reports and make `nyc` thresholds part of CI gating.
 
   </Card>
 </Update>
