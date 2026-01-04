@@ -21,11 +21,12 @@ import {
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
+  annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpProvidersSchema,
   annotatedFrontMcpResourcesSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
-import { AppType, ProviderType, ResourceType, ToolType } from '../interfaces';
+import { AppType, PluginType, ProviderType, ResourceType, ToolType } from '../interfaces';
 
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
@@ -77,6 +78,13 @@ export interface FrontMcpBaseMetadata {
    * These are merged (additively) with app-specific resources.
    */
   resources?: ResourceType[];
+
+  /**
+   * Server-level plugins that are instantiated per scope.
+   * Each scope gets its own instance of these plugins.
+   * These plugins have server-wide access (can see all apps in scope).
+   */
+  plugins?: PluginType[];
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -84,6 +92,7 @@ export const frontMcpBaseSchema = z.object({
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   tools: z.array(annotatedFrontMcpToolsSchema).optional().default([]),
   resources: z.array(annotatedFrontMcpResourcesSchema).optional().default([]),
+  plugins: z.array(annotatedFrontMcpPluginsSchema).optional().default([]),
   apps: z.array(annotatedFrontMcpAppSchema),
   serve: z.boolean().optional().default(true),
   http: httpOptionsSchema.optional(),

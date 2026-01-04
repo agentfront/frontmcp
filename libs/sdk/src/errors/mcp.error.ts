@@ -359,6 +359,16 @@ export class InvalidHookFlowError extends InternalMcpError {
 }
 
 /**
+ * Invalid plugin scope error - thrown when a plugin with scope='server'
+ * is used in a standalone app, which is not allowed.
+ */
+export class InvalidPluginScopeError extends InternalMcpError {
+  constructor(message: string) {
+    super(message, 'INVALID_PLUGIN_SCOPE');
+  }
+}
+
+/**
  * Request context not available error - thrown when code attempts to access
  * RequestContext outside of a request scope (i.e., without AsyncLocalStorage context).
  */
