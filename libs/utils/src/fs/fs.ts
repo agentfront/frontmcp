@@ -17,7 +17,7 @@ let _spawn: typeof import('child_process').spawn | null = null;
 function getFs(): typeof import('fs') {
   if (!_fs) {
     assertNode('File system operations');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     _fs = require('fs');
   }
   return _fs!;
@@ -26,7 +26,7 @@ function getFs(): typeof import('fs') {
 function getFsp(): typeof import('fs').promises {
   if (!_fsp) {
     assertNode('File system operations');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     _fsp = require('fs').promises;
   }
   return _fsp!;
@@ -35,7 +35,7 @@ function getFsp(): typeof import('fs').promises {
 function getSpawn(): typeof import('child_process').spawn {
   if (!_spawn) {
     assertNode('Child process operations');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     _spawn = require('child_process').spawn;
   }
   return _spawn!;

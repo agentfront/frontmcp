@@ -60,7 +60,7 @@ export function createStoreDriver(options: RedisOptions): StoreDriver {
  */
 function createRedisStoreDriver(options: RedisProviderOptions): StoreDriver {
   // Lazy import to avoid bundling ioredis when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { ScopedRedisStore } = require('./adapters/store.redis.adapter');
 
   return new ScopedRedisStore({
@@ -80,7 +80,7 @@ function createRedisStoreDriver(options: RedisProviderOptions): StoreDriver {
  */
 function createVercelKvStoreDriver(options: VercelKvProviderOptions): StoreDriver {
   // Lazy import to avoid bundling @vercel/kv when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { ScopedVercelKvStore } = require('./adapters/store.vercel-kv.adapter');
 
   return new ScopedVercelKvStore({
@@ -131,7 +131,7 @@ export async function createSessionStore(options: RedisOptions, logger?: FrontMc
  */
 async function createRedisSessionStore(options: RedisProviderOptions, logger?: FrontMcpLogger): Promise<SessionStore> {
   // Lazy require to avoid bundling ioredis when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { RedisSessionStore } = require('../auth/session/redis-session.store');
 
   return new RedisSessionStore(
@@ -156,7 +156,7 @@ async function createVercelKvSessionStore(
   logger?: FrontMcpLogger,
 ): Promise<SessionStore> {
   // Lazy require to avoid bundling @vercel/kv when not used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { VercelKvSessionStore } = require('../auth/session/vercel-kv-session.store');
 
   const store = new VercelKvSessionStore(
@@ -189,7 +189,7 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
   }
 
   // Redis only - synchronous creation
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const { RedisSessionStore } = require('../auth/session/redis-session.store');
   const redisOptions = isRedisProvider(options) ? options : (options as RedisProviderOptions);
 

@@ -11,7 +11,6 @@ import { InternalMcpError } from '../../errors/mcp.error';
 let _FrontMcpInstance: typeof import('../../front-mcp').FrontMcpInstance | null = null;
 function getFrontMcpInstance() {
   if (!_FrontMcpInstance) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     _FrontMcpInstance = require('../../front-mcp').FrontMcpInstance;
   }
   if (!_FrontMcpInstance) {
@@ -30,7 +29,6 @@ let _serverlessHandlerFns: ServerlessHandlerFns | null = null;
 
 function getServerlessHandlerFns(): ServerlessHandlerFns {
   if (!_serverlessHandlerFns) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     _serverlessHandlerFns = require('../../front-mcp/serverless-handler');
   }
   if (!_serverlessHandlerFns) {

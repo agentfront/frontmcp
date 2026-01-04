@@ -30,7 +30,7 @@ declare global {
    * Extends ExtendFrontMcpToolMetadata so agents can use plugin metadata
    * options (e.g., cache, codecall) since agents are exposed as tools.
    */
-  interface ExtendFrontMcpAgentMetadata extends ExtendFrontMcpToolMetadata {}
+  type ExtendFrontMcpAgentMetadata = ExtendFrontMcpToolMetadata;
 }
 
 // ============================================================================
