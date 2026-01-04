@@ -242,6 +242,22 @@ test.describe('Public Auth Mode E2E', () => {
 
 ---
 
+## Coverage automation
+
+Use the Nx helper scripts to keep the unit and E2E coverage reports in sync:
+
+```bash
+npm run test:unit:coverage
+npm run test:e2e:coverage
+npm run coverage:merge
+```
+
+`npm run coverage:all` chains the three commands above, and `npm run coverage:check` runs `npx nyc check-coverage --temp-dir=coverage/merged` to enforce your defined thresholds before publishing results.
+
+<Tip>Run `npm run coverage:all` at least once before a release so the merged output already reflects both unit and E2E suites.</Tip>
+
+<Note>The merge script `scripts/merge-coverage.mjs` consolidates the coverage outputs into `coverage/merged`, which `nyc check-coverage` reads to apply the configured thresholds.</Note>
+
 ## Next Steps
 
 <Columns cols={2}>

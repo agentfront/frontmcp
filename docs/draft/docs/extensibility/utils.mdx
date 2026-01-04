@@ -1,0 +1,81 @@
+---
+title: Utility Library
+sidebarTitle: Utils
+slug: extensibility/utils
+icon: toolbox
+description: Shared helper functions for naming, URI templates, crypto, and more.
+---
+
+`@frontmcp/utils` gathers the helper functions that other FrontMCP packages rely on so you can import them from one stable package instead of duplicating low-level code.
+
+## Installation
+
+```bash
+npm install @frontmcp/utils
+```
+
+## Core modules
+
+### Naming helpers
+
+`splitWords`, `toCase`, `sepFor`, `shortHash`, `ensureMaxLen`, and `idFromString` help you normalize identifiers, change casing patterns, and build consistent slugs for tools, URIs, and DI tokens.
+
+### URI utilities
+
+Use `isValidMcpUri`, `extractUriScheme`, `isValidMcpUriTemplate`, `parseUriTemplate`, `matchUriTemplate`, `expandUriTemplate`, and `extractTemplateParams` to validate MCP resource URIs and work with RFC 6570 Level 1 templates without re-implementing parsers.
+
+### Path & content helpers
+
+`trimSlashes` and `joinPath` normalize path fragments, while `sanitizeToJson` removes functions, symbols, and circular references before JSON serialization and `inferMimeType` guesses content types from extensions or payloads.
+
+### HTTP & filesystem helpers
+
+`validateBaseUrl` enforces `http:`/`https:` schemes before you call external services. Node-only helpers `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, and `runCmd` simplify async file workflows and CLI scripts with consistent error handling.
+
+### Escape & serialization helpers
+
+`escapeHtml`, `escapeHtmlAttr`, `escapeJsString`, `escapeScriptClose`, and `safeJsonForScript` keep untrusted data safe inside HTML or `<script>` tags, while `safeStringify` serializes objects that include circular references.
+
+### Crypto helpers
+
+`getCrypto`, `randomUUID`, `randomBytes`, `sha256`, `sha256Hex`, `sha256Base64url`, `hmacSha256`, `hkdfSha256`, `encryptAesGcm`, `decryptAesGcm`, `timingSafeEqual`, `bytesToHex`, `base64urlEncode`, `base64urlDecode`, `isNode`, `isBrowser`, `assertNode`, `CryptoProvider`, and `EncBlob` provide cross-platform cryptographic building blocks for tokens, signatures, key derivation, encryption, and encoding.
+
+## Usage example
+
+```ts
+import {
+  splitWords,
+  toCase,
+  trimSlashes,
+  joinPath,
+  validateBaseUrl,
+  sanitizeToJson,
+  safeStringify,
+  runCmd,
+  randomUUID,
+  hmacSha256,
+  bytesToHex,
+} from '@frontmcp/utils';
+
+const slug = toCase(splitWords('My Fancy Tool'), 'kebab');
+const endpoint = validateBaseUrl(process.env.API_BASE_URL ?? 'https://api.example.com');
+const route = joinPath('/api', trimSlashes('tools/fetch'));
+
+const payload = sanitizeToJson({
+  id: randomUUID(),
+  createdAt: new Date(),
+});
+
+const data = Buffer.from(JSON.stringify(payload));
+const signature = hmacSha256(Buffer.from(process.env.SIGNING_KEY ?? ''), data);
+
+await runCmd('npm', ['run', 'build'], { cwd: './apps/web' });
+
+console.log(safeStringify({ slug, route, endpoint: endpoint.toString(), signature: bytesToHex(signature) }));
+```
+
+<Tip>Always run `validateBaseUrl` before hitting third-party endpoints so SSRF protections stay in place.</Tip>
+
+<Note>`safeStringify` tracks objects with a `WeakSet` and replaces circular references with "[Circular]", so serialization never throws just because the data loops back on itself.</Note>
+
+<Note>The filesystem helpers (`fileExists`, `runCmd`, etc.) call `assertNode('File system operations')` and will throw outside Node.js. Guard them in browser-friendly code paths.</Note>

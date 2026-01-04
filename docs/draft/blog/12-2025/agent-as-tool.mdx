@@ -38,13 +38,13 @@ That's exactly what FrontMCP's **Agent as Tool** pattern does.
 
 Let's break down what makes multi-agent systems so painful to build:
 
-| Challenge | Traditional Approach | Time Sink |
-| --------- | -------------------- | --------- |
-| **Communication** | Custom message bus, shared state, event systems | Days of infrastructure |
+| Challenge            | Traditional Approach                                  | Time Sink               |
+| -------------------- | ----------------------------------------------------- | ----------------------- |
+| **Communication**    | Custom message bus, shared state, event systems       | Days of infrastructure  |
 | **Provider Lock-in** | Rewrite agents for each LLM (OpenAI, Anthropic, etc.) | 2-3x development effort |
-| **Tool Isolation** | Copy-paste tool definitions, maintain consistency | Ongoing maintenance |
-| **Visibility** | Build custom logging, tracing, debugging | More infrastructure |
-| **Security** | Implement auth, rate limits, sandboxing per agent | Security review cycles |
+| **Tool Isolation**   | Copy-paste tool definitions, maintain consistency     | Ongoing maintenance     |
+| **Visibility**       | Build custom logging, tracing, debugging              | More infrastructure     |
+| **Security**         | Implement auth, rate limits, sandboxing per agent     | Security review cycles  |
 
 Most teams give up on multi-agent and fall back to single monolithic agents. Which works—until it doesn't.
 
@@ -121,6 +121,7 @@ export default class ResearchAgent extends AgentContext {}
 ```
 
 That's it. No `execute()` method needed. FrontMCP runs the LLM loop automatically:
+
 1. Sends system instructions + user input to the LLM
 2. If the LLM requests tool calls, executes them
 3. Feeds results back to the LLM
@@ -206,6 +207,7 @@ export default class ContentPlatformApp {}
 ```
 
 Your MCP client now sees:
+
 - `use-agent:research-agent`
 - `use-agent:writer-agent`
 - `use-agent:analyst-agent`
@@ -438,16 +440,17 @@ swarm: {
   // Can this agent invoke other agents?
   canSeeOtherAgents?: boolean;  // default: false
 
-  // If true, which specific agents can it see?
-  visibleAgents?: string[];     // whitelist of agent IDs
+// If true, which specific agents can it see?
+visibleAgents?: string[]; // whitelist of agent IDs
 
-  // Is this agent visible to other agents?
-  isVisible?: boolean;          // default: true
+// Is this agent visible to other agents?
+isVisible?: boolean; // default: true
 
-  // Maximum nested agent call depth
-  maxCallDepth?: number;        // default: 3
+// Maximum nested agent call depth
+maxCallDepth?: number; // default: 3
 }
-```
+
+````
 </Accordion>
 
 ---
@@ -485,7 +488,7 @@ import GetWeatherTool from '../tools/get-weather.tool';
   codecall: { visibleInListTools: true },
 })
 export default class SummaryAgent extends AgentContext {}
-```
+````
 
 Registered in the app:
 
@@ -548,14 +551,14 @@ And get back:
   </Card>
 </CardGroup>
 
-| Scenario | Recommendation |
-| -------- | -------------- |
-| Fetch weather data | Tool |
-| Summarize weather for trip planning | Agent |
-| Create a database record | Tool |
-| Research and write a report | Agent |
-| Send an email | Tool |
-| Draft, review, and send personalized outreach | Agent |
+| Scenario                                      | Recommendation |
+| --------------------------------------------- | -------------- |
+| Fetch weather data                            | Tool           |
+| Summarize weather for trip planning           | Agent          |
+| Create a database record                      | Tool           |
+| Research and write a report                   | Agent          |
+| Send an email                                 | Tool           |
+| Draft, review, and send personalized outreach | Agent          |
 
 ---
 
@@ -563,12 +566,12 @@ And get back:
 
 Agents add overhead compared to raw tools:
 
-| Operation | Latency | Notes |
-| --------- | ------- | ----- |
-| Tool execution | ~50-200ms | Direct function call |
-| Agent (1 iteration) | ~1-3s | LLM round-trip |
-| Agent (5 iterations) | ~5-15s | Multiple LLM calls |
-| Nested agents | Multiplied | Each agent adds its own latency |
+| Operation            | Latency    | Notes                           |
+| -------------------- | ---------- | ------------------------------- |
+| Tool execution       | ~50-200ms  | Direct function call            |
+| Agent (1 iteration)  | ~1-3s      | LLM round-trip                  |
+| Agent (5 iterations) | ~5-15s     | Multiple LLM calls              |
+| Nested agents        | Multiplied | Each agent adds its own latency |
 
 <Tip>
 Use `execution.useToolFlow: false` to bypass the plugin layer for agent-internal tool calls. This reduces latency but loses plugin features like caching and rate limiting.
