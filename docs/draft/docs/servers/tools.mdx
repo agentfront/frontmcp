@@ -545,6 +545,22 @@ Progress notifications are only sent if the client includes a `progressToken` in
 If no token is provided, `this.progress()` returns `false` and silently succeeds.
 </Info>
 
+### Progress Token Access
+
+The `progressToken` is automatically extracted from the request's `_meta` field and made available via the `ToolCallExtra` type for advanced use cases:
+
+```ts
+import type { ToolCallExtra } from '@frontmcp/sdk';
+
+// In custom tool handlers or plugins, you can access the progressToken directly
+const extra: ToolCallExtra = {
+  authInfo: { ... },
+  progressToken: 'token-123',  // From request._meta.progressToken
+};
+```
+
+For most use cases, simply use `this.progress()` which handles the token automatically.
+
 ---
 
 ## Real-World Examples

@@ -9,10 +9,12 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  success: z.boolean(),
-  notificationSent: z.boolean(),
-});
+const outputSchema = z
+  .object({
+    success: z.boolean(),
+    notificationSent: z.boolean(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;

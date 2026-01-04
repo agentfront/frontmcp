@@ -1,7 +1,13 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListRootsResultSchema, type LoggingLevel, type Root } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListRootsResultSchema,
+  type LoggingLevel,
+  type ProgressNotificationParams,
+  type ProgressToken,
+  type Root,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   FrontMcpLogger,
   type AIPlatformType,
@@ -733,7 +739,7 @@ export class NotificationService {
    */
   sendProgressNotification(
     sessionId: string,
-    progressToken: string | number,
+    progressToken: ProgressToken,
     progress: number,
     total?: number,
     message?: string,
@@ -744,18 +750,12 @@ export class NotificationService {
       return false;
     }
 
-    const params: Record<string, unknown> = {
+    const params: ProgressNotificationParams = {
       progressToken,
       progress,
+      ...(total !== undefined && { total }),
+      ...(message !== undefined && { message }),
     };
-
-    if (total !== undefined) {
-      params['total'] = total;
-    }
-
-    if (message !== undefined) {
-      params['message'] = message;
-    }
 
     this.sendNotificationToServer(registered.server, sessionId, 'notifications/progress', params);
     return true;

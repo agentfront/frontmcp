@@ -146,9 +146,10 @@ export default class EnclaveService {
               },
             }
           : {}),
-        // Note: Console is handled internally by enclave-vm v2.0.0's __safe_console
-        // with built-in rate limiting and output size limits. Don't pass console in globals
-        // to avoid conflict with Double VM's internal console definition.
+        // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
+        // and output size limits. Passing console in globals causes "Cannot redefine property"
+        // errors due to Double VM architecture. Console output from user scripts goes to stdout
+        // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
       },
     });
 
