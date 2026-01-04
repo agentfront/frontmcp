@@ -1,4 +1,5 @@
-import { sanitizeToJson, toStructuredContent, buildResourceContent, inferMimeType } from '../content.utils';
+import { sanitizeToJson, inferMimeType } from '@frontmcp/utils';
+import { toStructuredContent, buildResourceContent } from '../content.utils';
 
 describe('Content Utils', () => {
   describe('sanitizeToJson', () => {

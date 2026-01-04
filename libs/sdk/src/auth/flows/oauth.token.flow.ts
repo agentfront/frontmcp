@@ -67,8 +67,8 @@ import {
   StageHookOf,
 } from '../../common';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
-import { LocalPrimaryAuth, TokenResponse } from '../instances/instance.local-primary-auth';
+import { randomUUID } from '@frontmcp/utils';
+import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
 

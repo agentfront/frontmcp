@@ -1,6 +1,6 @@
 // auth/machine-id.ts
 // Single source of truth for the machine ID used across session management
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 /**
  * Single-process machine ID generated at server launch.

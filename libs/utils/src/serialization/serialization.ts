@@ -1,13 +1,17 @@
 /**
- * @file safe-stringify.ts
- * @description Safe JSON stringification utility that handles circular references and edge cases.
+ * Safe JSON Serialization Utilities
  *
- * This prevents tool calls from failing due to serialization errors when
- * the output contains circular references or non-serializable values.
+ * Utilities for safely serializing values to JSON, handling circular references
+ * and other edge cases that would cause JSON.stringify to fail.
+ *
+ * @packageDocumentation
  */
 
 /**
  * Safely stringify a value, handling circular references and other edge cases.
+ *
+ * Uses a WeakSet to track visited objects and replaces circular references
+ * with the string '[Circular]' instead of throwing an error.
  *
  * @param value - The value to stringify
  * @param space - Optional indentation for pretty-printing (passed to JSON.stringify)

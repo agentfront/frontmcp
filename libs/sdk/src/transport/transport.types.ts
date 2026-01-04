@@ -1,7 +1,7 @@
 import { AuthenticatedServerRequest } from '../server/server.types';
 import { ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodType } from 'zod';
-import { Infer } from '../utils/types.utils';
+import { Infer } from '../types/zod.types';
 import { ServerResponse } from '../common';
 
 export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http';

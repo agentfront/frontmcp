@@ -1,11 +1,11 @@
 import { JSONRPCError, JSONRPCMessage, RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 const JSON_RPC = '2.0';
 
 export const noValidSessionError = (): JSONRPCError => ({
   jsonrpc: JSON_RPC,
-  error: { code: -32000, message:'Bad Request: No valid session ID provided' },
+  error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
   id: randomUUID(),
 });
 
@@ -15,7 +15,7 @@ export const rpcError = (message: string, requestId?: RequestId | null): JSONRPC
   id: requestId ?? randomUUID(), // change it to request id + random
 });
 
-export const rpcRequest = (requestId: RequestId,method: string, params: any): JSONRPCMessage => ({
+export const rpcRequest = (requestId: RequestId, method: string, params: any): JSONRPCMessage => ({
   jsonrpc: JSON_RPC,
   id: requestId ?? randomUUID(),
   method,

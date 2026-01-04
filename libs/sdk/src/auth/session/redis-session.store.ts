@@ -1,6 +1,6 @@
 // auth/session/redis-session.store.ts
 import IoRedis, { Redis, RedisOptions } from 'ioredis';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import {
   SessionStore,
   StoredSession,

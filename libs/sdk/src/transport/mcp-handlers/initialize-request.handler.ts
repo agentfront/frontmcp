@@ -1,7 +1,7 @@
 import { InitializeRequestSchema, InitializeRequest, InitializeResult } from '@modelcontextprotocol/sdk/types.js';
 import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
-import { UnsupportedClientVersionException } from '../../exceptions/mcp-exceptions/unsupported-client-version.exception';
+import { UnsupportedClientVersionError } from '../../errors';
 import type { ClientCapabilities } from '../../notification';
 import { detectPlatformFromCapabilities, detectAIPlatform } from '../../notification';
 import { updateSessionPayload } from '../../auth/session/utils/session-id.utils';
@@ -14,7 +14,7 @@ import { updateSessionPayload } from '../../auth/session/utils/session-id.utils'
 function guardClientVersion(clientVersion: string): void {
   const parsed = new Date(clientVersion);
   if (isNaN(parsed.getTime())) {
-    throw UnsupportedClientVersionException.fromVersion(clientVersion);
+    throw UnsupportedClientVersionError.fromVersion(clientVersion);
   }
   // Don't reject older versions - let version negotiation handle it
 }

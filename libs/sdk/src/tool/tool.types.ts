@@ -1,7 +1,7 @@
 import { EntryLineage, Token } from '../common';
 import { ToolInstance } from './tool.instance';
 import ToolRegistry from './tool.registry';
-import type { NameCase } from '../utils/naming.utils';
+import type { NameCase } from '@frontmcp/utils';
 
 /** Internal augmented row: instance + provenance + token */
 export type IndexedTool = {

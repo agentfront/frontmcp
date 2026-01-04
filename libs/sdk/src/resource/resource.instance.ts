@@ -20,7 +20,8 @@ import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { matchUriTemplate, parseUriTemplate, buildParsedResourceResult } from './resource.utils';
+import { matchUriTemplate, parseUriTemplate } from '@frontmcp/utils';
+import { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
 import { InvalidHookFlowError } from '../errors/mcp.error';
 
 export class ResourceInstance<

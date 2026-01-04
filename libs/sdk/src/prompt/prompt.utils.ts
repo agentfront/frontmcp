@@ -4,21 +4,6 @@ import { Token, Type, depsOfClass, depsOfFunc, isClass, getMetadata } from '@fro
 import { PromptMetadata, FrontMcpPromptTokens, PromptType, PromptRecord, PromptKind, PromptEntry } from '../common';
 import { GetPromptResult, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
-// Re-export shared naming utilities
-export {
-  splitWords,
-  toCase,
-  sepFor,
-  normalizeSegment,
-  normalizeProviderId,
-  normalizeOwnerPath,
-  shortHash,
-  ensureMaxLen,
-} from '../utils/naming.utils';
-
-// Re-export shared lineage utilities
-export { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-
 /**
  * Collect metadata from a class decorated with @FrontMcpPrompt
  */

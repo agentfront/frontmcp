@@ -29,7 +29,7 @@ import HookRegistry from '../hooks/hook.registry';
 import { rpcError } from '../transport/transport.error';
 import { FrontMcpContextStorage, FRONTMCP_CONTEXT } from '../context';
 import { RequestContextNotAvailableError, InternalMcpError } from '../errors/mcp.error';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 

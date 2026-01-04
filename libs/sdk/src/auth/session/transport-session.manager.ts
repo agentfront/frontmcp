@@ -1,6 +1,6 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import {
   TransportSession,
   TransportProtocol,

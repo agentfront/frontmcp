@@ -17,33 +17,6 @@ import {
 } from '../common';
 import { ResourceTemplateType } from './resource.types';
 
-// Re-export shared naming utilities (ResourceNameCase is exported from resource.types.ts)
-export {
-  splitWords,
-  toCase,
-  sepFor,
-  normalizeSegment,
-  normalizeProviderId,
-  normalizeOwnerPath,
-  shortHash,
-  ensureMaxLen,
-} from '../utils/naming.utils';
-
-// Re-export shared lineage utilities
-export { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
-
-// Re-export URI template utilities
-export {
-  parseUriTemplate,
-  matchUriTemplate,
-  expandUriTemplate,
-  extractTemplateParams,
-  isUriTemplate,
-} from '../utils/uri-template.utils';
-
-// Re-export content utilities
-export { buildResourceContent as buildParsedResourceResult } from '../utils/content.utils';
-
 /**
  * Collect metadata from a class decorated with @FrontMcpResource
  */

@@ -9,7 +9,7 @@ import {
   ResourceRegistryInterface,
   ToolRegistryInterface,
 } from '../../common';
-import {idFromString} from '../../utils/string.utils';
+import { idFromString } from '@frontmcp/utils';
 import ProviderRegistry from '../../provider/provider.registry';
 
 export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
@@ -22,9 +22,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     this.ready = this.initialize();
   }
 
-
   protected async initialize() {
-
     console.log('FrontMcpAppRemoteInstance.ready', this.id);
   }
 
@@ -51,5 +49,4 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   override get prompts(): PromptRegistryInterface {
     throw new Error('Method not implemented.');
   }
-
 }

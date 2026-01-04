@@ -12,17 +12,13 @@ import {
 } from '../common';
 import { ResourceChangeEvent, ResourceEmitter } from './resource.events';
 import ProviderRegistry from '../provider/provider.registry';
+import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import {
-  ensureMaxLen,
-  normalizeOwnerPath,
-  normalizeProviderId,
-  normalizeSegment,
   normalizeResource,
   normalizeResourceTemplate,
   isResourceTemplate,
-  ownerKeyOf,
-  qualifiedNameOf,
-  sepFor,
   resourceDiscoveryDeps,
 } from './resource.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';

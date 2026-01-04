@@ -1,5 +1,5 @@
 // errors/mcp.error.ts
-import { randomBytes } from 'crypto';
+import { randomBytes, bytesToHex } from '@frontmcp/utils';
 
 /**
  * MCP-specific error codes per JSON-RPC specification.
@@ -54,7 +54,7 @@ export abstract class McpError extends Error {
   }
 
   private generateErrorId(): string {
-    return `err_${randomBytes(8).toString('hex')}`;
+    return `err_${bytesToHex(randomBytes(8))}`;
   }
 
   /**
@@ -437,6 +437,40 @@ export class PromptExecutionError extends InternalMcpError {
       return `${this.message}\n\nOriginal error:\n${this.originalError.stack}`;
     }
     return this.message;
+  }
+}
+
+// ============================================================================
+// Session & Client Errors
+// ============================================================================
+
+/**
+ * Session missing error - thrown when a request is made without a valid session.
+ * This is a public error as the client needs to know they need to authenticate.
+ */
+export class SessionMissingError extends PublicMcpError {
+  constructor(message = 'Unauthorized: missing session') {
+    super(message, 'SESSION_MISSING', 401);
+  }
+}
+
+/**
+ * Unsupported client version error - thrown when a client connects with
+ * an unsupported protocol version.
+ */
+export class UnsupportedClientVersionError extends PublicMcpError {
+  readonly clientVersion: string;
+
+  constructor(version: string) {
+    super(`Unsupported client version: ${version}`, 'UNSUPPORTED_CLIENT_VERSION', 400);
+    this.clientVersion = version;
+  }
+
+  /**
+   * Factory method for creating from a version string.
+   */
+  static fromVersion(version: string): UnsupportedClientVersionError {
+    return new UnsupportedClientVersionError(version);
   }
 }
 

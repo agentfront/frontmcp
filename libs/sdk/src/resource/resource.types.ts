@@ -3,7 +3,7 @@
 import { EntryLineage, Token, Type, FuncType } from '../common';
 import { ResourceInstance } from './resource.instance';
 import ResourceRegistry from './resource.registry';
-import type { NameCase } from '../utils/naming.utils';
+import type { NameCase } from '@frontmcp/utils';
 
 // ============================================================================
 // Resource Template Type (interface equivalent)

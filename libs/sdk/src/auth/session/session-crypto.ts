@@ -6,7 +6,7 @@
  * systems like Redis that don't provide application-level integrity.
  */
 
-import { createHmac, timingSafeEqual } from 'crypto';
+import { hmacSha256, base64urlEncode, base64urlDecode, timingSafeEqual } from '@frontmcp/utils';
 import type { StoredSession } from './transport-session.types';
 
 /**
@@ -60,7 +60,11 @@ function getSigningSecret(config?: SessionSigningConfig): string {
  * Compute HMAC-SHA256 signature for session data.
  */
 function computeSignature(data: string, secret: string): string {
-  return createHmac('sha256', secret).update(data, 'utf8').digest('base64url');
+  const encoder = new TextEncoder();
+  const keyBytes = encoder.encode(secret);
+  const dataBytes = encoder.encode(data);
+  const hmac = hmacSha256(keyBytes, dataBytes);
+  return base64urlEncode(hmac);
 }
 
 /**
@@ -138,15 +142,10 @@ export function verifySession(signedData: string, config?: SessionSigningConfig)
     const expectedSig = computeSignature(data, secret);
 
     // Use timing-safe comparison to prevent timing attacks
-    const sigBuffer = Buffer.from(signed.sig, 'base64url');
-    const expectedBuffer = Buffer.from(expectedSig, 'base64url');
+    const sigBytes = base64urlDecode(signed.sig);
+    const expectedBytes = base64urlDecode(expectedSig);
 
-    if (sigBuffer.length !== expectedBuffer.length) {
-      console.warn('[SessionCrypto] Signature length mismatch - possible tampering');
-      return null;
-    }
-
-    if (!timingSafeEqual(sigBuffer, expectedBuffer)) {
+    if (!timingSafeEqual(sigBytes, expectedBytes)) {
       console.warn('[SessionCrypto] HMAC verification failed - session data may be tampered');
       return null;
     }

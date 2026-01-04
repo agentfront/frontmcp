@@ -68,6 +68,7 @@
     }
   },
   "dependencies": {
+    "@frontmcp/utils": "0.6.3",
     "@frontmcp/di": "0.6.3",
     "@frontmcp/uipack": "0.6.3",
     "@modelcontextprotocol/sdk": "1.25.1",

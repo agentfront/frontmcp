@@ -19,7 +19,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 const plan = {
   pre: [

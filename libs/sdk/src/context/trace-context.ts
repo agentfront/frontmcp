@@ -7,7 +7,7 @@
  * @see https://www.w3.org/TR/trace-context/
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 /**
  * W3C Trace Context parsed from traceparent header.

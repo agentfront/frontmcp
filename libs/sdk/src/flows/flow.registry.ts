@@ -5,7 +5,7 @@ import { FlowInputOf, FlowName, FlowOutputOf, FlowRecord, FlowType, ScopeEntry }
 import { normalizeFlow } from './flow.utils';
 import { FlowInstance } from './flow.instance';
 import { FrontMcpContextStorage } from '../context';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName>, FlowRecord, FlowType[]> {
   constructor(providers: ProviderRegistry, list: FlowType[]) {

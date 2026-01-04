@@ -1,7 +1,8 @@
 import * as path from 'path';
 import * as readline from 'readline';
 import { c } from '../colors';
-import { ensureDir, fileExists, fsp } from '../utils/fs';
+import { ensureDir, fileExists } from '@frontmcp/utils';
+import { fsp } from '../utils/fs';
 
 type AuthType = 'oauth2' | 'bearer' | 'apiKey';
 
@@ -35,8 +36,7 @@ export async function runTemplate(templateName?: string): Promise<void> {
     output: process.stdout,
   });
 
-  const ask = (q: string): Promise<string> =>
-    new Promise((resolve) => rl.question(q, (ans) => resolve(ans.trim())));
+  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, (ans) => resolve(ans.trim())));
 
   try {
     const templatesRoot = path.resolve(__dirname, '..', 'templates');
@@ -44,9 +44,7 @@ export async function runTemplate(templateName?: string): Promise<void> {
     // 1) Collect available templates up-front
     const available = await listAvailableTemplates(templatesRoot);
     if (!available.length) {
-      console.log(
-        c('red', `No templates found under ${path.relative(process.cwd(), templatesRoot)}.`),
-      );
+      console.log(c('red', `No templates found under ${path.relative(process.cwd(), templatesRoot)}.`));
       return;
     }
 
@@ -59,16 +57,12 @@ export async function runTemplate(templateName?: string): Promise<void> {
     } else if (available.includes(sanitized)) {
       selected = sanitized;
       if (sanitized !== name) {
-        console.log(
-          c('yellow', `[template] Template "${name}" not found, using sanitized "${sanitized}"`),
-        );
+        console.log(c('yellow', `[template] Template "${name}" not found, using sanitized "${sanitized}"`));
       }
     }
 
     if (!selected) {
-      console.log(
-        c('red', `Template "${name}" not found under ${path.relative(process.cwd(), templatesRoot)}.`),
-      );
+      console.log(c('red', `Template "${name}" not found under ${path.relative(process.cwd(), templatesRoot)}.`));
       console.log(c('gray', '\nAvailable templates:'));
       for (const t of available) {
         console.log('  -', t);
@@ -78,9 +72,7 @@ export async function runTemplate(templateName?: string): Promise<void> {
 
     const templateRoot = path.resolve(templatesRoot, selected);
 
-    console.log(
-      c('cyan', '[template]') + ` Using template "${selected}" from src/templates/${selected}`,
-    );
+    console.log(c('cyan', '[template]') + ` Using template "${selected}" from src/templates/${selected}`);
 
     // Ask for owner & service
     let owner = await ask(`Third-party owner (e.g. google, github, slack): `);
@@ -90,9 +82,7 @@ export async function runTemplate(templateName?: string): Promise<void> {
     }
     owner = sanitizeSlug(owner);
 
-    let service = await ask(
-      `Third-party service (e.g. gmail, slack-bot): `,
-    );
+    let service = await ask(`Third-party service (e.g. gmail, slack-bot): `);
     if (!service) {
       console.log(c('red', 'Service is required.'));
       return;
@@ -100,9 +90,7 @@ export async function runTemplate(templateName?: string): Promise<void> {
     service = sanitizeSlug(service);
 
     // Auth type (for placeholders only – you can use or ignore in templates)
-    let authRaw = await ask(
-      `Default auth type (oauth2/bearer/apiKey) [oauth2]: `,
-    );
+    let authRaw = await ask(`Default auth type (oauth2/bearer/apiKey) [oauth2]: `);
     if (!authRaw) authRaw = 'oauth2';
     const authType = authRaw as AuthType;
     if (!['oauth2', 'bearer', 'apiKey'].includes(authType)) {
@@ -116,23 +104,13 @@ export async function runTemplate(templateName?: string): Promise<void> {
     const destRoot = path.resolve(cwd, 'integrations', owner, service);
     await ensureDir(destRoot);
 
-    console.log(
-      c('gray', `[template] Scaffolding into ${path.relative(cwd, destRoot)}`),
-    );
+    console.log(c('gray', `[template] Scaffolding into ${path.relative(cwd, destRoot)}`));
 
     await copyTemplateTree(templateRoot, destRoot, ctx);
 
     console.log('');
-    console.log(
-      c('green', '✔ Template hydrated into: ') +
-      path.relative(cwd, destRoot),
-    );
-    console.log(
-      c(
-        'gray',
-        'You can now edit or delete the generated example files and create your own tools.',
-      ),
-    );
+    console.log(c('green', '✔ Template hydrated into: ') + path.relative(cwd, destRoot));
+    console.log(c('gray', 'You can now edit or delete the generated example files and create your own tools.'));
   } finally {
     rl.close();
   }
@@ -159,7 +137,7 @@ function sanitizeTemplateName(val: string): string {
     val
       .trim()
       .replace(/[^a-zA-Z0-9._-]/g, '-') // replace weird chars
-      .replace(/-+/g, '-')              // collapse multiple dashes
+      .replace(/-+/g, '-') // collapse multiple dashes
       .replace(/^-|-$/g, '') || 'template'
   );
 }
@@ -197,11 +175,7 @@ function applyPlaceholders(input: string, ctx: TemplateContext): string {
     .replaceAll('__AUTH_TYPE__', ctx.authType);
 }
 
-async function copyTemplateTree(
-  templateRoot: string,
-  destRoot: string,
-  ctx: TemplateContext,
-): Promise<void> {
+async function copyTemplateTree(templateRoot: string, destRoot: string, ctx: TemplateContext): Promise<void> {
   const walk = async (srcDir: string) => {
     const entries = await fsp.readdir(srcDir, { withFileTypes: true });
 
@@ -222,17 +196,13 @@ async function copyTemplateTree(
         const processed = applyPlaceholders(content, ctx);
 
         if (await fileExists(destPath)) {
-          console.log(
-            c('gray', `skip: ${path.relative(process.cwd(), destPath)} already exists`),
-          );
+          console.log(c('gray', `skip: ${path.relative(process.cwd(), destPath)} already exists`));
           continue;
         }
 
         await ensureDir(path.dirname(destPath));
         await fsp.writeFile(destPath, processed, 'utf8');
-        console.log(
-          c('green', `✓ created ${path.relative(process.cwd(), destPath)}`),
-        );
+        console.log(c('green', `✓ created ${path.relative(process.cwd(), destPath)}`));
       }
     }
   };

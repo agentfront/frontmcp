@@ -31,6 +31,7 @@
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
           "external": [
+            "@frontmcp/utils",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
             "@modelcontextprotocol/sdk",
@@ -60,6 +61,7 @@
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
           "external": [
+            "@frontmcp/utils",
             "@frontmcp/sdk",
             "@frontmcp/sdk/*",
             "@modelcontextprotocol/sdk",

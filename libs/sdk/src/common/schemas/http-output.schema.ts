@@ -7,7 +7,7 @@ import {
   JSONRPCResponseSchema,
   JSONRPCErrorSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 /**
  * Constants

@@ -13,7 +13,7 @@
  * @see https://vercel.com/docs/storage/vercel-kv
  */
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { SessionStore, StoredSession, storedSessionSchema, SessionSecurityConfig } from './transport-session.types';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import type { VercelKvProviderOptions } from '../../common/types/options/redis.options';

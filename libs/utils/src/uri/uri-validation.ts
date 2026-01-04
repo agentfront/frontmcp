@@ -1,10 +1,8 @@
-// file: libs/sdk/src/utils/uri-validation.utils.ts
-
 /**
- * URI validation utilities for MCP resource URIs.
+ * URI validation utilities.
  *
- * Per MCP specification, resource URIs should follow RFC 3986 and include
- * a valid scheme (e.g., file://, https://, custom://).
+ * Provides RFC 3986 compliant URI validation including scheme validation
+ * and extraction. These utilities are commonly used for validating resource URIs.
  */
 
 /**

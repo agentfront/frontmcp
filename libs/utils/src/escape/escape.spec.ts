@@ -1,10 +1,8 @@
 /**
- * escapeHtml Utility Tests
- *
- * Tests for HTML escaping functions to prevent XSS.
+ * HTML/JS Escaping Utility Tests
  */
 
-import { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from '../escape-html';
+import { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
 
 describe('escapeHtml', () => {
   describe('null and undefined handling', () => {

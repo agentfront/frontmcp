@@ -1,6 +1,6 @@
 // auth/authorization/orchestrated.authorization.ts
 
-import { createHash } from 'crypto';
+import { sha256Hex } from '@frontmcp/utils';
 import { AuthorizationBase } from './authorization.class';
 import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { ProviderSnapshot } from '../session/session.types';
@@ -347,7 +347,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
   private static generateAuthorizationId(token: string): string {
     const parts = token.split('.');
     const signature = parts[2] || token;
-    return createHash('sha256').update(signature).digest('hex').substring(0, 16);
+    return sha256Hex(signature).substring(0, 16);
   }
 
   /**

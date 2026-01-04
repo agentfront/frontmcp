@@ -1,4 +1,5 @@
-import { buildRequest, parseResponse, validateBaseUrl } from '../openapi.utils';
+import { buildRequest, parseResponse } from '../openapi.utils';
+import { validateBaseUrl } from '@frontmcp/utils';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
 
 // Helper to create a basic tool for testing

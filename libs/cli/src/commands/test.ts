@@ -3,7 +3,8 @@ import * as os from 'os';
 import { spawn, ChildProcess } from 'child_process';
 import { ParsedArgs } from '../args';
 import { c } from '../colors';
-import { fileExists, fsp } from '../utils/fs';
+import { fileExists } from '@frontmcp/utils';
+import { fsp } from '../utils/fs';
 
 /**
  * Generate Jest configuration programmatically for E2E tests.

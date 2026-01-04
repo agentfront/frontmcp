@@ -6,7 +6,7 @@
  * Supports both in-memory (dev/test) and Redis (production) backends.
  */
 
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, sha256Base64url } from '@frontmcp/utils';
 import { z } from 'zod';
 
 /**
@@ -221,12 +221,12 @@ export function verifyPkce(codeVerifier: string, challenge: PkceChallenge): bool
   }
 
   // S256: BASE64URL(SHA256(code_verifier)) === code_challenge
-  const hash = createHash('sha256').update(codeVerifier).digest('base64url');
+  const hash = sha256Base64url(codeVerifier);
   return hash === challenge.challenge;
 }
 
 export function generatePkceChallenge(codeVerifier: string): PkceChallenge {
-  const challenge = createHash('sha256').update(codeVerifier).digest('base64url');
+  const challenge = sha256Base64url(codeVerifier);
   return { challenge, method: 'S256' };
 }
 

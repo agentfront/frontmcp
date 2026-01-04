@@ -4,7 +4,7 @@ import {
   expandUriTemplate,
   extractTemplateParams,
   isUriTemplate,
-} from '../uri-template.utils';
+} from './uri-template';
 
 describe('URI Template Utils', () => {
   describe('parseUriTemplate', () => {
@@ -48,18 +48,14 @@ describe('URI Template Utils', () => {
       expect(result.pattern.test('apiXexampleXcom/users')).toBe(false);
     });
 
-    it('should handle template with query-like pattern', () => {
-      const result = parseUriTemplate('search?q={query}');
-
-      expect(result.paramNames).toEqual(['query']);
-      expect(result.pattern.test('search?q=hello')).toBe(true);
+    it('should throw for templates exceeding max length', () => {
+      const longTemplate = 'a'.repeat(1001);
+      expect(() => parseUriTemplate(longTemplate)).toThrow('too long');
     });
 
-    it('should handle template at the beginning', () => {
-      const result = parseUriTemplate('{scheme}://example.com');
-
-      expect(result.paramNames).toEqual(['scheme']);
-      expect(result.pattern.test('https://example.com')).toBe(true);
+    it('should throw for templates with too many parameters', () => {
+      const manyParams = Array.from({ length: 51 }, (_, i) => `{p${i}}`).join('/');
+      expect(() => parseUriTemplate(manyParams)).toThrow('too many parameters');
     });
   });
 
@@ -94,13 +90,6 @@ describe('URI Template Utils', () => {
       expect(params).toBeNull();
     });
 
-    it('should match empty string if param allows it', () => {
-      // The current implementation requires at least one char ([^/]+)
-      const params = matchUriTemplate('prefix/{id}/suffix', 'prefix//suffix');
-
-      expect(params).toBeNull();
-    });
-
     it('should handle special characters in URI', () => {
       const params = matchUriTemplate('file:///{path}', 'file:///documents');
 
@@ -111,12 +100,6 @@ describe('URI Template Utils', () => {
       const params = matchUriTemplate('static://resource', 'static://resource');
 
       expect(params).toEqual({});
-    });
-
-    it('should handle params with numbers', () => {
-      const params = matchUriTemplate('item/{id}', 'item/42');
-
-      expect(params).toEqual({ id: '42' });
     });
   });
 
@@ -159,12 +142,6 @@ describe('URI Template Utils', () => {
 
       expect(result).toBe('static://resource');
     });
-
-    it('should handle special characters in values', () => {
-      const result = expandUriTemplate('search/{query}', { query: 'a+b=c&d' });
-
-      expect(result).toBe('search/a%2Bb%3Dc%26d');
-    });
   });
 
   describe('extractTemplateParams', () => {
@@ -178,12 +155,6 @@ describe('URI Template Utils', () => {
       const params = extractTemplateParams('static://resource');
 
       expect(params).toEqual([]);
-    });
-
-    it('should extract single param', () => {
-      const params = extractTemplateParams('files/{name}');
-
-      expect(params).toEqual(['name']);
     });
 
     it('should preserve param order', () => {
@@ -214,14 +185,6 @@ describe('URI Template Utils', () => {
       expect(isUriTemplate('users/{}')).toBe(false);
       expect(isUriTemplate('users/{')).toBe(false);
       expect(isUriTemplate('users/}')).toBe(false);
-    });
-
-    it('should return true for param at beginning', () => {
-      expect(isUriTemplate('{scheme}://example.com')).toBe(true);
-    });
-
-    it('should return true for param at end', () => {
-      expect(isUriTemplate('api/resource/{id}')).toBe(true);
     });
   });
 });

@@ -4,17 +4,10 @@ import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import { EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptRegistryInterface, PromptType } from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
-import {
-  ensureMaxLen,
-  normalizeOwnerPath,
-  normalizeProviderId,
-  normalizeSegment,
-  normalizePrompt,
-  ownerKeyOf,
-  qualifiedNameOf,
-  sepFor,
-  promptDiscoveryDeps,
-} from './prompt.utils';
+import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { normalizePrompt, promptDiscoveryDeps } from './prompt.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { PromptInstance } from './prompt.instance';
 import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from './prompt.types';

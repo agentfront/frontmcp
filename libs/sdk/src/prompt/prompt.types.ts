@@ -3,7 +3,7 @@
 import { EntryLineage, Token } from '../common';
 import { PromptInstance } from './prompt.instance';
 import PromptRegistry from './prompt.registry';
-import type { NameCase } from '../utils/naming.utils';
+import type { NameCase } from '@frontmcp/utils';
 
 // Re-export NameCase as PromptNameCase for consistency
 export type PromptNameCase = NameCase;

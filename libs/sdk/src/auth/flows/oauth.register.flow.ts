@@ -19,28 +19,35 @@
  * - Decide JWT vs opaque access tokens; provide introspection if opaque.
  */
 
-
 import {
-  Flow, FlowBase, FlowPlan,
+  Flow,
+  FlowBase,
+  FlowPlan,
   FlowRunOptions,
-  httpInputSchema, HttpJsonSchema,
+  httpInputSchema,
+  HttpJsonSchema,
   httpRespond,
-  StageHookOf
-} from "../../common";
-import {z} from "zod";
-import {randomUUID, randomBytes} from "crypto";
+  StageHookOf,
+} from '../../common';
+import { z } from 'zod';
+import { randomUUID, randomBytes, base64urlEncode } from '@frontmcp/utils';
 
 /** Simple in-memory registry (dev only) */
 type RegisteredClient = {
   client_id: string;
   client_secret?: string;
-  token_endpoint_auth_method: "none" | "client_secret_basic" | "client_secret_post" | "private_key_jwt" | "tls_client_auth";
+  token_endpoint_auth_method:
+    | 'none'
+    | 'client_secret_basic'
+    | 'client_secret_post'
+    | 'private_key_jwt'
+    | 'tls_client_auth';
   grant_types: string[];
   response_types: string[];
   redirect_uris: string[];
   client_name?: string;
   scope?: string;
-  created_at: number;   // seconds since epoch
+  created_at: number; // seconds since epoch
   dev: boolean;
 };
 
@@ -53,23 +60,27 @@ export const DevClientRegistry = {
   },
   has(client_id: string) {
     return CLIENTS.has(client_id);
-  }
+  },
 };
 
 const inputSchema = httpInputSchema;
 const outputSchema = HttpJsonSchema;
 
-const registrationRequestSchema = z.object({
-  // RFC 7591-ish minimal set
-  redirect_uris: z.array(z.string().url()).min(1, "At least one redirect_uri is required"),
-  token_endpoint_auth_method: z.enum(["none", "client_secret_basic", "client_secret_post", "private_key_jwt", "tls_client_auth"])
-    .default("none"),
-  grant_types: z.array(z.enum(["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"]))
-    .default(["authorization_code"]),
-  response_types: z.array(z.enum(["code"])).default(["code"]),
-  client_name: z.string().optional(),
-  scope: z.string().optional(),
-}).passthrough()
+const registrationRequestSchema = z
+  .object({
+    // RFC 7591-ish minimal set
+    redirect_uris: z.array(z.string().url()).min(1, 'At least one redirect_uri is required'),
+    token_endpoint_auth_method: z
+      .enum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt', 'tls_client_auth'])
+      .default('none'),
+    grant_types: z
+      .array(z.enum(['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code']))
+      .default(['authorization_code']),
+    response_types: z.array(z.enum(['code'])).default(['code']),
+    client_name: z.string().optional(),
+    scope: z.string().optional(),
+  })
+  .passthrough();
 
 const stateSchema = z.object({
   body: registrationRequestSchema,
@@ -83,15 +94,15 @@ const plan = {
 } as const satisfies FlowPlan<string>;
 
 declare global {
-    interface ExtendFlows {
-      'oauth:register': FlowRunOptions<
-        OauthRegisterFlow,
-        typeof plan,
-        typeof inputSchema,
-        typeof outputSchema,
-        typeof stateSchema
-      >;
-    }
+  interface ExtendFlows {
+    'oauth:register': FlowRunOptions<
+      OauthRegisterFlow,
+      typeof plan,
+      typeof inputSchema,
+      typeof outputSchema,
+      typeof stateSchema
+    >;
+  }
 }
 
 const name = 'oauth:register' as const;
@@ -109,7 +120,6 @@ const Stage = StageHookOf(name);
   },
 })
 export default class OauthRegisterFlow extends FlowBase<typeof name> {
-
   private registered?: RegisteredClient;
 
   @Stage('parseInput')
@@ -117,7 +127,7 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     // Dev-only guard: hide the endpoint in production
     const isDev = process.env['NODE_ENV'] !== 'production';
 
-    const {request} = this.rawInput;
+    const { request } = this.rawInput;
     const parsed = registrationRequestSchema.parse(request.body || {});
     this.state.set({
       body: parsed,
@@ -134,41 +144,65 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     }
 
     // Minimal sanity checks for common mistakes in dev
-    const {redirect_uris, token_endpoint_auth_method, grant_types, response_types} = this.state.required.body;
+    const { redirect_uris, token_endpoint_auth_method, grant_types, response_types } = this.state.required.body;
 
     // Keep only supported combinations for the dummy server
     if (!response_types.includes('code')) {
-      this.respond(httpRespond.json({
-        error: 'invalid_client_metadata',
-        error_description: 'Only response_types=["code"] is supported in dev.',
-      }, {status: 400}));
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'invalid_client_metadata',
+            error_description: 'Only response_types=["code"] is supported in dev.',
+          },
+          { status: 400 },
+        ),
+      );
       return;
     }
 
     if (!grant_types.includes('authorization_code')) {
-      this.respond(httpRespond.json({
-        error: 'invalid_client_metadata',
-        error_description: 'grant_types must include "authorization_code" in dev.',
-      }, {status: 400}));
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'invalid_client_metadata',
+            error_description: 'grant_types must include "authorization_code" in dev.',
+          },
+          { status: 400 },
+        ),
+      );
       return;
     }
 
     // Warn (soft) if confidential but no TLS/jwt (still allowed for local only)
-    if (token_endpoint_auth_method !== 'none' && token_endpoint_auth_method !== 'client_secret_post' && token_endpoint_auth_method !== 'client_secret_basic') {
-      this.respond(httpRespond.json({
-        error: 'invalid_client_metadata',
-        error_description: 'This dev server only supports "none", "client_secret_post", or "client_secret_basic".',
-      }, {status: 400}));
+    if (
+      token_endpoint_auth_method !== 'none' &&
+      token_endpoint_auth_method !== 'client_secret_post' &&
+      token_endpoint_auth_method !== 'client_secret_basic'
+    ) {
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'invalid_client_metadata',
+            error_description: 'This dev server only supports "none", "client_secret_post", or "client_secret_basic".',
+          },
+          { status: 400 },
+        ),
+      );
       return;
     }
 
     // Ensure localhost/https-ish redirects for dev
-    const bad = redirect_uris.find(u => !/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+|127\.0\.0\.1)/.test(u));
+    const bad = redirect_uris.find((u) => !/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+|127\.0\.0\.1)/.test(u));
     if (bad) {
-      this.respond(httpRespond.json({
-        error: 'invalid_redirect_uri',
-        error_description: `Dev registration allows only localhost-style redirect_uris; got ${bad}`,
-      }, {status: 400}));
+      this.respond(
+        httpRespond.json(
+          {
+            error: 'invalid_redirect_uri',
+            error_description: `Dev registration allows only localhost-style redirect_uris; got ${bad}`,
+          },
+          { status: 400 },
+        ),
+      );
       return;
     }
   }
@@ -176,20 +210,14 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   @Stage('registerClient')
   async registerClient() {
     const now = Math.floor(Date.now() / 1000);
-    const {
-      token_endpoint_auth_method,
-      grant_types,
-      response_types,
-      redirect_uris,
-      client_name,
-      scope,
-    } = this.state.required.body;
+    const { token_endpoint_auth_method, grant_types, response_types, redirect_uris, client_name, scope } =
+      this.state.required.body;
 
     const client_id = randomUUID();
     let client_secret: string | undefined;
 
     if (token_endpoint_auth_method === 'client_secret_post' || token_endpoint_auth_method === 'client_secret_basic') {
-      client_secret = randomBytes(24).toString('base64url'); // short-lived dev secret
+      client_secret = base64urlEncode(randomBytes(24)); // short-lived dev secret
     }
 
     this.registered = {
@@ -213,18 +241,20 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     const c = this.registered!;
     // Minimal RFC 7591-ish response
     // (intentionally omitting registration_access_token/registration_client_uri for simplicity in dev)
-    this.respond(httpRespond.json({
-      client_id: c.client_id,
-      ...(c.client_secret ? {client_secret: c.client_secret} : {}),
-      client_id_issued_at: c.created_at,
-      client_secret_expires_at: c.client_secret ? 0 : 0, // 0 = does not expire (dev)
-      token_endpoint_auth_method: c.token_endpoint_auth_method,
-      grant_types: c.grant_types,
-      response_types: c.response_types,
-      redirect_uris: c.redirect_uris,
-      ...(c.client_name ? {client_name: c.client_name} : {}),
-      ...(c.scope ? {scope: c.scope} : {}),
-    }));
+    this.respond(
+      httpRespond.json({
+        client_id: c.client_id,
+        ...(c.client_secret ? { client_secret: c.client_secret } : {}),
+        client_id_issued_at: c.created_at,
+        client_secret_expires_at: c.client_secret ? 0 : 0, // 0 = does not expire (dev)
+        token_endpoint_auth_method: c.token_endpoint_auth_method,
+        grant_types: c.grant_types,
+        response_types: c.response_types,
+        redirect_uris: c.redirect_uris,
+        ...(c.client_name ? { client_name: c.client_name } : {}),
+        ...(c.scope ? { scope: c.scope } : {}),
+      }),
+    );
   }
 
   @Stage('validateOutput')
