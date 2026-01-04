@@ -146,25 +146,9 @@ export default class EnclaveService {
               },
             }
           : {}),
-        // Provide console if allowed
-        ...(this.vmOptions.allowConsole
-          ? {
-              console: {
-                log: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[log] ${message}`);
-                },
-                warn: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[warn] ${message}`);
-                },
-                error: (...args: unknown[]) => {
-                  const message = args.map((arg) => String(arg)).join(' ');
-                  logs.push(`[error] ${message}`);
-                },
-              },
-            }
-          : {}),
+        // Note: Console is handled internally by enclave-vm v2.0.0's __safe_console
+        // with built-in rate limiting and output size limits. Don't pass console in globals
+        // to avoid conflict with Double VM's internal console definition.
       },
     });
 
