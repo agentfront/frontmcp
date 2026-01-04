@@ -746,7 +746,9 @@ export class NotificationService {
   ): boolean {
     const registered = this.servers.get(sessionId);
     if (!registered) {
-      this.logger.warn(`Cannot send progress notification to unregistered session: ${sessionId.slice(0, 20)}...`);
+      // Return false rather than throw - consistent with other notification methods
+      // (sendLogMessageToSession, etc.) since notifications are best-effort and
+      // shouldn't disrupt the caller's execution if session is gone
       return false;
     }
 

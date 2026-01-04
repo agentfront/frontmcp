@@ -5,7 +5,10 @@ const inputSchema = z
   .object({
     message: z.string().describe('The message to send'),
     useObject: z.boolean().optional().describe('If true, send structured object instead of string'),
-    level: z.enum(['debug', 'info', 'warning', 'error']).optional().describe('Log level for the notification'),
+    level: z
+      .enum(['debug', 'info', 'notice', 'warning', 'error'])
+      .optional()
+      .describe('Log level for the notification'),
   })
   .strict();
 
