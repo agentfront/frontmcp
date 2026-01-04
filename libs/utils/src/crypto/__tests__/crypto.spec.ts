@@ -18,6 +18,10 @@ import {
   encryptAesGcm,
   decryptAesGcm,
   timingSafeEqual,
+  bytesToHex,
+  base64urlEncode,
+  base64urlDecode,
+  sha256Base64url,
   isNode,
   isBrowser,
 } from '../index';
@@ -82,6 +86,26 @@ describe('Crypto Module', () => {
       const a = randomBytes(32);
       const b = randomBytes(32);
       expect(a).not.toEqual(b);
+    });
+
+    it('should throw for zero length', () => {
+      expect(() => randomBytes(0)).toThrow('randomBytes length must be a positive integer');
+    });
+
+    it('should throw for negative length', () => {
+      expect(() => randomBytes(-1)).toThrow('randomBytes length must be a positive integer');
+    });
+
+    it('should throw for non-integer length', () => {
+      expect(() => randomBytes(3.5)).toThrow('randomBytes length must be a positive integer');
+    });
+
+    it('should throw for NaN', () => {
+      expect(() => randomBytes(NaN)).toThrow('randomBytes length must be a positive integer');
+    });
+
+    it('should throw for Infinity', () => {
+      expect(() => randomBytes(Infinity)).toThrow('randomBytes length must be a positive integer');
     });
   });
 
@@ -204,6 +228,34 @@ describe('Crypto Module', () => {
       const derived = hkdfSha256(ikm, salt, info, 32);
       expect(derived.length).toBe(32);
     });
+
+    it('should throw for zero length', () => {
+      const ikm = randomBytes(32);
+      const salt = randomBytes(16);
+      const info = new TextEncoder().encode('info');
+      expect(() => hkdfSha256(ikm, salt, info, 0)).toThrow('HKDF length must be a positive integer');
+    });
+
+    it('should throw for negative length', () => {
+      const ikm = randomBytes(32);
+      const salt = randomBytes(16);
+      const info = new TextEncoder().encode('info');
+      expect(() => hkdfSha256(ikm, salt, info, -1)).toThrow('HKDF length must be a positive integer');
+    });
+
+    it('should throw for non-integer length', () => {
+      const ikm = randomBytes(32);
+      const salt = randomBytes(16);
+      const info = new TextEncoder().encode('info');
+      expect(() => hkdfSha256(ikm, salt, info, 32.5)).toThrow('HKDF length must be a positive integer');
+    });
+
+    it('should throw for length exceeding HKDF-SHA256 maximum (8160 bytes)', () => {
+      const ikm = randomBytes(32);
+      const salt = randomBytes(16);
+      const info = new TextEncoder().encode('info');
+      expect(() => hkdfSha256(ikm, salt, info, 8161)).toThrow('HKDF-SHA256 length cannot exceed 8160 bytes');
+    });
   });
 
   describe('AES-256-GCM Encryption/Decryption', () => {
@@ -284,6 +336,50 @@ describe('Crypto Module', () => {
       expect(new TextDecoder().decode(nodeDecrypted)).toBe('Cross-platform encryption test');
       expect(new TextDecoder().decode(browserDecrypted)).toBe('Cross-platform encryption test');
     });
+
+    // Input validation tests
+    it('should throw for wrong key size in encryptAesGcm', () => {
+      const wrongKey = randomBytes(16); // Should be 32
+      const iv = randomBytes(12);
+      const plaintext = new TextEncoder().encode('test');
+      expect(() => encryptAesGcm(wrongKey, plaintext, iv)).toThrow('AES-256-GCM requires a 32-byte key');
+    });
+
+    it('should throw for wrong IV size in encryptAesGcm', () => {
+      const key = randomBytes(32);
+      const wrongIv = randomBytes(16); // Should be 12
+      const plaintext = new TextEncoder().encode('test');
+      expect(() => encryptAesGcm(key, plaintext, wrongIv)).toThrow('AES-GCM requires a 12-byte IV');
+    });
+
+    it('should throw for wrong key size in decryptAesGcm', () => {
+      const key = randomBytes(32);
+      const wrongKey = randomBytes(16);
+      const iv = randomBytes(12);
+      const plaintext = new TextEncoder().encode('test');
+      const { ciphertext, tag } = encryptAesGcm(key, plaintext, iv);
+      expect(() => decryptAesGcm(wrongKey, ciphertext, iv, tag)).toThrow('AES-256-GCM requires a 32-byte key');
+    });
+
+    it('should throw for wrong IV size in decryptAesGcm', () => {
+      const key = randomBytes(32);
+      const iv = randomBytes(12);
+      const wrongIv = randomBytes(16);
+      const plaintext = new TextEncoder().encode('test');
+      const { ciphertext, tag } = encryptAesGcm(key, plaintext, iv);
+      expect(() => decryptAesGcm(key, ciphertext, wrongIv, tag)).toThrow('AES-GCM requires a 12-byte IV');
+    });
+
+    it('should throw for wrong tag size in decryptAesGcm', () => {
+      const key = randomBytes(32);
+      const iv = randomBytes(12);
+      const plaintext = new TextEncoder().encode('test');
+      const { ciphertext } = encryptAesGcm(key, plaintext, iv);
+      const wrongTag = randomBytes(8); // Should be 16
+      expect(() => decryptAesGcm(key, ciphertext, iv, wrongTag)).toThrow(
+        'AES-GCM requires a 16-byte authentication tag',
+      );
+    });
   });
 
   describe('Timing-Safe Comparison', () => {
@@ -312,6 +408,102 @@ describe('Crypto Module', () => {
 
       expect(nodeCrypto.timingSafeEqual(a, b)).toBe(browserCrypto.timingSafeEqual(a, b));
       expect(nodeCrypto.timingSafeEqual(a, c)).toBe(browserCrypto.timingSafeEqual(a, c));
+    });
+  });
+
+  describe('Encoding Utilities', () => {
+    describe('bytesToHex', () => {
+      it('should convert bytes to hex string', () => {
+        const bytes = new Uint8Array([0x00, 0x01, 0x0f, 0x10, 0xff]);
+        expect(bytesToHex(bytes)).toBe('00010f10ff');
+      });
+
+      it('should handle empty array', () => {
+        expect(bytesToHex(new Uint8Array([]))).toBe('');
+      });
+
+      it('should pad single digits with zero', () => {
+        const bytes = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        expect(bytesToHex(bytes)).toBe('000102030405060708090a0b0c0d0e0f');
+      });
+    });
+
+    describe('base64urlEncode', () => {
+      it('should encode bytes to base64url', () => {
+        const bytes = new TextEncoder().encode('Hello, World!');
+        const encoded = base64urlEncode(bytes);
+        expect(encoded).toBe('SGVsbG8sIFdvcmxkIQ');
+      });
+
+      it('should not include padding', () => {
+        const bytes = new TextEncoder().encode('a');
+        const encoded = base64urlEncode(bytes);
+        expect(encoded).not.toContain('=');
+      });
+
+      it('should use URL-safe characters', () => {
+        // Create bytes that would produce + and / in standard base64
+        const bytes = new Uint8Array([0xfb, 0xff, 0xfe]);
+        const encoded = base64urlEncode(bytes);
+        expect(encoded).not.toContain('+');
+        expect(encoded).not.toContain('/');
+      });
+
+      it('should handle empty array', () => {
+        expect(base64urlEncode(new Uint8Array([]))).toBe('');
+      });
+    });
+
+    describe('base64urlDecode', () => {
+      it('should decode base64url to bytes', () => {
+        const decoded = base64urlDecode('SGVsbG8sIFdvcmxkIQ');
+        expect(new TextDecoder().decode(decoded)).toBe('Hello, World!');
+      });
+
+      it('should handle URL-safe characters', () => {
+        // Encode then decode
+        const original = new Uint8Array([0xfb, 0xff, 0xfe]);
+        const encoded = base64urlEncode(original);
+        const decoded = base64urlDecode(encoded);
+        expect(decoded).toEqual(original);
+      });
+
+      it('should handle empty string', () => {
+        expect(base64urlDecode('')).toEqual(new Uint8Array([]));
+      });
+
+      it('should roundtrip correctly', () => {
+        const original = randomBytes(100);
+        const encoded = base64urlEncode(original);
+        const decoded = base64urlDecode(encoded);
+        expect(decoded).toEqual(original);
+      });
+    });
+
+    describe('sha256Base64url', () => {
+      it('should compute SHA-256 and return as base64url', () => {
+        // Known vector: SHA-256 of empty string
+        const hash = sha256Base64url('');
+        expect(hash).toBe('47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU');
+      });
+
+      it('should handle string input', () => {
+        const hash = sha256Base64url('test');
+        expect(typeof hash).toBe('string');
+        expect(hash.length).toBeGreaterThan(0);
+      });
+
+      it('should handle Uint8Array input', () => {
+        const bytes = new TextEncoder().encode('test');
+        const hash = sha256Base64url(bytes);
+        expect(typeof hash).toBe('string');
+      });
+
+      it('should produce same result for string and equivalent Uint8Array', () => {
+        const str = 'hello world';
+        const bytes = new TextEncoder().encode(str);
+        expect(sha256Base64url(str)).toBe(sha256Base64url(bytes));
+      });
     });
   });
 
