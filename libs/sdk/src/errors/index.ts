@@ -1,27 +1,41 @@
 // Export all error classes
 export {
+  // Base classes
   McpError,
   PublicMcpError,
   InternalMcpError,
+  // Tool errors
   ToolNotFoundError,
+  ToolExecutionError,
+  // Resource errors
   ResourceNotFoundError,
   ResourceReadError,
   InvalidResourceUriError,
+  // Validation errors
   InvalidInputError,
   InvalidOutputError,
   InvalidMethodError,
-  ToolExecutionError,
+  // Rate limiting errors
   RateLimitError,
   QuotaExceededError,
+  // Auth errors
   UnauthorizedError,
+  // Session & client errors
+  SessionMissingError,
+  UnsupportedClientVersionError,
+  // Internal errors
   GenericServerError,
   DependencyNotFoundError,
   InvalidHookFlowError,
   InvalidPluginScopeError,
+  RequestContextNotAvailableError,
+  // Configuration errors
   AuthConfigurationError,
+  GlobalConfigNotFoundError,
+  // Prompt errors
   PromptNotFoundError,
   PromptExecutionError,
-  GlobalConfigNotFoundError,
+  // Utilities
   isPublicError,
   toMcpError,
   formatMcpErrorResponse,

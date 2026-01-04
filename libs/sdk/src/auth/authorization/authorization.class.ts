@@ -1,6 +1,6 @@
 // auth/authorization/authorization.class.ts
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import {
   Authorization,
   AuthorizationCreateCtx,

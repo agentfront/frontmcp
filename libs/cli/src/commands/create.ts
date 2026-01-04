@@ -2,10 +2,9 @@ import * as path from 'path';
 import * as readline from 'readline';
 import { promises as fsp } from 'fs';
 import { c } from '../colors';
-import { ensureDir, fileExists, isDirEmpty, writeJSON } from '../utils/fs';
+import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON } from '@frontmcp/utils';
 import { runInit } from '../tsconfig';
 import { getSelfVersion } from '../version';
-import { readJSON } from '../utils/fs';
 
 // =============================================================================
 // Types

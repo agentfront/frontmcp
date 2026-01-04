@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import getRawBody from 'raw-body';
 import contentType from 'content-type';

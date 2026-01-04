@@ -66,7 +66,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
     it('should handle missing internal transport gracefully', () => {
       // Access internal property and set to undefined
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport = undefined;
       expect(transport.isInitialized).toBe(false);
     });
@@ -77,20 +77,20 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       transport.setInitializationState('session-123');
 
       expect(transport.isInitialized).toBe(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const webTransport = (transport as any)._webStandardTransport;
       expect(webTransport.sessionId).toBe('session-123');
     });
 
     it('should allow different session IDs', () => {
       transport.setInitializationState('session-abc');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe('session-abc');
 
       // Create new transport with different session
       const transport2 = new RecreateableStreamableHTTPServerTransport();
       transport2.setInitializationState('session-xyz');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport2 as any)._webStandardTransport.sessionId).toBe('session-xyz');
     });
 
@@ -128,7 +128,6 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
 
     it('should store pending state when internal transport is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (transport as any)._webStandardTransport = undefined;
 
       transport.setInitializationState('session-123');
@@ -139,7 +138,6 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
 
     it('should throw error when expected fields are missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (transport as any)._webStandardTransport = {}; // Missing _initialized and sessionId
 
       expect(() => transport.setInitializationState('session-123')).toThrow(
@@ -154,7 +152,6 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
 
     it('should return true when state is pending', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (transport as any)._webStandardTransport = undefined;
       transport.setInitializationState('session-123');
       expect(transport.hasPendingInitState).toBe(true);
@@ -168,7 +165,6 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
   describe('deferred initialization (serverless cold start)', () => {
     it('should store initialization state when _webStandardTransport does not exist', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (transport as any)._webStandardTransport = undefined;
 
       transport.setInitializationState('deferred-session-id');
@@ -181,7 +177,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
     it('should apply pending state on handleRequest when transport becomes available', async () => {
       // Start with no internal transport
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport = undefined;
 
       // Set initialization state (will be stored as pending)
@@ -191,7 +187,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       expect(transport.hasPendingInitState).toBe(true);
 
       // Simulate internal transport being created (happens on first request in MCP SDK)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport = {
         _initialized: false,
         sessionId: undefined,
@@ -199,7 +195,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
       // Mock handleRequest on parent class
       const mockHandleRequest = jest.fn().mockResolvedValue(undefined);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       Object.getPrototypeOf(Object.getPrototypeOf(transport)).handleRequest = mockHandleRequest;
 
       // Call handleRequest - should apply pending state
@@ -208,20 +204,20 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       // Now should be initialized
       expect(transport.isInitialized).toBe(true);
       expect(transport.hasPendingInitState).toBe(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe('cold-start-session');
     });
 
     it('should not apply pending state if _webStandardTransport still missing on handleRequest', async () => {
       // Start with no internal transport
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport = undefined;
 
       transport.setInitializationState('pending-session');
 
       // Mock handleRequest on parent class
       const mockHandleRequest = jest.fn().mockResolvedValue(undefined);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       Object.getPrototypeOf(Object.getPrototypeOf(transport)).handleRequest = mockHandleRequest;
 
       // Call handleRequest without transport being available
@@ -232,19 +228,18 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
 
     it('should clear pending state after applying', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (transport as any)._webStandardTransport = undefined;
       transport.setInitializationState('clear-test-session');
 
       // Simulate transport becoming available
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport = {
         _initialized: false,
         sessionId: undefined,
       };
 
       const mockHandleRequest = jest.fn().mockResolvedValue(undefined);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       Object.getPrototypeOf(Object.getPrototypeOf(transport)).handleRequest = mockHandleRequest;
 
       // First request applies pending state
@@ -252,7 +247,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       expect(transport.hasPendingInitState).toBe(false);
 
       // Reset initialized for second test
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (transport as any)._webStandardTransport._initialized = false;
 
       // Second request should not try to apply again
@@ -276,7 +271,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
       // Verify recreation succeeded
       expect(newTransport.isInitialized).toBe(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((newTransport as any)._webStandardTransport.sessionId).toBe('stored-session-id');
     });
 
@@ -285,7 +280,6 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
 
       transport.setInitializationState(sessionId);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const webTransport = (transport as any)._webStandardTransport;
       expect(webTransport._initialized).toBe(true);
       expect(webTransport.sessionId).toBe(sessionId);
@@ -294,14 +288,14 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     it('should handle recreation with UUID-style session IDs', () => {
       const uuidSessionId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
       transport.setInitializationState(uuidSessionId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe(uuidSessionId);
     });
 
     it('should handle recreation with special characters in session ID', () => {
       const specialSessionId = 'session:with-special_chars.and/slashes';
       transport.setInitializationState(specialSessionId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe(specialSessionId);
     });
   });
@@ -319,9 +313,9 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       instanceB.setInitializationState(sessionId);
 
       // Both should have same session ID
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((instanceA as any)._webStandardTransport.sessionId).toBe(sessionId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((instanceB as any)._webStandardTransport.sessionId).toBe(sessionId);
     });
 
@@ -334,7 +328,7 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       expect(instanceA.isInitialized).toBe(true);
 
       // Simulate A going down (reference lost)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       let referenceA: RecreateableStreamableHTTPServerTransport | null = instanceA;
       referenceA = null;
 
@@ -349,14 +343,14 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     it('should handle very long session IDs', () => {
       const longSessionId = 'a'.repeat(1000);
       transport.setInitializationState(longSessionId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe(longSessionId);
     });
 
     it('should handle unicode in session IDs', () => {
       const unicodeSessionId = 'session-\u{1F600}-emoji';
       transport.setInitializationState(unicodeSessionId);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe(unicodeSessionId);
     });
 
@@ -366,17 +360,17 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
       transport.setInitializationState('session-123');
 
       expect(transport.isInitialized).toBe(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe('session-123');
     });
 
     it('should allow updating session ID (re-recreation)', () => {
       transport.setInitializationState('session-old');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe('session-old');
 
       transport.setInitializationState('session-new');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect((transport as any)._webStandardTransport.sessionId).toBe('session-new');
     });
   });

@@ -22,7 +22,7 @@
  */
 
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 
 // ============================================
 // Credential Type Enum

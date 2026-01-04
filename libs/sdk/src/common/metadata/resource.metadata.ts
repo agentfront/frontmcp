@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { RawZodShape } from '../types';
 import { Icon, IconSchema } from '@modelcontextprotocol/sdk/types.js';
-import { isValidMcpUri, isValidMcpUriTemplate } from '../../utils/uri-validation.utils';
+import { isValidMcpUri, isValidMcpUriTemplate } from '@frontmcp/utils';
 
 declare global {
   /**

@@ -53,6 +53,7 @@
     "./esm": null
   },
   "dependencies": {
+    "@frontmcp/utils": "0.6.3",
     "@frontmcp/sdk": "0.6.3",
     "zod": "^4.0.0",
     "openapi-types": "^12.1.3",

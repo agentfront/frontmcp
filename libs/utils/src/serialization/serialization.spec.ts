@@ -1,10 +1,8 @@
-/* eslint-disable */
 /**
- * @file safe-stringify.test.ts
- * @description Tests for the safeStringify utility.
+ * Safe Stringify Utility Tests
  */
 
-import { safeStringify } from '../safe-stringify';
+import { safeStringify } from './serialization';
 
 describe('safeStringify', () => {
   describe('basic functionality', () => {
@@ -32,7 +30,6 @@ describe('safeStringify', () => {
   describe('circular reference handling', () => {
     it('should handle self-referencing objects', () => {
       const obj: Record<string, unknown> = { name: 'test' };
-      // @ts-ignore
       obj.self = obj;
       const result = safeStringify(obj);
       expect(result).toBe('{"name":"test","self":"[Circular]"}');
@@ -42,7 +39,6 @@ describe('safeStringify', () => {
       const parent: Record<string, unknown> = { type: 'parent' };
       const child: Record<string, unknown> = { type: 'child', parent };
       parent['child'] = child;
-      // @ts-ignore
       child.ref = parent;
 
       const result = safeStringify(parent);
@@ -74,7 +70,6 @@ describe('safeStringify', () => {
 
       const result = safeStringify(a);
       expect(result).toContain('[Circular]');
-      expect(result).not.toThrow;
     });
   });
 
@@ -164,9 +159,7 @@ describe('safeStringify', () => {
           throw new Error('Cannot get value');
         },
       };
-      // This may or may not throw depending on how JSON.stringify handles getters
       const result = safeStringify(obj);
-      // Either it succeeds with empty or returns error
       expect(typeof result).toBe('string');
     });
 

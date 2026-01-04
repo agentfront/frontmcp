@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { spawn } from 'child_process';
 import { c } from '../colors';
-import { fileExists, readJSON } from '../utils/fs';
+import { fileExists, readJSON } from '@frontmcp/utils';
 import { checkRequiredTsOptions } from '../tsconfig';
 import { resolveEntry } from '../utils/fs';
 

@@ -24,7 +24,7 @@ import {
 } from '../../common';
 import { z } from 'zod';
 import { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import { escapeHtml } from '../ui';
 
 const inputSchema = httpInputSchema;
@@ -368,7 +368,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   private generateUserSub(email: string): string {
     // Create a deterministic UUID from the email for demo purposes
     // In production, this would be the actual user ID
-    const hash = createHash('sha256').update(email.toLowerCase()).digest('hex');
+    const hash = sha256Hex(email.toLowerCase());
     // Format as UUID
     return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
   }

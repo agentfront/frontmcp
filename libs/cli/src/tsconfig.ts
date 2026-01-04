@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { c } from './colors';
-import { fileExists, readJSON, writeJSON } from './utils/fs';
+import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
 
 export const REQUIRED_DECORATOR_FIELDS = {
   target: 'es2021',

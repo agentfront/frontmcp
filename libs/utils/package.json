@@ -1,0 +1,53 @@
+{
+  "name": "@frontmcp/utils",
+  "version": "0.6.3",
+  "description": "Shared utility functions for FrontMCP - string manipulation, URI handling, path utilities, and more",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "utils",
+    "utilities",
+    "uri",
+    "url",
+    "string",
+    "path",
+    "typescript",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "libs/utils"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/utils/README.md",
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "@noble/ciphers": "^2.1.1"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0"
+  }
+}

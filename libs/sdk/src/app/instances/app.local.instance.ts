@@ -1,5 +1,5 @@
 import { AppEntry, AppRecord, LocalAppMetadata } from '../../common';
-import { idFromString } from '../../utils/string.utils';
+import { idFromString } from '@frontmcp/utils';
 import ProviderRegistry from '../../provider/provider.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import ResourceRegistry from '../../resource/resource.registry';

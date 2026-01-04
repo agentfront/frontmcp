@@ -24,6 +24,7 @@
           "outExtension": { ".js": ".js" },
           "external": [
             "@frontmcp/sdk",
+            "@frontmcp/utils",
             "@frontmcp/di",
             "@frontmcp/uipack",
             "@frontmcp/uipack/*",
@@ -60,6 +61,7 @@
           "outExtension": { ".js": ".mjs" },
           "external": [
             "@frontmcp/sdk",
+            "@frontmcp/utils",
             "@frontmcp/di",
             "@frontmcp/uipack",
             "@frontmcp/uipack/*",

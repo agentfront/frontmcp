@@ -1,11 +1,18 @@
-// file: libs/sdk/src/utils/uri-template.utils.ts
-// RFC 6570 Level 1 URI Template utilities
+/**
+ * RFC 6570 Level 1 URI Template utilities.
+ *
+ * Provides parsing, matching, and expansion of URI templates using simple
+ * string substitution ({param} syntax). This implements RFC 6570 Level 1 only;
+ * advanced operators like {+path}, {#fragment}, or {?query} are not supported.
+ */
 
 /**
- * Parsed URI template information
+ * Parsed URI template information.
  */
 export interface ParsedUriTemplate {
+  /** Compiled regex pattern for matching URIs */
   pattern: RegExp;
+  /** Ordered list of parameter names extracted from template */
   paramNames: string[];
 }
 
@@ -13,14 +20,16 @@ export interface ParsedUriTemplate {
  * Parse a URI template (RFC 6570 Level 1) into a regex pattern and parameter names.
  * Supports simple string substitution: {param}
  *
- * Note: This implements RFC 6570 Level 1 only (simple string substitution).
- * Advanced operators like {+path}, {#fragment}, or {?query} are not supported.
+ * @param template - The URI template to parse
+ * @returns Parsed template with pattern and parameter names
+ * @throws Error if template is too long (>1000 chars) or has too many parameters (>50)
  *
  * @example
- * parseUriTemplate("file:///{path}") => { pattern: /^file:\/\/\/([^/]+)$/, paramNames: ["path"] }
- * parseUriTemplate("users/{userId}/posts/{postId}") => { pattern: /^users\/([^/]+)\/posts\/([^/]+)$/, paramNames: ["userId", "postId"] }
+ * parseUriTemplate("file:///{path}")
+ * // { pattern: /^file:\/\/\/([^/]+)$/, paramNames: ["path"] }
  *
- * @throws Error if template is too long (>1000 chars) or has too many parameters (>50)
+ * parseUriTemplate("users/{userId}/posts/{postId}")
+ * // { pattern: /^users\/([^/]+)\/posts\/([^/]+)$/, paramNames: ["userId", "postId"] }
  */
 export function parseUriTemplate(template: string): ParsedUriTemplate {
   if (template.length > 1000) {
@@ -57,12 +66,19 @@ export function parseUriTemplate(template: string): ParsedUriTemplate {
  * Match a URI against a URI template and extract parameters.
  * Returns null if no match, or an object with extracted parameters.
  *
+ * @param template - The URI template
+ * @param uri - The URI to match against the template
+ * @returns Object with extracted parameters, or null if no match
+ *
  * @example
- * matchUriTemplate("file:///{path}", "file:///documents/readme.txt")
- * => { path: "documents" } // Note: only captures first segment
+ * matchUriTemplate("file:///{path}", "file:///documents")
+ * // { path: "documents" }
  *
  * matchUriTemplate("users/{userId}/posts/{postId}", "users/123/posts/456")
- * => { userId: "123", postId: "456" }
+ * // { userId: "123", postId: "456" }
+ *
+ * matchUriTemplate("users/{id}", "products/123")
+ * // null (no match)
  */
 export function matchUriTemplate(template: string, uri: string): Record<string, string> | null {
   const { pattern, paramNames } = parseUriTemplate(template);
@@ -81,14 +97,17 @@ export function matchUriTemplate(template: string, uri: string): Record<string, 
 /**
  * Expand a URI template with the given parameters.
  *
+ * @param template - The URI template
+ * @param params - Object with parameter values
+ * @returns Expanded URI with parameters substituted
+ * @throws Error if a required parameter is missing
+ *
  * @example
- * expandUriTemplate("file:///{path}", { path: "documents/readme.txt" })
- * => "file:///documents%2Freadme.txt"
+ * expandUriTemplate("file:///{path}", { path: "documents" })
+ * // "file:///documents"
  *
  * expandUriTemplate("users/{userId}/posts/{postId}", { userId: "123", postId: "456" })
- * => "users/123/posts/456"
- *
- * @throws Error if a required parameter is missing
+ * // "users/123/posts/456"
  */
 export function expandUriTemplate(template: string, params: Record<string, string>): string {
   return template.replace(/\{([^}]+)\}/g, (_, paramName) => {
@@ -103,8 +122,15 @@ export function expandUriTemplate(template: string, params: Record<string, strin
 /**
  * Extract parameter names from a URI template.
  *
+ * @param template - The URI template
+ * @returns Array of parameter names in order of appearance
+ *
  * @example
- * extractTemplateParams("users/{userId}/posts/{postId}") => ["userId", "postId"]
+ * extractTemplateParams("users/{userId}/posts/{postId}")
+ * // ["userId", "postId"]
+ *
+ * extractTemplateParams("file:///static/path")
+ * // []
  */
 export function extractTemplateParams(template: string): string[] {
   const params: string[] = [];
@@ -117,6 +143,13 @@ export function extractTemplateParams(template: string): string[] {
 
 /**
  * Check if a string is a URI template (contains {param} placeholders).
+ *
+ * @param uri - The string to check
+ * @returns true if the string contains template placeholders
+ *
+ * @example
+ * isUriTemplate("users/{userId}") // true
+ * isUriTemplate("users/123") // false
  */
 export function isUriTemplate(uri: string): boolean {
   return /\{[^}]+\}/.test(uri);

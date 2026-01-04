@@ -1,4 +1,5 @@
 import type { McpOpenAPITool, SecurityResolver } from 'mcp-from-openapi';
+import { validateBaseUrl } from '@frontmcp/utils';
 
 /**
  * Request configuration for building HTTP requests
@@ -33,28 +34,6 @@ function coerceToString(value: unknown, paramName: string, location: string): st
     throw new Error(`${location} parameter '${paramName}' cannot be an object. Received: ${JSON.stringify(value)}`);
   }
   return String(value);
-}
-
-/**
- * Validate and normalize a base URL.
- *
- * @param url - URL to validate
- * @returns Validated URL object
- * @throws Error if URL is invalid or uses unsupported protocol
- */
-export function validateBaseUrl(url: string): URL {
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error(`Unsupported protocol: ${parsed.protocol}. Only http: and https: are supported.`);
-    }
-    return parsed;
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('Unsupported protocol')) {
-      throw err;
-    }
-    throw new Error(`Invalid base URL: ${url}`);
-  }
 }
 
 /**

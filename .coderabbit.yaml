@@ -2,6 +2,9 @@
 reviews:
   profile: chill
   high_level_summary: true
+  pre_merge_checks:
+    docstrings:
+      threshold: 65
 
   path_instructions:
     - path: "apps/demo/**"

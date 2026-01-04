@@ -1,6 +1,6 @@
 // auth/authorization/public.authorization.ts
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { AuthorizationBase } from './authorization.class';
 import { AuthorizationCreateCtx, AuthUser } from './authorization.types';
 import { AuthMode } from '../../common';

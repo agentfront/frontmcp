@@ -2,17 +2,10 @@ import { Token, tokenName, getMetadata } from '@frontmcp/di';
 import { EntryLineage, EntryOwnerRef, ToolEntry, ToolRecord, ToolRegistryInterface, ToolType } from '../common';
 import { ToolChangeEvent, ToolEmitter } from './tool.events';
 import ProviderRegistry from '../provider/provider.registry';
-import {
-  ensureMaxLen,
-  normalizeOwnerPath,
-  normalizeProviderId,
-  normalizeSegment,
-  normalizeTool,
-  ownerKeyOf,
-  qualifiedNameOf,
-  sepFor,
-  toolDiscoveryDeps,
-} from './tool.utils';
+import { ensureMaxLen, sepFor } from '@frontmcp/utils';
+import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
+import { ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import { normalizeTool, toolDiscoveryDeps } from './tool.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ToolInstance } from './tool.instance';
 import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.types';

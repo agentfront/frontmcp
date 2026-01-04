@@ -11,6 +11,7 @@
     "types": ["node"],
     "paths": {
       "@frontmcp/sdk": ["libs/sdk/src/index.ts"],
+      "@frontmcp/utils": ["libs/utils/dist/index.d.ts"],
       "@frontmcp/di": ["libs/di/dist/index.d.ts"],
       "@frontmcp/uipack": ["libs/uipack/dist/index.d.ts"],
       "@frontmcp/uipack/*": ["libs/uipack/dist/*/index.d.ts"],

@@ -1,5 +1,5 @@
 // auth/session/session.transport.ts
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { TransportIdMode } from '../../common';
 
 export class TransportIdGenerator {

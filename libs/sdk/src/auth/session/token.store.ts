@@ -1,5 +1,5 @@
 // auth/session/token.store.ts
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 import type { EncBlob } from './token.vault';
 
 export type SecretRecord = {

@@ -24,7 +24,7 @@
  */
 
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '@frontmcp/utils';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { VaultEncryption, EncryptedData, VaultSensitiveData, encryptedDataSchema } from './vault-encryption';
 import {

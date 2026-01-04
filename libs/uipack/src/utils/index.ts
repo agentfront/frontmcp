@@ -1,10 +1,17 @@
 /**
  * @frontmcp/ui Utilities
  *
- * Common utility functions for UI operations.
+ * Re-exports common utility functions from @frontmcp/utils.
  *
  * @packageDocumentation
  */
 
-export { safeStringify } from './safe-stringify';
-export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape-html';
+// Re-export from @frontmcp/utils
+export {
+  safeStringify,
+  escapeHtml,
+  escapeHtmlAttr,
+  escapeJsString,
+  escapeScriptClose,
+  safeJsonForScript,
+} from '@frontmcp/utils';

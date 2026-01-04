@@ -1,10 +1,10 @@
 // auth/path.utils.ts
 
-import {ServerRequest} from "../interfaces";
+import { ServerRequest } from '../interfaces';
+import { trimSlashes, joinPath } from '@frontmcp/utils';
 
-export function trimSlashes(s: string) {
-  return (s ?? '').replace(/^\/+|\/+$/g, '');
-}
+// Re-export for backwards compatibility
+export { trimSlashes, joinPath } from '@frontmcp/utils';
 
 /** Normalize entryPath (gateway prefix) to "" or "/mcp" */
 export function normalizeEntryPrefix(entryPath?: string): string {
@@ -17,13 +17,6 @@ export function normalizeScopeBase(scopeBase?: string): string {
   const t = trimSlashes(scopeBase ?? '');
   return t ? `/${t}` : '';
 }
-
-/** Join URL path segments with a single slash and no trailing slash */
-export function joinPath(...parts: string[]) {
-  const cleaned = parts.map((p) => trimSlashes(p)).filter(Boolean);
-  return cleaned.length ? `/${cleaned.join('/')}` : '';
-}
-
 
 export function getRequestBaseUrl(req: ServerRequest, entryPath?: string) {
   const proto = (req.headers['x-forwarded-proto'] as string) || (req as any).protocol || 'http';

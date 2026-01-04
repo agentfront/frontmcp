@@ -165,7 +165,7 @@ export function migrateAuthTransportConfig(metadata: MigratableMetadata): {
     }
 
     // Create clean auth without transport
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const { transport: _, ...cleanAuth } = metadata.auth!;
     result.auth = cleanAuth as OldAuthConfig;
   }

@@ -1,5 +1,5 @@
 // tools/flows/call-tool.flow.ts
-import { randomUUID } from 'crypto';
+import { randomUUID } from '@frontmcp/utils';
 import {
   Flow,
   FlowBase,

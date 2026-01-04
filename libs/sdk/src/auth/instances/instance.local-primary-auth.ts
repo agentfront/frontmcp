@@ -1,6 +1,6 @@
 import { SignJWT } from 'jose';
 import { URL } from 'url';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from '@frontmcp/utils';
 import { FrontMcpAuth, FrontMcpLogger, ProviderScope, ScopeEntry, ServerRequest, JWK } from '../../common';
 import {
   PublicAuthOptions,

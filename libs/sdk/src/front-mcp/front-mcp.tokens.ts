@@ -1,5 +1,4 @@
 import { Token } from '@frontmcp/di';
-import { FrontMcpConfigType, FrontMcpScopeInterface } from '../common';
-import { FrontMcpServerInstance } from '../server/server.instance';
+import { FrontMcpConfigType } from '../common';
 
 export const FrontMcpConfig: Token<FrontMcpConfigType> = Symbol('FrontMcpConfig');

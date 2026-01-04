@@ -1,5 +1,5 @@
 /**
- * HTML Escaping Utilities
+ * HTML and JavaScript Escaping Utilities
  *
  * Functions for escaping strings to prevent XSS attacks in HTML output.
  *

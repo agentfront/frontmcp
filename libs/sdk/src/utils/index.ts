@@ -1,34 +1,10 @@
 // file: libs/sdk/src/utils/index.ts
-// Centralized exports for SDK utilities
+// SDK-specific utilities only - no re-exports
 
-// Re-export DI utilities for backwards compatibility
-export {
-  tokenName,
-  isClass,
-  isPromise,
-  depsOfClass,
-  depsOfFunc,
-  getAsyncWithTokens,
-  readWithParamTypes,
-  getMetadata,
-  setMetadata,
-  hasAsyncWith,
-} from '@frontmcp/di';
+// MCP-specific naming utilities (use MCP_ALLOWED character set)
+export { normalizeSegment, normalizeProviderId, normalizeOwnerPath } from './naming.utils';
 
-// Naming and case conversion utilities
-export {
-  NameCase,
-  splitWords,
-  toCase,
-  sepFor,
-  normalizeSegment,
-  normalizeProviderId,
-  normalizeOwnerPath,
-  shortHash,
-  ensureMaxLen,
-} from './naming.utils';
-
-// Owner lineage and qualified name utilities
+// Owner lineage and qualified name utilities (SDK-specific types)
 export {
   ownerKeyOf,
   qualifiedNameOf,
@@ -38,22 +14,5 @@ export {
   isAncestorLineage,
 } from './lineage.utils';
 
-// URI validation utilities (RFC 3986)
-export { isValidMcpUri, extractUriScheme, isValidMcpUriTemplate } from './uri-validation.utils';
-
-// URI template parsing and matching utilities
-export { parseUriTemplate, matchUriTemplate, expandUriTemplate } from './uri-template.utils';
-
-// Content utilities
-export {
-  sanitizeToJson,
-  toStructuredContent,
-  TextContent,
-  BlobContent,
-  ResourceContent,
-  buildResourceContent,
-  inferMimeType,
-} from './content.utils';
-
-// String utilities
-export { idFromString } from './string.utils';
+// MCP-specific content utilities
+export { toStructuredContent, TextContent, BlobContent, ResourceContent, buildResourceContent } from './content.utils';

@@ -5,7 +5,7 @@
  * chain via AsyncLocalStorage. Access via DI only using the REQUEST_CONTEXT token.
  */
 
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { TraceContext, generateTraceContext } from './trace-context';
@@ -261,7 +261,7 @@ export class RequestContext {
       parentId: this.traceContext.parentId,
       // Hash sessionId to prevent logging user-identifying information
       // while preserving ability to correlate logs for the same session
-      sessionIdHash: createHash('sha256').update(this.sessionId).digest('hex').slice(0, 12),
+      sessionIdHash: sha256Hex(this.sessionId).slice(0, 12),
       scopeId: this.scopeId,
       elapsed: this.elapsed(),
     };

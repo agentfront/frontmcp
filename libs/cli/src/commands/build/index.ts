@@ -1,7 +1,8 @@
 import * as path from 'path';
 import { ParsedArgs } from '../../args';
 import { c } from '../../colors';
-import { ensureDir, fileExists, fsp, runCmd, resolveEntry, writeJSON } from '../../utils/fs';
+import { ensureDir, fileExists, runCmd, writeJSON } from '@frontmcp/utils';
+import { fsp, resolveEntry } from '../../utils/fs';
 import { REQUIRED_DECORATOR_FIELDS } from '../../tsconfig';
 import { ADAPTERS } from './adapters';
 import { AdapterName } from './types';

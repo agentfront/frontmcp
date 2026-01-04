@@ -1,36 +1,20 @@
-import * as fs from 'fs';
-import { promises as fsp } from 'fs';
+// file: libs/cli/src/utils/fs.ts
+// CLI-specific file system utilities
+
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { promises as fsp } from 'fs';
 import { c } from '../colors';
-
-export async function fileExists(p: string): Promise<boolean> {
-  try {
-    await fsp.access(p, fs.constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function readJSON<T = any>(jsonPath: string): Promise<T | null> {
-  try {
-    const buf = await fsp.readFile(jsonPath, 'utf8');
-    return JSON.parse(buf) as T;
-  } catch {
-    return null;
-  }
-}
-
-export async function writeJSON(p: string, obj: any) {
-  await fsp.writeFile(p, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-}
+import { fileExists, readJSON } from '@frontmcp/utils';
 
 function tryCandidates(base: string): string[] {
   const exts = ['', '.ts', '.tsx', '.js', '.mjs', '.cjs'];
   return exts.map((ext) => base + ext);
 }
 
+/**
+ * Resolve entry file for CLI commands.
+ * CLI-specific: includes colored error messages and CLI usage hints.
+ */
 export async function resolveEntry(cwd: string, explicit?: string): Promise<string> {
   if (explicit) {
     const full = path.resolve(cwd, explicit);
@@ -40,7 +24,7 @@ export async function resolveEntry(cwd: string, explicit?: string): Promise<stri
 
   const pkgPath = path.join(cwd, 'package.json');
   if (await fileExists(pkgPath)) {
-    const pkg = await readJSON<any>(pkgPath);
+    const pkg = await readJSON<{ main?: string }>(pkgPath);
     if (pkg && typeof pkg.main === 'string' && pkg.main.trim()) {
       const mainCandidates = tryCandidates(path.resolve(cwd, pkg.main));
       for (const p of mainCandidates) {
@@ -69,28 +53,6 @@ export async function resolveEntry(cwd: string, explicit?: string): Promise<stri
     `  frontmcp dev --entry src/main.ts`,
   ].join('\n');
   throw new Error(msg);
-}
-
-export function runCmd(cmd: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: 'inherit', shell: false, ...opts });
-    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`))));
-    child.on('error', reject);
-  });
-}
-
-export async function ensureDir(p: string): Promise<void> {
-  await fsp.mkdir(p, { recursive: true });
-}
-
-export async function isDirEmpty(dir: string): Promise<boolean> {
-  try {
-    const items = await fsp.readdir(dir);
-    return items.length === 0;
-  } catch (e: unknown) {
-    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return true;
-    throw e;
-  }
 }
 
 export { fsp }; // re-export if needed in other modules
