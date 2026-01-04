@@ -263,6 +263,10 @@
             "pages": ["blog/index", "blog/external-links"]
           },
           {
+            "group": "December 2025",
+            "pages": ["blog/12-2025/tool-ui", "blog/12-2025/deploy-to-vercel", "blog/12-2025/agent-as-tool"]
+          },
+          {
             "group": "November 2025",
             "pages": [
               "blog/11-2025/codecall-plugin",
