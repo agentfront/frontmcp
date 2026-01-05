@@ -1,4 +1,5 @@
 import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
+import { isValidMcpUri } from '@frontmcp/utils';
 import {
   LocalAppMetadata,
   FrontMcpLocalAppTokens,
@@ -19,14 +20,20 @@ export function collectAppMetadata(cls: AppType): LocalAppMetadata {
 }
 
 /**
- * Check if an object is a remote app configuration
+ * Check if an object is a remote app configuration.
+ * Validates that url is a valid MCP URI per RFC 3986.
  */
 function isRemoteAppConfig(item: unknown): item is RemoteAppMetadata {
   if (!item || typeof item !== 'object') {
     return false;
   }
   const obj = item as Record<string, unknown>;
-  return typeof obj['urlType'] === 'string' && typeof obj['url'] === 'string' && typeof obj['name'] === 'string';
+  return (
+    typeof obj['urlType'] === 'string' &&
+    typeof obj['url'] === 'string' &&
+    isValidMcpUri(obj['url']) &&
+    typeof obj['name'] === 'string'
+  );
 }
 
 /**

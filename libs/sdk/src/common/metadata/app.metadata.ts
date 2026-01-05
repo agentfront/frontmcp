@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
 import {
   AgentType,
@@ -335,7 +336,9 @@ export const frontMcpRemoteAppMetadataSchema = z.looseObject({
   name: z.string().min(1),
   description: z.string().optional(),
   urlType: z.enum(['worker', 'url', 'npm', 'esm']),
-  url: z.string(),
+  url: z.string().refine(isValidMcpUri, {
+    message: 'URL must have a valid scheme (e.g., https://, file://, custom://)',
+  }),
   namespace: z.string().optional(),
   transportOptions: remoteTransportOptionsSchema.optional(),
   remoteAuth: remoteAuthConfigSchema.optional(),
