@@ -58,12 +58,35 @@ export default class RememberRedisProvider implements RememberStoreInterface {
 
   /**
    * Store a value with optional TTL.
+   *
+   * @param key - The key to store under
+   * @param value - The value to store (must not be undefined)
+   * @param ttlSeconds - Optional TTL in seconds (must be positive integer if provided)
+   * @throws Error if value is undefined or ttlSeconds is invalid
    */
   async setValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    // Validate value is not undefined (JSON.stringify(undefined) returns undefined, not a string)
+    if (value === undefined) {
+      throw new Error('Cannot store undefined value. Use null or delete the key instead.');
+    }
+
+    // Validate ttlSeconds if provided
+    if (ttlSeconds !== undefined) {
+      if (typeof ttlSeconds !== 'number' || !Number.isFinite(ttlSeconds)) {
+        throw new Error(`Invalid TTL: expected a number, got ${typeof ttlSeconds}`);
+      }
+      if (ttlSeconds <= 0) {
+        throw new Error(`Invalid TTL: must be positive, got ${ttlSeconds}`);
+      }
+      if (!Number.isInteger(ttlSeconds)) {
+        throw new Error(`Invalid TTL: must be an integer, got ${ttlSeconds}`);
+      }
+    }
+
     const fullKey = this.keyPrefix + key;
     const strValue = typeof value === 'string' ? value : JSON.stringify(value);
 
-    if (ttlSeconds && ttlSeconds > 0) {
+    if (ttlSeconds !== undefined && ttlSeconds > 0) {
       await this.client.set(fullKey, strValue, 'EX', ttlSeconds);
     } else {
       await this.client.set(fullKey, strValue);
