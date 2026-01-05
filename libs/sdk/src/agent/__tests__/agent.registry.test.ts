@@ -362,7 +362,8 @@ describe('AgentRegistry', () => {
 
       const toolDef = agent?.getToolDefinition();
       expect(toolDef).toBeDefined();
-      expect(toolDef?.name).toBe('tool-agent');
+      // Agent tools are prefixed with 'invoke_' for MCP protocol consistency
+      expect(toolDef?.name).toBe('invoke_tool-agent');
       expect(toolDef?.description).toContain('Agent that can be invoked as a tool');
     });
   });

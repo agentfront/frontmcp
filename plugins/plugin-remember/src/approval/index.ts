@@ -17,6 +17,7 @@ export { ApprovalService, createApprovalService } from './approval.service';
 
 // Store implementations
 export { ApprovalMemoryStore } from './approval-memory.store';
+export { ApprovalStorageStore, ApprovalStorageStoreOptions, createApprovalMemoryStore } from './approval-storage.store';
 
 // Hook plugin
 export { default as ApprovalCheckPlugin } from './approval-check.hook';

@@ -62,3 +62,58 @@ export {
   CryptoProvider,
   EncBlob,
 } from './crypto';
+
+// Storage utilities (unified key-value storage with pluggable backends)
+export {
+  // Factory
+  createStorage,
+  createMemoryStorage,
+  getDetectedStorageType,
+  // Types
+  StorageAdapter,
+  NamespacedStorage,
+  RootStorage,
+  SetOptions,
+  SetEntry,
+  MessageHandler,
+  Unsubscribe,
+  MemoryAdapterOptions,
+  RedisAdapterOptions,
+  VercelKvAdapterOptions,
+  UpstashAdapterOptions,
+  StorageType,
+  StorageConfig,
+  // Namespace
+  NamespacedStorageImpl,
+  createRootStorage,
+  createNamespacedStorage,
+  buildPrefix,
+  NAMESPACE_SEPARATOR,
+  // Errors
+  StorageError,
+  StorageConnectionError,
+  StorageOperationError,
+  StorageNotSupportedError,
+  StorageConfigError,
+  StorageTTLError,
+  StoragePatternError,
+  StorageNotConnectedError,
+  // Adapters
+  BaseStorageAdapter,
+  MemoryStorageAdapter,
+  RedisStorageAdapter,
+  VercelKvStorageAdapter,
+  UpstashStorageAdapter,
+  // Utilities
+  globToRegex,
+  matchesPattern,
+  validatePattern,
+  escapeGlob,
+  MAX_TTL_SECONDS,
+  validateTTL,
+  validateOptionalTTL,
+  ttlToExpiresAt,
+  expiresAtToTTL,
+  isExpired,
+  normalizeTTL,
+} from './storage';

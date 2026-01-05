@@ -9,6 +9,7 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
 import { ProviderRegistryInterface } from '../interfaces/internal';
+import type ProviderRegistry from '../../provider/provider.registry';
 
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
 export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
@@ -42,6 +43,12 @@ export abstract class ToolEntry<
    * The full name of the tool, including the owner name as prefix.
    */
   fullName: string;
+
+  /**
+   * Get the provider registry for this tool.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  abstract get providers(): ProviderRegistry;
 
   inputSchema: InSchema;
   // This is whatever JSON-schema-ish thing you store for input; keeping type loose

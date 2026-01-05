@@ -153,6 +153,60 @@ export const transportOptionsSchema = z.object({
    * When enabled, sessions are persisted to Redis and transports can be recreated after server restart
    */
   persistence: transportPersistenceConfigSchema.optional(),
+
+  // ============================================
+  // Distributed/Serverless Mode
+  // ============================================
+
+  /**
+   * Distributed mode configuration for serverless and multi-instance deployments.
+   *
+   * When enabled, the SDK optimizes for environments where requests may land on
+   * different server instances (e.g., Vercel, AWS Lambda, Kubernetes).
+   *
+   * Key behaviors when enabled:
+   * - Provider session cache is disabled (CONTEXT providers rebuilt per-request)
+   * - Session termination tracking uses distributed storage
+   *
+   * @example Auto-detect serverless environment
+   * ```typescript
+   * transport: {
+   *   distributed: { enabled: 'auto' }
+   * }
+   * ```
+   *
+   * @example Explicit configuration
+   * ```typescript
+   * transport: {
+   *   distributed: {
+   *     enabled: true,
+   *     providerCaching: false,  // Don't cache providers (default when distributed)
+   *   }
+   * }
+   * ```
+   */
+  distributed: z
+    .object({
+      /**
+       * Enable distributed mode.
+       * - `true`: Always enable distributed optimizations
+       * - `false`: Disable (default for traditional deployments)
+       * - `'auto'`: Auto-detect serverless environment (checks VERCEL, AWS_LAMBDA_FUNCTION_NAME, etc.)
+       *
+       * @default false
+       */
+      enabled: z.union([z.boolean(), z.literal('auto')]).default(false),
+
+      /**
+       * Enable provider session caching.
+       * When false, CONTEXT-scoped providers are rebuilt on each request.
+       * This is the recommended setting for serverless/distributed deployments.
+       *
+       * @default true (but false when distributed.enabled is true/auto)
+       */
+      providerCaching: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 // ============================================
@@ -183,3 +237,61 @@ export type TransportPersistenceConfigInput = z.input<typeof transportPersistenc
  * Platform detection configuration type
  */
 export type PlatformDetectionConfigType = z.infer<typeof platformDetectionConfigSchema>;
+
+/**
+ * Distributed mode configuration type (with defaults applied)
+ */
+export type DistributedConfig = NonNullable<TransportOptions['distributed']>;
+
+/**
+ * Distributed mode configuration input type (for user configuration)
+ */
+export type DistributedConfigInput = {
+  enabled?: boolean | 'auto';
+  providerCaching?: boolean;
+};
+
+/**
+ * Check if distributed mode is enabled based on configuration.
+ * Handles 'auto' detection for serverless environments.
+ */
+export function isDistributedMode(config?: DistributedConfigInput): boolean {
+  if (!config) return false;
+
+  const enabled = config.enabled;
+  if (enabled === true) return true;
+  if (enabled === false || enabled === undefined) return false;
+
+  // Auto-detect serverless environment
+  if (enabled === 'auto') {
+    // Check common serverless environment indicators
+    const env = typeof process !== 'undefined' ? process.env : {};
+    return !!(
+      env['VERCEL'] ||
+      env['AWS_LAMBDA_FUNCTION_NAME'] ||
+      env['GOOGLE_CLOUD_PROJECT'] ||
+      env['AZURE_FUNCTIONS_ENVIRONMENT'] ||
+      env['K_SERVICE'] || // Google Cloud Run
+      env['RAILWAY_ENVIRONMENT'] ||
+      env['RENDER'] ||
+      env['FLY_APP_NAME']
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Get effective provider caching setting based on distributed config.
+ */
+export function shouldCacheProviders(config?: DistributedConfigInput): boolean {
+  if (!config) return true;
+
+  // If explicitly set, use that value
+  if (config.providerCaching !== undefined) {
+    return config.providerCaching;
+  }
+
+  // Default: disable caching when distributed mode is enabled
+  return !isDistributedMode(config);
+}

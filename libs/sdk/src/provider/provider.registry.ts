@@ -28,6 +28,18 @@ import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { SessionKey } from '../context/session-key.provider';
+import { type DistributedConfigInput, shouldCacheProviders } from '../common/types/options/transport.options';
+
+/**
+ * Configuration options for ProviderRegistry.
+ */
+export interface ProviderRegistryOptions {
+  /**
+   * Distributed mode configuration.
+   * Controls provider caching behavior for serverless/distributed deployments.
+   */
+  distributed?: DistributedConfigInput;
+}
 
 export default class ProviderRegistry
   extends RegistryAbstract<ProviderEntry, ProviderRecord, ProviderType[], ProviderRegistry | undefined>
@@ -61,10 +73,18 @@ export default class ProviderRegistry
   /** Handle for the session cleanup interval */
   private sessionCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(list: ProviderType[], private readonly parentProviders?: ProviderRegistry) {
+  /** Whether session caching is enabled (disabled in distributed/serverless mode) */
+  private readonly sessionCacheEnabled: boolean;
+
+  constructor(
+    list: ProviderType[],
+    private readonly parentProviders?: ProviderRegistry,
+    options?: ProviderRegistryOptions,
+  ) {
     super('ProviderRegistry', parentProviders, list, false);
 
     this.providedBy = new Map();
+    this.sessionCacheEnabled = shouldCacheProviders(options?.distributed);
 
     this.buildGraph();
     this.topoSort();
@@ -815,12 +835,21 @@ export default class ProviderRegistry
   /**
    * Get session cache statistics for monitoring.
    */
-  getSessionCacheStats(): { size: number; maxSize: number; ttlMs: number } {
+  getSessionCacheStats(): { enabled: boolean; size: number; maxSize: number; ttlMs: number } {
     return {
+      enabled: this.sessionCacheEnabled,
       size: this.sessionStores.size,
       maxSize: ProviderRegistry.MAX_SESSION_CACHE_SIZE,
       ttlMs: ProviderRegistry.SESSION_CACHE_TTL_MS,
     };
+  }
+
+  /**
+   * Check if session caching is enabled.
+   * Returns false in distributed/serverless mode.
+   */
+  isSessionCacheEnabled(): boolean {
+    return this.sessionCacheEnabled;
   }
 
   /* -------------------- Scoped Provider Views -------------------- */
@@ -848,10 +877,38 @@ export default class ProviderRegistry
     // 1. Global providers - return existing singletons
     const global = this.getAllSingletons();
 
-    // 2. Context providers - build per-context (unified session+request)
-    // Note: We don't cache context providers because they're per-request.
-    // The unified context model means all non-global providers are fresh per-request.
-    const contextStore = new Map<Token, unknown>(contextProviders);
+    // 2. Context providers - use session cache for per-session instances
+    // CONTEXT-scoped providers persist within the same session.
+    // Multiple calls with the same sessionKey share the same provider instances.
+    //
+    // In distributed/serverless mode, caching is disabled because sessions may
+    // land on different server instances. CONTEXT providers are stateless facades
+    // that delegate to storage, so rebuilding them per-request has minimal cost.
+    let contextStore: Map<Token, unknown>;
+
+    if (this.sessionCacheEnabled) {
+      // Traditional mode: cache providers per session
+      let cached = this.sessionStores.get(sessionKey);
+      if (!cached) {
+        cached = { providers: new Map<Token, unknown>(), lastAccess: Date.now() };
+        this.sessionStores.set(sessionKey, cached);
+      } else {
+        cached.lastAccess = Date.now();
+      }
+      contextStore = cached.providers;
+    } else {
+      // Distributed mode: no caching, rebuild providers each request
+      contextStore = new Map<Token, unknown>();
+    }
+
+    // Merge pre-built context providers (e.g., FrontMcpContext from flow)
+    if (contextProviders) {
+      for (const [token, instance] of contextProviders) {
+        if (!contextStore.has(token)) {
+          contextStore.set(token, instance);
+        }
+      }
+    }
 
     // Inject SessionKey for backwards compatibility with providers that depend on it
     // @deprecated - Providers should migrate to using FRONTMCP_CONTEXT instead

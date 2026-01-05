@@ -168,6 +168,25 @@ export function createMockPromptEntry(
       provide: class MockPromptEntry {} as unknown as new () => PromptEntry,
       metadata: fullMetadata,
     } as PromptRecord,
+    // Mock providers registry for CONTEXT-scoped provider support
+    providers: {
+      buildViews: jest.fn(async (_sessionKey: string, contextDeps?: Map<unknown, unknown>) => ({
+        global: new Map(),
+        context: contextDeps ?? new Map(),
+        session: contextDeps ?? new Map(),
+        request: contextDeps ?? new Map(),
+      })),
+      get: jest.fn((_token: unknown) => {
+        throw new Error('Provider not found in mock');
+      }),
+      getScope: jest.fn(() => ({
+        id: 'test-mock-scope',
+        kind: 'app' as const,
+        ref: {},
+      })),
+      getProviders: jest.fn(() => []),
+      getRegistries: jest.fn(() => []),
+    },
   };
 }
 
