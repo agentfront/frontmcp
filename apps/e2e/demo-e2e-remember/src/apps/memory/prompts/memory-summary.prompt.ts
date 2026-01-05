@@ -1,5 +1,5 @@
 import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { RememberAccessorToken } from '@frontmcp/plugins/remember';
+import { RememberAccessorToken, RememberAccessor } from '@frontmcp/plugin-remember';
 
 @Prompt({
   name: 'memory-summary',
@@ -15,7 +15,7 @@ import { RememberAccessorToken } from '@frontmcp/plugins/remember';
 export default class MemorySummaryPrompt extends PromptContext {
   async execute(args: Record<string, string>): Promise<GetPromptResult> {
     const scope = (args['scope'] ?? 'session') as 'session' | 'user' | 'tool' | 'global';
-    const remember = this.get(RememberAccessorToken);
+    const remember = this.get(RememberAccessorToken) as RememberAccessor;
     const keys = await remember.list({ scope });
 
     const memories: Record<string, unknown> = {};

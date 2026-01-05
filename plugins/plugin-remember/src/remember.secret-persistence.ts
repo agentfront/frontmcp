@@ -50,7 +50,8 @@ export interface SecretPersistenceOptions {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_SECRET_PATH = '.frontmcp/remember-secret.json';
+/** Default file path for storing the encryption secret (not the secret itself) */
+const DEFAULT_SECRET_FILE_PATH = '.frontmcp/remember-secret.json';
 const SECRET_BYTES = 32; // 256 bits
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +117,7 @@ export function isSecretPersistenceEnabled(options?: SecretPersistenceOptions): 
  * Resolve the secret file path.
  */
 export function resolveSecretPath(options?: SecretPersistenceOptions): string {
-  const secretPath = options?.secretPath ?? DEFAULT_SECRET_PATH;
+  const secretPath = options?.secretPath ?? DEFAULT_SECRET_FILE_PATH;
 
   // If absolute path, use as-is
   if (path.isAbsolute(secretPath)) {

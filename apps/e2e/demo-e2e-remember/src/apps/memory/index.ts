@@ -1,5 +1,5 @@
 import { App } from '@frontmcp/sdk';
-import { RememberPlugin } from '@frontmcp/plugins/remember';
+import { RememberPlugin } from '@frontmcp/plugin-remember';
 import RememberValueTool from './tools/remember-value.tool';
 import RecallValueTool from './tools/recall-value.tool';
 import ForgetValueTool from './tools/forget-value.tool';

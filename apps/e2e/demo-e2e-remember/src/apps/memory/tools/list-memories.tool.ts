@@ -1,6 +1,6 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import '@frontmcp/plugins/remember'; // Import for this.remember types
+import '@frontmcp/plugin-remember'; // Import for this.remember types
 
 const inputSchema = z
   .object({

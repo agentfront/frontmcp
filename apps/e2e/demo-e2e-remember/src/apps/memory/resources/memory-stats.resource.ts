@@ -1,6 +1,6 @@
 import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { z } from 'zod';
-import { RememberAccessorToken } from '@frontmcp/plugins/remember';
+import { RememberAccessorToken, RememberAccessor } from '@frontmcp/plugin-remember';
 
 const outputSchema = z.object({
   session: z.object({
@@ -24,7 +24,7 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class MemoryStatsResource extends ResourceContext<Record<string, never>, Output> {
   async execute(): Promise<Output> {
-    const remember = this.get(RememberAccessorToken);
+    const remember = this.get(RememberAccessorToken) as RememberAccessor;
     const sessionKeys = await remember.list({ scope: 'session' });
     const globalKeys = await remember.list({ scope: 'global' });
 
