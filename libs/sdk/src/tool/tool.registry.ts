@@ -12,7 +12,8 @@ import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.type
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
-import { AppRemoteInstance } from '../app/instances/app.remote.instance';
+import { Scope } from '../scope';
+import { AppEntry } from '../common';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -105,37 +106,12 @@ export default class ToolRegistry
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        // Check if this is a remote app using instanceof (type-safe)
-        const isRemoteApp = app instanceof AppRemoteInstance;
-
-        if (isRemoteApp) {
-          // For remote apps, directly adopt tools from the app's tools registry
-          // The RemoteToolRegistry isn't registered with providers, so we access it directly
-          try {
-            const remoteTools = app.tools.getTools();
-            if (remoteTools.length > 0) {
-              const prepend: EntryLineage = this.owner ? [this.owner] : [];
-              for (const remoteTool of remoteTools) {
-                // Validate tool entry has required properties
-                if (!remoteTool || typeof remoteTool.name !== 'string') {
-                  scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
-                  continue;
-                }
-                const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
-                this.localRows.push(row);
-              }
-            }
-          } catch (error) {
-            scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
-          }
+        if (app.isRemote) {
+          // Remote apps: adopt tools directly from the app's tools registry
+          this.adoptToolsFromRemoteApp(app, scope);
         } else {
-          // For local apps, adopt from child ToolRegistry instances
-          const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
-          appToolsRegistries
-            .filter((t) => t.owner.kind === 'app')
-            .forEach((appToolRegistry) => {
-              this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
-            });
+          // Local apps: adopt from child ToolRegistry instances
+          this.adoptToolsFromLocalApp(app);
         }
       }
     });
@@ -185,6 +161,42 @@ export default class ToolRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Adopt tools directly from a remote app's tools registry.
+   * Remote apps expose tools via proxy entries that forward execution to the remote server.
+   */
+  private adoptToolsFromRemoteApp(app: AppEntry, scope: Scope): void {
+    try {
+      const remoteTools = app.tools.getTools();
+      if (remoteTools.length > 0) {
+        const prepend: EntryLineage = this.owner ? [this.owner] : [];
+        for (const remoteTool of remoteTools) {
+          if (!remoteTool || typeof remoteTool.name !== 'string') {
+            scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
+            continue;
+          }
+          const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
+          this.localRows.push(row);
+        }
+      }
+    } catch (error) {
+      scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Adopt tools from a local app's child ToolRegistry instances.
+   * Local apps use the hierarchical registry pattern for tool discovery.
+   */
+  private adoptToolsFromLocalApp(app: AppEntry): void {
+    const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
+    appToolsRegistries
+      .filter((t) => t.owner.kind === 'app')
+      .forEach((appToolRegistry) => {
+        this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
+      });
   }
 
   // NOTE: `any` is intentional here - heterogeneous tool collections can't use `unknown`

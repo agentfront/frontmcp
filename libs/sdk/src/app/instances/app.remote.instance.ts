@@ -251,6 +251,14 @@ class EmptyAdapterRegistry implements AdapterRegistryInterface {
 export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   override readonly id: string;
 
+  /**
+   * Remote apps return true to indicate entries should be adopted directly
+   * from the app's registries rather than through child registry hierarchy.
+   */
+  override get isRemote(): boolean {
+    return true;
+  }
+
   private readonly scopeProviders: ProviderRegistry;
   private readonly mcpClient: McpClientService;
   private readonly appOwner: EntryOwnerRef;

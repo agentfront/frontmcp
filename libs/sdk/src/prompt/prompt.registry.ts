@@ -1,7 +1,15 @@
 // file: libs/sdk/src/prompt/prompt.registry.ts
 
 import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptRegistryInterface, PromptType } from '../common';
+import {
+  EntryLineage,
+  EntryOwnerRef,
+  PromptEntry,
+  PromptRecord,
+  PromptRegistryInterface,
+  PromptType,
+  AppEntry,
+} from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
 import { ensureMaxLen, sepFor } from '@frontmcp/utils';
@@ -14,6 +22,7 @@ import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from '
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { Scope } from '../scope';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -106,32 +115,17 @@ export default class PromptRegistry
     }
 
     // Adopt prompts from child app registries
+    const scope = this.providers.getActiveScope();
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        // Check if this is a remote app (has getMcpClient method)
-        // Remote apps use RemotePromptRegistry which isn't registered as a child registry
-        const isRemoteApp = typeof (app as { getMcpClient?: unknown }).getMcpClient === 'function';
-
-        if (isRemoteApp) {
-          // For remote apps, directly adopt prompts from the app's prompts registry
-          const remotePrompts = app.prompts.getPrompts();
-          if (remotePrompts.length > 0) {
-            const prepend: EntryLineage = this.owner ? [this.owner] : [];
-            for (const remotePrompt of remotePrompts) {
-              const row = this.makeRow(Symbol(remotePrompt.name), remotePrompt as PromptInstance, prepend, this);
-              this.localRows.push(row);
-            }
-          }
+        if (app.isRemote) {
+          // Remote apps: adopt prompts directly from the app's prompts registry
+          this.adoptPromptsFromRemoteApp(app, scope);
         } else {
-          // For local apps, adopt from child PromptRegistry instances
-          const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
-          appPromptRegistries
-            .filter((r) => r.owner.kind === 'app')
-            .forEach((appPromptRegistry) => {
-              this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
-            });
+          // Local apps: adopt from child PromptRegistry instances
+          this.adoptPromptsFromLocalApp(app);
         }
       }
     });
@@ -149,7 +143,6 @@ export default class PromptRegistry
     this.bump('reset');
 
     // Register prompt flows with the scope
-    const scope = this.providers.getActiveScope();
     await scope.registryFlows(GetPromptFlow, PromptsListFlow);
   }
 
@@ -180,6 +173,42 @@ export default class PromptRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Adopt prompts directly from a remote app's prompts registry.
+   * Remote apps expose prompts via proxy entries that forward execution to the remote server.
+   */
+  private adoptPromptsFromRemoteApp(app: AppEntry, scope: Scope): void {
+    try {
+      const remotePrompts = app.prompts.getPrompts();
+      if (remotePrompts.length > 0) {
+        const prepend: EntryLineage = this.owner ? [this.owner] : [];
+        for (const remotePrompt of remotePrompts) {
+          if (!remotePrompt || typeof remotePrompt.name !== 'string') {
+            scope.logger.warn(`Invalid remote prompt in app ${app.id}: missing name`);
+            continue;
+          }
+          const row = this.makeRow(Symbol(remotePrompt.name), remotePrompt as PromptInstance, prepend, this);
+          this.localRows.push(row);
+        }
+      }
+    } catch (error) {
+      scope.logger.error(`Failed to get prompts from remote app ${app.id}: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Adopt prompts from a local app's child PromptRegistry instances.
+   * Local apps use the hierarchical registry pattern for prompt discovery.
+   */
+  private adoptPromptsFromLocalApp(app: AppEntry): void {
+    const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
+    appPromptRegistries
+      .filter((r) => r.owner.kind === 'app')
+      .forEach((appPromptRegistry) => {
+        this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
+      });
   }
 
   /* -------------------- Public API -------------------- */

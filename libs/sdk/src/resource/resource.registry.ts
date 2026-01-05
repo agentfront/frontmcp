@@ -23,7 +23,8 @@ import {
 } from './resource.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ResourceInstance } from './resource.instance';
-import { AppRemoteInstance } from '../app/instances/app.remote.instance';
+import { Scope } from '../scope';
+import { AppEntry } from '../common';
 import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
@@ -129,39 +130,12 @@ export default class ResourceRegistry
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        // Use instanceof check instead of duck-typing for remote app detection
-        const isRemoteApp = app instanceof AppRemoteInstance;
-
-        if (isRemoteApp) {
-          // For remote apps, directly adopt resources from the app's resources registry
-          try {
-            const remoteResources = app.resources.getResources();
-            const remoteTemplates = app.resources.getResourceTemplates();
-            const allRemoteResources = [...remoteResources, ...remoteTemplates];
-            if (allRemoteResources.length > 0) {
-              const prepend: EntryLineage = this.owner ? [this.owner] : [];
-              for (const remoteResource of allRemoteResources) {
-                // Validate it's a valid ResourceEntry
-                if (!remoteResource || typeof remoteResource.name !== 'string') {
-                  scope.logger.warn(`Invalid remote resource in app ${app.id}`);
-                  continue;
-                }
-                // ResourceEntry is the base type, no unsafe cast needed
-                const row = this.makeRow(Symbol(remoteResource.name), remoteResource, prepend, this);
-                this.localRows.push(row);
-              }
-            }
-          } catch (error) {
-            scope.logger.error(`Failed to get resources from remote app ${app.id}: ${(error as Error).message}`);
-          }
+        if (app.isRemote) {
+          // Remote apps: adopt resources directly from the app's resources registry
+          this.adoptResourcesFromRemoteApp(app, scope);
         } else {
-          // For local apps, adopt from child ResourceRegistry instances
-          const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
-          appResourceRegistries
-            .filter((r) => r.owner.kind === 'app')
-            .forEach((appResourceRegistry) => {
-              this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
-            });
+          // Local apps: adopt from child ResourceRegistry instances
+          this.adoptResourcesFromLocalApp(app);
         }
       }
     });
@@ -215,6 +189,44 @@ export default class ResourceRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Adopt resources directly from a remote app's resources registry.
+   * Remote apps expose resources via proxy entries that forward execution to the remote server.
+   */
+  private adoptResourcesFromRemoteApp(app: AppEntry, scope: Scope): void {
+    try {
+      const remoteResources = app.resources.getResources();
+      const remoteTemplates = app.resources.getResourceTemplates();
+      const allRemoteResources = [...remoteResources, ...remoteTemplates];
+      if (allRemoteResources.length > 0) {
+        const prepend: EntryLineage = this.owner ? [this.owner] : [];
+        for (const remoteResource of allRemoteResources) {
+          if (!remoteResource || typeof remoteResource.name !== 'string') {
+            scope.logger.warn(`Invalid remote resource in app ${app.id}: missing name`);
+            continue;
+          }
+          const row = this.makeRow(Symbol(remoteResource.name), remoteResource, prepend, this);
+          this.localRows.push(row);
+        }
+      }
+    } catch (error) {
+      scope.logger.error(`Failed to get resources from remote app ${app.id}: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Adopt resources from a local app's child ResourceRegistry instances.
+   * Local apps use the hierarchical registry pattern for resource discovery.
+   */
+  private adoptResourcesFromLocalApp(app: AppEntry): void {
+    const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
+    appResourceRegistries
+      .filter((r) => r.owner.kind === 'app')
+      .forEach((appResourceRegistry) => {
+        this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
+      });
   }
 
   /* -------------------- Public API -------------------- */
