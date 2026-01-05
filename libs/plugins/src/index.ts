@@ -30,7 +30,7 @@ export {
 
 // Remember Plugin
 export {
-  RememberPlugin,
+  default as RememberPlugin,
   RememberPluginOptions,
   RememberPluginOptionsInput,
   RememberAccessorToken,

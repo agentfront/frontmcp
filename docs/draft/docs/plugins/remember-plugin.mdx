@@ -544,8 +544,11 @@ class DeleteAccountTool extends ToolContext {
       return { success: false, message: 'Deletion not confirmed' };
     }
 
-    // Perform deletion...
-    await this.remember.forget('*', { scope: 'user' }); // Clean up user data
+    // Perform deletion - list and delete all user-scoped memories
+    const userKeys = await this.remember.list({ scope: 'user' });
+    for (const key of userKeys) {
+      await this.remember.forget(key, { scope: 'user' });
+    }
 
     return { success: true, message: 'Account deleted' };
   }

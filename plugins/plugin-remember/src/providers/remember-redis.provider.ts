@@ -20,14 +20,19 @@ export type RedisRememberOptions = RedisRememberPluginOptions | RedisClientRemem
 export default class RememberRedisProvider implements RememberStoreInterface {
   private readonly client: RedisClient;
   private readonly keyPrefix: string;
+  /** True if this provider created the client (and should close it), false if externally provided */
+  private readonly ownsClient: boolean;
 
   constructor(options: RedisRememberOptions) {
     this.keyPrefix = options.keyPrefix ?? '';
 
     if (options.type === 'redis-client') {
       this.client = options.client;
+      this.ownsClient = false;
       return;
     }
+
+    this.ownsClient = true;
 
     this.client = new Redis({
       lazyConnect: false,
@@ -117,8 +122,12 @@ export default class RememberRedisProvider implements RememberStoreInterface {
 
   /**
    * Gracefully close the Redis connection.
+   * Only closes if this provider owns the client (created it internally).
+   * Externally-provided clients are left open for the caller to manage.
    */
   async close(): Promise<void> {
-    await this.client.quit();
+    if (this.ownsClient) {
+      await this.client.quit();
+    }
   }
 }

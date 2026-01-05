@@ -263,10 +263,11 @@ export class RememberAccessor {
         return `${this.keyPrefix}session:${this.ctx.sessionId}:`;
       case 'user':
         return `${this.keyPrefix}user:${this.userId ?? 'anonymous'}:`;
-      case 'tool':
+      case 'tool': {
         // Tool scope uses flow name if available
         const toolName = this.ctx.flow?.name ?? 'unknown';
         return `${this.keyPrefix}tool:${toolName}:${this.ctx.sessionId}:`;
+      }
       case 'global':
         return `${this.keyPrefix}global:`;
     }

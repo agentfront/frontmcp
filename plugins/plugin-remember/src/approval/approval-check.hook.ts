@@ -100,10 +100,11 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     if (config === false || config === undefined) {
       return { required: false };
     }
+    // Spread config first, then apply defaults to avoid undefined values overwriting defaults
     return {
+      ...config,
       required: config.required ?? true,
       defaultScope: config.defaultScope ?? ApprovalScope.SESSION,
-      ...config,
     };
   }
 

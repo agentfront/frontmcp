@@ -170,12 +170,29 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
     }
   }
 
+  // ReDoS protection constants
+  private static readonly MAX_PATTERN_LENGTH = 200;
+  private static readonly MAX_WILDCARDS = 20;
+
   /**
    * Convert a glob-style pattern to a RegExp.
    * * matches any sequence of characters
    * ? matches any single character
+   *
+   * Includes ReDoS protection: validates pattern length and wildcard count.
    */
   private patternToRegex(pattern: string): RegExp {
+    // ReDoS protection: limit pattern length
+    if (pattern.length > RememberMemoryProvider.MAX_PATTERN_LENGTH) {
+      throw new Error(`Pattern too long: ${pattern.length} chars (max ${RememberMemoryProvider.MAX_PATTERN_LENGTH})`);
+    }
+
+    // ReDoS protection: count wildcards
+    const wildcardCount = (pattern.match(/[*?]/g) || []).length;
+    if (wildcardCount > RememberMemoryProvider.MAX_WILDCARDS) {
+      throw new Error(`Too many wildcards in pattern: ${wildcardCount} (max ${RememberMemoryProvider.MAX_WILDCARDS})`);
+    }
+
     const escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special chars
       .replace(/\*/g, '.*') // * -> .*

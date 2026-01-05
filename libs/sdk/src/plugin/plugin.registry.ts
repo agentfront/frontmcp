@@ -257,7 +257,8 @@ export default class PluginRegistry
           def,
           // For CONTEXT-scoped providers, instance may not exist yet (built per-request).
           // mergeFromRegistry only uses instance for GLOBAL-scoped providers.
-          instance: singletons.get(def.provide) as ProviderEntry,
+          // The singletons map stores ProviderEntry values, so this cast is safe.
+          instance: singletons.get(def.provide) as ProviderEntry | undefined,
         }));
 
         // Merge to app's registry (for tool context creation)

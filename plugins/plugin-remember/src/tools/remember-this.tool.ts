@@ -67,7 +67,7 @@ export default class RememberThisTool extends ToolContext {
     const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
 
     if (!allowedScopes.includes(scope)) {
-      this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
+      throw this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
     }
 
     await remember.set(input.key, input.value, {

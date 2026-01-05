@@ -62,8 +62,9 @@ export function installContextExtensions(pluginName: string, extensions: Context
       get: function (this: ExecutionContextBase): unknown {
         try {
           return this.get(token as Token<unknown>);
-        } catch {
-          throw new Error(defaultErrorMessage);
+        } catch (err) {
+          // Preserve original error as cause for debugging
+          throw new Error(defaultErrorMessage, { cause: err });
         }
       },
       configurable: true,
@@ -76,8 +77,9 @@ export function installContextExtensions(pluginName: string, extensions: Context
         get: function (this: PromptContext): unknown {
           try {
             return this.get(token as Token<unknown>);
-          } catch {
-            throw new Error(defaultErrorMessage);
+          } catch (err) {
+            // Preserve original error as cause for debugging
+            throw new Error(defaultErrorMessage, { cause: err });
           }
         },
         configurable: true,

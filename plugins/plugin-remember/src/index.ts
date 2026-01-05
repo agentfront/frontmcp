@@ -40,8 +40,8 @@
  * @packageDocumentation
  */
 
-// Main plugin
-export { default as RememberPlugin } from './remember.plugin';
+// Main plugin (export both default and named for consistency with other plugins)
+export { default, default as RememberPlugin } from './remember.plugin';
 
 // Symbols (DI tokens)
 export {

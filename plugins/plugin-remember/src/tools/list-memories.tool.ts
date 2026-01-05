@@ -57,7 +57,7 @@ export default class ListMemoriesTool extends ToolContext {
     const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
 
     if (!allowedScopes.includes(scope)) {
-      this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
+      throw this.fail(new Error(`Scope '${scope}' is not allowed. Allowed scopes: ${allowedScopes.join(', ')}`));
     }
 
     const limit = input.limit ?? 50;

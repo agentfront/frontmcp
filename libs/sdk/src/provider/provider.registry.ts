@@ -617,14 +617,15 @@ export default class ProviderRegistry
     exported: {
       token: Token<ProviderInterface>;
       def: ProviderRecord;
-      instance: ProviderEntry;
+      /** Instance may be undefined for CONTEXT-scoped providers (built per-request) */
+      instance: ProviderEntry | undefined;
     }[],
   ) {
     for (const { token, def, instance } of exported) {
       // Use default GLOBAL scope when scope is not explicitly set (undefined)
       // This matches the behavior in getProviderScope() and resolveFromViews()
       const scope = def.metadata.scope ?? ProviderScope.GLOBAL;
-      if (scope === ProviderScope.GLOBAL) {
+      if (scope === ProviderScope.GLOBAL && instance !== undefined) {
         this.instances.set(token, instance);
       }
       this.defs.set(token, def);
