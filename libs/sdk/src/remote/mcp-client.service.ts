@@ -515,13 +515,14 @@ export class McpClientService {
       case 'static':
         return this.buildAuthHeaders(authConfig.credentials);
 
-      case 'forward':
+      case 'forward': {
         if (!gatewayAuthInfo?.token) {
           this.logger.warn(`No gateway auth token to forward for ${appId}`);
           return {};
         }
         const headerName = authConfig.headerName || 'Authorization';
         return { [headerName]: `Bearer ${gatewayAuthInfo.token}` };
+      }
 
       case 'mapped':
         try {
