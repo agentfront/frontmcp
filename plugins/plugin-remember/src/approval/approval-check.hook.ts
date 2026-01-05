@@ -43,8 +43,8 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     const ctx = toolContext.tryGetContext?.();
     const sessionId = ctx?.sessionId ?? 'unknown';
     const userId =
-      (ctx?.authInfo?.extra?.['userId'] as string | undefined) ??
-      (ctx?.authInfo?.extra?.['sub'] as string | undefined) ??
+      this.getStringExtra(ctx?.authInfo?.extra, 'userId') ??
+      this.getStringExtra(ctx?.authInfo?.extra, 'sub') ??
       ctx?.authInfo?.clientId;
 
     // Get current context (e.g., repo, project)
@@ -123,14 +123,39 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     const { toolContext } = flowCtx.state;
     const ctx = toolContext?.tryGetContext?.();
 
-    // Try to extract context from various sources
+    // Try to extract context from various sources with runtime validation
     // 1. Tool input (if tool expects context parameter)
-    const contextFromInput = toolContext?.input?.['context'] as ApprovalContext | undefined;
+    const inputContext = toolContext?.input?.['context'];
+    const contextFromInput = this.isApprovalContext(inputContext) ? inputContext : undefined;
 
     // 2. Session metadata
-    const contextFromSession = ctx?.authInfo?.extra?.['approvalContext'] as ApprovalContext | undefined;
+    const sessionContext = ctx?.authInfo?.extra?.['approvalContext'];
+    const contextFromSession = this.isApprovalContext(sessionContext) ? sessionContext : undefined;
 
     return contextFromInput ?? contextFromSession;
+  }
+
+  /**
+   * Runtime type guard for ApprovalContext.
+   */
+  private isApprovalContext(value: unknown): value is ApprovalContext {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'type' in value &&
+      'identifier' in value &&
+      typeof (value as ApprovalContext).type === 'string' &&
+      typeof (value as ApprovalContext).identifier === 'string'
+    );
+  }
+
+  /**
+   * Safely extract a string value from an extras object.
+   */
+  private getStringExtra(extra: Record<string, unknown> | undefined, key: string): string | undefined {
+    if (!extra) return undefined;
+    const value = extra[key];
+    return typeof value === 'string' ? value : undefined;
   }
 
   /**
@@ -160,11 +185,14 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     // Build approval prompt message
     const message = config.approvalMessage ?? `Tool "${tool?.fullName}" requires approval to execute. Allow?`;
 
+    // Determine approval state: use isExpired helper for APPROVED records with past expiresAt
+    const isExpiredApproval = existingApproval ? this.isExpired(existingApproval) : false;
+
     // For now, throw error for client to handle
     // Future: could use transport elicit if available
     throw new ApprovalRequiredError({
       toolId: tool?.fullName ?? 'unknown',
-      state: existingApproval?.state === ApprovalState.EXPIRED ? 'expired' : 'pending',
+      state: isExpiredApproval ? 'expired' : 'pending',
       message,
       approvalOptions: {
         allowedScopes: config.allowedScopes,

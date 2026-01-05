@@ -1,12 +1,11 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import type { RememberScope } from '../remember.types';
 
 /**
  * Input schema for the remember_this tool.
  */
-export const rememberThisInputSchema = {
+export const rememberThisInputSchema = z.object({
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
   scope: z
@@ -20,7 +19,7 @@ export const rememberThisInputSchema = {
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
     .optional()
     .describe('Type hint for the stored value'),
-};
+});
 
 /**
  * Output schema for the remember_this tool.
@@ -32,13 +31,7 @@ export const rememberThisOutputSchema = z.object({
   expiresAt: z.number().optional(),
 });
 
-export type RememberThisInput = {
-  key: string;
-  value: unknown;
-  scope?: RememberScope;
-  ttl?: number;
-  brand?: 'preference' | 'cache' | 'state' | 'conversation' | 'custom';
-};
+export type RememberThisInput = z.infer<typeof rememberThisInputSchema>;
 
 export type RememberThisOutput = z.infer<typeof rememberThisOutputSchema>;
 

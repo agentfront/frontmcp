@@ -120,10 +120,21 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
     const result: string[] = [];
     const regex = pattern ? this.patternToRegex(pattern) : null;
 
+    // Collect expired keys first to avoid modifying map during iteration
+    const expiredKeys: string[] = [];
     for (const [key, entry] of this.memory) {
-      // Skip expired entries
       if (this.isExpired(entry)) {
-        this.memory.delete(key);
+        expiredKeys.push(key);
+      }
+    }
+    // Delete expired keys using the public method (handles timeout cleanup)
+    for (const key of expiredKeys) {
+      await this.delete(key);
+    }
+
+    for (const [key, entry] of this.memory) {
+      // Skip expired entries (already cleaned above, but double-check)
+      if (this.isExpired(entry)) {
         continue;
       }
 

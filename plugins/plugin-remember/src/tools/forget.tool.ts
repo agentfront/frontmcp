@@ -1,18 +1,17 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import type { RememberScope } from '../remember.types';
 
 /**
  * Input schema for the forget tool.
  */
-export const forgetInputSchema = {
+export const forgetInputSchema = z.object({
   key: z.string().min(1).describe('What memory to forget'),
   scope: z
     .enum(['session', 'user', 'tool', 'global'])
     .optional()
     .describe('Which scope to forget from (default: session)'),
-};
+});
 
 /**
  * Output schema for the forget tool.
@@ -24,10 +23,7 @@ export const forgetOutputSchema = z.object({
   existed: z.boolean(),
 });
 
-export type ForgetInput = {
-  key: string;
-  scope?: RememberScope;
-};
+export type ForgetInput = z.infer<typeof forgetInputSchema>;
 
 export type ForgetOutput = z.infer<typeof forgetOutputSchema>;
 

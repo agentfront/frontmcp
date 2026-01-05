@@ -41,8 +41,8 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     });
 
     this.client.on('connect', () => {
-      // Silent connect - log only in debug mode
-      if (process.env['DEBUG']) {
+      // Silent connect - log only in debug mode (strict check for 'true')
+      if (process.env['DEBUG'] === 'true') {
         console.log('[RememberPlugin:Redis] Connected');
       }
     });

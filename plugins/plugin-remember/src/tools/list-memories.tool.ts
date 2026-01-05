@@ -1,19 +1,18 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import type { RememberScope } from '../remember.types';
 
 /**
  * Input schema for the list_memories tool.
  */
-export const listMemoriesInputSchema = {
+export const listMemoriesInputSchema = z.object({
   scope: z
     .enum(['session', 'user', 'tool', 'global'])
     .optional()
     .describe('Which scope to list from (default: session)'),
   pattern: z.string().optional().describe('Pattern to filter keys (e.g., "user_*")'),
   limit: z.number().positive().max(100).optional().describe('Maximum number of keys to return (default: 50)'),
-};
+});
 
 /**
  * Output schema for the list_memories tool.
@@ -25,11 +24,7 @@ export const listMemoriesOutputSchema = z.object({
   truncated: z.boolean(),
 });
 
-export type ListMemoriesInput = {
-  scope?: RememberScope;
-  pattern?: string;
-  limit?: number;
-};
+export type ListMemoriesInput = z.infer<typeof listMemoriesInputSchema>;
 
 export type ListMemoriesOutput = z.infer<typeof listMemoriesOutputSchema>;
 
