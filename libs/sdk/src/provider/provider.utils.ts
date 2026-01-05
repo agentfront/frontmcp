@@ -9,6 +9,30 @@ function collectProviderMetadata(cls: Type): ProviderMetadata {
   }, {} as ProviderMetadata);
 }
 
+/**
+ * Extract provider metadata from an item.
+ * Supports both nested `metadata: { scope, name }` and top-level fields.
+ * Top-level fields take precedence when both are present.
+ */
+function extractProviderMetadata(item: any): ProviderMetadata {
+  const nested = item.metadata as ProviderMetadata | undefined;
+  const topLevel: Partial<ProviderMetadata> = {};
+
+  // Extract known metadata fields from top level
+  if (item.name !== undefined) topLevel.name = item.name;
+  if (item.scope !== undefined) topLevel.scope = item.scope;
+  if (item.description !== undefined) topLevel.description = item.description;
+  if (item.id !== undefined) topLevel.id = item.id;
+
+  // Merge: nested first, then top-level overrides
+  // Provide a default name if none specified
+  const result = { ...nested, ...topLevel } as ProviderMetadata;
+  if (!result.name) {
+    result.name = tokenName(item.provide) || 'UnknownProvider';
+  }
+  return result;
+}
+
 export function normalizeProvider(item: any): ProviderRecord {
   if (isClass(item)) {
     // read McpProviderMetadata from class
@@ -23,6 +47,9 @@ export function normalizeProvider(item: any): ProviderRecord {
       throw new Error(`Provider '${name}' is missing 'provide'.`);
     }
 
+    // Extract metadata from both nested and top-level fields
+    const metadata = extractProviderMetadata(item);
+
     if (useClass) {
       if (!isClass(useClass)) {
         throw new Error(`'useClass' on provider '${tokenName(provide)}' must be a class.`);
@@ -31,7 +58,7 @@ export function normalizeProvider(item: any): ProviderRecord {
         kind: ProviderKind.CLASS,
         provide,
         useClass,
-        metadata: (item as any).metadata,
+        metadata,
       };
     }
 
@@ -45,7 +72,7 @@ export function normalizeProvider(item: any): ProviderRecord {
         provide,
         inject: inj,
         useFactory,
-        metadata: item.metadata,
+        metadata,
       };
     }
 
@@ -54,7 +81,7 @@ export function normalizeProvider(item: any): ProviderRecord {
         kind: ProviderKind.VALUE,
         provide,
         useValue,
-        metadata: item.metadata,
+        metadata,
       };
     }
   }

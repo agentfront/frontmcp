@@ -8,12 +8,20 @@ import { Request, Notification, CallToolRequest, CallToolResult } from '@modelco
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
+import { ProviderRegistryInterface } from '../interfaces/internal';
 
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
 export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
+  /**
+   * Optional context-aware providers from the flow.
+   * When provided, this is used instead of the tool's default providers.
+   * This enables access to context-scoped providers (from plugins) during tool execution.
+   * @internal
+   */
+  contextProviders?: ProviderRegistryInterface;
 };
 
 export type ParsedToolResult = CallToolResult;

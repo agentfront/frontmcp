@@ -285,8 +285,80 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+## Plugin Development
+
+### Creating Plugins with Context Extensions
+
+Plugins can extend `ExecutionContextBase` (ToolContext, etc.) to add properties like `this.remember`:
+
+1. **Module Augmentation** (TypeScript types):
+
+```typescript
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly myProperty: MyType;
+  }
+}
+```
+
+2. **Runtime Extension** (prototype modification):
+
+```typescript
+export function installMyContextExtension(): void {
+  const { ExecutionContextBase } = require('@frontmcp/sdk');
+
+  Object.defineProperty(ExecutionContextBase.prototype, 'myProperty', {
+    get: function () {
+      return this.get(MyToken);
+    },
+    configurable: true,
+    enumerable: false,
+  });
+}
+```
+
+See `libs/plugins/src/remember/remember.context-extension.ts` for a complete example.
+
+### Crypto Utilities
+
+**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly.
+
+```typescript
+import {
+  hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
+  encryptAesGcm, // AES-256-GCM encryption
+  decryptAesGcm, // AES-256-GCM decryption
+  randomBytes, // Cryptographic random bytes
+  sha256,
+  sha256Hex, // SHA-256 hashing
+  base64urlEncode, // Base64url encoding
+  base64urlDecode, // Base64url decoding
+} from '@frontmcp/utils';
+```
+
+This ensures cross-platform support (Node.js and browser) with consistent behavior.
+
+### RememberPlugin Usage
+
+When `RememberPlugin` is installed, tools can use `this.remember` and `this.approval`:
+
+```typescript
+@Tool({ name: 'my_tool' })
+class MyTool extends ToolContext {
+  async execute(input) {
+    // Store/retrieve session memory
+    await this.remember.set('key', 'value');
+    const val = await this.remember.get('key');
+
+    // Check tool approval
+    const approved = await this.approval.isApproved('other-tool');
+  }
+}
+```
+
 ## Anti-Patterns to Avoid
 
+❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)
 ❌ **Don't**: Add backwards compatibility exports in new libraries
 ❌ **Don't**: Use prefixes like "PT-001" in test names
 ❌ **Don't**: Skip constructor validation tests

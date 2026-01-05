@@ -1,4 +1,4 @@
-// file: libs/plugins/src/codecall/codecall.plugin.ts
+// file: plugins/plugin-codecall/src/codecall.plugin.ts
 
 import { DynamicPlugin, FlowCtxOf, ListToolsHook, Plugin, ProviderType, ScopeEntry, ToolEntry } from '@frontmcp/sdk';
 
@@ -15,7 +15,7 @@ import { SearchTool, DescribeTool, ExecuteTool, InvokeTool } from './tools';
 
 import CodeCallConfig from './providers/code-call.config';
 import EnclaveService from './services/enclave.service';
-import CachePlugin from '../cache';
+import CachePlugin from '@frontmcp/plugin-cache';
 
 @Plugin({
   name: 'codecall',

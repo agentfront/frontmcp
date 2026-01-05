@@ -11,6 +11,7 @@ import {
   InvalidOutputError,
   PromptExecutionError,
 } from '../../errors';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
   request: GetPromptRequestSchema,
@@ -137,7 +138,9 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       const parsedArgs = prompt.parseArguments(input.arguments);
       this.state.set('parsedArgs', parsedArgs);
 
-      const context = prompt.create(parsedArgs, ctx);
+      // Create context-aware providers that include scoped providers from plugins
+      const contextProviders = new FlowContextProviders(this.scope.providers, this.deps);
+      const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
       const promptHooks = this.scope.hooks.getClsHooks(prompt.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();

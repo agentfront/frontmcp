@@ -4,14 +4,8 @@
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
+  "implicitDependencies": ["plugin-cache", "plugin-codecall", "plugin-dashboard", "plugin-remember"],
   "targets": {
-    "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
-      "options": {
-        "jestConfig": "libs/plugins/jest.config.ts"
-      }
-    },
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",
       "dependsOn": ["^build"],
@@ -27,19 +21,14 @@
         "thirdParty": false,
         "platform": "node",
         "assets": ["libs/plugins/README.md", "LICENSE", "libs/plugins/package.json"],
-        "additionalEntryPoints": ["libs/plugins/src/cache/index.ts", "libs/plugins/src/codecall/index.ts"],
         "esbuildOptions": {
           "outExtension": { ".js": ".js" },
           "external": [
-            "ioredis",
-            "enclave-vm",
-            "vectoriadb",
-            "@vercel/kv",
-            "@frontmcp/sdk",
-            "@frontmcp/sdk/*",
-            "@modelcontextprotocol/sdk",
-            "@modelcontextprotocol/sdk/*",
-            "zod"
+            "@frontmcp/plugin-cache",
+            "@frontmcp/plugin-codecall",
+            "@frontmcp/plugin-dashboard",
+            "@frontmcp/plugin-remember",
+            "reflect-metadata"
           ]
         }
       }
@@ -57,19 +46,14 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
-        "additionalEntryPoints": ["libs/plugins/src/cache/index.ts", "libs/plugins/src/codecall/index.ts"],
         "esbuildOptions": {
           "outExtension": { ".js": ".mjs" },
           "external": [
-            "ioredis",
-            "enclave-vm",
-            "vectoriadb",
-            "@vercel/kv",
-            "@frontmcp/sdk",
-            "@frontmcp/sdk/*",
-            "@modelcontextprotocol/sdk",
-            "@modelcontextprotocol/sdk/*",
-            "zod"
+            "@frontmcp/plugin-cache",
+            "@frontmcp/plugin-codecall",
+            "@frontmcp/plugin-dashboard",
+            "@frontmcp/plugin-remember",
+            "reflect-metadata"
           ]
         }
       }
@@ -79,6 +63,14 @@
       "dependsOn": ["build-cjs", "build-esm"],
       "options": {
         "command": "node scripts/strip-dist-from-pkg.js libs/plugins/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/plugins"],
+      "options": {
+        "jestConfig": "libs/plugins/jest.config.ts",
+        "passWithNoTests": true
       }
     },
     "publish": {

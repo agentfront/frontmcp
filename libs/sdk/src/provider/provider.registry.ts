@@ -621,7 +621,10 @@ export default class ProviderRegistry
     }[],
   ) {
     for (const { token, def, instance } of exported) {
-      if (def.metadata.scope === ProviderScope.GLOBAL) {
+      // Use default GLOBAL scope when scope is not explicitly set (undefined)
+      // This matches the behavior in getProviderScope() and resolveFromViews()
+      const scope = def.metadata.scope ?? ProviderScope.GLOBAL;
+      if (scope === ProviderScope.GLOBAL) {
         this.instances.set(token, instance);
       }
       this.defs.set(token, def);
@@ -662,7 +665,28 @@ export default class ProviderRegistry
   async addDynamicProviders(dynamicProviders: ProviderType[]) {
     // Normalize ProviderType[] to ProviderRecord[] before instantiation
     const normalized = dynamicProviders.map((p) => normalizeProvider(p));
-    return Promise.all(normalized.map((rec) => this.initiateOne(rec.provide, rec)));
+
+    // Register all providers in the graph first
+    for (const rec of normalized) {
+      const provide = rec.provide;
+      this.tokens.add(provide);
+      this.defs.set(provide, rec);
+      if (!this.graph.has(provide)) {
+        this.graph.set(provide, new Set());
+      }
+      // Add edges for dependencies
+      const deps = this.discoveryDeps(rec);
+      for (const d of deps) {
+        if (this.tokens.has(d)) {
+          this.graph.get(provide)!.add(d);
+        }
+      }
+    }
+
+    // Only instantiate GLOBAL-scoped providers (skip CONTEXT-scoped)
+    // CONTEXT-scoped providers are built per-request via buildViews()
+    const globalProviders = normalized.filter((rec) => this.getProviderScope(rec) === ProviderScope.GLOBAL);
+    return Promise.all(globalProviders.map((rec) => this.initiateOne(rec.provide, rec)));
   }
 
   private getWithParents<T>(token: Token<T>): T {
@@ -840,6 +864,19 @@ export default class ProviderRegistry
       if (!rec) continue;
       // getProviderScope() already normalizes SESSION/REQUEST → CONTEXT
       if (this.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      if (contextStore.has(token)) continue;
+
+      await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);
+    }
+
+    // Also build any merged providers that were added via mergeFromRegistry
+    // These providers are in defs but not in order (added dynamically by plugins)
+    for (const [token, rec] of this.defs) {
+      // Skip if already in order (already processed above)
+      if (this.order.has(token as any)) continue;
+      // Skip non-CONTEXT scoped providers
+      if (this.getProviderScope(rec) !== ProviderScope.CONTEXT) continue;
+      // Skip if already built
       if (contextStore.has(token)) continue;
 
       await this.buildIntoStoreWithViews(token, rec, contextStore, sessionKey, contextStore, global);

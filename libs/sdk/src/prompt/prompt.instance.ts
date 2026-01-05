@@ -56,7 +56,8 @@ export class PromptInstance extends PromptEntry {
    */
   override create(args: Record<string, string>, ctx: PromptGetExtra): PromptContext {
     const metadata = this.metadata;
-    const providers = this.providers;
+    // Use context-aware providers from flow if available
+    const providers = ctx.contextProviders ?? this.providers;
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;

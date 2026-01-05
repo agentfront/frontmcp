@@ -26,6 +26,7 @@ import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -258,7 +259,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const progressToken = this.state.progressToken;
 
     try {
-      const context = tool.create(input.arguments, { ...ctx, progressToken });
+      // Create context-aware providers that include scoped providers from plugins.
+      // The deps map contains context-scoped providers built by buildViews().
+      const contextProviders = new FlowContextProviders(this.scope.providers, this.deps);
+      const context = tool.create(input.arguments, { ...ctx, progressToken, contextProviders });
       const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();

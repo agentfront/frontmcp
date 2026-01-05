@@ -106,7 +106,9 @@ export class ToolInstance<
 
   override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
-    const providers = this.providers;
+    // Use context-aware providers from flow if available, otherwise use default providers.
+    // Context providers include scoped providers from plugins (e.g., RememberPlugin).
+    const providers = ctx.contextProviders ?? this.providers;
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
