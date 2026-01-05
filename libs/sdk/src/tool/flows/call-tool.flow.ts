@@ -595,7 +595,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const result = parseResult.data;
 
     // Preserve any _meta from rawOutput (e.g., cache plugin adds cache: 'hit')
-    const rawMeta = (rawOutput as Record<string, unknown>)?.['_meta'] as Record<string, unknown> | undefined;
+    // Runtime type guard to safely extract _meta from rawOutput
+    const rawMeta = (() => {
+      if (typeof rawOutput !== 'object' || rawOutput === null) return undefined;
+      const meta = (rawOutput as Record<string, unknown>)['_meta'];
+      if (typeof meta !== 'object' || meta === null) return undefined;
+      return meta as Record<string, unknown>;
+    })();
     if (rawMeta) {
       result._meta = { ...result._meta, ...rawMeta };
     }

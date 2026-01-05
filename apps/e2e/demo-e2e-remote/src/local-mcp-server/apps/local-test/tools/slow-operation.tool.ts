@@ -2,7 +2,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
 
 const inputSchema = z.object({
-  delayMs: z.number().min(0).max(300000).describe('Delay in milliseconds (max 5 minutes)'),
+  delayMs: z.number().min(0).max(100000).describe('Delay in milliseconds (max ~100s to fit E2E timeout)'),
 });
 
 const outputSchema = z.object({

@@ -1,5 +1,13 @@
 import { Type, Token, depsOfClass, isClass, getMetadata } from '@frontmcp/di';
-import { LocalAppMetadata, FrontMcpLocalAppTokens, AppType, AppRecord, AppKind, RemoteAppMetadata } from '../common';
+import {
+  LocalAppMetadata,
+  FrontMcpLocalAppTokens,
+  AppType,
+  AppRecord,
+  AppKind,
+  RemoteAppMetadata,
+  AppEntry,
+} from '../common';
 import { AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
@@ -35,14 +43,16 @@ export function normalizeApp(item: AppType): AppRecord {
 
   // Check for remote app configuration (has urlType, url, and name)
   if (isRemoteAppConfig(item)) {
-    const metadata = item as RemoteAppMetadata;
+    const metadata = item; // Type guard already narrows to RemoteAppMetadata
     const appId = metadata.id ?? metadata.name;
     const provide: Token = Symbol(`remote:${appId}`);
 
     return {
       kind: AppKind.REMOTE_VALUE,
       provide,
-      useValue: null as any, // Remote instances are created in AppRegistry.initialize
+      // Placeholder: Remote instances are created in AppRegistry.initialize
+      // The null is replaced with actual AppRemoteInstance during initialization
+      useValue: null as unknown as AppEntry,
       metadata,
     };
   }

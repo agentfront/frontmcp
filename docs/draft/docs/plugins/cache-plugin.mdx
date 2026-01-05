@@ -215,7 +215,7 @@ Configure default behavior when registering the plugin:
   ```
 </ParamField>
 
-<ParamField path="bypassHeader" type="string" default="'frontmcp-disable-cache'">
+<ParamField path="bypassHeader" type="string" default="'x-frontmcp-disable-cache'">
   HTTP header name that clients can send to bypass cache for a specific request. When present with value `'true'` or `'1'`, cache read/write is skipped.
 </ParamField>
 
@@ -346,7 +346,7 @@ Clients can bypass caching for specific requests by sending a header:
 
 ```bash
 # Bypass cache for this request
-curl -H "frontmcp-disable-cache: true" http://localhost:3000/mcp
+curl -H "x-frontmcp-disable-cache: true" http://localhost:3000/mcp
 ```
 
 Configure a custom header name:

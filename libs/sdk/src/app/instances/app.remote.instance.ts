@@ -11,6 +11,7 @@ import {
   PromptRegistryInterface,
   ProviderRegistryInterface,
   RemoteAppMetadata,
+  RemoteAuthConfig,
   ResourceRegistryInterface,
   ToolRegistryInterface,
   EntryOwnerRef,
@@ -19,16 +20,26 @@ import {
   PromptEntry,
   PluginEntry,
   AdapterEntry,
+  FrontMcpLogger,
 } from '../../common';
 import { idFromString } from '@frontmcp/utils';
 import ProviderRegistry from '../../provider/provider.registry';
-import { McpClientService } from '../../remote/mcp-client.service';
+import { McpClientService } from '../../remote';
 import type { McpConnectRequest, McpTransportType, McpRemoteAuthConfig } from '../../remote/mcp-client.types';
 import { createProxyToolEntry, ProxyToolEntry } from '../../remote/entries/proxy-tool.entry';
 import { createProxyResourceEntry, ProxyResourceEntry } from '../../remote/entries/proxy-resource.entry';
 import { createProxyPromptEntry, ProxyPromptEntry } from '../../remote/entries/proxy-prompt.entry';
 import type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from '../../tool/tool.events';
 import type { ToolInstance } from '../../tool/tool.instance';
+
+/**
+ * Interface for scope with optional MCP client service cache.
+ * Used for proper typing in getOrCreateMcpClientService.
+ */
+interface ScopeWithMcpClient {
+  logger: FrontMcpLogger;
+  mcpClientService?: McpClientService;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // PROXY REGISTRY IMPLEMENTATIONS
@@ -254,6 +265,9 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   // Connection state
   private isConnected = false;
 
+  // Capability change subscription cleanup
+  private _unsubscribeCapability?: () => void;
+
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
     this.id = this.metadata.id ?? idFromString(this.metadata.name);
@@ -295,8 +309,8 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       // Discover and create proxy entries
       await this.discoverAndCreateProxies();
 
-      // Subscribe to capability changes
-      this.mcpClient.onCapabilityChange((event) => {
+      // Subscribe to capability changes and store unsubscribe function to prevent memory leak
+      this._unsubscribeCapability = this.mcpClient.onCapabilityChange((event) => {
         if (event.appId === this.id) {
           logger.info(`Remote capabilities changed for ${this.id}: ${event.kind}`);
           // Refresh proxies when capabilities change
@@ -362,6 +376,12 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
    * Disconnect from the remote server
    */
   async disconnect(): Promise<void> {
+    // Unsubscribe from capability changes to prevent memory leak
+    if (this._unsubscribeCapability) {
+      this._unsubscribeCapability();
+      this._unsubscribeCapability = undefined;
+    }
+
     if (this.isConnected) {
       await this.mcpClient.disconnect(this.id);
       this.isConnected = false;
@@ -387,7 +407,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   /**
    * Get or create the MCP client service from scope
    */
-  private getOrCreateMcpClientService(scope: any): McpClientService {
+  private getOrCreateMcpClientService(scope: ScopeWithMcpClient): McpClientService {
     // Try to get existing service from scope
     const existingService = scope.mcpClientService;
     if (existingService) {
@@ -396,9 +416,6 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
 
     // Create new service
     const service = new McpClientService(scope.logger, {
-      defaultTimeout: this.metadata.transportOptions?.timeout ?? 30000,
-      maxRetries: this.metadata.transportOptions?.retryAttempts ?? 3,
-      retryDelayMs: this.metadata.transportOptions?.retryDelayMs ?? 1000,
       capabilityRefreshInterval: this.metadata.refreshInterval ?? 0,
     });
 
@@ -450,12 +467,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   }
 
   /**
-   * Map remote auth config
+   * Map remote auth config from metadata format to MCP client format
    */
-  private mapRemoteAuth(remoteAuth?: any): McpRemoteAuthConfig | undefined {
+  private mapRemoteAuth(remoteAuth?: RemoteAuthConfig): McpRemoteAuthConfig | undefined {
     if (!remoteAuth) {
       return undefined;
     }
+    // RemoteAuthConfig and McpRemoteAuthConfig have the same structure
     return remoteAuth as McpRemoteAuthConfig;
   }
 

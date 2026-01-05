@@ -53,10 +53,9 @@ import {
 
 // Default service options
 const DEFAULT_OPTIONS: Required<McpClientServiceOptions> = {
-  defaultTimeout: 30000,
-  maxRetries: 3,
-  retryDelayMs: 1000,
   capabilityRefreshInterval: 0,
+  clientName: 'frontmcp-gateway',
+  clientVersion: '1.0.0',
   debug: false,
 };
 
@@ -83,6 +82,9 @@ export class McpClientService {
 
   // Refresh timers
   private readonly refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+
+  // Track refresh-in-progress to prevent overlapping refreshes
+  private readonly refreshInProgress: Set<string> = new Set();
 
   constructor(logger: FrontMcpLogger, options: McpClientServiceOptions = {}) {
     this.logger = logger.child('McpClientService');
@@ -118,11 +120,11 @@ export class McpClientService {
       // Create transport based on type
       const transport = await this.createTransport(request);
 
-      // Create MCP client
+      // Create MCP client with configurable name/version
       const client = new Client(
         {
-          name: `frontmcp-gateway`,
-          version: '1.0.0',
+          name: this.options.clientName,
+          version: this.options.clientVersion,
         },
         {
           capabilities: {
@@ -257,15 +259,13 @@ export class McpClientService {
     const connection = this.getConnection(appId);
 
     try {
-      // Fetch all capabilities in parallel
-      const [toolsResult, resourcesResult, promptsResult] = await Promise.all([
+      // Fetch all capabilities in parallel (including resource templates)
+      const [toolsResult, resourcesResult, resourceTemplatesResult, promptsResult] = await Promise.all([
         this.listToolsInternal(connection),
         this.listResourcesInternal(connection),
+        this.listResourceTemplatesInternal(connection),
         this.listPromptsInternal(connection),
       ]);
-
-      // Also fetch resource templates
-      const resourceTemplatesResult = await this.listResourceTemplatesInternal(connection);
 
       const capabilities: McpRemoteCapabilities = {
         tools: toolsResult,
@@ -728,10 +728,19 @@ export class McpClientService {
     }
 
     const timer = setInterval(async () => {
+      // Prevent overlapping refreshes
+      if (this.refreshInProgress.has(appId)) {
+        this.logger.debug(`Skipping capability refresh for ${appId} - already in progress`);
+        return;
+      }
+
+      this.refreshInProgress.add(appId);
       try {
         await this.discoverCapabilities(appId);
       } catch (error) {
         this.logger.warn(`Capability refresh failed for ${appId}: ${(error as Error).message}`);
+      } finally {
+        this.refreshInProgress.delete(appId);
       }
     }, this.options.capabilityRefreshInterval);
 

@@ -215,17 +215,26 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       }
 
       /**
-       * Add cache metadata to response
+       * Add cache metadata to response.
+       * Only add _meta if cached value is a plain object (not primitive/array).
        */
-      const cachedRecord = cached as Record<string, unknown>;
-      const existingMeta = (cachedRecord['_meta'] as Record<string, unknown>) || {};
-      const cachedWithMeta = {
-        ...cachedRecord,
-        _meta: {
-          ...existingMeta,
-          cache: 'hit',
-        },
-      };
+      const isPlainObject = typeof cached === 'object' && cached !== null && !Array.isArray(cached);
+      let cachedWithMeta: unknown;
+
+      if (isPlainObject) {
+        const cachedRecord = cached as Record<string, unknown>;
+        const existingMeta = (cachedRecord['_meta'] as Record<string, unknown>) || {};
+        cachedWithMeta = {
+          ...cachedRecord,
+          _meta: {
+            ...existingMeta,
+            cache: 'hit',
+          },
+        };
+      } else {
+        // For primitives and arrays, return as-is (cannot attach _meta)
+        cachedWithMeta = cached;
+      }
 
       /**
        * cache hit, set output to the main flow context

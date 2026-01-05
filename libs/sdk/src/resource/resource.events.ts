@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/resource.events.ts
 
-import { ResourceInstance } from './resource.instance';
+import { ResourceEntry } from '../common';
 
 export type ResourceChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 
@@ -18,7 +18,7 @@ export type ResourceChangeEvent = {
   sessionId?: string;
   relatedRequestId?: string;
   version: number;
-  snapshot: readonly ResourceInstance[];
+  snapshot: readonly ResourceEntry[];
 };
 
 type Listener = (e: ResourceChangeEvent) => void;

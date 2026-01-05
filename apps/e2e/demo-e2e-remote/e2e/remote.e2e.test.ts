@@ -76,7 +76,12 @@ test.describe('Remote MCP Server Orchestration E2E', () => {
       const tools = await mcp.tools.list();
       console.log(
         '[TEST] Found tools:',
-        tools.map((t: any) => t.name || t),
+        tools.map((t: unknown) => {
+          if (typeof t === 'object' && t !== null && 'name' in t) {
+            return (t as { name: string }).name;
+          }
+          return String(t);
+        }),
       );
 
       // Local tools should be namespaced with 'local:'

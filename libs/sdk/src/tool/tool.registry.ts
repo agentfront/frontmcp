@@ -12,6 +12,7 @@ import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.type
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { AppRemoteInstance } from '../app/instances/app.remote.instance';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -100,23 +101,32 @@ export default class ToolRegistry
     }
 
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
+    const scope = this.providers.getActiveScope();
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        // Check if this is a remote app (has getMcpClient method)
-        // Remote apps use RemoteToolRegistry which isn't registered as a child registry
-        const isRemoteApp = typeof (app as { getMcpClient?: unknown }).getMcpClient === 'function';
+        // Check if this is a remote app using instanceof (type-safe)
+        const isRemoteApp = app instanceof AppRemoteInstance;
 
         if (isRemoteApp) {
           // For remote apps, directly adopt tools from the app's tools registry
           // The RemoteToolRegistry isn't registered with providers, so we access it directly
-          const remoteTools = app.tools.getTools();
-          if (remoteTools.length > 0) {
-            const prepend: EntryLineage = this.owner ? [this.owner] : [];
-            for (const remoteTool of remoteTools) {
-              const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
-              this.localRows.push(row);
+          try {
+            const remoteTools = app.tools.getTools();
+            if (remoteTools.length > 0) {
+              const prepend: EntryLineage = this.owner ? [this.owner] : [];
+              for (const remoteTool of remoteTools) {
+                // Validate tool entry has required properties
+                if (!remoteTool || typeof remoteTool.name !== 'string') {
+                  scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
+                  continue;
+                }
+                const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
+                this.localRows.push(row);
+              }
             }
+          } catch (error) {
+            scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
           }
         } else {
           // For local apps, adopt from child ToolRegistry instances
@@ -141,7 +151,6 @@ export default class ToolRegistry
     this.reindex();
     this.bump('reset');
 
-    const scope = this.providers.getActiveScope();
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
   }
 

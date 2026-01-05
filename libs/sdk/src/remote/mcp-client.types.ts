@@ -205,14 +205,12 @@ export interface McpCapabilityChangeEvent {
  * Configuration for the MCP client service
  */
 export interface McpClientServiceOptions {
-  /** Default timeout for all operations (default: 30000) */
-  defaultTimeout?: number;
-  /** Maximum retry attempts (default: 3) */
-  maxRetries?: number;
-  /** Delay between retries in milliseconds (default: 1000) */
-  retryDelayMs?: number;
-  /** Interval for capability refresh (0 = no refresh, default: 0) */
+  /** Interval for capability refresh in ms (0 = no refresh, default: 0) */
   capabilityRefreshInterval?: number;
+  /** Client name reported to remote servers (default: 'frontmcp-gateway') */
+  clientName?: string;
+  /** Client version reported to remote servers (default: '1.0.0') */
+  clientVersion?: string;
   /** Enable debug logging */
   debug?: boolean;
 }

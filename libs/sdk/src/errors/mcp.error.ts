@@ -6,8 +6,12 @@ import { randomBytes, bytesToHex } from '@frontmcp/utils';
  * These codes are used in the JSON-RPC error response format.
  */
 export const MCP_ERROR_CODES = {
+  /** Unauthorized - missing credentials (-32001) */
+  UNAUTHORIZED: -32001,
   /** Resource not found (-32002) */
   RESOURCE_NOT_FOUND: -32002,
+  /** Forbidden - invalid or insufficient credentials (-32003) */
+  FORBIDDEN: -32003,
   /** Invalid request (-32600) */
   INVALID_REQUEST: -32600,
   /** Method not found (-32601) */

@@ -120,12 +120,12 @@ export class RemotePromptNotFoundError extends PublicMcpError {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Error thrown when authentication to a remote server fails
+ * Error thrown when authentication to a remote server fails (missing credentials)
  */
 export class RemoteAuthError extends PublicMcpError {
   readonly appId: string;
   readonly details?: string;
-  readonly mcpErrorCode = MCP_ERROR_CODES.INVALID_REQUEST;
+  readonly mcpErrorCode = MCP_ERROR_CODES.UNAUTHORIZED;
 
   constructor(appId: string, details?: string) {
     super(
@@ -139,12 +139,12 @@ export class RemoteAuthError extends PublicMcpError {
 }
 
 /**
- * Error thrown when authorization to a remote resource/tool fails
+ * Error thrown when authorization to a remote resource/tool fails (invalid/insufficient credentials)
  */
 export class RemoteAuthorizationError extends PublicMcpError {
   readonly appId: string;
   readonly resource?: string;
-  readonly mcpErrorCode = MCP_ERROR_CODES.INVALID_REQUEST;
+  readonly mcpErrorCode = MCP_ERROR_CODES.FORBIDDEN;
 
   constructor(appId: string, resource?: string) {
     super(

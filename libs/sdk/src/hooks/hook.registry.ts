@@ -166,10 +166,20 @@ export default class HookRegistry
       const hookOwner = hook.metadata.owner;
       // Include hooks with no owner (global hooks)
       if (!hookOwner) return true;
-      // Include hooks from scope/plugin level (apply globally to all tools)
-      if (hookOwner.kind === 'scope' || hookOwner.kind === 'plugin') return true;
-      // Include hooks from the same owner (app-level hooks)
-      return hookOwner.id === ownerId;
+
+      // Handle known owner kinds explicitly
+      switch (hookOwner.kind) {
+        case 'scope':
+        case 'plugin':
+          // Scope/plugin-level hooks apply globally to all tools
+          return true;
+        case 'app':
+          // App-level hooks only apply to matching owner
+          return hookOwner.id === ownerId;
+        default:
+          // Fail fast on unknown owner kinds to catch misconfigurations
+          throw new Error(`Unsupported hook owner kind: ${hookOwner.kind}`);
+      }
     });
   }
 
