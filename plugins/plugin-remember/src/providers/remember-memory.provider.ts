@@ -182,7 +182,8 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
   }
 
   // ReDoS protection constants
-  private static readonly MAX_PATTERN_LENGTH = 200;
+  // Pattern length allows for long prefixes (e.g., remember:session:{uuid}:user:*)
+  private static readonly MAX_PATTERN_LENGTH = 500;
   private static readonly MAX_WILDCARDS = 20;
 
   /**

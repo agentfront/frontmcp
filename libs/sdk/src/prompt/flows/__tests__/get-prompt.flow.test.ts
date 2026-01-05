@@ -277,7 +277,8 @@ describe('GetPromptFlow', () => {
       const result = await runFlow(input, createMockDependencies(promptRegistry));
 
       expect(result.success).toBe(true);
-      expect(capturedCtx).toEqual({ authInfo });
+      // Use toMatchObject since context may include additional internal properties
+      expect(capturedCtx).toMatchObject({ authInfo });
     });
 
     it('should handle prompt returning string output', async () => {

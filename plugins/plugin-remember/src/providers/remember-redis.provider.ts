@@ -19,6 +19,10 @@ export type RedisRememberOptions = RedisRememberPluginOptions | RedisClientRemem
 })
 export default class RememberRedisProvider implements RememberStoreInterface {
   private readonly client: RedisClient;
+  /**
+   * Prefix prepended to all Redis keys.
+   * Include any separator (e.g., "myapp:" or "user:123:") as part of the prefix.
+   */
   private readonly keyPrefix: string;
   /** True if this provider created the client (and should close it), false if externally provided */
   private readonly ownsClient: boolean;
@@ -68,6 +72,14 @@ export default class RememberRedisProvider implements RememberStoreInterface {
 
   /**
    * Retrieve a value by key.
+   *
+   * Returns the parsed JSON value if successful, or `defaultValue` if:
+   * - The key does not exist
+   * - The stored value is not valid JSON (malformed or legacy data)
+   *
+   * @param key - The key to retrieve
+   * @param defaultValue - Value to return if key doesn't exist or parsing fails
+   * @returns The parsed value as T, or defaultValue/undefined
    */
   async getValue<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     const fullKey = this.keyPrefix + key;
@@ -78,7 +90,8 @@ export default class RememberRedisProvider implements RememberStoreInterface {
     try {
       return JSON.parse(raw) as T;
     } catch {
-      return raw as unknown as T;
+      // Return defaultValue for malformed/legacy data rather than unsafe cast
+      return defaultValue;
     }
   }
 
