@@ -103,12 +103,30 @@ export default class ToolRegistry
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
-        appToolsRegistries
-          .filter((t) => t.owner.kind === 'app')
-          .forEach((appToolRegistry) => {
-            this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
-          });
+        // Check if this is a remote app (has getMcpClient method)
+        // Remote apps use RemoteToolRegistry which isn't registered as a child registry
+        const isRemoteApp = typeof (app as { getMcpClient?: unknown }).getMcpClient === 'function';
+
+        if (isRemoteApp) {
+          // For remote apps, directly adopt tools from the app's tools registry
+          // The RemoteToolRegistry isn't registered with providers, so we access it directly
+          const remoteTools = app.tools.getTools();
+          if (remoteTools.length > 0) {
+            const prepend: EntryLineage = this.owner ? [this.owner] : [];
+            for (const remoteTool of remoteTools) {
+              const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
+              this.localRows.push(row);
+            }
+          }
+        } else {
+          // For local apps, adopt from child ToolRegistry instances
+          const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
+          appToolsRegistries
+            .filter((t) => t.owner.kind === 'app')
+            .forEach((appToolRegistry) => {
+              this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
+            });
+        }
       }
     });
 

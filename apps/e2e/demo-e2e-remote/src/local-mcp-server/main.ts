@@ -6,7 +6,7 @@ const port = parseInt(process.env['PORT'] ?? '3099', 10);
 @FrontMcp({
   info: { name: 'Local Test MCP', version: '0.1.0' },
   apps: [LocalTestApp],
-  logging: { level: LogLevel.VERBOSE },
+  logging: { level: LogLevel.Verbose },
   http: { port },
   auth: {
     mode: 'public',

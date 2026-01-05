@@ -19,11 +19,27 @@ import {
   frontMcpAuthProviderMetadataSchema,
   frontMcpPluginMetadataSchema,
   frontMcpProviderMetadataSchema,
+  frontMcpRemoteAppMetadataSchema,
 } from '../metadata';
 
 export const annotatedFrontMcpAppSchema = z.custom<Type>(
-  (v): v is Type => typeof v === 'function' && Reflect.hasMetadata(FrontMcpLocalAppTokens.type, v),
-  { message: 'apps items must be annotated with @App() | @FrontMcpApp().' },
+  (v): v is Type => {
+    // Check for class-based @App() decorator
+    if (typeof v === 'function' && Reflect.hasMetadata(FrontMcpLocalAppTokens.type, v)) {
+      return true;
+    }
+    // Check for remote app configuration object
+    if (typeof v === 'object' && v !== null) {
+      const obj = v as Record<string, unknown>;
+      // Remote app configs have urlType and url properties
+      if (typeof obj['urlType'] === 'string' && typeof obj['url'] === 'string' && typeof obj['name'] === 'string') {
+        // Validate against remote app schema
+        return frontMcpRemoteAppMetadataSchema.passthrough().safeParse(v).success;
+      }
+    }
+    return false;
+  },
+  { message: 'apps items must be annotated with @App() | @FrontMcpApp() or be a valid remote app configuration.' },
 );
 
 export const annotatedFrontMcpProvidersSchema = z.custom<Type>(

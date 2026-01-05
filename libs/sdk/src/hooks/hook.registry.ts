@@ -158,10 +158,18 @@ export default class HookRegistry
     if (!ownerId) {
       return allHooks;
     }
-    // Filter hooks to only include those that belong to the same owner or have no owner (global hooks)
+    // Filter hooks to include:
+    // 1. Global hooks (no owner)
+    // 2. Scope/plugin-level hooks (apply globally to all tools)
+    // 3. App-level hooks that match the tool's owner
     return allHooks.filter((hook) => {
       const hookOwner = hook.metadata.owner;
-      return !hookOwner || hookOwner.id === ownerId;
+      // Include hooks with no owner (global hooks)
+      if (!hookOwner) return true;
+      // Include hooks from scope/plugin level (apply globally to all tools)
+      if (hookOwner.kind === 'scope' || hookOwner.kind === 'plugin') return true;
+      // Include hooks from the same owner (app-level hooks)
+      return hookOwner.id === ownerId;
     });
   }
 

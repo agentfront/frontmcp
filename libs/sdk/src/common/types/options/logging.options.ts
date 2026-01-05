@@ -5,11 +5,7 @@ import { RawZodShape } from '../common.types';
 
 export enum LogLevel {
   Debug = 0,
-  /**
-   * @deprecated use 'Verbose' instead
-   */
-  VERBOSE = 1,
-  Verbose = VERBOSE,
+  Verbose = 1,
   Info = 2,
   Warn = 3,
   Error = 4,
@@ -18,7 +14,7 @@ export enum LogLevel {
 
 export const LogLevelName: Record<LogLevel, string> = {
   [LogLevel.Debug]: 'debug',
-  [LogLevel.VERBOSE]: 'verbose',
+  [LogLevel.Verbose]: 'verbose',
   [LogLevel.Info]: 'info',
   [LogLevel.Warn]: 'warn',
   [LogLevel.Error]: 'error',

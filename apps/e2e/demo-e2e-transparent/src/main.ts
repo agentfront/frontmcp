@@ -12,7 +12,7 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
 @FrontMcp({
   info: { name: 'Demo E2E Transparent', version: '0.1.0' },
   apps: [TasksApp],
-  logging: { level: LogLevel.VERBOSE },
+  logging: { level: LogLevel.Verbose },
   http: { port },
   auth: {
     mode: 'transparent',

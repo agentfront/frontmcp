@@ -110,12 +110,29 @@ export default class PromptRegistry
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
-        appPromptRegistries
-          .filter((r) => r.owner.kind === 'app')
-          .forEach((appPromptRegistry) => {
-            this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
-          });
+        // Check if this is a remote app (has getMcpClient method)
+        // Remote apps use RemotePromptRegistry which isn't registered as a child registry
+        const isRemoteApp = typeof (app as { getMcpClient?: unknown }).getMcpClient === 'function';
+
+        if (isRemoteApp) {
+          // For remote apps, directly adopt prompts from the app's prompts registry
+          const remotePrompts = app.prompts.getPrompts();
+          if (remotePrompts.length > 0) {
+            const prepend: EntryLineage = this.owner ? [this.owner] : [];
+            for (const remotePrompt of remotePrompts) {
+              const row = this.makeRow(Symbol(remotePrompt.name), remotePrompt as PromptInstance, prepend, this);
+              this.localRows.push(row);
+            }
+          }
+        } else {
+          // For local apps, adopt from child PromptRegistry instances
+          const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
+          appPromptRegistries
+            .filter((r) => r.owner.kind === 'app')
+            .forEach((appPromptRegistry) => {
+              this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
+            });
+        }
       }
     });
 

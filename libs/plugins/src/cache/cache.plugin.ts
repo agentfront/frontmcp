@@ -8,12 +8,38 @@ import {
   FrontMcpConfigType,
   getGlobalStoreConfig,
   isVercelKvProvider,
+  FrontMcpContextStorage,
 } from '@frontmcp/sdk';
 import CacheRedisProvider from './providers/cache-redis.provider';
 import CacheMemoryProvider from './providers/cache-memory.provider';
 import CacheVercelKvProvider from './providers/cache-vercel-kv.provider';
 import { CachePluginOptions, GlobalStoreCachePluginOptions } from './cache.types';
 import { CacheStoreToken } from './cache.symbol';
+
+/**
+ * Default bypass header for cache.
+ * Uses x-frontmcp-* prefix to match the header extraction pattern in FrontMcpContextStorage.
+ */
+const DEFAULT_BYPASS_HEADER = 'x-frontmcp-disable-cache';
+
+/**
+ * Check if a tool name matches any of the provided patterns.
+ * Supports exact names and glob patterns with wildcards (*).
+ */
+function matchesToolPattern(toolName: string, patterns: string[]): boolean {
+  if (!patterns || patterns.length === 0) return false;
+
+  return patterns.some((pattern) => {
+    if (pattern.includes('*')) {
+      // Escape special regex characters except *
+      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+      // Convert * to regex .*
+      const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+      return regex.test(toolName);
+    }
+    return pattern === toolName;
+  });
+}
 
 @Plugin({
   name: 'cache',
@@ -97,23 +123,86 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
     };
   }
 
+  /**
+   * Check if a tool should be cached based on metadata or tools list.
+   */
+  private shouldCacheTool(
+    toolName: string,
+    cacheMetadata?: boolean | { ttl?: number; slideWindow?: boolean },
+  ): boolean {
+    // If metadata explicitly enables cache, use it
+    if (cacheMetadata) return true;
+
+    // Check if tool matches the configured patterns
+    const patterns = this.options.toolPatterns ?? [];
+    return matchesToolPattern(toolName, patterns);
+  }
+
+  /**
+   * Check if cache should be bypassed based on request headers.
+   * Accesses headers from FrontMcpContextStorage which extracts x-frontmcp-* custom headers.
+   */
+  private shouldBypassCache(_flowCtx: FlowCtxOf<'tools:call-tool'>): boolean {
+    const bypassHeader = this.options.bypassHeader ?? DEFAULT_BYPASS_HEADER;
+
+    try {
+      // Get custom headers from the context storage
+      // Headers with x-frontmcp-* prefix are stored in metadata.customHeaders
+      const contextStorage = this.get(FrontMcpContextStorage);
+      const context = contextStorage?.getStore();
+      const customHeaders = context?.metadata?.customHeaders;
+
+      if (!customHeaders) return false;
+
+      // Headers are stored lowercase in customHeaders
+      const headerKey = bypassHeader.toLowerCase();
+      const headerValue = customHeaders[headerKey];
+      return headerValue === 'true' || headerValue === '1';
+    } catch {
+      // Context storage not available - bypass header cannot be checked
+      return false;
+    }
+  }
+
+  /**
+   * Get TTL for a tool, with metadata taking precedence over defaults.
+   */
+  private getTtl(cacheMetadata?: boolean | { ttl?: number; slideWindow?: boolean }): number {
+    if (typeof cacheMetadata === 'object' && cacheMetadata.ttl !== undefined) {
+      return cacheMetadata.ttl;
+    }
+    return this.options.defaultTTL ?? 60 * 60 * 24;
+  }
+
   @ToolHook.Will('execute', { priority: 1000 })
   async willReadCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool, toolContext } = flowCtx.state;
     if (!tool || !toolContext) return;
 
-    const { cache } = toolContext.metadata;
-    if (!cache || typeof toolContext.input === 'undefined') {
-      // no cache or no input, skip
+    // Check bypass header
+    if (this.shouldBypassCache(flowCtx)) {
       return;
     }
+
+    const { cache } = toolContext.metadata;
+
+    // Check if tool should be cached (via metadata or tools list)
+    // Check both fullName (includes app owner) and name (just namespace:tool) for pattern matching
+    if (
+      (!this.shouldCacheTool(tool.fullName, cache) && !this.shouldCacheTool(tool.name, cache)) ||
+      typeof toolContext.input === 'undefined'
+    ) {
+      return;
+    }
+
     const cacheStore = this.get(CacheStoreToken);
     const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
     const cached = await cacheStore.getValue(hash);
 
     if (cached !== undefined && cached !== null) {
-      if (cache === true || (cache.ttl && cache.slideWindow)) {
-        const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
+      const cacheConfig = typeof cache === 'object' ? cache : undefined;
+      if (cache === true || (cacheConfig?.ttl && cacheConfig?.slideWindow)) {
+        const ttl = this.getTtl(cache);
         await cacheStore.setValue(hash, cached, ttl);
       }
 
@@ -124,15 +213,29 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         await cacheStore.delete(hash);
         return;
       }
+
+      /**
+       * Add cache metadata to response
+       */
+      const cachedRecord = cached as Record<string, unknown>;
+      const existingMeta = (cachedRecord['_meta'] as Record<string, unknown>) || {};
+      const cachedWithMeta = {
+        ...cachedRecord,
+        _meta: {
+          ...existingMeta,
+          cache: 'hit',
+        },
+      };
+
       /**
        * cache hit, set output to the main flow context
        */
-      flowCtx.state.rawOutput = cached;
+      flowCtx.state.rawOutput = cachedWithMeta;
 
       /**
        * call respond to bypass tool execution
        */
-      toolContext.respond(cached);
+      toolContext.respond(cachedWithMeta);
     }
   }
 
@@ -140,15 +243,34 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   async willWriteCache(flowCtx: FlowCtxOf<'tools:call-tool'>) {
     const { tool, toolContext } = flowCtx.state;
     if (!tool || !toolContext) return;
-    const { cache } = toolContext.metadata;
-    if (!cache || typeof toolContext.input === 'undefined') {
+
+    // Check bypass header
+    if (this.shouldBypassCache(flowCtx)) {
       return;
     }
+
+    const { cache } = toolContext.metadata;
+
+    // Check if tool should be cached (via metadata or tools list)
+    // Check both fullName (includes app owner) and name (just namespace:tool) for pattern matching
+    const shouldCache = this.shouldCacheTool(tool.fullName, cache) || this.shouldCacheTool(tool.name, cache);
+    if (!shouldCache || typeof toolContext.input === 'undefined') {
+      return;
+    }
+
     const cacheStore = this.get(CacheStoreToken);
-    const ttl = cache === true ? this.options.defaultTTL : cache.ttl ?? this.options.defaultTTL;
+    const ttl = this.getTtl(cache);
 
     const hash = hashObject({ tool: tool.fullName, input: toolContext.input });
     await cacheStore.setValue(hash, toolContext.output, ttl);
+  }
+
+  /**
+   * Check if a tool is cacheable based on metadata or tools list.
+   * This can be used by other plugins or flows to determine cacheability.
+   */
+  isCacheable(toolName: string): boolean {
+    return matchesToolPattern(toolName, this.options.toolPatterns ?? []);
   }
 }
 

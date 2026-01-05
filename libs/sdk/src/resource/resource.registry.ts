@@ -127,12 +127,31 @@ export default class ResourceRegistry
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
-        appResourceRegistries
-          .filter((r) => r.owner.kind === 'app')
-          .forEach((appResourceRegistry) => {
-            this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
-          });
+        // Check if this is a remote app (has getMcpClient method)
+        // Remote apps use RemoteResourceRegistry which isn't registered as a child registry
+        const isRemoteApp = typeof (app as { getMcpClient?: unknown }).getMcpClient === 'function';
+
+        if (isRemoteApp) {
+          // For remote apps, directly adopt resources from the app's resources registry
+          const remoteResources = app.resources.getResources();
+          const remoteTemplates = app.resources.getResourceTemplates();
+          const allRemoteResources = [...remoteResources, ...remoteTemplates];
+          if (allRemoteResources.length > 0) {
+            const prepend: EntryLineage = this.owner ? [this.owner] : [];
+            for (const remoteResource of allRemoteResources) {
+              const row = this.makeRow(Symbol(remoteResource.name), remoteResource as ResourceInstance, prepend, this);
+              this.localRows.push(row);
+            }
+          }
+        } else {
+          // For local apps, adopt from child ResourceRegistry instances
+          const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
+          appResourceRegistries
+            .filter((r) => r.owner.kind === 'app')
+            .forEach((appResourceRegistry) => {
+              this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
+            });
+        }
       }
     });
 

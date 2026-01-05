@@ -588,6 +588,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const result = parseResult.data;
 
+    // Preserve any _meta from rawOutput (e.g., cache plugin adds cache: 'hit')
+    const rawMeta = (rawOutput as Record<string, unknown>)?.['_meta'] as Record<string, unknown> | undefined;
+    if (rawMeta) {
+      result._meta = { ...result._meta, ...rawMeta };
+    }
+
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {
       result.content = uiResult.content;

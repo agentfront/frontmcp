@@ -10,7 +10,7 @@ if (isNaN(port) || port < 1 || port > 65535) {
 @FrontMcp({
   info: { name: 'Demo E2E Transport Recreation', version: '0.1.0' },
   apps: [TransportTestApp],
-  logging: { level: LogLevel.VERBOSE },
+  logging: { level: LogLevel.Verbose },
   http: { port },
   auth: {
     mode: 'public',

@@ -1,10 +1,4 @@
-import {
-  LogTransportInterface,
-  LogRecord,
-  LogTransport,
-  LogLevel,
-  LogFn,
-} from '../../common';
+import { LogTransportInterface, LogRecord, LogTransport, LogLevel, LogFn } from '../../common';
 
 type LogLevelMeta = {
   label: string;
@@ -16,7 +10,6 @@ type LogLevelMeta = {
   description: 'Used as default console logger',
 })
 export class ConsoleLogTransportInstance extends LogTransportInterface {
-
   log(rec: LogRecord): void {
     const fn = this.bind(rec.level, rec.prefix);
     fn(String(rec.message), ...rec.args);
@@ -25,7 +18,7 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
   private levelTags: Record<LogLevel, LogLevelMeta> = {
     [LogLevel.Off]: { label: '', ansi: '' },
     [LogLevel.Debug]: { label: 'DEBUG', ansi: '\x1b[34m' }, // gray
-    [LogLevel.VERBOSE]: { label: 'VERBOSE', ansi: '\x1b[90m' }, // blue
+    [LogLevel.Verbose]: { label: 'VERBOSE', ansi: '\x1b[90m' }, // blue
     [LogLevel.Info]: { label: 'INFO', ansi: '\x1b[32m' }, // green
     [LogLevel.Warn]: { label: 'WARN', ansi: '\x1b[33m' }, // yellow
     [LogLevel.Error]: { label: 'ERROR', ansi: '\x1b[31m' }, // red
@@ -44,9 +37,7 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
 
     const useAnsi = this.supportsAnsi();
     const timePart = useAnsi ? `${DIM}[${ts}]${RESET}` : `[${ts}]`;
-    const scopePart = loggerPrefix
-      ? (useAnsi ? `${BOLD}[${loggerPrefix}]${RESET}` : `[${loggerPrefix}]`)
-      : undefined;
+    const scopePart = loggerPrefix ? (useAnsi ? `${BOLD}[${loggerPrefix}]${RESET}` : `[${loggerPrefix}]`) : undefined;
     const levelPart = useAnsi ? `${BOLD}${meta.ansi}${meta.label}${RESET}` : meta.label;
 
     const fmt = [timePart, scopePart, levelPart, '%s'].filter(Boolean).join(' ');
@@ -57,7 +48,7 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
     switch (level) {
       case LogLevel.Debug:
         return console.debug.bind(console);
-      case LogLevel.VERBOSE:
+      case LogLevel.Verbose:
         return console.info.bind(console);
       case LogLevel.Info:
         return console.info.bind(console);
@@ -82,5 +73,4 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
     const pad = (n: number, w = 2) => String(n).padStart(w, '0');
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
   }
-
 }

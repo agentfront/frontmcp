@@ -207,6 +207,18 @@ Configure default behavior when registering the plugin:
   Existing ioredis client instance (required when `type: 'redis-client'`)
 </ParamField>
 
+<ParamField path="toolPatterns" type="string[]">
+  Tool names or glob patterns to cache. Tools matching these patterns use `defaultTTL` unless they have custom cache metadata.
+
+  ```ts
+  toolPatterns: ['mintlify:*', 'local:ping', 'api:get-*']
+  ```
+</ParamField>
+
+<ParamField path="bypassHeader" type="string" default="'frontmcp-disable-cache'">
+  HTTP header name that clients can send to bypass cache for a specific request. When present with value `'true'` or `'1'`, cache read/write is skipped.
+</ParamField>
+
 ### Tool-Level Configuration
 
 Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
@@ -256,6 +268,99 @@ Configure caching behavior per tool in the `@Tool` or `tool()` metadata:
 <ParamField path="cache.slideWindow" type="boolean" default="false">
   When `true`, reading from cache refreshes the TTL, keeping frequently accessed entries alive longer
 </ParamField>
+
+---
+
+## Caching Remote Tools
+
+For remote MCP tools that you don't control (connected via URL), use the `toolPatterns` option to enable caching by name or pattern:
+
+<CodeGroup>
+
+```ts Cache All Tools from Namespace
+CachePlugin.init({
+  type: 'memory',
+  defaultTTL: 300, // 5 minutes
+  toolPatterns: ['mintlify:*'], // Cache all Mintlify tools
+})
+```
+
+```ts Cache Specific Tools
+CachePlugin.init({
+  type: 'redis',
+  config: { host: 'localhost', port: 6379 },
+  toolPatterns: [
+    'external:expensive-query',
+    'external:get-user-*', // Glob pattern
+  ],
+})
+```
+
+```ts Combined with Remote Apps
+@FrontMcp({
+  apps: [
+    {
+      name: 'mintlify-docs',
+      urlType: 'url',
+      url: 'https://mintlify.com/docs/mcp',
+      namespace: 'mintlify',
+    },
+  ],
+  plugins: [
+    CachePlugin.init({
+      type: 'memory',
+      defaultTTL: 300,
+      toolPatterns: ['mintlify:*'], // Cache all remote tools
+    }),
+  ],
+})
+```
+
+</CodeGroup>
+
+### Pattern Syntax
+
+| Pattern | Matches |
+|---------|---------|
+| `tool-name` | Exact match only |
+| `namespace:*` | All tools in namespace |
+| `prefix-*` | Tools starting with prefix |
+| `*-suffix` | Tools ending with suffix |
+| `api:*:list` | Middle wildcard pattern |
+
+### Priority Rules
+
+1. **Tool metadata takes precedence** - If a tool has `cache: { ttl: 60 }` metadata, that TTL is used
+2. **Pattern list uses `defaultTTL`** - Matched tools without metadata use the plugin's default TTL
+3. **Union behavior** - A tool is cached if it matches `toolPatterns` OR has `cache` metadata
+
+<Info>
+  The `toolPatterns` option is especially useful for remote MCP servers where you can't add `cache: true` to tool metadata directly.
+</Info>
+
+---
+
+## Bypassing Cache
+
+Clients can bypass caching for specific requests by sending a header:
+
+```bash
+# Bypass cache for this request
+curl -H "frontmcp-disable-cache: true" http://localhost:3000/mcp
+```
+
+Configure a custom header name:
+
+```ts
+CachePlugin.init({
+  type: 'memory',
+  bypassHeader: 'x-no-cache', // Custom header name
+})
+```
+
+<Tip>
+  Cache bypass is useful for debugging, forcing fresh data, or when the client knows the cached data is stale.
+</Tip>
 
 ---
 
