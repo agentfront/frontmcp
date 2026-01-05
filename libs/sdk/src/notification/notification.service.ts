@@ -1,7 +1,13 @@
 // file: libs/sdk/src/notification/notification.service.ts
 
 import { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListRootsResultSchema, type LoggingLevel, type Root } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListRootsResultSchema,
+  type LoggingLevel,
+  type ProgressNotificationParams,
+  type ProgressToken,
+  type Root,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   FrontMcpLogger,
   type AIPlatformType,
@@ -252,7 +258,8 @@ export type McpNotificationMethod =
   | 'notifications/tools/list_changed'
   | 'notifications/prompts/list_changed'
   | 'notifications/resources/updated'
-  | 'notifications/message';
+  | 'notifications/message'
+  | 'notifications/progress';
 
 /**
  * Information about a registered MCP server/transport connection.
@@ -711,6 +718,48 @@ export class NotificationService {
     }
 
     this.sendNotificationToServer(registered.server, sessionId, 'notifications/message', params);
+    return true;
+  }
+
+  // =====================================================
+  // Progress Notifications (MCP 2025-11-25)
+  // =====================================================
+
+  /**
+   * Send a progress notification to a specific session.
+   * Per MCP 2025-11-25 spec, this sends a 'notifications/progress' notification
+   * using the progressToken from the original request.
+   *
+   * @param sessionId - The target session
+   * @param progressToken - The progress token from the original request's _meta
+   * @param progress - Current progress value (should increase monotonically)
+   * @param total - Total progress value (optional)
+   * @param message - Progress message (optional)
+   * @returns true if the notification was sent
+   */
+  sendProgressNotification(
+    sessionId: string,
+    progressToken: ProgressToken,
+    progress: number,
+    total?: number,
+    message?: string,
+  ): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
+      // Return false rather than throw - consistent with other notification methods
+      // (sendLogMessageToSession, etc.) since notifications are best-effort and
+      // shouldn't disrupt the caller's execution if session is gone
+      return false;
+    }
+
+    const params: ProgressNotificationParams = {
+      progressToken,
+      progress,
+      ...(total !== undefined && { total }),
+      ...(message !== undefined && { message }),
+    };
+
+    this.sendNotificationToServer(registered.server, sessionId, 'notifications/progress', params);
     return true;
   }
 

@@ -12,6 +12,8 @@ import { ToolInputOf, ToolOutputOf } from '../decorators';
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
 export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
+  /** Progress token from the request's _meta, used for progress notifications */
+  progressToken?: string | number;
 };
 
 export type ParsedToolResult = CallToolResult;

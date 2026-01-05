@@ -233,6 +233,15 @@ export interface AgentExecutionConfig {
    * @default true
    */
   inheritPlugins?: boolean;
+
+  /**
+   * Whether to automatically send progress notifications during agent execution.
+   * When true, the agent sends notifications about LLM calls, tool executions,
+   * and completion status via `notifications/progress` and `notifications/message`.
+   * Requires `enableNotifications` to also be true.
+   * @default false (opt-in feature)
+   */
+  enableAutoProgress?: boolean;
 }
 
 // ============================================================================
@@ -461,6 +470,8 @@ const executionConfigSchema = z.object({
   // Default false: inner agent tools use agent's own plugins only.
   // The agent itself (as use-agent:* tool) goes through parent scope's plugins.
   inheritPlugins: z.boolean().optional().default(false),
+  // Opt-in: agents must explicitly enable auto progress notifications
+  enableAutoProgress: z.boolean().optional().default(false),
 });
 
 const exportsConfigSchema = z.object({

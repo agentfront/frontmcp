@@ -38,6 +38,8 @@ const stateSchema = z.object({
   output: outputSchema,
   // Agent owner ID for hook filtering (set during parseInput)
   _agentOwnerId: z.string().optional(),
+  // Progress token from request's _meta (for progress notifications)
+  progressToken: z.union([z.string(), z.number()]).optional(),
   // Execution metadata
   executionMeta: z
     .object({
@@ -138,7 +140,10 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     // Store agent owner ID in state for hook filtering
     const agentOwnerId = agent?.owner?.id;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo, _agentOwnerId: agentOwnerId });
+    // Extract progressToken from request's _meta (for progress notifications)
+    const progressToken = params._meta?.progressToken;
+
+    this.state.set({ input: params, authInfo: ctx.authInfo, _agentOwnerId: agentOwnerId, progressToken });
     this.logger.verbose('parseInput:done');
   }
 
@@ -240,9 +245,10 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     this.logger.verbose('createAgentContext:start');
     const { ctx } = this.input;
     const { agent, input } = this.state.required;
+    const progressToken = this.state.progressToken;
 
     try {
-      const context = agent.create(input.arguments, ctx);
+      const context = agent.create(input.arguments, { ...ctx, progressToken });
       const agentHooks = this.scope.hooks.getClsHooks(agent.record.provide).map((hook) => {
         const originalRun = hook.run;
         hook.run = async (hookInput, hookCtx) => {

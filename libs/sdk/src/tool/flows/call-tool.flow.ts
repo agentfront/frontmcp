@@ -52,6 +52,8 @@ const stateSchema = z.object({
   uiResult: z.any().optional() as z.ZodType<ToolResponseContent | undefined>,
   // UI metadata from rendering (merged into _meta)
   uiMeta: z.record(z.string(), z.unknown()).optional(),
+  // Progress token from request's _meta (for progress notifications)
+  progressToken: z.union([z.string(), z.number()]).optional(),
 });
 
 const plan = {
@@ -125,7 +127,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Store tool owner ID in state for hook filtering
     const toolOwnerId = tool?.owner?.id;
 
-    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId });
+    // Extract progressToken from request's _meta (for progress notifications)
+    const progressToken = params._meta?.progressToken;
+
+    this.state.set({ input: params, authInfo: ctx.authInfo, _toolOwnerId: toolOwnerId, progressToken });
     this.logger.verbose('parseInput:done');
   }
 
@@ -250,9 +255,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('createToolCallContext:start');
     const { ctx } = this.input;
     const { tool, input } = this.state.required;
+    const progressToken = this.state.progressToken;
 
     try {
-      const context = tool.create(input.arguments, ctx);
+      const context = tool.create(input.arguments, { ...ctx, progressToken });
       const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();
