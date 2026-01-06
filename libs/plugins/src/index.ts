@@ -10,7 +10,6 @@
  * - @frontmcp/plugin-remember
  */
 
-// Remember Plugin
 export * from '@frontmcp/plugin-cache';
 export * from '@frontmcp/plugin-codecall';
 export * from '@frontmcp/plugin-dashboard';

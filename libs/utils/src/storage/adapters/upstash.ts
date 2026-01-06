@@ -167,6 +167,7 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
+    this.ensureConnected();
     const prefixedKey = this.prefixKey(key);
     const setOptions: { ex?: number; nx?: boolean; xx?: boolean } = {};
 
@@ -246,7 +247,8 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
         match: prefixedPattern,
         count: 100,
       });
-      cursor = typeof nextCursor === 'string' ? parseInt(nextCursor, 10) : nextCursor;
+      const parsedCursor = typeof nextCursor === 'string' ? parseInt(nextCursor, 10) : nextCursor;
+      cursor = Number.isNaN(parsedCursor) ? 0 : parsedCursor;
 
       for (const key of keys) {
         result.push(this.unprefixKey(key));

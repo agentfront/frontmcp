@@ -4,7 +4,7 @@
  * These are standalone error classes that can be extended by plugins
  * for MCP-specific error handling.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
 import type { ApprovalScope } from './types';
 /**

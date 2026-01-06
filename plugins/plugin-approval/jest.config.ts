@@ -2,7 +2,7 @@ module.exports = {
   displayName: 'plugin-approval',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  transformIgnorePatterns: ['/node_modules/(?!(jose|@noble/hashes|@noble/ciphers)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(jose|@noble/hashes|@noble/ciphers)/)'],
   moduleNameMapper: {
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/utils$': '<rootDir>/../../libs/utils/src/index.ts',
@@ -40,10 +40,10 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
   coverageThreshold: {
     global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 95,
+      functions: 95,
+      lines: 95,
+      statements: 95,
     },
   },
   setupFilesAfterEnv: ['reflect-metadata'],

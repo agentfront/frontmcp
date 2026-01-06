@@ -4,7 +4,7 @@
  * Provides types, schemas, factories, guards, and errors for implementing
  * tool approval systems with full audit trail support.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  *
  * @example
  * ```typescript
@@ -15,7 +15,7 @@
  *   testGrantor,
  *   isHumanGrantor,
  *   approvalRecordSchema,
- * } from '@frontmcp/utils';
+ * } from '@frontmcp/plugin-approval';
  *
  * // Create an approval record
  * const record = {

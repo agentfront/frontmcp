@@ -292,7 +292,7 @@ describe('Secret Persistence', () => {
       expect(saved).toBe(true); // Returns true (not a failure)
 
       // But file should not exist
-      await expect(access(secretPath)).rejects.toThrow();
+      await expect(access(secretPath)).rejects.toThrow(Error);
     });
 
     it('should not load when persistence disabled', async () => {

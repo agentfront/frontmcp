@@ -157,21 +157,24 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
     this.ensureConnected();
     const prefixedKey = this.prefixKey(key);
-    const args: (string | number)[] = [prefixedKey, value];
 
-    // Add TTL if provided
+    // Build SET command with proper typing
+    // Redis SET: SET key value [EX seconds] [NX|XX]
     if (options?.ttlSeconds) {
-      args.push('EX', options.ttlSeconds);
-    }
-
-    // Add conditional flags
-    if (options?.ifNotExists) {
-      args.push('NX');
+      if (options.ifNotExists) {
+        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds, 'NX');
+      } else if (options.ifExists) {
+        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds, 'XX');
+      } else {
+        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds);
+      }
+    } else if (options?.ifNotExists) {
+      await this.client!.set(prefixedKey, value, 'NX');
     } else if (options?.ifExists) {
-      args.push('XX');
+      await this.client!.set(prefixedKey, value, 'XX');
+    } else {
+      await this.client!.set(prefixedKey, value);
     }
-
-    await (this.client as any).set(...args);
   }
 
   async delete(key: string): Promise<boolean> {
@@ -211,18 +214,23 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
 
     for (const entry of entries) {
       const prefixedKey = this.prefixKey(entry.key);
-      const args: (string | number)[] = [prefixedKey, entry.value];
 
+      // Build SET command with proper typing
       if (entry.options?.ttlSeconds) {
-        args.push('EX', entry.options.ttlSeconds);
-      }
-      if (entry.options?.ifNotExists) {
-        args.push('NX');
+        if (entry.options.ifNotExists) {
+          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds, 'NX');
+        } else if (entry.options.ifExists) {
+          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds, 'XX');
+        } else {
+          pipeline.set(prefixedKey, entry.value, 'EX', entry.options.ttlSeconds);
+        }
+      } else if (entry.options?.ifNotExists) {
+        pipeline.set(prefixedKey, entry.value, 'NX');
       } else if (entry.options?.ifExists) {
-        args.push('XX');
+        pipeline.set(prefixedKey, entry.value, 'XX');
+      } else {
+        pipeline.set(prefixedKey, entry.value);
       }
-
-      (pipeline as any).set(...args);
     }
 
     await pipeline.exec();

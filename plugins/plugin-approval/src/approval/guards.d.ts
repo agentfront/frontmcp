@@ -1,7 +1,7 @@
 /**
  * Type guards for approval types.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
 import type { ApprovalGrantor, ApprovalSourceType } from './types';
 /**

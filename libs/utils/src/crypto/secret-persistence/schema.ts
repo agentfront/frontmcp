@@ -10,11 +10,13 @@ import type { SecretData, SecretValidationResult } from './types';
 /**
  * Zod schema for SecretData.
  */
-export const secretDataSchema = z.object({
-  secret: z.string().min(32), // base64url of 32 bytes is ~43 chars
-  createdAt: z.number().positive().int(),
-  version: z.number().positive().int(),
-});
+export const secretDataSchema = z
+  .object({
+    secret: z.string().min(32), // base64url of 32 bytes is ~43 chars
+    createdAt: z.number().positive().int(),
+    version: z.number().positive().int(),
+  })
+  .strict();
 
 /**
  * Maximum allowed clock drift for createdAt validation (1 minute).

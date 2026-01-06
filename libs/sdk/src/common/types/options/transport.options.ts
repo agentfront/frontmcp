@@ -271,7 +271,6 @@ export function isDistributedMode(config?: DistributedConfigInput): boolean {
       env['NETLIFY'] ||
       env['CF_PAGES'] || // Cloudflare Pages
       env['AWS_LAMBDA_FUNCTION_NAME'] ||
-      env['GOOGLE_CLOUD_PROJECT'] ||
       env['AZURE_FUNCTIONS_ENVIRONMENT'] ||
       env['K_SERVICE'] || // Google Cloud Run
       env['RAILWAY_ENVIRONMENT'] ||

@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { userGrantor, testGrantor, policyGrantor } from '@frontmcp/utils';
+ * import { userGrantor, testGrantor, policyGrantor } from '@frontmcp/plugin-approval';
  *
  * // In tests
  * await store.grantApproval({
@@ -23,7 +23,7 @@
  * });
  * ```
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
 import type {
   ApprovalGrantor,

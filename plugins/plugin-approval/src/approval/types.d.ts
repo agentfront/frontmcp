@@ -4,7 +4,7 @@
  * These types define the structure for approval records, grantors, and revokers
  * used in tool permission systems.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
 /**
  * Approval scope determines the lifetime and visibility of an approval.

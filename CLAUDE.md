@@ -317,7 +317,7 @@ export function installMyContextExtension(): void {
 }
 ```
 
-See `libs/plugins/src/remember/remember.context-extension.ts` for a complete example.
+See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete example.
 
 ### Crypto Utilities
 

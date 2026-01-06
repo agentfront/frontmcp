@@ -1,7 +1,7 @@
 /**
  * Zod validation schemas for approval types.
  *
- * @module @frontmcp/utils/approval
+ * @module @frontmcp/plugin-approval
  */
 import { z } from 'zod';
 import { ApprovalScope, ApprovalState } from './types';
