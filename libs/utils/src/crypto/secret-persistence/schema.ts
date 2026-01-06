@@ -12,7 +12,7 @@ import type { SecretData, SecretValidationResult } from './types';
  */
 export const secretDataSchema = z
   .object({
-    secret: z.string().min(32), // base64url of 32 bytes is ~43 chars
+    secret: z.string().base64url().length(43), // base64url of 32 bytes is exactly 43 chars
     createdAt: z.number().positive().int(),
     version: z.number().positive().int(),
   })

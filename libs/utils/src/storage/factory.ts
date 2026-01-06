@@ -5,7 +5,7 @@
  */
 
 import type { StorageConfig, StorageType, RootStorage, StorageAdapter } from './types';
-import { StorageConfigError, StorageConnectionError } from './errors';
+import { StorageConfigError } from './errors';
 import { createRootStorage, createNamespacedStorage } from './namespace';
 import { MemoryStorageAdapter } from './adapters/memory';
 

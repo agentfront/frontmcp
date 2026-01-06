@@ -117,7 +117,7 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
    * Default count: keys().length.
    * Override for more efficient implementations.
    */
-  async count(pattern: string = '*'): Promise<number> {
+  async count(pattern = '*'): Promise<number> {
     const matchedKeys = await this.keys(pattern);
     return matchedKeys.length;
   }

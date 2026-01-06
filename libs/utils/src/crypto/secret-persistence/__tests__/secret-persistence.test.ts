@@ -168,20 +168,23 @@ describe('Secret Persistence', () => {
       expect(result.valid).toBe(false);
     });
 
+    // Valid base64url string of 43 chars (represents 32 bytes)
+    const validBase64urlSecret = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop0';
+
     it('should reject missing createdAt', () => {
-      const result = validateSecretData({ secret: 'abc123...'.repeat(5), version: 1 });
+      const result = validateSecretData({ secret: validBase64urlSecret, version: 1 });
       expect(result.valid).toBe(false);
     });
 
     it('should reject missing version', () => {
-      const result = validateSecretData({ secret: 'abc123...'.repeat(5), createdAt: Date.now() });
+      const result = validateSecretData({ secret: validBase64urlSecret, createdAt: Date.now() });
       expect(result.valid).toBe(false);
     });
 
     it('should reject future createdAt', () => {
       const futureTime = Date.now() + 120000; // 2 minutes in future
       const result = validateSecretData({
-        secret: 'abc123...'.repeat(5),
+        secret: validBase64urlSecret,
         createdAt: futureTime,
         version: 1,
       });
@@ -192,7 +195,7 @@ describe('Secret Persistence', () => {
     it('should allow small clock drift', () => {
       const slightlyFuture = Date.now() + 30000; // 30 seconds in future
       const result = validateSecretData({
-        secret: 'abc123...'.repeat(5),
+        secret: validBase64urlSecret,
         createdAt: slightlyFuture,
         version: 1,
       });
@@ -292,7 +295,7 @@ describe('Secret Persistence', () => {
       expect(saved).toBe(true); // Returns true (not a failure)
 
       // But file should not exist
-      await expect(access(secretPath)).rejects.toThrow(Error);
+      await expect(access(secretPath)).rejects.toThrow(/ENOENT/);
     });
 
     it('should not load when persistence disabled', async () => {

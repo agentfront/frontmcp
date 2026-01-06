@@ -12,7 +12,7 @@ import {
   type NamespacedStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
-import { normalizeGrantor } from '../approval';
+import { normalizeGrantor, approvalRecordSchema } from '../approval';
 import type {
   ApprovalStore,
   ApprovalQuery,
@@ -20,6 +20,18 @@ import type {
   RevokeApprovalOptions,
 } from './approval-store.interface';
 import { ApprovalScope, ApprovalState, type ApprovalRecord, type ApprovalContext } from '../types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Escape glob metacharacters in a string for safe pattern matching.
+ * Redis/storage SCAN patterns use glob-style matching where *, ?, and [ are special.
+ */
+function escapePattern(str: string): string {
+  return str.replace(/[*?[\]\\]/g, '\\$&');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -129,7 +141,12 @@ export class ApprovalStorageStore implements ApprovalStore {
   private parseRecord(value: string | null): ApprovalRecord | undefined {
     if (!value) return undefined;
     try {
-      return JSON.parse(value) as ApprovalRecord;
+      const parsed = JSON.parse(value);
+      const result = approvalRecordSchema.safeParse(parsed);
+      if (!result.success) {
+        return undefined;
+      }
+      return result.data as ApprovalRecord;
     } catch {
       return undefined;
     }
@@ -277,7 +294,9 @@ export class ApprovalStorageStore implements ApprovalStore {
   async clearSessionApprovals(sessionId: string): Promise<number> {
     this.ensureInitialized();
 
-    const pattern = `*:session:${sessionId}*`;
+    // Escape sessionId to prevent glob metacharacters from matching unintended keys
+    const escapedSessionId = escapePattern(sessionId);
+    const pattern = `*:session:${escapedSessionId}*`;
     const keys = await this.storage.keys(pattern);
 
     if (keys.length === 0) {

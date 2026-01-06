@@ -190,7 +190,8 @@ describe('Storage Factory', () => {
       // Basic operations
       await session.set('user', JSON.stringify({ name: 'John' }));
       const userData = await session.get('user');
-      expect(JSON.parse(userData!)).toEqual({ name: 'John' });
+      expect(userData).not.toBeNull();
+      expect(JSON.parse(userData as string)).toEqual({ name: 'John' });
 
       // TTL
       await session.set('temp', 'data', { ttlSeconds: 60 });

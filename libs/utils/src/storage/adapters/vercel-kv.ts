@@ -7,9 +7,8 @@
 
 import { BaseStorageAdapter } from './base';
 import type { VercelKvAdapterOptions, SetOptions } from '../types';
-import { StorageConnectionError, StorageConfigError, StorageOperationError } from '../errors';
+import { StorageConnectionError, StorageConfigError } from '../errors';
 import { validateTTL } from '../utils/ttl';
-import { globToRegex } from '../utils/pattern';
 
 // Type for @vercel/kv client
 type VercelKvClient = {
@@ -35,7 +34,6 @@ function getVercelKv(): {
   createClient: (config: { url: string; token: string }) => VercelKvClient;
 } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@vercel/kv');
   } catch {
     throw new Error('@vercel/kv is required for Vercel KV storage adapter. Install it with: npm install @vercel/kv');
@@ -106,10 +104,12 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       if (this.options.url === process.env['KV_REST_API_URL']) {
         this.client = kv;
       } else {
-        this.client = createClient({
-          url: this.options.url!,
-          token: this.options.token!,
-        });
+        const url = this.options.url;
+        const token = this.options.token;
+        if (!url || !token) {
+          throw new StorageConfigError('vercel-kv', 'URL and token are required');
+        }
+        this.client = createClient({ url, token });
       }
 
       // Test connection with a simple operation
@@ -141,16 +141,31 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   }
 
   // ============================================
+  // Connection Helpers
+  // ============================================
+
+  /**
+   * Get the connected Vercel KV client, throwing if not connected.
+   */
+  private getConnectedClient(): VercelKvClient {
+    this.ensureConnected();
+    if (!this.client) {
+      throw new StorageConnectionError('Vercel KV client not connected', undefined, 'vercel-kv');
+    }
+    return this.client;
+  }
+
+  // ============================================
   // Core Operations
   // ============================================
 
   async get(key: string): Promise<string | null> {
-    this.ensureConnected();
-    const result = await this.client!.get<string>(this.prefixKey(key));
+    const result = await this.getConnectedClient().get<string>(this.prefixKey(key));
     return result;
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
+    const client = this.getConnectedClient();
     const prefixedKey = this.prefixKey(key);
     const setOptions: { ex?: number; nx?: boolean; xx?: boolean } = {};
 
@@ -163,18 +178,16 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       setOptions.xx = true;
     }
 
-    await this.client!.set(prefixedKey, value, Object.keys(setOptions).length > 0 ? setOptions : undefined);
+    await client.set(prefixedKey, value, Object.keys(setOptions).length > 0 ? setOptions : undefined);
   }
 
   async delete(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.del(this.prefixKey(key));
+    const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
   }
 
   async exists(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.exists(this.prefixKey(key));
+    const result = await this.getConnectedClient().exists(this.prefixKey(key));
     return result > 0;
   }
 
@@ -183,17 +196,15 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   override async mget(keys: string[]): Promise<(string | null)[]> {
-    this.ensureConnected();
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.mget<string>(...prefixedKeys);
+    return this.getConnectedClient().mget<string>(...prefixedKeys);
   }
 
   override async mdelete(keys: string[]): Promise<number> {
-    this.ensureConnected();
     if (keys.length === 0) return 0;
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.del(...prefixedKeys);
+    return this.getConnectedClient().del(...prefixedKeys);
   }
 
   // ============================================
@@ -201,15 +212,13 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
-    this.ensureConnected();
     validateTTL(ttlSeconds);
-    const result = await this.client!.expire(this.prefixKey(key), ttlSeconds);
+    const result = await this.getConnectedClient().expire(this.prefixKey(key), ttlSeconds);
     return result === 1;
   }
 
   async ttl(key: string): Promise<number | null> {
-    this.ensureConnected();
-    const result = await this.client!.ttl(this.prefixKey(key));
+    const result = await this.getConnectedClient().ttl(this.prefixKey(key));
     // Redis returns -2 if key doesn't exist, -1 if no TTL
     if (result === -2) return null;
     return result;
@@ -219,9 +228,8 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   // Key Enumeration
   // ============================================
 
-  async keys(pattern: string = '*'): Promise<string[]> {
-    this.ensureConnected();
-
+  async keys(pattern = '*'): Promise<string[]> {
+    const client = this.getConnectedClient();
     const prefixedPattern = this.prefixKey(pattern);
 
     try {
@@ -230,7 +238,7 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       let cursor = 0;
 
       do {
-        const [nextCursor, keys] = await this.client!.scan(cursor, {
+        const [nextCursor, keys] = await client.scan(cursor, {
           match: prefixedPattern,
           count: 100,
         });
@@ -244,7 +252,7 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       return result;
     } catch {
       // Fallback to keys command (may be slow)
-      const allKeys = await this.client!.keys(prefixedPattern);
+      const allKeys = await client.keys(prefixedPattern);
       return allKeys.map((k) => this.unprefixKey(k));
     }
   }
@@ -254,18 +262,15 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async incr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incr(this.prefixKey(key));
+    return this.getConnectedClient().incr(this.prefixKey(key));
   }
 
   async decr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.decr(this.prefixKey(key));
+    return this.getConnectedClient().decr(this.prefixKey(key));
   }
 
   async incrBy(key: string, amount: number): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incrby(this.prefixKey(key), amount);
+    return this.getConnectedClient().incrby(this.prefixKey(key), amount);
   }
 
   // ============================================

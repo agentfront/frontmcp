@@ -78,9 +78,14 @@ export function resolveSecretPath(options?: SecretPersistenceOptions): string {
 // Logging
 // ─────────────────────────────────────────────────────────────────────────────
 
+// No-op function for disabled logging
+const noop = () => {
+  /* intentionally empty */
+};
+
 function getLogger(options?: SecretPersistenceOptions) {
   if (options?.enableLogging === false) {
-    return { warn: () => {}, error: () => {} };
+    return { warn: noop, error: noop };
   }
   return options?.logger ?? { warn: console.warn, error: console.error };
 }

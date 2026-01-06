@@ -10,35 +10,23 @@
 import { assertNode } from '../crypto/runtime';
 
 // Lazy-loaded Node.js modules to avoid import errors in browser
-let _fs: typeof import('fs') | null = null;
 let _fsp: typeof import('fs').promises | null = null;
 let _spawn: typeof import('child_process').spawn | null = null;
-
-function getFs(): typeof import('fs') {
-  if (!_fs) {
-    assertNode('File system operations');
-
-    _fs = require('fs');
-  }
-  return _fs!;
-}
 
 function getFsp(): typeof import('fs').promises {
   if (!_fsp) {
     assertNode('File system operations');
-
     _fsp = require('fs').promises;
   }
-  return _fsp!;
+  return _fsp as typeof import('fs').promises;
 }
 
 function getSpawn(): typeof import('child_process').spawn {
   if (!_spawn) {
     assertNode('Child process operations');
-
     _spawn = require('child_process').spawn;
   }
-  return _spawn!;
+  return _spawn as typeof import('child_process').spawn;
 }
 
 // fs.constants.F_OK is always 0 in Node.js - define locally to avoid lazy-load in fileExists

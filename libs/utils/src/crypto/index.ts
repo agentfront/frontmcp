@@ -18,10 +18,8 @@ let _provider: CryptoProvider | null = null;
 export function getCrypto(): CryptoProvider {
   if (!_provider) {
     if (isNode()) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./node').nodeCrypto as CryptoProvider;
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }

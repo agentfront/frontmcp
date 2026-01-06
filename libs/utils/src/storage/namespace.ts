@@ -39,7 +39,7 @@ export function buildPrefix(name: string, id?: string): string {
 export class NamespacedStorageImpl implements NamespacedStorage {
   constructor(
     private readonly adapter: StorageAdapter,
-    public readonly prefix: string = '',
+    public readonly prefix = '',
     public readonly root: StorageAdapter = adapter,
   ) {}
 
@@ -161,14 +161,14 @@ export class NamespacedStorageImpl implements NamespacedStorage {
   // Key Enumeration (with prefixing)
   // ============================================
 
-  async keys(pattern: string = '*'): Promise<string[]> {
+  async keys(pattern = '*'): Promise<string[]> {
     const prefixedPattern = this.prefixPattern(pattern);
     const keys = await this.adapter.keys(prefixedPattern);
     // Remove prefix from returned keys
     return keys.map((k) => this.unprefixKey(k));
   }
 
-  async count(pattern: string = '*'): Promise<number> {
+  async count(pattern = '*'): Promise<number> {
     const prefixedPattern = this.prefixPattern(pattern);
     return this.adapter.count(prefixedPattern);
   }

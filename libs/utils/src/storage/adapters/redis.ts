@@ -7,7 +7,7 @@
 
 import { BaseStorageAdapter } from './base';
 import type { RedisAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
-import { StorageConnectionError, StorageConfigError, StorageOperationError } from '../errors';
+import { StorageConnectionError, StorageConfigError } from '../errors';
 import { validateTTL } from '../utils/ttl';
 
 // Type imports for ioredis (dynamic import at runtime)
@@ -19,7 +19,6 @@ type RedisOptions = import('ioredis').RedisOptions;
  */
 function getRedisClass(): typeof import('ioredis').default {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('ioredis').default || require('ioredis');
   } catch {
     throw new Error('ioredis is required for Redis storage adapter. Install it with: npm install ioredis');
@@ -146,46 +145,68 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 
   // ============================================
+  // Connection Helpers
+  // ============================================
+
+  /**
+   * Get the connected Redis client, throwing if not connected.
+   */
+  private getConnectedClient(): Redis {
+    this.ensureConnected();
+    if (!this.client) {
+      throw new StorageConnectionError('Redis client not connected', undefined, 'redis');
+    }
+    return this.client;
+  }
+
+  /**
+   * Get the connected Redis subscriber, throwing if not created.
+   */
+  private getConnectedSubscriber(): Redis {
+    if (!this.subscriber) {
+      throw new StorageConnectionError('Redis subscriber not created', undefined, 'redis');
+    }
+    return this.subscriber;
+  }
+
+  // ============================================
   // Core Operations
   // ============================================
 
   async get(key: string): Promise<string | null> {
-    this.ensureConnected();
-    return this.client!.get(this.prefixKey(key));
+    return this.getConnectedClient().get(this.prefixKey(key));
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
-    this.ensureConnected();
+    const client = this.getConnectedClient();
     const prefixedKey = this.prefixKey(key);
 
     // Build SET command with proper typing
     // Redis SET: SET key value [EX seconds] [NX|XX]
     if (options?.ttlSeconds) {
       if (options.ifNotExists) {
-        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds, 'NX');
+        await client.set(prefixedKey, value, 'EX', options.ttlSeconds, 'NX');
       } else if (options.ifExists) {
-        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds, 'XX');
+        await client.set(prefixedKey, value, 'EX', options.ttlSeconds, 'XX');
       } else {
-        await this.client!.set(prefixedKey, value, 'EX', options.ttlSeconds);
+        await client.set(prefixedKey, value, 'EX', options.ttlSeconds);
       }
     } else if (options?.ifNotExists) {
-      await this.client!.set(prefixedKey, value, 'NX');
+      await client.set(prefixedKey, value, 'NX');
     } else if (options?.ifExists) {
-      await this.client!.set(prefixedKey, value, 'XX');
+      await client.set(prefixedKey, value, 'XX');
     } else {
-      await this.client!.set(prefixedKey, value);
+      await client.set(prefixedKey, value);
     }
   }
 
   async delete(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.del(this.prefixKey(key));
+    const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
   }
 
   async exists(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.exists(this.prefixKey(key));
+    const result = await this.getConnectedClient().exists(this.prefixKey(key));
     return result > 0;
   }
 
@@ -194,14 +215,12 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   override async mget(keys: string[]): Promise<(string | null)[]> {
-    this.ensureConnected();
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.mget(...prefixedKeys);
+    return this.getConnectedClient().mget(...prefixedKeys);
   }
 
   override async mset(entries: import('../types').SetEntry[]): Promise<void> {
-    this.ensureConnected();
     if (entries.length === 0) return;
 
     // Validate all entries first
@@ -210,7 +229,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     }
 
     // Use pipeline for efficiency
-    const pipeline = this.client!.pipeline();
+    const pipeline = this.getConnectedClient().pipeline();
 
     for (const entry of entries) {
       const prefixedKey = this.prefixKey(entry.key);
@@ -237,10 +256,9 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 
   override async mdelete(keys: string[]): Promise<number> {
-    this.ensureConnected();
     if (keys.length === 0) return 0;
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.del(...prefixedKeys);
+    return this.getConnectedClient().del(...prefixedKeys);
   }
 
   // ============================================
@@ -248,15 +266,13 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
-    this.ensureConnected();
     validateTTL(ttlSeconds);
-    const result = await this.client!.expire(this.prefixKey(key), ttlSeconds);
+    const result = await this.getConnectedClient().expire(this.prefixKey(key), ttlSeconds);
     return result === 1;
   }
 
   async ttl(key: string): Promise<number | null> {
-    this.ensureConnected();
-    const result = await this.client!.ttl(this.prefixKey(key));
+    const result = await this.getConnectedClient().ttl(this.prefixKey(key));
     // Redis returns -2 if key doesn't exist, -1 if no TTL
     if (result === -2) return null;
     return result;
@@ -266,15 +282,14 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // Key Enumeration (SCAN)
   // ============================================
 
-  async keys(pattern: string = '*'): Promise<string[]> {
-    this.ensureConnected();
-
+  async keys(pattern = '*'): Promise<string[]> {
+    const client = this.getConnectedClient();
     const prefixedPattern = this.prefixKey(pattern);
     const result: string[] = [];
     let cursor = '0';
 
     do {
-      const [nextCursor, keys] = await this.client!.scan(cursor, 'MATCH', prefixedPattern, 'COUNT', 100);
+      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', prefixedPattern, 'COUNT', 100);
       cursor = nextCursor;
 
       // Remove prefix from keys
@@ -291,18 +306,15 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async incr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incr(this.prefixKey(key));
+    return this.getConnectedClient().incr(this.prefixKey(key));
   }
 
   async decr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.decr(this.prefixKey(key));
+    return this.getConnectedClient().decr(this.prefixKey(key));
   }
 
   async incrBy(key: string, amount: number): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incrby(this.prefixKey(key), amount);
+    return this.getConnectedClient().incrby(this.prefixKey(key), amount);
   }
 
   // ============================================
@@ -314,9 +326,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 
   override async publish(channel: string, message: string): Promise<number> {
-    this.ensureConnected();
     const prefixedChannel = this.prefixKey(channel);
-    return this.client!.publish(prefixedChannel, message);
+    return this.getConnectedClient().publish(prefixedChannel, message);
   }
 
   override async subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe> {
@@ -328,12 +339,17 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       await this.createSubscriber();
     }
 
+    const subscriber = this.getConnectedSubscriber();
+
     // Track handlers
     if (!this.subscriptionHandlers.has(prefixedChannel)) {
       this.subscriptionHandlers.set(prefixedChannel, new Set());
-      await this.subscriber!.subscribe(prefixedChannel);
+      await subscriber.subscribe(prefixedChannel);
     }
-    this.subscriptionHandlers.get(prefixedChannel)!.add(handler);
+    const handlers = this.subscriptionHandlers.get(prefixedChannel);
+    if (handlers) {
+      handlers.add(handler);
+    }
 
     // Return unsubscribe function
     return async () => {
@@ -363,7 +379,10 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       };
     }
 
-    const config = this.options.config!;
+    const config = this.options.config;
+    if (!config) {
+      throw new StorageConfigError('redis', 'Redis config is required when URL is not provided');
+    }
     return {
       host: config.host,
       port: config.port ?? 6379,
@@ -380,18 +399,21 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
    */
   private async createSubscriber(): Promise<void> {
     const RedisClass = getRedisClass();
+    let subscriber: Redis;
 
     if (this.options.url) {
-      this.subscriber = new RedisClass(this.options.url);
+      subscriber = new RedisClass(this.options.url);
     } else if (this.options.config) {
-      this.subscriber = new RedisClass(this.buildRedisOptions());
+      subscriber = new RedisClass(this.buildRedisOptions());
     } else if (this.options.client) {
       // Duplicate the client for subscriber
-      this.subscriber = (this.options.client as Redis).duplicate();
+      subscriber = (this.options.client as Redis).duplicate();
+    } else {
+      throw new StorageConfigError('redis', 'Cannot create subscriber without url, config, or client');
     }
 
-    // Set up message handler
-    this.subscriber!.on('message', (channel: string, message: string) => {
+    // Set up message handler before assigning to instance
+    subscriber.on('message', (channel: string, message: string) => {
       const handlers = this.subscriptionHandlers.get(channel);
       if (handlers) {
         const unprefixedChannel = this.unprefixKey(channel);
@@ -404,6 +426,8 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
         }
       }
     });
+
+    this.subscriber = subscriber;
   }
 
   /**

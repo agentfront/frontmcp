@@ -130,7 +130,8 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
     // Handle conditional flags
-    const exists = this.store.has(key) && !isExpired(this.store.get(key)!.expiresAt);
+    const existingEntry = this.store.get(key);
+    const exists = existingEntry !== undefined && !isExpired(existingEntry.expiresAt);
 
     if (options?.ifNotExists && exists) {
       return; // NX: Don't set if exists
@@ -248,7 +249,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
   // Key Enumeration
   // ============================================
 
-  async keys(pattern: string = '*'): Promise<string[]> {
+  async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
 
     const regex = globToRegex(pattern);

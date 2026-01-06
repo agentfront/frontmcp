@@ -34,7 +34,6 @@ type UpstashRedis = {
  */
 function getUpstashRedis(): { Redis: new (config: { url: string; token: string }) => UpstashRedis } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@upstash/redis');
   } catch {
     throw new Error(
@@ -115,10 +114,12 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
 
     try {
       const { Redis } = getUpstashRedis();
-      this.client = new Redis({
-        url: this.options.url!,
-        token: this.options.token!,
-      });
+      const url = this.options.url;
+      const token = this.options.token;
+      if (!url || !token) {
+        throw new StorageConfigError('upstash', 'URL and token are required');
+      }
+      this.client = new Redis({ url, token });
 
       // Test connection
       await this.client.exists('__healthcheck__');
@@ -157,17 +158,31 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   }
 
   // ============================================
+  // Connection Helpers
+  // ============================================
+
+  /**
+   * Get the connected Upstash client, throwing if not connected.
+   */
+  private getConnectedClient(): UpstashRedis {
+    this.ensureConnected();
+    if (!this.client) {
+      throw new StorageConnectionError('Upstash client not connected', undefined, 'upstash');
+    }
+    return this.client;
+  }
+
+  // ============================================
   // Core Operations
   // ============================================
 
   async get(key: string): Promise<string | null> {
-    this.ensureConnected();
-    const result = await this.client!.get<string>(this.prefixKey(key));
+    const result = await this.getConnectedClient().get<string>(this.prefixKey(key));
     return result;
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
-    this.ensureConnected();
+    const client = this.getConnectedClient();
     const prefixedKey = this.prefixKey(key);
     const setOptions: { ex?: number; nx?: boolean; xx?: boolean } = {};
 
@@ -180,18 +195,16 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       setOptions.xx = true;
     }
 
-    await this.client!.set(prefixedKey, value, Object.keys(setOptions).length > 0 ? setOptions : undefined);
+    await client.set(prefixedKey, value, Object.keys(setOptions).length > 0 ? setOptions : undefined);
   }
 
   async delete(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.del(this.prefixKey(key));
+    const result = await this.getConnectedClient().del(this.prefixKey(key));
     return result > 0;
   }
 
   async exists(key: string): Promise<boolean> {
-    this.ensureConnected();
-    const result = await this.client!.exists(this.prefixKey(key));
+    const result = await this.getConnectedClient().exists(this.prefixKey(key));
     return result > 0;
   }
 
@@ -200,17 +213,15 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   override async mget(keys: string[]): Promise<(string | null)[]> {
-    this.ensureConnected();
     if (keys.length === 0) return [];
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.mget<string>(...prefixedKeys);
+    return this.getConnectedClient().mget<string>(...prefixedKeys);
   }
 
   override async mdelete(keys: string[]): Promise<number> {
-    this.ensureConnected();
     if (keys.length === 0) return 0;
     const prefixedKeys = keys.map((k) => this.prefixKey(k));
-    return this.client!.del(...prefixedKeys);
+    return this.getConnectedClient().del(...prefixedKeys);
   }
 
   // ============================================
@@ -218,15 +229,13 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
-    this.ensureConnected();
     validateTTL(ttlSeconds);
-    const result = await this.client!.expire(this.prefixKey(key), ttlSeconds);
+    const result = await this.getConnectedClient().expire(this.prefixKey(key), ttlSeconds);
     return result === 1;
   }
 
   async ttl(key: string): Promise<number | null> {
-    this.ensureConnected();
-    const result = await this.client!.ttl(this.prefixKey(key));
+    const result = await this.getConnectedClient().ttl(this.prefixKey(key));
     if (result === -2) return null;
     return result;
   }
@@ -235,15 +244,14 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   // Key Enumeration
   // ============================================
 
-  async keys(pattern: string = '*'): Promise<string[]> {
-    this.ensureConnected();
-
+  async keys(pattern = '*'): Promise<string[]> {
+    const client = this.getConnectedClient();
     const prefixedPattern = this.prefixKey(pattern);
     const result: string[] = [];
     let cursor = 0;
 
     do {
-      const [nextCursor, keys] = await this.client!.scan(cursor, {
+      const [nextCursor, keys] = await client.scan(cursor, {
         match: prefixedPattern,
         count: 100,
       });
@@ -263,18 +271,15 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   // ============================================
 
   async incr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incr(this.prefixKey(key));
+    return this.getConnectedClient().incr(this.prefixKey(key));
   }
 
   async decr(key: string): Promise<number> {
-    this.ensureConnected();
-    return this.client!.decr(this.prefixKey(key));
+    return this.getConnectedClient().decr(this.prefixKey(key));
   }
 
   async incrBy(key: string, amount: number): Promise<number> {
-    this.ensureConnected();
-    return this.client!.incrby(this.prefixKey(key), amount);
+    return this.getConnectedClient().incrby(this.prefixKey(key), amount);
   }
 
   // ============================================
@@ -286,8 +291,6 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
   }
 
   override async publish(channel: string, message: string): Promise<number> {
-    this.ensureConnected();
-
     if (!this.pubSubEnabled) {
       return super.publish(channel, message); // Throws not supported error
     }
@@ -296,12 +299,12 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
     // Native PUBLISH won't work because subscribe() polls a queue, not native pub/sub
     const prefixedChannel = this.prefixKey(`__pubsub__:${channel}`);
     const listKey = `${prefixedChannel}:queue`;
-    await this.client!.lpush(listKey, message);
+    await this.getConnectedClient().lpush(listKey, message);
     return 1; // Return 1 to indicate message was published
   }
 
   override async subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe> {
-    this.ensureConnected();
+    const client = this.getConnectedClient();
 
     if (!this.pubSubEnabled) {
       return super.subscribe(channel, handler); // Throws not supported error
@@ -320,7 +323,7 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       const interval = setInterval(async () => {
         try {
           // Pop messages from the list
-          const message = await this.client!.rpop(listKey);
+          const message = await client.rpop(listKey);
           if (message) {
             const handlers = this.subscriptionHandlers.get(prefixedChannel);
             if (handlers) {
@@ -346,7 +349,10 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       this.pollingIntervals.set(prefixedChannel, interval);
     }
 
-    this.subscriptionHandlers.get(prefixedChannel)!.add(handler);
+    const handlers = this.subscriptionHandlers.get(prefixedChannel);
+    if (handlers) {
+      handlers.add(handler);
+    }
 
     // Return unsubscribe function
     return async () => {
@@ -370,11 +376,9 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
    * This is an alternative to native PUBLISH when subscribers are polling.
    */
   async publishToQueue(channel: string, message: string): Promise<void> {
-    this.ensureConnected();
-
     const prefixedChannel = this.prefixKey(`__pubsub__:${channel}`);
     const listKey = `${prefixedChannel}:queue`;
-    await this.client!.lpush(listKey, message);
+    await this.getConnectedClient().lpush(listKey, message);
   }
 
   protected override getPubSubSuggestion(): string {
