@@ -116,7 +116,8 @@ export class ResourceInstance<
    */
   override create(uri: string, params: Params, ctx: ResourceReadExtra): ResourceContext<Params, Out> {
     const metadata = this.metadata;
-    const providers = this.providers;
+    // Use context-aware providers from flow if available
+    const providers = ctx.contextProviders ?? this.providers;
     const scope = this.providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;

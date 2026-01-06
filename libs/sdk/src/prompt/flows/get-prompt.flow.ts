@@ -11,6 +11,7 @@ import {
   InvalidOutputError,
   PromptExecutionError,
 } from '../../errors';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
   request: GetPromptRequestSchema,
@@ -131,13 +132,31 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.logger.verbose('createPromptContext:start');
     const { ctx } = this.input;
     const { prompt, input } = this.state.required;
+    // authInfo is optional - access separately to avoid "required" throwing
+    const authInfo = this.state.authInfo;
 
     try {
       // Parse and validate arguments, cache for reuse in execute stage
       const parsedArgs = prompt.parseArguments(input.arguments);
       this.state.set('parsedArgs', parsedArgs);
 
-      const context = prompt.create(parsedArgs, ctx);
+      // Build context-scoped providers from the prompt's provider registry (app-level).
+      // This ensures CONTEXT-scoped providers registered at the app level are available.
+      const sessionKey = authInfo?.sessionId ?? 'anonymous';
+      const promptViews = await prompt.providers.buildViews(sessionKey, new Map(this.deps));
+
+      // Merge prompt's context providers with flow's context deps
+      const mergedContextDeps = new Map(this.deps);
+      for (const [token, instance] of promptViews.context) {
+        if (!mergedContextDeps.has(token)) {
+          mergedContextDeps.set(token, instance);
+        }
+      }
+
+      // Create context-aware providers that include scoped providers from both
+      // the scope (via flow deps) and the prompt's app (via promptViews).
+      const contextProviders = new FlowContextProviders(prompt.providers, mergedContextDeps);
+      const context = prompt.create(parsedArgs, { ...ctx, contextProviders });
       const promptHooks = this.scope.hooks.getClsHooks(prompt.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();

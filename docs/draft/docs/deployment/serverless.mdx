@@ -285,6 +285,74 @@ main = "dist/index.js"
 compatibility_date = "2024-01-01"
 ```
 
+## Storage Considerations
+
+Serverless environments require distributed storage since each invocation may run on a different instance.
+
+### Recommended Storage by Platform
+
+| Platform   | Recommended Storage                 | Notes                          |
+| ---------- | ----------------------------------- | ------------------------------ |
+| Vercel     | Vercel KV or Upstash                | Edge-compatible REST APIs      |
+| AWS Lambda | ElastiCache Redis or Upstash        | VPC-accessible                 |
+| Cloudflare | Cloudflare KV or Upstash            | Workers KV for simple cases    |
+
+### Storage Configuration
+
+<Tabs>
+  <Tab title="Vercel KV">
+    ```typescript
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        provider: 'vercel-kv',
+        // Uses KV_REST_API_URL and KV_REST_API_TOKEN from env
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Upstash">
+    ```typescript
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        provider: 'upstash',
+        // Uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from env
+      },
+    })
+    ```
+  </Tab>
+  <Tab title="Redis">
+    ```typescript
+    @FrontMcp({
+      info: { name: 'My Server', version: '1.0.0' },
+      redis: {
+        host: process.env.REDIS_HOST,
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### Plugin Storage
+
+Plugins like RememberPlugin and CachePlugin can use `type: 'global-store'` to automatically use the FrontMcp-level storage configuration:
+
+```typescript
+RememberPlugin.init({
+  type: 'global-store', // Uses redis config from @FrontMcp
+  defaultTTL: 3600,
+});
+```
+
+<Warning>
+**In-memory storage** does not work reliably in serverless environments. Each invocation may create a new instance with empty memory. Always use a distributed storage backend.
+</Warning>
+
+---
+
 ## How Serverless Mode Works
 
 ### Architecture

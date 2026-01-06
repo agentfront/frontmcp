@@ -11,6 +11,7 @@
     "docs:live": "cd docs/live && mint dev --port 4100",
     "docs:draft": "cd docs/draft && mint dev --port 4200",
     "prepare": "husky",
+    "test": "yarn test:unit && yarn test:e2e",
     "test:unit": "nx run-many -t test --exclude='demo-e2e-*'",
     "test:unit:coverage": "nx run-many -t test --exclude='demo-e2e-*' --coverage",
     "test:e2e": "nx run-many -t test --projects='demo-e2e-*'",
@@ -31,7 +32,7 @@
     "@noble/hashes": "^2.0.1",
     "@rspack/core": "^1.3.12",
     "axios": "^1.6.0",
-    "enclave-vm": "^2.0.0",
+    "enclave-vm": "^2.2.0",
     "esbuild": "^0.27.1",
     "handlebars": "^4.7.8",
     "ioredis": "^5.8.0",
@@ -102,7 +103,8 @@
   },
   "workspaces": [
     "apps/*",
-    "libs/*"
+    "libs/*",
+    "plugins/*"
   ],
   "nx": {
     "includedScripts": []

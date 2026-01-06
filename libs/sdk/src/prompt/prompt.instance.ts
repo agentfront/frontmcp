@@ -21,17 +21,17 @@ import { buildParsedPromptResult } from './prompt.utils';
 import { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
 export class PromptInstance extends PromptEntry {
-  private readonly providers: ProviderRegistry;
+  private readonly _providers: ProviderRegistry;
   readonly scope: Scope;
   readonly hooks: HookRegistry;
 
   constructor(record: PromptRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
-    this.providers = providers;
+    this._providers = providers;
     this.name = record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
-    this.scope = this.providers.getActiveScope();
+    this.scope = this._providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
     this.ready = this.initialize();
@@ -52,12 +52,21 @@ export class PromptInstance extends PromptEntry {
   }
 
   /**
+   * Get the provider registry for this prompt.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  get providers(): ProviderRegistry {
+    return this._providers;
+  }
+
+  /**
    * Create a prompt context (class or function wrapper).
    */
   override create(args: Record<string, string>, ctx: PromptGetExtra): PromptContext {
     const metadata = this.metadata;
-    const providers = this.providers;
-    const scope = this.providers.getActiveScope();
+    // Use context-aware providers from flow if available
+    const providers = ctx.contextProviders ?? this._providers;
+    const scope = this._providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
 

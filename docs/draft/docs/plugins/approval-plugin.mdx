@@ -1,0 +1,633 @@
+---
+title: Approval Plugin
+description: Tool authorization workflow with PKCE webhook security for secure AI agent interactions.
+icon: shield-check
+---
+
+The Approval Plugin provides Claude Code-style permission management for FrontMCP servers, enabling fine-grained tool authorization with PKCE webhook security.
+
+## Why Use Approval?
+
+<CardGroup cols={2}>
+  <Card title="Tool Permissions" icon="shield-check">
+    Claude Code-style approval system for sensitive tool execution
+  </Card>
+  <Card title="Multiple Scopes" icon="folder-tree">
+    Session, user, time-limited, and context-specific approvals
+  </Card>
+
+  <Card title="PKCE Security" icon="lock">
+    RFC 7636 PKCE webhooks for secure external approval systems
+  </Card>
+
+  <Card title="Audit Trail" icon="clipboard-list">
+    Full audit log with grantor/revoker tracking
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-approval
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Tool Configuration">
+    Mark tools requiring approval with `approval: { required: true }` in metadata
+  </Step>
+  <Step title="Approval Check Hook">
+    Before tool execution, the plugin checks if approval exists
+  </Step>
+
+  <Step title="Approval Request">
+    If not approved, throws `ApprovalRequiredError` for client handling
+  </Step>
+
+  <Step title="Grant/Revoke">
+    Approvals are granted via `this.approval` methods or external webhooks
+  </Step>
+</Steps>
+
+---
+
+## Quick Start
+
+### Basic Setup
+
+```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [ApprovalPlugin.init()], // Uses memory store by default
+  tools: [
+    /* your tools */
+  ],
+})
+class MyApp {}
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class Server {}
+```
+
+### Require Approval on Tools
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'file_write',
+  description: 'Write to file system',
+  inputSchema: { path: z.string(), content: z.string() },
+  approval: {
+    required: true,
+    defaultScope: 'session',
+    category: 'write',
+    riskLevel: 'medium',
+    approvalMessage: 'Allow writing to file system for this session?',
+  },
+})
+export default class FileWriteTool extends ToolContext {
+  async execute(input: { path: string; content: string }) {
+    // Tool only executes if approved
+    return await this.writeFile(input.path, input.content);
+  }
+}
+```
+
+### Using the Approval Service
+
+The plugin extends all execution contexts with `this.approval`:
+
+```ts
+@Tool({ name: 'dangerous_tool' })
+class DangerousTool extends ToolContext {
+  async execute(input) {
+    // Check if approved
+    const isApproved = await this.approval.isApproved('dangerous_tool');
+
+    if (!isApproved) {
+      // Request approval from client
+      return { needsApproval: true, message: 'Please approve this action' };
+    }
+
+    // Proceed with dangerous operation
+    return await this.performDangerousAction(input);
+  }
+}
+```
+
+---
+
+## Approval Scopes
+
+| Scope              | Description                              | Use Case                      |
+| ------------------ | ---------------------------------------- | ----------------------------- |
+| `session`          | Valid only for current session           | Default, most restrictive     |
+| `user`             | Persists across sessions for user        | Trusted tools                 |
+| `time_limited`     | Expires after specified TTL              | Temporary elevated access     |
+| `tool_specific`    | Tied to specific tool instance           | Fine-grained control          |
+| `context_specific` | Tied to context (e.g., specific repo)    | Context-aware approvals       |
+
+---
+
+## Plugin Options
+
+### Basic Configuration
+
+```ts
+ApprovalPlugin.init({
+  // Storage configuration
+  storage: { type: 'auto' }, // 'auto', 'memory', 'redis', 'vercel-kv'
+
+  // Namespace for approval keys
+  namespace: 'approval', // default
+
+  // Approval workflow mode
+  mode: 'recheck', // or 'webhook'
+
+  // Enable audit logging
+  enableAudit: true, // default
+
+  // Maximum delegation depth
+  maxDelegationDepth: 3, // default
+
+  // Cleanup interval for expired approvals
+  cleanupIntervalSeconds: 60, // default
+});
+```
+
+### Recheck Mode (Default)
+
+In recheck mode, the plugin polls an external API for approval status:
+
+```ts
+ApprovalPlugin.init({
+  mode: 'recheck',
+  recheck: {
+    url: 'https://api.example.com/approval/status',
+    auth: 'jwt', // 'jwt', 'bearer', 'none', 'custom'
+    interval: 5000, // ms between checks
+    maxAttempts: 10,
+  },
+});
+```
+
+### Webhook Mode with PKCE
+
+For secure external approval systems using PKCE (RFC 7636):
+
+```ts
+ApprovalPlugin.init({
+  mode: 'webhook',
+  webhook: {
+    url: 'https://approval.example.com/webhook',
+    includeJwt: false, // Security: don't expose JWT by default
+    challengeTtl: 300, // 5 minutes
+    callbackPath: '/approval/callback',
+  },
+});
+```
+
+---
+
+## Tool Approval Options
+
+<ParamField path="approval.required" type="boolean" default="true">
+  Whether this tool requires approval before execution
+</ParamField>
+
+<ParamField path="approval.defaultScope" type="ApprovalScope" default="'session'">
+  Default scope for approvals: `session`, `user`, `time_limited`, `tool_specific`, `context_specific`
+</ParamField>
+
+<ParamField path="approval.allowedScopes" type="ApprovalScope[]">
+  Restrict which scopes are allowed for this tool
+</ParamField>
+
+<ParamField path="approval.maxTtlMs" type="number">
+  Maximum TTL for time-limited approvals (milliseconds)
+</ParamField>
+
+<ParamField path="approval.category" type="string">
+  Category for grouping: `read`, `write`, `delete`, `execute`, `admin`
+</ParamField>
+
+<ParamField path="approval.riskLevel" type="string">
+  Risk level hint: `low`, `medium`, `high`, `critical`
+</ParamField>
+
+<ParamField path="approval.approvalMessage" type="string">
+  Message shown to user when prompting for approval
+</ParamField>
+
+<ParamField path="approval.alwaysPrompt" type="boolean" default="false">
+  Prompt every time, even if previously approved (for highly sensitive operations)
+</ParamField>
+
+<ParamField path="approval.skipApproval" type="boolean" default="false">
+  Skip approval entirely (for safe, read-only operations)
+</ParamField>
+
+<ParamField path="approval.preApprovedContexts" type="ApprovalContext[]">
+  Contexts that are pre-approved (bypass approval check)
+</ParamField>
+
+---
+
+## API Reference
+
+### ApprovalService Methods
+
+<ParamField path="isApproved(toolId)" type="Promise<boolean>">
+  Check if a tool is approved for execution
+
+```ts
+const approved = await this.approval.isApproved('file_write');
+```
+
+</ParamField>
+
+<ParamField path="grantSessionApproval(toolId, options?)" type="Promise<void>">
+  Grant session-scoped approval
+
+```ts
+await this.approval.grantSessionApproval('file_write', {
+  reason: 'User clicked Allow button',
+});
+```
+
+</ParamField>
+
+<ParamField path="grantUserApproval(toolId, options?)" type="Promise<void>">
+  Grant user-scoped approval (persists across sessions)
+
+```ts
+await this.approval.grantUserApproval('api_access', {
+  reason: 'Admin pre-approved',
+});
+```
+
+</ParamField>
+
+<ParamField path="grantTimeLimitedApproval(toolId, ttlMs, options?)" type="Promise<void>">
+  Grant time-limited approval
+
+```ts
+await this.approval.grantTimeLimitedApproval('elevated_access', 3600000, {
+  reason: 'Temporary elevated access for 1 hour',
+});
+```
+
+</ParamField>
+
+<ParamField path="revokeApproval(toolId, options?)" type="Promise<void>">
+  Revoke an existing approval
+
+```ts
+await this.approval.revokeApproval('file_write', {
+  reason: 'User clicked Revoke',
+});
+```
+
+</ParamField>
+
+<ParamField path="getApproval(toolId)" type="Promise<ApprovalRecord | undefined>">
+  Get the current approval record for a tool
+
+```ts
+const record = await this.approval.getApproval('file_write');
+if (record) {
+  console.log('Approved at:', record.grantedAt);
+  console.log('Granted by:', record.grantedBy);
+}
+```
+
+</ParamField>
+
+---
+
+## Approval Audit Trail
+
+Every approval records who granted it and how:
+
+```ts
+interface ApprovalRecord {
+  toolId: string;
+  state: 'pending' | 'approved' | 'denied' | 'expired';
+  scope: ApprovalScope;
+  grantedAt: number;
+  grantedBy: {
+    source: 'user' | 'policy' | 'admin' | 'system' | 'agent' | 'api' | 'oauth';
+    identifier?: string;
+    displayName?: string;
+    method?: 'interactive' | 'implicit' | 'delegation' | 'batch' | 'api';
+    delegatedFrom?: DelegationContext;
+  };
+  reason?: string;
+  expiresAt?: number;
+  revokedAt?: number;
+  revokedBy?: ApprovalRevoker;
+}
+```
+
+### Grantor Factory Functions
+
+Create typed grantors for audit trails:
+
+```ts
+import { userGrantor, adminGrantor, policyGrantor, systemGrantor } from '@frontmcp/plugin-approval';
+
+// User-initiated approval
+await this.approval.grantSessionApproval('tool', {
+  grantedBy: userGrantor('user-123', 'John Doe', 'interactive'),
+});
+
+// Admin approval
+await this.approval.grantUserApproval('tool', {
+  grantedBy: adminGrantor('admin-456', 'Admin User'),
+});
+
+// Policy-based auto-approval
+await this.approval.grantSessionApproval('tool', {
+  grantedBy: policyGrantor('policy:read-only-safe'),
+});
+
+// System auto-approval
+await this.approval.grantSessionApproval('tool', {
+  grantedBy: systemGrantor('initialization'),
+});
+```
+
+---
+
+## PKCE Webhook Flow
+
+For external approval systems, the plugin implements RFC 7636 PKCE:
+
+```
+1. Generate PKCE pair: code_verifier (64 chars) + code_challenge = SHA256(verifier)
+2. Store challenge: challenge:{code_challenge} → {toolId, sessionId, scope, expiresAt}
+3. Send to webhook: {code_challenge, toolId, requestInfo, callbackUrl} (NO sessionId!)
+4. External system calls back: POST /approval/callback {code_verifier, approved}
+5. Plugin validates: SHA256(code_verifier) === stored code_challenge
+6. Grant approval if valid
+```
+
+### Webhook Request
+
+The plugin sends to your webhook URL:
+
+```json
+{
+  "code_challenge": "sha256-hash-of-verifier",
+  "toolId": "file_write",
+  "requestInfo": {
+    "toolName": "file_write",
+    "category": "write",
+    "riskLevel": "medium",
+    "customMessage": "Allow writing to file system?"
+  },
+  "callbackUrl": "https://your-server.com/approval/callback"
+}
+```
+
+### Callback Response
+
+Your approval system responds to the callback URL:
+
+```json
+{
+  "code_verifier": "original-verifier-string",
+  "approved": true,
+  "scope": "session",
+  "ttlMs": 3600000,
+  "grantedBy": {
+    "source": "user",
+    "identifier": "user-123",
+    "displayName": "John Doe"
+  }
+}
+```
+
+<Warning>
+The `sessionId` is **never** sent to external webhooks. PKCE ensures only the original requester can complete the approval flow.
+</Warning>
+
+---
+
+## Storage Options
+
+### Auto-Detect (Default)
+
+```ts
+ApprovalPlugin.init({
+  storage: { type: 'auto' }, // Uses Redis if available, else memory
+});
+```
+
+### Memory Storage
+
+```ts
+ApprovalPlugin.init({
+  storage: { type: 'memory' },
+});
+```
+
+<Warning>Memory storage resets when the process restarts.</Warning>
+
+### Redis Storage
+
+```ts
+ApprovalPlugin.init({
+  storage: {
+    type: 'redis',
+    config: {
+      host: 'localhost',
+      port: 6379,
+      password: process.env.REDIS_PASSWORD,
+    },
+  },
+});
+```
+
+### Use Existing Storage Instance
+
+```ts
+import { createStorage } from '@frontmcp/utils';
+
+const storage = await createStorage({ type: 'redis', ... });
+
+ApprovalPlugin.init({
+  storageInstance: storage,
+});
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="1. Use Appropriate Scopes">
+    - **Session**: Default, most restrictive - good for sensitive operations
+    - **User**: For tools the user has explicitly trusted
+    - **Time-limited**: For temporary elevated access
+    - **Context-specific**: For repository/project-specific permissions
+  </Accordion>
+
+  <Accordion title="2. Configure Risk Levels">
+    Mark tools with appropriate risk levels to help users make informed decisions:
+    ```ts
+    approval: {
+      required: true,
+      riskLevel: 'critical', // For destructive operations
+      category: 'delete',
+      alwaysPrompt: true, // Always ask for critical operations
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="3. Use PKCE for External Approvals">
+    When integrating with external approval systems, always use webhook mode with PKCE to prevent session hijacking.
+  </Accordion>
+
+  <Accordion title="4. Track Audit Trails">
+    Always provide meaningful `reason` and `grantedBy` information for compliance and debugging:
+    ```ts
+    await this.approval.grantSessionApproval('tool', {
+      grantedBy: userGrantor(userId, userName, 'interactive'),
+      reason: 'User approved via UI dialog',
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { ApprovalPlugin, userGrantor } from '@frontmcp/plugin-approval';
+import { z } from 'zod';
+
+// Configure approval plugin with webhook mode
+const approvalPlugin = ApprovalPlugin.init({
+  mode: 'webhook',
+  webhook: {
+    url: 'https://approval.example.com/webhook',
+    challengeTtl: 300,
+  },
+  storage: {
+    type: 'redis',
+    config: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+    },
+  },
+});
+
+// Tool requiring approval
+@Tool({
+  name: 'delete-account',
+  description: 'Permanently delete user account',
+  inputSchema: { confirm: z.boolean() },
+  approval: {
+    required: true,
+    riskLevel: 'critical',
+    category: 'delete',
+    approvalMessage: 'This will permanently delete your account. Are you sure?',
+    alwaysPrompt: true,
+  },
+})
+class DeleteAccountTool extends ToolContext {
+  async execute(input: { confirm: boolean }) {
+    if (!input.confirm) {
+      return { success: false, message: 'Deletion not confirmed' };
+    }
+
+    // Perform account deletion
+    await this.deleteAccount();
+
+    return { success: true, message: 'Account deleted' };
+  }
+}
+
+// Tool for granting approvals (admin only)
+@Tool({
+  name: 'grant-tool-access',
+  description: 'Grant access to a tool for a user',
+  inputSchema: {
+    toolId: z.string(),
+    scope: z.enum(['session', 'user']),
+  },
+})
+class GrantToolAccessTool extends ToolContext {
+  async execute(input: { toolId: string; scope: 'session' | 'user' }) {
+    const userId = this.context.authInfo?.extra?.['userId'] as string;
+
+    if (input.scope === 'session') {
+      await this.approval.grantSessionApproval(input.toolId, {
+        grantedBy: userGrantor(userId, 'Admin', 'interactive'),
+        reason: 'Admin granted access',
+      });
+    } else {
+      await this.approval.grantUserApproval(input.toolId, {
+        grantedBy: userGrantor(userId, 'Admin', 'interactive'),
+        reason: 'Admin granted persistent access',
+      });
+    }
+
+    return { success: true, message: `Access granted for ${input.toolId}` };
+  }
+}
+
+@App({
+  id: 'secure-app',
+  name: 'Secure App',
+  plugins: [approvalPlugin],
+  tools: [DeleteAccountTool, GrantToolAccessTool],
+})
+class SecureApp {}
+
+@FrontMcp({
+  info: { name: 'Secure Server', version: '1.0.0' },
+  apps: [SecureApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+---
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Source Code"
+    icon="github"
+    href="https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-approval"
+  >
+    View the approval plugin source code
+  </Card>
+
+  <Card title="Remember Plugin" icon="brain" href="/docs/plugins/remember-plugin">
+    For session memory storage
+  </Card>
+
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/extensibility/plugins">
+    Learn more about FrontMCP plugins
+  </Card>
+
+  <Card title="PKCE RFC 7636" icon="book" href="https://oauth.net/2/pkce/">
+    PKCE specification
+  </Card>
+</CardGroup>

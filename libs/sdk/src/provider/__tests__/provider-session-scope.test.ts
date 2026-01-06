@@ -121,9 +121,13 @@ describe('ProviderRegistry - Context Scope', () => {
       await registry.buildViews('session-1');
       expect(callCount.count).toBe(1);
 
-      // Second call for same session should also build (no caching)
+      // Second call for same session should return cached instance (no rebuild)
       await registry.buildViews('session-1');
-      expect(callCount.count).toBe(2);
+      expect(callCount.count).toBe(1); // Still 1, cached
+
+      // Different session should build a new instance
+      await registry.buildViews('session-2');
+      expect(callCount.count).toBe(2); // Now 2 for different session
     });
 
     it('should normalize SESSION scope to CONTEXT (deprecated scope)', async () => {
@@ -200,14 +204,22 @@ describe('ProviderRegistry - Context Scope', () => {
       ]);
       await registry.ready;
 
+      // Same session - should share instances (CONTEXT = per-session)
       const views1 = await registry.buildViews('session-1');
-      const views2 = await registry.buildViews('session-1'); // Same session, but fresh context
+      const views2 = await registry.buildViews('session-1');
 
       const service1 = views1.context.get(ContextStateService) as ContextStateService;
       const service2 = views2.context.get(ContextStateService) as ContextStateService;
 
-      // Each call should have its own instance (fresh per request)
-      expect(service1).not.toBe(service2);
+      // Same session = same instance (CONTEXT providers persist within session)
+      expect(service1).toBe(service2);
+
+      // Different session - should have separate instances
+      const views3 = await registry.buildViews('session-2');
+      const service3 = views3.context.get(ContextStateService) as ContextStateService;
+
+      // Different session = different instance
+      expect(service1).not.toBe(service3);
     });
 
     it('should share GLOBAL providers across all contexts', async () => {
@@ -435,7 +447,7 @@ describe('ProviderRegistry - Context Scope', () => {
       expect(cleaned).toBe(0);
     });
 
-    it('getSessionCacheStats should return zero size', async () => {
+    it('getSessionCacheStats should track cached sessions', async () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
@@ -444,10 +456,15 @@ describe('ProviderRegistry - Context Scope', () => {
 
       const stats = registry.getSessionCacheStats();
 
-      // No sessions are cached with unified context model
-      expect(stats.size).toBe(0);
+      // Sessions are cached for per-session CONTEXT provider instances
+      expect(stats.size).toBe(2);
       expect(stats.maxSize).toBe(10000);
       expect(stats.ttlMs).toBe(3600000);
+
+      // Cleanup sessions
+      registry.cleanupSession('session-1');
+      registry.cleanupSession('session-2');
+      expect(registry.getSessionCacheStats().size).toBe(0);
     });
   });
 

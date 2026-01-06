@@ -9,9 +9,9 @@
  */
 
 import { createHash } from 'crypto';
-import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
+import { readFile, readFileBuffer } from '@frontmcp/utils';
 
 import type { FileBundleOptions, CDNDependency } from '../../dependency/types';
 
@@ -47,7 +47,7 @@ export function sha256Buffer(buffer: Buffer): string {
  */
 export async function hashFile(filePath: string): Promise<string | undefined> {
   try {
-    const content = await readFile(filePath);
+    const content = await readFileBuffer(filePath);
     return sha256Buffer(content);
   } catch {
     return undefined;
@@ -270,7 +270,7 @@ async function collectLocalDependencies(
   collected.add(filePath);
 
   try {
-    const content = await readFile(filePath, 'utf8');
+    const content = await readFile(filePath);
     const imports = extractImportPaths(content);
 
     for (const importPath of imports) {

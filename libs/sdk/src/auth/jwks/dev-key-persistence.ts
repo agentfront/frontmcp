@@ -1,9 +1,9 @@
 // auth/jwks/dev-key-persistence.ts
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { JSONWebKeySet } from 'jose';
 import { z } from 'zod';
+import { readFile, mkdir, writeFile, rename, unlink } from '@frontmcp/utils';
 
 /**
  * Data structure for persisted development keys
@@ -186,7 +186,7 @@ export async function loadDevKey(options?: DevKeyPersistenceOptions): Promise<De
   const keyPath = resolveKeyPath(options);
 
   try {
-    const content = await fs.readFile(keyPath, 'utf8');
+    const content = await readFile(keyPath, 'utf8');
     const data = JSON.parse(content);
 
     // Validate JWK structure using Zod schema
@@ -230,14 +230,14 @@ export async function saveDevKey(keyData: DevKeyData, options?: DevKeyPersistenc
 
   try {
     // Ensure directory exists with restricted permissions
-    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await mkdir(dir, { recursive: true, mode: 0o700 });
 
     // Write to temp file first (atomic write pattern)
     const content = JSON.stringify(keyData, null, 2);
-    await fs.writeFile(tempPath, content, { mode: 0o600, encoding: 'utf8' });
+    await writeFile(tempPath, content, { mode: 0o600 });
 
     // Atomic rename to target path
-    await fs.rename(tempPath, keyPath);
+    await rename(tempPath, keyPath);
 
     console.log(`[DevKeyPersistence] Saved key (kid=${keyData.kid}) to ${keyPath}`);
     return true;
@@ -245,7 +245,7 @@ export async function saveDevKey(keyData: DevKeyData, options?: DevKeyPersistenc
     console.error(`[DevKeyPersistence] Failed to save key to ${keyPath}: ${(error as Error).message}`);
     // Clean up temp file if it exists
     try {
-      await fs.unlink(tempPath);
+      await unlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -262,7 +262,7 @@ export async function deleteDevKey(options?: DevKeyPersistenceOptions): Promise<
   const keyPath = resolveKeyPath(options);
 
   try {
-    await fs.unlink(keyPath);
+    await unlink(keyPath);
     console.log(`[DevKeyPersistence] Deleted key at ${keyPath}`);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

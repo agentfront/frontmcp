@@ -1,8 +1,16 @@
-export { default as CachePlugin } from './cache';
-export { CachePluginOptions } from './cache';
+/**
+ * @frontmcp/plugins - Meta-package for FrontMCP plugins
+ *
+ * This package re-exports all official FrontMCP plugins for convenience.
+ * You can also install individual plugins directly:
+ *
+ * - @frontmcp/plugin-cache
+ * - @frontmcp/plugin-codecall
+ * - @frontmcp/plugin-dashboard
+ * - @frontmcp/plugin-remember
+ */
 
-export { default as CodeCallPlugin } from './codecall';
-export { CodeCallPluginOptions, CodeCallPluginOptionsInput } from './codecall';
-
-export { default as DashboardPlugin, DashboardApp } from './dashboard';
-export { DashboardPluginOptions, DashboardPluginOptionsInput } from './dashboard';
+export * from '@frontmcp/plugin-cache';
+export * from '@frontmcp/plugin-codecall';
+export * from '@frontmcp/plugin-dashboard';
+export * from '@frontmcp/plugin-remember';

@@ -13,6 +13,7 @@ import {
 } from '../../errors';
 import { isUIResourceUri, handleUIResourceRead } from '../../tool/ui';
 import { Scope } from '../../scope';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
   request: ReadResourceRequestSchema,
@@ -184,7 +185,9 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const { resource, input, params } = this.state.required;
 
     try {
-      const context = resource.create(input.uri, params, ctx);
+      // Create context-aware providers that include scoped providers from plugins
+      const contextProviders = new FlowContextProviders(this.scope.providers, this.deps);
+      const context = resource.create(input.uri, params, { ...ctx, contextProviders });
       const resourceHooks = this.scope.hooks.getClsHooks(resource.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();

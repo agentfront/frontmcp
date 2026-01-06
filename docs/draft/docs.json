@@ -127,6 +127,7 @@
                 "pages": [
                   "docs/plugins/overview",
                   "docs/plugins/cache-plugin",
+                  "docs/plugins/remember-plugin",
                   {
                     "group": "CodeCall",
                     "icon": "code",

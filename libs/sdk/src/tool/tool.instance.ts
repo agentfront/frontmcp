@@ -41,7 +41,7 @@ export class ToolInstance<
   Out = ToolOutputOf<{ outputSchema: OutSchema }>,
 > extends ToolEntry<InSchema, OutSchema, In, Out> {
   /** The provider registry this tool is bound to (captured at construction) */
-  private readonly providers: ProviderRegistry;
+  private readonly _providers: ProviderRegistry;
   /** The scope this tool operates in (captured at construction from providers) */
   readonly scope: Scope;
   /** The hook registry for this tool's scope (captured at construction) */
@@ -50,10 +50,10 @@ export class ToolInstance<
   constructor(record: ToolRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
-    this.providers = providers;
+    this._providers = providers;
     this.name = record.metadata.id || record.metadata.name;
     this.fullName = this.owner.id + ':' + this.name;
-    this.scope = this.providers.getActiveScope();
+    this.scope = this._providers.getActiveScope();
     this.hooks = this.scope.providers.getHooksRegistry();
 
     const schema: any = record.metadata.inputSchema;
@@ -104,10 +104,20 @@ export class ToolInstance<
     return this.outputSchema;
   }
 
+  /**
+   * Get the provider registry for this tool.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  get providers(): ProviderRegistry {
+    return this._providers;
+  }
+
   override create(input: ToolCallArgs, ctx: ToolCallExtra): ToolContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
-    const providers = this.providers;
-    const scope = this.providers.getActiveScope();
+    // Use context-aware providers from flow if available, otherwise use default providers.
+    // Context providers include scoped providers from plugins (e.g., RememberPlugin).
+    const providers = ctx.contextProviders ?? this._providers;
+    const scope = this._providers.getActiveScope();
     const logger = scope.logger;
     const authInfo = ctx.authInfo;
     const progressToken = ctx.progressToken;

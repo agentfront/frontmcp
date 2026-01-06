@@ -8,12 +8,21 @@ import { Request, Notification, CallToolRequest, CallToolResult } from '@modelco
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolInputOf, ToolOutputOf } from '../decorators';
+import { ProviderRegistryInterface } from '../interfaces/internal';
+import type ProviderRegistry from '../../provider/provider.registry';
 
 export type ToolCallArgs = CallToolRequest['params']['arguments'];
 export type ToolCallExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
   /** Progress token from the request's _meta, used for progress notifications */
   progressToken?: string | number;
+  /**
+   * Optional context-aware providers from the flow.
+   * When provided, this is used instead of the tool's default providers.
+   * This enables access to context-scoped providers (from plugins) during tool execution.
+   * @internal
+   */
+  contextProviders?: ProviderRegistryInterface;
 };
 
 export type ParsedToolResult = CallToolResult;
@@ -34,6 +43,12 @@ export abstract class ToolEntry<
    * The full name of the tool, including the owner name as prefix.
    */
   fullName: string;
+
+  /**
+   * Get the provider registry for this tool.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  abstract get providers(): ProviderRegistry;
 
   inputSchema: InSchema;
   // This is whatever JSON-schema-ish thing you store for input; keeping type loose
