@@ -185,8 +185,10 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
 
       for (const tool of scopeTools) {
-        // Deduplicate tools by their unique ID (fullName or metadata.id)
-        const toolId = tool.fullName || tool.metadata.id || tool.metadata.name;
+        // Deduplicate tools by owner + name combination
+        // This prevents the same tool from being registered twice while allowing
+        // different owners to have tools with the same name (for conflict resolution)
+        const toolId = `${tool.owner.id}:${tool.fullName || tool.metadata.id || tool.metadata.name}`;
         if (!seenToolIds.has(toolId)) {
           seenToolIds.add(toolId);
           tools.push({ appName: tool.owner.id, tool });

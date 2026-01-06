@@ -153,9 +153,10 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       this.logger.verbose(`findResources: scope resources=${scopeResources.length}`);
 
       for (const resource of scopeResources) {
-        // Deduplicate resources by their URI (unique identifier)
-        // Use resource.uri (from entry) or fall back to metadata.name
-        const resourceId = resource.uri || resource.metadata.name;
+        // Deduplicate resources by owner + URI/name combination
+        // This prevents the same resource from being registered twice while allowing
+        // different owners to have resources with the same name (for conflict resolution)
+        const resourceId = `${resource.owner.id}:${resource.uri || resource.metadata.name}`;
         if (!seenResourceIds.has(resourceId)) {
           seenResourceIds.add(resourceId);
           resources.push({ ownerName: resource.owner.id, resource });

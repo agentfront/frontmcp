@@ -155,8 +155,10 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
       this.logger.verbose(`findPrompts: scope prompts=${scopePrompts.length}`);
 
       for (const prompt of scopePrompts) {
-        // Deduplicate prompts by their unique ID (fullName or metadata.name)
-        const promptId = prompt.fullName || prompt.metadata.name;
+        // Deduplicate prompts by owner + name combination
+        // This prevents the same prompt from being registered twice while allowing
+        // different owners to have prompts with the same name (for conflict resolution)
+        const promptId = `${prompt.owner.id}:${prompt.fullName || prompt.metadata.name}`;
         if (!seenPromptIds.has(promptId)) {
           seenPromptIds.add(promptId);
           prompts.push({ ownerName: prompt.owner.id, prompt });

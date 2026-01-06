@@ -164,12 +164,29 @@ export default class ToolRegistry
   }
 
   /**
+   * Type guard to check if an object has the ToolRegistry subscribe interface.
+   * Used for duck-typing remote registries that may not be full ToolRegistry instances.
+   */
+  private hasSubscribeInterface(obj: unknown): obj is { subscribe: ToolRegistry['subscribe'] } {
+    if (obj === null || typeof obj !== 'object') return false;
+    const registry = obj as Record<string, unknown>;
+    // Check for subscribe method with expected signature (function that accepts options and callback)
+    return typeof registry['subscribe'] === 'function';
+  }
+
+  /**
    * Adopt tools directly from a remote app's tools registry.
    * Remote apps expose tools via proxy entries that forward execution to the remote server.
    * This also subscribes to updates from the remote app's registry for lazy-loaded tools.
    */
   private adoptToolsFromRemoteApp(app: AppEntry, scope: Scope): void {
-    const remoteRegistry = app.tools as ToolRegistry;
+    // Validate that app.tools has the expected interface before casting
+    // Remote apps may have different registry implementations
+    if (!app.tools || typeof app.tools.getTools !== 'function') {
+      scope.logger.warn(`Remote app ${app.id} does not have a valid tools registry interface`);
+      return;
+    }
+    const remoteRegistry = app.tools;
 
     // Helper to adopt/re-adopt tools from the remote app
     const adoptRemoteTools = () => {
@@ -207,7 +224,7 @@ export default class ToolRegistry
 
     // Subscribe to remote app's tool registry for lazy-loaded tools
     // Remote apps discover tools asynchronously after connection
-    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+    if (this.hasSubscribeInterface(remoteRegistry)) {
       remoteRegistry.subscribe({ immediate: false }, () => {
         adoptRemoteTools();
       });
@@ -460,6 +477,28 @@ export default class ToolRegistry
   }
 
   /**
+   * Type guard to check if a ToolEntry has the required properties for registration.
+   * Validates that the tool has record with provide, kind, metadata, and a valid name.
+   */
+  private isRegisterableTool(
+    tool: ToolEntry,
+  ): tool is ToolEntry & { record: { provide: Token; kind: string; metadata: unknown }; name: string } {
+    // Check for required name property
+    if (typeof tool.name !== 'string' || !tool.name) {
+      return false;
+    }
+
+    // Check for record property (exists on ToolInstance and RemoteToolInstance)
+    const toolWithRecord = tool as { record?: { provide?: unknown; kind?: unknown; metadata?: unknown } };
+    if (!toolWithRecord.record) {
+      return false;
+    }
+
+    const { record } = toolWithRecord;
+    return record.provide !== undefined && record.kind !== undefined && record.metadata !== undefined;
+  }
+
+  /**
    * Register an existing ToolInstance directly (for agent-scoped or remote tools).
    * This allows pre-constructed tool instances to be added without going through
    * the standard token-based initialization flow.
@@ -487,34 +526,38 @@ export default class ToolRegistry
    * @throws Error if tool is not a valid instance
    */
   registerToolInstance(tool: ToolEntry): void {
-    // Validate that we have a proper instance with required properties
-    // Accept both ToolInstance and RemoteToolInstance (or any ToolEntry subclass with valid record)
-    const instance = tool as ToolInstance;
+    // Validate using type guard - accepts both ToolInstance and RemoteToolInstance
+    if (!this.isRegisterableTool(tool)) {
+      // Provide specific error messages for debugging
+      if (typeof tool.name !== 'string' || !tool.name) {
+        throw new Error('Tool instance is missing required name property');
+      }
+      const toolWithRecord = tool as { record?: { provide?: unknown; kind?: unknown; metadata?: unknown } };
+      if (!toolWithRecord.record) {
+        throw new Error('Tool instance is missing required record property');
+      }
+      if (!toolWithRecord.record.provide) {
+        throw new Error('Tool instance is missing required record.provide property');
+      }
+      if (!toolWithRecord.record.kind || !toolWithRecord.record.metadata) {
+        throw new Error('Tool instance is missing required record.kind or record.metadata');
+      }
+      throw new Error('Tool instance validation failed');
+    }
 
-    // Check for required properties that make it a valid registerable instance
-    if (!instance.record || !instance.record.provide) {
-      throw new Error('Tool instance is missing required record.provide property');
-    }
-    if (!instance.record.kind || !instance.record.metadata) {
-      throw new Error('Tool instance is missing required record.kind or record.metadata');
-    }
-    if (typeof instance.name !== 'string' || !instance.name) {
-      throw new Error('Tool instance is missing required name property');
-    }
-
-    const token = instance.record.provide as Token;
+    const token = tool.record.provide as Token;
 
     // Check for duplicate registration
     if (this.instances.has(token as Token<ToolInstance>)) {
       return; // Already registered, skip silently
     }
 
-    // Add to instances map
-    this.instances.set(token as Token<ToolInstance>, instance);
+    // Add to instances map - the type guard ensures tool has the required properties
+    this.instances.set(token as Token<ToolInstance>, tool as ToolInstance);
 
     // Create an indexed row for this tool
     const lineage: EntryLineage = this.owner ? [this.owner] : [];
-    const row = this.makeRow(token, instance, lineage, this);
+    const row = this.makeRow(token, tool, lineage, this);
     this.localRows.push(row);
 
     // Rebuild indexes
