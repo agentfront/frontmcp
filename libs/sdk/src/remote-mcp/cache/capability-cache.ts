@@ -75,7 +75,8 @@ export class CapabilityCache {
     this.cache.set(appId, {
       capabilities,
       expiresAt: Date.now() + effectiveTTL,
-      fetchedAt: new Date(),
+      // Preserve the original fetchedAt from capabilities
+      fetchedAt: capabilities.fetchedAt,
     });
   }
 

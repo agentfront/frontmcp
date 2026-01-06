@@ -1,4 +1,4 @@
-import { ToolInstance } from './tool.instance';
+import { ToolEntry } from '../common';
 
 export type ToolChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 
@@ -16,7 +16,7 @@ export type ToolChangeEvent = {
   sessionId?: string;
   relatedRequestId?: string;
   version: number;
-  snapshot: readonly ToolInstance[];
+  snapshot: readonly ToolEntry[];
 };
 
 type Listener = (e: ToolChangeEvent) => void;

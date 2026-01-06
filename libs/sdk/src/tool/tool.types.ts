@@ -1,12 +1,12 @@
-import { EntryLineage, Token } from '../common';
-import { ToolInstance } from './tool.instance';
+import { EntryLineage, Token, ToolEntry } from '../common';
 import ToolRegistry from './tool.registry';
 import type { NameCase } from '@frontmcp/utils';
 
 /** Internal augmented row: instance + provenance + token */
 export type IndexedTool = {
   token: Token;
-  instance: ToolInstance;
+  /** The tool entry (can be ToolInstance or remote proxy entry) */
+  instance: ToolEntry;
   /** base tool name from metadata (unmodified) */
   baseName: string;
   /** lineage & qualified info */

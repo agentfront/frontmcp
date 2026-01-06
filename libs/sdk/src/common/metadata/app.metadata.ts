@@ -294,6 +294,13 @@ export interface RemoteAppMetadata {
   refreshInterval?: number;
 
   /**
+   * TTL in milliseconds for cached capabilities from the remote server.
+   * Capabilities are cached to avoid repeated discovery calls.
+   * @default 60000 (60 seconds)
+   */
+  cacheTTL?: number;
+
+  /**
    * If true, the app will NOT be included and will act as a separated scope.
    * If false, the app will be included in MultiApp frontmcp server.
    * If 'includeInParent', the app will be included in the gateway's
@@ -344,6 +351,7 @@ export const frontMcpRemoteAppMetadataSchema = z.looseObject({
   remoteAuth: remoteAuthConfigSchema.optional(),
   auth: authOptionsSchema.optional(),
   refreshInterval: z.number().optional(),
+  cacheTTL: z.number().optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])
     .optional()

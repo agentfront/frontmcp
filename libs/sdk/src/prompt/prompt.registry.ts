@@ -189,7 +189,9 @@ export default class PromptRegistry
             scope.logger.warn(`Invalid remote prompt in app ${app.id}: missing name`);
             continue;
           }
-          const row = this.makeRow(Symbol(remotePrompt.name), remotePrompt as PromptInstance, prepend, this);
+          // Use Symbol.for() for stable, deterministic tokens across registry operations
+          const stableToken = Symbol.for(`prompt:${app.id}:${remotePrompt.name}`);
+          const row = this.makeRow(stableToken, remotePrompt, prepend, this);
           this.localRows.push(row);
         }
       }
@@ -238,7 +240,7 @@ export default class PromptRegistry
   /**
    * Find a prompt by exact name match
    */
-  findByName(name: string): PromptInstance | undefined {
+  findByName(name: string): PromptEntry | undefined {
     const rows = this.byName.get(name);
     return rows?.[0]?.instance;
   }
@@ -246,7 +248,7 @@ export default class PromptRegistry
   /**
    * Find all prompts matching a name
    */
-  findAllByName(name: string): PromptInstance[] {
+  findAllByName(name: string): PromptEntry[] {
     const rows = this.byName.get(name) ?? [];
     return rows.map((r) => r.instance);
   }
@@ -257,12 +259,12 @@ export default class PromptRegistry
   }
 
   /** List all instances (locals + adopted). */
-  listAllInstances(): readonly PromptInstance[] {
+  listAllInstances(): readonly PromptEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
-  listByOwner(ownerPath: string): readonly PromptInstance[] {
+  listByOwner(ownerPath: string): readonly PromptEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
@@ -297,7 +299,7 @@ export default class PromptRegistry
   /**
    * Produce unique, MCP-valid exported names.
    */
-  exportResolvedNames(opts?: PromptExportOptions): Array<{ name: string; instance: PromptInstance }> {
+  exportResolvedNames(opts?: PromptExportOptions): Array<{ name: string; instance: PromptEntry }> {
     const cfg = { ...DEFAULT_PROMPT_EXPORT_OPTS, ...(opts ?? {}) };
 
     const rows = this.listAllIndexed().map((r) => {
@@ -316,7 +318,7 @@ export default class PromptRegistry
       byBase.set(r.base, list);
     }
 
-    const out = new Map<string, PromptInstance>();
+    const out = new Map<string, PromptEntry>();
 
     for (const [base, group] of byBase.entries()) {
       if (group.length === 1) {
@@ -361,7 +363,7 @@ export default class PromptRegistry
 
     function disambiguate(
       candidate: string,
-      pool: Map<string, PromptInstance>,
+      pool: Map<string, PromptEntry>,
       cfg: Required<PromptExportOptions>,
     ): string {
       if (!pool.has(candidate)) return candidate;
@@ -376,7 +378,7 @@ export default class PromptRegistry
   }
 
   /** Lookup by the exported (resolved) name. */
-  getExported(name: string, opts?: PromptExportOptions): PromptInstance | undefined {
+  getExported(name: string, opts?: PromptExportOptions): PromptEntry | undefined {
     const pairs = this.exportResolvedNames(opts);
     return pairs.find((p) => p.name === name)?.instance;
   }
@@ -384,7 +386,7 @@ export default class PromptRegistry
   /* -------------------- Subscriptions -------------------- */
 
   subscribe(
-    opts: { immediate?: boolean; filter?: (i: PromptInstance) => boolean },
+    opts: { immediate?: boolean; filter?: (i: PromptEntry) => boolean },
     cb: (evt: PromptChangeEvent) => void,
   ): () => void {
     const filter = opts.filter ?? (() => true);
@@ -407,12 +409,7 @@ export default class PromptRegistry
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedPrompt row */
-  private makeRow(
-    token: Token,
-    instance: PromptInstance,
-    lineage: EntryLineage,
-    source: PromptRegistry,
-  ): IndexedPrompt {
+  private makeRow(token: Token, instance: PromptEntry, lineage: EntryLineage, source: PromptRegistry): IndexedPrompt {
     const ownerKey = ownerKeyOf(lineage);
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
@@ -450,16 +447,16 @@ export default class PromptRegistry
   }
 
   /** Best-effort provider id used for prefixing. */
-  private providerIdOf(inst: PromptInstance): string | undefined {
+  private providerIdOf(inst: PromptEntry): string | undefined {
     try {
-      const meta: unknown = inst.getMetadata?.();
+      // Access metadata directly from the entry (cast through unknown for type safety)
+      const meta = inst.metadata as unknown as Record<string, unknown> | undefined;
       if (!meta || typeof meta !== 'object') return undefined;
 
-      const metaObj = meta as Record<string, unknown>;
-      const maybe = metaObj['providerId'] ?? metaObj['provider'] ?? metaObj['ownerId'];
+      const maybe = meta['providerId'] ?? meta['provider'] ?? meta['ownerId'];
       if (typeof maybe === 'string' && maybe.length > 0) return maybe;
 
-      const cls = metaObj['cls'];
+      const cls = meta['cls'];
       if (cls && typeof cls === 'function') {
         const id = getMetadata('id', cls);
         if (typeof id === 'string' && id.length > 0) return id;

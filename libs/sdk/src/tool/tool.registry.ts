@@ -177,7 +177,9 @@ export default class ToolRegistry
             scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
             continue;
           }
-          const row = this.makeRow(Symbol(remoteTool.name), remoteTool as ToolInstance, prepend, this);
+          // Use Symbol.for() for stable, deterministic tokens across registry operations
+          const stableToken = Symbol.for(`tool:${app.id}:${remoteTool.name}`);
+          const row = this.makeRow(stableToken, remoteTool, prepend, this);
           this.localRows.push(row);
         }
       }
@@ -251,12 +253,12 @@ export default class ToolRegistry
   }
 
   /** List all instances (locals + adopted). */
-  listAllInstances(): readonly ToolInstance[] {
+  listAllInstances(): readonly ToolEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
-  listByOwner(ownerPath: string): readonly ToolInstance[] {
+  listByOwner(ownerPath: string): readonly ToolEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
@@ -269,7 +271,7 @@ export default class ToolRegistry
    *    - Locals keep bare base (unless >1 locals conflict → they get owner prefixes)
    *    - Children with same base get prefixed by providerId (or owner path)
    */
-  exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolInstance }> {
+  exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolEntry }> {
     const cfg = { ...DEFAULT_EXPORT_OPTS, ...(opts ?? {}) };
 
     const rows = this.listAllIndexed().map((r) => {
@@ -288,7 +290,7 @@ export default class ToolRegistry
       byBase.set(r.base, list);
     }
 
-    const out = new Map<string, ToolInstance>();
+    const out = new Map<string, ToolEntry>();
 
     for (const [base, group] of byBase.entries()) {
       if (group.length === 1) {
@@ -331,7 +333,7 @@ export default class ToolRegistry
 
     return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, instance]) => ({ name, instance }));
 
-    function disambiguate(candidate: string, pool: Map<string, any>, cfg: Required<ExportNameOptions>): string {
+    function disambiguate(candidate: string, pool: Map<string, ToolEntry>, cfg: Required<ExportNameOptions>): string {
       if (!pool.has(candidate)) return candidate;
       let n = 2;
       while (true) {
@@ -343,7 +345,7 @@ export default class ToolRegistry
   }
 
   /** Lookup by the exported (resolved) name. */
-  getExported(name: string, opts?: ExportNameOptions): ToolInstance | undefined {
+  getExported(name: string, opts?: ExportNameOptions): ToolEntry | undefined {
     const pairs = this.exportResolvedNames(opts);
     return pairs.find((p) => p.name === name)?.instance;
   }
@@ -351,7 +353,7 @@ export default class ToolRegistry
   /* -------------------- Subscriptions -------------------- */
 
   subscribe(
-    opts: { immediate?: boolean; filter?: (i: ToolInstance) => boolean },
+    opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
     cb: (evt: ToolChangeEvent) => void,
   ): () => void {
     const filter = opts.filter ?? (() => true);
@@ -374,7 +376,7 @@ export default class ToolRegistry
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedTool row */
-  private makeRow(token: Token, instance: ToolInstance, lineage: EntryLineage, source: ToolRegistry): IndexedTool {
+  private makeRow(token: Token, instance: ToolEntry, lineage: EntryLineage, source: ToolRegistry): IndexedTool {
     const ownerKey = ownerKeyOf(lineage);
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
@@ -403,18 +405,20 @@ export default class ToolRegistry
   }
 
   /** Best-effort provider id used for prefixing (inspects class metadata if present). */
-  private providerIdOf(inst: ToolInstance): string | undefined {
-    // Try reading provider id from the tool class metadata (if your decorators set one)
+  private providerIdOf(inst: ToolEntry): string | undefined {
+    // Try reading provider id from the tool metadata (cast through unknown for type safety)
     try {
-      const meta: any = inst.getMetadata?.();
-      const maybe = meta?.providerId ?? meta?.provider ?? meta?.ownerId ?? undefined;
+      const meta = inst.metadata as unknown as Record<string, unknown> | undefined;
+      if (!meta || typeof meta !== 'object') return undefined;
+
+      const maybe = meta['providerId'] ?? meta['provider'] ?? meta['ownerId'];
       if (typeof maybe === 'string' && maybe.length) return maybe;
 
-      const cls: any = meta && meta.cls ? meta.cls : undefined;
-      if (cls) {
+      const cls = meta['cls'];
+      if (cls && typeof cls === 'function') {
         const id = getMetadata('id', cls);
         if (typeof id === 'string' && id.length) return id;
-        if (cls.name) return cls.name;
+        if ('name' in cls && typeof cls.name === 'string') return cls.name;
       }
     } catch {
       /* ignore */

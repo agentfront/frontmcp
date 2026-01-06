@@ -31,5 +31,6 @@ export const FrontMcpRemoteAppTokens: RawMetadataShape<RemoteAppMetadata> = {
   transportOptions: tokenFactory.meta('transportOptions'),
   remoteAuth: tokenFactory.meta('remoteAuth'),
   refreshInterval: tokenFactory.meta('refreshInterval'),
+  cacheTTL: tokenFactory.meta('cacheTTL'),
   standalone: tokenFactory.meta('standalone'),
 } as const;

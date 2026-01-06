@@ -64,6 +64,12 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withRetry<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
   const opts = { ...DEFAULT_RETRY_OPTIONS, ...options };
+
+  // Validate maxAttempts to ensure type safety
+  if (opts.maxAttempts < 1) {
+    throw new RangeError('maxAttempts must be at least 1');
+  }
+
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
@@ -94,8 +100,9 @@ export async function withRetry<T>(operation: () => Promise<T>, options: RetryOp
     }
   }
 
-  // Should never reach here, but TypeScript needs it
-  throw lastError!;
+  // This code path can only be reached if maxAttempts >= 1 and no errors occurred,
+  // but all successful attempts return early. For type safety, provide a fallback.
+  throw lastError ?? new Error('No error captured during retry');
 }
 
 /**

@@ -190,7 +190,7 @@ export class McpClientService {
 
     try {
       // Create transport based on type
-      const transport = await this.createTransport(request);
+      let transport = this.createTransport(request);
 
       // Create MCP client with configurable name/version
       const client = new Client(
@@ -205,8 +205,22 @@ export class McpClientService {
         },
       );
 
-      // Connect to server
-      await client.connect(transport);
+      // Connect to server with fallback support for HTTP transport
+      try {
+        await client.connect(transport);
+      } catch (connectError) {
+        // If Streamable HTTP fails and fallback is enabled, try SSE
+        if (this.shouldFallbackToSSE(request)) {
+          this.logger.debug(
+            `Streamable HTTP connection failed for ${appId}: ${(connectError as Error).message}. ` +
+              `Falling back to SSE transport.`,
+          );
+          transport = this.createFallbackSSETransport(request);
+          await client.connect(transport);
+        } else {
+          throw connectError;
+        }
+      }
 
       // Create connection object
       const connection: McpClientConnection = {
@@ -466,9 +480,21 @@ export class McpClientService {
       }
     }
 
+    // Log if authContext is provided - headers are set at transport level during connect
+    if (authContext?.headers && Object.keys(authContext.headers).length > 0) {
+      this.logger.debug(
+        `authContext.headers provided for tool ${toolName} on ${appId}. ` +
+          `Note: Auth headers are configured at connection time via transportOptions.headers`,
+      );
+    }
+
     const operation = async (): Promise<CallToolResult> => {
       const connection = this.getConnection(appId);
       const startTime = Date.now();
+
+      // Get timeout from stored config
+      const config = this.configs.get(appId);
+      const timeout = (config?.transportOptions as McpHttpTransportOptions | undefined)?.timeout ?? 30000;
 
       try {
         // Verify tool exists
@@ -478,11 +504,17 @@ export class McpClientService {
           throw new RemoteToolNotFoundError(appId, toolName);
         }
 
-        // Call the tool
-        const result = await connection.client.callTool(
+        // Call the tool with timeout
+        const toolCallPromise = connection.client.callTool(
           { name: toolName, arguments: args },
           undefined, // resultSchema - let the server handle it
         );
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new RemoteTimeoutError(appId, toolName, timeout)), timeout);
+        });
+
+        const result = await Promise.race([toolCallPromise, timeoutPromise]);
 
         // Update heartbeat
         connection.lastHeartbeat = new Date();
@@ -514,6 +546,9 @@ export class McpClientService {
         if (error instanceof RemoteToolNotFoundError) {
           throw error;
         }
+        if (error instanceof RemoteTimeoutError) {
+          throw error;
+        }
         throw new RemoteToolExecutionError(appId, toolName, error as Error);
       }
     };
@@ -526,6 +561,7 @@ export class McpClientService {
           // Don't retry non-transient errors
           if (error instanceof RemoteToolNotFoundError) return false;
           if (error instanceof CircuitOpenError) return false;
+          if (error instanceof RemoteTimeoutError) return false;
           return isTransientError(error);
         },
         onRetry: (attempt, error, delayMs) => {
@@ -727,28 +763,31 @@ export class McpClientService {
     return connection;
   }
 
-  private async createTransport(request: McpConnectRequest): Promise<Transport> {
+  /**
+   * Create transport for a remote connection.
+   *
+   * Note: For HTTP transport with fallback, the initial transport is Streamable HTTP.
+   * If connection fails with Streamable HTTP, use createFallbackTransport() to get SSE.
+   */
+  private createTransport(request: McpConnectRequest): Transport {
     const { transportType, url, transportOptions } = request;
     const httpOptions = transportOptions as McpHttpTransportOptions | undefined;
 
     switch (transportType) {
       case 'http': {
-        const fallbackToSSE = httpOptions?.fallbackToSSE ?? true;
-
-        try {
-          // Try Streamable HTTP first
-          return new StreamableHTTPClientTransport(new URL(url));
-        } catch (error) {
-          if (fallbackToSSE) {
-            this.logger.debug(`Streamable HTTP failed for ${request.appId}, falling back to SSE`);
-            return new SSEClientTransport(new URL(url));
-          }
-          throw error;
-        }
+        // Start with Streamable HTTP - fallback to SSE happens during connect() if needed
+        const headers = httpOptions?.headers;
+        return new StreamableHTTPClientTransport(new URL(url), {
+          requestInit: headers ? { headers } : undefined,
+        });
       }
 
-      case 'sse':
-        return new SSEClientTransport(new URL(url));
+      case 'sse': {
+        const headers = httpOptions?.headers;
+        return new SSEClientTransport(new URL(url), {
+          requestInit: headers ? { headers } : undefined,
+        });
+      }
 
       case 'worker':
       case 'npm':
@@ -759,6 +798,26 @@ export class McpClientService {
       default:
         throw new Error(`Unknown transport type: ${transportType}`);
     }
+  }
+
+  /**
+   * Create fallback SSE transport when Streamable HTTP fails
+   */
+  private createFallbackSSETransport(request: McpConnectRequest): Transport {
+    const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
+    const headers = httpOptions?.headers;
+    return new SSEClientTransport(new URL(request.url), {
+      requestInit: headers ? { headers } : undefined,
+    });
+  }
+
+  /**
+   * Check if fallback to SSE is enabled for a request
+   */
+  private shouldFallbackToSSE(request: McpConnectRequest): boolean {
+    if (request.transportType !== 'http') return false;
+    const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
+    return httpOptions?.fallbackToSSE ?? true;
   }
 
   private async listToolsInternal(connection: McpClientConnection): Promise<Tool[]> {

@@ -128,7 +128,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     };
 
     // Initialize capability cache with configurable TTL
-    const cacheTTL = (this.metadata as any).cacheTTL ?? 60000; // Default 60 seconds
+    const cacheTTL = this.metadata.cacheTTL ?? 60000; // Default 60 seconds
     this.capabilityCache = new CapabilityCache({ defaultTTL: cacheTTL });
 
     // Initialize standard registries (empty initially - populated lazily)
@@ -391,7 +391,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       capabilities = await this.mcpClient.discoverCapabilities(this.id);
 
       // Cache the capabilities
-      const cacheTTL = (this.metadata as any).cacheTTL ?? 60000;
+      const cacheTTL = this.metadata.cacheTTL ?? 60000;
       this.capabilityCache.set(this.id, capabilities, cacheTTL);
     } else {
       logger.debug(`Using cached capabilities for remote app ${this.id}`);

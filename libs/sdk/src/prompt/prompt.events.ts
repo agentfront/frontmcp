@@ -1,6 +1,6 @@
 // file: libs/sdk/src/prompt/prompt.events.ts
 
-import { PromptInstance } from './prompt.instance';
+import { PromptEntry } from '../common';
 
 export type PromptChangeKind = 'added' | 'updated' | 'removed' | 'reset';
 
@@ -10,7 +10,7 @@ export type PromptChangeEvent = {
   sessionId?: string;
   relatedRequestId?: string;
   version: number;
-  snapshot: readonly PromptInstance[];
+  snapshot: readonly PromptEntry[];
 };
 
 type Listener = (e: PromptChangeEvent) => void;
