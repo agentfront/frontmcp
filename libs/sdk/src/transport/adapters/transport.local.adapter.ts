@@ -67,18 +67,37 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
   }
 
   connectServer() {
-    const { info } = this.scope.metadata;
+    const { info, apps } = this.scope.metadata;
+
+    // Check if there are remote apps configured (they will have tools/resources/prompts that load later)
+    // Remote apps have 'urlType' property indicating they're external MCP servers
+    const hasRemoteApps = apps?.some(
+      (app) =>
+        app && typeof app === 'object' && 'urlType' in app && (app as { standalone?: boolean }).standalone !== true,
+    );
 
     // Check if completions capability should be enabled (when prompts or resources are present)
-    const hasPrompts = this.scope.prompts.hasAny();
-    const hasResources = this.scope.resources.hasAny();
-    const hasTools = this.scope.tools.hasAny();
+    // Also enable for remote apps since they may have prompts/resources
+    const hasPrompts = this.scope.prompts.hasAny() || hasRemoteApps;
+    const hasResources = this.scope.resources.hasAny() || hasRemoteApps;
+    const hasTools = this.scope.tools.hasAny() || hasRemoteApps;
     const hasAgents = this.scope.agents.hasAny();
     const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
+
+    // Build capabilities, including pre-advertised capabilities for remote apps
+    // Remote apps may have tools/resources/prompts that load asynchronously after connection
+    const remoteCapabilities = hasRemoteApps
+      ? {
+          tools: { listChanged: true },
+          resources: { subscribe: true, listChanged: true },
+          prompts: { listChanged: true },
+        }
+      : {};
 
     const serverOptions = {
       instructions: '',
       capabilities: {
+        ...remoteCapabilities, // Pre-advertise for remote apps (may be overwritten by local)
         ...this.scope.tools.getCapabilities(),
         ...this.scope.resources.getCapabilities(),
         ...this.scope.prompts.getCapabilities(),
@@ -95,6 +114,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       hasResources,
       hasPrompts,
       hasAgents,
+      hasRemoteApps,
       capabilities: JSON.stringify(serverOptions.capabilities),
       serverInfo: JSON.stringify(serverOptions.serverInfo),
     });

@@ -86,7 +86,39 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
   }
 }
 
+/**
+ * Check if a value is already a valid CallToolResult.
+ * Remote tools return CallToolResult directly, so we should pass it through as-is.
+ */
+function isCallToolResult(value: unknown): value is ParsedToolResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+
+  // A CallToolResult must have a 'content' array with valid content blocks
+  if (!Array.isArray(obj['content'])) return false;
+
+  // Check if content array has valid content blocks (each has a 'type' field)
+  // Empty content array is valid
+  const content = obj['content'] as unknown[];
+  if (content.length > 0) {
+    const firstItem = content[0] as Record<string, unknown>;
+    if (typeof firstItem !== 'object' || firstItem === null) return false;
+    if (typeof firstItem['type'] !== 'string') return false;
+    // Valid content types: 'text', 'image', 'audio', 'resource', 'resource_link'
+    const validTypes = ['text', 'image', 'audio', 'resource', 'resource_link'];
+    if (!validTypes.includes(firstItem['type'])) return false;
+  }
+
+  return true;
+}
+
 export function buildParsedToolResult(descriptor: any, raw: unknown): ParsedToolResult {
+  // If raw is already a valid CallToolResult (e.g., from remote tools), return it as-is
+  // This prevents double-wrapping of MCP-formatted responses
+  if (isCallToolResult(raw)) {
+    return raw;
+  }
+
   const content: ContentBlock[] = [];
   let structuredData: Record<string, any> | undefined;
 

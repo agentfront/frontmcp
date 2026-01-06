@@ -44,7 +44,7 @@ type ResponseToolItem = z.infer<typeof outputSchema>['tools'][number];
 // TODO: add support for pagination
 // TODO: add support for session based tools
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'ensureRemoteCapabilities'],
   execute: ['findTools', 'resolveConflicts'],
   post: ['parseTools'],
 } as const satisfies FlowPlan<string>;
@@ -122,6 +122,54 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:done');
   }
 
+  /**
+   * Ensure remote app capabilities are loaded before listing tools.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as ToolRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
+  }
+
   @Stage('findTools')
   async findTools() {
     this.logger.info('findTools:start');
@@ -131,15 +179,21 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       this.logger.info(`findTools: discovered ${apps.length} app(s)`);
 
       const tools: Array<{ appName: string; tool: ToolEntry }> = [];
+      const seenToolIds = new Set<string>();
 
       const scopeTools = this.scope.tools.getTools();
       this.logger.verbose(`findTools: scope tools=${scopeTools.length}`);
 
       for (const tool of scopeTools) {
-        tools.push({ appName: tool.owner.id, tool });
+        // Deduplicate tools by their unique ID (fullName or metadata.id)
+        const toolId = tool.fullName || tool.metadata.id || tool.metadata.name;
+        if (!seenToolIds.has(toolId)) {
+          seenToolIds.add(toolId);
+          tools.push({ appName: tool.owner.id, tool });
+        }
       }
 
-      this.logger.info(`findTools: total tools collected=${tools.length}`);
+      this.logger.info(`findTools: total tools collected=${tools.length} (deduped from ${scopeTools.length})`);
       if (tools.length === 0) {
         this.logger.warn('findTools: no tools found across apps');
       }

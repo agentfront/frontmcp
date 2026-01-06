@@ -194,25 +194,52 @@ export default class ResourceRegistry
   /**
    * Adopt resources directly from a remote app's resources registry.
    * Remote apps expose resources via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded resources.
    */
   private adoptResourcesFromRemoteApp(app: AppEntry, scope: Scope): void {
-    try {
-      const remoteResources = app.resources.getResources();
-      const remoteTemplates = app.resources.getResourceTemplates();
-      const allRemoteResources = [...remoteResources, ...remoteTemplates];
-      if (allRemoteResources.length > 0) {
-        const prepend: EntryLineage = this.owner ? [this.owner] : [];
-        for (const remoteResource of allRemoteResources) {
-          if (!remoteResource || typeof remoteResource.name !== 'string') {
-            scope.logger.warn(`Invalid remote resource in app ${app.id}: missing name`);
-            continue;
+    const remoteRegistry = app.resources as ResourceRegistry;
+
+    // Helper to adopt/re-adopt resources from the remote app
+    const adoptRemoteResources = () => {
+      try {
+        // Remove any previously adopted resources from this remote app
+        const appPrefix = `resource:${app.id}:`;
+        this.localRows = this.localRows.filter((row) => {
+          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
+          return !tokenDesc?.startsWith(appPrefix);
+        });
+
+        const remoteResources = app.resources.getResources();
+        const remoteTemplates = app.resources.getResourceTemplates();
+        const allRemoteResources = [...remoteResources, ...remoteTemplates];
+        if (allRemoteResources.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remoteResource of allRemoteResources) {
+            if (!remoteResource || typeof remoteResource.name !== 'string') {
+              scope.logger.warn(`Invalid remote resource in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`resource:${app.id}:${remoteResource.name}`);
+            const row = this.makeRow(stableToken, remoteResource, prepend, this);
+            this.localRows.push(row);
           }
-          const row = this.makeRow(Symbol(remoteResource.name), remoteResource, prepend, this);
-          this.localRows.push(row);
         }
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get resources from remote app ${app.id}: ${(error as Error).message}`);
       }
-    } catch (error) {
-      scope.logger.error(`Failed to get resources from remote app ${app.id}: ${(error as Error).message}`);
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemoteResources();
+
+    // Subscribe to remote app's resource registry for lazy-loaded resources
+    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemoteResources();
+      });
     }
   }
 

@@ -58,7 +58,7 @@ const AuthorizedSchema = z
 export const sessionVerifyOutputSchema = z.union([UnauthorizedSchema, AuthorizedSchema]);
 
 const plan = {
-  pre: ['parseInput', 'handlePublicMode', 'requireAuthorizationHeader', 'verifyIfJwt'],
+  pre: ['parseInput', 'handlePublicMode', 'handleAnonymousFallback', 'requireAuthorizationHeader', 'verifyIfJwt'],
   execute: ['deriveUser', 'parseSessionHeader', 'buildAuthorizedOutput'],
 } as const satisfies FlowPlan<string>;
 
@@ -215,8 +215,95 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     });
   }
 
+  /**
+   * Handle transparent mode with allowAnonymous when no token is provided
+   * This creates an anonymous session similar to public mode but for transparent auth
+   */
+  @Stage('handleAnonymousFallback', {
+    filter: ({ state, scope }) => {
+      // Only process if no token and auth is transparent with allowAnonymous
+      if (state.token) return false;
+      const authOptions = scope.auth?.options;
+      if (!authOptions || !isTransparentMode(authOptions)) return false;
+      return (authOptions as TransparentAuthOptions).allowAnonymous === true;
+    },
+  })
+  async handleAnonymousFallback() {
+    const sessionIdHeader = this.state.sessionIdHeader;
+    const machineId = getMachineId();
+    const authOptions = this.scope.auth?.options as TransparentAuthOptions | undefined;
+
+    // Similar logic to handlePublicMode but for transparent mode with allowAnonymous
+    if (sessionIdHeader) {
+      const existingPayload = decryptPublicSession(sessionIdHeader);
+      const user = existingPayload
+        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: 'transparent-anon', name: 'Anonymous' }
+        : { sub: `anon:${crypto.randomUUID()}`, iss: 'transparent-anon', name: 'Anonymous' };
+
+      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
+
+      this.respond({
+        kind: 'authorized',
+        authorization: {
+          token: '',
+          user,
+          session: {
+            id: sessionIdHeader,
+            payload: finalPayload,
+          },
+        },
+      });
+      return;
+    }
+
+    // Create new anonymous session
+    const now = Date.now();
+    const scopes = authOptions?.anonymousScopes ?? ['anonymous'];
+    const user = {
+      sub: `anon:${crypto.randomUUID()}`,
+      iss: 'transparent-anon',
+      name: 'Anonymous',
+      scope: scopes.join(' '),
+    };
+    const uuid = crypto.randomUUID();
+
+    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
+    const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
+
+    const payload = {
+      uuid,
+      nodeId: machineId,
+      authSig: 'transparent-anon',
+      iat: Math.floor(now / 1000),
+      isPublic: true,
+      ...(platformType !== 'unknown' && { platformType }),
+    };
+
+    const sessionId = encryptJson(payload);
+
+    this.respond({
+      kind: 'authorized',
+      authorization: {
+        token: '',
+        user,
+        session: { id: sessionId, payload },
+      },
+    });
+  }
+
   @Stage('requireAuthorizationHeader', {
-    filter: ({ state }) => !state.authorizationHeader,
+    filter: ({ state, scope }) => {
+      // Don't require auth if we already have an authorization header
+      if (state.authorizationHeader) return false;
+      // Don't require auth in public mode
+      const authOptions = scope.auth?.options;
+      if (authOptions && isPublicMode(authOptions)) return false;
+      // Don't require auth if transparent mode with allowAnonymous (handled by handleAnonymousFallback)
+      if (authOptions && isTransparentMode(authOptions)) {
+        if ((authOptions as TransparentAuthOptions).allowAnonymous === true) return false;
+      }
+      return true;
+    },
   })
   async requireAuthorizationOrChallenge() {
     this.respond({

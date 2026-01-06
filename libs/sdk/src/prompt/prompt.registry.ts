@@ -178,25 +178,50 @@ export default class PromptRegistry
   /**
    * Adopt prompts directly from a remote app's prompts registry.
    * Remote apps expose prompts via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded prompts.
    */
   private adoptPromptsFromRemoteApp(app: AppEntry, scope: Scope): void {
-    try {
-      const remotePrompts = app.prompts.getPrompts();
-      if (remotePrompts.length > 0) {
-        const prepend: EntryLineage = this.owner ? [this.owner] : [];
-        for (const remotePrompt of remotePrompts) {
-          if (!remotePrompt || typeof remotePrompt.name !== 'string') {
-            scope.logger.warn(`Invalid remote prompt in app ${app.id}: missing name`);
-            continue;
+    const remoteRegistry = app.prompts as PromptRegistry;
+
+    // Helper to adopt/re-adopt prompts from the remote app
+    const adoptRemotePrompts = () => {
+      try {
+        // Remove any previously adopted prompts from this remote app
+        const appPrefix = `prompt:${app.id}:`;
+        this.localRows = this.localRows.filter((row) => {
+          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
+          return !tokenDesc?.startsWith(appPrefix);
+        });
+
+        const remotePrompts = app.prompts.getPrompts();
+        if (remotePrompts.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remotePrompt of remotePrompts) {
+            if (!remotePrompt || typeof remotePrompt.name !== 'string') {
+              scope.logger.warn(`Invalid remote prompt in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`prompt:${app.id}:${remotePrompt.name}`);
+            const row = this.makeRow(stableToken, remotePrompt, prepend, this);
+            this.localRows.push(row);
           }
-          // Use Symbol.for() for stable, deterministic tokens across registry operations
-          const stableToken = Symbol.for(`prompt:${app.id}:${remotePrompt.name}`);
-          const row = this.makeRow(stableToken, remotePrompt, prepend, this);
-          this.localRows.push(row);
         }
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get prompts from remote app ${app.id}: ${(error as Error).message}`);
       }
-    } catch (error) {
-      scope.logger.error(`Failed to get prompts from remote app ${app.id}: ${(error as Error).message}`);
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemotePrompts();
+
+    // Subscribe to remote app's prompt registry for lazy-loaded prompts
+    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemotePrompts();
+      });
     }
   }
 

@@ -166,25 +166,51 @@ export default class ToolRegistry
   /**
    * Adopt tools directly from a remote app's tools registry.
    * Remote apps expose tools via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded tools.
    */
   private adoptToolsFromRemoteApp(app: AppEntry, scope: Scope): void {
-    try {
-      const remoteTools = app.tools.getTools();
-      if (remoteTools.length > 0) {
-        const prepend: EntryLineage = this.owner ? [this.owner] : [];
-        for (const remoteTool of remoteTools) {
-          if (!remoteTool || typeof remoteTool.name !== 'string') {
-            scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
-            continue;
+    const remoteRegistry = app.tools as ToolRegistry;
+
+    // Helper to adopt/re-adopt tools from the remote app
+    const adoptRemoteTools = () => {
+      try {
+        // Remove any previously adopted tools from this remote app
+        // We store remote tools in localRows, so filter them out by checking the token
+        const appPrefix = `tool:${app.id}:`;
+        this.localRows = this.localRows.filter((row) => {
+          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
+          return !tokenDesc?.startsWith(appPrefix);
+        });
+        const remoteTools = app.tools.getTools();
+        if (remoteTools.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remoteTool of remoteTools) {
+            if (!remoteTool || typeof remoteTool.name !== 'string') {
+              scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`tool:${app.id}:${remoteTool.name}`);
+            const row = this.makeRow(stableToken, remoteTool, prepend, this);
+            this.localRows.push(row);
           }
-          // Use Symbol.for() for stable, deterministic tokens across registry operations
-          const stableToken = Symbol.for(`tool:${app.id}:${remoteTool.name}`);
-          const row = this.makeRow(stableToken, remoteTool, prepend, this);
-          this.localRows.push(row);
         }
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
       }
-    } catch (error) {
-      scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemoteTools();
+
+    // Subscribe to remote app's tool registry for lazy-loaded tools
+    // Remote apps discover tools asynchronously after connection
+    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemoteTools();
+      });
     }
   }
 

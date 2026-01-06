@@ -142,6 +142,17 @@ export class ToolInstance<
   }
 
   override parseInput(input: CallToolRequest['params']): CallToolRequest['params']['arguments'] {
+    // For remote tools, use passthrough to preserve all arguments since validation
+    // happens on the remote server. Remote tools have 'frontmcp:remote' annotation.
+    const isRemoteTool = this.metadata.annotations?.['frontmcp:remote'] === true;
+
+    if (isRemoteTool) {
+      // Pass through all arguments without stripping unknown keys
+      const inputSchema = z.object(this.inputSchema).passthrough();
+      return inputSchema.parse(input.arguments);
+    }
+
+    // For local tools, use strict validation
     const inputSchema = z.object(this.inputSchema);
     return inputSchema.parse(input.arguments);
   }

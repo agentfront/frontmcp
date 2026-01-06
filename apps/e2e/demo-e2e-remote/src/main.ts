@@ -50,11 +50,6 @@ const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://autheu.davida
     enableLegacySSE: true,
     enableSseListener: true,
   },
-  auth: {
-    mode: 'transparent',
-    remote: {
-      provider: idpProviderUrl,
-    },
-  },
+  auth: { mode: 'public' },
 })
 export default class RemoteGatewayServer {}
