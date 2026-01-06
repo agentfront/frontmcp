@@ -1,7 +1,6 @@
 // file: libs/sdk/src/prompt/prompt.types.ts
 
-import { EntryLineage, Token } from '../common';
-import { PromptInstance } from './prompt.instance';
+import { EntryLineage, PromptEntry, Token } from '../common';
 import PromptRegistry from './prompt.registry';
 import type { NameCase } from '@frontmcp/utils';
 
@@ -15,7 +14,8 @@ export type PromptNameCase = NameCase;
 /** Internal augmented row: instance + provenance + token */
 export type IndexedPrompt = {
   token: Token;
-  instance: PromptInstance;
+  /** The prompt entry (can be PromptInstance or remote proxy entry) */
+  instance: PromptEntry;
   /** base prompt name from metadata (unmodified) */
   baseName: string;
   /** lineage & qualified info */

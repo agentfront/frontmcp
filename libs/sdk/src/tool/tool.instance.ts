@@ -135,10 +135,24 @@ export class ToolInstance<
         return new this.record.provide(toolCtorArgs) as ToolContext<InSchema, OutSchema, In, Out>;
       case ToolKind.FUNCTION:
         return new FunctionToolContext<InSchema, OutSchema, In, Out>(this.record, toolCtorArgs);
+      default:
+        // TypeScript exhaustive check - catches deprecated REMOTE or unknown kinds
+        throw new Error(`Unhandled tool kind: ${(this.record as { kind: string }).kind}`);
     }
   }
 
   override parseInput(input: CallToolRequest['params']): CallToolRequest['params']['arguments'] {
+    // For remote tools, use passthrough to preserve all arguments since validation
+    // happens on the remote server. Remote tools have 'frontmcp:remote' annotation.
+    const isRemoteTool = this.metadata.annotations?.['frontmcp:remote'] === true;
+
+    if (isRemoteTool) {
+      // Pass through all arguments without stripping unknown keys
+      const inputSchema = z.object(this.inputSchema).passthrough();
+      return inputSchema.parse(input.arguments);
+    }
+
+    // For local tools, use strict validation
     const inputSchema = z.object(this.inputSchema);
     return inputSchema.parse(input.arguments);
   }

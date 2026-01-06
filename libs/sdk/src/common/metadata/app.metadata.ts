@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidMcpUri } from '@frontmcp/utils';
 import { RawZodShape, authOptionsSchema, AuthOptionsInput } from '../types';
 import {
   AgentType,
@@ -134,6 +135,94 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
     .default(false),
 } satisfies RawZodShape<LocalAppMetadata>);
 
+// ═══════════════════════════════════════════════════════════════════
+// REMOTE APP TYPES
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Transport options for remote MCP connections
+ */
+export interface RemoteTransportOptions {
+  /**
+   * Request timeout in milliseconds.
+   * @default 30000
+   */
+  timeout?: number;
+
+  /**
+   * Number of retry attempts for failed requests.
+   * @default 3
+   */
+  retryAttempts?: number;
+
+  /**
+   * Delay between retries in milliseconds.
+   * @default 1000
+   */
+  retryDelayMs?: number;
+
+  /**
+   * Whether to fallback to SSE if Streamable HTTP fails.
+   * Only applies to 'url' transport type.
+   * @default true
+   */
+  fallbackToSSE?: boolean;
+
+  /**
+   * Additional headers to include in all requests.
+   */
+  headers?: Record<string, string>;
+}
+
+/**
+ * Static credentials for remote server authentication
+ */
+export interface RemoteStaticCredentials {
+  type: 'bearer' | 'basic' | 'apiKey';
+  value: string;
+  /**
+   * Header name for apiKey type.
+   * @default 'X-API-Key'
+   */
+  headerName?: string;
+}
+
+/**
+ * Authentication configuration for remote MCP connections.
+ * This controls how the gateway authenticates with the remote server.
+ */
+export type RemoteAuthConfig =
+  | {
+      /**
+       * Use static credentials for the remote server.
+       * Good for trusted internal services.
+       */
+      mode: 'static';
+      credentials: RemoteStaticCredentials;
+    }
+  | {
+      /**
+       * Forward gateway user's token to remote server.
+       * Enables remote authorization decisions based on gateway user.
+       */
+      mode: 'forward';
+      /**
+       * Specific claim to extract from token (default: entire token)
+       */
+      tokenClaim?: string;
+      /**
+       * Header name to use (default: 'Authorization')
+       */
+      headerName?: string;
+    }
+  | {
+      /**
+       * Let remote server handle its own OAuth flow.
+       * No auth headers are added by the gateway.
+       */
+      mode: 'oauth';
+    };
+
 /**
  * Declarative metadata describing what a remote encapsulated mcp app.
  */
@@ -156,21 +245,60 @@ export interface RemoteAppMetadata {
   description?: string;
 
   /**
-   * The type of the remote app.
-   * - 'worker': The remote app is a worker file.
-   * - 'url': The remote app is a remote URL.
+   * The type of the remote app transport.
+   * - 'url': Standard HTTP MCP server (Streamable HTTP with SSE fallback)
+   * - 'worker': Local worker subprocess
+   * - 'npm': NPM package loaded via esm.sh CDN
+   * - 'esm': Direct ESM module URL
    */
-  urlType: 'worker' | 'url';
+  urlType: 'worker' | 'url' | 'npm' | 'esm';
+
   /**
-   * The URL of the remote app. This can be a local worker file or a remote URL.
+   * The URL or path for the remote app.
+   * - For 'url': HTTP(S) endpoint (e.g., 'https://api.example.com/mcp')
+   * - For 'worker': Path to worker script (e.g., './workers/my-mcp.js')
+   * - For 'npm': Package specifier (e.g., '@frontmcp/slack-mcp@latest')
+   * - For 'esm': ESM module URL (e.g., 'https://esm.sh/@scope/pkg')
    */
   url: string;
+
+  /**
+   * Namespace prefix for tools, resources, and prompts from this remote app.
+   * Helps avoid naming conflicts when orchestrating multiple remote servers.
+   * @default Uses app name
+   */
+  namespace?: string;
+
+  /**
+   * Transport-specific options for the remote connection.
+   */
+  transportOptions?: RemoteTransportOptions;
+
+  /**
+   * Authentication configuration for the remote server.
+   * Controls how the gateway authenticates with the remote MCP server.
+   */
+  remoteAuth?: RemoteAuthConfig;
 
   /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
   auth?: AuthOptionsInput;
+
+  /**
+   * Interval in milliseconds to refresh capabilities from the remote server.
+   * Set to 0 to disable automatic refresh.
+   * @default 0
+   */
+  refreshInterval?: number;
+
+  /**
+   * TTL in milliseconds for cached capabilities from the remote server.
+   * Capabilities are cached to avoid repeated discovery calls.
+   * @default 60000 (60 seconds)
+   */
+  cacheTTL?: number;
 
   /**
    * If true, the app will NOT be included and will act as a separated scope.
@@ -181,13 +309,49 @@ export interface RemoteAppMetadata {
   standalone: 'includeInParent' | boolean;
 }
 
+const remoteTransportOptionsSchema = z.object({
+  timeout: z.number().optional(),
+  retryAttempts: z.number().optional(),
+  retryDelayMs: z.number().optional(),
+  fallbackToSSE: z.boolean().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+
+const remoteStaticCredentialsSchema = z.object({
+  type: z.enum(['bearer', 'basic', 'apiKey']),
+  value: z.string(),
+  headerName: z.string().optional(),
+});
+
+const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('static'),
+    credentials: remoteStaticCredentialsSchema,
+  }),
+  z.object({
+    mode: z.literal('forward'),
+    tokenClaim: z.string().optional(),
+    headerName: z.string().optional(),
+  }),
+  z.object({
+    mode: z.literal('oauth'),
+  }),
+]);
+
 export const frontMcpRemoteAppMetadataSchema = z.looseObject({
   id: z.string().optional(),
   name: z.string().min(1),
   description: z.string().optional(),
-  urlType: z.enum(['worker', 'url']),
-  url: z.string().url(),
+  urlType: z.enum(['worker', 'url', 'npm', 'esm']),
+  url: z.string().refine(isValidMcpUri, {
+    message: 'URL must have a valid scheme (e.g., https://, file://, custom://)',
+  }),
+  namespace: z.string().optional(),
+  transportOptions: remoteTransportOptionsSchema.optional(),
+  remoteAuth: remoteAuthConfigSchema.optional(),
   auth: authOptionsSchema.optional(),
+  refreshInterval: z.number().optional(),
+  cacheTTL: z.number().optional(),
   standalone: z
     .union([z.literal('includeInParent'), z.boolean()])
     .optional()

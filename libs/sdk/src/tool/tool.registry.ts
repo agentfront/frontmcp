@@ -12,6 +12,8 @@ import { DEFAULT_EXPORT_OPTS, ExportNameOptions, IndexedTool } from './tool.type
 import ToolsListFlow from './flows/tools-list.flow';
 import CallToolFlow from './flows/call-tool.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { Scope } from '../scope';
+import { AppEntry } from '../common';
 
 export default class ToolRegistry
   extends RegistryAbstract<
@@ -32,6 +34,9 @@ export default class ToolRegistry
 
   /** Children registries that we track */
   private children = new Set<ToolRegistry>();
+
+  /** Remote app tools tracked by app ID for efficient cleanup during re-adoption */
+  private remoteAppTools = new Map<string, IndexedTool[]>();
 
   // ---- O(1) indexes over EFFECTIVE set (local + adopted) ----
   private byQualifiedId = new Map<string, IndexedTool>(); // qualifiedId -> row
@@ -100,15 +105,17 @@ export default class ToolRegistry
     }
 
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
+    const scope = this.providers.getActiveScope();
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
-        appToolsRegistries
-          .filter((t) => t.owner.kind === 'app')
-          .forEach((appToolRegistry) => {
-            this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
-          });
+        if (app.isRemote) {
+          // Remote apps: adopt tools directly from the app's tools registry
+          this.adoptToolsFromRemoteApp(app, scope);
+        } else {
+          // Local apps: adopt from child ToolRegistry instances
+          this.adoptToolsFromLocalApp(app);
+        }
       }
     });
 
@@ -123,7 +130,6 @@ export default class ToolRegistry
     this.reindex();
     this.bump('reset');
 
-    const scope = this.providers.getActiveScope();
     await scope.registryFlows(ToolsListFlow, CallToolFlow);
   }
 
@@ -158,6 +164,94 @@ export default class ToolRegistry
 
     this.reindex();
     this.bump('reset');
+  }
+
+  /**
+   * Type guard to check if an object has the ToolRegistry subscribe interface.
+   * Used for duck-typing remote registries that may not be full ToolRegistry instances.
+   */
+  private hasSubscribeInterface(obj: unknown): obj is { subscribe: ToolRegistry['subscribe'] } {
+    if (obj === null || typeof obj !== 'object') return false;
+    const registry = obj as Record<string, unknown>;
+    // Check for subscribe method with expected signature (function that accepts options and callback)
+    return typeof registry['subscribe'] === 'function';
+  }
+
+  /**
+   * Adopt tools directly from a remote app's tools registry.
+   * Remote apps expose tools via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded tools.
+   */
+  private adoptToolsFromRemoteApp(app: AppEntry, scope: Scope): void {
+    // Validate that app.tools has the expected interface before casting
+    // Remote apps may have different registry implementations
+    if (!app.tools || typeof app.tools.getTools !== 'function') {
+      scope.logger.warn(`Remote app ${app.id} does not have a valid tools registry interface`);
+      return;
+    }
+    const remoteRegistry = app.tools;
+
+    // Helper to adopt/re-adopt tools from the remote app
+    const adoptRemoteTools = () => {
+      try {
+        // Remove any previously adopted tools from this remote app using the dedicated Map
+        const previousTools = this.remoteAppTools.get(app.id);
+        if (previousTools && previousTools.length > 0) {
+          const previousTokens = new Set(previousTools.map((row) => row.token));
+          this.localRows = this.localRows.filter((row) => !previousTokens.has(row.token));
+        }
+
+        const remoteTools = app.tools.getTools();
+        const newRows: IndexedTool[] = [];
+
+        if (remoteTools.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remoteTool of remoteTools) {
+            if (!remoteTool || typeof remoteTool.name !== 'string') {
+              scope.logger.warn(`Invalid remote tool in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`tool:${app.id}:${remoteTool.name}`);
+            const row = this.makeRow(stableToken, remoteTool, prepend, this);
+            this.localRows.push(row);
+            newRows.push(row);
+          }
+        }
+
+        // Track the new rows in the remoteAppTools Map for efficient cleanup
+        this.remoteAppTools.set(app.id, newRows);
+
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get tools from remote app ${app.id}: ${(error as Error).message}`);
+      }
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemoteTools();
+
+    // Subscribe to remote app's tool registry for lazy-loaded tools
+    // Remote apps discover tools asynchronously after connection
+    if (this.hasSubscribeInterface(remoteRegistry)) {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemoteTools();
+      });
+    }
+  }
+
+  /**
+   * Adopt tools from a local app's child ToolRegistry instances.
+   * Local apps use the hierarchical registry pattern for tool discovery.
+   */
+  private adoptToolsFromLocalApp(app: AppEntry): void {
+    const appToolsRegistries = app.providers.getRegistries('ToolRegistry');
+    appToolsRegistries
+      .filter((t) => t.owner.kind === 'app')
+      .forEach((appToolRegistry) => {
+        this.adoptFromChild(appToolRegistry as ToolRegistry, appToolRegistry.owner);
+      });
   }
 
   // NOTE: `any` is intentional here - heterogeneous tool collections can't use `unknown`
@@ -212,12 +306,12 @@ export default class ToolRegistry
   }
 
   /** List all instances (locals + adopted). */
-  listAllInstances(): readonly ToolInstance[] {
+  listAllInstances(): readonly ToolEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
-  listByOwner(ownerPath: string): readonly ToolInstance[] {
+  listByOwner(ownerPath: string): readonly ToolEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
@@ -230,7 +324,7 @@ export default class ToolRegistry
    *    - Locals keep bare base (unless >1 locals conflict → they get owner prefixes)
    *    - Children with same base get prefixed by providerId (or owner path)
    */
-  exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolInstance }> {
+  exportResolvedNames(opts?: ExportNameOptions): Array<{ name: string; instance: ToolEntry }> {
     const cfg = { ...DEFAULT_EXPORT_OPTS, ...(opts ?? {}) };
 
     const rows = this.listAllIndexed().map((r) => {
@@ -249,7 +343,7 @@ export default class ToolRegistry
       byBase.set(r.base, list);
     }
 
-    const out = new Map<string, ToolInstance>();
+    const out = new Map<string, ToolEntry>();
 
     for (const [base, group] of byBase.entries()) {
       if (group.length === 1) {
@@ -292,19 +386,21 @@ export default class ToolRegistry
 
     return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, instance]) => ({ name, instance }));
 
-    function disambiguate(candidate: string, pool: Map<string, any>, cfg: Required<ExportNameOptions>): string {
+    function disambiguate(candidate: string, pool: Map<string, ToolEntry>, cfg: Required<ExportNameOptions>): string {
       if (!pool.has(candidate)) return candidate;
+      const maxAttempts = 10000;
       let n = 2;
-      while (true) {
+      while (n <= maxAttempts) {
         const withN = ensureMaxLen(`${candidate}${sepFor(cfg.case)}${n}`, cfg.maxLen);
         if (!pool.has(withN)) return withN;
         n++;
       }
+      throw new Error(`Failed to disambiguate name "${candidate}" after ${maxAttempts} attempts`);
     }
   }
 
   /** Lookup by the exported (resolved) name. */
-  getExported(name: string, opts?: ExportNameOptions): ToolInstance | undefined {
+  getExported(name: string, opts?: ExportNameOptions): ToolEntry | undefined {
     const pairs = this.exportResolvedNames(opts);
     return pairs.find((p) => p.name === name)?.instance;
   }
@@ -312,7 +408,7 @@ export default class ToolRegistry
   /* -------------------- Subscriptions -------------------- */
 
   subscribe(
-    opts: { immediate?: boolean; filter?: (i: ToolInstance) => boolean },
+    opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
     cb: (evt: ToolChangeEvent) => void,
   ): () => void {
     const filter = opts.filter ?? (() => true);
@@ -335,7 +431,7 @@ export default class ToolRegistry
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedTool row */
-  private makeRow(token: Token, instance: ToolInstance, lineage: EntryLineage, source: ToolRegistry): IndexedTool {
+  private makeRow(token: Token, instance: ToolEntry, lineage: EntryLineage, source: ToolRegistry): IndexedTool {
     const ownerKey = ownerKeyOf(lineage);
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
@@ -364,18 +460,20 @@ export default class ToolRegistry
   }
 
   /** Best-effort provider id used for prefixing (inspects class metadata if present). */
-  private providerIdOf(inst: ToolInstance): string | undefined {
-    // Try reading provider id from the tool class metadata (if your decorators set one)
+  private providerIdOf(inst: ToolEntry): string | undefined {
+    // Try reading provider id from the tool metadata (cast through unknown for type safety)
     try {
-      const meta: any = inst.getMetadata?.();
-      const maybe = meta?.providerId ?? meta?.provider ?? meta?.ownerId ?? undefined;
+      const meta = inst.metadata as unknown as Record<string, unknown> | undefined;
+      if (!meta || typeof meta !== 'object') return undefined;
+
+      const maybe = meta['providerId'] ?? meta['provider'] ?? meta['ownerId'];
       if (typeof maybe === 'string' && maybe.length) return maybe;
 
-      const cls: any = meta && meta.cls ? meta.cls : undefined;
-      if (cls) {
+      const cls = meta['cls'];
+      if (cls && typeof cls === 'function') {
         const id = getMetadata('id', cls);
         if (typeof id === 'string' && id.length) return id;
-        if (cls.name) return cls.name;
+        if ('name' in cls && typeof cls.name === 'string') return cls.name;
       }
     } catch {
       /* ignore */
@@ -389,7 +487,29 @@ export default class ToolRegistry
   }
 
   /**
-   * Register an existing ToolInstance directly (for agent-scoped tools).
+   * Type guard to check if a ToolEntry has the required properties for registration.
+   * Validates that the tool has record with provide, kind, metadata, and a valid name.
+   */
+  private isRegisterableTool(
+    tool: ToolEntry,
+  ): tool is ToolEntry & { record: { provide: Token; kind: string; metadata: unknown }; name: string } {
+    // Check for required name property
+    if (typeof tool.name !== 'string' || !tool.name) {
+      return false;
+    }
+
+    // Check for record property (exists on ToolInstance and RemoteToolInstance)
+    const toolWithRecord = tool as { record?: { provide?: unknown; kind?: unknown; metadata?: unknown } };
+    if (!toolWithRecord.record) {
+      return false;
+    }
+
+    const { record } = toolWithRecord;
+    return record.provide !== undefined && record.kind !== undefined && record.metadata !== undefined;
+  }
+
+  /**
+   * Register an existing ToolInstance directly (for agent-scoped or remote tools).
    * This allows pre-constructed tool instances to be added without going through
    * the standard token-based initialization flow.
    *
@@ -403,38 +523,51 @@ export default class ToolRegistry
    * const tool = new ToolInstance(record, agentProviders, owner);
    * agentTools.registerToolInstance(tool);
    *
+   * // For remote tools: Use RemoteToolInstance
+   * const remoteTool = new RemoteToolInstance(record, mcpClient, providers, owner);
+   * remoteTools.registerToolInstance(remoteTool);
+   *
    * // Wrong: Reusing app-scoped tool in agent context
    * // The tool will still use app's scope/hooks, not agent's!
    * agentTools.registerToolInstance(existingAppTool);
    * ```
    *
-   * @param tool - The tool instance to register (must be created with this registry's providers)
-   * @throws Error if tool is not a valid ToolInstance
+   * @param tool - The tool instance to register (ToolInstance or RemoteToolInstance)
+   * @throws Error if tool is not a valid instance
    */
   registerToolInstance(tool: ToolEntry): void {
-    // Validate that we have a proper ToolInstance with required properties
-    if (!(tool instanceof ToolInstance)) {
-      throw new Error('registerToolInstance requires a ToolInstance, not a generic ToolEntry');
+    // Validate using type guard - accepts both ToolInstance and RemoteToolInstance
+    if (!this.isRegisterableTool(tool)) {
+      // Provide specific error messages for debugging
+      if (typeof tool.name !== 'string' || !tool.name) {
+        throw new Error('Tool instance is missing required name property');
+      }
+      const toolWithRecord = tool as { record?: { provide?: unknown; kind?: unknown; metadata?: unknown } };
+      if (!toolWithRecord.record) {
+        throw new Error('Tool instance is missing required record property');
+      }
+      if (!toolWithRecord.record.provide) {
+        throw new Error('Tool instance is missing required record.provide property');
+      }
+      if (!toolWithRecord.record.kind || !toolWithRecord.record.metadata) {
+        throw new Error('Tool instance is missing required record.kind or record.metadata');
+      }
+      throw new Error('Tool instance validation failed');
     }
 
-    const instance = tool;
-    if (!instance.record || !instance.record.provide) {
-      throw new Error('ToolInstance is missing required record.provide property');
-    }
-
-    const token = instance.record.provide as Token;
+    const token = tool.record.provide as Token;
 
     // Check for duplicate registration
     if (this.instances.has(token as Token<ToolInstance>)) {
       return; // Already registered, skip silently
     }
 
-    // Add to instances map
-    this.instances.set(token as Token<ToolInstance>, instance);
+    // Add to instances map - the type guard ensures tool has the required properties
+    this.instances.set(token as Token<ToolInstance>, tool as ToolInstance);
 
     // Create an indexed row for this tool
     const lineage: EntryLineage = this.owner ? [this.owner] : [];
-    const row = this.makeRow(token, instance, lineage, this);
+    const row = this.makeRow(token, tool, lineage, this);
     this.localRows.push(row);
 
     // Rebuild indexes

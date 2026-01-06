@@ -42,7 +42,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'findPrompt', 'createPromptContext'],
+  pre: ['parseInput', 'ensureRemoteCapabilities', 'findPrompt', 'createPromptContext'],
   execute: ['execute', 'validateOutput'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -101,6 +101,54 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       authInfo: ctx.authInfo,
     });
     this.logger.verbose('parseInput:done');
+  }
+
+  /**
+   * Ensure remote app capabilities are loaded before looking up prompts.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as PromptRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
   }
 
   @Stage('findPrompt')

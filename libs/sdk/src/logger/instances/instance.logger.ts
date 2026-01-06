@@ -59,7 +59,7 @@ export class LoggerInstance extends FrontMcpLogger {
   }
 
   get verbose(): LogFn {
-    return this._getter(LogLevel.VERBOSE);
+    return this._getter(LogLevel.Verbose);
   }
 
   get debug(): LogFn {

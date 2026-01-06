@@ -388,8 +388,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     }) => intent === 'stateful-http',
   })
   async handleStatefulHttp() {
-    // this.scope.runFlow('mcp:transport:stateful-http', this.rawInput);
-    this.next();
+    try {
+      const response = await this.scope.runFlow('handle:streamable-http', this.rawInput);
+      if (response) {
+        this.respond(response);
+      }
+      this.next();
+    } catch (error) {
+      // FlowControl is expected control flow, not an error
+      if (!(error instanceof FlowControl)) {
+        this.logError(error, 'handleStatefulHttp');
+      }
+      throw error;
+    }
   }
 
   @Stage('handleStatelessHttp', {

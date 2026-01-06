@@ -60,6 +60,7 @@ const stateSchema = z.object({
 const plan = {
   pre: [
     'parseInput',
+    'ensureRemoteCapabilities',
     'findTool',
     'checkToolAuthorization',
     'createToolCallContext',
@@ -135,6 +136,54 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:done');
   }
 
+  /**
+   * Ensure remote app capabilities are loaded before looking up tools.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as ToolRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
+  }
+
   @Stage('findTool')
   async findTool() {
     this.logger.verbose('findTool:start');
@@ -145,9 +194,34 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     // Agent invocations (use-agent:*) are routed to agents:call-agent flow
     // by the call-tool-request handler, so they won't reach here
-    const tool = activeTools.find((entry) => {
+    let tool = activeTools.find((entry) => {
       return entry.fullName === name || entry.name === name;
     });
+
+    // Fallback: search directly in remote app registries
+    // This handles timing issues where subscription callbacks haven't propagated tools yet
+    if (!tool) {
+      this.logger.verbose(`findTool: tool "${name}" not in scope registry, checking remote apps directly`);
+
+      const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+      for (const appRegistry of appRegistries) {
+        const apps = appRegistry.getApps();
+        for (const app of apps) {
+          if (app.isRemote) {
+            const remoteTools = app.tools.getTools(true);
+            const remoteTool = remoteTools.find((entry) => {
+              return entry.fullName === name || entry.name === name;
+            });
+            if (remoteTool) {
+              this.logger.verbose(`findTool: found tool "${name}" in remote app "${app.id}"`);
+              tool = remoteTool;
+              break;
+            }
+          }
+        }
+        if (tool) break;
+      }
+    }
 
     if (!tool) {
       this.logger.warn(`findTool: tool "${name}" not found`);
@@ -612,6 +686,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     const result = parseResult.data;
+
+    // Preserve any _meta from rawOutput (e.g., cache plugin adds cache: 'hit')
+    // Runtime type guard to safely extract _meta from rawOutput
+    const rawMeta = (() => {
+      if (typeof rawOutput !== 'object' || rawOutput === null) return undefined;
+      const meta = (rawOutput as Record<string, unknown>)['_meta'];
+      if (typeof meta !== 'object' || meta === null) return undefined;
+      return meta as Record<string, unknown>;
+    })();
+    if (rawMeta) {
+      result._meta = { ...result._meta, ...rawMeta };
+    }
 
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {

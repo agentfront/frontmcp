@@ -35,7 +35,7 @@ const stateSchema = z.object({
 type ResponsePromptItem = Prompt;
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'ensureRemoteCapabilities'],
   execute: ['findPrompts', 'resolveConflicts'],
   post: ['parsePrompts'],
 } as const satisfies FlowPlan<string>;
@@ -94,22 +94,78 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:done');
   }
 
+  /**
+   * Ensure remote app capabilities are loaded before listing prompts.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as PromptRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
+  }
+
   @Stage('findPrompts')
   async findPrompts() {
     this.logger.info('findPrompts:start');
 
     try {
       const prompts: Array<{ ownerName: string; prompt: PromptEntry }> = [];
+      const seenPromptIds = new Set<string>();
 
       // Get prompts from scope's prompt registry
       const scopePrompts = this.scope.prompts.getPrompts();
       this.logger.verbose(`findPrompts: scope prompts=${scopePrompts.length}`);
 
       for (const prompt of scopePrompts) {
-        prompts.push({ ownerName: prompt.owner.id, prompt });
+        // Deduplicate prompts by owner + name combination
+        // This prevents the same prompt from being registered twice while allowing
+        // different owners to have prompts with the same name (for conflict resolution)
+        const promptId = `${prompt.owner.id}:${prompt.fullName || prompt.metadata.name}`;
+        if (!seenPromptIds.has(promptId)) {
+          seenPromptIds.add(promptId);
+          prompts.push({ ownerName: prompt.owner.id, prompt });
+        }
       }
 
-      this.logger.info(`findPrompts: total prompts collected=${prompts.length}`);
+      this.logger.info(`findPrompts: total prompts collected=${prompts.length} (deduped from ${scopePrompts.length})`);
       if (prompts.length === 0) {
         this.logger.warn('findPrompts: no prompts found');
       }

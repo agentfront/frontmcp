@@ -73,3 +73,32 @@ export {
   AgentNotConfiguredError,
   AgentToolNotFoundError,
 } from './agent.errors';
+
+// Export remote MCP errors
+export {
+  // Connection errors
+  RemoteConnectionError,
+  RemoteDisconnectError,
+  // Timeout errors
+  RemoteTimeoutError,
+  // Not found errors
+  RemoteToolNotFoundError,
+  RemoteResourceNotFoundError,
+  RemotePromptNotFoundError,
+  // Auth errors
+  RemoteAuthError,
+  RemoteAuthorizationError,
+  // Execution errors
+  RemoteToolExecutionError,
+  RemoteResourceReadError,
+  RemotePromptGetError,
+  // Transport errors
+  RemoteTransportError,
+  RemoteUnsupportedTransportError,
+  // Capability errors
+  RemoteCapabilityDiscoveryError,
+  RemoteCapabilityNotSupportedError,
+  // Configuration errors
+  RemoteConfigurationError,
+  RemoteNotConnectedError,
+} from './remote.errors';

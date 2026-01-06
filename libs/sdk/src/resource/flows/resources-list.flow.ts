@@ -33,7 +33,7 @@ const stateSchema = z.object({
 type ResponseResourceItem = Resource;
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'ensureRemoteCapabilities'],
   execute: ['findResources', 'resolveConflicts'],
   post: ['parseResources'],
 } as const satisfies FlowPlan<string>;
@@ -72,11 +72,11 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:start');
 
     let method!: string;
-    let params: any;
+    let params: { cursor?: string } | undefined;
     try {
       const inputData = inputSchema.parse(this.rawInput);
       method = inputData.request.method;
-      params = inputData.request.params;
+      params = inputData.request.params as { cursor?: string } | undefined;
     } catch (e) {
       throw new InvalidInputError('Invalid request format', e instanceof z.ZodError ? e.issues : undefined);
     }
@@ -92,22 +92,80 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseInput:done');
   }
 
+  /**
+   * Ensure remote app capabilities are loaded before listing resources.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as ResourceRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
+  }
+
   @Stage('findResources')
   async findResources() {
     this.logger.info('findResources:start');
 
     try {
       const resources: Array<{ ownerName: string; resource: ResourceEntry }> = [];
+      const seenResourceIds = new Set<string>();
 
       // Get resources from scope's resource registry
       const scopeResources = this.scope.resources.getResources();
       this.logger.verbose(`findResources: scope resources=${scopeResources.length}`);
 
       for (const resource of scopeResources) {
-        resources.push({ ownerName: resource.owner.id, resource });
+        // Deduplicate resources by owner + URI/name combination
+        // This prevents the same resource from being registered twice while allowing
+        // different owners to have resources with the same name (for conflict resolution)
+        const resourceId = `${resource.owner.id}:${resource.uri || resource.metadata.name}`;
+        if (!seenResourceIds.has(resourceId)) {
+          seenResourceIds.add(resourceId);
+          resources.push({ ownerName: resource.owner.id, resource });
+        }
       }
 
-      this.logger.info(`findResources: total resources collected=${resources.length}`);
+      this.logger.info(
+        `findResources: total resources collected=${resources.length} (deduped from ${scopeResources.length})`,
+      );
       if (resources.length === 0) {
         this.logger.warn('findResources: no resources found');
       }

@@ -101,13 +101,17 @@ export default function initializeRequestHandler({
         ? requestedVersion
         : LATEST_PROTOCOL_VERSION;
 
+      // Get server info from scope metadata (configured in @FrontMcp decorator)
+      // Fall back to defaults if not configured
+      const configuredInfo = scope.metadata?.info ?? { name: 'FrontMcpServer', version: '0.0.1' };
+
       const result: InitializeResult = {
         capabilities: serverOptions.capabilities!,
         instructions: serverOptions.instructions,
         serverInfo: {
-          name: 'FrontMcpServer',
-          version: '0.0.1',
-          title: 'FrontMcpServer',
+          name: configuredInfo.name,
+          version: configuredInfo.version,
+          title: configuredInfo.name,
         },
         protocolVersion,
       };

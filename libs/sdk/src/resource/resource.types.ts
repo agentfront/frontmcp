@@ -1,6 +1,6 @@
 // file: libs/sdk/src/resource/resource.types.ts
 
-import { EntryLineage, Token, Type, FuncType } from '../common';
+import { EntryLineage, Token, Type, FuncType, ResourceEntry } from '../common';
 import { ResourceInstance } from './resource.instance';
 import ResourceRegistry from './resource.registry';
 import type { NameCase } from '@frontmcp/utils';
@@ -24,7 +24,8 @@ export type ResourceTemplateType<In = any, Out = any> =
 /** Internal augmented row: instance + provenance + token */
 export type IndexedResource = {
   token: Token;
-  instance: ResourceInstance;
+  /** Resource entry (ResourceInstance for local, proxy ResourceEntry for remote) */
+  instance: ResourceEntry;
   /** base resource name from metadata (unmodified) */
   baseName: string;
   /** URI for static resources */

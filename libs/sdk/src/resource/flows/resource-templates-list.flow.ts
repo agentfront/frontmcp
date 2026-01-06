@@ -37,7 +37,7 @@ const stateSchema = z.object({
 type ResponseTemplateItem = ResourceTemplate;
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'ensureRemoteCapabilities'],
   execute: ['findTemplates', 'resolveConflicts'],
   post: ['parseTemplates'],
 } as const satisfies FlowPlan<string>;
@@ -94,6 +94,54 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     if (cursor) this.logger.verbose(`parseInput: cursor=${cursor}`);
     this.state.set('cursor', cursor);
     this.logger.verbose('parseInput:done');
+  }
+
+  /**
+   * Ensure remote app capabilities are loaded before listing resource templates.
+   * Remote apps use lazy capability discovery - this triggers the loading.
+   * Uses provider registry to find all remote apps across all app registries.
+   */
+  @Stage('ensureRemoteCapabilities')
+  async ensureRemoteCapabilities() {
+    this.logger.verbose('ensureRemoteCapabilities:start');
+
+    // Get all apps from all app registries (same approach as ResourceRegistry.initialize)
+    // This finds remote apps that may be in parent scopes
+    const appRegistries = this.scope.providers.getRegistries('AppRegistry');
+    const remoteApps: Array<{ id: string; ensureCapabilitiesLoaded?: () => Promise<void> }> = [];
+
+    for (const appRegistry of appRegistries) {
+      const apps = appRegistry.getApps();
+      for (const app of apps) {
+        if (app.isRemote) {
+          remoteApps.push(app);
+        }
+      }
+    }
+
+    this.logger.verbose(
+      `ensureRemoteCapabilities: found ${remoteApps.length} remote app(s) across ${appRegistries.length} registries`,
+    );
+
+    if (remoteApps.length === 0) {
+      this.logger.verbose('ensureRemoteCapabilities:skip (no remote apps)');
+      return;
+    }
+
+    // Trigger capability loading for all remote apps in parallel
+    const loadPromises = remoteApps.map(async (app) => {
+      // Check if app has ensureCapabilitiesLoaded method (remote apps do)
+      if ('ensureCapabilitiesLoaded' in app && typeof app.ensureCapabilitiesLoaded === 'function') {
+        try {
+          await app.ensureCapabilitiesLoaded();
+        } catch (error) {
+          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    await Promise.all(loadPromises);
+    this.logger.verbose('ensureRemoteCapabilities:done');
   }
 
   @Stage('findTemplates')

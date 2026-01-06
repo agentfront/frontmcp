@@ -23,6 +23,8 @@ import {
 } from './resource.utils';
 import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ResourceInstance } from './resource.instance';
+import { Scope } from '../scope';
+import { AppEntry } from '../common';
 import { DEFAULT_RESOURCE_EXPORT_OPTS, ResourceExportOptions, IndexedResource } from './resource.types';
 import ReadResourceFlow from './flows/read-resource.flow';
 import ResourcesListFlow from './flows/resources-list.flow';
@@ -123,16 +125,18 @@ export default class ResourceRegistry
     }
 
     // Adopt resources from child app registries
+    const scope = this.providers.getActiveScope();
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
-        appResourceRegistries
-          .filter((r) => r.owner.kind === 'app')
-          .forEach((appResourceRegistry) => {
-            this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
-          });
+        if (app.isRemote) {
+          // Remote apps: adopt resources directly from the app's resources registry
+          this.adoptResourcesFromRemoteApp(app, scope);
+        } else {
+          // Local apps: adopt from child ResourceRegistry instances
+          this.adoptResourcesFromLocalApp(app);
+        }
       }
     });
 
@@ -148,8 +152,7 @@ export default class ResourceRegistry
     this.reindex();
     this.bump('reset');
 
-    // Register resource flows with the scope
-    const scope = this.providers.getActiveScope();
+    // Register resource flows with the scope (scope already declared above)
     await scope.registryFlows(
       ReadResourceFlow,
       ResourcesListFlow,
@@ -188,6 +191,71 @@ export default class ResourceRegistry
     this.bump('reset');
   }
 
+  /**
+   * Adopt resources directly from a remote app's resources registry.
+   * Remote apps expose resources via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded resources.
+   */
+  private adoptResourcesFromRemoteApp(app: AppEntry, scope: Scope): void {
+    const remoteRegistry = app.resources as ResourceRegistry;
+
+    // Helper to adopt/re-adopt resources from the remote app
+    const adoptRemoteResources = () => {
+      try {
+        // Remove any previously adopted resources from this remote app
+        const appPrefix = `resource:${app.id}:`;
+        this.localRows = this.localRows.filter((row) => {
+          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
+          return !tokenDesc?.startsWith(appPrefix);
+        });
+
+        const remoteResources = app.resources.getResources();
+        const remoteTemplates = app.resources.getResourceTemplates();
+        const allRemoteResources = [...remoteResources, ...remoteTemplates];
+        if (allRemoteResources.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remoteResource of allRemoteResources) {
+            if (!remoteResource || typeof remoteResource.name !== 'string') {
+              scope.logger.warn(`Invalid remote resource in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`resource:${app.id}:${remoteResource.name}`);
+            const row = this.makeRow(stableToken, remoteResource, prepend, this);
+            this.localRows.push(row);
+          }
+        }
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get resources from remote app ${app.id}: ${(error as Error).message}`);
+      }
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemoteResources();
+
+    // Subscribe to remote app's resource registry for lazy-loaded resources
+    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemoteResources();
+      });
+    }
+  }
+
+  /**
+   * Adopt resources from a local app's child ResourceRegistry instances.
+   * Local apps use the hierarchical registry pattern for resource discovery.
+   */
+  private adoptResourcesFromLocalApp(app: AppEntry): void {
+    const appResourceRegistries = app.providers.getRegistries('ResourceRegistry');
+    appResourceRegistries
+      .filter((r) => r.owner.kind === 'app')
+      .forEach((appResourceRegistry) => {
+        this.adoptFromChild(appResourceRegistry as ResourceRegistry, appResourceRegistry.owner);
+      });
+  }
+
   /* -------------------- Public API -------------------- */
 
   /**
@@ -223,7 +291,7 @@ export default class ResourceRegistry
   /**
    * Find a resource by exact URI match
    */
-  findByUri(uri: string): ResourceInstance | undefined {
+  findByUri(uri: string): ResourceEntry | undefined {
     const row = this.byUri.get(uri);
     return row?.instance;
   }
@@ -231,7 +299,7 @@ export default class ResourceRegistry
   /**
    * Match a URI against template resources and extract parameters
    */
-  matchTemplateByUri(uri: string): { instance: ResourceInstance; params: Record<string, string> } | undefined {
+  matchTemplateByUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined {
     // Try each template resource
     for (const row of this.listAllIndexed()) {
       if (!row.isTemplate) continue;
@@ -247,7 +315,7 @@ export default class ResourceRegistry
   /**
    * Find a resource by URI - tries exact match first, then template matching
    */
-  findResourceForUri(uri: string): { instance: ResourceInstance; params: Record<string, string> } | undefined {
+  findResourceForUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined {
     // Try exact URI match first
     const exact = this.findByUri(uri);
     if (exact) {
@@ -264,12 +332,12 @@ export default class ResourceRegistry
   }
 
   /** List all instances (locals + adopted). */
-  listAllInstances(): readonly ResourceInstance[] {
+  listAllInstances(): readonly ResourceEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
-  listByOwner(ownerPath: string): readonly ResourceInstance[] {
+  listByOwner(ownerPath: string): readonly ResourceEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
@@ -313,7 +381,7 @@ export default class ResourceRegistry
   /**
    * Produce unique, MCP-valid exported names.
    */
-  exportResolvedNames(opts?: ResourceExportOptions): Array<{ name: string; instance: ResourceInstance }> {
+  exportResolvedNames(opts?: ResourceExportOptions): Array<{ name: string; instance: ResourceEntry }> {
     const cfg = { ...DEFAULT_RESOURCE_EXPORT_OPTS, ...(opts ?? {}) };
 
     const rows = this.listAllIndexed().map((r) => {
@@ -332,7 +400,7 @@ export default class ResourceRegistry
       byBase.set(r.base, list);
     }
 
-    const out = new Map<string, ResourceInstance>();
+    const out = new Map<string, ResourceEntry>();
 
     for (const [base, group] of byBase.entries()) {
       if (group.length === 1) {
@@ -389,7 +457,7 @@ export default class ResourceRegistry
   }
 
   /** Lookup by the exported (resolved) name. */
-  getExported(name: string, opts?: ResourceExportOptions): ResourceInstance | undefined {
+  getExported(name: string, opts?: ResourceExportOptions): ResourceEntry | undefined {
     const pairs = this.exportResolvedNames(opts);
     return pairs.find((p) => p.name === name)?.instance;
   }
@@ -397,7 +465,7 @@ export default class ResourceRegistry
   /* -------------------- Subscriptions -------------------- */
 
   subscribe(
-    opts: { immediate?: boolean; filter?: (i: ResourceInstance) => boolean },
+    opts: { immediate?: boolean; filter?: (i: ResourceEntry) => boolean },
     cb: (evt: ResourceChangeEvent) => void,
   ): () => void {
     const filter = opts.filter ?? (() => true);
@@ -422,7 +490,7 @@ export default class ResourceRegistry
   /** Build an IndexedResource row */
   private makeRow(
     token: Token,
-    instance: ResourceInstance,
+    instance: ResourceEntry,
     lineage: EntryLineage,
     source: ResourceRegistry,
   ): IndexedResource {
@@ -469,9 +537,10 @@ export default class ResourceRegistry
   }
 
   /** Best-effort provider id used for prefixing. */
-  private providerIdOf(inst: ResourceInstance): string | undefined {
+  private providerIdOf(inst: ResourceEntry): string | undefined {
     try {
-      const meta: unknown = inst.getMetadata?.();
+      // Use metadata property from BaseEntry
+      const meta: unknown = inst.metadata;
       if (!meta || typeof meta !== 'object') return undefined;
 
       const metaObj = meta as Record<string, unknown>;
@@ -510,6 +579,53 @@ export default class ResourceRegistry
           },
         }
       : {};
+  }
+
+  /**
+   * Register an existing ResourceEntry instance directly (for remote resources).
+   * This allows pre-constructed resource instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * **IMPORTANT: Scope Binding**
+   * The ResourceEntry captures its scope and providers at construction time.
+   * The resource will use the scope from its original `providers` argument, NOT this registry's scope.
+   *
+   * @param resource - The resource instance to register (ResourceInstance or RemoteResourceInstance)
+   * @throws Error if resource is not a valid instance
+   */
+  registerResourceInstance(resource: ResourceEntry): void {
+    // Validate that we have a proper instance with required properties
+    const instance = resource as ResourceInstance;
+
+    // Check for required properties that make it a valid registerable instance
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('Resource instance is missing required record.provide property');
+    }
+    if (!instance.record.kind || !instance.record.metadata) {
+      throw new Error('Resource instance is missing required record.kind or record.metadata');
+    }
+    if (typeof instance.name !== 'string' || !instance.name) {
+      throw new Error('Resource instance is missing required name property');
+    }
+
+    const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<ResourceInstance>)) {
+      return; // Already registered, skip silently
+    }
+
+    // Add to instances map
+    this.instances.set(token as Token<ResourceInstance>, instance);
+
+    // Create an indexed row for this resource
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
   }
 
   /**

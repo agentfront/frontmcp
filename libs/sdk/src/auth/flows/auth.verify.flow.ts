@@ -73,7 +73,14 @@ export type AuthVerifyOutput = z.infer<typeof authVerifyOutputSchema>;
 
 // Flow plan
 const plan = {
-  pre: ['parseInput', 'determineAuthMode', 'handlePublicMode', 'requireAuthorizationHeader', 'verifyToken'],
+  pre: [
+    'parseInput',
+    'determineAuthMode',
+    'handlePublicMode',
+    'handleAnonymousFallback',
+    'requireAuthorizationHeader',
+    'verifyToken',
+  ],
   execute: ['buildAuthorization'],
 } as const satisfies FlowPlan<string>;
 
@@ -192,10 +199,50 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Require authorization header for non-public modes
+   * Handle transparent mode with allowAnonymous when no token is provided
+   * Uses the same TTL and issuer configuration as handlePublicMode for consistency
+   */
+  @Stage('handleAnonymousFallback', {
+    filter: ({ state, scope }) => {
+      if (state.authMode !== 'transparent' || state.token) return false;
+      const authOptions = scope.auth?.options as Record<string, unknown> | undefined;
+      return authOptions?.['allowAnonymous'] === true;
+    },
+  })
+  async handleAnonymousFallback() {
+    const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
+
+    // Create anonymous authorization for transparent mode with allowAnonymous
+    // Use same TTL and issuer logic as handlePublicMode for consistency
+    const publicAccess = authOptions?.['publicAccess'] as Record<string, unknown> | undefined;
+    const authorization = PublicAuthorization.create({
+      scopes: (authOptions?.['anonymousScopes'] as string[] | undefined) ?? ['anonymous'],
+      ttlMs: this.parseTtl(authOptions?.['sessionTtl'] as string | number | undefined),
+      issuer: (authOptions?.['issuer'] as string | undefined) ?? this.state.required.baseUrl,
+      allowedTools: (publicAccess?.['tools'] as string[] | 'all' | undefined) ?? 'all',
+      allowedPrompts: (publicAccess?.['prompts'] as string[] | 'all' | undefined) ?? 'all',
+    });
+
+    this.logger.info(`Created anonymous authorization (allowAnonymous fallback): ${authorization.id}`);
+
+    this.respond({
+      kind: 'authorized',
+      authorization,
+    });
+  }
+
+  /**
+   * Require authorization header for non-public modes (unless allowAnonymous is set)
    */
   @Stage('requireAuthorizationHeader', {
-    filter: ({ state }) => state.authMode !== 'public' && !state.authorizationHeader,
+    filter: ({ state, scope }) => {
+      if (state.authMode === 'public') return false;
+      if (state.authorizationHeader) return false;
+      // Check if allowAnonymous is enabled (already handled by handleAnonymousFallback)
+      const authOptions = scope.auth?.options as Record<string, unknown> | undefined;
+      if (state.authMode === 'transparent' && authOptions?.['allowAnonymous'] === true) return false;
+      return true;
+    },
   })
   async requireAuthorizationHeader() {
     this.logger.warn('No authorization header provided');

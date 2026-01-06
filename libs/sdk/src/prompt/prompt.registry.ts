@@ -1,7 +1,15 @@
 // file: libs/sdk/src/prompt/prompt.registry.ts
 
 import { Token, tokenName, getMetadata } from '@frontmcp/di';
-import { EntryLineage, EntryOwnerRef, PromptEntry, PromptRecord, PromptRegistryInterface, PromptType } from '../common';
+import {
+  EntryLineage,
+  EntryOwnerRef,
+  PromptEntry,
+  PromptRecord,
+  PromptRegistryInterface,
+  PromptType,
+  AppEntry,
+} from '../common';
 import { PromptChangeEvent, PromptEmitter } from './prompt.events';
 import ProviderRegistry from '../provider/provider.registry';
 import { ensureMaxLen, sepFor } from '@frontmcp/utils';
@@ -14,6 +22,7 @@ import { DEFAULT_PROMPT_EXPORT_OPTS, PromptExportOptions, IndexedPrompt } from '
 import GetPromptFlow from './flows/get-prompt.flow';
 import PromptsListFlow from './flows/prompts-list.flow';
 import { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { Scope } from '../scope';
 
 /** Maximum attempts for name disambiguation to prevent infinite loops */
 const MAX_DISAMBIGUATE_ATTEMPTS = 10000;
@@ -106,16 +115,18 @@ export default class PromptRegistry
     }
 
     // Adopt prompts from child app registries
+    const scope = this.providers.getActiveScope();
     const childAppRegistries = this.providers.getRegistries('AppRegistry');
     childAppRegistries.forEach((appRegistry) => {
       const apps = appRegistry.getApps();
       for (const app of apps) {
-        const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
-        appPromptRegistries
-          .filter((r) => r.owner.kind === 'app')
-          .forEach((appPromptRegistry) => {
-            this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
-          });
+        if (app.isRemote) {
+          // Remote apps: adopt prompts directly from the app's prompts registry
+          this.adoptPromptsFromRemoteApp(app, scope);
+        } else {
+          // Local apps: adopt from child PromptRegistry instances
+          this.adoptPromptsFromLocalApp(app);
+        }
       }
     });
 
@@ -132,7 +143,6 @@ export default class PromptRegistry
     this.bump('reset');
 
     // Register prompt flows with the scope
-    const scope = this.providers.getActiveScope();
     await scope.registryFlows(GetPromptFlow, PromptsListFlow);
   }
 
@@ -165,6 +175,69 @@ export default class PromptRegistry
     this.bump('reset');
   }
 
+  /**
+   * Adopt prompts directly from a remote app's prompts registry.
+   * Remote apps expose prompts via proxy entries that forward execution to the remote server.
+   * This also subscribes to updates from the remote app's registry for lazy-loaded prompts.
+   */
+  private adoptPromptsFromRemoteApp(app: AppEntry, scope: Scope): void {
+    const remoteRegistry = app.prompts as PromptRegistry;
+
+    // Helper to adopt/re-adopt prompts from the remote app
+    const adoptRemotePrompts = () => {
+      try {
+        // Remove any previously adopted prompts from this remote app
+        const appPrefix = `prompt:${app.id}:`;
+        this.localRows = this.localRows.filter((row) => {
+          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
+          return !tokenDesc?.startsWith(appPrefix);
+        });
+
+        const remotePrompts = app.prompts.getPrompts();
+        if (remotePrompts.length > 0) {
+          const prepend: EntryLineage = this.owner ? [this.owner] : [];
+          for (const remotePrompt of remotePrompts) {
+            if (!remotePrompt || typeof remotePrompt.name !== 'string') {
+              scope.logger.warn(`Invalid remote prompt in app ${app.id}: missing name`);
+              continue;
+            }
+            // Use Symbol.for() for stable, deterministic tokens across registry operations
+            const stableToken = Symbol.for(`prompt:${app.id}:${remotePrompt.name}`);
+            const row = this.makeRow(stableToken, remotePrompt, prepend, this);
+            this.localRows.push(row);
+          }
+        }
+        this.reindex();
+        this.bump('reset');
+      } catch (error) {
+        scope.logger.error(`Failed to get prompts from remote app ${app.id}: ${(error as Error).message}`);
+      }
+    };
+
+    // Initial adoption (may be empty if remote app hasn't connected yet)
+    adoptRemotePrompts();
+
+    // Subscribe to remote app's prompt registry for lazy-loaded prompts
+    if (remoteRegistry && typeof remoteRegistry.subscribe === 'function') {
+      remoteRegistry.subscribe({ immediate: false }, () => {
+        adoptRemotePrompts();
+      });
+    }
+  }
+
+  /**
+   * Adopt prompts from a local app's child PromptRegistry instances.
+   * Local apps use the hierarchical registry pattern for prompt discovery.
+   */
+  private adoptPromptsFromLocalApp(app: AppEntry): void {
+    const appPromptRegistries = app.providers.getRegistries('PromptRegistry');
+    appPromptRegistries
+      .filter((r) => r.owner.kind === 'app')
+      .forEach((appPromptRegistry) => {
+        this.adoptFromChild(appPromptRegistry as PromptRegistry, appPromptRegistry.owner);
+      });
+  }
+
   /* -------------------- Public API -------------------- */
 
   /**
@@ -192,7 +265,7 @@ export default class PromptRegistry
   /**
    * Find a prompt by exact name match
    */
-  findByName(name: string): PromptInstance | undefined {
+  findByName(name: string): PromptEntry | undefined {
     const rows = this.byName.get(name);
     return rows?.[0]?.instance;
   }
@@ -200,7 +273,7 @@ export default class PromptRegistry
   /**
    * Find all prompts matching a name
    */
-  findAllByName(name: string): PromptInstance[] {
+  findAllByName(name: string): PromptEntry[] {
     const rows = this.byName.get(name) ?? [];
     return rows.map((r) => r.instance);
   }
@@ -211,12 +284,12 @@ export default class PromptRegistry
   }
 
   /** List all instances (locals + adopted). */
-  listAllInstances(): readonly PromptInstance[] {
+  listAllInstances(): readonly PromptEntry[] {
     return this.listAllIndexed().map((r) => r.instance);
   }
 
   /** List instances by owner path (e.g. "app:Portal/plugin:Okta") */
-  listByOwner(ownerPath: string): readonly PromptInstance[] {
+  listByOwner(ownerPath: string): readonly PromptEntry[] {
     return (this.byOwner.get(ownerPath) ?? []).map((r) => r.instance);
   }
 
@@ -251,7 +324,7 @@ export default class PromptRegistry
   /**
    * Produce unique, MCP-valid exported names.
    */
-  exportResolvedNames(opts?: PromptExportOptions): Array<{ name: string; instance: PromptInstance }> {
+  exportResolvedNames(opts?: PromptExportOptions): Array<{ name: string; instance: PromptEntry }> {
     const cfg = { ...DEFAULT_PROMPT_EXPORT_OPTS, ...(opts ?? {}) };
 
     const rows = this.listAllIndexed().map((r) => {
@@ -270,7 +343,7 @@ export default class PromptRegistry
       byBase.set(r.base, list);
     }
 
-    const out = new Map<string, PromptInstance>();
+    const out = new Map<string, PromptEntry>();
 
     for (const [base, group] of byBase.entries()) {
       if (group.length === 1) {
@@ -315,7 +388,7 @@ export default class PromptRegistry
 
     function disambiguate(
       candidate: string,
-      pool: Map<string, PromptInstance>,
+      pool: Map<string, PromptEntry>,
       cfg: Required<PromptExportOptions>,
     ): string {
       if (!pool.has(candidate)) return candidate;
@@ -330,7 +403,7 @@ export default class PromptRegistry
   }
 
   /** Lookup by the exported (resolved) name. */
-  getExported(name: string, opts?: PromptExportOptions): PromptInstance | undefined {
+  getExported(name: string, opts?: PromptExportOptions): PromptEntry | undefined {
     const pairs = this.exportResolvedNames(opts);
     return pairs.find((p) => p.name === name)?.instance;
   }
@@ -338,7 +411,7 @@ export default class PromptRegistry
   /* -------------------- Subscriptions -------------------- */
 
   subscribe(
-    opts: { immediate?: boolean; filter?: (i: PromptInstance) => boolean },
+    opts: { immediate?: boolean; filter?: (i: PromptEntry) => boolean },
     cb: (evt: PromptChangeEvent) => void,
   ): () => void {
     const filter = opts.filter ?? (() => true);
@@ -361,12 +434,7 @@ export default class PromptRegistry
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedPrompt row */
-  private makeRow(
-    token: Token,
-    instance: PromptInstance,
-    lineage: EntryLineage,
-    source: PromptRegistry,
-  ): IndexedPrompt {
+  private makeRow(token: Token, instance: PromptEntry, lineage: EntryLineage, source: PromptRegistry): IndexedPrompt {
     const ownerKey = ownerKeyOf(lineage);
     const baseName = instance.name;
     const qualifiedName = qualifiedNameOf(lineage, baseName);
@@ -404,16 +472,16 @@ export default class PromptRegistry
   }
 
   /** Best-effort provider id used for prefixing. */
-  private providerIdOf(inst: PromptInstance): string | undefined {
+  private providerIdOf(inst: PromptEntry): string | undefined {
     try {
-      const meta: unknown = inst.getMetadata?.();
+      // Access metadata directly from the entry (cast through unknown for type safety)
+      const meta = inst.metadata as unknown as Record<string, unknown> | undefined;
       if (!meta || typeof meta !== 'object') return undefined;
 
-      const metaObj = meta as Record<string, unknown>;
-      const maybe = metaObj['providerId'] ?? metaObj['provider'] ?? metaObj['ownerId'];
+      const maybe = meta['providerId'] ?? meta['provider'] ?? meta['ownerId'];
       if (typeof maybe === 'string' && maybe.length > 0) return maybe;
 
-      const cls = metaObj['cls'];
+      const cls = meta['cls'];
       if (cls && typeof cls === 'function') {
         const id = getMetadata('id', cls);
         if (typeof id === 'string' && id.length > 0) return id;
@@ -429,6 +497,53 @@ export default class PromptRegistry
   /** True if this registry (or adopted children) has any prompts. */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
+  }
+
+  /**
+   * Register an existing PromptEntry instance directly (for remote prompts).
+   * This allows pre-constructed prompt instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * **IMPORTANT: Scope Binding**
+   * The PromptEntry captures its scope and providers at construction time.
+   * The prompt will use the scope from its original `providers` argument, NOT this registry's scope.
+   *
+   * @param prompt - The prompt instance to register (PromptInstance or RemotePromptInstance)
+   * @throws Error if prompt is not a valid instance
+   */
+  registerPromptInstance(prompt: PromptEntry): void {
+    // Validate that we have a proper instance with required properties
+    const instance = prompt as PromptInstance;
+
+    // Check for required properties that make it a valid registerable instance
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('Prompt instance is missing required record.provide property');
+    }
+    if (!instance.record.kind || !instance.record.metadata) {
+      throw new Error('Prompt instance is missing required record.kind or record.metadata');
+    }
+    if (typeof instance.name !== 'string' || !instance.name) {
+      throw new Error('Prompt instance is missing required name property');
+    }
+
+    const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<PromptInstance>)) {
+      return; // Already registered, skip silently
+    }
+
+    // Add to instances map
+    this.instances.set(token as Token<PromptInstance>, instance);
+
+    // Create an indexed row for this prompt
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
   }
 
   /**

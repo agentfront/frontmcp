@@ -140,10 +140,5 @@ export function resourceDiscoveryDeps(rec: ResourceRecord | ResourceTemplateReco
     case ResourceKind.CLASS_TOKEN:
     case ResourceTemplateKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
-    default: {
-      // Exhaustive check - this should never happen if all ResourceKind and ResourceTemplateKind are handled
-      const _exhaustiveCheck: never = rec;
-      throw new Error(`Unhandled resource kind: ${(rec as { kind: string }).kind}`);
-    }
   }
 }
