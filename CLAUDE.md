@@ -338,6 +338,41 @@ import {
 
 This ensures cross-platform support (Node.js and browser) with consistent behavior.
 
+### File System Utilities
+
+**IMPORTANT**: Always use `@frontmcp/utils` for file system operations. Never use `fs/promises` or `node:fs` directly.
+
+```typescript
+import {
+  readFile, // Read file as string
+  readFileBuffer, // Read file as Buffer
+  writeFile, // Write content to file
+  mkdir, // Create directory
+  rename, // Rename/move file or directory
+  unlink, // Delete file
+  stat, // Get file/directory stats
+  copyFile, // Copy file
+  cp, // Copy file or directory recursively
+  readdir, // List directory contents
+  rm, // Remove file or directory
+  mkdtemp, // Create temporary directory
+  access, // Check file accessibility
+  fileExists, // Check if file exists (returns boolean)
+  readJSON, // Read and parse JSON file
+  writeJSON, // Write object as JSON
+  ensureDir, // Ensure directory exists
+  isDirEmpty, // Check if directory is empty
+  runCmd, // Run command as child process
+} from '@frontmcp/utils';
+```
+
+Benefits:
+
+- Cross-platform support (Node.js only, throws in browser)
+- Lazy-loaded modules to avoid import errors in browser builds
+- Consistent API across the codebase
+- Centralized error handling and logging
+
 ### RememberPlugin Usage
 
 When `RememberPlugin` is installed, tools can use `this.remember` and `this.approval`:
@@ -359,6 +394,7 @@ class MyTool extends ToolContext {
 ## Anti-Patterns to Avoid
 
 ❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)
+❌ **Don't**: Use `fs/promises` or `node:fs` directly (use `@frontmcp/utils` for consistent file ops)
 ❌ **Don't**: Add backwards compatibility exports in new libraries
 ❌ **Don't**: Use prefixes like "PT-001" in test names
 ❌ **Don't**: Skip constructor validation tests
@@ -371,6 +407,7 @@ class MyTool extends ToolContext {
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
 
 ✅ **Do**: Use clean, descriptive names for everything
+✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
 ✅ **Do**: Test all code paths including errors
 ✅ **Do**: Document known limitations clearly
 ✅ **Do**: Follow the preset pattern for hierarchical configurations

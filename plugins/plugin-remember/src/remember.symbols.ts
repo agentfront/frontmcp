@@ -2,8 +2,6 @@ import { Reference } from '@frontmcp/sdk';
 import type { RememberStoreInterface } from './providers/remember-store.interface';
 import type { RememberAccessor } from './providers/remember-accessor.provider';
 import type { RememberPluginOptions } from './remember.types';
-import type { ApprovalStore } from './approval/approval-store.interface';
-import type { ApprovalService } from './approval/approval.service';
 
 /**
  * DI token for the underlying storage provider.
@@ -36,28 +34,3 @@ export const RememberConfigToken: Reference<RememberPluginOptions> = Symbol(
 export const RememberAccessorToken: Reference<RememberAccessor> = Symbol(
   'plugin:remember:accessor',
 ) as Reference<RememberAccessor>;
-
-/**
- * DI token for the approval store.
- */
-export const ApprovalStoreToken: Reference<ApprovalStore> = Symbol(
-  'plugin:remember:approval-store',
-) as Reference<ApprovalStore>;
-
-/**
- * DI token for the approval service.
- * Use this to programmatically manage tool approvals.
- *
- * @example
- * ```typescript
- * class MyTool extends ToolContext {
- *   async execute(input) {
- *     const approvalService = this.get(ApprovalServiceToken);
- *     const isApproved = await approvalService.isApproved('dangerous-tool');
- *   }
- * }
- * ```
- */
-export const ApprovalServiceToken: Reference<ApprovalService> = Symbol(
-  'plugin:remember:approval-service',
-) as Reference<ApprovalService>;

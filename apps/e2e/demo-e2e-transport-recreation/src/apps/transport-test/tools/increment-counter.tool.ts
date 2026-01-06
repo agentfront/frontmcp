@@ -25,7 +25,7 @@ const sessionCounters = new Map<string, number>();
 })
 export default class IncrementCounterTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
-    // Use FrontMcpContext.sessionId (always set) over authInfo.sessionId (may be undefined in public mode)
+    // Prefer FrontMcpContext.sessionId (set when context exists) over authInfo.sessionId (may be undefined in public mode)
     const ctx = this.tryGetContext();
     const authInfo = this.getAuthInfo();
     const sessionId = ctx?.sessionId ?? authInfo.sessionId ?? 'no-session';

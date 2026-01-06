@@ -1,4 +1,11 @@
-import { z } from 'zod';
+/**
+ * Approval type definitions for tool authorization flows.
+ *
+ * These types define the structure for approval records, grantors, and revokers
+ * used in tool permission systems.
+ *
+ * @module @frontmcp/utils/approval
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Scope
@@ -24,8 +31,6 @@ export enum ApprovalScope {
   CONTEXT_SPECIFIC = 'context_specific',
 }
 
-export const approvalScopeSchema = z.nativeEnum(ApprovalScope);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval State
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,8 +52,6 @@ export enum ApprovalState {
   EXPIRED = 'expired',
 }
 
-export const approvalStateSchema = z.nativeEnum(ApprovalState);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Context
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,12 +70,6 @@ export interface ApprovalContext {
   /** Optional additional context data */
   metadata?: Record<string, unknown>;
 }
-
-export const approvalContextSchema = z.object({
-  type: z.string().min(1),
-  identifier: z.string().min(1),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Source Types
@@ -104,14 +101,10 @@ export type ApprovalSourceType =
   | 'test' // Test environment
   | (string & {}); // Allow custom strings (vendor extensibility)
 
-export const approvalSourceTypeSchema = z.string().min(1);
-
 /**
  * How the approval was obtained.
  */
 export type ApprovalMethod = 'interactive' | 'implicit' | 'delegation' | 'batch' | 'api';
-
-export const approvalMethodSchema = z.enum(['interactive', 'implicit', 'delegation', 'batch', 'api']);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Delegation Context
@@ -134,13 +127,6 @@ export interface DelegationContext {
   /** Constraints on the delegation (paths, actions, etc.) */
   constraints?: Record<string, unknown>;
 }
-
-export const delegationContextSchema = z.object({
-  delegatorId: z.string().min(1),
-  delegateId: z.string().min(1),
-  purpose: z.string().optional(),
-  constraints: z.record(z.string(), z.unknown()).optional(),
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Grantor (Full Audit Trail)
@@ -198,15 +184,6 @@ export interface ApprovalGrantor {
   delegationContext?: DelegationContext;
 }
 
-export const approvalGrantorSchema = z.object({
-  source: approvalSourceTypeSchema,
-  identifier: z.string().optional(),
-  displayName: z.string().optional(),
-  method: approvalMethodSchema.optional(),
-  origin: z.string().optional(),
-  delegationContext: delegationContextSchema.optional(),
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Revoker (Revocation Tracking)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,6 +192,11 @@ export const approvalGrantorSchema = z.object({
  * Revocation source types (includes approval sources + revocation-specific).
  */
 export type RevocationSourceType = ApprovalSourceType | 'expiry' | 'session_end';
+
+/**
+ * Revocation method types.
+ */
+export type RevocationMethod = 'interactive' | 'implicit' | 'policy' | 'expiry';
 
 /**
  * Tracking for who/what revoked an approval.
@@ -230,22 +212,15 @@ export interface ApprovalRevoker {
   displayName?: string;
 
   /** How the revocation was triggered */
-  method?: 'interactive' | 'implicit' | 'policy' | 'expiry';
+  method?: RevocationMethod;
 }
-
-export const approvalRevokerSchema = z.object({
-  source: z.string().min(1),
-  identifier: z.string().optional(),
-  displayName: z.string().optional(),
-  method: z.enum(['interactive', 'implicit', 'policy', 'expiry']).optional(),
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Approval Record
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Approval record stored in memory.
+ * Approval record stored in memory/storage.
  * Enhanced with full audit trail support per MCP spec requirements.
  */
 export interface ApprovalRecord {
@@ -298,28 +273,19 @@ export interface ApprovalRecord {
   revocationReason?: string;
 }
 
-export const approvalRecordSchema = z.object({
-  toolId: z.string().min(1),
-  state: approvalStateSchema,
-  scope: approvalScopeSchema,
-  grantedAt: z.number(),
-  expiresAt: z.number().optional(),
-  ttlMs: z.number().optional(),
-  sessionId: z.string().optional(),
-  userId: z.string().optional(),
-  context: approvalContextSchema.optional(),
-  grantedBy: approvalGrantorSchema,
-  approvalChain: z.array(approvalGrantorSchema).optional(),
-  reason: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  revokedAt: z.number().optional(),
-  revokedBy: approvalRevokerSchema.optional(),
-  revocationReason: z.string().optional(),
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool Approval Requirements
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Approval category for grouping UX.
+ */
+export type ApprovalCategory = 'read' | 'write' | 'delete' | 'execute' | 'admin';
+
+/**
+ * Risk level hint for UI.
+ */
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 /**
  * Approval requirement for a tool.
@@ -373,12 +339,12 @@ export interface ToolApprovalRequirement {
   /**
    * Categories for grouping approval UX.
    */
-  category?: 'read' | 'write' | 'delete' | 'execute' | 'admin';
+  category?: ApprovalCategory;
 
   /**
    * Risk level hint for UI.
    */
-  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  riskLevel?: RiskLevel;
 
   /**
    * Contexts where this tool is pre-approved.
@@ -386,50 +352,3 @@ export interface ToolApprovalRequirement {
    */
   preApprovedContexts?: ApprovalContext[];
 }
-
-export const toolApprovalRequirementSchema = z.object({
-  required: z.boolean().optional(),
-  defaultScope: approvalScopeSchema.optional(),
-  allowedScopes: z.array(approvalScopeSchema).optional(),
-  maxTtlMs: z.number().positive().optional(),
-  alwaysPrompt: z.boolean().optional(),
-  skipApproval: z.boolean().optional(),
-  approvalMessage: z.string().optional(),
-  category: z.enum(['read', 'write', 'delete', 'execute', 'admin']).optional(),
-  riskLevel: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  preApprovedContexts: z.array(approvalContextSchema).optional(),
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Global Declaration Merging
-// ─────────────────────────────────────────────────────────────────────────────
-
-declare global {
-  /**
-   * Extend tool metadata with approval requirements.
-   * This merges with ExtendFrontMcpToolMetadata in @frontmcp/sdk.
-   */
-  interface ExtendFrontMcpToolMetadata {
-    /**
-     * Approval requirements for this tool.
-     * Enables Claude Code-like permission prompts.
-     *
-     * @example
-     * ```typescript
-     * @Tool({
-     *   name: 'file_write',
-     *   approval: {
-     *     required: true,
-     *     defaultScope: 'session',
-     *     category: 'write',
-     *     riskLevel: 'medium',
-     *   },
-     * })
-     * ```
-     */
-    approval?: ToolApprovalRequirement | boolean;
-  }
-}
-
-// Ensure the module is treated as a module
-export {};

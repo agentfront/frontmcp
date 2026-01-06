@@ -1,7 +1,7 @@
 import * as path from 'path';
-import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
+import { mkdir, readdir, stat, cp, copyFile, readFile, writeFile } from '@frontmcp/utils';
 import { AdapterTemplate } from '../types';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
@@ -114,22 +114,22 @@ export default async function handler(req, res) {
     const funcDir = path.join(outputDir, 'functions', 'index.func');
 
     // Create directories
-    await fs.mkdir(funcDir, { recursive: true });
+    await mkdir(funcDir, { recursive: true });
 
     // Copy all files from dist to the function directory
     // This includes handler.cjs and any chunk files (*.handler.cjs)
-    const distFiles = await fs.readdir(outDir);
+    const distFiles = await readdir(outDir);
     for (const file of distFiles) {
       const srcPath = path.join(outDir, file);
       const destPath = path.join(funcDir, file);
-      const stat = await fs.stat(srcPath);
+      const fileStat = await stat(srcPath);
 
-      if (stat.isDirectory()) {
+      if (fileStat.isDirectory()) {
         // Recursively copy directories
-        await fs.cp(srcPath, destPath, { recursive: true });
+        await cp(srcPath, destPath, { recursive: true });
       } else {
         // Copy files
-        await fs.copyFile(srcPath, destPath);
+        await copyFile(srcPath, destPath);
       }
     }
 
@@ -140,7 +140,7 @@ export default async function handler(req, res) {
 
     // Read package.json to get the exact versions
     const pkgJsonPath = path.join(cwd, 'package.json');
-    const pkgJson = JSON.parse(await fs.readFile(pkgJsonPath, 'utf-8'));
+    const pkgJson = JSON.parse(await readFile(pkgJsonPath, 'utf-8'));
     const allDeps = { ...pkgJson.dependencies, ...pkgJson.devDependencies };
 
     // Build list of deps with versions
@@ -155,7 +155,7 @@ export default async function handler(req, res) {
     if (depsToInstall.length > 0) {
       // Create package.json in function directory
       const funcPkgJson = { name: 'index.func', private: true, dependencies: {} };
-      await fs.writeFile(path.join(funcDir, 'package.json'), JSON.stringify(funcPkgJson, null, 2));
+      await writeFile(path.join(funcDir, 'package.json'), JSON.stringify(funcPkgJson, null, 2));
 
       // Install dependencies using npm (works on all platforms)
       try {
@@ -174,7 +174,7 @@ export default async function handler(req, res) {
       handler: bundleOutput,
       launcherType: 'Nodejs',
     };
-    await fs.writeFile(
+    await writeFile(
       path.join(funcDir, '.vc-config.json'),
       JSON.stringify(vcConfig, null, 2),
     );
@@ -184,7 +184,7 @@ export default async function handler(req, res) {
       version: 3,
       routes: [{ src: '/(.*)', dest: '/index' }],
     };
-    await fs.writeFile(
+    await writeFile(
       path.join(outputDir, 'config.json'),
       JSON.stringify(outputConfig, null, 2),
     );

@@ -242,7 +242,7 @@ export class RememberStorageProvider implements RememberStoreInterface {
  * @example
  * ```typescript
  * const provider = createRememberMemoryProvider();
- * // No need to call initialize() - storage is already connected
+ * await provider.initialize(); // Required before use
  * await provider.setValue('key', { data: 'value' });
  * ```
  */

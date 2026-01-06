@@ -5,26 +5,16 @@ import {
   ProviderScope,
   FrontMcpConfig,
   FrontMcpConfigType,
-  FrontMcpContext,
   FRONTMCP_CONTEXT,
   getGlobalStoreConfig,
   isVercelKvProvider,
 } from '@frontmcp/sdk';
 import type { RememberPluginOptions, RememberPluginOptionsInput } from './remember.types';
-import {
-  RememberStoreToken,
-  RememberConfigToken,
-  RememberAccessorToken,
-  ApprovalStoreToken,
-  ApprovalServiceToken,
-} from './remember.symbols';
+import { RememberStoreToken, RememberConfigToken, RememberAccessorToken } from './remember.symbols';
 import RememberMemoryProvider from './providers/remember-memory.provider';
 import RememberRedisProvider from './providers/remember-redis.provider';
 import RememberVercelKvProvider from './providers/remember-vercel-kv.provider';
 import { createRememberAccessor } from './providers/remember-accessor.provider';
-import { ApprovalMemoryStore } from './approval/approval-memory.store';
-import { createApprovalService } from './approval/approval.service';
-import ApprovalCheckPlugin from './approval/approval-check.hook';
 
 /**
  * RememberPlugin - Stateful session memory for FrontMCP.
@@ -49,7 +39,6 @@ import ApprovalCheckPlugin from './approval/approval-check.hook';
  *     RememberPlugin.init({
  *       type: 'global-store',
  *       tools: { enabled: true },
- *       approval: { enabled: true },
  *     }),
  *   ],
  * })
@@ -74,11 +63,6 @@ import ApprovalCheckPlugin from './approval/approval-check.hook';
       property: 'remember',
       token: RememberAccessorToken,
       errorMessage: 'RememberPlugin is not installed. Add RememberPlugin.init() to your plugins array.',
-    },
-    {
-      property: 'approval',
-      token: ApprovalServiceToken,
-      errorMessage: 'RememberPlugin approval is not enabled. Set approval: { enabled: true } in plugin options.',
     },
   ],
 })
@@ -222,48 +206,6 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
       useFactory: (store, ctx, cfg) => createRememberAccessor(store, ctx, cfg),
     });
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Approval System (if enabled)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    if (config.approval?.enabled) {
-      // Approval Store
-      providers.push({
-        name: 'remember:approval-store',
-        provide: ApprovalStoreToken,
-        useValue: new ApprovalMemoryStore(),
-      });
-
-      // Approval Service (Context-scoped)
-      providers.push({
-        name: 'remember:approval-service',
-        provide: ApprovalServiceToken,
-        scope: ProviderScope.CONTEXT,
-        inject: () => [ApprovalStoreToken, FRONTMCP_CONTEXT] as const,
-        useFactory: (store, ctx: FrontMcpContext) => {
-          const userId =
-            (ctx.authInfo?.extra?.['userId'] as string | undefined) ??
-            (ctx.authInfo?.extra?.['sub'] as string | undefined) ??
-            ctx.authInfo?.clientId;
-          return createApprovalService(store, ctx.sessionId, userId);
-        },
-      });
-    }
-
     return providers;
   };
-
-  /**
-   * Get plugin metadata including nested plugins.
-   */
-  static getPluginMetadata(options: RememberPluginOptionsInput): { plugins?: unknown[] } {
-    const plugins: unknown[] = [];
-
-    // Include approval check hook if approval is enabled
-    if (options.approval?.enabled) {
-      plugins.push(ApprovalCheckPlugin);
-    }
-
-    return plugins.length > 0 ? { plugins } : {};
-  }
 }

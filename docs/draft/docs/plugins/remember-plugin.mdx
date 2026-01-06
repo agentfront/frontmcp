@@ -1,10 +1,10 @@
 ---
 title: Remember Plugin
-description: Encrypted session memory with scoped storage and tool approval system for secure AI agent interactions.
+description: Encrypted session memory with scoped storage for AI agent interactions.
 icon: brain
 ---
 
-The Remember Plugin provides encrypted session memory and a comprehensive approval system for FrontMCP servers, enabling AI agents to remember context across conversations and manage sensitive tool permissions.
+The Remember Plugin provides encrypted session memory for FrontMCP servers, enabling AI agents to remember context across conversations.
 
 ## Why Use Remember?
 
@@ -16,14 +16,18 @@ The Remember Plugin provides encrypted session memory and a comprehensive approv
     AES-256-GCM encryption protects sensitive data at rest
   </Card>
 
-  <Card title="Tool Approvals" icon="shield-check">
-    Claude Code-style permission system for sensitive tool authorization
-  </Card>
-
   <Card title="Multiple Backends" icon="database">
     Redis, Vercel KV, or in-memory storage for different deployment needs
   </Card>
+
+  <Card title="Scoped Storage" icon="folder-tree">
+    Organize data by session, user, tool, or global scope
+  </Card>
 </CardGroup>
+
+<Info>
+For tool approval workflows (Claude Code-style permissions), see the [Approval Plugin](/docs/plugins/approval-plugin).
+</Info>
 
 ## Installation
 
@@ -35,7 +39,7 @@ npm install @frontmcp/plugin-remember
 
 <Steps>
   <Step title="Context Extension">
-    The plugin adds `this.remember` and `this.approval` to all execution contexts (ToolContext, AgentContext, etc.)
+    The plugin adds `this.remember` to all execution contexts (ToolContext, AgentContext, etc.)
   </Step>
   <Step title="Scoped Storage">
     Data is organized by scope (session, user, tool, global) with automatic key prefixing
@@ -161,6 +165,56 @@ await this.remember.set('maintenance_mode', true, { scope: 'global' });
 
 ---
 
+## Data Structure
+
+### Entry Format
+
+Each stored value is wrapped in an entry with metadata:
+
+```ts
+interface RememberEntry<T> {
+  value: T;                           // The stored value
+  brand?: PayloadBrandType;           // Semantic type hint
+  createdAt: number;                  // Unix timestamp (ms)
+  updatedAt: number;                  // Unix timestamp (ms)
+  expiresAt?: number;                 // Expiration timestamp (ms)
+  metadata?: Record<string, unknown>; // Custom metadata
+}
+```
+
+### Branded Payloads
+
+Use brands to categorize stored data semantically:
+
+```ts
+// Store with brand
+await this.remember.set('theme', 'dark', {
+  scope: 'user',
+  brand: 'preference',
+});
+
+// Available brands
+type PayloadBrandType =
+  | 'approval'      // Approval state (use with ApprovalPlugin)
+  | 'preference'    // User preferences
+  | 'cache'         // Cached data
+  | 'state'         // Application state
+  | 'conversation'  // Conversation context
+  | 'custom';       // Custom data
+```
+
+Brands enable filtering and batch operations by category:
+
+```ts
+// List all preferences
+const prefKeys = await this.remember.list({
+  scope: 'user',
+  pattern: '*',
+});
+```
+
+---
+
 ## Storage Options
 
 ### In-Memory (Default)
@@ -240,9 +294,37 @@ All stored values are encrypted by default using AES-256-GCM.
 
 ### How Keys Are Derived
 
-1. A master secret is derived from `FRONTMCP_SECRET` environment variable (or auto-generated)
+1. A master secret is derived from `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
 2. Per-entry keys are derived using HKDF-SHA256 with session/user context as salt
 3. Each entry gets a unique key based on its scope and identity
+
+### Secret Persistence
+
+In **development**, the plugin automatically generates and persists an encryption secret to `.frontmcp/remember-secret.json`:
+
+```json
+{
+  "secret": "base64url-encoded-32-byte-secret",
+  "createdAt": 1704067200000,
+  "version": 1
+}
+```
+
+This enables consistent encryption across process restarts during development without manual configuration.
+
+<Warning>
+In **production**, set the `REMEMBER_SECRET` environment variable instead:
+
+```bash
+# Generate a secure secret
+openssl rand -base64 32
+
+# Set in environment
+export REMEMBER_SECRET="your-generated-secret"
+```
+
+File-based persistence is disabled in production by default for security.
+</Warning>
 
 ### Configuration
 
@@ -255,101 +337,6 @@ RememberPlugin.init({
   },
   config: { host: 'localhost', port: 6379 },
 });
-```
-
-<Warning>
-  Set `FRONTMCP_SECRET` environment variable in production to ensure consistent encryption keys across restarts.
-</Warning>
-
----
-
-## Tool Approval System
-
-The approval system provides Claude Code-style permission management for sensitive tools.
-
-### Enable Approval System
-
-```ts
-RememberPlugin.init({
-  type: 'redis',
-  approval: {
-    enabled: true,
-  },
-  config: { host: 'localhost', port: 6379 },
-});
-```
-
-### Require Approval on Tools
-
-```ts
-@Tool({
-  name: 'file_write',
-  description: 'Write to file system',
-  inputSchema: { path: z.string(), content: z.string() },
-  approval: {
-    required: true,
-    defaultScope: 'session',
-    category: 'write',
-    riskLevel: 'medium',
-    approvalMessage: 'Allow writing to file system for this session?',
-  },
-})
-export default class FileWriteTool extends ToolContext {
-  async execute(input: { path: string; content: string }) {
-    // Tool only executes if approved
-    return await this.fs.write(input.path, input.content);
-  }
-}
-```
-
-### Approval Options
-
-<ParamField path="approval.required" type="boolean" default="true">
-  Whether this tool requires approval before execution
-</ParamField>
-
-<ParamField path="approval.defaultScope" type="ApprovalScope" default="'session'">
-  Default scope for approvals: `session`, `user`, `time_limited`, `tool_specific`, `context_specific`
-</ParamField>
-
-<ParamField path="approval.category" type="string">
-  Category for grouping: `read`, `write`, `delete`, `execute`, `admin`
-</ParamField>
-
-<ParamField path="approval.riskLevel" type="string">
-  Risk level hint: `low`, `medium`, `high`, `critical`
-</ParamField>
-
-<ParamField path="approval.approvalMessage" type="string">
-  Message shown to user when prompting for approval
-</ParamField>
-
-<ParamField path="approval.alwaysPrompt" type="boolean" default="false">
-  Prompt every time, even if previously approved (for highly sensitive operations)
-</ParamField>
-
-<ParamField path="approval.skipApproval" type="boolean" default="false">
-  Skip approval entirely (for safe, read-only operations)
-</ParamField>
-
-### Checking Approval Status
-
-```ts
-@Tool({ name: 'dangerous_tool' })
-class DangerousTool extends ToolContext {
-  async execute(input) {
-    // Check if approved
-    const isApproved = await this.approval.isApproved('dangerous_tool');
-
-    if (!isApproved) {
-      // Request approval from client
-      return { needsApproval: true, message: 'Please approve this action' };
-    }
-
-    // Proceed with dangerous operation
-    return await this.performDangerousAction(input);
-  }
-}
 ```
 
 ---
@@ -380,6 +367,37 @@ const value = await this.remember.get('key', {
   scope: 'user',
   defaultValue: 'fallback',
 });
+```
+
+</ParamField>
+
+<ParamField path="getEntry<T>(key, options?)" type="Promise<RememberEntry<T> | undefined>">
+  Retrieve the full entry including metadata, timestamps, and brand
+
+```ts
+const entry = await this.remember.getEntry('key', { scope: 'user' });
+if (entry) {
+  console.log('Created:', entry.createdAt);
+  console.log('Updated:', entry.updatedAt);
+  console.log('Brand:', entry.brand);
+  console.log('Value:', entry.value);
+}
+```
+
+</ParamField>
+
+<ParamField path="update<T>(key, value, options?)" type="Promise<boolean>">
+  Update an existing value while preserving metadata. Returns `false` if key doesn't exist.
+
+```ts
+const updated = await this.remember.update('counter', 42, {
+  scope: 'session',
+  ttl: 3600,
+});
+if (!updated) {
+  // Key didn't exist, create it instead
+  await this.remember.set('counter', 42);
+}
 ```
 
 </ParamField>
@@ -465,23 +483,18 @@ This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`
     - Better memory management with eviction policies
   </Accordion>
 
-  <Accordion title="4. Configure Approval for Sensitive Tools">
-    Any tool that:
-    - Writes to external systems
-    - Accesses sensitive data
-    - Performs irreversible actions
-
-    Should have `approval: { required: true }` configured.
-  </Accordion>
-
-  <Accordion title="5. Set FRONTMCP_SECRET in Production">
+  <Accordion title="4. Set REMEMBER_SECRET in Production">
     ```bash
     # Generate a secure secret
     openssl rand -base64 32
 
     # Set in environment
-    export FRONTMCP_SECRET="your-generated-secret"
+    export REMEMBER_SECRET="your-generated-secret"
     ```
+
+    <Info>
+    In development, the secret is auto-generated and stored in `.frontmcp/remember-secret.json`. Add this file to `.gitignore`.
+    </Info>
   </Accordion>
 </AccordionGroup>
 
@@ -494,12 +507,11 @@ import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
 import { RememberPlugin } from '@frontmcp/plugin-remember';
 import { z } from 'zod';
 
-// Configure with Redis and approval system
+// Configure with Redis
 const rememberPlugin = RememberPlugin.init({
   type: 'redis',
   defaultTTL: 86400, // 1 day
   encryption: { enabled: true },
-  approval: { enabled: true },
   config: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -525,40 +537,11 @@ class SetPreferencesTool extends ToolContext {
   }
 }
 
-// Tool requiring approval
-@Tool({
-  name: 'delete-account',
-  description: 'Permanently delete user account',
-  inputSchema: { confirm: z.boolean() },
-  approval: {
-    required: true,
-    riskLevel: 'critical',
-    category: 'delete',
-    approvalMessage: 'This will permanently delete your account. Are you sure?',
-    alwaysPrompt: true, // Always ask, even if previously approved
-  },
-})
-class DeleteAccountTool extends ToolContext {
-  async execute(input: { confirm: boolean }) {
-    if (!input.confirm) {
-      return { success: false, message: 'Deletion not confirmed' };
-    }
-
-    // Perform deletion - list and delete all user-scoped memories
-    const userKeys = await this.remember.list({ scope: 'user' });
-    for (const key of userKeys) {
-      await this.remember.forget(key, { scope: 'user' });
-    }
-
-    return { success: true, message: 'Account deleted' };
-  }
-}
-
 @App({
   id: 'user-management',
   name: 'User Management',
   plugins: [rememberPlugin],
-  tools: [SetPreferencesTool, DeleteAccountTool],
+  tools: [SetPreferencesTool],
 })
 class UserManagementApp {}
 
@@ -583,8 +566,8 @@ export default class Server {}
     View the remember plugin source code
   </Card>
 
-  <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
-    See memory and approvals in action
+  <Card title="Approval Plugin" icon="shield-check" href="/docs/plugins/approval-plugin">
+    For tool authorization workflows
   </Card>
 
   <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/extensibility/plugins">

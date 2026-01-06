@@ -100,8 +100,12 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
       } else {
         // Create new client
         const RedisClass = getRedisClass();
-        const redisOptions = this.buildRedisOptions();
-        this.client = new RedisClass(redisOptions);
+        if (this.options.url) {
+          // Pass URL directly to constructor
+          this.client = new RedisClass(this.options.url, this.buildRedisOptions());
+        } else {
+          this.client = new RedisClass(this.buildRedisOptions());
+        }
       }
 
       // Test connection
@@ -151,6 +155,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   }
 
   protected async doSet(key: string, value: string, options?: SetOptions): Promise<void> {
+    this.ensureConnected();
     const prefixedKey = this.prefixKey(key);
     const args: (string | number)[] = [prefixedKey, value];
 

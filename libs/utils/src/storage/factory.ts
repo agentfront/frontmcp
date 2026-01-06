@@ -73,7 +73,7 @@ async function createAdapter(type: StorageType, config: StorageConfig): Promise<
     }
 
     case 'auto':
-      throw new Error('Auto type should be resolved before calling createAdapter');
+      throw new StorageConfigError('auto', 'Auto type should be resolved before calling createAdapter');
 
     default:
       throw new StorageConfigError('unknown', `Unknown storage type: ${type}`);

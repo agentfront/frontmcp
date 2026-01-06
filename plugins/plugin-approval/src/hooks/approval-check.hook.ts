@@ -1,20 +1,23 @@
+/**
+ * Hook plugin that checks tool approval before execution.
+ *
+ * @module @frontmcp/plugin-approval
+ */
+
 import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
-import type { ApprovalStore } from './approval-store.interface';
-import type { ToolApprovalRequirement, ApprovalContext, ApprovalRecord } from './approval.types';
-import { ApprovalScope, ApprovalState } from './approval.types';
-import { ApprovalRequiredError, ApprovalScopeNotAllowedError } from './approval.errors';
-import { ApprovalStoreToken } from '../remember.symbols';
+import { ApprovalRequiredError } from '../approval';
+import type { ApprovalStore } from '../stores/approval-store.interface';
+import type { ToolApprovalRequirement, ApprovalContext, ApprovalRecord } from '../types';
+import { ApprovalScope, ApprovalState } from '../types';
+import { ApprovalStoreToken } from '../approval.symbols';
 
 /**
  * Hook plugin that checks tool approval before execution.
  *
- * Integrates with the tool execution flow at `willExecute` stage
- * to verify approval state before allowing tool execution.
- *
  * Priority 100 ensures this runs early (before cache at 1000).
  */
 @Plugin({
-  name: 'remember:approval-check',
+  name: 'approval:check',
   description: 'Checks tool approval state before execution',
 })
 export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, never>> {
@@ -26,20 +29,20 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     const { tool, toolContext } = flowCtx.state;
     if (!tool || !toolContext) return;
 
-    // Get approval requirements from tool metadata
-    const approvalConfig = this.resolveApprovalConfig(tool.metadata.approval);
+    // Get approval config from tool metadata (if it exists)
+    const metadata = tool.metadata as unknown as Record<string, unknown>;
+    const approvalConfig = this.resolveApprovalConfig(
+      metadata['approval'] as ToolApprovalRequirement | boolean | undefined,
+    );
 
-    // If no approval required, skip check
     if (!approvalConfig.required) {
       return;
     }
 
-    // If skipApproval is true, skip check
     if (approvalConfig.skipApproval) {
       return;
     }
 
-    // Get session and user info from context
     const ctx = toolContext.tryGetContext?.();
     const sessionId = ctx?.sessionId ?? 'unknown';
     const userId =
@@ -47,37 +50,26 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       this.getStringExtra(ctx?.authInfo?.extra, 'sub') ??
       ctx?.authInfo?.clientId;
 
-    // Get current context (e.g., repo, project)
     const currentContext = this.getCurrentContext(flowCtx);
 
-    // Check for pre-approved contexts
     if (this.isPreApprovedContext(approvalConfig, currentContext)) {
       return;
     }
 
-    // Get the approval store
-    const approvalStore = this.get(ApprovalStoreToken);
-
-    // Check if tool is already approved
+    const approvalStore = this.get(ApprovalStoreToken) as ApprovalStore;
     const approval = await approvalStore.getApproval(tool.fullName, sessionId, userId);
 
-    // If alwaysPrompt, ignore existing approval
     if (approvalConfig.alwaysPrompt) {
       await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
       return;
     }
 
-    // Check approval state
     if (approval?.state === ApprovalState.APPROVED) {
-      // Check if approval is still valid (not expired)
       if (!this.isExpired(approval)) {
-        // Approval valid, allow execution
         return;
       }
-      // Approval expired, need to re-prompt
     }
 
-    // If denied, throw immediately
     if (approval?.state === ApprovalState.DENIED) {
       throw new ApprovalRequiredError({
         toolId: tool.fullName,
@@ -86,13 +78,9 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       });
     }
 
-    // Need approval - handle based on configuration
     await this.handleApprovalRequired(flowCtx, approvalConfig, approval);
   }
 
-  /**
-   * Resolve approval configuration from metadata.
-   */
   private resolveApprovalConfig(config: ToolApprovalRequirement | boolean | undefined): ToolApprovalRequirement {
     if (config === true) {
       return { required: true, defaultScope: ApprovalScope.SESSION };
@@ -100,7 +88,6 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     if (config === false || config === undefined) {
       return { required: false };
     }
-    // Spread config first, then apply defaults to avoid undefined values overwriting defaults
     return {
       ...config,
       required: config.required ?? true,
@@ -108,36 +95,24 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     };
   }
 
-  /**
-   * Check if approval is expired.
-   */
   private isExpired(approval: ApprovalRecord): boolean {
     if (!approval.expiresAt) return false;
     return Date.now() > approval.expiresAt;
   }
 
-  /**
-   * Get current context from flow context.
-   */
   private getCurrentContext(flowCtx: FlowCtxOf<'tools:call-tool'>): ApprovalContext | undefined {
     const { toolContext } = flowCtx.state;
     const ctx = toolContext?.tryGetContext?.();
 
-    // Try to extract context from various sources with runtime validation
-    // 1. Tool input (if tool expects context parameter)
     const inputContext = toolContext?.input?.['context'];
     const contextFromInput = this.isApprovalContext(inputContext) ? inputContext : undefined;
 
-    // 2. Session metadata
     const sessionContext = ctx?.authInfo?.extra?.['approvalContext'];
     const contextFromSession = this.isApprovalContext(sessionContext) ? sessionContext : undefined;
 
     return contextFromInput ?? contextFromSession;
   }
 
-  /**
-   * Runtime type guard for ApprovalContext.
-   */
   private isApprovalContext(value: unknown): value is ApprovalContext {
     return (
       typeof value === 'object' &&
@@ -149,18 +124,12 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     );
   }
 
-  /**
-   * Safely extract a string value from an extras object.
-   */
   private getStringExtra(extra: Record<string, unknown> | undefined, key: string): string | undefined {
     if (!extra) return undefined;
     const value = extra[key];
     return typeof value === 'string' ? value : undefined;
   }
 
-  /**
-   * Check if current context is pre-approved.
-   */
   private isPreApprovedContext(config: ToolApprovalRequirement, currentContext: ApprovalContext | undefined): boolean {
     if (!currentContext || !config.preApprovedContexts?.length) {
       return false;
@@ -171,25 +140,15 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     );
   }
 
-  /**
-   * Handle the case where approval is required.
-   * Throws ApprovalRequiredError to signal client.
-   */
   private async handleApprovalRequired(
     flowCtx: FlowCtxOf<'tools:call-tool'>,
     config: ToolApprovalRequirement,
     existingApproval: ApprovalRecord | undefined,
   ): Promise<void> {
     const { tool } = flowCtx.state;
-
-    // Build approval prompt message
     const message = config.approvalMessage ?? `Tool "${tool?.fullName}" requires approval to execute. Allow?`;
-
-    // Determine approval state: use isExpired helper for APPROVED records with past expiresAt
     const isExpiredApproval = existingApproval ? this.isExpired(existingApproval) : false;
 
-    // For now, throw error for client to handle
-    // Future: could use transport elicit if available
     throw new ApprovalRequiredError({
       toolId: tool?.fullName ?? 'unknown',
       state: isExpiredApproval ? 'expired' : 'pending',

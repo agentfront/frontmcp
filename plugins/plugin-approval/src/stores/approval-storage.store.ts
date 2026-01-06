@@ -1,3 +1,9 @@
+/**
+ * Storage-backed implementation of the ApprovalStore.
+ *
+ * @module @frontmcp/plugin-approval
+ */
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import {
   createStorage,
@@ -6,53 +12,14 @@ import {
   type NamespacedStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
+import { normalizeGrantor, normalizeRevoker } from '../approval';
 import type {
   ApprovalStore,
   ApprovalQuery,
   GrantApprovalOptions,
   RevokeApprovalOptions,
 } from './approval-store.interface';
-import type {
-  ApprovalRecord,
-  ApprovalContext,
-  ApprovalGrantor,
-  ApprovalRevoker,
-  ApprovalSourceType,
-  RevocationSourceType,
-} from './approval.types';
-import { ApprovalScope, ApprovalState } from './approval.types';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Normalization Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Normalize a grantedBy input to the structured ApprovalGrantor format.
- * Accepts either a simple string source type or a full ApprovalGrantor object.
- */
-function normalizeGrantor(input: ApprovalGrantor | ApprovalSourceType | undefined): ApprovalGrantor {
-  if (!input) {
-    return { source: 'user' };
-  }
-  if (typeof input === 'string') {
-    return { source: input };
-  }
-  return input;
-}
-
-/**
- * Normalize a revokedBy input to the structured ApprovalRevoker format.
- * Accepts either a simple string source type or a full ApprovalRevoker object.
- */
-function normalizeRevoker(input: ApprovalRevoker | RevocationSourceType | undefined): ApprovalRevoker {
-  if (!input) {
-    return { source: 'user' };
-  }
-  if (typeof input === 'string') {
-    return { source: input };
-  }
-  return input;
-}
+import { ApprovalScope, ApprovalState, type ApprovalRecord, type ApprovalContext } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -70,7 +37,6 @@ export interface ApprovalStorageStoreOptions {
 
   /**
    * Use an existing storage instance instead of creating a new one.
-   * Takes precedence over `storage` config.
    */
   storageInstance?: RootStorage | NamespacedStorage;
 
@@ -95,33 +61,10 @@ export interface ApprovalStorageStoreOptions {
 /**
  * Storage-backed implementation of the ApprovalStore.
  * Works with any storage backend (memory, Redis, Vercel KV, Upstash).
- *
- * @example Memory storage (development)
- * ```typescript
- * const store = new ApprovalStorageStore();
- * await store.initialize();
- * ```
- *
- * @example Redis storage (production)
- * ```typescript
- * const store = new ApprovalStorageStore({
- *   storage: { type: 'redis', redis: { url: 'redis://localhost:6379' } }
- * });
- * await store.initialize();
- * ```
- *
- * @example With existing storage instance
- * ```typescript
- * const rootStorage = await createStorage({ type: 'redis' });
- * const store = new ApprovalStorageStore({
- *   storageInstance: rootStorage.namespace('myapp')
- * });
- * await store.initialize();
- * ```
  */
 @Provider({
-  name: 'provider:remember:approval-store:storage',
-  description: 'Storage-backed approval store for RememberPlugin (supports Memory, Redis, Vercel KV, Upstash)',
+  name: 'provider:approval:store:storage',
+  description: 'Storage-backed approval store (supports Memory, Redis, Vercel KV, Upstash)',
   scope: ProviderScope.GLOBAL,
 })
 export class ApprovalStorageStore implements ApprovalStore {
@@ -144,14 +87,12 @@ export class ApprovalStorageStore implements ApprovalStore {
 
   /**
    * Initialize the storage connection.
-   * Must be called before using the store.
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
 
-    // Use provided storage instance or create new one
     if (this.options.storageInstance) {
       this.storage = this.options.storageInstance.namespace(this.options.namespace);
       this.ownedStorage = false;
@@ -161,7 +102,6 @@ export class ApprovalStorageStore implements ApprovalStore {
       this.ownedStorage = true;
     }
 
-    // Start cleanup interval if enabled
     if (this.options.cleanupIntervalSeconds > 0) {
       this.cleanupInterval = setInterval(() => {
         void this.clearExpiredApprovals();
@@ -172,18 +112,12 @@ export class ApprovalStorageStore implements ApprovalStore {
     this.initialized = true;
   }
 
-  /**
-   * Ensure initialization before operations.
-   */
   private ensureInitialized(): void {
     if (!this.initialized) {
       throw new Error('ApprovalStorageStore not initialized. Call initialize() first.');
     }
   }
 
-  /**
-   * Build a unique key for an approval.
-   */
   private buildKey(toolId: string, sessionId?: string, userId?: string, context?: ApprovalContext): string {
     const parts = [toolId];
     if (sessionId) parts.push(`session:${sessionId}`);
@@ -192,9 +126,6 @@ export class ApprovalStorageStore implements ApprovalStore {
     return parts.join(':');
   }
 
-  /**
-   * Parse an approval record from storage.
-   */
   private parseRecord(value: string | null): ApprovalRecord | undefined {
     if (!value) return undefined;
     try {
@@ -204,20 +135,13 @@ export class ApprovalStorageStore implements ApprovalStore {
     }
   }
 
-  /**
-   * Check if an approval is expired.
-   */
   private isExpired(approval: ApprovalRecord): boolean {
     return approval.expiresAt !== undefined && Date.now() > approval.expiresAt;
   }
 
-  /**
-   * Get approval for a specific tool.
-   */
   async getApproval(toolId: string, sessionId: string, userId?: string): Promise<ApprovalRecord | undefined> {
     this.ensureInitialized();
 
-    // Check session approval first
     const sessionKey = this.buildKey(toolId, sessionId);
     const sessionValue = await this.storage.get(sessionKey);
     const sessionApproval = this.parseRecord(sessionValue);
@@ -225,7 +149,6 @@ export class ApprovalStorageStore implements ApprovalStore {
       return sessionApproval;
     }
 
-    // Check user approval
     if (userId) {
       const userKey = this.buildKey(toolId, undefined, userId);
       const userValue = await this.storage.get(userKey);
@@ -238,31 +161,22 @@ export class ApprovalStorageStore implements ApprovalStore {
     return undefined;
   }
 
-  /**
-   * Query approvals matching filters.
-   */
   async queryApprovals(query: ApprovalQuery): Promise<ApprovalRecord[]> {
     this.ensureInitialized();
 
     const results: ApprovalRecord[] = [];
-
-    // Get all keys matching pattern
     const pattern = query.toolId ? `${query.toolId}:*` : '*';
     const keys = await this.storage.keys(pattern);
-
-    // Batch fetch all values
     const values = await this.storage.mget(keys);
 
     for (const value of values) {
       const approval = this.parseRecord(value);
       if (!approval) continue;
 
-      // Check expiration
       if (!query.includeExpired && this.isExpired(approval)) {
         continue;
       }
 
-      // Apply filters
       if (query.toolId && approval.toolId !== query.toolId) continue;
       if (query.toolIds && !query.toolIds.includes(approval.toolId)) continue;
       if (query.scope && approval.scope !== query.scope) continue;
@@ -287,16 +201,11 @@ export class ApprovalStorageStore implements ApprovalStore {
     return results;
   }
 
-  /**
-   * Grant approval for a tool.
-   */
   async grantApproval(options: GrantApprovalOptions): Promise<ApprovalRecord> {
     this.ensureInitialized();
 
     const now = Date.now();
     const expiresAt = options.ttlMs ? now + options.ttlMs : undefined;
-
-    // Normalize grantedBy to full ApprovalGrantor structure
     const grantedBy = normalizeGrantor(options.grantedBy);
 
     const record: ApprovalRecord = {
@@ -315,25 +224,18 @@ export class ApprovalStorageStore implements ApprovalStore {
     };
 
     const key = this.buildKey(options.toolId, options.sessionId, options.userId, options.context);
-
-    // Store with TTL if specified (convert ms to seconds)
     const ttlSeconds = options.ttlMs ? Math.ceil(options.ttlMs / 1000) : undefined;
     await this.storage.set(key, JSON.stringify(record), { ttlSeconds });
 
     return record;
   }
 
-  /**
-   * Revoke approval for a tool.
-   */
   async revokeApproval(options: RevokeApprovalOptions): Promise<boolean> {
     this.ensureInitialized();
 
     const key = this.buildKey(options.toolId, options.sessionId, options.userId, options.context);
-
     const exists = await this.storage.exists(key);
     if (exists) {
-      // Delete the record
       await this.storage.delete(key);
       return true;
     }
@@ -341,13 +243,9 @@ export class ApprovalStorageStore implements ApprovalStore {
     return false;
   }
 
-  /**
-   * Check if a tool is approved.
-   */
   async isApproved(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): Promise<boolean> {
     this.ensureInitialized();
 
-    // Check context-specific approval first
     if (context) {
       const contextKey = this.buildKey(toolId, sessionId, userId, context);
       const contextValue = await this.storage.get(contextKey);
@@ -357,7 +255,6 @@ export class ApprovalStorageStore implements ApprovalStore {
       }
     }
 
-    // Check session approval
     const sessionKey = this.buildKey(toolId, sessionId);
     const sessionValue = await this.storage.get(sessionKey);
     const sessionApproval = this.parseRecord(sessionValue);
@@ -365,7 +262,6 @@ export class ApprovalStorageStore implements ApprovalStore {
       return true;
     }
 
-    // Check user approval
     if (userId) {
       const userKey = this.buildKey(toolId, undefined, userId);
       const userValue = await this.storage.get(userKey);
@@ -378,13 +274,9 @@ export class ApprovalStorageStore implements ApprovalStore {
     return false;
   }
 
-  /**
-   * Clear all session approvals.
-   */
   async clearSessionApprovals(sessionId: string): Promise<number> {
     this.ensureInitialized();
 
-    // Find all keys for this session
     const pattern = `*:session:${sessionId}*`;
     const keys = await this.storage.keys(pattern);
 
@@ -395,16 +287,10 @@ export class ApprovalStorageStore implements ApprovalStore {
     return await this.storage.mdelete(keys);
   }
 
-  /**
-   * Clear expired approvals.
-   */
   async clearExpiredApprovals(): Promise<number> {
     this.ensureInitialized();
 
     const now = Date.now();
-    let count = 0;
-
-    // Get all keys
     const keys = await this.storage.keys('*');
     const values = await this.storage.mget(keys);
 
@@ -418,15 +304,12 @@ export class ApprovalStorageStore implements ApprovalStore {
     }
 
     if (keysToDelete.length > 0) {
-      count = await this.storage.mdelete(keysToDelete);
+      return await this.storage.mdelete(keysToDelete);
     }
 
-    return count;
+    return 0;
   }
 
-  /**
-   * Get approval statistics.
-   */
   async getStats(): Promise<{
     totalApprovals: number;
     byScope: Record<ApprovalScope, number>;
@@ -449,7 +332,6 @@ export class ApprovalStorageStore implements ApprovalStore {
       [ApprovalState.EXPIRED]: 0,
     };
 
-    // Get all keys and values
     const keys = await this.storage.keys('*');
     const values = await this.storage.mget(keys);
 
@@ -470,16 +352,12 @@ export class ApprovalStorageStore implements ApprovalStore {
     };
   }
 
-  /**
-   * Close the store and cleanup.
-   */
   async close(): Promise<void> {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = undefined;
     }
 
-    // Only disconnect if we own the storage
     if (this.ownedStorage && this.storage) {
       await this.storage.root.disconnect();
     }
@@ -490,13 +368,6 @@ export class ApprovalStorageStore implements ApprovalStore {
 
 /**
  * Create an ApprovalStorageStore with synchronous memory storage.
- * Convenience function for simple use cases.
- *
- * @example
- * ```typescript
- * const store = createApprovalMemoryStore();
- * // No need to call initialize() - storage is already connected
- * ```
  */
 export function createApprovalMemoryStore(
   options: Omit<ApprovalStorageStoreOptions, 'storage' | 'storageInstance'> = {},

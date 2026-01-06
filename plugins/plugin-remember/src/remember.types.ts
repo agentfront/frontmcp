@@ -133,12 +133,6 @@ export interface BaseRememberPluginOptions {
     /** Tool name prefix (default: none) */
     prefix?: string;
   };
-
-  /** Approval system configuration */
-  approval?: {
-    /** Whether approval system is enabled (default: false) */
-    enabled?: boolean;
-  };
 }
 
 /**

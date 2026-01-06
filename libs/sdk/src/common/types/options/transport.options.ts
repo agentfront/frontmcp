@@ -268,6 +268,8 @@ export function isDistributedMode(config?: DistributedConfigInput): boolean {
     const env = typeof process !== 'undefined' ? process.env : {};
     return !!(
       env['VERCEL'] ||
+      env['NETLIFY'] ||
+      env['CF_PAGES'] || // Cloudflare Pages
       env['AWS_LAMBDA_FUNCTION_NAME'] ||
       env['GOOGLE_CLOUD_PROJECT'] ||
       env['AZURE_FUNCTIONS_ENVIRONMENT'] ||

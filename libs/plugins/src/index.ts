@@ -10,33 +10,8 @@
  * - @frontmcp/plugin-remember
  */
 
-// Cache Plugin
-export { default as CachePlugin, CachePluginOptions } from '@frontmcp/plugin-cache';
-
-// CodeCall Plugin
-export {
-  default as CodeCallPlugin,
-  CodeCallPluginOptions,
-  CodeCallPluginOptionsInput,
-} from '@frontmcp/plugin-codecall';
-
-// Dashboard Plugin
-export {
-  default as DashboardPlugin,
-  DashboardApp,
-  DashboardPluginOptions,
-  DashboardPluginOptionsInput,
-} from '@frontmcp/plugin-dashboard';
-
 // Remember Plugin
-export {
-  default as RememberPlugin,
-  RememberPluginOptions,
-  RememberPluginOptionsInput,
-  RememberAccessorToken,
-  ApprovalServiceToken,
-  RememberScope,
-  ApprovalScope,
-  ApprovalState,
-} from '@frontmcp/plugin-remember';
-export type { RememberEntry, ApprovalRecord, ToolApprovalRequirement } from '@frontmcp/plugin-remember';
+export * from '@frontmcp/plugin-cache';
+export * from '@frontmcp/plugin-codecall';
+export * from '@frontmcp/plugin-dashboard';
+export * from '@frontmcp/plugin-remember';

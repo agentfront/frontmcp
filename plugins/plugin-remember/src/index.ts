@@ -44,13 +44,7 @@
 export { default, default as RememberPlugin } from './remember.plugin';
 
 // Symbols (DI tokens)
-export {
-  RememberStoreToken,
-  RememberConfigToken,
-  RememberAccessorToken,
-  ApprovalStoreToken,
-  ApprovalServiceToken,
-} from './remember.symbols';
+export { RememberStoreToken, RememberConfigToken, RememberAccessorToken } from './remember.symbols';
 
 // Types
 export type {
@@ -83,67 +77,12 @@ export { default as RememberMemoryProvider } from './providers/remember-memory.p
 export { default as RememberRedisProvider } from './providers/remember-redis.provider';
 export { default as RememberVercelKvProvider } from './providers/remember-vercel-kv.provider';
 
-// Approval system - Types
-export {
-  ApprovalScope,
-  ApprovalState,
-  type ApprovalContext,
-  type ApprovalRecord,
-  type ToolApprovalRequirement,
-  // New grantor/revoker types for production-grade audit trails
-  type ApprovalSourceType,
-  type ApprovalMethod,
-  type ApprovalGrantor,
-  type ApprovalRevoker,
-  type RevocationSourceType,
-  type DelegationContext,
-} from './approval/approval.types';
-export type {
-  ApprovalStore,
-  ApprovalQuery,
-  GrantApprovalOptions,
-  RevokeApprovalOptions,
-} from './approval/approval-store.interface';
-export { ApprovalService, type GrantOptions, type RevokeOptions } from './approval/approval.service';
-export { ApprovalMemoryStore } from './approval/approval-memory.store';
-export {
-  ApprovalRequiredError,
-  ApprovalOperationError,
-  ApprovalScopeNotAllowedError,
-} from './approval/approval.errors';
-
-// Approval system - Utility helpers for creating grantors/revokers
-export {
-  // Grantor factories
-  userGrantor,
-  policyGrantor,
-  adminGrantor,
-  systemGrantor,
-  agentGrantor,
-  apiGrantor,
-  oauthGrantor,
-  testGrantor,
-  customGrantor,
-  // Revoker factories
-  userRevoker,
-  adminRevoker,
-  expiryRevoker,
-  sessionEndRevoker,
-  policyRevoker,
-  // Normalization helpers
-  normalizeGrantor,
-  normalizeRevoker,
-  // Type guards
-  isGrantorSource,
-  isHumanGrantor,
-  isAutoGrantor,
-  isDelegatedGrantor,
-} from './approval/approval.utils';
-
 // Tools
 export { RememberThisTool, RecallTool, ForgetTool, ListMemoriesTool } from './tools';
 
 // Context Extension Types & Helper Functions
-// TypeScript types for this.remember and this.approval are declared in remember.context-extension.ts
+// TypeScript types for this.remember are declared in remember.context-extension.ts
 // SDK handles runtime installation via contextExtensions in plugin metadata
-export { getRemember, getApproval, tryGetRemember, tryGetApproval } from './remember.context-extension';
+export { getRemember, tryGetRemember } from './remember.context-extension';
+
+// For tool approval workflows, use @frontmcp/plugin-approval

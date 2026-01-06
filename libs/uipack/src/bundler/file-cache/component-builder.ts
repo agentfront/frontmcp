@@ -7,10 +7,10 @@
  * @packageDocumentation
  */
 
-import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, extname, basename } from 'path';
 import { randomUUID } from 'crypto';
+import { readFile } from '@frontmcp/utils';
 
 import type {
   ComponentBuildManifest,

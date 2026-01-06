@@ -11,6 +11,7 @@
     "docs:live": "cd docs/live && mint dev --port 4100",
     "docs:draft": "cd docs/draft && mint dev --port 4200",
     "prepare": "husky",
+    "test": "yarn test:unit && yarn test:e2e",
     "test:unit": "nx run-many -t test --exclude='demo-e2e-*'",
     "test:unit:coverage": "nx run-many -t test --exclude='demo-e2e-*' --coverage",
     "test:e2e": "nx run-many -t test --projects='demo-e2e-*'",

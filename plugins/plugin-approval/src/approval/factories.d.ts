@@ -1,12 +1,12 @@
 /**
- * Utility functions for creating approval grantors and revokers.
+ * Factory functions for creating approval grantors and revokers.
  *
  * These helpers make it easy to create properly-typed grantor/revoker objects
  * for common scenarios.
  *
  * @example
  * ```typescript
- * import { userGrantor, testGrantor, policyGrantor } from '@frontmcp/plugins/remember';
+ * import { userGrantor, testGrantor, policyGrantor } from '@frontmcp/utils';
  *
  * // In tests
  * await store.grantApproval({
@@ -22,6 +22,8 @@
  *   grantedBy: userGrantor('user-123', 'John Doe'),
  * });
  * ```
+ *
+ * @module @frontmcp/utils/approval
  */
 import type {
   ApprovalGrantor,
@@ -30,12 +32,7 @@ import type {
   RevocationSourceType,
   DelegationContext,
   ApprovalMethod,
-} from './approval.types';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Grantor Factory Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
+} from './types';
 /**
  * Create a user grantor for interactive approvals.
  *
@@ -50,20 +47,14 @@ import type {
  * // => { source: 'user', identifier: 'user-123', displayName: 'John Doe', method: 'interactive' }
  * ```
  */
-export function userGrantor(
+export declare function userGrantor(
   userId: string,
   displayName?: string,
-  options?: { method?: ApprovalMethod; origin?: string },
-): ApprovalGrantor {
-  return {
-    source: 'user',
-    identifier: userId,
-    displayName,
-    method: options?.method ?? 'interactive',
-    origin: options?.origin,
-  };
-}
-
+  options?: {
+    method?: ApprovalMethod;
+    origin?: string;
+  },
+): ApprovalGrantor;
 /**
  * Create a policy grantor for auto-approved tools.
  *
@@ -77,15 +68,7 @@ export function userGrantor(
  * // => { source: 'policy', identifier: 'safe-list', displayName: 'Safe Tools Policy', method: 'implicit' }
  * ```
  */
-export function policyGrantor(policyId: string, policyName?: string): ApprovalGrantor {
-  return {
-    source: 'policy',
-    identifier: policyId,
-    displayName: policyName,
-    method: 'implicit',
-  };
-}
-
+export declare function policyGrantor(policyId: string, policyName?: string): ApprovalGrantor;
 /**
  * Create an admin grantor for administrator overrides.
  *
@@ -100,20 +83,14 @@ export function policyGrantor(policyId: string, policyName?: string): ApprovalGr
  * // => { source: 'admin', identifier: 'admin-456', displayName: 'Super Admin', method: 'interactive' }
  * ```
  */
-export function adminGrantor(
+export declare function adminGrantor(
   adminId: string,
   displayName?: string,
-  options?: { method?: ApprovalMethod; origin?: string },
-): ApprovalGrantor {
-  return {
-    source: 'admin',
-    identifier: adminId,
-    displayName,
-    method: options?.method ?? 'interactive',
-    origin: options?.origin,
-  };
-}
-
+  options?: {
+    method?: ApprovalMethod;
+    origin?: string;
+  },
+): ApprovalGrantor;
 /**
  * Create a system grantor for system-level approvals.
  *
@@ -126,14 +103,7 @@ export function adminGrantor(
  * // => { source: 'system', identifier: 'system', method: 'implicit' }
  * ```
  */
-export function systemGrantor(systemId = 'system'): ApprovalGrantor {
-  return {
-    source: 'system',
-    identifier: systemId,
-    method: 'implicit',
-  };
-}
-
+export declare function systemGrantor(systemId?: string): ApprovalGrantor;
 /**
  * Create an agent grantor for AI agents with delegated authority.
  *
@@ -152,20 +122,11 @@ export function systemGrantor(systemId = 'system'): ApprovalGrantor {
  * }, 'Claude Code Assistant')
  * ```
  */
-export function agentGrantor(
+export declare function agentGrantor(
   agentId: string,
   delegationContext: DelegationContext,
   displayName?: string,
-): ApprovalGrantor {
-  return {
-    source: 'agent',
-    identifier: agentId,
-    displayName,
-    method: 'delegation',
-    delegationContext,
-  };
-}
-
+): ApprovalGrantor;
 /**
  * Create an API grantor for external API integrations.
  *
@@ -179,16 +140,7 @@ export function agentGrantor(
  * // => { source: 'api', identifier: 'sk_live_...abc', displayName: 'GitHub Actions', method: 'api' }
  * ```
  */
-export function apiGrantor(apiKeyPrefix: string, serviceName?: string): ApprovalGrantor {
-  return {
-    source: 'api',
-    identifier: apiKeyPrefix,
-    displayName: serviceName,
-    method: 'api',
-    origin: 'api',
-  };
-}
-
+export declare function apiGrantor(apiKeyPrefix: string, serviceName?: string): ApprovalGrantor;
 /**
  * Create an OAuth grantor for OAuth token grants.
  *
@@ -202,16 +154,7 @@ export function apiGrantor(apiKeyPrefix: string, serviceName?: string): Approval
  * // => { source: 'oauth', identifier: 'token-xyz', displayName: 'Google', method: 'api', origin: 'oauth' }
  * ```
  */
-export function oauthGrantor(tokenId: string, provider?: string): ApprovalGrantor {
-  return {
-    source: 'oauth',
-    identifier: tokenId,
-    displayName: provider,
-    method: 'api',
-    origin: 'oauth',
-  };
-}
-
+export declare function oauthGrantor(tokenId: string, provider?: string): ApprovalGrantor;
 /**
  * Create a test grantor for test environments.
  * Use this in tests to avoid TypeScript errors with the old hardcoded types.
@@ -228,14 +171,7 @@ export function oauthGrantor(tokenId: string, provider?: string): ApprovalGranto
  * });
  * ```
  */
-export function testGrantor(): ApprovalGrantor {
-  return {
-    source: 'test',
-    identifier: 'test',
-    method: 'implicit',
-  };
-}
-
+export declare function testGrantor(): ApprovalGrantor;
 /**
  * Create a custom grantor for vendor-specific sources.
  *
@@ -254,7 +190,7 @@ export function testGrantor(): ApprovalGrantor {
  * })
  * ```
  */
-export function customGrantor(
+export declare function customGrantor(
   source: string,
   identifier?: string,
   options?: {
@@ -263,21 +199,7 @@ export function customGrantor(
     origin?: string;
     delegationContext?: DelegationContext;
   },
-): ApprovalGrantor {
-  return {
-    source,
-    identifier,
-    displayName: options?.displayName,
-    method: options?.method,
-    origin: options?.origin,
-    delegationContext: options?.delegationContext,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Revoker Factory Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
+): ApprovalGrantor;
 /**
  * Create a user revoker for interactive revocations.
  *
@@ -285,15 +207,7 @@ export function customGrantor(
  * @param displayName - Human-readable name for display
  * @returns ApprovalRevoker object
  */
-export function userRevoker(userId: string, displayName?: string): ApprovalRevoker {
-  return {
-    source: 'user',
-    identifier: userId,
-    displayName,
-    method: 'interactive',
-  };
-}
-
+export declare function userRevoker(userId: string, displayName?: string): ApprovalRevoker;
 /**
  * Create an admin revoker for administrator revocations.
  *
@@ -301,41 +215,20 @@ export function userRevoker(userId: string, displayName?: string): ApprovalRevok
  * @param displayName - Human-readable name for display
  * @returns ApprovalRevoker object
  */
-export function adminRevoker(adminId: string, displayName?: string): ApprovalRevoker {
-  return {
-    source: 'admin',
-    identifier: adminId,
-    displayName,
-    method: 'interactive',
-  };
-}
-
+export declare function adminRevoker(adminId: string, displayName?: string): ApprovalRevoker;
 /**
  * Create an expiry revoker for TTL-based revocations.
  *
  * @returns ApprovalRevoker object
  */
-export function expiryRevoker(): ApprovalRevoker {
-  return {
-    source: 'expiry',
-    method: 'expiry',
-  };
-}
-
+export declare function expiryRevoker(): ApprovalRevoker;
 /**
  * Create a session end revoker for session cleanup.
  *
  * @param sessionId - The session that ended
  * @returns ApprovalRevoker object
  */
-export function sessionEndRevoker(sessionId?: string): ApprovalRevoker {
-  return {
-    source: 'session_end',
-    identifier: sessionId,
-    method: 'implicit',
-  };
-}
-
+export declare function sessionEndRevoker(sessionId?: string): ApprovalRevoker;
 /**
  * Create a policy revoker for policy-based revocations.
  *
@@ -343,19 +236,7 @@ export function sessionEndRevoker(sessionId?: string): ApprovalRevoker {
  * @param policyName - Human-readable policy name
  * @returns ApprovalRevoker object
  */
-export function policyRevoker(policyId: string, policyName?: string): ApprovalRevoker {
-  return {
-    source: 'policy',
-    identifier: policyId,
-    displayName: policyName,
-    method: 'policy',
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Normalization Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
+export declare function policyRevoker(policyId: string, policyName?: string): ApprovalRevoker;
 /**
  * Normalize a grantedBy input to the structured ApprovalGrantor format.
  * Accepts either a simple string source type or a full ApprovalGrantor object.
@@ -372,16 +253,7 @@ export function policyRevoker(policyId: string, policyName?: string): ApprovalRe
  * // => { source: 'user', identifier: 'user-123' }
  * ```
  */
-export function normalizeGrantor(input: ApprovalGrantor | ApprovalSourceType | undefined): ApprovalGrantor {
-  if (!input) {
-    return { source: 'user' };
-  }
-  if (typeof input === 'string') {
-    return { source: input };
-  }
-  return input;
-}
-
+export declare function normalizeGrantor(input: ApprovalGrantor | ApprovalSourceType | undefined): ApprovalGrantor;
 /**
  * Normalize a revokedBy input to the structured ApprovalRevoker format.
  * Accepts either a simple string source type or a full ApprovalRevoker object.
@@ -398,53 +270,4 @@ export function normalizeGrantor(input: ApprovalGrantor | ApprovalSourceType | u
  * // => { source: 'admin', identifier: 'admin-456' }
  * ```
  */
-export function normalizeRevoker(input: ApprovalRevoker | RevocationSourceType | undefined): ApprovalRevoker {
-  if (!input) {
-    return { source: 'user' };
-  }
-  if (typeof input === 'string') {
-    return { source: input };
-  }
-  return input;
-}
-
-/**
- * Check if a grantor is of a specific source type.
- *
- * @param grantor - The grantor to check
- * @param source - The source type to check for
- * @returns true if the grantor matches the source type
- */
-export function isGrantorSource(grantor: ApprovalGrantor, source: ApprovalSourceType): boolean {
-  return grantor.source === source;
-}
-
-/**
- * Check if a grantor was granted by a human (user or admin).
- *
- * @param grantor - The grantor to check
- * @returns true if granted by a human
- */
-export function isHumanGrantor(grantor: ApprovalGrantor): boolean {
-  return grantor.source === 'user' || grantor.source === 'admin';
-}
-
-/**
- * Check if a grantor was auto-granted (policy, system, test).
- *
- * @param grantor - The grantor to check
- * @returns true if auto-granted
- */
-export function isAutoGrantor(grantor: ApprovalGrantor): boolean {
-  return grantor.source === 'policy' || grantor.source === 'system' || grantor.source === 'test';
-}
-
-/**
- * Check if a grantor was delegated (agent with delegation context).
- *
- * @param grantor - The grantor to check
- * @returns true if delegated
- */
-export function isDelegatedGrantor(grantor: ApprovalGrantor): boolean {
-  return grantor.source === 'agent' && !!grantor.delegationContext;
-}
+export declare function normalizeRevoker(input: ApprovalRevoker | RevocationSourceType | undefined): ApprovalRevoker;

@@ -8,10 +8,9 @@
  * This enables distributed deployments to share the same encryption secret
  * without requiring manual configuration (for development/testing).
  */
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
-import { randomBytes, base64urlEncode } from '@frontmcp/utils';
+import { randomBytes, base64urlEncode, readFile, mkdir, writeFile, rename, unlink } from '@frontmcp/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -146,7 +145,7 @@ export async function loadRememberSecret(options?: SecretPersistenceOptions): Pr
   const secretPath = resolveSecretPath(options);
 
   try {
-    const content = await fs.readFile(secretPath, 'utf8');
+    const content = await readFile(secretPath, 'utf8');
     const data = JSON.parse(content);
 
     // Validate structure using Zod schema
@@ -194,21 +193,21 @@ export async function saveRememberSecret(
 
   try {
     // Ensure directory exists with restricted permissions
-    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await mkdir(dir, { recursive: true, mode: 0o700 });
 
     // Write to temp file first (atomic write pattern)
     const content = JSON.stringify(secretData, null, 2);
-    await fs.writeFile(tempPath, content, { mode: 0o600, encoding: 'utf8' });
+    await writeFile(tempPath, content, { mode: 0o600 });
 
     // Atomic rename to target path
-    await fs.rename(tempPath, secretPath);
+    await rename(tempPath, secretPath);
 
     return true;
   } catch (error: unknown) {
     console.error(`[RememberSecretPersistence] Failed to save secret to ${secretPath}: ${(error as Error).message}`);
     // Clean up temp file if it exists
     try {
-      await fs.unlink(tempPath);
+      await unlink(tempPath);
     } catch {
       // Ignore cleanup errors
     }
@@ -225,7 +224,7 @@ export async function deleteRememberSecret(options?: SecretPersistenceOptions): 
   const secretPath = resolveSecretPath(options);
 
   try {
-    await fs.unlink(secretPath);
+    await unlink(secretPath);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       console.warn(`[RememberSecretPersistence] Failed to delete secret at ${secretPath}: ${(error as Error).message}`);

@@ -290,9 +290,12 @@ export class UpstashStorageAdapter extends BaseStorageAdapter {
       return super.publish(channel, message); // Throws not supported error
     }
 
-    // Use native Redis PUBLISH
+    // Use list-based approach to match the polling subscriber
+    // Native PUBLISH won't work because subscribe() polls a queue, not native pub/sub
     const prefixedChannel = this.prefixKey(`__pubsub__:${channel}`);
-    return this.client!.publish(prefixedChannel, message);
+    const listKey = `${prefixedChannel}:queue`;
+    await this.client!.lpush(listKey, message);
+    return 1; // Return 1 to indicate message was published
   }
 
   override async subscribe(channel: string, handler: MessageHandler): Promise<Unsubscribe> {
