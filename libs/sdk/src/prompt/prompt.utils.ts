@@ -62,11 +62,6 @@ export function promptDiscoveryDeps(rec: PromptRecord): Token[] {
       return depsOfFunc(rec.provide, 'discovery');
     case PromptKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
-    default: {
-      // Exhaustive check: ensures all PromptKind values are handled
-      const _exhaustive: never = rec;
-      throw new Error(`Unhandled prompt kind: ${(_exhaustive as PromptRecord).kind}`);
-    }
   }
 }
 

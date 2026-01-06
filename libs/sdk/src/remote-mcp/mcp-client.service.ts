@@ -51,12 +51,62 @@ import {
   RemoteAuthError,
 } from '../errors/remote.errors';
 
+import {
+  withRetry,
+  isTransientError,
+  isConnectionError,
+  CircuitBreaker,
+  CircuitBreakerManager,
+  CircuitOpenError,
+  HealthChecker,
+  HealthCheckManager,
+  type RetryOptions,
+  type CircuitBreakerOptions,
+  type HealthCheckOptions,
+  type HealthStatus,
+} from './resilience';
+
+// Default retry options for self-healing
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+  jitterFactor: 0.1,
+};
+
+// Default circuit breaker options
+const DEFAULT_CIRCUIT_BREAKER_OPTIONS: CircuitBreakerOptions = {
+  failureThreshold: 5,
+  resetTimeoutMs: 30000,
+  successThreshold: 2,
+  failureWindowMs: 60000,
+};
+
+// Default health check options
+const DEFAULT_HEALTH_CHECK_OPTIONS: HealthCheckOptions = {
+  intervalMs: 30000,
+  timeoutMs: 5000,
+  unhealthyThreshold: 3,
+  healthyThreshold: 2,
+};
+
 // Default service options
 const DEFAULT_OPTIONS: Required<McpClientServiceOptions> = {
   capabilityRefreshInterval: 0,
   clientName: 'frontmcp-gateway',
   clientVersion: '1.0.0',
   debug: false,
+  // Resilience options
+  enableRetry: true,
+  retryOptions: DEFAULT_RETRY_OPTIONS,
+  enableCircuitBreaker: true,
+  circuitBreakerOptions: DEFAULT_CIRCUIT_BREAKER_OPTIONS,
+  enableHealthCheck: true,
+  healthCheckOptions: DEFAULT_HEALTH_CHECK_OPTIONS,
+  enableAutoReconnect: true,
+  autoReconnectDelayMs: 5000,
+  maxAutoReconnectAttempts: 3,
 };
 
 /**
@@ -86,9 +136,31 @@ export class McpClientService {
   // Track refresh-in-progress to prevent overlapping refreshes
   private readonly refreshInProgress: Set<string> = new Set();
 
+  // Resilience components
+  private readonly circuitBreakerManager: CircuitBreakerManager;
+  private readonly healthCheckManager: HealthCheckManager;
+  private readonly reconnectAttempts: Map<string, number> = new Map();
+  private readonly reconnectTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
   constructor(logger: FrontMcpLogger, options: McpClientServiceOptions = {}) {
     this.logger = logger.child('McpClientService');
     this.options = { ...DEFAULT_OPTIONS, ...options };
+
+    // Initialize resilience components
+    this.circuitBreakerManager = new CircuitBreakerManager({
+      ...this.options.circuitBreakerOptions,
+      onStateChange: (state, prev) => {
+        this.logger.info(`Circuit breaker state changed: ${prev} -> ${state}`);
+      },
+    });
+
+    this.healthCheckManager = new HealthCheckManager({
+      ...this.options.healthCheckOptions,
+      onStatusChange: (appId, status, prev) => {
+        this.logger.info(`Health status changed for ${appId}: ${prev} -> ${status}`);
+        this.handleHealthStatusChange(appId, status, prev);
+      },
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -157,6 +229,13 @@ export class McpClientService {
         this.startCapabilityRefresh(appId);
       }
 
+      // Start health checking
+      this.startHealthCheck(appId);
+
+      // Reset reconnect attempts on successful connection
+      this.reconnectAttempts.delete(appId);
+      this.cancelAutoReconnect(appId);
+
       // Notify listeners
       this.updateConnectionStatus(appId, 'connected');
 
@@ -177,6 +256,15 @@ export class McpClientService {
 
     // Stop refresh timer
     this.stopCapabilityRefresh(appId);
+
+    // Stop health check
+    this.stopHealthCheck(appId);
+
+    // Cancel any pending auto-reconnect
+    this.cancelAutoReconnect(appId);
+
+    // Remove circuit breaker
+    this.circuitBreakerManager.removeBreaker(appId);
 
     const connection = this.connections.get(appId);
     if (!connection) {
@@ -359,7 +447,7 @@ export class McpClientService {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Call a tool on a remote server
+   * Call a tool on a remote server with self-healing
    */
   async callTool(
     appId: string,
@@ -369,38 +457,84 @@ export class McpClientService {
   ): Promise<CallToolResult> {
     this.logger.debug(`Calling tool ${toolName} on ${appId}`);
 
-    const connection = this.getConnection(appId);
-    const startTime = Date.now();
-
-    try {
-      // Verify tool exists
-      const capabilities = this.capabilities.get(appId);
-      const tool = capabilities?.tools.find((t) => t.name === toolName);
-      if (!tool) {
-        throw new RemoteToolNotFoundError(appId, toolName);
+    // Check circuit breaker
+    if (this.options.enableCircuitBreaker) {
+      const breaker = this.circuitBreakerManager.getBreaker(appId);
+      if (!breaker.canExecute()) {
+        const stats = breaker.getStats();
+        throw new CircuitOpenError(appId, stats.nextAttemptTime);
       }
-
-      // Call the tool
-      const result = await connection.client.callTool(
-        { name: toolName, arguments: args },
-        undefined, // resultSchema - let the server handle it
-      );
-
-      // Update heartbeat
-      connection.lastHeartbeat = new Date();
-
-      const durationMs = Date.now() - startTime;
-      this.logger.debug(`Tool ${toolName} on ${appId} completed in ${durationMs}ms`);
-
-      // The result can be either CallToolResult with content, or a CompatibilityCallToolResult with toolResult
-      // We normalize it to CallToolResult format
-      return result as unknown as CallToolResult;
-    } catch (error) {
-      if (error instanceof RemoteToolNotFoundError) {
-        throw error;
-      }
-      throw new RemoteToolExecutionError(appId, toolName, error as Error);
     }
+
+    const operation = async (): Promise<CallToolResult> => {
+      const connection = this.getConnection(appId);
+      const startTime = Date.now();
+
+      try {
+        // Verify tool exists
+        const capabilities = this.capabilities.get(appId);
+        const tool = capabilities?.tools.find((t) => t.name === toolName);
+        if (!tool) {
+          throw new RemoteToolNotFoundError(appId, toolName);
+        }
+
+        // Call the tool
+        const result = await connection.client.callTool(
+          { name: toolName, arguments: args },
+          undefined, // resultSchema - let the server handle it
+        );
+
+        // Update heartbeat
+        connection.lastHeartbeat = new Date();
+
+        const durationMs = Date.now() - startTime;
+        this.logger.debug(`Tool ${toolName} on ${appId} completed in ${durationMs}ms`);
+
+        // Record success for circuit breaker and health check
+        if (this.options.enableCircuitBreaker) {
+          this.circuitBreakerManager.getBreaker(appId).recordSuccess();
+        }
+        this.healthCheckManager.getChecker(appId)?.markHealthy();
+
+        // The result can be either CallToolResult with content, or a CompatibilityCallToolResult with toolResult
+        // We normalize it to CallToolResult format
+        return result as unknown as CallToolResult;
+      } catch (error) {
+        // Record failure for circuit breaker
+        if (this.options.enableCircuitBreaker) {
+          this.circuitBreakerManager.getBreaker(appId).recordFailure(error as Error);
+        }
+        this.healthCheckManager.getChecker(appId)?.markUnhealthy(error as Error);
+
+        // Check if this is a connection error that needs auto-reconnect
+        if (isConnectionError(error as Error) && this.options.enableAutoReconnect) {
+          this.scheduleAutoReconnect(appId);
+        }
+
+        if (error instanceof RemoteToolNotFoundError) {
+          throw error;
+        }
+        throw new RemoteToolExecutionError(appId, toolName, error as Error);
+      }
+    };
+
+    // Execute with retry if enabled
+    if (this.options.enableRetry) {
+      return withRetry(operation, {
+        ...this.options.retryOptions,
+        isRetryable: (error) => {
+          // Don't retry non-transient errors
+          if (error instanceof RemoteToolNotFoundError) return false;
+          if (error instanceof CircuitOpenError) return false;
+          return isTransientError(error);
+        },
+        onRetry: (attempt, error, delayMs) => {
+          this.logger.warn(`Retry ${attempt} for tool ${toolName} on ${appId} after ${delayMs}ms: ${error.message}`);
+        },
+      });
+    }
+
+    return operation();
   }
 
   /**
@@ -555,6 +689,17 @@ export class McpClientService {
     for (const appId of this.refreshTimers.keys()) {
       this.stopCapabilityRefresh(appId);
     }
+
+    // Cancel all auto-reconnect timers
+    for (const appId of this.reconnectTimers.keys()) {
+      this.cancelAutoReconnect(appId);
+    }
+
+    // Dispose health check manager
+    this.healthCheckManager.dispose();
+
+    // Reset all circuit breakers
+    this.circuitBreakerManager.resetAll();
 
     // Disconnect from all servers
     const disconnectPromises: Promise<void>[] = [];
@@ -765,6 +910,151 @@ export class McpClientService {
         return { [credentials.headerName || 'X-API-Key']: credentials.value };
       default:
         return {};
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SELF-HEALING HELPERS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Schedule an auto-reconnect attempt for an app
+   */
+  private scheduleAutoReconnect(appId: string): void {
+    // Don't schedule if already scheduled
+    if (this.reconnectTimers.has(appId)) {
+      return;
+    }
+
+    const attempts = this.reconnectAttempts.get(appId) || 0;
+    if (attempts >= this.options.maxAutoReconnectAttempts) {
+      this.logger.warn(`Max auto-reconnect attempts (${this.options.maxAutoReconnectAttempts}) reached for ${appId}`);
+      return;
+    }
+
+    // Calculate delay with exponential backoff
+    const delay = this.options.autoReconnectDelayMs * Math.pow(2, attempts);
+    this.logger.info(`Scheduling auto-reconnect for ${appId} in ${delay}ms (attempt ${attempts + 1})`);
+
+    const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(appId);
+      this.reconnectAttempts.set(appId, attempts + 1);
+
+      try {
+        await this.reconnect(appId);
+        this.logger.info(`Auto-reconnect successful for ${appId}`);
+        this.reconnectAttempts.delete(appId);
+
+        // Reset circuit breaker on successful reconnect
+        if (this.options.enableCircuitBreaker) {
+          this.circuitBreakerManager.getBreaker(appId).reset();
+        }
+      } catch (error) {
+        this.logger.error(`Auto-reconnect failed for ${appId}: ${(error as Error).message}`);
+        // Schedule next attempt
+        this.scheduleAutoReconnect(appId);
+      }
+    }, delay);
+
+    this.reconnectTimers.set(appId, timer);
+  }
+
+  /**
+   * Cancel scheduled auto-reconnect for an app
+   */
+  private cancelAutoReconnect(appId: string): void {
+    const timer = this.reconnectTimers.get(appId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(appId);
+    }
+    this.reconnectAttempts.delete(appId);
+  }
+
+  /**
+   * Handle health status changes for proactive healing
+   */
+  private handleHealthStatusChange(appId: string, status: HealthStatus, previousStatus: HealthStatus): void {
+    if (status === 'unhealthy' && previousStatus !== 'unhealthy') {
+      // Connection became unhealthy - try to reconnect
+      this.logger.warn(`Connection to ${appId} became unhealthy, attempting recovery`);
+
+      if (this.options.enableAutoReconnect) {
+        this.scheduleAutoReconnect(appId);
+      }
+    } else if (status === 'healthy' && previousStatus === 'unhealthy') {
+      // Connection recovered
+      this.logger.info(`Connection to ${appId} recovered`);
+      this.cancelAutoReconnect(appId);
+
+      // Reset circuit breaker
+      if (this.options.enableCircuitBreaker) {
+        this.circuitBreakerManager.getBreaker(appId).reset();
+      }
+    }
+  }
+
+  /**
+   * Start health checking for an app
+   */
+  private startHealthCheck(appId: string): void {
+    if (!this.options.enableHealthCheck) return;
+
+    // Create a health check function that pings the server
+    const checkFn = async () => {
+      const connection = this.connections.get(appId);
+      if (!connection || connection.status !== 'connected') {
+        throw new Error('Not connected');
+      }
+      // Simple ping - list tools as a health check
+      await connection.client.listTools();
+    };
+
+    this.healthCheckManager.addChecker(appId, checkFn, this.options.healthCheckOptions);
+  }
+
+  /**
+   * Stop health checking for an app
+   */
+  private stopHealthCheck(appId: string): void {
+    this.healthCheckManager.removeChecker(appId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // RESILIENCE STATUS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Get circuit breaker status for an app
+   */
+  getCircuitBreakerStatus(appId: string): ReturnType<CircuitBreaker['getStats']> | undefined {
+    if (!this.options.enableCircuitBreaker) return undefined;
+    return this.circuitBreakerManager.getBreaker(appId).getStats();
+  }
+
+  /**
+   * Get health check status for an app
+   */
+  getHealthStatus(appId: string): ReturnType<HealthChecker['getLastResult']> | undefined {
+    return this.healthCheckManager.getChecker(appId)?.getLastResult();
+  }
+
+  /**
+   * Manually reset circuit breaker for an app
+   */
+  resetCircuitBreaker(appId: string): void {
+    if (this.options.enableCircuitBreaker) {
+      this.circuitBreakerManager.getBreaker(appId).reset();
+    }
+  }
+
+  /**
+   * Force a health check for an app
+   */
+  async forceHealthCheck(appId: string): Promise<void> {
+    const checker = this.healthCheckManager.getChecker(appId);
+    if (checker) {
+      await checker.check();
     }
   }
 }

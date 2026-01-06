@@ -202,6 +202,50 @@ export interface McpCapabilityChangeEvent {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * Retry options for self-healing
+ */
+export interface McpRetryOptions {
+  /** Maximum number of retry attempts (default: 3) */
+  maxAttempts?: number;
+  /** Initial delay in milliseconds (default: 1000) */
+  initialDelayMs?: number;
+  /** Maximum delay in milliseconds (default: 10000) */
+  maxDelayMs?: number;
+  /** Backoff multiplier (default: 2) */
+  backoffMultiplier?: number;
+  /** Jitter factor 0-1 to randomize delays (default: 0.1) */
+  jitterFactor?: number;
+}
+
+/**
+ * Circuit breaker options
+ */
+export interface McpCircuitBreakerOptions {
+  /** Number of failures before opening circuit (default: 5) */
+  failureThreshold?: number;
+  /** Time in ms before attempting to close circuit (default: 30000) */
+  resetTimeoutMs?: number;
+  /** Number of successful calls in half-open to close circuit (default: 2) */
+  successThreshold?: number;
+  /** Time window in ms for counting failures (default: 60000) */
+  failureWindowMs?: number;
+}
+
+/**
+ * Health check options
+ */
+export interface McpHealthCheckOptions {
+  /** Interval between health checks in ms (default: 30000) */
+  intervalMs?: number;
+  /** Timeout for health check in ms (default: 5000) */
+  timeoutMs?: number;
+  /** Number of failures before marking unhealthy (default: 3) */
+  unhealthyThreshold?: number;
+  /** Number of successes before marking healthy (default: 2) */
+  healthyThreshold?: number;
+}
+
+/**
  * Configuration for the MCP client service
  */
 export interface McpClientServiceOptions {
@@ -213,6 +257,32 @@ export interface McpClientServiceOptions {
   clientVersion?: string;
   /** Enable debug logging */
   debug?: boolean;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // RESILIENCE OPTIONS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** Enable retry with exponential backoff for transient failures (default: true) */
+  enableRetry?: boolean;
+  /** Retry configuration options */
+  retryOptions?: McpRetryOptions;
+
+  /** Enable circuit breaker to prevent cascading failures (default: true) */
+  enableCircuitBreaker?: boolean;
+  /** Circuit breaker configuration options */
+  circuitBreakerOptions?: McpCircuitBreakerOptions;
+
+  /** Enable health checking for proactive monitoring (default: true) */
+  enableHealthCheck?: boolean;
+  /** Health check configuration options */
+  healthCheckOptions?: McpHealthCheckOptions;
+
+  /** Enable automatic reconnection on connection failures (default: true) */
+  enableAutoReconnect?: boolean;
+  /** Base delay between auto-reconnect attempts in ms (default: 5000) */
+  autoReconnectDelayMs?: number;
+  /** Maximum number of auto-reconnect attempts (default: 3) */
+  maxAutoReconnectAttempts?: number;
 }
 
 /**

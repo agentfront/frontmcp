@@ -428,7 +428,7 @@ export default class ToolRegistry
   }
 
   /**
-   * Register an existing ToolInstance directly (for agent-scoped tools).
+   * Register an existing ToolInstance directly (for agent-scoped or remote tools).
    * This allows pre-constructed tool instances to be added without going through
    * the standard token-based initialization flow.
    *
@@ -442,23 +442,32 @@ export default class ToolRegistry
    * const tool = new ToolInstance(record, agentProviders, owner);
    * agentTools.registerToolInstance(tool);
    *
+   * // For remote tools: Use RemoteToolInstance
+   * const remoteTool = new RemoteToolInstance(record, mcpClient, providers, owner);
+   * remoteTools.registerToolInstance(remoteTool);
+   *
    * // Wrong: Reusing app-scoped tool in agent context
    * // The tool will still use app's scope/hooks, not agent's!
    * agentTools.registerToolInstance(existingAppTool);
    * ```
    *
-   * @param tool - The tool instance to register (must be created with this registry's providers)
-   * @throws Error if tool is not a valid ToolInstance
+   * @param tool - The tool instance to register (ToolInstance or RemoteToolInstance)
+   * @throws Error if tool is not a valid instance
    */
   registerToolInstance(tool: ToolEntry): void {
-    // Validate that we have a proper ToolInstance with required properties
-    if (!(tool instanceof ToolInstance)) {
-      throw new Error('registerToolInstance requires a ToolInstance, not a generic ToolEntry');
-    }
+    // Validate that we have a proper instance with required properties
+    // Accept both ToolInstance and RemoteToolInstance (or any ToolEntry subclass with valid record)
+    const instance = tool as ToolInstance;
 
-    const instance = tool;
+    // Check for required properties that make it a valid registerable instance
     if (!instance.record || !instance.record.provide) {
-      throw new Error('ToolInstance is missing required record.provide property');
+      throw new Error('Tool instance is missing required record.provide property');
+    }
+    if (!instance.record.kind || !instance.record.metadata) {
+      throw new Error('Tool instance is missing required record.kind or record.metadata');
+    }
+    if (typeof instance.name !== 'string' || !instance.name) {
+      throw new Error('Tool instance is missing required name property');
     }
 
     const token = instance.record.provide as Token;

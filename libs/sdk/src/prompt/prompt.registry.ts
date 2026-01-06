@@ -478,6 +478,53 @@ export default class PromptRegistry
   }
 
   /**
+   * Register an existing PromptEntry instance directly (for remote prompts).
+   * This allows pre-constructed prompt instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * **IMPORTANT: Scope Binding**
+   * The PromptEntry captures its scope and providers at construction time.
+   * The prompt will use the scope from its original `providers` argument, NOT this registry's scope.
+   *
+   * @param prompt - The prompt instance to register (PromptInstance or RemotePromptInstance)
+   * @throws Error if prompt is not a valid instance
+   */
+  registerPromptInstance(prompt: PromptEntry): void {
+    // Validate that we have a proper instance with required properties
+    const instance = prompt as PromptInstance;
+
+    // Check for required properties that make it a valid registerable instance
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('Prompt instance is missing required record.provide property');
+    }
+    if (!instance.record.kind || !instance.record.metadata) {
+      throw new Error('Prompt instance is missing required record.kind or record.metadata');
+    }
+    if (typeof instance.name !== 'string' || !instance.name) {
+      throw new Error('Prompt instance is missing required name property');
+    }
+
+    const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<PromptInstance>)) {
+      return; // Already registered, skip silently
+    }
+
+    // Add to instances map
+    this.instances.set(token as Token<PromptInstance>, instance);
+
+    // Create an indexed row for this prompt
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Get the MCP capabilities for prompts.
    * These are reported to clients during initialization.
    */

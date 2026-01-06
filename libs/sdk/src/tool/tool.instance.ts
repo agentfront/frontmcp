@@ -125,6 +125,9 @@ export class ToolInstance<
         return new this.record.provide(toolCtorArgs) as ToolContext<InSchema, OutSchema, In, Out>;
       case ToolKind.FUNCTION:
         return new FunctionToolContext<InSchema, OutSchema, In, Out>(this.record, toolCtorArgs);
+      default:
+        // TypeScript exhaustive check - catches deprecated REMOTE or unknown kinds
+        throw new Error(`Unhandled tool kind: ${(this.record as { kind: string }).kind}`);
     }
   }
 

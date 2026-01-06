@@ -11,7 +11,7 @@ export {
 } from './front-mcp/serverless-handler';
 export * from './common';
 export * from './errors';
-export * from './remote';
+export * from './remote-mcp';
 
 // Re-export MCP types commonly needed
 export type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';

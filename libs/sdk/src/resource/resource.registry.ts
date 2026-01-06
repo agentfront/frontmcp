@@ -555,6 +555,53 @@ export default class ResourceRegistry
   }
 
   /**
+   * Register an existing ResourceEntry instance directly (for remote resources).
+   * This allows pre-constructed resource instances to be added without going through
+   * the standard token-based initialization flow.
+   *
+   * **IMPORTANT: Scope Binding**
+   * The ResourceEntry captures its scope and providers at construction time.
+   * The resource will use the scope from its original `providers` argument, NOT this registry's scope.
+   *
+   * @param resource - The resource instance to register (ResourceInstance or RemoteResourceInstance)
+   * @throws Error if resource is not a valid instance
+   */
+  registerResourceInstance(resource: ResourceEntry): void {
+    // Validate that we have a proper instance with required properties
+    const instance = resource as ResourceInstance;
+
+    // Check for required properties that make it a valid registerable instance
+    if (!instance.record || !instance.record.provide) {
+      throw new Error('Resource instance is missing required record.provide property');
+    }
+    if (!instance.record.kind || !instance.record.metadata) {
+      throw new Error('Resource instance is missing required record.kind or record.metadata');
+    }
+    if (typeof instance.name !== 'string' || !instance.name) {
+      throw new Error('Resource instance is missing required name property');
+    }
+
+    const token = instance.record.provide as Token;
+
+    // Check for duplicate registration
+    if (this.instances.has(token as Token<ResourceInstance>)) {
+      return; // Already registered, skip silently
+    }
+
+    // Add to instances map
+    this.instances.set(token as Token<ResourceInstance>, instance);
+
+    // Create an indexed row for this resource
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const row = this.makeRow(token, instance, lineage, this);
+    this.localRows.push(row);
+
+    // Rebuild indexes
+    this.reindex();
+    this.bump('reset');
+  }
+
+  /**
    * Dynamically register a resource or resource template at runtime.
    *
    * Used for system resources like the ui:// template that should be

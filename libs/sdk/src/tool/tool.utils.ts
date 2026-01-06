@@ -79,9 +79,8 @@ export function normalizeTool(item: any): ToolRecord {
  */
 export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
   switch (rec.kind) {
-    case ToolKind.FUNCTION: {
+    case ToolKind.FUNCTION:
       return depsOfFunc(rec.provide, 'discovery');
-    }
     case ToolKind.CLASS_TOKEN:
       return depsOfClass(rec.provide, 'discovery');
   }

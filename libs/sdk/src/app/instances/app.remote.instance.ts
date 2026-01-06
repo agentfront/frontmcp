@@ -1,6 +1,9 @@
 /**
  * @file app.remote.instance.ts
  * @description Remote MCP app instance that proxies to a remote MCP server
+ *
+ * This implementation uses standard registries (ToolRegistry, ResourceRegistry, PromptRegistry)
+ * like local apps, but with lazy capability discovery and TTL-based caching.
  */
 
 import {
@@ -15,22 +18,24 @@ import {
   ResourceRegistryInterface,
   ToolRegistryInterface,
   EntryOwnerRef,
-  ToolEntry,
-  ResourceEntry,
-  PromptEntry,
   PluginEntry,
   AdapterEntry,
   FrontMcpLogger,
 } from '../../common';
 import { idFromString } from '@frontmcp/utils';
 import ProviderRegistry from '../../provider/provider.registry';
-import { McpClientService } from '../../remote';
-import type { McpConnectRequest, McpTransportType, McpRemoteAuthConfig } from '../../remote/mcp-client.types';
-import { createProxyToolEntry, ProxyToolEntry } from '../../remote/entries/proxy-tool.entry';
-import { createProxyResourceEntry, ProxyResourceEntry } from '../../remote/entries/proxy-resource.entry';
-import { createProxyPromptEntry, ProxyPromptEntry } from '../../remote/entries/proxy-prompt.entry';
-import type { ToolChangeEvent, ToolChangeKind, ToolChangeScope } from '../../tool/tool.events';
-import type { ToolInstance } from '../../tool/tool.instance';
+import ToolRegistry from '../../tool/tool.registry';
+import ResourceRegistry from '../../resource/resource.registry';
+import PromptRegistry from '../../prompt/prompt.registry';
+import { McpClientService } from '../../remote-mcp';
+import { CapabilityCache } from '../../remote-mcp/cache';
+import {
+  createRemoteToolInstance,
+  createRemoteResourceInstance,
+  createRemoteResourceTemplateInstance,
+  createRemotePromptInstance,
+} from '../../remote-mcp/factories';
+import type { McpConnectRequest, McpTransportType, McpRemoteAuthConfig } from '../../remote-mcp/mcp-client.types';
 
 /**
  * Interface for scope with optional MCP client service cache.
@@ -39,181 +44,6 @@ import type { ToolInstance } from '../../tool/tool.instance';
 interface ScopeWithMcpClient {
   logger: FrontMcpLogger;
   mcpClientService?: McpClientService;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PROXY REGISTRY IMPLEMENTATIONS
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Lightweight tool registry that exposes proxy tools from a remote server
- */
-class RemoteToolRegistry implements ToolRegistryInterface {
-  readonly owner: EntryOwnerRef;
-  private readonly tools: Map<string, ProxyToolEntry> = new Map();
-  private readonly subscribers: Set<(evt: ToolChangeEvent) => void> = new Set();
-  private version = 0;
-
-  constructor(owner: EntryOwnerRef) {
-    this.owner = owner;
-  }
-
-  addTool(tool: ProxyToolEntry): void {
-    this.tools.set(tool.name, tool);
-    this.notifySubscribers('added');
-  }
-
-  removeTool(name: string): void {
-    if (this.tools.has(name)) {
-      this.tools.delete(name);
-      this.notifySubscribers('removed');
-    }
-  }
-
-  clear(): void {
-    this.tools.clear();
-    this.notifySubscribers('reset');
-  }
-
-  getTools(_includeHidden?: boolean): ToolEntry[] {
-    return Array.from(this.tools.values());
-  }
-
-  getInlineTools(): ToolEntry[] {
-    return this.getTools();
-  }
-
-  subscribe(
-    opts: { immediate?: boolean; filter?: (i: ToolEntry) => boolean },
-    cb: (evt: ToolChangeEvent) => void,
-  ): () => void {
-    this.subscribers.add(cb);
-
-    if (opts.immediate) {
-      // Emit a single 'reset' event with all matching tools as snapshot
-      const matchingTools = Array.from(this.tools.values()).filter((t) => !opts.filter || opts.filter(t));
-      if (matchingTools.length > 0) {
-        cb(this.createEvent('reset', matchingTools));
-      }
-    }
-
-    return () => {
-      this.subscribers.delete(cb);
-    };
-  }
-
-  private notifySubscribers(kind: ToolChangeKind): void {
-    const snapshot = Array.from(this.tools.values());
-    const event = this.createEvent(kind, snapshot);
-    for (const cb of this.subscribers) {
-      try {
-        cb(event);
-      } catch {
-        // Ignore callback errors
-      }
-    }
-  }
-
-  private createEvent(kind: ToolChangeKind, snapshot: ProxyToolEntry[]): ToolChangeEvent {
-    this.version++;
-    return {
-      kind,
-      changeScope: 'global' as ToolChangeScope,
-      version: this.version,
-      // Cast proxy entries as ToolInstance - they implement the same interface
-      snapshot: snapshot as unknown as readonly ToolInstance[],
-    };
-  }
-}
-
-/**
- * Lightweight resource registry that exposes proxy resources from a remote server
- */
-class RemoteResourceRegistry implements ResourceRegistryInterface {
-  readonly owner: EntryOwnerRef;
-  private readonly resources: Map<string, ProxyResourceEntry> = new Map();
-  private readonly templates: Map<string, ProxyResourceEntry> = new Map();
-
-  constructor(owner: EntryOwnerRef) {
-    this.owner = owner;
-  }
-
-  addResource(resource: ProxyResourceEntry): void {
-    if (resource.isTemplate) {
-      this.templates.set(resource.name, resource);
-    } else {
-      this.resources.set(resource.name, resource);
-    }
-  }
-
-  clear(): void {
-    this.resources.clear();
-    this.templates.clear();
-  }
-
-  getResources(_includeHidden?: boolean): ResourceEntry[] {
-    return Array.from(this.resources.values());
-  }
-
-  getResourceTemplates(): ResourceEntry[] {
-    return Array.from(this.templates.values());
-  }
-
-  getInlineResources(): ResourceEntry[] {
-    return [...this.getResources(), ...this.getResourceTemplates()];
-  }
-
-  findResourceForUri(uri: string): { instance: ResourceEntry; params: Record<string, string> } | undefined {
-    // Check exact match first
-    for (const resource of this.resources.values()) {
-      const { matches, params } = resource.matchUri(uri);
-      if (matches) {
-        return { instance: resource, params };
-      }
-    }
-
-    // Check templates
-    for (const template of this.templates.values()) {
-      const { matches, params } = template.matchUri(uri);
-      if (matches) {
-        return { instance: template, params };
-      }
-    }
-
-    return undefined;
-  }
-}
-
-/**
- * Lightweight prompt registry that exposes proxy prompts from a remote server
- */
-class RemotePromptRegistry implements PromptRegistryInterface {
-  readonly owner: EntryOwnerRef;
-  private readonly prompts: Map<string, ProxyPromptEntry> = new Map();
-
-  constructor(owner: EntryOwnerRef) {
-    this.owner = owner;
-  }
-
-  addPrompt(prompt: ProxyPromptEntry): void {
-    this.prompts.set(prompt.name, prompt);
-  }
-
-  clear(): void {
-    this.prompts.clear();
-  }
-
-  getPrompts(_includeHidden?: boolean): PromptEntry[] {
-    return Array.from(this.prompts.values());
-  }
-
-  getInlinePrompts(): PromptEntry[] {
-    return this.getPrompts();
-  }
-
-  findByName(name: string): PromptEntry | undefined {
-    return this.prompts.get(name);
-  }
 }
 
 /**
@@ -241,12 +71,16 @@ class EmptyAdapterRegistry implements AdapterRegistryInterface {
 /**
  * Remote MCP app instance that connects to and proxies a remote MCP server.
  *
- * This class:
- * - Connects to a remote MCP server using McpClientService
- * - Discovers remote capabilities (tools, resources, prompts)
- * - Creates proxy entries that forward execution to the remote server
- * - Exposes remote capabilities as first-class entries to the gateway
- * - Integrates with gateway hooks (cache, auth, audit)
+ * This class uses standard registries (ToolRegistry, ResourceRegistry, PromptRegistry)
+ * like local apps, providing consistent behavior for:
+ * - Hook lifecycle (beforeExec, afterExec)
+ * - Tool/resource/prompt discovery
+ * - Change event notifications
+ *
+ * Key features:
+ * - Lazy capability discovery: Capabilities are discovered on first access
+ * - TTL-based caching: Capabilities are cached with configurable TTL
+ * - Full hook support: Remote tools participate in the hook lifecycle
  */
 export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   override readonly id: string;
@@ -262,16 +96,21 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   private readonly scopeProviders: ProviderRegistry;
   private readonly mcpClient: McpClientService;
   private readonly appOwner: EntryOwnerRef;
+  private readonly capabilityCache: CapabilityCache;
 
-  // Proxy registries
-  private readonly _tools: RemoteToolRegistry;
-  private readonly _resources: RemoteResourceRegistry;
-  private readonly _prompts: RemotePromptRegistry;
+  // Standard registries (like local apps)
+  private readonly _tools: ToolRegistry;
+  private readonly _resources: ResourceRegistry;
+  private readonly _prompts: PromptRegistry;
   private readonly _plugins: EmptyPluginRegistry;
   private readonly _adapters: EmptyAdapterRegistry;
 
   // Connection state
   private isConnected = false;
+
+  // Lazy loading state
+  private capabilitiesLoaded = false;
+  private loadingPromise: Promise<void> | null = null;
 
   // Capability change subscription cleanup
   private _unsubscribeCapability?: () => void;
@@ -288,10 +127,14 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       ref: this.token,
     };
 
-    // Initialize proxy registries
-    this._tools = new RemoteToolRegistry(this.appOwner);
-    this._resources = new RemoteResourceRegistry(this.appOwner);
-    this._prompts = new RemotePromptRegistry(this.appOwner);
+    // Initialize capability cache with configurable TTL
+    const cacheTTL = (this.metadata as any).cacheTTL ?? 60000; // Default 60 seconds
+    this.capabilityCache = new CapabilityCache({ defaultTTL: cacheTTL });
+
+    // Initialize standard registries (empty initially - populated lazily)
+    this._tools = new ToolRegistry(this.scopeProviders, [], this.appOwner);
+    this._resources = new ResourceRegistry(this.scopeProviders, [], this.appOwner);
+    this._prompts = new PromptRegistry(this.scopeProviders, [], this.appOwner);
     this._plugins = new EmptyPluginRegistry();
     this._adapters = new EmptyAdapterRegistry();
 
@@ -307,6 +150,9 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     logger.info(`Initializing remote app: ${this.id} (${this.metadata.url})`);
 
     try {
+      // Wait for registries to be ready
+      await Promise.all([this._tools.ready, this._resources.ready, this._prompts.ready]);
+
       // Build connection request
       const connectRequest = this.buildConnectRequest();
 
@@ -314,28 +160,59 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
       await this.mcpClient.connect(connectRequest);
       this.isConnected = true;
 
-      // Discover and create proxy entries
-      await this.discoverAndCreateProxies();
-
-      // Subscribe to capability changes and store unsubscribe function to prevent memory leak
+      // Subscribe to capability changes
       this._unsubscribeCapability = this.mcpClient.onCapabilityChange((event) => {
         if (event.appId === this.id) {
           logger.info(`Remote capabilities changed for ${this.id}: ${event.kind}`);
-          // Refresh proxies when capabilities change
-          this.discoverAndCreateProxies().catch((err) => {
-            logger.error(`Failed to refresh proxies for ${this.id}: ${err.message}`);
-          });
+          // Invalidate cache and trigger reload on next access
+          this.capabilityCache.invalidate(this.id);
+          this.capabilitiesLoaded = false;
         }
       });
 
-      logger.info(
-        `Remote app ${this.id} initialized: ${this._tools.getTools().length} tools, ` +
-          `${this._resources.getResources().length} resources, ${this._prompts.getPrompts().length} prompts`,
-      );
+      logger.info(`Remote app ${this.id} connected. Capabilities will be loaded lazily.`);
     } catch (error) {
       logger.error(`Failed to initialize remote app ${this.id}: ${(error as Error).message}`);
       throw error;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LAZY CAPABILITY LOADING
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Ensure capabilities are loaded, using cache if available.
+   * This is called lazily when tools/resources/prompts are accessed.
+   */
+  async ensureCapabilitiesLoaded(): Promise<void> {
+    // Check if already loaded and cache is valid
+    if (this.capabilitiesLoaded && !this.capabilityCache.isExpired(this.id)) {
+      return;
+    }
+
+    // Check if a loading operation is already in progress
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
+
+    // Start loading
+    this.loadingPromise = this.discoverAndRegisterCapabilities();
+    try {
+      await this.loadingPromise;
+      this.capabilitiesLoaded = true;
+    } finally {
+      this.loadingPromise = null;
+    }
+  }
+
+  /**
+   * Force refresh capabilities from the remote server.
+   */
+  async refreshCapabilities(): Promise<void> {
+    this.capabilityCache.invalidate(this.id);
+    this.capabilitiesLoaded = false;
+    await this.ensureCapabilitiesLoaded();
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -381,10 +258,24 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   }
 
   /**
+   * Check if capabilities have been loaded
+   */
+  getCapabilitiesLoaded(): boolean {
+    return this.capabilitiesLoaded;
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): { totalEntries: number; activeEntries: number; expiredEntries: number } {
+    return this.capabilityCache.getStats();
+  }
+
+  /**
    * Disconnect from the remote server
    */
   async disconnect(): Promise<void> {
-    // Unsubscribe from capability changes to prevent memory leak
+    // Unsubscribe from capability changes
     if (this._unsubscribeCapability) {
       this._unsubscribeCapability();
       this._unsubscribeCapability = undefined;
@@ -393,9 +284,8 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     if (this.isConnected) {
       await this.mcpClient.disconnect(this.id);
       this.isConnected = false;
-      this._tools.clear();
-      this._resources.clear();
-      this._prompts.clear();
+      this.capabilitiesLoaded = false;
+      this.capabilityCache.invalidate(this.id);
     }
   }
 
@@ -405,7 +295,8 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
   async reconnect(): Promise<void> {
     await this.mcpClient.reconnect(this.id);
     this.isConnected = true;
-    await this.discoverAndCreateProxies();
+    this.capabilitiesLoaded = false;
+    this.capabilityCache.invalidate(this.id);
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -481,26 +372,34 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     if (!remoteAuth) {
       return undefined;
     }
-    // RemoteAuthConfig and McpRemoteAuthConfig have the same structure
     return remoteAuth as McpRemoteAuthConfig;
   }
 
   /**
-   * Discover remote capabilities and create proxy entries
+   * Discover remote capabilities and register them in standard registries.
    */
-  private async discoverAndCreateProxies(): Promise<void> {
-    // Clear existing proxies
-    this._tools.clear();
-    this._resources.clear();
-    this._prompts.clear();
-
-    // Discover capabilities
-    const capabilities = await this.mcpClient.discoverCapabilities(this.id);
+  private async discoverAndRegisterCapabilities(): Promise<void> {
+    const logger = this.scopeProviders.getActiveScope().logger;
     const namespace = this.metadata.namespace || this.metadata.name;
 
-    // Create proxy tools
+    // Try to use cached capabilities
+    let capabilities = this.capabilityCache.get(this.id);
+
+    if (!capabilities) {
+      // Fetch from remote server
+      logger.debug(`Fetching capabilities for remote app ${this.id}`);
+      capabilities = await this.mcpClient.discoverCapabilities(this.id);
+
+      // Cache the capabilities
+      const cacheTTL = (this.metadata as any).cacheTTL ?? 60000;
+      this.capabilityCache.set(this.id, capabilities, cacheTTL);
+    } else {
+      logger.debug(`Using cached capabilities for remote app ${this.id}`);
+    }
+
+    // Register tools using standard ToolInstance with dynamic context class
     for (const remoteTool of capabilities.tools) {
-      const proxyTool = createProxyToolEntry(
+      const toolInstance = createRemoteToolInstance(
         remoteTool,
         this.mcpClient,
         this.id,
@@ -508,13 +407,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.appOwner,
         namespace,
       );
-      await proxyTool.ready;
-      this._tools.addTool(proxyTool);
+      await toolInstance.ready;
+      this._tools.registerToolInstance(toolInstance);
     }
 
-    // Create proxy resources
+    // Register resources using standard ResourceInstance with dynamic context class
     for (const remoteResource of capabilities.resources) {
-      const proxyResource = createProxyResourceEntry(
+      const resourceInstance = createRemoteResourceInstance(
         remoteResource,
         this.mcpClient,
         this.id,
@@ -522,13 +421,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.appOwner,
         namespace,
       );
-      await proxyResource.ready;
-      this._resources.addResource(proxyResource);
+      await resourceInstance.ready;
+      this._resources.registerResourceInstance(resourceInstance);
     }
 
-    // Create proxy resource templates
+    // Register resource templates using standard ResourceInstance
     for (const remoteTemplate of capabilities.resourceTemplates) {
-      const proxyTemplate = createProxyResourceEntry(
+      const templateInstance = createRemoteResourceTemplateInstance(
         remoteTemplate,
         this.mcpClient,
         this.id,
@@ -536,13 +435,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.appOwner,
         namespace,
       );
-      await proxyTemplate.ready;
-      this._resources.addResource(proxyTemplate);
+      await templateInstance.ready;
+      this._resources.registerResourceInstance(templateInstance);
     }
 
-    // Create proxy prompts
+    // Register prompts using standard PromptInstance with dynamic context class
     for (const remotePrompt of capabilities.prompts) {
-      const proxyPrompt = createProxyPromptEntry(
+      const promptInstance = createRemotePromptInstance(
         remotePrompt,
         this.mcpClient,
         this.id,
@@ -550,8 +449,13 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
         this.appOwner,
         namespace,
       );
-      await proxyPrompt.ready;
-      this._prompts.addPrompt(proxyPrompt);
+      await promptInstance.ready;
+      this._prompts.registerPromptInstance(promptInstance);
     }
+
+    logger.info(
+      `Remote app ${this.id} capabilities loaded: ${capabilities.tools.length} tools, ` +
+        `${capabilities.resources.length} resources, ${capabilities.prompts.length} prompts`,
+    );
   }
 }
