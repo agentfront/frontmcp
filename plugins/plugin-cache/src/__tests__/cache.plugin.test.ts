@@ -273,6 +273,485 @@ describe('CachePlugin', () => {
     });
   });
 
+  describe('shouldCacheTool', () => {
+    it('should return true when cache metadata is true', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      const result = (plugin as any).shouldCacheTool('any:tool', true);
+      expect(result).toBe(true);
+    });
+
+    it('should return true when cache metadata is an object', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      const result = (plugin as any).shouldCacheTool('any:tool', { ttl: 3600 });
+      expect(result).toBe(true);
+    });
+
+    it('should check toolPatterns when metadata is false/undefined', () => {
+      const plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
+      expect((plugin as any).shouldCacheTool('test:tool', false)).toBe(true);
+      expect((plugin as any).shouldCacheTool('test:tool', undefined)).toBe(true);
+      expect((plugin as any).shouldCacheTool('other:tool', undefined)).toBe(false);
+    });
+
+    it('should return false when no patterns and no metadata', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      const result = (plugin as any).shouldCacheTool('any:tool', undefined);
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getTtl', () => {
+    it('should return TTL from cache metadata object', () => {
+      const plugin = new CachePlugin({ type: 'memory', defaultTTL: 1000 });
+      const result = (plugin as any).getTtl({ ttl: 5000 });
+      expect(result).toBe(5000);
+    });
+
+    it('should return default TTL when metadata is true', () => {
+      const plugin = new CachePlugin({ type: 'memory', defaultTTL: 2000 });
+      const result = (plugin as any).getTtl(true);
+      expect(result).toBe(2000);
+    });
+
+    it('should return default TTL when metadata is undefined', () => {
+      const plugin = new CachePlugin({ type: 'memory', defaultTTL: 3000 });
+      const result = (plugin as any).getTtl(undefined);
+      expect(result).toBe(3000);
+    });
+
+    it('should return default TTL when metadata object has no ttl', () => {
+      const plugin = new CachePlugin({ type: 'memory', defaultTTL: 4000 });
+      const result = (plugin as any).getTtl({ slideWindow: true });
+      expect(result).toBe(4000);
+    });
+
+    it('should return 24h default when no defaultTTL configured', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      // defaultTTL is set in constructor, but test the fallback path
+      (plugin.options as any).defaultTTL = undefined;
+      const result = (plugin as any).getTtl(undefined);
+      expect(result).toBe(60 * 60 * 24);
+    });
+  });
+
+  describe('shouldBypassCache', () => {
+    it('should return false when context storage is not available', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      // Mock get to throw
+      (plugin as any).get = () => {
+        throw new Error('Not available');
+      };
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(false);
+    });
+
+    it('should return false when no custom headers', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      (plugin as any).get = () => ({
+        getStore: () => ({ metadata: {} }),
+      });
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(false);
+    });
+
+    it('should return true when bypass header is "true"', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: {
+            customHeaders: { 'x-frontmcp-disable-cache': 'true' },
+          },
+        }),
+      });
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(true);
+    });
+
+    it('should return true when bypass header is "1"', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: {
+            customHeaders: { 'x-frontmcp-disable-cache': '1' },
+          },
+        }),
+      });
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(true);
+    });
+
+    it('should return false when bypass header has other value', () => {
+      const plugin = new CachePlugin({ type: 'memory' });
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: {
+            customHeaders: { 'x-frontmcp-disable-cache': 'false' },
+          },
+        }),
+      });
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(false);
+    });
+
+    it('should use custom bypass header', () => {
+      const plugin = new CachePlugin({ type: 'memory', bypassHeader: 'x-custom-bypass' });
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: {
+            customHeaders: { 'x-custom-bypass': 'true' },
+          },
+        }),
+      });
+      const mockFlowCtx = {} as any;
+      const result = (plugin as any).shouldBypassCache(mockFlowCtx);
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('willReadCache hook', () => {
+    let plugin: CachePlugin;
+    let mockCacheStore: any;
+
+    beforeEach(() => {
+      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
+      mockCacheStore = {
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        delete: jest.fn(),
+      };
+      (plugin as any).get = (token: any) => {
+        if (token === CacheStoreToken) return mockCacheStore;
+        return {
+          getStore: () => ({ metadata: {} }),
+        };
+      };
+    });
+
+    it('should return early when tool is undefined', async () => {
+      const flowCtx = { state: { tool: undefined, toolContext: undefined } } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when toolContext is undefined', async () => {
+      const flowCtx = { state: { tool: {}, toolContext: undefined } } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when cache is bypassed', async () => {
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: { customHeaders: { 'x-frontmcp-disable-cache': 'true' } },
+        }),
+      });
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: { metadata: { cache: true }, input: {} },
+        },
+      } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when tool should not be cached', async () => {
+      plugin = new CachePlugin({ type: 'memory' }); // no toolPatterns
+      (plugin as any).get = () => mockCacheStore;
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'other:tool', name: 'other:tool' },
+          toolContext: { metadata: {}, input: {} },
+        },
+      } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when input is undefined', async () => {
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: { metadata: { cache: true }, input: undefined },
+        },
+      } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).not.toHaveBeenCalled();
+    });
+
+    it('should check cache for matching tool', async () => {
+      mockCacheStore.getValue.mockResolvedValue(undefined);
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: { metadata: {}, input: { key: 'value' } },
+        },
+      } as any;
+      await plugin.willReadCache(flowCtx);
+      expect(mockCacheStore.getValue).toHaveBeenCalled();
+    });
+
+    it('should set output when cache hit with plain object', async () => {
+      const cachedData = { data: 'cached' };
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const respondMock = jest.fn();
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: {
+            metadata: { cache: true },
+            input: { key: 'value' },
+            respond: respondMock,
+          },
+          rawOutput: undefined,
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.rawOutput).toEqual({ data: 'cached', _meta: { cache: 'hit' } });
+      expect(respondMock).toHaveBeenCalled();
+    });
+
+    it('should return cached data as-is for primitives', async () => {
+      const cachedData = 'simple string';
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const respondMock = jest.fn();
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: {
+            metadata: { cache: true },
+            input: { key: 'value' },
+            respond: respondMock,
+          },
+          rawOutput: undefined,
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.rawOutput).toBe('simple string');
+      expect(respondMock).toHaveBeenCalledWith('simple string');
+    });
+
+    it('should return cached data as-is for arrays', async () => {
+      const cachedData = [1, 2, 3];
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const respondMock = jest.fn();
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: {
+            metadata: { cache: true },
+            input: { key: 'value' },
+            respond: respondMock,
+          },
+          rawOutput: undefined,
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.rawOutput).toEqual([1, 2, 3]);
+    });
+
+    it('should delete invalid cached data', async () => {
+      const cachedData = { data: 'cached' };
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: false }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: { metadata: { cache: true }, input: { key: 'value' } },
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(mockCacheStore.delete).toHaveBeenCalled();
+    });
+
+    it('should slide window when slideWindow is true', async () => {
+      const cachedData = { data: 'cached' };
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const respondMock = jest.fn();
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: {
+            metadata: { cache: { ttl: 1000, slideWindow: true } },
+            input: { key: 'value' },
+            respond: respondMock,
+          },
+          rawOutput: undefined,
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(mockCacheStore.setValue).toHaveBeenCalled();
+    });
+
+    it('should preserve existing _meta in cached data', async () => {
+      const cachedData = { data: 'cached', _meta: { source: 'api' } };
+      mockCacheStore.getValue.mockResolvedValue(cachedData);
+      const respondMock = jest.fn();
+      const mockTool = {
+        fullName: 'test:tool',
+        name: 'test:tool',
+        safeParseOutput: jest.fn().mockReturnValue({ success: true }),
+      };
+      const flowCtx = {
+        state: {
+          tool: mockTool,
+          toolContext: {
+            metadata: { cache: true },
+            input: { key: 'value' },
+            respond: respondMock,
+          },
+          rawOutput: undefined,
+        },
+      } as any;
+
+      await plugin.willReadCache(flowCtx);
+
+      expect(flowCtx.state.rawOutput).toEqual({
+        data: 'cached',
+        _meta: { source: 'api', cache: 'hit' },
+      });
+    });
+  });
+
+  describe('willWriteCache hook', () => {
+    let plugin: CachePlugin;
+    let mockCacheStore: any;
+
+    beforeEach(() => {
+      plugin = new CachePlugin({ type: 'memory', toolPatterns: ['test:*'] });
+      mockCacheStore = {
+        getValue: jest.fn(),
+        setValue: jest.fn(),
+        delete: jest.fn(),
+      };
+      (plugin as any).get = (token: any) => {
+        if (token === CacheStoreToken) return mockCacheStore;
+        return {
+          getStore: () => ({ metadata: {} }),
+        };
+      };
+    });
+
+    it('should return early when tool is undefined', async () => {
+      const flowCtx = { state: { tool: undefined, toolContext: undefined } } as any;
+      await plugin.willWriteCache(flowCtx);
+      expect(mockCacheStore.setValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when cache is bypassed', async () => {
+      (plugin as any).get = () => ({
+        getStore: () => ({
+          metadata: { customHeaders: { 'x-frontmcp-disable-cache': 'true' } },
+        }),
+      });
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: { metadata: { cache: true }, input: {}, output: {} },
+        },
+      } as any;
+      await plugin.willWriteCache(flowCtx);
+      expect(mockCacheStore.setValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when tool should not be cached', async () => {
+      plugin = new CachePlugin({ type: 'memory' }); // no toolPatterns
+      (plugin as any).get = () => mockCacheStore;
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'other:tool', name: 'other:tool' },
+          toolContext: { metadata: {}, input: {}, output: {} },
+        },
+      } as any;
+      await plugin.willWriteCache(flowCtx);
+      expect(mockCacheStore.setValue).not.toHaveBeenCalled();
+    });
+
+    it('should return early when input is undefined', async () => {
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: { metadata: { cache: true }, input: undefined, output: {} },
+        },
+      } as any;
+      await plugin.willWriteCache(flowCtx);
+      expect(mockCacheStore.setValue).not.toHaveBeenCalled();
+    });
+
+    it('should write cache for matching tool', async () => {
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: {
+            metadata: {},
+            input: { key: 'value' },
+            output: { result: 'data' },
+          },
+        },
+      } as any;
+
+      await plugin.willWriteCache(flowCtx);
+
+      expect(mockCacheStore.setValue).toHaveBeenCalledWith(expect.any(String), { result: 'data' }, expect.any(Number));
+    });
+
+    it('should use custom TTL from metadata', async () => {
+      const flowCtx = {
+        state: {
+          tool: { fullName: 'test:tool', name: 'test:tool' },
+          toolContext: {
+            metadata: { cache: { ttl: 7200 } },
+            input: { key: 'value' },
+            output: { result: 'data' },
+          },
+        },
+      } as any;
+
+      await plugin.willWriteCache(flowCtx);
+
+      expect(mockCacheStore.setValue).toHaveBeenCalledWith(expect.any(String), { result: 'data' }, 7200);
+    });
+  });
+
   describe('isCacheable', () => {
     it('should return false when no toolPatterns configured', () => {
       const plugin = new CachePlugin({ type: 'memory' });

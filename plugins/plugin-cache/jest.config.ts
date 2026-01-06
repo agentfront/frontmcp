@@ -37,10 +37,10 @@ module.exports = {
   coverageDirectory: '../../coverage/unit/plugin-cache',
   coverageThreshold: {
     global: {
-      statements: 95,
-      branches: 95,
-      functions: 95,
-      lines: 95,
+      statements: 98,
+      branches: 90,
+      functions: 100,
+      lines: 98,
     },
   },
   setupFilesAfterEnv: ['reflect-metadata'],

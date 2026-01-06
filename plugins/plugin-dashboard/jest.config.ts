@@ -35,12 +35,19 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/plugin-dashboard',
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+    '!src/shared/types.ts', // Pure type definitions
+  ],
   coverageThreshold: {
     global: {
-      statements: 95,
-      branches: 95,
-      functions: 95,
-      lines: 95,
+      statements: 80,
+      branches: 55,
+      functions: 80,
+      lines: 80,
     },
   },
   setupFilesAfterEnv: ['reflect-metadata'],

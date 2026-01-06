@@ -33,4 +33,13 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/cli',
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts', '!src/cli.ts', '!src/templates/**'],
+  coverageThreshold: {
+    global: {
+      statements: 60,
+      branches: 60,
+      functions: 53,
+      lines: 59,
+    },
+  },
 };
