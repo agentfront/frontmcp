@@ -1,0 +1,93 @@
+---
+title: Remote Apps
+slug: servers/remote-apps
+icon: cloud
+---
+
+## Overview
+
+Remote apps let you orchestrate capabilities hosted on other MCP servers while your gateway stays the single entry point. Each remote tool, resource, resource template, and prompt becomes a proxy entry in the server registries, so MCP clients call them the same way they call local capabilities. This guide focuses on the connection, transport, and caching knobs you can tweak when wiring up remote MCP peers.
+
+<Info>
+See the [Apps guide](/docs/servers/apps) for the general app lifecycle and how remote apps live alongside local ones.
+</Info>
+
+## Connection options
+
+Define remote apps inside your `apps` array. Provide `urlType`, `url`, and (optionally) a `namespace` to prefix every capability imported from that server.
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  apps: [
+    {
+      name: 'mintlify-docs',
+      urlType: 'url',
+      url: 'https://mintlify.com/docs/mcp',
+      namespace: 'mintlify',
+      transportOptions: {
+        timeout: 45_000,
+        retryAttempts: 3,
+        retryDelayMs: 250,
+        fallbackToSSE: true,
+        headers: {
+          Authorization: 'Bearer vip-token',
+        },
+      },
+      remoteAuth: {
+        mode: 'forward',
+        tokenClaim: 'access_token',
+        headerName: 'Authorization',
+      },
+      refreshInterval: 20_000,
+      cacheTTL: 120_000,
+    },
+  ],
+})
+export class GatewayServer {}
+```
+
+<Note>
+If you skip `namespace`, the gateway defaults to the app name. Set a custom prefix when you connect multiple remote servers so their tools, resources, and prompts never collide.
+</Note>
+
+### Transport options
+
+Adjust `transportOptions` to control how the gateway talks to the remote server:
+
+- `timeout` (milliseconds) limits how long HTTP/SSE requests can run before failing.
+- `retryAttempts` defines how many transient failures the gateway should retry.
+- `retryDelayMs` inserts a pause between retries so backoff can kick in.
+- `fallbackToSSE` triggers the GET-based SSE fallback when the POST-based stream is blocked or unsupported.
+- `headers` injects API keys, `Authorization` tokens, or custom metadata on every transport connection.
+
+<Tip>
+Keep shared credentials in `headers` to avoid hardcoding them inside the remote server.
+</Tip>
+
+### Remote authentication
+
+`remoteAuth` controls how you prove identity to the remote MCP server:
+
+- `mode: 'static'` — Send a bearer/basic/API key credential for trusted internal endpoints.
+- `mode: 'forward'` — Forward the gateway user's token so the remote server can reuse the same authorization rules; optionally pick the claim (`tokenClaim`) and header name.
+- `mode: 'oauth'` — Let the remote server handle its own OAuth handshake while the gateway stays a transparent proxy.
+
+## Capability proxying
+
+When the remote app connects, the gateway discovers its capabilities and registers proxy entries for tools, resources, resource templates, and prompts. Each proxy:
+
+- exposes the same metadata as the remote source (descriptions, schemas, and resource URIs),
+- forwards requests through the gateway's normal tool/resource flows so plugins, caching, and authorization still run,
+- uses the configured `namespace` prefix, for example `mintlify:search-docs` or `mintlify:load-config`.
+
+<Note>
+Remote registries subscribe to capability updates, so newly published tools or prompts become available without restarting your server.
+</Note>
+
+### Capability caching
+
+Set `refreshInterval` to poll the remote server for capability changes (default: `0`, which disables polling). The gateway caches each discovery response for `cacheTTL` milliseconds (default: `60_000`) to avoid hitting the remote endpoint on every startup.
+
+Pair remote apps with the [Cache Plugin](/docs/plugins/cache-plugin#caching-remote-tools) and its `toolPatterns` option when you want to cache remote tool results while still honoring remote TTLs.

@@ -5,17 +5,40 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-06" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    ## Features
+    🚀 **Remote MCP orchestration** – Connect remote MCP servers so their tools, resources, resource templates, and prompts appear in your gateway with namespace isolation, resilient transport options, and cached discovery.
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+    🧠 **Memory management dashboards** – Lean on the new remember tools and dashboard plugin to watch encrypted session memory, adjust TTLs, and prune stale entries without leaving the UI.
 
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    🔔 **Progress-aware agents** – Agents and tools now emit auto progress updates tied to progress tokens, so clients see real-time status for every step in streaming and nested flows.
 
+  </Card>
+</Update>
+
+<Update label="json-schema-to-zod-v3 draft" description="2026-01-06" tags={["Independent"]}>
+  <Card
+    title="json-schema-to-zod-v3 draft"
+    href="/docs"
+    cta="Read the release notes"
+  >
+    ## Highlights
+    📦 **Preview-aligned publishing** – The Nx `publish-alpha` target keeps preview builds aligned with the workspace release script, so json-schema-to-zod-v3 ships the same hardened dual CJS/ESM exports whenever you push.
+  </Card>
+</Update>
+
+<Update label="mcp-from-openapi draft" description="2026-01-06" tags={["Independent"]}>
+  <Card
+    title="mcp-from-openapi draft"
+    href="/docs"
+    cta="Read the release notes"
+  >
+    ## Highlights
+    ⚙️ **Shared release workflow** – The Nx `publish-alpha` target gives mcp-from-openapi the same preview-release path as the core workspace, making tooling upgrades easier to test before the public release.
   </Card>
 </Update>

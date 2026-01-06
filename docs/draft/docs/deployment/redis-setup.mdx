@@ -161,9 +161,9 @@ Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel
 
 ### Plugin Secrets
 
-| Variable           | Required  | Default        | Description                                                            |
-| ------------------ | --------- | -------------- | ---------------------------------------------------------------------- |
-| `REMEMBER_SECRET`  | Prod only | Auto-generated | Encryption secret for RememberPlugin (32+ byte base64-encoded string)  |
+| Variable          | Required  | Default        | Description                                                           |
+| ----------------- | --------- | -------------- | --------------------------------------------------------------------- |
+| `REMEMBER_SECRET` | Prod only | Auto-generated | Encryption secret for RememberPlugin (32+ byte base64-encoded string) |
 
 <Info>
 In development, `REMEMBER_SECRET` is auto-generated and stored in `.frontmcp/remember-secret.json`. Add this file to `.gitignore`. In production, always set `REMEMBER_SECRET` explicitly to ensure consistent encryption across instances.
