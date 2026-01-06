@@ -16,6 +16,11 @@ import { createTemplateHelpers } from '../runtime/wrapper';
 type ReactComponentType<P = any> = ((props: P) => unknown) & { displayName?: string; name?: string };
 
 /**
+ * Maximum input length for MDX syntax detection (ReDoS prevention).
+ */
+const MAX_MDX_SOURCE_LENGTH = 100000;
+
+/**
  * Check if a string contains MDX syntax (Markdown + JSX).
  *
  * Looks for:
@@ -25,6 +30,11 @@ type ReactComponentType<P = any> = ((props: P) => unknown) & { displayName?: str
  * - Frontmatter: `---\n...\n---`
  */
 export function containsMdxSyntax(source: string): boolean {
+  // Guard against ReDoS on large inputs
+  if (source.length > MAX_MDX_SOURCE_LENGTH) {
+    return false;
+  }
+
   // Has JSX component tags (PascalCase)
   if (/<[A-Z][a-zA-Z0-9]*/.test(source)) {
     return true;

@@ -127,6 +127,34 @@ export {
   isSecretCached,
 } from './crypto';
 
+// Safe regex utilities (ReDoS prevention)
+export {
+  // Core safe regex functions
+  analyzePattern,
+  isPatternSafe,
+  createSafeRegExp,
+  safeTest,
+  safeMatch,
+  safeReplace,
+  safeExec,
+  isInputLengthSafe,
+  DEFAULT_MAX_INPUT_LENGTH,
+  REDOS_THRESHOLDS,
+  // Pre-built safe pattern utilities
+  trimLeading,
+  trimTrailing,
+  trimBoth,
+  trimChars,
+  extractBracedParams,
+  expandTemplate,
+  hasTemplatePlaceholders,
+  collapseChar,
+  collapseWhitespace,
+  // Types
+  type SafeRegexOptions,
+  type PatternAnalysisResult,
+} from './regex';
+
 // Storage utilities (unified key-value storage with pluggable backends)
 export {
   // Factory

@@ -5,6 +5,8 @@
  * (camelCase, snake_case, kebab-case, etc.) and generating unique identifiers.
  */
 
+import { trimBoth } from '../regex';
+
 /**
  * Supported naming conventions for identifiers.
  */
@@ -142,5 +144,6 @@ export function idFromString(name: string): string {
   // Replace any invalid run with '-'
   const cleaned = name.replace(/[^A-Za-z0-9_-]+/g, '-');
   // Trim to max length and remove leading/trailing hyphens produced by cleaning
-  return cleaned.replace(/^-+|-+$/g, '').slice(0, 64);
+  // Uses trimBoth to avoid ReDoS vulnerability in /^-+|-+$/g pattern
+  return trimBoth(cleaned, '-').slice(0, 64);
 }

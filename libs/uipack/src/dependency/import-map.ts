@@ -236,7 +236,11 @@ export function generateUMDShim(dependencies: ResolvedDependency[], options: UMD
 })();`
     : `window.__esm_shim = ${shimObject};`;
 
-  return minify ? code.replace(/\s+/g, ' ').replace(/\s*([{},:])\s*/g, '$1') : code;
+  // Guard against ReDoS on large inputs (100KB limit)
+  if (minify && code.length <= 100000) {
+    return code.replace(/\s+/g, ' ').replace(/\s*([{},:])\s*/g, '$1');
+  }
+  return code;
 }
 
 /**
