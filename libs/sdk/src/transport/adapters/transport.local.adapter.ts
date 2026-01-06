@@ -71,10 +71,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
 
     // Check if there are remote apps configured (they will have tools/resources/prompts that load later)
     // Remote apps have 'urlType' property indicating they're external MCP servers
-    const hasRemoteApps = apps?.some(
-      (app) =>
-        app && typeof app === 'object' && 'urlType' in app && (app as { standalone?: boolean }).standalone !== true,
-    );
+    const hasRemoteApps = apps?.some((app) => this.isRemoteApp(app)) ?? false;
 
     // Check if completions capability should be enabled (when prompts or resources are present)
     // Also enable for remote apps since they may have prompts/resources
@@ -84,15 +81,10 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const hasAgents = this.scope.agents.hasAny();
     const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
 
-    // Build capabilities, including pre-advertised capabilities for remote apps
-    // Remote apps may have tools/resources/prompts that load asynchronously after connection
-    const remoteCapabilities = hasRemoteApps
-      ? {
-          tools: { listChanged: true },
-          resources: { subscribe: true, listChanged: true },
-          prompts: { listChanged: true },
-        }
-      : {};
+    // Get capabilities from registries - they now handle both local and remote capabilities
+    // When hasRemoteApps is true, we pre-advertise listChanged capabilities since remote tools/resources/prompts
+    // load asynchronously after connection and may emit change notifications
+    const remoteCapabilities = hasRemoteApps ? this.buildRemoteCapabilities() : {};
 
     const serverOptions = {
       instructions: '',
@@ -220,5 +212,30 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Type predicate to check if an app configuration represents a remote MCP app.
+   * Remote apps have a 'urlType' property and are not standalone.
+   */
+  private isRemoteApp(app: unknown): boolean {
+    if (app === null || typeof app !== 'object') return false;
+    const appObj = app as Record<string, unknown>;
+    // Remote apps have 'urlType' property indicating they're external MCP servers
+    // Standalone apps don't contribute to the main server's capabilities
+    return 'urlType' in appObj && appObj['standalone'] !== true;
+  }
+
+  /**
+   * Build capabilities that should be pre-advertised for remote apps.
+   * Remote apps load their tools/resources/prompts asynchronously after connection,
+   * so we need to pre-advertise listChanged capabilities for proper notification support.
+   */
+  private buildRemoteCapabilities(): Record<string, unknown> {
+    return {
+      tools: { listChanged: true },
+      resources: { subscribe: true, listChanged: true },
+      prompts: { listChanged: true },
+    };
   }
 }

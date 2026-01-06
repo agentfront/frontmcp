@@ -200,6 +200,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
 
   /**
    * Handle transparent mode with allowAnonymous when no token is provided
+   * Uses the same TTL and issuer configuration as handlePublicMode for consistency
    */
   @Stage('handleAnonymousFallback', {
     filter: ({ state, scope }) => {
@@ -212,11 +213,12 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     const authOptions = this.scope.auth?.options as Record<string, unknown> | undefined;
 
     // Create anonymous authorization for transparent mode with allowAnonymous
+    // Use same TTL and issuer logic as handlePublicMode for consistency
     const publicAccess = authOptions?.['publicAccess'] as Record<string, unknown> | undefined;
     const authorization = PublicAuthorization.create({
       scopes: (authOptions?.['anonymousScopes'] as string[] | undefined) ?? ['anonymous'],
-      ttlMs: 3600000, // 1 hour default
-      issuer: this.state.required.baseUrl,
+      ttlMs: this.parseTtl(authOptions?.['sessionTtl'] as string | number | undefined),
+      issuer: (authOptions?.['issuer'] as string | undefined) ?? this.state.required.baseUrl,
       allowedTools: (publicAccess?.['tools'] as string[] | 'all' | undefined) ?? 'all',
       allowedPrompts: (publicAccess?.['prompts'] as string[] | 'all' | undefined) ?? 'all',
     });

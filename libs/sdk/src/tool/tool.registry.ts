@@ -361,12 +361,14 @@ export default class ToolRegistry
 
     function disambiguate(candidate: string, pool: Map<string, ToolEntry>, cfg: Required<ExportNameOptions>): string {
       if (!pool.has(candidate)) return candidate;
+      const maxAttempts = 10000;
       let n = 2;
-      while (true) {
+      while (n <= maxAttempts) {
         const withN = ensureMaxLen(`${candidate}${sepFor(cfg.case)}${n}`, cfg.maxLen);
         if (!pool.has(withN)) return withN;
         n++;
       }
+      throw new Error(`Failed to disambiguate name "${candidate}" after ${maxAttempts} attempts`);
     }
   }
 
