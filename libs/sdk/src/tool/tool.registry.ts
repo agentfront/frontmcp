@@ -35,6 +35,9 @@ export default class ToolRegistry
   /** Children registries that we track */
   private children = new Set<ToolRegistry>();
 
+  /** Remote app tools tracked by app ID for efficient cleanup during re-adoption */
+  private remoteAppTools = new Map<string, IndexedTool[]>();
+
   // ---- O(1) indexes over EFFECTIVE set (local + adopted) ----
   private byQualifiedId = new Map<string, IndexedTool>(); // qualifiedId -> row
   private byName = new Map<string, IndexedTool[]>(); // baseName -> rows
@@ -191,14 +194,16 @@ export default class ToolRegistry
     // Helper to adopt/re-adopt tools from the remote app
     const adoptRemoteTools = () => {
       try {
-        // Remove any previously adopted tools from this remote app
-        // We store remote tools in localRows, so filter them out by checking the token
-        const appPrefix = `tool:${app.id}:`;
-        this.localRows = this.localRows.filter((row) => {
-          const tokenDesc = typeof row.token === 'symbol' ? row.token.description : undefined;
-          return !tokenDesc?.startsWith(appPrefix);
-        });
+        // Remove any previously adopted tools from this remote app using the dedicated Map
+        const previousTools = this.remoteAppTools.get(app.id);
+        if (previousTools && previousTools.length > 0) {
+          const previousTokens = new Set(previousTools.map((row) => row.token));
+          this.localRows = this.localRows.filter((row) => !previousTokens.has(row.token));
+        }
+
         const remoteTools = app.tools.getTools();
+        const newRows: IndexedTool[] = [];
+
         if (remoteTools.length > 0) {
           const prepend: EntryLineage = this.owner ? [this.owner] : [];
           for (const remoteTool of remoteTools) {
@@ -210,8 +215,13 @@ export default class ToolRegistry
             const stableToken = Symbol.for(`tool:${app.id}:${remoteTool.name}`);
             const row = this.makeRow(stableToken, remoteTool, prepend, this);
             this.localRows.push(row);
+            newRows.push(row);
           }
         }
+
+        // Track the new rows in the remoteAppTools Map for efficient cleanup
+        this.remoteAppTools.set(app.id, newRows);
+
         this.reindex();
         this.bump('reset');
       } catch (error) {
