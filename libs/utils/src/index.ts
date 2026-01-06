@@ -31,8 +31,28 @@ export { sanitizeToJson, inferMimeType } from './content';
 // HTTP utilities
 export { validateBaseUrl } from './http';
 
-// File system utilities
-export { fileExists, readJSON, writeJSON, ensureDir, isDirEmpty, runCmd } from './fs';
+// File system utilities (Node.js only)
+export {
+  readFile,
+  readFileBuffer,
+  writeFile,
+  mkdir,
+  rename,
+  unlink,
+  stat,
+  copyFile,
+  cp,
+  readdir,
+  rm,
+  mkdtemp,
+  access,
+  fileExists,
+  readJSON,
+  writeJSON,
+  ensureDir,
+  isDirEmpty,
+  runCmd,
+} from './fs';
 
 // Escape utilities (HTML, JS, XSS prevention)
 export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
@@ -41,7 +61,9 @@ export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJson
 export { safeStringify } from './serialization';
 
 // Crypto utilities (cross-platform: Node.js and browser)
+// Includes: core crypto, encrypted blobs, PKCE (RFC 7636), secret persistence
 export {
+  // Core crypto
   getCrypto,
   randomUUID,
   randomBytes,
@@ -61,4 +83,101 @@ export {
   assertNode,
   CryptoProvider,
   EncBlob,
+  // Encrypted blob helpers
+  EncryptedBlob,
+  EncryptedBlobError,
+  encryptValue,
+  decryptValue,
+  tryDecryptValue,
+  serializeBlob,
+  deserializeBlob,
+  tryDeserializeBlob,
+  isValidEncryptedBlob,
+  encryptAndSerialize,
+  deserializeAndDecrypt,
+  tryDeserializeAndDecrypt,
+  // PKCE utilities (RFC 7636)
+  generateCodeVerifier,
+  generateCodeChallenge,
+  verifyCodeChallenge,
+  generatePkcePair,
+  isValidCodeVerifier,
+  isValidCodeChallenge,
+  MIN_CODE_VERIFIER_LENGTH,
+  MAX_CODE_VERIFIER_LENGTH,
+  DEFAULT_CODE_VERIFIER_LENGTH,
+  PkceError,
+  type PkcePair,
+  // Secret persistence utilities
+  type SecretData,
+  type SecretPersistenceOptions,
+  type SecretValidationResult,
+  secretDataSchema,
+  validateSecretData,
+  parseSecretData,
+  isSecretPersistenceEnabled,
+  resolveSecretPath,
+  loadSecret,
+  saveSecret,
+  deleteSecret,
+  generateSecret,
+  createSecretData,
+  getOrCreateSecret,
+  clearCachedSecret,
+  isSecretCached,
 } from './crypto';
+
+// Storage utilities (unified key-value storage with pluggable backends)
+export {
+  // Factory
+  createStorage,
+  createMemoryStorage,
+  getDetectedStorageType,
+  // Types
+  StorageAdapter,
+  NamespacedStorage,
+  RootStorage,
+  SetOptions,
+  SetEntry,
+  MessageHandler,
+  Unsubscribe,
+  MemoryAdapterOptions,
+  RedisAdapterOptions,
+  VercelKvAdapterOptions,
+  UpstashAdapterOptions,
+  StorageType,
+  StorageConfig,
+  // Namespace
+  NamespacedStorageImpl,
+  createRootStorage,
+  createNamespacedStorage,
+  buildPrefix,
+  NAMESPACE_SEPARATOR,
+  // Errors
+  StorageError,
+  StorageConnectionError,
+  StorageOperationError,
+  StorageNotSupportedError,
+  StorageConfigError,
+  StorageTTLError,
+  StoragePatternError,
+  StorageNotConnectedError,
+  // Adapters
+  BaseStorageAdapter,
+  MemoryStorageAdapter,
+  RedisStorageAdapter,
+  VercelKvStorageAdapter,
+  UpstashStorageAdapter,
+  // Utilities
+  globToRegex,
+  matchesPattern,
+  validatePattern,
+  escapeGlob,
+  MAX_TTL_SECONDS,
+  validateTTL,
+  validateOptionalTTL,
+  ttlToExpiresAt,
+  expiresAtToTTL,
+  isExpired,
+  normalizeTTL,
+} from './storage';

@@ -73,7 +73,11 @@ export class Scope extends ScopeEntry {
       this.routeBase = '';
     }
 
-    this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders);
+    // Pass distributed config to ProviderRegistry for serverless/multi-instance support
+    const distributedConfig = rec.metadata.transport?.distributed;
+    this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders, {
+      distributed: distributedConfig,
+    });
     this.ready = this.initialize();
   }
 

@@ -3,9 +3,9 @@
  *
  * Tests for the development key persistence system used for JWT signing.
  */
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { mkdtemp, rm, writeFile, stat, readFile, readdir, access } from '@frontmcp/utils';
 import {
   DevKeyData,
   DevKeyPersistenceOptions,
@@ -21,12 +21,12 @@ describe('Dev Key Persistence', () => {
   let originalNodeEnv: string | undefined;
 
   beforeAll(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dev-key-test-'));
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'dev-key-test-'));
   });
 
   afterAll(async () => {
     // Clean up temp directory
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   beforeEach(() => {
@@ -118,7 +118,7 @@ describe('Dev Key Persistence', () => {
 
       // Create a valid key file
       const validKey = createValidRsaKeyData();
-      await fs.writeFile(keyPath, JSON.stringify(validKey));
+      await writeFile(keyPath, JSON.stringify(validKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -127,7 +127,7 @@ describe('Dev Key Persistence', () => {
     it('should load valid RS256 key', async () => {
       const keyPath = path.join(tempDir, 'valid-rs256.json');
       const validKey = createValidRsaKeyData();
-      await fs.writeFile(keyPath, JSON.stringify(validKey));
+      await writeFile(keyPath, JSON.stringify(validKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).not.toBeNull();
@@ -138,7 +138,7 @@ describe('Dev Key Persistence', () => {
     it('should load valid ES256 key', async () => {
       const keyPath = path.join(tempDir, 'valid-es256.json');
       const validKey = createValidEcKeyData();
-      await fs.writeFile(keyPath, JSON.stringify(validKey));
+      await writeFile(keyPath, JSON.stringify(validKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).not.toBeNull();
@@ -148,7 +148,7 @@ describe('Dev Key Persistence', () => {
 
     it('should return null for empty file', async () => {
       const keyPath = path.join(tempDir, 'empty.json');
-      await fs.writeFile(keyPath, '');
+      await writeFile(keyPath, '');
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -156,7 +156,7 @@ describe('Dev Key Persistence', () => {
 
     it('should return null for invalid JSON', async () => {
       const keyPath = path.join(tempDir, 'invalid-json.json');
-      await fs.writeFile(keyPath, 'not valid json {{{');
+      await writeFile(keyPath, 'not valid json {{{');
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -164,7 +164,7 @@ describe('Dev Key Persistence', () => {
 
     it('should return null for JSON with just {}', async () => {
       const keyPath = path.join(tempDir, 'empty-object.json');
-      await fs.writeFile(keyPath, '{}');
+      await writeFile(keyPath, '{}');
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -172,7 +172,7 @@ describe('Dev Key Persistence', () => {
 
     it('should return null for JSON with null', async () => {
       const keyPath = path.join(tempDir, 'null.json');
-      await fs.writeFile(keyPath, 'null');
+      await writeFile(keyPath, 'null');
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -188,7 +188,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'missing-kid.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey as unknown as Record<string, unknown>)['kid'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -198,7 +198,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'missing-private.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey as unknown as Record<string, unknown>)['privateKey'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -208,7 +208,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'missing-public.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey as unknown as Record<string, unknown>)['publicJwk'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -218,7 +218,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'missing-created.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey as unknown as Record<string, unknown>)['createdAt'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -228,7 +228,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'missing-alg.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey as unknown as Record<string, unknown>)['alg'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -238,7 +238,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'invalid-alg-hs256.json');
       const invalidKey = createValidRsaKeyData();
       (invalidKey as unknown as Record<string, unknown>)['alg'] = 'HS256';
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -248,7 +248,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'invalid-alg-none.json');
       const invalidKey = createValidRsaKeyData();
       (invalidKey as unknown as Record<string, unknown>)['alg'] = 'none';
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -258,7 +258,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'empty-keys.json');
       const invalidKey = createValidRsaKeyData();
       invalidKey.publicJwk.keys = [];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -268,7 +268,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'no-keys-array.json');
       const invalidKey = createValidRsaKeyData();
       (invalidKey as unknown as Record<string, unknown>)['publicJwk'] = {};
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -278,7 +278,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'negative-timestamp.json');
       const invalidKey = createValidRsaKeyData();
       invalidKey.createdAt = -1;
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -288,7 +288,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'future-timestamp.json');
       const invalidKey = createValidRsaKeyData();
       invalidKey.createdAt = new Date('3000-01-01').getTime();
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -298,7 +298,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'rs256-with-ec.json');
       const invalidKey = createValidEcKeyData();
       invalidKey.alg = 'RS256';
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -308,7 +308,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'es256-with-rsa.json');
       const invalidKey = createValidRsaKeyData();
       invalidKey.alg = 'ES256';
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -320,7 +320,7 @@ describe('Dev Key Persistence', () => {
       const ecKey = createValidEcKeyData();
       // Use RSA private key with EC public key
       rsaKey.publicJwk = ecKey.publicJwk;
-      await fs.writeFile(keyPath, JSON.stringify(rsaKey));
+      await writeFile(keyPath, JSON.stringify(rsaKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -331,7 +331,7 @@ describe('Dev Key Persistence', () => {
       const validKey = createValidRsaKeyData();
       // Modify publicJwk kid to be different from top-level kid
       validKey.publicJwk.keys[0].kid = 'different-kid';
-      await fs.writeFile(keyPath, JSON.stringify(validKey));
+      await writeFile(keyPath, JSON.stringify(validKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -341,7 +341,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'rsa-missing-n.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['n'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -351,7 +351,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'rsa-missing-e.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['e'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -361,7 +361,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'rsa-missing-d.json');
       const invalidKey = createValidRsaKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['d'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -371,7 +371,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'ec-missing-x.json');
       const invalidKey = createValidEcKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['x'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -381,7 +381,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'ec-missing-y.json');
       const invalidKey = createValidEcKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['y'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -391,7 +391,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'ec-missing-d.json');
       const invalidKey = createValidEcKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['d'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -401,7 +401,7 @@ describe('Dev Key Persistence', () => {
       const keyPath = path.join(tempDir, 'ec-missing-crv.json');
       const invalidKey = createValidEcKeyData();
       delete (invalidKey.privateKey as Record<string, unknown>)['crv'];
-      await fs.writeFile(keyPath, JSON.stringify(invalidKey));
+      await writeFile(keyPath, JSON.stringify(invalidKey));
 
       const result = await loadDevKey({ keyPath });
       expect(result).toBeNull();
@@ -421,8 +421,8 @@ describe('Dev Key Persistence', () => {
       expect(result).toBe(true);
 
       // Verify file exists
-      const stat = await fs.stat(keyPath);
-      expect(stat.isFile()).toBe(true);
+      const fileStat = await stat(keyPath);
+      expect(fileStat.isFile()).toBe(true);
     });
 
     it('should create parent directories', async () => {
@@ -433,8 +433,8 @@ describe('Dev Key Persistence', () => {
       expect(result).toBe(true);
 
       // Verify file exists
-      const stat = await fs.stat(keyPath);
-      expect(stat.isFile()).toBe(true);
+      const fileStat = await stat(keyPath);
+      expect(fileStat.isFile()).toBe(true);
     });
 
     it('should set file permissions to 0o600', async () => {
@@ -443,9 +443,9 @@ describe('Dev Key Persistence', () => {
 
       await saveDevKey(validKey, { keyPath });
 
-      const stat = await fs.stat(keyPath);
+      const fileStat = await stat(keyPath);
       // Check owner read/write only (on POSIX systems)
-      expect(stat.mode & 0o777).toBe(0o600);
+      expect(fileStat.mode & 0o777).toBe(0o600);
     });
 
     it('should set directory permissions to 0o700', async () => {
@@ -454,7 +454,7 @@ describe('Dev Key Persistence', () => {
 
       await saveDevKey(validKey, { keyPath });
 
-      const dirStat = await fs.stat(path.dirname(keyPath));
+      const dirStat = await stat(path.dirname(keyPath));
       expect(dirStat.mode & 0o777).toBe(0o700);
     });
 
@@ -467,7 +467,7 @@ describe('Dev Key Persistence', () => {
       expect(result).toBe(true);
 
       // File should not exist
-      await expect(fs.access(keyPath)).rejects.toThrow();
+      await expect(access(keyPath)).rejects.toThrow();
     });
 
     it('should use atomic write pattern', async () => {
@@ -478,7 +478,7 @@ describe('Dev Key Persistence', () => {
       await saveDevKey(validKey, { keyPath });
 
       // Check no temp files in directory
-      const files = await fs.readdir(path.dirname(keyPath));
+      const files = await readdir(path.dirname(keyPath));
       const tempFiles = files.filter((f) => f.includes('.tmp.'));
       expect(tempFiles.length).toBe(0);
     });
@@ -505,7 +505,7 @@ describe('Dev Key Persistence', () => {
 
       await saveDevKey(validKey, { keyPath });
 
-      const content = await fs.readFile(keyPath, 'utf8');
+      const content = await readFile(keyPath, 'utf8');
       // Check for 2-space indentation
       expect(content).toContain('  "kid"');
     });
@@ -524,7 +524,7 @@ describe('Dev Key Persistence', () => {
       await deleteDevKey({ keyPath });
 
       // File should not exist
-      await expect(fs.access(keyPath)).rejects.toThrow();
+      await expect(access(keyPath)).rejects.toThrow();
     });
 
     it('should not throw for non-existent file', async () => {

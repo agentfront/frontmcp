@@ -1,7 +1,15 @@
 // plugin-registry.ts
 import 'reflect-metadata';
 import { Token, tokenName, Ctor } from '@frontmcp/di';
-import { EntryOwnerRef, PluginEntry, PluginKind, PluginRecord, PluginRegistryInterface, PluginType } from '../common';
+import {
+  EntryOwnerRef,
+  PluginEntry,
+  PluginKind,
+  PluginRecord,
+  PluginRegistryInterface,
+  PluginType,
+  ProviderEntry,
+} from '../common';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
 import ProviderRegistry from '../provider/provider.registry';
 import AdapterRegistry from '../adapter/adapter.regsitry';
@@ -13,6 +21,7 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
 import { InvalidPluginScopeError } from '../errors';
+import { installContextExtensions } from '../context/context-extension';
 
 /**
  * Scope information for plugin hook registration.
@@ -220,9 +229,53 @@ export default class PluginRegistry
         await targetHookScope.hooks.registerHooks(false, ...hooksWithOwner);
       }
       pluginInstance.get = providers.get.bind(providers) as any;
+
+      // Install context extensions declared by the plugin
+      // This adds properties like `this.remember` to ExecutionContextBase
+      const contextExtensions = rec.metadata.contextExtensions;
+      if (contextExtensions && contextExtensions.length > 0) {
+        installContextExtensions(rec.metadata.name, contextExtensions);
+      }
+
       const dynamicProviders = rec.providers;
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
+
+        // Register dynamic provider DEFINITIONS in both:
+        // 1. The parent registry (this.providers) - for tool/resource/prompt creation
+        // 2. The scope's registry (this.scope.providers) - for flow buildViews() resolution
+        //
+        // This is necessary because:
+        // - Tools/resources/prompts resolve providers from the app's provider hierarchy
+        // - Flows use scope.providers.buildViews() to build context-scoped providers
+        // - App providers (this.providers) are a CHILD of scope providers, not a parent
+        // - So we need to merge to both to ensure providers are found in both paths
+        const normalized = dynamicProviders.map((p) => normalizeProvider(p));
+        const singletons = providers.getAllSingletons();
+        const exported = normalized.map((def) => ({
+          token: def.provide,
+          def,
+          // For CONTEXT-scoped providers, instance may not exist yet (built per-request).
+          // mergeFromRegistry only uses instance for GLOBAL-scoped providers.
+          // The singletons map stores ProviderEntry values, so this cast is safe.
+          instance: singletons.get(def.provide) as ProviderEntry | undefined,
+        }));
+
+        // Merge to app's registry (for tool context creation)
+        this.providers.mergeFromRegistry(providers, exported);
+
+        // Also merge to scope's registry (for flow buildViews to find them)
+        // This enables CONTEXT-scoped providers from plugins to be built during flows.
+        // The scope.providers is a ProviderRegistryInterface but the actual implementation
+        // is ProviderRegistry which has mergeFromRegistry. We check at runtime to be safe.
+        const scopeProviders = this.scope.providers;
+        if (
+          scopeProviders !== this.providers &&
+          'mergeFromRegistry' in scopeProviders &&
+          typeof (scopeProviders as ProviderRegistry).mergeFromRegistry === 'function'
+        ) {
+          (scopeProviders as ProviderRegistry).mergeFromRegistry(providers, exported);
+        }
       }
       this.instances.set(token, pluginInstance);
     }

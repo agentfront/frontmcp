@@ -7,9 +7,16 @@ import { PromptMetadata } from '../metadata';
 import { GetPromptResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ProviderRegistryInterface } from '../interfaces/internal';
+import type ProviderRegistry from '../../provider/provider.registry';
 
 export type PromptGetExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
+  /**
+   * Optional context-aware providers from the flow.
+   * @internal
+   */
+  contextProviders?: ProviderRegistryInterface;
 };
 
 export type ParsedPromptResult = GetPromptResult;
@@ -27,6 +34,12 @@ export abstract class PromptEntry extends BaseEntry<PromptRecord, PromptInterfac
    * The full name of the prompt, including the owner name as prefix.
    */
   fullName: string;
+
+  /**
+   * Get the provider registry for this prompt.
+   * Used by flows to build context-aware providers for CONTEXT-scoped dependencies.
+   */
+  abstract get providers(): ProviderRegistry;
 
   /**
    * Create a prompt context (class or function wrapper).

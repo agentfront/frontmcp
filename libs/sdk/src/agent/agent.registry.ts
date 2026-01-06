@@ -167,9 +167,12 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     await Promise.all([...this.instances.values()].map((ai) => ai.ready));
 
     // Register agent tools in the parent scope's ToolRegistry
-    // This makes agents available as standard tools (use-agent:*) that go through
-    // the standard tools:call-tool flow with full plugin/hook support.
-    await this.registerAgentToolsInParentScope();
+    // Only do this for scope-level registries - app-level registries don't have
+    // scope.tools available yet (tools registry is created after apps).
+    // The scope-level AgentRegistry will register all agents (local + adopted).
+    if (this.owner.kind === 'scope') {
+      await this.registerAgentToolsInParentScope();
+    }
   }
 
   /**
@@ -180,6 +183,9 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
    * - Plugin metadata extensions (cache, codecall) to work on agents
    * - CodeCall to discover and search for agent tools
    * - Unified hook/plugin execution for all tools including agents
+   *
+   * NOTE: This method registers ALL agents (local + adopted), not just local ones.
+   * It should only be called by scope-level registries after all apps are initialized.
    */
   private async registerAgentToolsInParentScope(): Promise<void> {
     const scope = this.providers.getActiveScope();
@@ -190,7 +196,8 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
       return;
     }
 
-    for (const agentInstance of this.instances.values()) {
+    // Register ALL agents (local + adopted from apps/plugins)
+    for (const agentInstance of this.listAllInstances()) {
       const toolInstance = agentInstance.getToolInstance();
 
       if (toolInstance) {

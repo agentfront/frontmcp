@@ -285,8 +285,116 @@ Never:
 - `git commit --amend`
 - Any command that modifies git history
 
+## Plugin Development
+
+### Creating Plugins with Context Extensions
+
+Plugins can extend `ExecutionContextBase` (ToolContext, etc.) to add properties like `this.remember`:
+
+1. **Module Augmentation** (TypeScript types):
+
+```typescript
+declare module '@frontmcp/sdk' {
+  interface ExecutionContextBase {
+    readonly myProperty: MyType;
+  }
+}
+```
+
+2. **Runtime Extension** (prototype modification):
+
+```typescript
+export function installMyContextExtension(): void {
+  const { ExecutionContextBase } = require('@frontmcp/sdk');
+
+  Object.defineProperty(ExecutionContextBase.prototype, 'myProperty', {
+    get: function () {
+      return this.get(MyToken);
+    },
+    configurable: true,
+    enumerable: false,
+  });
+}
+```
+
+See `plugins/plugin-remember/src/remember.context-extension.ts` for a complete example.
+
+### Crypto Utilities
+
+**IMPORTANT**: Always use `@frontmcp/utils` for cryptographic operations. Never use `node:crypto` directly.
+
+```typescript
+import {
+  hkdfSha256, // HKDF-SHA256 key derivation (RFC 5869)
+  encryptAesGcm, // AES-256-GCM encryption
+  decryptAesGcm, // AES-256-GCM decryption
+  randomBytes, // Cryptographic random bytes
+  sha256,
+  sha256Hex, // SHA-256 hashing
+  base64urlEncode, // Base64url encoding
+  base64urlDecode, // Base64url decoding
+} from '@frontmcp/utils';
+```
+
+This ensures cross-platform support (Node.js and browser) with consistent behavior.
+
+### File System Utilities
+
+**IMPORTANT**: Always use `@frontmcp/utils` for file system operations. Never use `fs/promises` or `node:fs` directly.
+
+```typescript
+import {
+  readFile, // Read file as string
+  readFileBuffer, // Read file as Buffer
+  writeFile, // Write content to file
+  mkdir, // Create directory
+  rename, // Rename/move file or directory
+  unlink, // Delete file
+  stat, // Get file/directory stats
+  copyFile, // Copy file
+  cp, // Copy file or directory recursively
+  readdir, // List directory contents
+  rm, // Remove file or directory
+  mkdtemp, // Create temporary directory
+  access, // Check file accessibility
+  fileExists, // Check if file exists (returns boolean)
+  readJSON, // Read and parse JSON file
+  writeJSON, // Write object as JSON
+  ensureDir, // Ensure directory exists
+  isDirEmpty, // Check if directory is empty
+  runCmd, // Run command as child process
+} from '@frontmcp/utils';
+```
+
+Benefits:
+
+- Cross-platform support (Node.js only, throws in browser)
+- Lazy-loaded modules to avoid import errors in browser builds
+- Consistent API across the codebase
+- Centralized error handling and logging
+
+### RememberPlugin Usage
+
+When `RememberPlugin` is installed, tools can use `this.remember` and `this.approval`:
+
+```typescript
+@Tool({ name: 'my_tool' })
+class MyTool extends ToolContext {
+  async execute(input) {
+    // Store/retrieve session memory
+    await this.remember.set('key', 'value');
+    const val = await this.remember.get('key');
+
+    // Check tool approval
+    const approved = await this.approval.isApproved('other-tool');
+  }
+}
+```
+
 ## Anti-Patterns to Avoid
 
+❌ **Don't**: Use `node:crypto` directly (use `@frontmcp/utils` for cross-platform support)
+❌ **Don't**: Use `fs/promises` or `node:fs` directly (use `@frontmcp/utils` for consistent file ops)
 ❌ **Don't**: Add backwards compatibility exports in new libraries
 ❌ **Don't**: Use prefixes like "PT-001" in test names
 ❌ **Don't**: Skip constructor validation tests
@@ -299,6 +407,7 @@ Never:
 ❌ **Don't**: Name event properties `scope` when they don't refer to Scope class
 
 ✅ **Do**: Use clean, descriptive names for everything
+✅ **Do**: Use `@frontmcp/utils` for file system and crypto operations
 ✅ **Do**: Test all code paths including errors
 ✅ **Do**: Document known limitations clearly
 ✅ **Do**: Follow the preset pattern for hierarchical configurations

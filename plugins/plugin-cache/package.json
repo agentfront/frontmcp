@@ -1,0 +1,64 @@
+{
+  "name": "@frontmcp/plugin-cache",
+  "version": "0.6.3",
+  "description": "Cache plugin for FrontMCP - Redis, Vercel KV, and in-memory caching with automatic tool result caching",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "cache",
+    "redis",
+    "vercel-kv",
+    "plugin",
+    "frontmcp",
+    "agentfront"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "plugins/plugin-cache"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-cache/README.md",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "ioredis": "^5.8.0",
+    "@frontmcp/sdk": "0.6.3",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@vercel/kv": "^2.0.0 || ^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vercel/kv": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "reflect-metadata": "^0.2.2"
+  }
+}

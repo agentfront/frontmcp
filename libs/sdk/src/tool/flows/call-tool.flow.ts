@@ -26,6 +26,7 @@ import { hasUIConfig } from '../ui';
 import { Scope } from '../../scope';
 import { resolveServingMode, buildToolResponseContent, type ToolResponseContent } from '@frontmcp/uipack/adapters';
 import { isUIRenderFailure } from '@frontmcp/uipack/registry';
+import { FlowContextProviders } from '../../provider/flow-context-providers';
 
 const inputSchema = z.object({
   request: CallToolRequestSchema,
@@ -255,10 +256,28 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('createToolCallContext:start');
     const { ctx } = this.input;
     const { tool, input } = this.state.required;
+    // authInfo is optional - access separately to avoid "required" throwing
+    const authInfo = this.state.authInfo;
     const progressToken = this.state.progressToken;
 
     try {
-      const context = tool.create(input.arguments, { ...ctx, progressToken });
+      // Build context-scoped providers from the tool's provider registry (app-level).
+      // This ensures CONTEXT-scoped providers registered at the app level are available.
+      const sessionKey = authInfo?.sessionId ?? 'anonymous';
+      const toolViews = await tool.providers.buildViews(sessionKey, new Map(this.deps));
+
+      // Merge tool's context providers with flow's context deps
+      const mergedContextDeps = new Map(this.deps);
+      for (const [token, instance] of toolViews.context) {
+        if (!mergedContextDeps.has(token)) {
+          mergedContextDeps.set(token, instance);
+        }
+      }
+
+      // Create context-aware providers that include scoped providers from both
+      // the scope (via flow deps) and the tool's app (via toolViews).
+      const contextProviders = new FlowContextProviders(tool.providers, mergedContextDeps);
+      const context = tool.create(input.arguments, { ...ctx, progressToken, contextProviders });
       const toolHooks = this.scope.hooks.getClsHooks(tool.record.provide).map((hook) => {
         hook.run = async () => {
           return context[hook.metadata.method]();

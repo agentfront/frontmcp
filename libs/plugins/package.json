@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/plugins",
   "version": "0.6.3",
-  "description": "FrontMCP plugins to extend the SDK",
+  "description": "FrontMCP plugins meta-package - installs all official plugins",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
@@ -21,6 +21,10 @@
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",
@@ -38,48 +42,15 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/esm/index.mjs"
       }
-    },
-    "./cache": {
-      "development": "./src/cache/index.ts",
-      "require": {
-        "types": "./dist/cache/index.d.ts",
-        "default": "./dist/cache/index.js"
-      },
-      "import": {
-        "types": "./dist/cache/index.d.ts",
-        "default": "./dist/esm/cache/index.mjs"
-      }
-    },
-    "./codecall": {
-      "development": "./src/codecall/index.ts",
-      "require": {
-        "types": "./dist/codecall/index.d.ts",
-        "default": "./dist/codecall/index.js"
-      },
-      "import": {
-        "types": "./dist/codecall/index.d.ts",
-        "default": "./dist/esm/codecall/index.mjs"
-      }
-    },
-    "./esm": null
+    }
   },
   "dependencies": {
-    "ioredis": "^5.8.0",
-    "@frontmcp/sdk": "0.6.3",
-    "enclave-vm": "^2.0.0",
-    "vectoriadb": "^2.0.1",
-    "zod": "^4.0.0",
-    "@modelcontextprotocol/sdk": "1.25.1"
+    "@frontmcp/plugin-cache": "0.6.3",
+    "@frontmcp/plugin-codecall": "0.6.3",
+    "@frontmcp/plugin-dashboard": "0.6.3",
+    "@frontmcp/plugin-remember": "0.6.3"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"
-  },
-  "peerDependencies": {
-    "@vercel/kv": "^2.0.0 || ^3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@vercel/kv": {
-      "optional": true
-    }
   }
 }

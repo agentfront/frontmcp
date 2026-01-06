@@ -1,0 +1,54 @@
+{
+  "name": "demo-e2e-remember",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-remember/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:remember"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "development",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/e2e/demo-e2e-remember",
+        "main": "apps/e2e/demo-e2e-remember/src/main.ts",
+        "tsConfig": "apps/e2e/demo-e2e-remember/tsconfig.app.json",
+        "webpackConfig": "apps/e2e/demo-e2e-remember/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "optimization": true
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node dist/apps/e2e/demo-e2e-remember/main.js",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-remember"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-remember/jest.e2e.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-remember-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-remember/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}

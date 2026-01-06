@@ -1,5 +1,24 @@
 import { Type, Token, ProviderKind, isClass, tokenName, getMetadata } from '@frontmcp/di';
-import { ProviderMetadata, FrontMcpProviderTokens, ProviderRecord } from '../common';
+import { ProviderMetadata, FrontMcpProviderTokens, ProviderRecord, ProviderScope } from '../common';
+
+/**
+ * Shape for provider input items (used during normalization).
+ * Supports both class-based providers and configuration objects.
+ */
+interface ProviderLike {
+  provide?: Token;
+  useClass?: Type;
+  useValue?: unknown;
+  useFactory?: (...args: unknown[]) => unknown;
+  inject?: () => readonly Token[];
+  // Top-level metadata fields (can override nested metadata)
+  name?: string;
+  scope?: ProviderScope;
+  description?: string;
+  id?: string;
+  // Nested metadata object
+  metadata?: ProviderMetadata;
+}
 
 function collectProviderMetadata(cls: Type): ProviderMetadata {
   return Object.entries(FrontMcpProviderTokens).reduce((metadata, [key, token]) => {
@@ -9,19 +28,47 @@ function collectProviderMetadata(cls: Type): ProviderMetadata {
   }, {} as ProviderMetadata);
 }
 
-export function normalizeProvider(item: any): ProviderRecord {
+/**
+ * Extract provider metadata from an item.
+ * Supports both nested `metadata: { scope, name }` and top-level fields.
+ * Top-level fields take precedence when both are present.
+ */
+function extractProviderMetadata(item: ProviderLike): ProviderMetadata {
+  const nested: ProviderMetadata | undefined = item.metadata;
+  const topLevel: Partial<ProviderMetadata> = {};
+
+  // Extract known metadata fields from top level
+  if (item.name !== undefined) topLevel.name = item.name;
+  if (item.scope !== undefined) topLevel.scope = item.scope;
+  if (item.description !== undefined) topLevel.description = item.description;
+  if (item.id !== undefined) topLevel.id = item.id;
+
+  // Merge: nested first, then top-level overrides
+  // Provide a default name if none specified
+  const result = { ...nested, ...topLevel } as ProviderMetadata;
+  if (!result.name) {
+    result.name = (item.provide ? tokenName(item.provide) : undefined) || 'UnknownProvider';
+  }
+  return result;
+}
+
+export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
   if (isClass(item)) {
     // read McpProviderMetadata from class
     const metadata = collectProviderMetadata(item);
     return { kind: ProviderKind.CLASS_TOKEN, provide: item, metadata };
   }
   if (item && typeof item === 'object') {
-    const { provide, useClass, useValue, useFactory, inject } = item;
+    const providerItem = item as ProviderLike;
+    const { provide, useClass, useValue, useFactory, inject } = providerItem;
 
     if (!provide) {
-      const name = (item as any)?.name ?? '[object]';
+      const name = providerItem.name ?? '[object]';
       throw new Error(`Provider '${name}' is missing 'provide'.`);
     }
+
+    // Extract metadata from both nested and top-level fields
+    const metadata = extractProviderMetadata(providerItem);
 
     if (useClass) {
       if (!isClass(useClass)) {
@@ -31,7 +78,7 @@ export function normalizeProvider(item: any): ProviderRecord {
         kind: ProviderKind.CLASS,
         provide,
         useClass,
-        metadata: (item as any).metadata,
+        metadata,
       };
     }
 
@@ -45,7 +92,7 @@ export function normalizeProvider(item: any): ProviderRecord {
         provide,
         inject: inj,
         useFactory,
-        metadata: item.metadata,
+        metadata,
       };
     }
 
@@ -54,12 +101,12 @@ export function normalizeProvider(item: any): ProviderRecord {
         kind: ProviderKind.VALUE,
         provide,
         useValue,
-        metadata: item.metadata,
+        metadata,
       };
     }
   }
 
-  const name = (item as any)?.name ?? String(item);
+  const name = (item as ProviderLike)?.name ?? String(item);
   throw new Error(`Invalid provider '${name}'. Expected a class or a provider object.`);
 }
 

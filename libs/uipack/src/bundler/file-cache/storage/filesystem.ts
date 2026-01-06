@@ -7,10 +7,10 @@
  * @packageDocumentation
  */
 
-import { mkdir, readFile, writeFile, readdir, unlink, rm } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { createHash } from 'crypto';
+import { mkdir, readFile, writeFile, readdir, unlink, rm } from '@frontmcp/utils';
 
 import type { ComponentBuildManifest, CacheStats } from '../../../dependency/types';
 import type { BuildCacheStorage, StorageOptions, CacheEntry } from './interface';
@@ -366,7 +366,7 @@ export class FilesystemStorage implements BuildCacheStorage {
    */
   private async writeEntry(filePath: string, entry: CacheEntry): Promise<void> {
     await mkdir(dirname(filePath), { recursive: true });
-    await writeFile(filePath, JSON.stringify(entry, null, 2), 'utf8');
+    await writeFile(filePath, JSON.stringify(entry, null, 2));
   }
 
   /**

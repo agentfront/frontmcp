@@ -1,6 +1,6 @@
 import * as yaml from 'yaml';
-import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import type {
   OpenAPIDocument,

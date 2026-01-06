@@ -148,6 +148,8 @@ Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel
 
 ## Environment Variables
 
+### Redis Configuration
+
 | Variable           | Required  | Default     | Description                                                                    |
 | ------------------ | --------- | ----------- | ------------------------------------------------------------------------------ |
 | `REDIS_HOST`       | Yes       | `localhost` | Redis server hostname                                                          |
@@ -156,6 +158,16 @@ Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel
 | `REDIS_DB`         | No        | `0`         | Redis database number                                                          |
 | `REDIS_TLS`        | No        | `false`     | Enable TLS encryption                                                          |
 | `REDIS_KEY_PREFIX` | No        | `mcp:`      | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
+
+### Plugin Secrets
+
+| Variable           | Required  | Default        | Description                                                            |
+| ------------------ | --------- | -------------- | ---------------------------------------------------------------------- |
+| `REMEMBER_SECRET`  | Prod only | Auto-generated | Encryption secret for RememberPlugin (32+ byte base64-encoded string)  |
+
+<Info>
+In development, `REMEMBER_SECRET` is auto-generated and stored in `.frontmcp/remember-secret.json`. Add this file to `.gitignore`. In production, always set `REMEMBER_SECRET` explicitly to ensure consistent encryption across instances.
+</Info>
 
 ## Health Checks
 

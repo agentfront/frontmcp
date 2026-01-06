@@ -1,5 +1,6 @@
 import { RawZodShape } from '../types';
 import { z } from 'zod';
+import { Token } from '@frontmcp/di';
 import { ProviderType, PluginType, AdapterType, ToolType, ResourceType, PromptType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -9,6 +10,42 @@ import {
   annotatedFrontMcpResourcesSchema,
   annotatedFrontMcpToolsSchema,
 } from '../schemas';
+
+/**
+ * Context extension declaration for plugins.
+ * Allows plugins to add properties to ExecutionContextBase (ToolContext, etc.)
+ * without directly accessing SDK internals.
+ *
+ * @example
+ * ```typescript
+ * @Plugin({
+ *   name: 'remember',
+ *   contextExtensions: [
+ *     { property: 'remember', token: RememberAccessorToken },
+ *     { property: 'approval', token: ApprovalServiceToken },
+ *   ],
+ * })
+ * ```
+ */
+export interface ContextExtension {
+  /**
+   * Property name to add to ExecutionContextBase (e.g., 'remember', 'approval').
+   * Will be accessible as `this.remember` in tools.
+   */
+  property: string;
+
+  /**
+   * DI token to resolve when the property is accessed.
+   * The resolved value is returned when accessing `this.{property}`.
+   */
+  token: Token<unknown>;
+
+  /**
+   * Custom error message when the token cannot be resolved.
+   * Default: "{PluginName} is not installed or {property} is not configured."
+   */
+  errorMessage?: string;
+}
 
 /**
  * Declarative metadata describing what an McpPlugin contributes at app scope.
@@ -83,7 +120,32 @@ export interface PluginMetadata {
    * Note: Plugins with scope='server' cannot be used in standalone apps.
    */
   scope?: 'app' | 'server';
+
+  /**
+   * Context extensions to add to ExecutionContextBase.
+   * Allows plugins to provide `this.{property}` access in tools.
+   *
+   * @example
+   * ```typescript
+   * @Plugin({
+   *   name: 'remember',
+   *   contextExtensions: [
+   *     { property: 'remember', token: RememberAccessorToken },
+   *   ],
+   * })
+   * ```
+   */
+  contextExtensions?: ContextExtension[];
 }
+
+// Schema for context extensions (uses passthrough since token is a Symbol)
+const contextExtensionSchema = z
+  .object({
+    property: z.string().min(1),
+    token: z.any(), // Token is a Symbol, can't validate with zod
+    errorMessage: z.string().optional(),
+  })
+  .passthrough();
 
 export const frontMcpPluginMetadataSchema = z
   .object({
@@ -98,5 +160,6 @@ export const frontMcpPluginMetadataSchema = z
     resources: z.array(annotatedFrontMcpResourcesSchema).optional(),
     prompts: z.array(annotatedFrontMcpPromptsSchema).optional(),
     scope: z.enum(['app', 'server']).optional().default('app'),
+    contextExtensions: z.array(contextExtensionSchema).optional(),
   } satisfies RawZodShape<PluginMetadata>)
   .passthrough();

@@ -184,10 +184,10 @@ export function agentDiscoveryDeps(record: AgentRecord): Token[] {
 
 /**
  * Generate the tool name for an agent.
- * Agents use standard tool names without any prefix.
+ * Agents are exposed as callable tools with the `invoke_` prefix.
  *
  * @param agentId The agent's ID
- * @returns Sanitized tool name
+ * @returns Tool name in format `invoke_<sanitized-agent-id>`
  */
 export function agentToolName(agentId: string): string {
   // Sanitize the agent ID for use in a tool name
@@ -204,7 +204,7 @@ export function agentToolName(agentId: string): string {
     );
   }
 
-  return sanitized;
+  return `invoke_${sanitized}`;
 }
 
 /**

@@ -7,9 +7,15 @@ import { ResourceMetadata, ResourceTemplateMetadata } from '../metadata';
 import { ReadResourceResult, Request, Notification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { ProviderRegistryInterface } from '../interfaces/internal';
 
 export type ResourceReadExtra = RequestHandlerExtra<Request, Notification> & {
   authInfo: AuthInfo;
+  /**
+   * Optional context-aware providers from the flow.
+   * @internal
+   */
+  contextProviders?: ProviderRegistryInterface;
 };
 
 export type ParsedResourceResult = ReadResourceResult;

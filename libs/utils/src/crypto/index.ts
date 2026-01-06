@@ -18,10 +18,8 @@ let _provider: CryptoProvider | null = null;
 export function getCrypto(): CryptoProvider {
   if (!_provider) {
     if (isNode()) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./node').nodeCrypto as CryptoProvider;
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }
@@ -222,3 +220,69 @@ export function sha256Base64url(data: string | Uint8Array): string {
 // Re-export types and runtime utilities
 export type { CryptoProvider, EncBlob };
 export { isNode, isBrowser, assertNode } from './runtime';
+
+// Re-export encrypted blob helpers
+export {
+  // Types
+  type EncryptedBlob,
+  // Error class
+  EncryptedBlobError,
+  // Core functions
+  encryptValue,
+  decryptValue,
+  tryDecryptValue,
+  // Serialization
+  serializeBlob,
+  deserializeBlob,
+  tryDeserializeBlob,
+  // Validation
+  isValidEncryptedBlob,
+  // Convenience functions
+  encryptAndSerialize,
+  deserializeAndDecrypt,
+  tryDeserializeAndDecrypt,
+} from './encrypted-blob';
+
+// Re-export PKCE utilities (RFC 7636)
+export {
+  // Constants
+  MIN_CODE_VERIFIER_LENGTH,
+  MAX_CODE_VERIFIER_LENGTH,
+  DEFAULT_CODE_VERIFIER_LENGTH,
+  // Error
+  PkceError,
+  // Functions
+  generateCodeVerifier,
+  generateCodeChallenge,
+  verifyCodeChallenge,
+  generatePkcePair,
+  isValidCodeVerifier,
+  isValidCodeChallenge,
+  // Types
+  type PkcePair,
+} from './pkce';
+
+// Re-export secret persistence utilities
+export {
+  // Types
+  type SecretData,
+  type SecretPersistenceOptions,
+  type SecretValidationResult,
+  // Schema and validation
+  secretDataSchema,
+  validateSecretData,
+  parseSecretData,
+  // Persistence operations
+  isSecretPersistenceEnabled,
+  resolveSecretPath,
+  loadSecret,
+  saveSecret,
+  deleteSecret,
+  // Secret generation
+  generateSecret,
+  createSecretData,
+  // High-level API
+  getOrCreateSecret,
+  clearCachedSecret,
+  isSecretCached,
+} from './secret-persistence';
