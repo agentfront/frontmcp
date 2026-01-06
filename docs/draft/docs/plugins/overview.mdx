@@ -73,6 +73,19 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
     **Best for:** Expensive computations, API rate limiting, multi-tenant data, frequently accessed resources
 
   </Card>
+  <Card title="Dashboard Plugin" icon="chart-network" href="/docs/plugins/dashboard-plugin">
+    Visualize your MCP server with live telemetry, graph views, and built-in introspection tools.
+
+    **Features:**
+    - Live SSE streams for logs, traffic, and metrics
+    - Graph exploration of servers, scopes, tools, resources, and prompts
+    - Built-in tools to list metadata and export the server graph
+    - Secure optional token-based access and CDN overrides
+    - Standalone DashboardApp/HTTP plugin for dedicated consoles
+
+    **Best for:** Observability, debugging, and platform monitoring
+
+  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>
@@ -227,12 +240,13 @@ When publishing a community plugin:
 
 Choose the right plugin for your use case:
 
-| Plugin       | Best For                  | Overhead | Scope        | Complexity  |
-| ------------ | ------------------------- | -------- | ------------ | ----------- |
-| **Remember** | Session memory, approvals | Low      | Per-session  | Low         |
-| **CodeCall** | Large toolsets, workflows | Low      | Cross-app    | Medium      |
-| **Cache**    | Expensive operations      | Minimal  | Per-tool     | Low         |
-| **Custom**   | Any cross-cutting feature | Varies   | Configurable | Medium-High |
+| Plugin        | Best For                      | Overhead | Scope        | Complexity  |
+| ------------- | ----------------------------- | -------- | ------------ | ----------- |
+| **Remember**  | Session memory, approvals     | Low      | Per-session  | Low         |
+| **CodeCall**  | Large toolsets, workflows     | Low      | Cross-app    | Medium      |
+| **Cache**     | Expensive operations          | Minimal  | Per-tool     | Low         |
+| **Dashboard** | Visual monitoring & telemetry | Low      | Server-wide  | Medium      |
+| **Custom**    | Any cross-cutting feature     | Varies   | Configurable | Medium-High |
 
 ## Next Steps
 
@@ -245,6 +259,9 @@ Choose the right plugin for your use case:
   </Card>
   <Card title="Cache Plugin" icon="database" href="/docs/plugins/cache-plugin">
     Learn how to use the Cache plugin
+  </Card>
+  <Card title="Dashboard Plugin" icon="view-columns" href="/docs/plugins/dashboard-plugin">
+    Explore your server graph, logs, and tools from a single UI.
   </Card>
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
     Get help and share your plugins

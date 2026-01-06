@@ -1,0 +1,173 @@
+---
+title: Dashboard Plugin
+slug: plugins/dashboard-plugin
+description: Visual monitoring, graph exploration, and real-time telemetry for FrontMCP servers.
+icon: chart-network
+---
+
+The Dashboard Plugin surfaces an interactive console that highlights tools, resources, apps, and telemetry signals across your MCP server through a streaming SSE connection.
+
+<CardGroup cols={2}>
+  <Card title="Live Monitoring" icon="live-photo">
+    Watch tool calls, HTTP traffic, logs, and metrics flow in real time.
+  </Card>
+  <Card title="Graph Visualization" icon="diagram">
+    Inspect the server graph (server → scopes → tools/resources/prompts) with nodes, edges, and metadata.
+  </Card>
+  <Card title="Introspection Tools" icon="toolbox">
+    Built-in MCP tools list every tool, resource, and graph definition so you can debug without leaving the dashboard.
+  </Card>
+  <Card title="Secure Access" icon="lock-open">
+    Optional token-based auth and CDN overrides keep your dashboard safe for production environments.
+  </Card>
+</CardGroup>
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @frontmcp/plugin-dashboard
+```
+```bash pnpm
+pnpm add @frontmcp/plugin-dashboard
+```
+```bash yarn
+yarn add @frontmcp/plugin-dashboard
+```
+</CodeGroup>
+
+<Info>
+  The plugin is also re-exported from `@frontmcp/plugins` if you prefer the meta package.
+</Info>
+
+## Quick Start
+
+### Plug it into your server
+
+```ts title="src/main.ts"
+import { FrontMcp } from '@frontmcp/sdk';
+import DashboardPlugin from '@frontmcp/plugin-dashboard';
+
+@FrontMcp({
+  info: { name: 'Ops Server', version: '1.0.0' },
+  plugins: [
+    DashboardPlugin.init({
+      basePath: '/dashboard',
+      auth: { enabled: true, token: process.env.DASHBOARD_TOKEN },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+The plugin registers middleware on `/dashboard` that serves the React shell and connects to `/dashboard/sse` so the UI receives `graph:update`, `log:entry`, `metric:update`, `traffic:request`, `registry:change`, and `connected` events.
+
+<Tip>
+  Use the `basePath` option to mount the dashboard somewhere that matches your routing conventions (for example `/admin/dashboard`). The SSE stream follows the same base path.
+</Tip>
+
+### Optional standalone Dashboard app
+
+```ts
+import { FrontMcp } from '@frontmcp/sdk';
+import { DashboardApp } from '@frontmcp/plugin-dashboard';
+
+@FrontMcp({
+  info: { name: 'Dashboard', version: '1.0.0' },
+  apps: [DashboardApp],
+})
+export default class DashboardServer {}
+```
+
+`DashboardApp` runs in `standalone: true` mode, injects a `GraphDataProvider`, and registers the `DashboardHttpPlugin` so the console can observe every registered scope inside the monitored server.
+
+<Info>
+  Advanced scenarios can import `DashboardHttpPlugin` directly to reuse the HTML/SSE middleware in another app or to customize the HTTP handler.
+</Info>
+
+## Configuration Options
+
+| Option     | Default              | Description                                                                               |
+| ---------- | -------------------- | ----------------------------------------------------------------------------------------- |
+| `enabled`  | `undefined`          | Auto-enabled in development and disabled in production unless explicitly toggled          |
+| `basePath` | `'/dashboard'`       | HTTP path prefix for the UI and the SSE endpoint                                          |
+| `auth`     | `{ enabled: false }` | Simple token protection (`?token=`) for anonymous or shared dashboards                    |
+| `cdn`      | `esm.sh` defaults    | Override the entrypoint or CDN URLs for React, React DOM, React Router, XYFlow, and Dagre |
+
+<Tip>
+  Provide a custom `cdn.entrypoint` when you host the dashboard UI inside your own asset pipeline or need to pin a specific bundle.
+</Tip>
+
+<Warning>
+  Always enable token-based `auth` before exposing the dashboard to the public internet. The query token travels alongside the SSE stream and protects both the HTML shell and the data events.
+</Warning>
+
+## Introspection Tools
+
+The plugin also ships three helper tools:
+
+| Tool                       | Purpose                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `dashboard:list-tools`     | Lists every tool the monitored server exposes, including descriptions, tags, and optional schemas. Supports regex filtering. |
+| `dashboard:list-resources` | Returns all static resources and resource templates with URIs, MIME types, and metadata.                                     |
+| `dashboard:graph`          | Fetches the complete server graph (nodes, edges, metadata). Set `includeSchemas` to include input/output definitions.        |
+
+<Info>
+  These tools respect the parent scope when the dashboard runs as its own app and fall back to the current scope when `ParentScopeToken` is missing.
+</Info>
+
+## Graph Data & Real-Time Events
+
+`GraphDataProvider` walks the scope registry, skips the dashboard itself, and builds a graph of:
+
+- **Nodes** for servers, app scopes, plugins, adapters, tools, resources, resource templates, prompts, and auth providers.
+- **Edges** typed `contains`, `provides`, or `uses` so the UI can draw relationships.
+- **Metadata** such as `generatedAt`, `entryFile`, and node counts for observability.
+
+The provider caches the snapshot for 5 seconds and exposes `invalidateCache()` to refresh the graph after dynamic registrations.
+
+Real-time telemetry streams over SSE:
+
+| Event             | Payload                                                             |
+| ----------------- | ------------------------------------------------------------------- |
+| `graph:update`    | The latest graph data after registry changes                        |
+| `registry:change` | Registry delta (tools, resources, prompts, adapters, plugins, apps) |
+| `traffic:request` | HTTP request metadata (method, path, status, duration, client)      |
+| `log:entry`       | Log entries with `level`, message, and optional metadata            |
+| `metric:update`   | Metric updates with name, value, unit, and labels                   |
+| `connected`       | Client handshake containing `clientId` and timestamp                |
+
+<Tip>
+  You can subscribe to `/dashboard/sse?token=…` from your own page to feed the dashboard data into custom observability panels.
+</Tip>
+
+## Example: Access the Graph Programmatically
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { GraphDataProvider } from '@frontmcp/plugin-dashboard';
+
+@Tool({ name: 'report-dashboard-graph', annotations: { readOnlyHint: true } })
+class ReportDashboardGraphTool extends ToolContext {
+  async execute() {
+    const provider = this.get(GraphDataProvider);
+    const graph = await provider.getGraphData();
+    return {
+      nodes: graph.nodes.length,
+      edges: graph.edges.length,
+      generatedAt: graph.metadata.generatedAt,
+    };
+  }
+}
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-dashboard">
+    Explore the plugin implementation, providers, and tools
+  </Card>
+  <Card title="SSE Transport" icon="bolt" href="/docs/servers/server">
+    Learn how the MCP SSE transport powers live updates
+  </Card>
+</CardGroup>

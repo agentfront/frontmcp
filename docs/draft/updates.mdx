@@ -5,17 +5,25 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-06" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    ## Features
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+    🚀 **Live operations console** – Visualize your server graph, traffic, logs, and metrics in a single SSE-powered dashboard so you can spot issues without juggling tabs.
 
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    🧠 **Memory management toolbox** – Remember, recall, forget, and list scoped memories with TTL-aware helpers so agents keep context without hand-holding state.
+
+    🛡️ **Claude-style approvals** – Gate sensitive tools with PKCE webhooks, auditable grants, and scopes that keep dangerous operations locked behind approvals.
+
+    📡 **Progress feedback** – Agents and tools now emit lifecycle updates whenever clients include a `_meta.progressToken`, keeping end users informed about long-running work.
+
+    ## Docs
+
+    📚 **Dashboard plugin guide** – Learn how to install, secure, and extend the new real-time console for graph exploration and telemetry.
 
   </Card>
 </Update>
