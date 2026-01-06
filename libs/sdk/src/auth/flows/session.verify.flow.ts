@@ -77,6 +77,21 @@ declare global {
 const name = 'session:verify' as const;
 const Stage = StageHookOf(name);
 
+/** Auth mode for session payload - distinguishes between anonymous session types */
+type AuthMode = 'public' | 'transparent-anon';
+
+/** Options for creating an anonymous session */
+interface AnonymousSessionOptions {
+  /** Auth mode: 'public' for public mode, 'transparent-anon' for transparent anonymous */
+  authMode: AuthMode;
+  /** Issuer identifier for the user claim */
+  issuer: string;
+  /** Optional scopes for the anonymous user */
+  scopes?: string[];
+  /** Existing session ID header from client (if present) */
+  sessionIdHeader?: string;
+}
+
 @Flow({
   name,
   plan,
@@ -85,6 +100,76 @@ const Stage = StageHookOf(name);
   access: 'authorized',
 })
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
+  /**
+   * Create an anonymous session with consistent structure for both public and transparent-anon modes.
+   * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
+   */
+  private createAnonymousSession(options: AnonymousSessionOptions): void {
+    const { authMode, issuer, scopes = ['anonymous'], sessionIdHeader } = options;
+    const machineId = getMachineId();
+
+    // If client sent session ID, use it for transport lookup
+    if (sessionIdHeader) {
+      const existingPayload = decryptPublicSession(sessionIdHeader);
+      const user = existingPayload
+        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') }
+        : { sub: `anon:${crypto.randomUUID()}`, iss: issuer, name: 'Anonymous', scope: scopes.join(' ') };
+
+      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
+
+      this.respond({
+        kind: 'authorized',
+        authorization: {
+          token: '',
+          user,
+          session: {
+            id: sessionIdHeader,
+            payload: finalPayload,
+          },
+        },
+      });
+      return;
+    }
+
+    // Create new anonymous session
+    const now = Date.now();
+    const user = {
+      sub: `anon:${crypto.randomUUID()}`,
+      iss: issuer,
+      name: 'Anonymous',
+      scope: scopes.join(' '),
+    };
+    const uuid = crypto.randomUUID();
+
+    // Detect platform from User-Agent header for UI rendering support
+    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
+    const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
+
+    // Create session payload with explicit authMode to distinguish session types
+    // - authMode: 'public' for public mode, 'transparent-anon' for transparent anonymous
+    // - isPublic: true only for 'public' mode, false for 'transparent-anon'
+    const payload = {
+      uuid,
+      nodeId: machineId,
+      authSig: authMode,
+      iat: Math.floor(now / 1000),
+      isPublic: authMode === 'public',
+      authMode,
+      ...(platformType !== 'unknown' && { platformType }),
+    };
+
+    const sessionId = encryptJson(payload);
+
+    this.respond({
+      kind: 'authorized',
+      authorization: {
+        token: '',
+        user,
+        session: { id: sessionId, payload },
+      },
+    });
+  }
+
   @Stage('parseInput')
   async parseInput() {
     const { request } = this.rawInput;
@@ -148,70 +233,12 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const sessionIdHeader = this.state.sessionIdHeader;
-    const machineId = getMachineId();
-
-    // CRITICAL: If client sent session ID, ALWAYS use it for transport lookup.
-    // The transport registry uses this ID as the key. Creating a different ID
-    // would cause "session not initialized" error.
-    if (sessionIdHeader) {
-      // Try to decrypt/validate for payload extraction (optional - for nodeId validation)
-      const existingPayload = decryptPublicSession(sessionIdHeader);
-
-      // Determine user based on whether we could extract payload
-      const user = existingPayload
-        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: 'public', name: 'Anonymous' }
-        : { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
-
-      // ALWAYS use client's session ID, regardless of validation result.
-      // If payload is valid and nodeId matches, include payload for protocol detection.
-      // If validation failed, transport layer will handle the error appropriately.
-      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
-
-      this.respond({
-        kind: 'authorized',
-        authorization: {
-          token: '',
-          user,
-          session: {
-            id: sessionIdHeader, // ← CRITICAL: Always use client's session ID
-            payload: finalPayload,
-          },
-        },
-      });
-      return;
-    }
-
-    // No session header → create new session (initialize request)
-    // For new sessions, don't pre-determine protocol. Let transport handler detect it.
-    const now = Date.now();
-    const user = { sub: `anon:${crypto.randomUUID()}`, iss: 'public', name: 'Anonymous' };
-    const uuid = crypto.randomUUID();
-
-    // Detect platform from User-Agent header for UI rendering support
-    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
-    const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
-
-    // Create a valid session payload matching the SessionIdPayload schema
-    // Include platformType if detected (non-unknown) for Tool UI support
-    const payload = {
-      uuid,
-      nodeId: machineId,
-      authSig: 'public',
-      iat: Math.floor(now / 1000),
-      isPublic: true,
-      ...(platformType !== 'unknown' && { platformType }),
-    };
-
-    const sessionId = encryptJson(payload);
-
-    this.respond({
-      kind: 'authorized',
-      authorization: {
-        token: '',
-        user,
-        session: { id: sessionId, payload },
-      },
+    // Use shared helper for anonymous session creation
+    this.createAnonymousSession({
+      authMode: 'public',
+      issuer: 'public',
+      scopes: ['public'],
+      sessionIdHeader: this.state.sessionIdHeader,
     });
   }
 
@@ -229,65 +256,15 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     },
   })
   async handleAnonymousFallback() {
-    const sessionIdHeader = this.state.sessionIdHeader;
-    const machineId = getMachineId();
     const authOptions = this.scope.auth?.options as TransparentAuthOptions | undefined;
-
-    // Similar logic to handlePublicMode but for transparent mode with allowAnonymous
-    if (sessionIdHeader) {
-      const existingPayload = decryptPublicSession(sessionIdHeader);
-      const user = existingPayload
-        ? { sub: `anon:${existingPayload.iat * 1000}`, iss: 'transparent-anon', name: 'Anonymous' }
-        : { sub: `anon:${crypto.randomUUID()}`, iss: 'transparent-anon', name: 'Anonymous' };
-
-      const finalPayload = existingPayload && existingPayload.nodeId === machineId ? existingPayload : undefined;
-
-      this.respond({
-        kind: 'authorized',
-        authorization: {
-          token: '',
-          user,
-          session: {
-            id: sessionIdHeader,
-            payload: finalPayload,
-          },
-        },
-      });
-      return;
-    }
-
-    // Create new anonymous session
-    const now = Date.now();
     const scopes = authOptions?.anonymousScopes ?? ['anonymous'];
-    const user = {
-      sub: `anon:${crypto.randomUUID()}`,
-      iss: 'transparent-anon',
-      name: 'Anonymous',
-      scope: scopes.join(' '),
-    };
-    const uuid = crypto.randomUUID();
 
-    const platformDetectionConfig = this.scope.metadata.transport?.platformDetection;
-    const platformType = detectPlatformFromUserAgent(this.state.userAgent, platformDetectionConfig);
-
-    const payload = {
-      uuid,
-      nodeId: machineId,
-      authSig: 'transparent-anon',
-      iat: Math.floor(now / 1000),
-      isPublic: true,
-      ...(platformType !== 'unknown' && { platformType }),
-    };
-
-    const sessionId = encryptJson(payload);
-
-    this.respond({
-      kind: 'authorized',
-      authorization: {
-        token: '',
-        user,
-        session: { id: sessionId, payload },
-      },
+    // Use shared helper for anonymous session creation
+    this.createAnonymousSession({
+      authMode: 'transparent-anon',
+      issuer: 'transparent-anon',
+      scopes,
+      sessionIdHeader: this.state.sessionIdHeader,
     });
   }
 
