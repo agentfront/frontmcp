@@ -18,7 +18,6 @@
 ### build
 
 - Align synchronized packages (SDK, CLI, adapters, `@frontmcp/ui`, `@frontmcp/uipack`, and `@frontmcp/testing`) at v0.6.3 with shared dual CJS/ESM exports and sanitized bundler helpers.
-- Independent packages `json-schema-to-zod-v3@1.0.4` and `mcp-from-openapi@2.1.2` add the Nx `publish-alpha` target so preview builds follow the same release script as the core workspace.
 
 ## [v0.6.2] - 2025-12-24
 
@@ -37,12 +36,10 @@
 ### build
 
 - All synchronized workspaces (sdk, cli, adapters, plugins) now publish dual CommonJS/ESM artifacts with `sideEffects: false` and shared typings for better tree-shaking.
-- Independent packages `json-schema-to-zod-v3@1.0.3` and `mcp-from-openapi@2.1.1` match the new export map layout, ensuring adapters and downstream CLIs consume a single source of truth.
 
 ### docs
 
 - Published the Build Modes guide plus a new callout on the platforms page to explain when to reach for static, dynamic, or hybrid rendering.
-- Refreshed the live updates page with v0.6.2 highlights and links to the independent library releases.
 
 ## [v0.6.1] - 2025-12-22
 

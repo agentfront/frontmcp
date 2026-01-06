@@ -981,7 +981,7 @@ See [`openapi.executor.ts`](./openapi.executor.ts) for implementation details.
 | Custom Headers   | `apiKey`         | `additionalHeaders`  |
 | Cookies          | Context          | Custom resolver      |
 
-See [SECURITY.md](../../../../mcp-from-openapi/SECURITY.md) for detailed authentication examples.
+See the [mcp-from-openapi documentation](https://github.com/agentfront/mcp-from-openapi) for detailed authentication examples.
 
 ## Security Validation
 
@@ -1206,9 +1206,8 @@ headersMapper: (authInfo, headers) => {
 
 ## Links
 
-- [mcp-from-openapi](https://github.com/frontmcp/mcp-from-openapi) - Core OpenAPI to MCP converter
-- [Security Guide](../../../../mcp-from-openapi/SECURITY.md) - Comprehensive authentication guide
-- [FrontMCP SDK](../../../../sdk) - FrontMCP core SDK
+- [mcp-from-openapi](https://github.com/agentfront/mcp-from-openapi) - Core OpenAPI to MCP converter (external package)
+- [FrontMCP SDK](https://www.npmjs.com/package/@frontmcp/sdk) - FrontMCP core SDK
 
 ## License
 

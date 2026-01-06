@@ -38,13 +38,6 @@ export default [
     },
   },
   {
-    // Allow `any` only in json-schema-to-zod library where dynamic typing is necessary
-    files: ['libs/json-schema-to-zod-v3/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-    },
-  },
-  {
     files: ['**/*.ts', '**/*.tsx', '**/*.cts', '**/*.mts', '**/*.js', '**/*.jsx', '**/*.cjs', '**/*.mjs'],
     // Override or add rules here
     rules: {

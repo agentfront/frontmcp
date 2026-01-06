@@ -4,18 +4,16 @@
 
 ## Overview
 
-| Library               | Tests | Stmts | Branches | Funcs | Lines | Status    |
-| --------------------- | ----- | ----- | -------- | ----- | ----- | --------- |
-| ast-guard             | 356   | 89.5% | 76.5%    | 89.7% | 90.4% | ✅ Good   |
-| vectoriadb            | 357   | 82.9% | 81.0%    | 80.3% | 82.5% | ✅ Good   |
-| plugins               | 101   | 78.2% | 60.7%    | 61.0% | 79.9% | ⚠️ Medium |
-| adapters              | 70    | 72.2% | 61.5%    | 74.0% | 72.2% | ⚠️ Medium |
-| enclave               | 168   | 71.6% | 56.3%    | 75.0% | 71.9% | ⚠️ Medium |
-| json-schema-to-zod-v3 | 59    | 70.5% | 54.2%    | 83.3% | 71.9% | ⚠️ Medium |
-| mcp-from-openapi      | 21    | 67.5% | 54.3%    | 78.6% | 68.2% | ⚠️ Medium |
-| sdk                   | 125   | 37.0% | 7.0%     | 17.5% | 38.1% | ❌ Low    |
+| Library    | Tests | Stmts | Branches | Funcs | Lines | Status    |
+| ---------- | ----- | ----- | -------- | ----- | ----- | --------- |
+| ast-guard  | 356   | 89.5% | 76.5%    | 89.7% | 90.4% | ✅ Good   |
+| vectoriadb | 357   | 82.9% | 81.0%    | 80.3% | 82.5% | ✅ Good   |
+| plugins    | 101   | 78.2% | 60.7%    | 61.0% | 79.9% | ⚠️ Medium |
+| adapters   | 70    | 72.2% | 61.5%    | 74.0% | 72.2% | ⚠️ Medium |
+| enclave    | 168   | 71.6% | 56.3%    | 75.0% | 71.9% | ⚠️ Medium |
+| sdk        | 125   | 37.0% | 7.0%     | 17.5% | 38.1% | ❌ Low    |
 
-## Total Tests: 1,257 passed (1 skipped)
+## Total Tests: 1,177 passed (1 skipped)
 
 ---
 
@@ -49,26 +47,6 @@ Statements : 82.91% ( 665/802 )
 Branches   : 80.95% ( 374/462 )
 Functions  : 80.27% ( 118/147 )
 Lines      : 82.46% ( 635/770 )
-```
-
-### json-schema-to-zod-v3
-
-```text
-Tests:       59 passed, 59 total
-Statements : 70.49% ( 473/671 )
-Branches   : 54.21% ( 270/498 )
-Functions  : 83.33% ( 120/144 )
-Lines      : 71.92% ( 415/577 )
-```
-
-### mcp-from-openapi
-
-```text
-Tests:       21 passed, 21 total
-Statements : 67.54% ( 335/496 )
-Branches   : 54.26% ( 242/446 )
-Functions  : 78.57% ( 55/70 )
-Lines      : 68.16% ( 319/468 )
 ```
 
 ### sdk

@@ -61,9 +61,7 @@
       "@frontmcp/ui/react": ["libs/ui/src/react/index.ts"],
       "@frontmcp/ui/render": ["libs/ui/src/render/index.ts"],
       "@frontmcp/ui/universal": ["libs/ui/src/universal/index.ts"],
-      "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"],
-      "json-schema-to-zod-v3": ["libs/json-schema-to-zod-v3/src/index.ts"],
-      "mcp-from-openapi": ["libs/mcp-from-openapi/src/index.ts"]
+      "@frontmcp/ui/bundler": ["libs/ui/src/bundler/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
