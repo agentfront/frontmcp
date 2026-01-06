@@ -12,7 +12,7 @@ import {
   type NamespacedStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
-import { normalizeGrantor, normalizeRevoker } from '../approval';
+import { normalizeGrantor } from '../approval';
 import type {
   ApprovalStore,
   ApprovalQuery,

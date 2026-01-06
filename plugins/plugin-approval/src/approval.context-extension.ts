@@ -34,7 +34,6 @@ let installed = false;
 export function installApprovalContextExtension(): void {
   if (installed) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { ExecutionContextBase } = require('@frontmcp/sdk');
 
   Object.defineProperty(ExecutionContextBase.prototype, 'approval', {

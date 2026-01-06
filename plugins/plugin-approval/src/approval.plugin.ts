@@ -7,7 +7,7 @@
 import { DynamicPlugin, Plugin, ProviderType, ProviderScope, FrontMcpContext, FRONTMCP_CONTEXT } from '@frontmcp/sdk';
 import type { StorageConfig, RootStorage, NamespacedStorage } from '@frontmcp/utils';
 
-import { ApprovalStorageStore, createApprovalMemoryStore } from './stores/approval-storage.store';
+import { ApprovalStorageStore } from './stores/approval-storage.store';
 import { createApprovalService } from './services/approval.service';
 import { ChallengeService } from './services/challenge.service';
 import { ApprovalStoreToken, ApprovalServiceToken, ChallengeServiceToken } from './approval.symbols';
