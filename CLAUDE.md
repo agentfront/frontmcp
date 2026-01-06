@@ -15,14 +15,7 @@ Located in `/libs/*`:
 - **adapters** (`libs/adapters`) - Framework adapters and integrations
 - **plugins** (`libs/plugins`) - Plugin system and extensions
 
-### Helper/Independent Libraries
-
-Located in `/libs/*`:
-
-- **json-schema-to-zod-v3** (`libs/json-schema-to-zod-v3`) - JSON Schema to Zod converter
-- **mcp-from-openapi** (`libs/mcp-from-openapi`) - Generate MCP servers from OpenAPI specs
-
-> **Note:** `ast-guard`, `vectoriadb`, and `enclave-vm` have been moved to the [enclave monorepo](https://github.com/agentfront/enclave).
+> **Note:** `ast-guard`, `vectoriadb`, `enclave-vm`, `json-schema-to-zod-v3`, and `mcp-from-openapi` have been moved to external repositories.
 
 ### Demo Apps
 
@@ -82,22 +75,6 @@ export * from './errors';
 
 - **Purpose**: Plugin system and extensions
 - **Scope**: Extensibility framework
-
-### Helper/Independent Libraries
-
-#### json-schema-to-zod-v3
-
-- **Type**: Helper library (independent, publishable)
-- **Purpose**: Convert JSON Schema definitions to Zod schemas
-- **Use Case**: Type-safe runtime validation, schema transformation
-- **Usage**: Used for converting OpenAPI/JSON schemas to TypeScript Zod validators
-
-#### mcp-from-openapi
-
-- **Type**: Helper library (independent, publishable)
-- **Purpose**: Generate MCP (Model Context Protocol) servers from OpenAPI specifications
-- **Use Case**: Automatically create MCP-compatible servers from REST API definitions
-- **Usage**: Bridges OpenAPI ecosystem with MCP protocol
 
 ### Demo Applications
 

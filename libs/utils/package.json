@@ -25,7 +25,8 @@
   "homepage": "https://github.com/agentfront/frontmcp/blob/main/libs/utils/README.md",
   "dependencies": {
     "@noble/hashes": "^2.0.1",
-    "@noble/ciphers": "^2.1.1"
+    "@noble/ciphers": "^2.1.1",
+    "ast-guard": "^2.1.0"
   },
   "type": "commonjs",
   "main": "./dist/index.js",

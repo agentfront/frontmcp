@@ -14,10 +14,9 @@ request/response handling.
 - README: `libs/adapters/src/openapi/README.md`
 - Demo usage: `apps/demo/src/apps/expenses/index.ts`
 - Example spec (used by the demo): https://frontmcp-test.proxy.beeceptor.com/openapi.json
-- Generator library: https://www.npmjs.com/package/mcp-from-openapi
 
-This adapter is powered by [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi), which handles parameter
-conflict resolution, multi-security schemes, and request mappers for you.
+This adapter is powered by [`mcp-from-openapi`](https://www.npmjs.com/package/mcp-from-openapi) (external package),
+which handles parameter conflict resolution, multi-security schemes, and request mappers for you.
 
 Quick example:
 

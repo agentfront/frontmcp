@@ -85,91 +85,6 @@ mode: 'center'
   </Card>
 </Update>
 
-<Update label="mcp-from-openapi v2.1.x" description="2025-12-27" tags={["Independent"]}>
-  <Card
-    title="mcp-from-openapi v2.1.2"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    🧠 **Preview generator builds** – The same `publish-alpha` target publishes early OpenAPI generator builds so you can test tool upgrades before the stable release.
-
-    🔄 **Consistent release scripts** – Aligning publishing with the rest of the monorepo keeps the generator, adapters, and CLI in sync during previews.
-
-  </Card>
-  <Card
-    title="mcp-from-openapi v2.1.1"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    🧱 **Unified exports** – Require or import the generator thanks to the new dual CJS/ESM build, with typings shared
-    across both entry points.
-
-    ⚙️ **Tree-shakable helpers** – Marking the package as side-effect free keeps bundlers from pulling the OpenAPI
-    loader when you only need schema utilities.
-
-    🔄 **Version sync** – The library now ships in lockstep with `@frontmcp/adapters`, so generated tools inherit the
-    same input mappers and security metadata.
-
-  </Card>
-  <Card
-    title="mcp-from-openapi v2.1.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    🪵 **Adapter logging** – Plug a logger into the generator to trace request mappers, auth routing, and spec parsing
-    steps.
-
-    🔐 **Security routing** – Expanded helpers automatically map OpenAPI schemes to the right MCP auth metadata for
-    multi-scheme APIs.
-
-    📚 **Sharper guidance** – Refined resolver docs and examples make it easier to cover complex authentication setups
-    without guesswork.
-
-  </Card>
-</Update>
-<Update label="json-schema-to-zod-v3 v1.0.x" description="2025-12-24" tags={["Independent"]}>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.4"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    ✨ **Alpha publishing** – Nx's new `publish-alpha` target (shared script) automates preview builds so you can try converter tweaks before the stable line ships.
-
-    🧰 **Aligned metadata** – The shared pipeline keeps exports, typings, and packaging consistent for alpha consumers.
-
-  </Card>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.3"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    🧱 **Dual module builds** – Import from ESM or require from CommonJS via the new `exports` map while sharing a single
-    `dist/index.d.ts`.
-
-    ⚡ **Side-effect free** – `sideEffects: false` and flattened `dist/esm` output let bundlers drop unused converters
-    automatically.
-
-    🔧 **Workspace alignment** – Published metadata now mirrors the FrontMCP 0.6.2 toolchain so CLI scaffolds and
-    adapters consume the converter without overrides.
-
-  </Card>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.2"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    🔧 **CJS-aware tests** – Updated Jest and SWC presets keep CommonJS runners happy so downstream monorepos no longer
-    need local overrides.
-
-    ⚙️ **Clean dist output** – Adjusted TypeScript rootDirs ensure `dist/` artifacts mirror the published API without
-    manual file moves.
-
-    🧪 **Peer alignment** – Documented `zod` expectations and sturdier e2e fixtures make it clearer how to wire the
-    converter into new workspaces.
-
-  </Card>
-</Update>
-
 <Update label="FrontMCP v0.5" description="2025-12-12" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.5.1: Tool UIs, orchestration, and security"
@@ -206,42 +121,6 @@ mode: 'center'
   </Card>
 </Update>
 
-<Update label="json-schema-to-zod-v3 v1.0.1" description="2025-12-11" tags={["Independent"]}>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.1"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    ⚙️ **ES2022 build** – Ships modern SWC/Jest settings so bundlers pick up the same output the FrontMCP CLI expects in
-    Node 22 and 24.
-
-    🧪 **Stricter fixtures** – Updated test exclusions and @types/node coverage keep regex hardening and schema guards
-    green across CI.
-
-    📦 **Metadata cleanup** – Repository directories and package metadata now match the monorepo, making stack traces and
-    source links more useful.
-
-  </Card>
-</Update>
-
-<Update label="mcp-from-openapi v2.0.0" description="2025-12-11" tags={["Independent"]}>
-  <Card
-    title="mcp-from-openapi v2.0.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    🧩 **Zod v4 ready** – Generated JSON Schema now lines up with Zod v4 so adapter pipelines stay type-safe after the
-    framework upgrade.
-
-    🔁 **Simpler helpers** – The renamed `toJsonSchema` export and mapper refactors clarify how tool inputs map into HTTP
-    requests.
-
-    ⚙️ **Modern toolchain** – ES2022 output plus refreshed SWC/Jest configs shorten build times and keep the generator
-    aligned with FrontMCP v0.5.
-
-  </Card>
-</Update>
-
 <Update label="v0.4.0" description="2025-11-22" tags={["Releases"]}>
   <Card
     title="FrontMCP v0.4.0: Generator-first adapters and typed error surfaces"
@@ -259,42 +138,6 @@ mode: 'center'
 
     📚 **Maintainer runbooks** – Fresh docs explain how draft/live Mintlify trees sync, when to edit each folder, and how
     independent libraries ship alongside synchronized packages.
-
-  </Card>
-</Update>
-
-<Update label="json-schema-to-zod-v3 v1.0.0" description="2025-11-22" tags={["Independent"]}>
-  <Card
-    title="json-schema-to-zod-v3 v1.0.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    🔒 **Regex hardening** – Default-on quantifier guards, pattern timeouts, and `validatePattern` helpers keep untrusted
-    specs from triggering ReDoS in your adapters.
-
-    🧠 **Schema utilities** – Helpers like `jsonSchemaObjectToZodRawShape` and tuple/prefix handling reproduce complex
-    shapes without custom parsing code.
-
-    🛠️ **Configurable security profiles** – Tune `setSecurityConfig` once to balance trusted internal specs and public
-    uploads.
-
-  </Card>
-</Update>
-
-<Update label="mcp-from-openapi v1.0.0" description="2025-11-22" tags={["Independent"]}>
-  <Card
-    title="mcp-from-openapi v1.0.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    ⚙️ **Request mappers** – Every generated tool ships its own mapper so you always know where each input lands (path,
-    query, header, or body).
-
-    🌐 **Flexible loaders** – Load specs from URLs, files, JSON, or YAML strings before generating tools with consistent
-    metadata.
-
-    🧾 **Typed metadata** – Capture auth schemes, preferred servers, and deprecation info so adapters like FrontMCP can
-    reason about each operation automatically.
 
   </Card>
 </Update>

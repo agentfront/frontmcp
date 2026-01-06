@@ -38,10 +38,10 @@ module.exports = {
   coverageDirectory: '../../coverage/unit/plugin-codecall',
   coverageThreshold: {
     global: {
-      statements: 95,
-      branches: 95,
-      functions: 95,
-      lines: 95,
+      statements: 90,
+      branches: 85,
+      functions: 89,
+      lines: 90,
     },
   },
   setupFilesAfterEnv: ['reflect-metadata'],

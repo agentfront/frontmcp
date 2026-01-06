@@ -16,6 +16,14 @@ module.exports = {
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/unit/sdk',
+  // Only collect coverage from SDK source files
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+    // Exclude test utilities - they shouldn't be counted for coverage
+    '!src/__test-utils__/**',
+  ],
   // Map @frontmcp/uipack imports to the built dist for tests
   moduleNameMapper: {
     '^@frontmcp/uipack$': '<rootDir>/../uipack/dist/index.js',

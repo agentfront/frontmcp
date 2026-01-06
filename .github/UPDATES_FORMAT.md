@@ -64,20 +64,22 @@ One update per release for all synchronized packages:
 
 #### B. Independent Libraries
 
+> **Note:** Independent libraries (`json-schema-to-zod-v3`, `mcp-from-openapi`, etc.) have been moved to external repositories. This section is kept for historical reference only. New releases no longer include independent library updates.
+
 Separate update per independent library published in this release:
 
 ```mdx
-<Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={["Independent"]}>
+<Update label="my-library v1.2.0" description="2025-11-22" tags={["Independent"]}>
   <Card
-    title="json-schema-to-zod-v3 v1.2.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
+    title="my-library v1.2.0"
+    href="https://github.com/org/my-library"
     cta="Explore the library"
   >
-    🔒 **Regex hardening** – Default-on quantifier guards and pattern timeouts keep untrusted specs safe.
+    🔒 **Feature 1** – Description of what this feature does for users.
 
-    🧠 **Schema utilities** – Helpers like jsonSchemaObjectToZodRawShape reproduce complex shapes without custom code.
+    🧠 **Feature 2** – Another benefit-focused description.
 
-    🛠️ **Configurable security** – Tune setSecurityConfig once to balance trusted specs and public uploads.
+    🛠️ **Feature 3** – How this improves the user experience.
 
   </Card>
 </Update>
@@ -85,11 +87,11 @@ Separate update per independent library published in this release:
 
 **Fields:**
 
-- `label`: `"{package-name} v{version}"` (e.g., `"json-schema-to-zod-v3 v1.2.0"`)
+- `label`: `"{package-name} v{version}"` (e.g., `"my-library v1.2.0"`)
 - `description`: ISO date format `"YYYY-MM-DD"` (same as FrontMCP release)
 - `tags`: `{["Independent"]}`
 - `title`: `"{package-name} v{version}"`
-- `href`: `"https://github.com/agentfront/frontmcp/tree/main/libs/{lib-folder-name}"`
+- `href`: Link to the library's repository
 - `cta`: `"Explore the library"`
 
 **Content format:**
@@ -126,36 +128,6 @@ mode: 'center'
     🔐 **Authentication Flow** – Simplified auth setup with better provider integration and clearer error messages.
 
     📚 **Documentation** – New streaming guide and updated authentication examples to get you started quickly.
-
-  </Card>
-</Update>
-
-<Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={["Independent"]}>
-  <Card
-    title="json-schema-to-zod-v3 v1.2.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
-    ✨ **JSON Schema Draft 2020-12** – Full support for the latest JSON Schema specification with all new features.
-
-    🔍 **Enhanced Validation** – More accurate regex pattern validation catches edge cases before runtime.
-
-    🛠️ **Better DX** – Improved TypeScript types and error messages make integration smoother.
-
-  </Card>
-</Update>
-
-<Update label="mcp-from-openapi v3.3.0" description="2025-11-22" tags={["Independent"]}>
-  <Card
-    title="mcp-from-openapi v3.3.0"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi"
-    cta="Explore the library"
-  >
-    🌐 **OpenAPI 3.1 Discriminators** – Full support for polymorphic schemas with discriminator mapping.
-
-    🔐 **Auth Scheme Detection** – Automatically detect and configure authentication from OpenAPI specs.
-
-    🧩 **Nested Objects** – Properly generate types and validators for deeply nested object structures.
 
   </Card>
 </Update>
@@ -225,9 +197,11 @@ When only synchronized packages are released (no independent libs affected):
 
 **Result:** One update component only
 
-### Scenario 2: Release with Independent Libraries
+### Scenario 2: Release with Independent Libraries (Historical)
 
-When synchronized packages + 2 independent libraries are released:
+> **Note:** Independent libraries have been moved to external repositories. This scenario is kept for historical reference.
+
+When synchronized packages + independent libraries were released together:
 
 ```mdx
 <Update label="v0.5.0" description="2025-11-22" tags={['Releases']}>
@@ -239,38 +213,27 @@ When synchronized packages + 2 independent libraries are released:
   </Card>
 </Update>
 
-<Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={['Independent']}>
-  <Card title="json-schema-to-zod-v3 v1.2.0" href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3" cta="Explore the library">
-    ✨ **Change 1** – Independent lib 1 changes description...
+<Update label="my-library v1.2.0" description="2025-11-22" tags={['Independent']}>
+  <Card title="my-library v1.2.0" href="https://github.com/org/my-library" cta="Explore the library">
+    ✨ **Change 1** – Independent lib changes description...
 
-    🔍 **Change 2** – Another independent lib 1 change...
-
-  </Card>
-</Update>
-
-<Update label="mcp-from-openapi v3.3.0" description="2025-11-22" tags={['Independent']}>
-  <Card title="mcp-from-openapi v3.3.0" href="https://github.com/agentfront/frontmcp/tree/main/libs/mcp-from-openapi" cta="Explore the library">
-    🌐 **Change 1** – Independent lib 2 changes description...
-
-    🔐 **Change 2** – Another independent lib 2 change...
+    🔍 **Change 2** – Another independent lib change...
 
   </Card>
 </Update>
 ```
 
-**Result:** Three update components (1 FrontMCP + 2 independent)
+**Result:** Multiple update components (1 FrontMCP + 1 per independent library)
 
-### Scenario 3: Independent-Only Release
+### Scenario 3: Independent-Only Release (Historical)
 
-When only an independent library is released (rare, but possible):
+> **Note:** Independent libraries have been moved to external repositories. This scenario is kept for historical reference.
+
+When only an independent library was released (rare):
 
 ```mdx
-<Update label="json-schema-to-zod-v3 v1.2.1" description="2025-11-23" tags={['Independent']}>
-  <Card
-    title="json-schema-to-zod-v3 v1.2.1"
-    href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-    cta="Explore the library"
-  >
+<Update label="my-library v1.2.1" description="2025-11-23" tags={['Independent']}>
+  <Card title="my-library v1.2.1" href="https://github.com/org/my-library" cta="Explore the library">
     🔧 **Critical bug fix** – Description of what's fixed and how it helps users.
   </Card>
 </Update>

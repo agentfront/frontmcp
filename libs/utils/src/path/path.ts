@@ -4,8 +4,13 @@
  * Provides common operations for normalizing and joining path segments.
  */
 
+import { trimBoth } from '../regex';
+
 /**
  * Trim leading and trailing slashes from a string.
+ *
+ * Uses a safe non-regex approach to avoid ReDoS vulnerabilities
+ * (the pattern /^\/+|\/+$/g can cause polynomial backtracking).
  *
  * @param s - The string to trim (null/undefined treated as empty string)
  * @returns String with leading/trailing slashes removed
@@ -16,7 +21,7 @@
  * trimSlashes('///multiple///') // 'multiple'
  */
 export function trimSlashes(s: string | null | undefined): string {
-  return (s ?? '').replace(/^\/+|\/+$/g, '');
+  return trimBoth(s ?? '', '/');
 }
 
 /**

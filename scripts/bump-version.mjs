@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * Bump version script for libraries
  * Usage: node scripts/bump-version.mjs <library-name> <bump-type>
- * Example: node scripts/bump-version.mjs json-schema-to-zod-v3 patch
+ * Example: node scripts/bump-version.mjs sdk patch
  *
  * This script:
  * 1. Bumps the version of the specified library

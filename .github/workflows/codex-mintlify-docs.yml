@@ -397,20 +397,6 @@ jobs:
             </Card>
           </Update>
 
-          <Update label="json-schema-to-zod-v3 v1.2.0" description="2025-11-22" tags={["Independent"]}>
-            <Card
-              title="json-schema-to-zod-v3 v1.2.0"
-              href="https://github.com/agentfront/frontmcp/tree/main/libs/json-schema-to-zod-v3"
-              cta="Explore the library"
-            >
-              ✨ **JSON Schema Draft 2020-12** – Full support for the latest JSON Schema specification with all new features.
-
-              🔍 **Enhanced Validation** – More accurate regex pattern validation catches edge cases before runtime.
-
-              🛠️ **Better DX** – Improved TypeScript types and error messages make integration smoother.
-            </Card>
-          </Update>
-
           <Update label="v0.4.0" description="2025-11-21" tags={["Releases"]}>
             ... (previous release)
           </Update>

@@ -257,13 +257,13 @@ jobs:
           - MINOR: New features, backwards-compatible functionality additions
           - PATCH: Backwards-compatible bug fixes, documentation, refactoring, minor improvements
 
-          CRITICAL: Return the library name EXACTLY as shown in the "LIBRARY:" field below (the folder name like "json-schema-to-zod-v3", NOT the npm package name like "@frontmcp/json-schema-to-zod-v3").
+          CRITICAL: Return the library name EXACTLY as shown in the "LIBRARY:" field below (the folder name like "sdk", NOT the npm package name like "@frontmcp/sdk").
 
           Libraries to analyze (ONLY these, no others):
           $LIBS_DATA
 
           For each library listed above, respond with:
-          - name: The EXACT folder name from the "LIBRARY:" field (e.g., "json-schema-to-zod-v3", "mcp-from-openapi")
+          - name: The EXACT folder name from the "LIBRARY:" field (e.g., "sdk", "adapters", "cli")
           - bump: major, minor, or patch
           - changelog: Starting with ## [NEW_VERSION] - $TODAY and including appropriate sections
 

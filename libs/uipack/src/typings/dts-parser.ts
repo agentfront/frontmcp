@@ -243,6 +243,12 @@ export function getSubpathFromSpecifier(specifier: string): string | undefined {
 }
 
 /**
+ * Maximum statement length for import parsing (ReDoS prevention).
+ * Import statements are typically < 500 chars.
+ */
+const MAX_IMPORT_STATEMENT_LENGTH = 2000;
+
+/**
  * Parse an import statement to extract the specifier.
  *
  * @param statement - The import statement string
@@ -255,6 +261,11 @@ export function getSubpathFromSpecifier(specifier: string): string | undefined {
  * ```
  */
 export function parseImportStatement(statement: string): string | null {
+  // Guard against ReDoS on large inputs
+  if (statement.length > MAX_IMPORT_STATEMENT_LENGTH) {
+    return null;
+  }
+
   // Try named/default import pattern
   const namedMatch = /import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"]([^'"]+)['"]/.exec(statement);
   if (namedMatch) {

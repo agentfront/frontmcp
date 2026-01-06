@@ -81,7 +81,21 @@ const COLOR_VAR_REGEX = /--(color-[\w-]+):\s*([^;]+);/g;
  * // result.remainingCss: ":root {\n  --font-size: 16px;\n}"
  * ```
  */
+/**
+ * Maximum CSS input length for theme extraction (ReDoS prevention).
+ */
+const MAX_CSS_INPUT_LENGTH = 100000;
+
 export function cssToTailwindTheme(userCss: string): CssToThemeResult {
+  // Guard against ReDoS on large inputs
+  if (userCss.length > MAX_CSS_INPUT_LENGTH) {
+    return {
+      themeBlock: '',
+      remainingCss: userCss,
+      colorVars: new Map(),
+    };
+  }
+
   const colorVars = new Map<string, string>();
 
   // Extract all --color-* variables

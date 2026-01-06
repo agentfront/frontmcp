@@ -35,7 +35,8 @@ export function parseUriTemplate(template: string): ParsedUriTemplate {
   if (template.length > 1000) {
     throw new Error('URI template too long (max 1000 characters)');
   }
-  const paramCount = (template.match(/\{[^}]+\}/g) || []).length;
+  // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)
+  const paramCount = (template.match(/\{[^{}]+\}/g) || []).length;
   if (paramCount > 50) {
     throw new Error('URI template has too many parameters (max 50)');
   }
@@ -50,7 +51,8 @@ export function parseUriTemplate(template: string): ParsedUriTemplate {
   });
 
   // Replace {param} with capture groups
-  regexStr = regexStr.replace(/\{([^}]+)\}/g, (_, paramName) => {
+  // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)
+  regexStr = regexStr.replace(/\{([^{}]+)\}/g, (_, paramName) => {
     paramNames.push(paramName);
     // Match any non-empty string segment (stops at /)
     return '([^/]+)';
@@ -110,7 +112,8 @@ export function matchUriTemplate(template: string, uri: string): Record<string, 
  * // "users/123/posts/456"
  */
 export function expandUriTemplate(template: string, params: Record<string, string>): string {
-  return template.replace(/\{([^}]+)\}/g, (_, paramName) => {
+  // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)
+  return template.replace(/\{([^{}]+)\}/g, (_, paramName) => {
     const value = params[paramName];
     if (value === undefined) {
       throw new Error(`Missing parameter '${paramName}' for URI template '${template}'`);
@@ -134,7 +137,8 @@ export function expandUriTemplate(template: string, params: Record<string, strin
  */
 export function extractTemplateParams(template: string): string[] {
   const params: string[] = [];
-  template.replace(/\{([^}]+)\}/g, (_, paramName) => {
+  // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)
+  template.replace(/\{([^{}]+)\}/g, (_, paramName) => {
     params.push(paramName);
     return '';
   });
@@ -152,5 +156,6 @@ export function extractTemplateParams(template: string): string[] {
  * isUriTemplate("users/123") // false
  */
 export function isUriTemplate(uri: string): boolean {
-  return /\{[^}]+\}/.test(uri);
+  // Use [^{}]+ instead of [^}]+ to fail fast on nested braces (ReDoS prevention)
+  return /\{[^{}]+\}/.test(uri);
 }

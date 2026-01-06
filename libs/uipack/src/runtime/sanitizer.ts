@@ -162,9 +162,20 @@ export function detectPIIType(value: string): keyof typeof REDACTION_TOKENS | nu
 }
 
 /**
+ * Maximum text length for PII redaction (ReDoS prevention).
+ * Text longer than this will be returned unchanged.
+ */
+const MAX_PII_TEXT_LENGTH = 100000;
+
+/**
  * Redact PII patterns from text
  */
 export function redactPIIFromText(text: string): string {
+  // Guard against ReDoS on large inputs
+  if (text.length > MAX_PII_TEXT_LENGTH) {
+    return text;
+  }
+
   let result = text;
 
   // Order matters - more specific patterns first

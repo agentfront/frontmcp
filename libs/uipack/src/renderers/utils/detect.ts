@@ -9,6 +9,12 @@
  */
 
 /**
+ * Maximum input length for template detection (ReDoS prevention).
+ * Templates longer than this will be treated as plain HTML.
+ */
+const MAX_TEMPLATE_LENGTH = 50000;
+
+/**
  * Check if a value is a React component (FC or class).
  *
  * Detection heuristics:
@@ -112,6 +118,11 @@ export function isTemplateBuilderFunction(fn: Function): boolean {
  * ```
  */
 export function containsJsx(source: string): boolean {
+  // Guard against ReDoS on large inputs
+  if (source.length > MAX_TEMPLATE_LENGTH) {
+    return false;
+  }
+
   // JSX component tag (PascalCase)
   if (/<[A-Z][a-zA-Z0-9]*(\s|>|\/)/.test(source)) {
     return true;
@@ -172,6 +183,11 @@ export function containsJsx(source: string): boolean {
  * ```
  */
 export function containsMdxSyntax(source: string): boolean {
+  // Guard against ReDoS on large inputs
+  if (source.length > MAX_TEMPLATE_LENGTH) {
+    return false;
+  }
+
   // Has JSX component tags (PascalCase)
   if (/<[A-Z][a-zA-Z0-9]*/.test(source)) {
     return true;
