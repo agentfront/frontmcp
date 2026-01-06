@@ -40,10 +40,10 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/index.ts'],
   coverageThreshold: {
     global: {
-      branches: 66,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 88,
+      functions: 94,
+      lines: 95,
+      statements: 95,
     },
   },
   setupFilesAfterEnv: ['reflect-metadata'],
