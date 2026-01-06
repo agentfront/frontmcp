@@ -23,7 +23,8 @@ import { validateSecretData } from './schema';
 /** Default number of bytes for secret generation (256 bits) */
 const DEFAULT_SECRET_BYTES = 32;
 
-/** Default directory for secret files */
+/** Default directory for secret files (not a secret, just a path) */
+// snyk:ignore CWE-547 - This is a directory path, not a cryptographic secret
 const DEFAULT_SECRET_DIR = '.frontmcp';
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -69,7 +69,7 @@ describe('Secret Persistence', () => {
       expect(isSecretPersistenceEnabled({ forceEnable: true })).toBe(true);
     });
 
-    it('should be enabled in production without forceEnable=false', () => {
+    it('should be disabled in production when forceEnable is false', () => {
       process.env['NODE_ENV'] = 'production';
       expect(isSecretPersistenceEnabled({ forceEnable: false })).toBe(false);
     });

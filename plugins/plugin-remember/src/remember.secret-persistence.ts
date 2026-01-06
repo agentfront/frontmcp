@@ -50,6 +50,7 @@ export interface SecretPersistenceOptions {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Default file path for storing the encryption secret (not the secret itself) */
+// snyk:ignore CWE-547 - This is a file path, not a cryptographic secret
 const DEFAULT_SECRET_FILE_PATH = '.frontmcp/remember-secret.json';
 const SECRET_BYTES = 32; // 256 bits
 

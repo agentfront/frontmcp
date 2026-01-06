@@ -242,7 +242,8 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
           match: prefixedPattern,
           count: 100,
         });
-        cursor = parseInt(nextCursor, 10);
+        const parsedCursor = typeof nextCursor === 'string' ? parseInt(nextCursor, 10) : nextCursor;
+        cursor = Number.isNaN(parsedCursor) ? 0 : parsedCursor;
 
         for (const key of keys) {
           result.push(this.unprefixKey(key));

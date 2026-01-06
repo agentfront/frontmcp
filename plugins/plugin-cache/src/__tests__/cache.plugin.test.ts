@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import type { ProviderFactoryType } from '@frontmcp/sdk';
 import CachePlugin from '../cache.plugin';
 import { CacheStoreToken } from '../cache.symbol';
 import CacheRedisProvider from '../providers/cache-redis.provider';
@@ -111,20 +112,21 @@ describe('CachePlugin', () => {
     describe('type: global-store', () => {
       it('should create provider with inject and useFactory', () => {
         const providers = CachePlugin.dynamicProviders({ type: 'global-store' });
+        const provider = providers[0] as ProviderFactoryType<any, any>;
 
         expect(providers).toHaveLength(1);
-        expect(providers[0].name).toBe('cache:global-store');
-        expect(providers[0].provide).toBe(CacheStoreToken);
-        expect(providers[0].inject).toBeDefined();
-        expect(providers[0].useFactory).toBeDefined();
-        expect(typeof providers[0].inject).toBe('function');
-        expect(typeof providers[0].useFactory).toBe('function');
+        expect(provider.name).toBe('cache:global-store');
+        expect(provider.provide).toBe(CacheStoreToken);
+        expect(provider.inject).toBeDefined();
+        expect(provider.useFactory).toBeDefined();
+        expect(typeof provider.inject).toBe('function');
+        expect(typeof provider.useFactory).toBe('function');
       });
 
       it('should inject FrontMcpConfig token', () => {
         const providers = CachePlugin.dynamicProviders({ type: 'global-store' });
-        const injectFn = providers[0].inject as () => any[];
-        const tokens = injectFn();
+        const provider = providers[0] as ProviderFactoryType<any, any>;
+        const tokens = provider.inject();
 
         expect(tokens).toHaveLength(1);
         expect(typeof tokens[0]).toBe('symbol');
