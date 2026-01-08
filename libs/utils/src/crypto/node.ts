@@ -131,7 +131,7 @@ export interface RsaKeyPair {
 /**
  * Generate an RSA key pair with the specified modulus length
  *
- * @param modulusLength - Key size in bits (default: 2048)
+ * @param modulusLength - Key size in bits (default: 2048, suitable for short-lived OAuth/JWT verification; use 3072+ for longer-term keys)
  * @param alg - JWT algorithm (default: 'RS256')
  * @returns RSA key pair with private, public keys and JWK
  */
@@ -177,11 +177,16 @@ export function jwtAlgToNodeAlg(jwtAlg: string): string {
     RS256: 'RSA-SHA256',
     RS384: 'RSA-SHA384',
     RS512: 'RSA-SHA512',
-    PS256: 'RSA-PSS-SHA256',
-    PS384: 'RSA-PSS-SHA384',
-    PS512: 'RSA-PSS-SHA512',
+    // For RSA-PSS, Node's crypto.sign/verify uses the digest algorithm + explicit PSS padding options.
+    PS256: 'RSA-SHA256',
+    PS384: 'RSA-SHA384',
+    PS512: 'RSA-SHA512',
   };
-  return mapping[jwtAlg] ?? 'RSA-SHA256';
+  const nodeAlg = mapping[jwtAlg];
+  if (!nodeAlg) {
+    throw new Error(`Unsupported JWT algorithm: ${jwtAlg}`);
+  }
+  return nodeAlg;
 }
 
 /**
@@ -205,7 +210,14 @@ export function createSignedJwt(
   const signatureInput = `${headerB64}.${payloadB64}`;
 
   const nodeAlgorithm = jwtAlgToNodeAlg(alg);
-  const signature = crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), privateKey);
+  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = alg.startsWith('PS')
+    ? {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }
+    : privateKey;
+  const signature = crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), signingKey);
   const signatureB64 = signature.toString('base64url');
 
   return `${headerB64}.${payloadB64}.${signatureB64}`;

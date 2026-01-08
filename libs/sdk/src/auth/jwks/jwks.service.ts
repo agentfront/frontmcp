@@ -12,12 +12,13 @@ const WEAK_KEY_WARNING = `
     Please contact your OAuth provider to upgrade their signing keys.
     Verification will proceed but with reduced security guarantees.
 `;
-const warnedProviders = new Set<string>();
 
 export class JwksService {
   private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence'>> & {
     devKeyPersistence?: JwksServiceOptions['devKeyPersistence'];
   };
+
+  private warnedProviders = new Set<string>();
 
   // Orchestrator signing material
   private orchestratorKey!: {
@@ -192,8 +193,20 @@ export class JwksService {
       const signatureInput = `${headerB64}.${payloadB64}`;
       const signature = Buffer.from(signatureB64, 'base64url');
 
-      const algorithm = this.getNodeAlgorithm(header.alg);
-      const isValid = crypto.verify(algorithm, Buffer.from(signatureInput), publicKey, signature);
+      const jwtAlg = typeof header.alg === 'string' ? header.alg : undefined;
+      if (!jwtAlg) {
+        return { ok: false, error: 'missing_alg' };
+      }
+
+      const algorithm = this.getNodeAlgorithm(jwtAlg);
+      const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = jwtAlg.startsWith('PS')
+        ? {
+            key: publicKey,
+            padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+          }
+        : publicKey;
+      const isValid = crypto.verify(algorithm, Buffer.from(signatureInput), verifyKey, signature);
 
       if (!isValid) {
         return { ok: false, error: 'signature_invalid' };
@@ -212,8 +225,8 @@ export class JwksService {
       }
 
       // Emit warning (once per provider)
-      if (!warnedProviders.has(provider.id)) {
-        warnedProviders.add(provider.id);
+      if (!this.warnedProviders.has(provider.id)) {
+        this.warnedProviders.add(provider.id);
         console.warn(WEAK_KEY_WARNING);
         console.warn(`    Provider: ${provider.id} (${provider.issuerUrl})`);
       }
@@ -259,11 +272,16 @@ export class JwksService {
       RS256: 'RSA-SHA256',
       RS384: 'RSA-SHA384',
       RS512: 'RSA-SHA512',
-      PS256: 'RSA-PSS-SHA256',
-      PS384: 'RSA-PSS-SHA384',
-      PS512: 'RSA-PSS-SHA512',
+      // For RSA-PSS, Node's crypto.verify uses the digest algorithm + explicit PSS padding options.
+      PS256: 'RSA-SHA256',
+      PS384: 'RSA-SHA384',
+      PS512: 'RSA-SHA512',
     };
-    return algorithms[alg] || 'RSA-SHA256';
+    const nodeAlg = algorithms[alg];
+    if (!nodeAlg) {
+      throw new Error(`Unsupported JWT algorithm: ${alg}`);
+    }
+    return nodeAlg;
   }
 
   // ===========================================================================

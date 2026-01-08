@@ -126,6 +126,9 @@ export class MockAPIServer {
   constructor(options: MockAPIServerOptions) {
     this.options = options;
     this.routes = options.routes ?? [];
+    for (const route of this.routes) {
+      this.validateRoute(route);
+    }
   }
 
   /**
@@ -203,6 +206,7 @@ export class MockAPIServer {
    * Add a route dynamically
    */
   addRoute(route: MockRoute): void {
+    this.validateRoute(route);
     this.routes.push(route);
   }
 
@@ -216,6 +220,15 @@ export class MockAPIServer {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE
   // ═══════════════════════════════════════════════════════════════════
+
+  private validateRoute(route: MockRoute): void {
+    if (route.handler && route.response) {
+      throw new Error(`Mock route ${route.method} ${route.path} must define either 'handler' or 'response', not both`);
+    }
+    if (!route.handler && !route.response) {
+      throw new Error(`Mock route ${route.method} ${route.path} must define either 'handler' or 'response'`);
+    }
+  }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url ?? '/';
@@ -359,18 +372,32 @@ export class MockAPIServer {
    * Parse request body as JSON
    */
   private async parseBody(req: IncomingMessage): Promise<unknown> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let body = '';
-      req.on('data', (chunk) => {
+      const onData = (chunk: Buffer) => {
         body += chunk.toString();
-      });
-      req.on('end', () => {
+      };
+      const cleanup = () => {
+        req.off('data', onData);
+        req.off('end', onEnd);
+        req.off('error', onError);
+      };
+      const onEnd = () => {
+        cleanup();
         try {
           resolve(body ? JSON.parse(body) : undefined);
         } catch {
           resolve(body);
         }
-      });
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+
+      req.on('data', onData);
+      req.once('end', onEnd);
+      req.once('error', onError);
     });
   }
 
