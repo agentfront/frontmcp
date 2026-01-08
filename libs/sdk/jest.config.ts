@@ -30,5 +30,6 @@ module.exports = {
     '^@frontmcp/uipack/(.*)$': '<rootDir>/../uipack/dist/$1/index.js',
     '^@frontmcp/ui$': '<rootDir>/../ui/dist/index.js',
     '^@frontmcp/ui/(.*)$': '<rootDir>/../ui/dist/$1/index.js',
+    '^@frontmcp/utils/crypto/node$': '<rootDir>/../utils/src/crypto/node.ts',
   },
 };

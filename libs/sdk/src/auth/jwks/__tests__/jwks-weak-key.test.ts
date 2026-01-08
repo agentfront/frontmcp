@@ -4,69 +4,8 @@
  * Tests for fallback verification when OAuth providers use RSA keys < 2048 bits.
  * This is a security concern but should work with a warning.
  */
-import crypto from 'crypto';
+import { createSignedJwt, generateRsaKeyPair } from '@frontmcp/utils/crypto/node';
 import { JwksService } from '../jwks.service';
-
-type RsaJwk = {
-  kty: 'RSA';
-  kid: string;
-  alg: string;
-  use: 'sig';
-  n: string;
-  e: string;
-};
-
-type RsaKeyPair = {
-  privateKey: crypto.KeyObject;
-  publicKey: crypto.KeyObject;
-  publicJwk: RsaJwk;
-};
-
-function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
-  const kid = `rsa-key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength });
-  const exported = publicKey.export({ format: 'jwk' }) as { n: string; e: string };
-  return {
-    privateKey,
-    publicKey,
-    publicJwk: {
-      kty: 'RSA',
-      kid,
-      alg,
-      use: 'sig',
-      n: exported.n,
-      e: exported.e,
-    },
-  };
-}
-
-function jwtAlgToNodeAlg(jwtAlg: string): string {
-  const mapping: Record<string, string> = {
-    RS256: 'RSA-SHA256',
-    RS384: 'RSA-SHA384',
-    RS512: 'RSA-SHA512',
-    PS256: 'RSA-SHA256',
-    PS384: 'RSA-SHA384',
-    PS512: 'RSA-SHA512',
-  };
-  const nodeAlg = mapping[jwtAlg];
-  if (!nodeAlg) {
-    throw new Error(`Unsupported JWT algorithm: ${jwtAlg}`);
-  }
-  return nodeAlg;
-}
-
-function rsaSignJwt(signatureInput: string, privateKey: crypto.KeyObject, jwtAlg: string): Buffer {
-  const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
-  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = jwtAlg.startsWith('PS')
-    ? {
-        key: privateKey,
-        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-      }
-    : privateKey;
-  return crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), signingKey);
-}
 
 describe('JwksService Weak RSA Key Handling', () => {
   let service: JwksService;
@@ -97,15 +36,7 @@ describe('JwksService Weak RSA Key Handling', () => {
     kid: string,
     alg = 'RS256',
   ): string {
-    const header = { alg, typ: 'JWT', kid };
-    const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
-    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    const signatureInput = `${headerB64}.${payloadB64}`;
-
-    const signature = rsaSignJwt(signatureInput, privateKey, alg);
-    const signatureB64 = signature.toString('base64url');
-
-    return `${headerB64}.${payloadB64}.${signatureB64}`;
+    return createSignedJwt(payload, privateKey, kid, alg);
   }
 
   beforeEach(() => {

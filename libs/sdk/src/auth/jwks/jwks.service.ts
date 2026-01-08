@@ -1,7 +1,7 @@
 // auth/jwks/jwks.service.ts
 import crypto from 'node:crypto';
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
-import { jwtAlgToNodeAlg } from '@frontmcp/utils';
+import { isRsaPssAlg, jwtAlgToNodeAlg } from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
 import { isDevKeyPersistenceEnabled, loadDevKey, saveDevKey, DevKeyData } from './dev-key-persistence';
@@ -158,10 +158,16 @@ export class JwksService {
   /**
    * Check if the error is due to weak RSA key (< 2048 bits)
    */
-  private isWeakKeyError(error: any): boolean {
+  private isWeakKeyError(error: unknown): boolean {
     // NOTE: This is a best-effort fallback keyed off `jose` error message text.
     // If `jose` changes this message format in a future major version, update this matcher and its tests.
-    const message = error?.message || String(error);
+    const message =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : String(error);
     return message.includes('modulusLength') && message.includes('2048');
   }
 
@@ -205,7 +211,7 @@ export class JwksService {
       }
 
       const algorithm = this.getNodeAlgorithm(jwtAlg);
-      const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = jwtAlg.startsWith('PS')
+      const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = isRsaPssAlg(jwtAlg)
         ? {
             key: publicKey,
             padding: crypto.constants.RSA_PKCS1_PSS_PADDING,

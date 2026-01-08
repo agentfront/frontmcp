@@ -138,7 +138,7 @@ export interface RsaKeyPair {
  * @returns RSA key pair with private, public keys and JWK
  */
 export function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
-  const kid = `rsa-key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const kid = `rsa-key-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
 
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength,
