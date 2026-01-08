@@ -7,6 +7,7 @@
 
 import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
+export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
 // Lazy-loaded provider
 let _provider: CryptoProvider | null = null;

@@ -4,8 +4,10 @@
  * Implementation using Node.js native crypto module.
  */
 
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import type { CryptoProvider } from './types';
+import { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
+export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
 /**
  * Convert Node.js Buffer to Uint8Array.
@@ -158,35 +160,20 @@ export function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyP
 }
 
 /**
- * Sign data using RSA with the specified algorithm
+ * Sign data using RSA with the specified algorithm.
  *
- * @param algorithm - Node.js crypto algorithm (e.g., 'RSA-SHA256')
- * @param data - Data to sign
- * @param privateKey - Private key to sign with
- * @returns Signature buffer
+ * For RSA-PSS (PS256/PS384/PS512), callers must pass appropriate padding/saltLength options.
  */
-export function rsaSign(algorithm: string, data: Buffer, privateKey: crypto.KeyObject): Buffer {
-  return crypto.sign(algorithm, data, privateKey);
-}
-
-/**
- * Map JWT algorithm to Node.js crypto algorithm
- */
-export function jwtAlgToNodeAlg(jwtAlg: string): string {
-  const mapping: Record<string, string> = {
-    RS256: 'RSA-SHA256',
-    RS384: 'RSA-SHA384',
-    RS512: 'RSA-SHA512',
-    // For RSA-PSS, Node's crypto.sign/verify uses the digest algorithm + explicit PSS padding options.
-    PS256: 'RSA-SHA256',
-    PS384: 'RSA-SHA384',
-    PS512: 'RSA-SHA512',
-  };
-  const nodeAlg = mapping[jwtAlg];
-  if (!nodeAlg) {
-    throw new Error(`Unsupported JWT algorithm: ${jwtAlg}`);
-  }
-  return nodeAlg;
+export function rsaSign(
+  algorithm: string,
+  data: Buffer,
+  privateKey: crypto.KeyObject,
+  options?: Omit<crypto.SignKeyObjectInput, 'key'>,
+): Buffer {
+  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = options
+    ? { key: privateKey, ...options }
+    : privateKey;
+  return crypto.sign(algorithm, data, signingKey);
 }
 
 /**
@@ -210,14 +197,17 @@ export function createSignedJwt(
   const signatureInput = `${headerB64}.${payloadB64}`;
 
   const nodeAlgorithm = jwtAlgToNodeAlg(alg);
-  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = alg.startsWith('PS')
-    ? {
-        key: privateKey,
-        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-      }
-    : privateKey;
-  const signature = crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), signingKey);
+  const signature = rsaSign(
+    nodeAlgorithm,
+    Buffer.from(signatureInput),
+    privateKey,
+    isRsaPssAlg(alg)
+      ? {
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+        }
+      : undefined,
+  );
   const signatureB64 = signature.toString('base64url');
 
   return `${headerB64}.${payloadB64}.${signatureB64}`;

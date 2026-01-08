@@ -67,17 +67,6 @@ export interface MockResponseHelper {
  */
 export type MockRouteHandler = (req: MockRequest, res: MockResponseHelper) => void | Promise<void>;
 
-export interface MockRoute {
-  /** HTTP method */
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  /** Path to match (e.g., '/products', '/products/:id') */
-  path: string;
-  /** Static response to return (mutually exclusive with handler) */
-  response?: MockResponse;
-  /** Dynamic handler function (mutually exclusive with response) */
-  handler?: MockRouteHandler;
-}
-
 export interface MockResponse {
   /** HTTP status code (default: 200) */
   status?: number;
@@ -87,9 +76,35 @@ export interface MockResponse {
   body: unknown;
 }
 
+export type MockRoute =
+  | {
+      /** HTTP method */
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      /** Path to match (e.g., '/products', '/products/:id') */
+      path: string;
+      /** Dynamic handler function (mutually exclusive with response) */
+      handler: MockRouteHandler;
+      /** Static response to return (mutually exclusive with handler) */
+      response?: never;
+    }
+  | {
+      /** HTTP method */
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      /** Path to match (e.g., '/products', '/products/:id') */
+      path: string;
+      /** Static response to return (mutually exclusive with handler) */
+      response: MockResponse;
+      /** Dynamic handler function (mutually exclusive with response) */
+      handler?: never;
+    };
+
 export interface MockAPIServerOptions {
   /** Port to listen on (default: random available port) */
   port?: number;
+  /** Maximum request body size (default: 1MB) */
+  maxBodyBytes?: number;
+  /** Request body read timeout in ms (default: 10s) */
+  bodyTimeoutMs?: number;
   /** OpenAPI spec to serve at /openapi.json */
   openApiSpec: unknown;
   /** Routes to mock */
@@ -142,15 +157,16 @@ export class MockAPIServer {
     const port = this.options.port ?? 0; // 0 = random available port
 
     return new Promise((resolve, reject) => {
-      this.server = createServer(this.handleRequest.bind(this));
+      const server = createServer(this.handleRequest.bind(this));
+      this.server = server;
 
-      this.server.on('error', (err) => {
+      server.on('error', (err) => {
         this.log(`Server error: ${err.message}`);
         reject(err);
       });
 
-      this.server.listen(port, () => {
-        const address = this.server!.address();
+      server.listen(port, () => {
+        const address = server.address();
         if (!address || typeof address === 'string') {
           reject(new Error('Failed to get server address'));
           return;
@@ -174,12 +190,13 @@ export class MockAPIServer {
    * Stop the mock API server
    */
   async stop(): Promise<void> {
-    if (!this.server) {
+    const server = this.server;
+    if (!server) {
       return;
     }
 
     return new Promise((resolve, reject) => {
-      this.server!.close((err) => {
+      server.close((err) => {
         if (err) {
           reject(err);
         } else {
@@ -221,12 +238,17 @@ export class MockAPIServer {
   // PRIVATE
   // ═══════════════════════════════════════════════════════════════════
 
-  private validateRoute(route: MockRoute): void {
-    if (route.handler && route.response) {
-      throw new Error(`Mock route ${route.method} ${route.path} must define either 'handler' or 'response', not both`);
+  private validateRoute(route: { method?: string; path?: string; handler?: unknown; response?: unknown }): void {
+    const method = route.method ?? 'UNKNOWN';
+    const path = route.path ?? '<unknown>';
+    const hasHandler = typeof route.handler === 'function';
+    const hasResponse = route.response != null;
+
+    if (hasHandler && hasResponse) {
+      throw new Error(`Mock route ${method} ${path} must define either 'handler' or 'response', not both`);
     }
-    if (!route.handler && !route.response) {
-      throw new Error(`Mock route ${route.method} ${route.path} must define either 'handler' or 'response'`);
+    if (!hasHandler && !hasResponse) {
+      throw new Error(`Mock route ${method} ${path} must define either 'handler' or 'response'`);
     }
   }
 
@@ -372,16 +394,34 @@ export class MockAPIServer {
    * Parse request body as JSON
    */
   private async parseBody(req: IncomingMessage): Promise<unknown> {
+    const maxBodyBytes = this.options.maxBodyBytes ?? 1 * 1024 * 1024; // 1MB
+    const bodyTimeoutMs = this.options.bodyTimeoutMs ?? 10_000; // 10s
+
     return new Promise((resolve, reject) => {
       let body = '';
+      let bodyBytes = 0;
+
       const onData = (chunk: Buffer) => {
+        bodyBytes += chunk.length;
+        if (bodyBytes > maxBodyBytes) {
+          cleanup();
+          req.destroy();
+          reject(new Error(`Request body too large (>${maxBodyBytes} bytes)`));
+          return;
+        }
         body += chunk.toString();
       };
       const cleanup = () => {
         req.off('data', onData);
         req.off('end', onEnd);
         req.off('error', onError);
+        clearTimeout(timeout);
       };
+      const timeout = setTimeout(() => {
+        cleanup();
+        req.destroy();
+        reject(new Error(`Request body read timed out after ${bodyTimeoutMs}ms`));
+      }, bodyTimeoutMs);
       const onEnd = () => {
         cleanup();
         try {

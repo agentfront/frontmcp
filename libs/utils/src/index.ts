@@ -65,6 +65,8 @@ export { safeStringify } from './serialization';
 export {
   // Core crypto
   getCrypto,
+  jwtAlgToNodeAlg,
+  isRsaPssAlg,
   randomUUID,
   randomBytes,
   sha256,

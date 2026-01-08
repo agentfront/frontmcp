@@ -1,6 +1,7 @@
 // auth/jwks/jwks.service.ts
 import crypto from 'node:crypto';
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
+import { jwtAlgToNodeAlg } from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
 import { isDevKeyPersistenceEnabled, loadDevKey, saveDevKey, DevKeyData } from './dev-key-persistence';
@@ -115,8 +116,9 @@ export class JwksService {
     }
 
     for (const p of candidates) {
+      let jwks: JSONWebKeySet | undefined;
       try {
-        const jwks = await this.getJwksForProvider(p);
+        jwks = await this.getJwksForProvider(p);
         if (!jwks?.keys?.length) continue;
         const draftPayload = decodeJwtPayloadSafe(token);
         const JWKS = createLocalJWKSet(jwks);
@@ -137,9 +139,9 @@ export class JwksService {
       } catch (e: any) {
         // Check for weak RSA key error from jose library
         if (this.isWeakKeyError(e)) {
-          const jwks = await this.getJwksForProvider(p);
-          if (jwks?.keys?.length) {
-            const fallbackResult = await this.verifyWithWeakKey(token, jwks, p);
+          const fallbackJwks = jwks ?? (await this.getJwksForProvider(p));
+          if (fallbackJwks?.keys?.length) {
+            const fallbackResult = await this.verifyWithWeakKey(token, fallbackJwks, p);
             if (fallbackResult.ok) {
               return fallbackResult;
             }
@@ -157,6 +159,8 @@ export class JwksService {
    * Check if the error is due to weak RSA key (< 2048 bits)
    */
   private isWeakKeyError(error: any): boolean {
+    // NOTE: This is a best-effort fallback keyed off `jose` error message text.
+    // If `jose` changes this message format in a future major version, update this matcher and its tests.
     const message = error?.message || String(error);
     return message.includes('modulusLength') && message.includes('2048');
   }
@@ -215,9 +219,13 @@ export class JwksService {
       }
 
       // Validate issuer
-      const expectedIssuers = [normalizeIssuer(provider.issuerUrl)];
-      if (payload.iss) expectedIssuers.push(payload.iss);
-      if (!expectedIssuers.some((iss) => normalizeIssuer(payload.iss) === normalizeIssuer(iss))) {
+      const payloadIssuerRaw = typeof payload.iss === 'string' ? payload.iss : undefined;
+      if (!payloadIssuerRaw) {
+        return { ok: false, error: 'issuer_mismatch' };
+      }
+      const trustedIssuers = new Set([normalizeIssuer(provider.issuerUrl)]);
+      const payloadIssuer = normalizeIssuer(payloadIssuerRaw);
+      if (!trustedIssuers.has(payloadIssuer)) {
         return { ok: false, error: 'issuer_mismatch' };
       }
 
@@ -270,20 +278,7 @@ export class JwksService {
    * Map JWT algorithm to Node.js crypto algorithm name
    */
   private getNodeAlgorithm(alg: string): string {
-    const algorithms: Record<string, string> = {
-      RS256: 'RSA-SHA256',
-      RS384: 'RSA-SHA384',
-      RS512: 'RSA-SHA512',
-      // For RSA-PSS, Node's crypto.verify uses the digest algorithm + explicit PSS padding options.
-      PS256: 'RSA-SHA256',
-      PS384: 'RSA-SHA384',
-      PS512: 'RSA-SHA512',
-    };
-    const nodeAlg = algorithms[alg];
-    if (!nodeAlg) {
-      throw new Error(`Unsupported JWT algorithm: ${alg}`);
-    }
-    return nodeAlg;
+    return jwtAlgToNodeAlg(alg);
   }
 
   // ===========================================================================
