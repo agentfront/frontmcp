@@ -4,7 +4,7 @@
  * Tests for fallback verification when OAuth providers use RSA keys < 2048 bits.
  * This is a security concern but should work with a warning.
  */
-import { createSignedJwt, generateRsaKeyPair } from '@frontmcp/utils/crypto/node';
+import { createSignedJwt, generateRsaKeyPair, jwtAlgToNodeAlg } from '@frontmcp/utils/crypto/node';
 import { JwksService } from '../jwks.service';
 
 describe('JwksService Weak RSA Key Handling', () => {
@@ -277,15 +277,13 @@ describe('JwksService Weak RSA Key Handling', () => {
 
   describe('Algorithm mapping', () => {
     it('should map JWT algorithms to Node.js crypto algorithms', () => {
-      const getNodeAlgorithm = (service as any).getNodeAlgorithm.bind(service);
-
-      expect(getNodeAlgorithm('RS256')).toBe('RSA-SHA256');
-      expect(getNodeAlgorithm('RS384')).toBe('RSA-SHA384');
-      expect(getNodeAlgorithm('RS512')).toBe('RSA-SHA512');
-      expect(getNodeAlgorithm('PS256')).toBe('RSA-SHA256');
-      expect(getNodeAlgorithm('PS384')).toBe('RSA-SHA384');
-      expect(getNodeAlgorithm('PS512')).toBe('RSA-SHA512');
-      expect(() => getNodeAlgorithm('UNKNOWN')).toThrow('Unsupported JWT algorithm');
+      expect(jwtAlgToNodeAlg('RS256')).toBe('RSA-SHA256');
+      expect(jwtAlgToNodeAlg('RS384')).toBe('RSA-SHA384');
+      expect(jwtAlgToNodeAlg('RS512')).toBe('RSA-SHA512');
+      expect(jwtAlgToNodeAlg('PS256')).toBe('RSA-SHA256');
+      expect(jwtAlgToNodeAlg('PS384')).toBe('RSA-SHA384');
+      expect(jwtAlgToNodeAlg('PS512')).toBe('RSA-SHA512');
+      expect(() => jwtAlgToNodeAlg('UNKNOWN')).toThrow('Unsupported JWT algorithm');
     });
   });
 });

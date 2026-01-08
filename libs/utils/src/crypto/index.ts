@@ -5,7 +5,7 @@
  * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
-import { isNode } from './runtime';
+import { assertNode, isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
 export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
@@ -32,6 +32,12 @@ export function getCrypto(): CryptoProvider {
     }
   }
   return _provider!;
+}
+
+export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
+  assertNode('rsaVerify');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean;
 }
 
 // Convenience function exports - delegate to provider
