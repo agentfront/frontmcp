@@ -1,0 +1,580 @@
+---
+title: Remember Plugin
+description: Encrypted session memory with scoped storage for AI agent interactions.
+icon: brain
+---
+
+The Remember Plugin provides encrypted session memory for FrontMCP servers, enabling AI agents to remember context across conversations.
+
+## Why Use Remember?
+
+<CardGroup cols={2}>
+  <Card title="Session Memory" icon="brain">
+    Store user preferences, conversation context, and state across tool invocations
+  </Card>
+  <Card title="Encrypted Storage" icon="lock">
+    AES-256-GCM encryption protects sensitive data at rest
+  </Card>
+
+  <Card title="Multiple Backends" icon="database">
+    Redis, Vercel KV, or in-memory storage for different deployment needs
+  </Card>
+
+  <Card title="Scoped Storage" icon="folder-tree">
+    Organize data by session, user, tool, or global scope
+  </Card>
+</CardGroup>
+
+<Info>
+For tool approval workflows (Claude Code-style permissions), see the [Approval Plugin](/docs/plugins/approval-plugin).
+</Info>
+
+## Installation
+
+```bash
+npm install @frontmcp/plugin-remember
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Context Extension">
+    The plugin adds `this.remember` to all execution contexts (ToolContext, AgentContext, etc.)
+  </Step>
+  <Step title="Scoped Storage">
+    Data is organized by scope (session, user, tool, global) with automatic key prefixing
+  </Step>
+
+  <Step title="Encryption">
+    Values are encrypted before storage using keys derived from session/user identifiers
+  </Step>
+
+  <Step title="TTL Management">
+    Entries expire automatically based on configured TTL or scope lifetime
+  </Step>
+</Steps>
+
+<Info>
+  All stored values are **encrypted by default** using AES-256-GCM. Keys are derived using HKDF-SHA256 from session and user identifiers.
+</Info>
+
+---
+
+## Quick Start
+
+### Basic Setup
+
+```ts
+import { FrontMcp, App } from '@frontmcp/sdk';
+import { RememberPlugin } from '@frontmcp/plugin-remember';
+
+@App({
+  id: 'my-app',
+  name: 'My App',
+  plugins: [RememberPlugin], // Default: memory store, encryption enabled
+  tools: [
+    /* your tools */
+  ],
+})
+class MyApp {}
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class Server {}
+```
+
+### Using Memory in Tools
+
+The plugin extends all execution contexts with `this.remember`:
+
+<CodeGroup>
+
+```ts Class-based tool
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'personalize-greeting',
+  description: 'Greet user with their preferences',
+  inputSchema: { name: z.string() },
+})
+export default class PersonalizeGreetingTool extends ToolContext {
+  async execute(input: { name: string }) {
+    // Get remembered preference (or default)
+    const theme = await this.remember.get('theme', { defaultValue: 'light' });
+
+    // Store for future use
+    await this.remember.set('last_greeted', input.name);
+
+    return `Hello ${input.name}! Your theme is ${theme}.`;
+  }
+}
+```
+
+```ts Function-based tool
+import { tool } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+export const PersonalizeGreeting = tool({
+  name: 'personalize-greeting',
+  description: 'Greet user with their preferences',
+  inputSchema: { name: z.string() },
+})(async (input, ctx) => {
+  // Access remember through context
+  const theme = await ctx.remember.get('theme', { defaultValue: 'light' });
+  await ctx.remember.set('last_greeted', input.name);
+
+  return `Hello ${input.name}! Your theme is ${theme}.`;
+});
+```
+
+</CodeGroup>
+
+---
+
+## Memory Scopes
+
+Memory is organized into four scopes with different visibility and lifetime:
+
+| Scope     | Description                          | Use Case                          |
+| --------- | ------------------------------------ | --------------------------------- |
+| `session` | Current session only (default)       | Temporary state, conversation context |
+| `user`    | Persists across user sessions        | User preferences, settings        |
+| `tool`    | Tied to specific tool + session      | Tool-specific cache               |
+| `global`  | Shared across all sessions/users     | Application-wide configuration    |
+
+### Using Scopes
+
+```ts
+// Session scope (default)
+await this.remember.set('temp_token', 'xyz');
+await this.remember.get('temp_token');
+
+// User scope - persists across sessions
+await this.remember.set('language', 'en', { scope: 'user' });
+const lang = await this.remember.get('language', { scope: 'user' });
+
+// Tool scope - isolated per tool
+await this.remember.set('last_query', query, { scope: 'tool' });
+
+// Global scope - shared everywhere
+await this.remember.set('maintenance_mode', true, { scope: 'global' });
+```
+
+---
+
+## Data Structure
+
+### Entry Format
+
+Each stored value is wrapped in an entry with metadata:
+
+```ts
+interface RememberEntry<T> {
+  value: T;                           // The stored value
+  brand?: PayloadBrandType;           // Semantic type hint
+  createdAt: number;                  // Unix timestamp (ms)
+  updatedAt: number;                  // Unix timestamp (ms)
+  expiresAt?: number;                 // Expiration timestamp (ms)
+  metadata?: Record<string, unknown>; // Custom metadata
+}
+```
+
+### Branded Payloads
+
+Use brands to categorize stored data semantically:
+
+```ts
+// Store with brand
+await this.remember.set('theme', 'dark', {
+  scope: 'user',
+  brand: 'preference',
+});
+
+// Available brands
+type PayloadBrandType =
+  | 'approval'      // Approval state (use with ApprovalPlugin)
+  | 'preference'    // User preferences
+  | 'cache'         // Cached data
+  | 'state'         // Application state
+  | 'conversation'  // Conversation context
+  | 'custom';       // Custom data
+```
+
+Brands enable filtering and batch operations by category:
+
+```ts
+// List all preferences
+const prefKeys = await this.remember.list({
+  scope: 'user',
+  pattern: '*',
+});
+```
+
+---
+
+## Storage Options
+
+### In-Memory (Default)
+
+Best for: Single-instance deployments, development, non-persistent data
+
+```ts
+RememberPlugin.init({
+  type: 'memory',
+  defaultTTL: 3600, // 1 hour
+});
+```
+
+<Warning>Memory storage resets when the process restarts. Not shared across instances.</Warning>
+
+### Redis (Recommended for Production)
+
+Best for: Multi-instance deployments, persistent memory, production
+
+<CodeGroup>
+
+```ts Redis connection config
+RememberPlugin.init({
+  type: 'redis',
+  defaultTTL: 86400, // 1 day
+  config: {
+    host: '127.0.0.1',
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+    db: 0,
+  },
+});
+```
+
+```ts Reuse existing Redis client
+import { Redis } from 'ioredis';
+
+const redis = new Redis({
+  host: 'redis.example.com',
+  port: 6379,
+});
+
+RememberPlugin.init({
+  type: 'redis-client',
+  client: redis,
+});
+```
+
+</CodeGroup>
+
+### Vercel KV
+
+Best for: Vercel deployments, serverless environments
+
+```ts
+RememberPlugin.init({
+  type: 'vercel-kv',
+  // Uses KV_REST_API_URL and KV_REST_API_TOKEN env vars by default
+});
+```
+
+### Global Store
+
+Use the store configuration from `@FrontMcp` decorator:
+
+```ts
+RememberPlugin.init({
+  type: 'global-store', // Uses redis/vercel-kv from FrontMcp config
+});
+```
+
+---
+
+## Encryption
+
+All stored values are encrypted by default using AES-256-GCM.
+
+### How Keys Are Derived
+
+1. A master secret is derived from `REMEMBER_SECRET` environment variable (or auto-generated and persisted)
+2. Per-entry keys are derived using HKDF-SHA256 with session/user context as salt
+3. Each entry gets a unique key based on its scope and identity
+
+### Secret Persistence
+
+In **development**, the plugin automatically generates and persists an encryption secret to `.frontmcp/remember-secret.json`:
+
+```json
+{
+  "secret": "base64url-encoded-32-byte-secret",
+  "createdAt": 1704067200000,
+  "version": 1
+}
+```
+
+This enables consistent encryption across process restarts during development without manual configuration.
+
+<Warning>
+In **production**, set the `REMEMBER_SECRET` environment variable instead:
+
+```bash
+# Generate a secure secret
+openssl rand -base64 32
+
+# Set in environment
+export REMEMBER_SECRET="your-generated-secret"
+```
+
+File-based persistence is disabled in production by default for security.
+</Warning>
+
+### Configuration
+
+```ts
+RememberPlugin.init({
+  type: 'redis',
+  encryption: {
+    enabled: true, // default
+    customKey: process.env.CUSTOM_ENCRYPTION_KEY, // optional override
+  },
+  config: { host: 'localhost', port: 6379 },
+});
+```
+
+---
+
+## API Reference
+
+### RememberAccessor Methods
+
+<ParamField path="set(key, value, options?)" type="Promise<void>">
+  Store a value with optional scope, TTL, and metadata
+
+```ts
+await this.remember.set('key', { data: 'value' }, {
+  scope: 'user',
+  ttl: 3600, // seconds
+  brand: 'preference',
+  metadata: { source: 'api' },
+});
+```
+
+</ParamField>
+
+<ParamField path="get<T>(key, options?)" type="Promise<T | undefined>">
+  Retrieve a value with optional default
+
+```ts
+const value = await this.remember.get('key', {
+  scope: 'user',
+  defaultValue: 'fallback',
+});
+```
+
+</ParamField>
+
+<ParamField path="getEntry<T>(key, options?)" type="Promise<RememberEntry<T> | undefined>">
+  Retrieve the full entry including metadata, timestamps, and brand
+
+```ts
+const entry = await this.remember.getEntry('key', { scope: 'user' });
+if (entry) {
+  console.log('Created:', entry.createdAt);
+  console.log('Updated:', entry.updatedAt);
+  console.log('Brand:', entry.brand);
+  console.log('Value:', entry.value);
+}
+```
+
+</ParamField>
+
+<ParamField path="update<T>(key, value, options?)" type="Promise<boolean>">
+  Update an existing value while preserving metadata. Returns `false` if key doesn't exist.
+
+```ts
+const updated = await this.remember.update('counter', 42, {
+  scope: 'session',
+  ttl: 3600,
+});
+if (!updated) {
+  // Key didn't exist, create it instead
+  await this.remember.set('counter', 42);
+}
+```
+
+</ParamField>
+
+<ParamField path="knows(key, options?)" type="Promise<boolean>">
+  Check if a key exists
+
+```ts
+if (await this.remember.knows('onboarded', { scope: 'user' })) {
+  // Skip onboarding
+}
+```
+
+</ParamField>
+
+<ParamField path="forget(key, options?)" type="Promise<void>">
+  Delete a key
+
+```ts
+await this.remember.forget('temp_token', { scope: 'session' });
+```
+
+</ParamField>
+
+<ParamField path="list(options?)" type="Promise<string[]>">
+  List keys with optional pattern matching
+
+```ts
+const keys = await this.remember.list({
+  scope: 'session',
+  pattern: 'user:*',
+});
+```
+
+</ParamField>
+
+---
+
+## LLM-Accessible Tools
+
+Enable built-in tools that let the LLM manage memory directly:
+
+```ts
+RememberPlugin.init({
+  type: 'redis',
+  tools: {
+    enabled: true,
+    allowedScopes: ['session', 'user'], // Restrict which scopes LLM can access
+    prefix: 'memory_', // Tool name prefix
+  },
+  config: { host: 'localhost', port: 6379 },
+});
+```
+
+This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`, and `memory_list_memories`.
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="1. Use Appropriate Scopes">
+    - **Session**: Temporary data, current conversation context
+    - **User**: Preferences, settings that should persist
+    - **Tool**: Tool-specific cache to avoid scope pollution
+    - **Global**: Only for true application-wide settings
+  </Accordion>
+
+  <Accordion title="2. Set TTLs for Sensitive Data">
+    Don't store sensitive data forever:
+    ```ts
+    await this.remember.set('auth_token', token, {
+      ttl: 300, // 5 minutes
+      scope: 'session',
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="3. Use Redis for Production">
+    Redis provides:
+    - Persistence across restarts
+    - Sharing across multiple server instances
+    - Better memory management with eviction policies
+  </Accordion>
+
+  <Accordion title="4. Set REMEMBER_SECRET in Production">
+    ```bash
+    # Generate a secure secret
+    openssl rand -base64 32
+
+    # Set in environment
+    export REMEMBER_SECRET="your-generated-secret"
+    ```
+
+    <Info>
+    In development, the secret is auto-generated and stored in `.frontmcp/remember-secret.json`. Add this file to `.gitignore`.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext } from '@frontmcp/sdk';
+import { RememberPlugin } from '@frontmcp/plugin-remember';
+import { z } from 'zod';
+
+// Configure with Redis
+const rememberPlugin = RememberPlugin.init({
+  type: 'redis',
+  defaultTTL: 86400, // 1 day
+  encryption: { enabled: true },
+  config: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    password: process.env.REDIS_PASSWORD,
+  },
+});
+
+// Tool using memory
+@Tool({
+  name: 'set-preferences',
+  description: 'Set user preferences',
+  inputSchema: {
+    theme: z.enum(['light', 'dark']),
+    language: z.string(),
+  },
+})
+class SetPreferencesTool extends ToolContext {
+  async execute(input: { theme: string; language: string }) {
+    await this.remember.set('theme', input.theme, { scope: 'user' });
+    await this.remember.set('language', input.language, { scope: 'user' });
+
+    return { success: true, message: 'Preferences saved' };
+  }
+}
+
+@App({
+  id: 'user-management',
+  name: 'User Management',
+  plugins: [rememberPlugin],
+  tools: [SetPreferencesTool],
+})
+class UserManagementApp {}
+
+@FrontMcp({
+  info: { name: 'User Server', version: '1.0.0' },
+  apps: [UserManagementApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+---
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card
+    title="Source Code"
+    icon="github"
+    href="https://github.com/agentfront/frontmcp/tree/main/plugins/plugin-remember"
+  >
+    View the remember plugin source code
+  </Card>
+
+  <Card title="Approval Plugin" icon="shield-check" href="/docs/plugins/approval-plugin">
+    For tool authorization workflows
+  </Card>
+
+  <Card title="Plugin Guide" icon="puzzle-piece" href="/docs/extensibility/plugins">
+    Learn more about FrontMCP plugins
+  </Card>
+
+  <Card title="Cache Plugin" icon="database" href="/docs/plugins/cache-plugin">
+    For tool response caching
+  </Card>
+</CardGroup>

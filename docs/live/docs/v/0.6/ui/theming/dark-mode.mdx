@@ -1,0 +1,297 @@
+---
+title: Dark Mode
+sidebarTitle: Dark Mode
+icon: moon
+description: FrontMCP UI supports dark mode through theme variants and CSS media queries. Widgets can adapt to the user's system preference or platform theme.
+---
+
+## How Dark Mode Works
+
+Platforms like OpenAI and Claude provide theme information to widgets. FrontMCP UI can detect this and apply appropriate styles.
+
+```typescript
+// The MCP Bridge exposes theme info
+window.mcpBridge.theme // 'light' | 'dark'
+
+// Or via context
+window.mcpBridge.context.theme // 'light' | 'dark' | 'system'
+```
+
+## Creating a Dark Theme
+
+Create a separate dark theme:
+
+```typescript
+import { createTheme } from '@frontmcp/uipack/theme';
+
+const darkTheme = createTheme({
+  name: 'dark',
+  colors: {
+    semantic: {
+      primary: '#60a5fa',     // Lighter blue for dark mode
+      secondary: '#9ca3af',
+      accent: '#a78bfa',
+      success: '#34d399',
+      warning: '#fbbf24',
+      danger: '#f87171',
+      info: '#38bdf8',
+    },
+    surface: {
+      background: '#0f172a',   // Slate-900
+      foreground: '#1e293b',   // Slate-800
+      muted: '#334155',        // Slate-700
+      subtle: '#475569',       // Slate-600
+    },
+    text: {
+      primary: '#f1f5f9',      // Slate-100
+      secondary: '#cbd5e1',    // Slate-300
+      muted: '#94a3b8',        // Slate-400
+      inverse: '#0f172a',
+      link: '#60a5fa',
+    },
+    border: {
+      default: '#334155',      // Slate-700
+      strong: '#475569',       // Slate-600
+      muted: '#1e293b',        // Slate-800
+    },
+  },
+});
+```
+
+## Applying Based on Platform Theme
+
+Detect the platform theme and apply the appropriate theme:
+
+```typescript
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { DEFAULT_THEME, createTheme } from '@frontmcp/uipack/theme';
+
+const lightTheme = DEFAULT_THEME;
+const darkTheme = createTheme({ name: 'dark', /* ... */ });
+
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: (ctx) => {
+      // Platform theme is available via context
+      const isDark = typeof window !== 'undefined' &&
+        window.__mcpHostContext?.theme === 'dark';
+
+      return baseLayout({
+        content: myContent,
+        theme: isDark ? darkTheme : lightTheme,
+      });
+    },
+  },
+})
+```
+
+## CSS Media Query Approach
+
+Use `prefers-color-scheme` for automatic detection:
+
+```typescript
+const html = `
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1f2937;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f2937;
+      --text: #f9fafb;
+    }
+  }
+</style>
+
+<div style="background: var(--bg); color: var(--text);">
+  Content adapts to system preference
+</div>
+`;
+```
+
+## Tailwind Dark Mode
+
+Tailwind CSS supports dark mode variants:
+
+```typescript
+const html = `
+<div class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+  <h1 class="text-2xl font-bold">Adaptive Content</h1>
+  <p class="text-gray-600 dark:text-gray-400">
+    This text adapts to dark mode.
+  </p>
+</div>
+`;
+```
+
+<Info>
+  Tailwind's dark mode requires the `dark` class on a parent element (usually `<html>`).
+  The base layout handles this automatically based on theme detection.
+</Info>
+
+## Manual Toggle
+
+Allow users to toggle dark mode manually:
+
+```typescript
+import { button } from '@frontmcp/ui/components';
+
+const toggleButton = button('Toggle Dark Mode', {
+  data: { 'toggle-theme': 'true' },
+});
+
+const html = `
+<script>
+  document.querySelector('[data-toggle-theme]').addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark');
+  });
+</script>
+${toggleButton}
+`;
+```
+
+## Theme-Aware Components
+
+Components automatically use CSS variables, so they work with any theme:
+
+```typescript
+import { card, badge, button } from '@frontmcp/ui/components';
+
+// These components use CSS variables like:
+// - bg-primary -> var(--color-primary)
+// - text-text-primary -> var(--color-text-primary)
+// - border-border -> var(--color-border)
+
+// They automatically adapt when CSS variables change
+const html = card(`
+  ${badge('Status', { variant: 'success' })}
+  <p class="text-text-secondary">Description</p>
+  ${button('Action')}
+`, { title: 'Card Title' });
+```
+
+## Dual Theme Setup
+
+Create a complete light/dark setup:
+
+```typescript title="src/themes/index.ts"
+import { createTheme, DEFAULT_THEME } from '@frontmcp/uipack/theme';
+
+// Light theme (default)
+export const lightTheme = DEFAULT_THEME;
+
+// Dark theme
+export const darkTheme = createTheme({
+  name: 'dark',
+  colors: {
+    semantic: {
+      primary: '#60a5fa',
+      secondary: '#9ca3af',
+      accent: '#a78bfa',
+      success: '#34d399',
+      warning: '#fbbf24',
+      danger: '#f87171',
+      info: '#38bdf8',
+    },
+    surface: {
+      background: '#0f172a',
+      foreground: '#1e293b',
+      muted: '#334155',
+      subtle: '#475569',
+    },
+    text: {
+      primary: '#f1f5f9',
+      secondary: '#cbd5e1',
+      muted: '#94a3b8',
+      inverse: '#0f172a',
+      link: '#60a5fa',
+    },
+    border: {
+      default: '#334155',
+      strong: '#475569',
+      muted: '#1e293b',
+    },
+  },
+});
+
+// Get theme based on mode
+export function getTheme(mode: 'light' | 'dark' | 'system') {
+  if (mode === 'dark') return darkTheme;
+  if (mode === 'light') return lightTheme;
+
+  // System preference
+  if (typeof window !== 'undefined') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? darkTheme : lightTheme;
+  }
+
+  return lightTheme;
+}
+```
+
+Usage:
+
+```typescript
+import { getTheme } from './themes';
+import { baseLayout } from '@frontmcp/ui/layouts';
+
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: (ctx) => {
+      const themeMode = window.__mcpHostContext?.theme ?? 'system';
+      const theme = getTheme(themeMode);
+
+      return baseLayout({
+        content: myContent,
+        theme,
+      });
+    },
+  },
+})
+```
+
+## Testing Dark Mode
+
+Test both themes in development:
+
+```typescript
+// Force dark mode for testing
+document.documentElement.classList.add('dark');
+
+// Or toggle
+document.documentElement.classList.toggle('dark');
+
+// Check current mode
+const isDark = document.documentElement.classList.contains('dark');
+```
+
+## Platform Considerations
+
+### OpenAI
+
+OpenAI provides theme via `window.openai.theme`:
+
+```typescript
+const isDark = window.openai?.theme === 'dark';
+```
+
+### Claude
+
+Claude Artifacts may have limited theme support. Default to light theme with system preference fallback.
+
+### Gemini
+
+Check `window.__mcpHostContext` for theme information.
+
+## Best Practices
+
+1. **Test both modes** - Ensure all content is readable
+2. **Check contrast ratios** - Meet WCAG accessibility standards
+3. **Use semantic colors** - Let the theme define actual colors
+4. **Respect user preference** - Follow system/platform settings
+5. **Provide graceful fallback** - Default to light theme if detection fails
+6. **Avoid hardcoded colors** - Use CSS variables instead

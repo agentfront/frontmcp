@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugins",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "FrontMCP plugins meta-package - installs all official plugins",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",

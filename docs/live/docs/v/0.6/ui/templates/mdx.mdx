@@ -1,0 +1,395 @@
+---
+title: MDX Templates
+sidebarTitle: MDX
+icon: markdown
+description: MDX combines Markdown with JSX, letting you write content in Markdown while embedding React components. It's ideal for documentation-style widgets and content-heavy displays.
+---
+
+## Basic Syntax
+
+MDX templates are strings containing Markdown and JSX:
+
+```typescript
+@Tool({
+  name: 'get_article',
+  ui: {
+    template: `
+# {output.title}
+
+**Author:** {output.author}
+**Published:** {helpers.formatDate(output.date)}
+
+{output.content}
+
+---
+
+*Tags: {output.tags.join(', ')}*
+    `,
+  },
+})
+```
+
+## Variable Interpolation
+
+Access template context variables directly:
+
+```mdx
+# Welcome, {output.name}!
+
+Your account was created on {helpers.formatDate(output.createdAt)}.
+
+| Field | Value |
+|-------|-------|
+| Email | {output.email} |
+| Plan | {output.plan} |
+| Status | {output.status} |
+```
+
+Available variables:
+
+- `input` - Tool input arguments
+- `output` - Tool output/result
+- `helpers` - Utility functions
+
+## Using Components
+
+### Built-in Components
+
+MDX templates can use components you provide:
+
+```typescript
+@Tool({
+  name: 'show_status',
+  ui: {
+    template: `
+# System Status
+
+<Alert type="info">
+  All systems operational
+</Alert>
+
+<Card title="Server Status">
+  - CPU: {output.cpu}%
+  - Memory: {output.memory}%
+  - Disk: {output.disk}%
+</Card>
+    `,
+    mdxComponents: {
+      Alert: ({ type, children }) => `
+        <div class="alert alert-${type}">${children}</div>
+      `,
+      Card: ({ title, children }) => `
+        <div class="card">
+          <h3>${title}</h3>
+          ${children}
+        </div>
+      `,
+    },
+  },
+})
+```
+
+### FrontMCP UI Components
+
+Register FrontMCP components for use in MDX:
+
+```typescript
+import { card, badge, button, alert } from '@frontmcp/ui/components';
+
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: `
+# User Profile
+
+<Card title={output.name}>
+  <Badge variant="success">{output.status}</Badge>
+
+  **Email:** {output.email}
+
+  <Button variant="outline" size="sm">Edit Profile</Button>
+</Card>
+    `,
+    mdxComponents: {
+      Card: ({ title, children }) => card(children, { title }),
+      Badge: ({ variant, children }) => badge(children, { variant }),
+      Button: ({ variant, size, children }) => button(children, { variant, size }),
+    },
+  },
+})
+```
+
+## Markdown Features
+
+### Headings
+
+```mdx
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+### Text Formatting
+
+```mdx
+**Bold text**
+*Italic text*
+~~Strikethrough~~
+`inline code`
+```
+
+### Lists
+
+```mdx
+Unordered:
+- Item 1
+- Item 2
+  - Nested item
+
+Ordered:
+1. First
+2. Second
+3. Third
+```
+
+### Tables
+
+```mdx
+| Name | Value | Status |
+|------|-------|--------|
+| API | v2.0 | {output.apiStatus} |
+| DB | v1.5 | {output.dbStatus} |
+```
+
+### Code Blocks
+
+````mdx
+```javascript
+const greeting = 'Hello, World!';
+console.log(greeting);
+```
+````
+
+### Blockquotes
+
+```mdx
+> This is a blockquote.
+> It can span multiple lines.
+```
+
+### Links and Images
+
+```mdx
+[Link text](https://example.com)
+
+![Alt text](https://example.com/image.png)
+```
+
+## JSX in MDX
+
+### Inline JSX
+
+```mdx
+The current status is <Badge variant="success">Active</Badge>.
+```
+
+### Block JSX
+
+```mdx
+<Card title="Statistics">
+  <div className="grid grid-cols-3 gap-4">
+    <div>
+      <h4>Users</h4>
+      <p className="text-2xl font-bold">{output.users}</p>
+    </div>
+    <div>
+      <h4>Revenue</h4>
+      <p className="text-2xl font-bold">{helpers.formatCurrency(output.revenue)}</p>
+    </div>
+  </div>
+</Card>
+```
+
+### Conditional Rendering
+
+```mdx
+# Status Report
+
+{output.hasErrors ? (
+  <Alert type="danger">
+    Found {output.errorCount} errors
+  </Alert>
+) : (
+  <Alert type="success">
+    All checks passed!
+  </Alert>
+)}
+```
+
+### Mapping Arrays
+
+```mdx
+# Team Members
+
+{output.members.map(member => (
+  <Card key={member.id} title={member.name}>
+    **Role:** {member.role}
+    **Email:** {member.email}
+  </Card>
+))}
+```
+
+## Template Functions
+
+For complex logic, use a template function:
+
+```typescript
+@Tool({
+  name: 'get_report',
+  ui: {
+    template: (ctx) => {
+      const { output, helpers } = ctx;
+      const statusEmoji = output.status === 'success' ? '✅' : '❌';
+
+      return `
+# ${statusEmoji} ${helpers.escapeHtml(output.title)}
+
+**Generated:** ${helpers.formatDate(output.generatedAt)}
+
+## Summary
+
+${output.summary}
+
+## Details
+
+${output.details.map(d => `- **${d.label}:** ${d.value}`).join('\n')}
+
+---
+
+<Button href="${output.downloadUrl}">Download Report</Button>
+      `;
+    },
+    mdxComponents: {
+      Button: ({ href, children }) => button(children, { href }),
+    },
+  },
+})
+```
+
+## Styling
+
+### Tailwind in JSX
+
+```mdx
+<div className="bg-gradient-to-r from-blue-500 to-purple-500 p-6 rounded-xl text-white">
+  <h2 className="text-2xl font-bold mb-2">{output.title}</h2>
+  <p className="opacity-90">{output.subtitle}</p>
+</div>
+```
+
+### CSS Classes in Markdown
+
+MDX supports adding classes to elements:
+
+```mdx
+# Heading {.text-center .text-blue-500}
+
+Paragraph with custom class. {.text-gray-600}
+```
+
+<Info>
+  Class support depends on the MDX processor configuration.
+  FrontMCP uses @mdx-js/mdx which supports this syntax.
+</Info>
+
+## Complete Example
+
+```typescript
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { card, badge, button, alert, table } from '@frontmcp/ui/components';
+import { z } from 'zod';
+
+@Tool({
+  name: 'get_dashboard',
+  description: 'Get dashboard summary',
+  outputSchema: z.object({
+    title: z.string(),
+    stats: z.object({
+      users: z.number(),
+      revenue: z.number(),
+      orders: z.number(),
+    }),
+    recentOrders: z.array(z.object({
+      id: z.string(),
+      customer: z.string(),
+      amount: z.number(),
+      status: z.string(),
+    })),
+    alerts: z.array(z.object({
+      type: z.enum(['info', 'warning', 'danger']),
+      message: z.string(),
+    })),
+  }),
+  ui: {
+    template: `
+# {output.title}
+
+{output.alerts.length > 0 && (
+  <div className="space-y-2 mb-6">
+    {output.alerts.map((alert, i) => (
+      <Alert key={i} type={alert.type}>{alert.message}</Alert>
+    ))}
+  </div>
+)}
+
+## Quick Stats
+
+<div className="grid grid-cols-3 gap-4 mb-6">
+  <StatCard label="Users" value={output.stats.users} />
+  <StatCard label="Revenue" value={helpers.formatCurrency(output.stats.revenue)} />
+  <StatCard label="Orders" value={output.stats.orders} />
+</div>
+
+## Recent Orders
+
+<Table
+  headers={['Order', 'Customer', 'Amount', 'Status']}
+  rows={output.recentOrders.map(o => [
+    o.id,
+    o.customer,
+    helpers.formatCurrency(o.amount),
+    o.status
+  ])}
+/>
+
+---
+
+<Button variant="outline" href="/orders">View All Orders</Button>
+    `,
+    mdxComponents: {
+      Alert: ({ type, children }) => alert(children, { variant: type }),
+      StatCard: ({ label, value }) => card(`
+        <div class="text-center">
+          <div class="text-3xl font-bold">${value}</div>
+          <div class="text-sm text-gray-500">${label}</div>
+        </div>
+      `),
+      Table: ({ headers, rows }) => table({ headers, rows }),
+      Button: ({ variant, href, children }) => button(children, { variant, href }),
+    },
+  },
+})
+export class GetDashboardTool extends ToolContext {
+  async execute() {
+    // Return dashboard data...
+  }
+}
+```
+
+## Best Practices
+
+1. **Use for content-heavy widgets** - MDX shines when you have lots of text
+2. **Register reusable components** - Create an mdxComponents library
+3. **Keep JSX simple** - Complex logic should be in components
+4. **Escape user content** - Use `helpers.escapeHtml()` when needed
+5. **Test rendering** - MDX can fail silently on syntax errors

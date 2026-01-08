@@ -1,0 +1,156 @@
+---
+title: Authentication Overview
+sidebarTitle: Overview
+slug: authentication/overview
+icon: shield-check
+description: Understanding FrontMCP's three-tier authentication system
+---
+
+FrontMCP implements a flexible three-tier authentication system designed for both development simplicity and production security.
+
+## Authentication Modes
+
+FrontMCP supports three authentication modes, each designed for different deployment scenarios:
+
+<CardGroup cols={3}>
+  <Card title="Public Mode" icon="unlock">
+    No authentication required. Anonymous sessions are auto-generated for all requests.
+
+    **Best for:** Development, testing, public APIs
+
+  </Card>
+  <Card title="Transparent Mode" icon="arrow-right-arrow-left">
+    Pass-through tokens from external identity providers. FrontMCP validates tokens against upstream JWKS.
+
+    **Best for:** Existing Auth0, Okta, Azure AD integrations
+
+  </Card>
+  <Card title="Orchestrated Mode" icon="sitemap">
+    Full OAuth 2.1 authorization server. Can be self-contained (local) or proxy to upstream IdP (remote).
+
+    **Best for:** Multi-app scenarios, federated auth, progressive authorization
+
+  </Card>
+</CardGroup>
+
+## Quick Mode Selection
+
+| Scenario                   | Recommended Mode        | Why                                 |
+| -------------------------- | ----------------------- | ----------------------------------- |
+| Local development          | `public`                | No setup required                   |
+| Existing IdP (Auth0, Okta) | `transparent`           | Direct token pass-through           |
+| Multi-provider federation  | `orchestrated` (remote) | Unified session, multiple IdPs      |
+| Self-contained auth        | `orchestrated` (local)  | Full control, built-in OAuth server |
+
+## Configuration Levels
+
+Authentication can be configured at two levels:
+
+<Tabs>
+  <Tab title="Server Level">
+    Apply the same auth configuration to all apps:
+
+    ```typescript
+    @FrontMcp({
+      info: { name: 'MyServer', version: '1.0.0' },
+      apps: [BillingApp, AnalyticsApp],
+      auth: {
+        mode: 'orchestrated',
+        type: 'local',
+        consent: { enabled: true },
+      },
+    })
+    export class Server {}
+    ```
+
+  </Tab>
+  <Tab title="App Level">
+    Each app defines its own auth provider (required when `splitByApp: true`):
+
+    ```typescript
+    @App({
+      name: 'Billing',
+      auth: {
+        mode: 'transparent',
+        remote: {
+          provider: 'https://auth.example.com',
+        },
+      },
+    })
+    export class BillingApp {}
+
+    @FrontMcp({
+      info: { name: 'Suite', version: '1.0.0' },
+      apps: [BillingApp, CrmApp],
+      splitByApp: true,
+    })
+    export class Server {}
+    ```
+
+  </Tab>
+</Tabs>
+
+<Warning>
+  When using `splitByApp: true`, you must configure auth per app. Server-level `auth` is not allowed.
+</Warning>
+
+## OAuth 2.1 Compliance
+
+FrontMCP's orchestrated mode is fully OAuth 2.1 compliant:
+
+<Check>**PKCE Required** - Only S256 code challenge method supported</Check>
+<Check>**Authorization Code Flow** - No implicit or password grants</Check>
+<Check>**Refresh Token Rotation** - Tokens rotate on each use</Check>
+<Check>**JWT Access Tokens** - Signed with RS256 or ES256</Check>
+
+## Session Management
+
+Sessions determine how tokens are stored and managed:
+
+| Session Mode  | Token Storage              | Refresh             | Multi-Instance          |
+| ------------- | -------------------------- | ------------------- | ----------------------- |
+| **Stateful**  | Server-side (Redis/memory) | Silent refresh      | Requires shared storage |
+| **Stateless** | Embedded in JWT            | Client must re-auth | Works anywhere          |
+
+<Tip>
+  Use **stateful** sessions when working with short-lived upstream tokens. You'll get automatic refresh without client round-trips.
+</Tip>
+
+```typescript
+auth: {
+  mode: 'orchestrated',
+  type: 'local',
+  sessionMode: 'stateful', // or 'stateless'
+  tokenStorage: {
+    type: 'redis',
+    config: { host: 'localhost', port: 6379 },
+  },
+}
+```
+
+## Discovery Endpoints
+
+FrontMCP exposes standard OAuth discovery endpoints:
+
+| Endpoint                                  | Description                                        |
+| ----------------------------------------- | -------------------------------------------------- |
+| `/.well-known/oauth-authorization-server` | OAuth 2.0 Authorization Server Metadata (RFC 8414) |
+| `/.well-known/jwks.json`                  | JSON Web Key Set for token verification (RFC 7517) |
+| `/.well-known/oauth-protected-resource`   | Protected Resource Metadata                        |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authorization Modes" icon="layer-group" href="/docs/authentication/modes">
+    Deep dive into public, transparent, and orchestrated modes
+  </Card>
+  <Card title="Token & Sessions" icon="key" href="/docs/authentication/token">
+    Configure token lifetimes and session management
+  </Card>
+  <Card title="Remote OAuth" icon="cloud" href="/docs/authentication/remote">
+    Connect to external identity providers
+  </Card>
+  <Card title="Production Checklist" icon="clipboard-check" href="/docs/authentication/production">
+    Security requirements for production deployments
+  </Card>
+</CardGroup>

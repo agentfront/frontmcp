@@ -1,0 +1,212 @@
+---
+title: Redis Setup
+description: Configure Redis for development and production deployments
+---
+
+# Redis Setup
+
+FrontMCP uses Redis for caching, session storage, and distributed state management.
+
+<Tip>
+**Deploying to Vercel?** Consider [Vercel KV](/docs/deployment/vercel-kv) for edge-compatible storage without managing Redis infrastructure.
+</Tip>
+
+## Requirements
+
+| Environment | Redis        | Notes                                    |
+| ----------- | ------------ | ---------------------------------------- |
+| Development | Recommended  | Enables full feature testing             |
+| Production  | **Required** | Essential for multi-instance deployments |
+
+## Development Setup
+
+### Option 1: Docker Compose (Recommended)
+
+Projects created with `frontmcp create --target node` include Docker files in the `ci/` folder:
+
+```bash
+# Start Redis
+docker compose -f ci/docker-compose.yml up redis -d
+
+# Verify Redis is running
+docker compose -f ci/docker-compose.yml exec redis redis-cli ping
+
+# Start the full stack (app + Redis)
+docker compose -f ci/docker-compose.yml up
+```
+
+<Tip>
+When running inside Docker, use `redis` (the service name) as `REDIS_HOST`, not `localhost`.
+Projects created with `frontmcp create` include a `ci/.env.docker` file with Docker-specific values.
+</Tip>
+
+### Option 2: Local Installation
+
+```bash
+# macOS
+brew install redis
+brew services start redis
+
+# Ubuntu/Debian
+sudo apt install redis-server
+sudo systemctl start redis
+```
+
+### Configuration
+
+```typescript
+import { CachePlugin } from '@frontmcp/plugins';
+
+CachePlugin.init({
+  type: 'redis',
+  config: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    db: parseInt(process.env.REDIS_DB || '0'),
+    tls: process.env.REDIS_TLS === 'true',
+  }
+});
+```
+
+<Tip>
+Already configuring the top-level `redis` block (or `redis.provider: 'vercel-kv'`) on `@FrontMcp`? Set `CachePlugin.init({ type: 'global-store' })` so the plugin automatically reuses that store without duplicating credentials.
+</Tip>
+
+For complete CachePlugin API documentation, see the [Cache Plugin Guide](/docs/plugins/cache-plugin).
+
+## Production Setup
+
+<Warning>
+Redis is **required** in production. Without Redis, session data will be lost on restart and caching will not persist across instances.
+</Warning>
+
+### Managed Redis Services (Recommended)
+
+| Provider    | Service               |
+| ----------- | --------------------- |
+| AWS         | ElastiCache for Redis |
+| GCP         | Memorystore for Redis |
+| Azure       | Azure Cache for Redis |
+| Upstash     | Serverless Redis      |
+| Redis Cloud | Redis Enterprise      |
+
+### Self-Hosted Production
+
+For self-hosted Redis in production:
+
+```yaml
+# docker-compose.prod.yml
+services:
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+```
+
+### Security Best Practices
+
+1. **Authentication**: Always set `REDIS_PASSWORD` in production
+2. **Network**: Run Redis in private network, not exposed to internet
+3. **TLS**: Enable TLS for encrypted connections
+4. **Persistence**: Use AOF for durability (`appendonly yes`)
+
+### Configuration Example
+
+```typescript
+// src/main.ts
+import 'reflect-metadata';
+import { FrontMcp } from '@frontmcp/sdk';
+import { CachePlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === 'true',
+  },
+  plugins: [
+    CachePlugin.init({
+      type: 'global-store',
+      defaultTTL: 600,
+    }),
+  ],
+})
+export default class Server {}
+```
+
+Switch the `redis` block to `{ provider: 'vercel-kv' }` when deploying on Vercel KV—the Cache Plugin will keep reusing the same store without code changes.
+
+## Environment Variables
+
+| Variable           | Required  | Default     | Description                                                                    |
+| ------------------ | --------- | ----------- | ------------------------------------------------------------------------------ |
+| `REDIS_HOST`       | Yes       | `localhost` | Redis server hostname                                                          |
+| `REDIS_PORT`       | No        | `6379`      | Redis server port                                                              |
+| `REDIS_PASSWORD`   | Prod only | -           | Redis authentication password                                                  |
+| `REDIS_DB`         | No        | `0`         | Redis database number                                                          |
+| `REDIS_TLS`        | No        | `false`     | Enable TLS encryption                                                          |
+| `REDIS_KEY_PREFIX` | No        | `mcp:`      | Key prefix for cache namespacing (CachePlugin uses content hashing by default) |
+
+## Health Checks
+
+```typescript
+import Redis from 'ioredis';
+
+async function checkRedisHealth(): Promise<boolean> {
+  const redis = new Redis({
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD,
+    lazyConnect: true,
+  });
+
+  try {
+    await redis.connect();
+    await redis.ping();
+    await redis.quit();
+    return true;
+  } catch {
+    return false;
+  }
+}
+```
+
+## Troubleshooting
+
+### Connection Refused
+
+- Verify Redis is running: `redis-cli ping`
+- Check firewall rules
+- Verify host/port configuration
+
+### Authentication Failed
+
+- Ensure `REDIS_PASSWORD` matches server config
+- Check for special characters in password (may need URL encoding)
+
+### Memory Issues
+
+- Set `maxmemory` and `maxmemory-policy` in Redis config
+- Monitor with `redis-cli INFO memory`
+
+### Docker Network Issues
+
+When using Docker Compose, the app container should use `redis` as the hostname (the service name), not `localhost`:
+
+```bash
+# Inside Docker container
+REDIS_HOST=redis
+
+# Outside Docker (local development)
+REDIS_HOST=localhost
+```
