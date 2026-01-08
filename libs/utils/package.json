@@ -26,7 +26,7 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@noble/ciphers": "^2.1.1",
-    "ast-guard": "^2.2.0"
+    "ast-guard": "^2.3.0"
   },
   "type": "commonjs",
   "main": "./dist/index.js",
