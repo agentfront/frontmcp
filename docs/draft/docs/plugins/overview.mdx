@@ -73,6 +73,10 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
     **Best for:** Expensive computations, API rate limiting, multi-tenant data, frequently accessed resources
 
   </Card>
+
+  <Card title="Dashboard Plugin" icon="monitor" href="/docs/plugins/dashboard">
+    Visualize your MCP server graph, tool metadata, and scopes through the streaming DashboardApp or plugin.
+  </Card>
 </CardGroup>
 
 <Note>More official plugins are coming soon! Rate limiting, observability, and validation plugins are in development.</Note>
@@ -227,12 +231,13 @@ When publishing a community plugin:
 
 Choose the right plugin for your use case:
 
-| Plugin       | Best For                  | Overhead | Scope        | Complexity  |
-| ------------ | ------------------------- | -------- | ------------ | ----------- |
-| **Remember** | Session memory, approvals | Low      | Per-session  | Low         |
-| **CodeCall** | Large toolsets, workflows | Low      | Cross-app    | Medium      |
-| **Cache**    | Expensive operations      | Minimal  | Per-tool     | Low         |
-| **Custom**   | Any cross-cutting feature | Varies   | Configurable | Medium-High |
+| Plugin        | Best For                           | Overhead | Scope        | Complexity  |
+| ------------- | ---------------------------------- | -------- | ------------ | ----------- |
+| **Remember**  | Session memory, approvals          | Low      | Per-session  | Low         |
+| **CodeCall**  | Large toolsets, workflows          | Low      | Cross-app    | Medium      |
+| **Cache**     | Expensive operations               | Minimal  | Per-tool     | Low         |
+| **Dashboard** | Real-time server graph & telemetry | Low      | Server       | Low         |
+| **Custom**    | Any cross-cutting feature          | Varies   | Configurable | Medium-High |
 
 ## Next Steps
 
@@ -246,6 +251,10 @@ Choose the right plugin for your use case:
   <Card title="Cache Plugin" icon="database" href="/docs/plugins/cache-plugin">
     Learn how to use the Cache plugin
   </Card>
+  <Card title="Dashboard Plugin" icon="monitor" href="/docs/plugins/dashboard">
+    Explore the DashboardApp and plugin for live visualization of tools, apps, and resources.
+  </Card>
+
   <Card title="Join Community" icon="users" href="https://github.com/agentfront/frontmcp/discussions">
     Get help and share your plugins
   </Card>

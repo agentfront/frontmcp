@@ -5,17 +5,19 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-08" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    **Features**
+    🚀 **Dashboard plugin** – Stream your server graph, tool metadata, and scopes through the new DashboardApp/plugin combo and its SSE-powered telemetry.
+    🧪 **Agents E2E demo** – Run `demo-e2e-agents` to exercise echo, calculator, and orchestrator agents with mock adapters, swarm visibility checks, and strongly typed schemas.
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
-
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    **Docs**
+    📚 **Dashboard plugin guide** – Step-by-step coverage of DashboardApp/Plugin setup, configuration knobs, and MCP tool APIs.
+    📚 **Agents E2E guide** – Walkthrough for the new Agents demo highlighting server auth, mock adapters, and testing patterns.
 
   </Card>
 </Update>

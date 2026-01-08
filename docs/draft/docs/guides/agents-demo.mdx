@@ -1,0 +1,107 @@
+---
+title: Agents E2E Demo
+slug: guides/agents-demo
+icon: robot
+description: Walkthrough for the demo-e2e-agents sample server and tests.
+---
+
+## Overview
+
+`apps/e2e/demo-e2e-agents` launches a dedicated MCP server that registers `EchoAgent`, `CalculatorAgent`, and `OrchestratorAgent`. It proves how agents appear as `invoke_<agent-id>` tools, how mock LLM adapters behave, and how swarms coordinate without real AI providers.
+
+<CardGroup cols={3}>
+  <Card title="Echo Agent" icon="megaphone">
+    Echoes every message and timestamps it, making it trivial to assert tool responses in E2E suites.
+  </Card>
+  <Card title="Calculator Agent" icon="calculator">
+    Sanitizes math expressions, returns structured success/error metadata, and demonstrates agent-level validation.
+  </Card>
+  <Card title="Orchestrator Agent" icon="network-wired">
+    Coordinates with the other agents via swarm visibility and simple keyword routing logic.
+  </Card>
+</CardGroup>
+
+<Info>
+  The sample uses `@frontmcp/testing` for fixtures and Jest for orchestration. All agents run with mock `AgentLlmAdapter`s so the suite stays offline.
+</Info>
+
+## Quick Start
+
+<Steps>
+  <Step title="Run the server">
+    Start the demo server on port 3020: `pnpm nx serve demo-e2e-agents --port 3020`.
+  </Step>
+  <Step title="Execute the tests">
+    Run the bundled suite: `pnpm nx test demo-e2e-agents`. The Jest config wires `@swc/jest`, sets `testTimeout` to 60s, and writes coverage into `coverage/e2e/demo-e2e-agents`.
+  </Step>
+  <Step title="Inspect coverage">
+    The suite already writes coverage data so you can merge it with `yarn coverage:merge` and track the agent surface.
+  </Step>
+</Steps>
+
+## Agents and Adapters
+
+`AgentsApp` registers all three agents and is used directly by the demo server. Each agent illustrates a different capability:
+
+### EchoAgent
+
+`mockEchoAdapter` captures the user's message and returns `Echo: <message>` plus an ISO timestamp. The input schema requires `message: string`, so tests can assert the tool metadata and ensure a timestamp is returned alongside the echoed text.
+
+### CalculatorAgent
+
+`mockCalculatorAdapter` and the `execute()` override sanitize arithmetic expressions, guard against invalid characters, and return `{ result, expression, success, error? }`. The agent remains visible to other agents via `swarm.isVisible`, showing tool-like behavior with typed outputs.
+
+### OrchestratorAgent
+
+`swarm.canSeeOtherAgents` is `true`, and `visibleAgents` lists `calculator-agent` and `echo-agent`. Its system instructions describe the available agents and the logic inspects keywords (`calculate`, `echo`, `repeat`) to delegate or complete tasks directly.
+
+## Testing Patterns
+
+The E2E suite proves that each agent becomes a callable tool and respects the declared schemas:
+
+```ts
+test.use({
+  server: 'apps/e2e/demo-e2e-agents/src/main.ts',
+  publicMode: true,
+});
+
+const tools = await mcp.tools.list();
+expect(tools).toContainTool('invoke_echo-agent');
+expect(tools).toContainTool('invoke_calculator-agent');
+```
+
+Tests also assert the schema `required` fields, inspect `invoke_*` descriptions, and call the agents to verify echo, math, and delegation responses.
+
+## Swarm & Authorization
+
+The demo server is configured for public mode sessions with explicit transport settings:
+
+```ts
+@FrontMcp({
+  auth: {
+    mode: 'public',
+    sessionTtl: 3600,
+    anonymousScopes: ['anonymous'],
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+      enableLegacySSE: true,
+      enableSseListener: true,
+    },
+  },
+})
+```
+
+This setup keeps SSE, streamable HTTP, and legacy transports available so agents, tools, and inspectors can reconnect reliably.
+
+## Test Configuration
+
+`jest.e2e.config.ts` ships with the demo: it forces exit after the suite, limits `maxWorkers` to 1, and loads `<rootDir>/../../../libs/testing/src/setup.ts`. It also merges coverage via `jest.e2e.coverage.preset.js` and maps `@frontmcp/sdk`, `@frontmcp/plugins`, and `@frontmcp/adapters` to their source entries.
+
+<Note>The config transforms TypeScript with `@swc/jest` and whitelists `jose` in `node_modules`, ensuring decorators work for the agents. Keep the coverage directory so you can aggregate the data with `coverage:merge`.</Note>
+
+## Extending the Demo
+
+Swap in real LLM adapters, add new agents, or point the orchestrator at additional worker agents. The mock adapters show how to stay offline while you iterate on tooling, and the suite proves that agent tools, metadata, and swarm settings behave predictably.
