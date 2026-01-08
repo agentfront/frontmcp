@@ -1,3 +1,23 @@
+## [v0.7.0] - 2026-01-08
+
+### feat
+
+- Introduce remote app gateways so FrontMCP servers can register external MCP URLs, namespace their tools/prompts/resources, and reuse CachePlugin patterns plus transport options when proxying those capabilities.
+- Extend tools and agents with `notify()`/`progress()` plus automatic progress token support so long-running flows stream statuses back to clients that include `_meta.progressToken`.
+- Expand `@frontmcp/utils` with `createStorage`, TTL/pattern helpers, and auto-detection so Remember, Cache, and Approval stores pick Redis, Vercel KV, or memory safely while the memory demo ships tools/resources/prompts to inspect stored values.
+
+### fix
+
+- Harden `JwksService` verification (new OpenAPI security tests, weak-RSA warning/fallback, and clearer logs) so JWKS-based tokens keep verifying even when some providers still sign with smaller keys.
+
+### docs
+
+- Document remote apps, progress notifications, and session recovery so operators know how to wire remote MCP servers, surface job progress, and reconnect streamable transports after restarts.
+
+### build
+
+- Bump the synchronized packages to 0.7.0 and add the Nx `test`, `test:e2e`, and coverage scripts so releases can run unified unit/e2e suites plus coverage merging before publishing.
+
 ## [v0.6.3] - 2025-12-27
 
 ### feat
@@ -87,8 +107,7 @@
 
 ### build
 
-- Add Docker assets, multi-stage builds, and Redis setup scripts so generated projects can run locally or in CI without manual tweaks.
-- Improve the release pipeline by iterating dist folders for Verdaccio publishes and keeping Nx release commands in sync with lockfiles.
+- Add Docker assets, multi-stage builds, and Redis setup scripts so generational README updates and release pipelines stay aligned with versioned assets.
 
 ### ci
 
@@ -127,7 +146,7 @@
 
 ### build
 
-- Require Node >= 22 (tested on 24), bump @types/node to 24, upgrade to MCP SDK 1.23, Zod 4, add @huggingface/transformers + zod-from-json-schema, and align Nx tooling + engine metadata.
+- Require Node ≥ 22 (tested on 24), bump @types/node to 24, upgrade to MCP SDK 1.23, Zod 4, add @huggingface/transformers + zod-from-json-schema, and align Nx tooling + engine metadata.
 - Streamline CI by skipping CUDA for ONNX validator installs and tightening SWC/Jest configs across packages.
 
 ## [v0.4.0] - 2025-11-22
@@ -152,8 +171,7 @@
 
 ### feat
 
-- Support split-by-app deployments with scoped base paths so per-app auth providers and transports work without
-  collisions.
+- Support split-by-app deployments with scoped base paths so per-app auth providers and transports work without collisions.
 - Expand the demo workspace with calculator and employee time-tracking sample apps to showcase scoped tooling.
 
 ### fix
@@ -169,14 +187,12 @@
 
 ### feat
 
-- Expose `FlowHooksOf(...)` helpers so custom hooks can target Will/Did/Around stages across HTTP, transport, auth, and
-  tool flows.
+- Expose `FlowHooksOf(...)` helpers so custom hooks can target Will/Did/Around stages across HTTP, transport, auth, and tool flows.
 - Ship the Cache plugin with memory and Redis stores plus per-tool TTL and sliding-window refresh controls.
 
 ### fix
 
-- Stringify JSON request bodies before issuing OpenAPI adapter requests so downstream APIs receive valid
-  `application/json`.
+- Stringify JSON request bodies before issuing OpenAPI adapter requests so downstream APIs receive valid `application/json`.
 
 ### docs
 
@@ -224,22 +240,17 @@ This was a version bump only, there were no code changes.
 
 ## 0.2.0 (2025-11-05)
 
-FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector, smarter
-config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
+FrontMCP 0.2.0 focuses on a zero-friction developer experience: a project generator, one-command Inspector, smarter config checks, and ergonomic tool schemas—plus a **dev-only no-auth mode** for quick local testing.
 
 - 🧪 **Dev-only no-auth**: run without auth _in development mode only_. Example: <code>frontmcp dev --no-auth</code>
-- 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json scripts, and
-  starter files.
+- 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json scripts, and starter files.
 - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
 - 🔭 **Inspector, zero setup**: <code>frontmcp inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
 - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-- ✨ **Tool schema ergonomics**: pass Zod fields directly (<code>inputSchema: &#123; ... &#125;</code> /
-  <code>outputSchema: &#123; ... &#125;</code>).
+- ✨ **Tool schema ergonomics**: pass Zod fields directly (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
 - ⚡ **Async type checks in dev**: background type-checking while watching files.
-- 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>; builds
-  to <code>./dist</code> (override with <code>--out-dir</code>).
-- 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and session-aware
-  SSE.
+- 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>; builds to <code>./dist</code> (override with <code>--out-dir</code>).
+- 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and session-aware SSE.
 - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
 
 ## 0.1.3 (2025-11-05)

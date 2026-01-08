@@ -17,6 +17,7 @@ mode: center
 Your MCP server works locally. It handles tools, resources, prompts—maybe even agents. Now you need it in production.
 
 Traditional deployment means:
+
 - Provisioning servers
 - Setting up load balancers
 - Configuring Redis for sessions
@@ -111,22 +112,22 @@ vercel.json                   # Build commands
 ```
 
 The `.vc-config.json` configures:
+
 - **Runtime:** Node.js 22.x
 - **Handler:** `handler.cjs`
 - **Launcher:** Nodejs type
 
 Routes in `config.json` point all traffic to your function.
+
 </Accordion>
 
 ---
-
 
 <img
   className="blog-full-image"
   src="../../assets/banners/deploy-to-vercel/architecture.png"
   alt="FrontMCP deploying to Vercel's global edge network"
 />
-
 
 ## Deployment Steps
 
@@ -140,6 +141,7 @@ Routes in `config.json` point all traffic to your function.
     <Check>
     You should see `.vercel/output/` directory created.
     </Check>
+
   </Step>
 
   <Step title="Add Environment Variables">
@@ -153,6 +155,7 @@ Routes in `config.json` point all traffic to your function.
     ```bash
     vercel env add OPENAI_API_KEY production
     ```
+
   </Step>
 
   <Step title="Deploy">
@@ -169,6 +172,7 @@ Routes in `config.json` point all traffic to your function.
     <Check>
     Vercel returns a URL like `https://my-mcp-server.vercel.app`
     </Check>
+
   </Step>
 
   <Step title="Verify">
@@ -184,6 +188,7 @@ Routes in `config.json` point all traffic to your function.
       -H "Content-Type: application/json" \
       -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
     ```
+
   </Step>
 </Steps>
 
@@ -204,6 +209,7 @@ Standard Redis requires a persistent TCP connection—which serverless doesn't h
     4. Name it (e.g., `my-mcp-sessions`)
 
     Vercel automatically adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` to your environment.
+
   </Step>
 
   <Step title="Configure FrontMCP">
@@ -234,14 +240,14 @@ Standard Redis requires a persistent TCP connection—which serverless doesn't h
 
 ### Vercel KV vs Standard Redis
 
-| Feature | Vercel KV | Standard Redis |
-| ------- | --------- | -------------- |
-| **Transport** | REST (edge-compatible) | TCP (requires connection) |
-| **Latency** | ~5-15ms | ~1-5ms |
-| **Pub/Sub** | Not supported | Supported |
-| **Resource Subscriptions** | Requires hybrid setup | Fully supported |
-| **Setup** | One-click in dashboard | Provision + configure |
-| **Cost** | Pay-per-request | Fixed instance cost |
+| Feature                    | Vercel KV              | Standard Redis            |
+| -------------------------- | ---------------------- | ------------------------- |
+| **Transport**              | REST (edge-compatible) | TCP (requires connection) |
+| **Latency**                | ~5-15ms                | ~1-5ms                    |
+| **Pub/Sub**                | Not supported          | Supported                 |
+| **Resource Subscriptions** | Requires hybrid setup  | Fully supported           |
+| **Setup**                  | One-click in dashboard | Provision + configure     |
+| **Cost**                   | Pay-per-request        | Fixed instance cost       |
 
 <Tip>
 For most MCP servers, Vercel KV is the right choice. It handles sessions, caching, and state—which is 90% of what you need. Only use standard Redis if you need real-time resource subscriptions.
@@ -255,11 +261,11 @@ For most MCP servers, Vercel KV is the right choice. It handles sessions, cachin
 
 Vercel serverless functions have timeout limits:
 
-| Tier | Max Duration |
-| ---- | ------------ |
-| Hobby | 60 seconds |
-| Pro | 300 seconds |
-| Enterprise | 900 seconds |
+| Tier       | Max Duration |
+| ---------- | ------------ |
+| Hobby      | 60 seconds   |
+| Pro        | 300 seconds  |
+| Enterprise | 900 seconds  |
 
 <Warning>
 If your MCP operations take longer than 60 seconds on Hobby tier, they'll fail. For long-running agent tasks, consider Pro tier or chunking the work.
@@ -328,6 +334,7 @@ As long as the client sends its `session-id` header (or uses the same SSE connec
 </Tip>
 
 This means:
+
 - **No client-side reconnection logic** needed for cold starts
 - **Session state persists** across function invocations
 - **Seamless experience** even with aggressive function recycling
@@ -400,6 +407,7 @@ FrontMCP auto-detects your package manager. If you use yarn or pnpm, the generat
 ### Vercel Dashboard
 
 The Vercel dashboard shows:
+
 - Function invocations and duration
 - Error rates and logs
 - Request/response details
@@ -422,6 +430,7 @@ class MyTool extends ToolContext {
 ```
 
 View logs with:
+
 ```bash
 vercel logs https://my-mcp-server.vercel.app
 ```
@@ -473,12 +482,12 @@ Connect your git repository for automatic deployments:
 
 Vercel's serverless pricing is usage-based:
 
-| Resource | Hobby (Free) | Pro ($20/mo) |
-| -------- | ------------ | ------------ |
-| Function Invocations | 100K/mo | 1M/mo |
-| Function Duration | 100 GB-hrs | 1000 GB-hrs |
-| Bandwidth | 100 GB | 1 TB |
-| KV Operations | 30K/day | 150K/day |
+| Resource             | Hobby (Free) | Pro ($20/mo) |
+| -------------------- | ------------ | ------------ |
+| Function Invocations | 100K/mo      | 1M/mo        |
+| Function Duration    | 100 GB-hrs   | 1000 GB-hrs  |
+| Bandwidth            | 100 GB       | 1 TB         |
+| KV Operations        | 30K/day      | 150K/day     |
 
 <Tip>
 For MCP servers, the main cost drivers are function duration (LLM calls take time) and KV operations (session storage). Most projects stay well within free tier limits.
@@ -496,6 +505,7 @@ For MCP servers, the main cost drivers are function duration (LLM calls take tim
     - Increase max duration in `vercel.json`
     - Upgrade to Pro tier for longer limits
     - Break long operations into smaller chunks
+
   </Accordion>
 
   <Accordion title="Missing Environment Variables">
@@ -506,6 +516,7 @@ For MCP servers, the main cost drivers are function duration (LLM calls take tim
     vercel env add OPENAI_API_KEY production
     vercel deploy --prod
     ```
+
   </Accordion>
 
   <Accordion title="Cold Start Latency">
@@ -515,6 +526,7 @@ For MCP servers, the main cost drivers are function duration (LLM calls take tim
     - Keep functions small (faster cold starts)
     - Use edge functions for ultra-low latency
     - Consider Pro tier with more resources
+
   </Accordion>
 
   <Accordion title="KV Connection Errors">
@@ -524,6 +536,7 @@ For MCP servers, the main cost drivers are function duration (LLM calls take tim
     - Ensure KV database is linked to project
     - Check that `KV_REST_API_URL` and `KV_REST_API_TOKEN` are set
     - Redeploy after linking KV
+
   </Accordion>
 </AccordionGroup>
 

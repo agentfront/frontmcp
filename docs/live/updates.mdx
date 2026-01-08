@@ -5,7 +5,22 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.7.0" description="2026-01-08" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.7.0: Remote gateways, progress notifications, and resilient storage"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.7.0"
+    cta="View full changlog"
+  >
+    🚀 **Remote App Gateway** – Aggregate tools, prompts, and resources from remote MCP servers behind a single proxy with shared auth, namespaces, and caching.
 
+    🛰️ **Progress notifications** – Tools and agents can call `notify`/`progress` while clients supply a `progressToken`, keeping long-running jobs visible with live updates.
+
+    🧠 **Memory observability tools** – The Remember plugin demo now ships memory-checking tools, stats resources, and prompts so sessions can audit remembered values.
+
+    ⚡ **Smart storage helpers** – `@frontmcp/utils` exposes `createStorage`, TTL utilities, and glob/pattern guards so plugins auto-select Redis, Vercel KV, or memory stores with safe defaults.
+
+  </Card>
+</Update>
 
 <Update label="v0.6.x" description="2025-12-24" tags={["Releases"]}>
   <Card

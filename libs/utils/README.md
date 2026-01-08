@@ -105,6 +105,35 @@ await ensureDir('/path/to/directory');
 await isDirEmpty('/path/to/directory');
 ```
 
+## Storage Utilities
+
+`@frontmcp/utils` now exposes a unified storage layer that automatically picks Upstash, Vercel KV, Redis, or an in-memory adapter so caches, approvals, and keep-alive stores work the same in serverless, edge, or local setups. Use `createStorage()` for async adapters (auto-detection + TTLs) and `createMemoryStorage()` when you need a synchronous helper that keeps everything in-process.
+
+```ts
+import {
+  createStorage,
+  createMemoryStorage,
+  NamespacedStorageImpl,
+  buildPrefix,
+  globToRegex,
+  validateTTL,
+  MAX_TTL_SECONDS,
+} from '@frontmcp/utils';
+
+const store = await createStorage({ prefix: 'app:' });
+await store.set('session:123', JSON.stringify({ user: 'alice' }));
+
+const sessionStore = store.namespace('session', '123');
+await sessionStore.set('lastSeen', new Date().toISOString());
+
+const memoryOnly = createMemoryStorage({ maxEntries: 1000 });
+
+const pattern = globToRegex('session:*:metadata');
+validateTTL(Math.min(3600, MAX_TTL_SECONDS));
+```
+
+Helper types such as `NamespacedStorageImpl` and `buildPrefix` make it easy to layer prefixes on top of shared adapters, while the TTL/pattern utilities keep glob matching and expiry math consistent across plugins and demos.
+
 ## License
 
 Apache-2.0
