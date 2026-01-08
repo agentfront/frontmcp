@@ -2,10 +2,10 @@
  * Cross-Platform Crypto Module
  *
  * Provides cryptographic operations that work in both Node.js and browser environments.
- * Uses @noble/hashes + @noble/ciphers so it can be bundled for browsers.
+ * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
-import { browserCrypto } from './browser';
+import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
 
 // Lazy-loaded provider
@@ -16,11 +16,19 @@ let _provider: CryptoProvider | null = null;
  * Lazily initializes the provider.
  *
  * Note: this module intentionally avoids importing any Node-only crypto modules
- * so it can be used in browser builds without pulling in `node:crypto`.
+ * at module-load time so it can be used in browser builds without pulling them in.
  */
 export function getCrypto(): CryptoProvider {
   if (!_provider) {
-    _provider = browserCrypto;
+    if (isNode()) {
+      // Node.js: keep crypto module isolated from browser builds
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _provider = require('./node').nodeCrypto as CryptoProvider;
+    } else {
+      // Browser: noble-based implementation
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _provider = require('./browser').browserCrypto as CryptoProvider;
+    }
   }
   // Provider is always initialized in the if block above
   if (!_provider) {

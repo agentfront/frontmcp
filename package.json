@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "nx serve demo",
     "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint",
     "docs:live": "cd docs/live && mint dev --port 4100",
     "docs:draft": "cd docs/draft && mint dev --port 4200",
     "prepare": "husky",

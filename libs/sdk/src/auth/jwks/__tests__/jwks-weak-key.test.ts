@@ -4,8 +4,48 @@
  * Tests for fallback verification when OAuth providers use RSA keys < 2048 bits.
  * This is a security concern but should work with a warning.
  */
-import { generateRsaKeyPair, rsaSign } from '../../../../../utils/src/crypto/node';
+import crypto from 'crypto';
 import { JwksService } from '../jwks.service';
+
+type RsaJwk = {
+  kty: 'RSA';
+  kid: string;
+  alg: string;
+  use: 'sig';
+  n: string;
+  e: string;
+};
+
+type RsaKeyPair = {
+  privateKey: crypto.KeyObject;
+  publicKey: crypto.KeyObject;
+  publicJwk: RsaJwk;
+};
+
+function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
+  const kid = `rsa-key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength });
+  const exported = publicKey.export({ format: 'jwk' }) as { n: string; e: string };
+  return {
+    privateKey,
+    publicKey,
+    publicJwk: {
+      kty: 'RSA',
+      kid,
+      alg,
+      use: 'sig',
+      n: exported.n,
+      e: exported.e,
+    },
+  };
+}
+
+function rsaSign(algorithm: string, data: Buffer, privateKey: crypto.KeyObject): Buffer {
+  const signer = crypto.createSign(algorithm);
+  signer.update(data);
+  signer.end();
+  return signer.sign(privateKey);
+}
 
 describe('JwksService Weak RSA Key Handling', () => {
   let service: JwksService;
@@ -29,7 +69,7 @@ describe('JwksService Weak RSA Key Handling', () => {
     payload: Record<string, unknown>,
     privateKey: ReturnType<typeof generateRsaKeyPair>['privateKey'],
     kid: string,
-    alg: string = 'RS256',
+    alg = 'RS256',
   ): string {
     const header = { alg, typ: 'JWT', kid };
     const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');

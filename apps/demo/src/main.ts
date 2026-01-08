@@ -1,4 +1,4 @@
-import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { DashboardApp } from '@frontmcp/plugins';
 
 // Other demo apps available but not active:
@@ -8,17 +8,9 @@ import CalculatorMcpApp from './apps/calculator';
 import EmployeeTimeMcpApp from './apps/employee-time';
 import CrmMcpApp from './apps/crm';
 
-@App({
-  id: 'agent-link',
-  name: 'Agent Link',
-  adapters: [],
-})
-class AgentLinkApp {}
-
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  // apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
-  apps: [AgentLinkApp],
+  apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
   logging: { level: LogLevel.Verbose },
   http: {
     port: 3003,
@@ -27,7 +19,16 @@ class AgentLinkApp {}
     enableLegacySSE: true,
   },
   auth: {
-    mode: 'public',
+    mode: 'transparent',
+    remote: {
+      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
+      name: 'frontegg',
+      dcrEnabled: false,
+    },
+    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
+    requiredScopes: [],
+    allowAnonymous: true, // Allow anonymous access for demo
+    anonymousScopes: ['anonymous'],
   },
 })
 export default class Server {}
