@@ -92,8 +92,8 @@
     "./esm": null
   },
   "peerDependencies": {
-    "@frontmcp/sdk": "0.6.3",
-    "@frontmcp/ui": "0.6.3",
+    "@frontmcp/sdk": "0.7.0",
+    "@frontmcp/ui": "0.7.0",
     "@playwright/test": "^1.40.0",
     "jest": "^29.0.0",
     "@jest/globals": "^29.0.0"
