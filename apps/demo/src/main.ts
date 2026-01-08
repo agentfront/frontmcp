@@ -8,14 +8,6 @@ import CalculatorMcpApp from './apps/calculator';
 import EmployeeTimeMcpApp from './apps/employee-time';
 import CrmMcpApp from './apps/crm';
 
-import fs from 'node:fs';
-import OpenapiAdapter from '@frontmcp/adapters/openapi';
-const spec = JSON.parse(
-  fs.readFileSync('/Users/davidfrontegg/git/app-integrations/tools/openapi-generator/openapi.json', {
-    encoding: 'utf-8',
-  }),
-);
-
 @App({
   id: 'agent-link',
   name: 'Agent Link',
