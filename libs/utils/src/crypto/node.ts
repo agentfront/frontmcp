@@ -4,7 +4,7 @@
  * Implementation using Node.js native crypto module.
  */
 
-import crypto from 'node:crypto';
+import crypto from 'crypto';
 import type { CryptoProvider } from './types';
 
 /**
@@ -99,3 +99,114 @@ export const nodeCrypto: CryptoProvider = {
     return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// RSA KEY UTILITIES (Node.js only)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * RSA JWK structure for public keys
+ */
+export interface RsaJwk {
+  kty: 'RSA';
+  kid: string;
+  alg: string;
+  use: 'sig';
+  n: string;
+  e: string;
+}
+
+/**
+ * RSA key pair structure
+ */
+export interface RsaKeyPair {
+  /** Private key for signing */
+  privateKey: crypto.KeyObject;
+  /** Public key for verification */
+  publicKey: crypto.KeyObject;
+  /** Public key in JWK format */
+  publicJwk: RsaJwk;
+}
+
+/**
+ * Generate an RSA key pair with the specified modulus length
+ *
+ * @param modulusLength - Key size in bits (default: 2048)
+ * @param alg - JWT algorithm (default: 'RS256')
+ * @returns RSA key pair with private, public keys and JWK
+ */
+export function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
+  const kid = `rsa-key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength,
+  });
+
+  const exported = publicKey.export({ format: 'jwk' }) as {
+    n: string;
+    e: string;
+  };
+  const publicJwk: RsaJwk = {
+    ...exported,
+    kid,
+    alg,
+    use: 'sig',
+    kty: 'RSA',
+  };
+
+  return { privateKey, publicKey, publicJwk };
+}
+
+/**
+ * Sign data using RSA with the specified algorithm
+ *
+ * @param algorithm - Node.js crypto algorithm (e.g., 'RSA-SHA256')
+ * @param data - Data to sign
+ * @param privateKey - Private key to sign with
+ * @returns Signature buffer
+ */
+export function rsaSign(algorithm: string, data: Buffer, privateKey: crypto.KeyObject): Buffer {
+  return crypto.sign(algorithm, data, privateKey);
+}
+
+/**
+ * Map JWT algorithm to Node.js crypto algorithm
+ */
+export function jwtAlgToNodeAlg(jwtAlg: string): string {
+  const mapping: Record<string, string> = {
+    RS256: 'RSA-SHA256',
+    RS384: 'RSA-SHA384',
+    RS512: 'RSA-SHA512',
+    PS256: 'RSA-PSS-SHA256',
+    PS384: 'RSA-PSS-SHA384',
+    PS512: 'RSA-PSS-SHA512',
+  };
+  return mapping[jwtAlg] ?? 'RSA-SHA256';
+}
+
+/**
+ * Create a JWT signed with an RSA key
+ *
+ * @param payload - JWT payload
+ * @param privateKey - RSA private key
+ * @param kid - Key ID for the JWT header
+ * @param alg - JWT algorithm (default: 'RS256')
+ * @returns Signed JWT string
+ */
+export function createSignedJwt(
+  payload: Record<string, unknown>,
+  privateKey: crypto.KeyObject,
+  kid: string,
+  alg = 'RS256',
+): string {
+  const header = { alg, typ: 'JWT', kid };
+  const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signatureInput = `${headerB64}.${payloadB64}`;
+
+  const nodeAlgorithm = jwtAlgToNodeAlg(alg);
+  const signature = crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), privateKey);
+  const signatureB64 = signature.toString('base64url');
+
+  return `${headerB64}.${payloadB64}.${signatureB64}`;
+}

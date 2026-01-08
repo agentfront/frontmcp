@@ -1,5 +1,9 @@
 /**
  * Unit tests for OpenAPI security functions
+ *
+ * These tests mock SecurityResolver to test createSecurityContextFromAuth
+ * in isolation. For end-to-end security flow tests (including actual
+ * Authorization header generation), see openapi-security-integration.spec.ts
  */
 
 import {

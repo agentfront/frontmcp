@@ -1,4 +1,4 @@
-import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { DashboardApp } from '@frontmcp/plugins';
 
 // Other demo apps available but not active:
@@ -8,9 +8,25 @@ import CalculatorMcpApp from './apps/calculator';
 import EmployeeTimeMcpApp from './apps/employee-time';
 import CrmMcpApp from './apps/crm';
 
+import fs from 'node:fs';
+import OpenapiAdapter from '@frontmcp/adapters/openapi';
+const spec = JSON.parse(
+  fs.readFileSync('/Users/davidfrontegg/git/app-integrations/tools/openapi-generator/openapi.json', {
+    encoding: 'utf-8',
+  }),
+);
+
+@App({
+  id: 'agent-link',
+  name: 'Agent Link',
+  adapters: [],
+})
+class AgentLinkApp {}
+
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
-  apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
+  // apps: [DashboardApp, WeatherMcpApp, CrmMcpApp, ExpenseMcpApp, CalculatorMcpApp, EmployeeTimeMcpApp],
+  apps: [AgentLinkApp],
   logging: { level: LogLevel.Verbose },
   http: {
     port: 3003,
@@ -19,16 +35,7 @@ import CrmMcpApp from './apps/crm';
     enableLegacySSE: true,
   },
   auth: {
-    mode: 'transparent',
-    remote: {
-      provider: process.env['IDP_PROVIDER_URL'] || 'https://sample-app.frontegg.com',
-      name: 'frontegg',
-      dcrEnabled: false,
-    },
-    expectedAudience: process.env['IDP_EXPECTED_AUDIENCE'] || 'https://sample-app.frontegg.com',
-    requiredScopes: [],
-    allowAnonymous: true, // Allow anonymous access for demo
-    anonymousScopes: ['anonymous'],
+    mode: 'public',
   },
 })
 export default class Server {}

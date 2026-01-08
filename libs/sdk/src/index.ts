@@ -1,4 +1,20 @@
 import 'reflect-metadata';
+
+// Suppress Express req.host deprecation warning triggered by Zod v4 during object validation
+// Zod v4 internally accesses .host on objects which triggers Express's deprecation warning
+// This is harmless but noisy - see: https://github.com/colinhacks/zod/issues
+(function suppressZodExpressWarning() {
+  const originalEmitWarning = process.emitWarning.bind(process);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process as any).emitWarning = (warning: string | Error, ...args: any[]) => {
+    const message = typeof warning === 'string' ? warning : warning?.message;
+    if (message?.includes('req.host') && message?.includes('req.hostname')) {
+      return; // Suppress the Express req.host deprecation warning from Zod v4
+    }
+    return originalEmitWarning(warning, ...args);
+  };
+})();
+
 import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';

@@ -62,47 +62,6 @@ One update per release for all synchronized packages:
 - Focus on benefits and practical capabilities
 - NO changelog link at end (href already points to releases)
 
-#### B. Independent Libraries
-
-> **Note:** Independent libraries (`json-schema-to-zod-v3`, `mcp-from-openapi`, etc.) have been moved to external repositories. This section is kept for historical reference only. New releases no longer include independent library updates.
-
-Separate update per independent library published in this release:
-
-```mdx
-<Update label="my-library v1.2.0" description="2025-11-22" tags={["Independent"]}>
-  <Card
-    title="my-library v1.2.0"
-    href="https://github.com/org/my-library"
-    cta="Explore the library"
-  >
-    🔒 **Feature 1** – Description of what this feature does for users.
-
-    🧠 **Feature 2** – Another benefit-focused description.
-
-    🛠️ **Feature 3** – How this improves the user experience.
-
-  </Card>
-</Update>
-```
-
-**Fields:**
-
-- `label`: `"{package-name} v{version}"` (e.g., `"my-library v1.2.0"`)
-- `description`: ISO date format `"YYYY-MM-DD"` (same as FrontMCP release)
-- `tags`: `{["Independent"]}`
-- `title`: `"{package-name} v{version}"`
-- `href`: Link to the library's repository
-- `cta`: `"Explore the library"`
-
-**Content format:**
-
-- Use emoji at start of each line
-- Format: `emoji **Bold feature name** – Description.`
-- Use en dash (–) not hyphen (-)
-- Each feature on its own line with blank line between
-- Focus on practical use cases
-- NO changelog link at end
-
 ## Complete Example
 
 ### Live Updates (docs/live/updates.mdx)
