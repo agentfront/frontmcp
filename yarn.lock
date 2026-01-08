@@ -5143,10 +5143,10 @@ assert-plus@1.0.0, assert-plus@^1.0.0:
   resolved "https://registry.yarnpkg.com/assert-plus/-/assert-plus-1.0.0.tgz#f12e0f3c5d77b0b1cdd9146942e4e96c1e4dd525"
   integrity sha512-NfJ4UzBCcQGLDlQq7nHxH+tv3kyZ0hHQqF5BO6J7tNJeP5do1llPr8dZ8zHonfhAu0PHAdMkSo+8o0wxg9lZWw==
 
-ast-guard@2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/ast-guard/-/ast-guard-2.1.0.tgz#85db8b0bfa9e0704ed2a0b0adf7f3d8cb9f158ca"
-  integrity sha512-mXtP6LGceFmH//wey8rZR47ZABqEIVstgmb1/Drwi+UhkFus3SDMkNoalHZ0AEY7K+ftCyJy5g+2DK4q0SqDLA==
+ast-guard@2.2.0, ast-guard@^2.2.0:
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/ast-guard/-/ast-guard-2.2.0.tgz#fad899306f617f8a644f35e7898067574b4d795a"
+  integrity sha512-bcjrT/wj2A6/gNTPjeBHr8lxUhw/2iQNNHLyAyJA0+YfAh6iTcUsSNJUvWXRGkJAIenVXACUX034TsmkM8onAA==
   dependencies:
     acorn "8.15.0"
     acorn-walk "8.3.4"
@@ -6657,14 +6657,14 @@ emojis-list@^3.0.0:
   resolved "https://registry.yarnpkg.com/emojis-list/-/emojis-list-3.0.0.tgz#5570662046ad29e2e916e71aae260abdff4f6a78"
   integrity sha512-/kyM18EfinwXZbno9FyUGeFh87KC8HRQBQGildHZbEuRyWFOmv1U10o9BBp8XVZDVNNuQKyIGIu5ZYAAXJ0V2Q==
 
-enclave-vm@^2.4.0:
-  version "2.4.0"
-  resolved "https://registry.yarnpkg.com/enclave-vm/-/enclave-vm-2.4.0.tgz#1ca777eeacb075ed5b3834fbbde8c1d0aa16455b"
-  integrity sha512-XExT4I226ghSocSjoKcYv61GWDveqSkhUmYd8CUZjm/eEohToST7JWmMg+htviCJAgxdcmq6hLzeYEjjEuxYfQ==
+enclave-vm@^2.5.0:
+  version "2.5.0"
+  resolved "https://registry.yarnpkg.com/enclave-vm/-/enclave-vm-2.5.0.tgz#4b7a38621cd13e8e17fdf3993fcbf8e03ebda69f"
+  integrity sha512-w4coCt/0dVGE/sPnZfSEJs110MYZcnsD51lDxiys3tI1CXhp6Qwk5X1HzXn50moYGd4h8kQRLWDARsyQJ5fNFg==
   dependencies:
     acorn "8.15.0"
     acorn-walk "8.3.4"
-    ast-guard "2.1.0"
+    ast-guard "2.2.0"
     astring "1.9.0"
     zod "^4.1.13"
 
@@ -13528,10 +13528,10 @@ vary@^1, vary@^1.1.2, vary@~1.1.2:
   resolved "https://registry.yarnpkg.com/vary/-/vary-1.1.2.tgz#2299f02c6ded30d4a5961b0b9f74524a18f634fc"
   integrity sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==
 
-vectoriadb@^2.0.1:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/vectoriadb/-/vectoriadb-2.0.1.tgz#ff0db58380fbf8a05e429bdb3e2ca7e51fc2fda9"
-  integrity sha512-sAiS5hO/mB3aaWY2beXJDmLebUhleyo6DweM1ZIUlFh6vkoyBUTv6S+6c7uCU6DRoy5JieRUwFI1ciF0Piq2JA==
+vectoriadb@^2.0.2:
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/vectoriadb/-/vectoriadb-2.0.2.tgz#1b16d4229199a3cc8eb8ea521fc41f7841ed7f56"
+  integrity sha512-9gGhIirz4GUxmqpr/T6/y/0dCnKjgacKVfKj2RPws5t4s2NFiGo/HQn9e5gGevoldQvl8PV+JlSwExSRnIS3qA==
 
 verdaccio-audit@13.0.0-next-8.27:
   version "13.0.0-next-8.27"

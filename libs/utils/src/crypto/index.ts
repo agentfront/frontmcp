@@ -5,29 +5,39 @@
  * Uses native crypto in Node.js and @noble/hashes + @noble/ciphers in browsers.
  */
 
-import { isNode } from './runtime';
+import { assertNode, isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
+export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
 // Lazy-loaded provider
 let _provider: CryptoProvider | null = null;
 
 /**
  * Get the crypto provider for the current runtime environment.
- * Lazily initializes the appropriate provider (Node.js or browser).
+ * Lazily initializes the provider.
+ *
+ * Note: this module intentionally avoids importing any Node-only crypto modules
+ * at module-load time so it can be used in browser builds without pulling them in.
  */
 export function getCrypto(): CryptoProvider {
   if (!_provider) {
     if (isNode()) {
+      // Node.js: keep crypto module isolated from browser builds
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./node').nodeCrypto as CryptoProvider;
     } else {
+      // Browser: noble-based implementation
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }
-  // Provider is always initialized in the if block above
-  if (!_provider) {
-    throw new Error('Failed to initialize crypto provider');
-  }
-  return _provider;
+  return _provider!;
+}
+
+export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
+  assertNode('rsaVerify');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./node').rsaVerify(jwtAlg, data, publicJwk, signature) as boolean;
 }
 
 // Convenience function exports - delegate to provider

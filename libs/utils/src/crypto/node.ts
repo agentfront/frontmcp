@@ -6,6 +6,8 @@
 
 import crypto from 'node:crypto';
 import type { CryptoProvider } from './types';
+import { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
+export { isRsaPssAlg, jwtAlgToNodeAlg } from './jwt-alg';
 
 /**
  * Convert Node.js Buffer to Uint8Array.
@@ -99,3 +101,127 @@ export const nodeCrypto: CryptoProvider = {
     return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// RSA KEY UTILITIES (Node.js only)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * RSA JWK structure for public keys
+ */
+export interface RsaJwk {
+  kty: 'RSA';
+  kid: string;
+  alg: string;
+  use: 'sig';
+  n: string;
+  e: string;
+}
+
+/**
+ * RSA key pair structure
+ */
+export interface RsaKeyPair {
+  /** Private key for signing */
+  privateKey: crypto.KeyObject;
+  /** Public key for verification */
+  publicKey: crypto.KeyObject;
+  /** Public key in JWK format */
+  publicJwk: RsaJwk;
+}
+
+/**
+ * Generate an RSA key pair with the specified modulus length
+ *
+ * @param modulusLength - Key size in bits (default: 2048, suitable for short-lived OAuth/JWT verification; use 3072+ for longer-term keys)
+ * @param alg - JWT algorithm (default: 'RS256')
+ * @returns RSA key pair with private, public keys and JWK
+ */
+export function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
+  const kid = `rsa-key-${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
+
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength,
+  });
+
+  const exported = publicKey.export({ format: 'jwk' }) as {
+    n: string;
+    e: string;
+  };
+  const publicJwk: RsaJwk = {
+    ...exported,
+    kid,
+    alg,
+    use: 'sig',
+    kty: 'RSA',
+  };
+
+  return { privateKey, publicKey, publicJwk };
+}
+
+/**
+ * Sign data using RSA with the specified algorithm.
+ *
+ * For RSA-PSS (PS256/PS384/PS512), callers must pass appropriate padding/saltLength options.
+ */
+export function rsaSign(
+  algorithm: string,
+  data: Buffer,
+  privateKey: crypto.KeyObject,
+  options?: Omit<crypto.SignKeyObjectInput, 'key'>,
+): Buffer {
+  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = options
+    ? { key: privateKey, ...options }
+    : privateKey;
+  return crypto.sign(algorithm, data, signingKey);
+}
+
+export function rsaVerify(jwtAlg: string, data: Buffer, publicJwk: JsonWebKey, signature: Buffer): boolean {
+  const publicKey = crypto.createPublicKey({ key: publicJwk as crypto.JsonWebKey, format: 'jwk' });
+  const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
+  const verifyKey: crypto.KeyObject | crypto.VerifyKeyObjectInput = isRsaPssAlg(jwtAlg)
+    ? {
+        key: publicKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }
+    : publicKey;
+  return crypto.verify(nodeAlgorithm, data, verifyKey, signature);
+}
+
+/**
+ * Create a JWT signed with an RSA key
+ *
+ * @param payload - JWT payload
+ * @param privateKey - RSA private key
+ * @param kid - Key ID for the JWT header
+ * @param alg - JWT algorithm (default: 'RS256')
+ * @returns Signed JWT string
+ */
+export function createSignedJwt(
+  payload: Record<string, unknown>,
+  privateKey: crypto.KeyObject,
+  kid: string,
+  alg = 'RS256',
+): string {
+  const header = { alg, typ: 'JWT', kid };
+  const headerB64 = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signatureInput = `${headerB64}.${payloadB64}`;
+
+  const nodeAlgorithm = jwtAlgToNodeAlg(alg);
+  const signature = rsaSign(
+    nodeAlgorithm,
+    Buffer.from(signatureInput),
+    privateKey,
+    isRsaPssAlg(alg)
+      ? {
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+        }
+      : undefined,
+  );
+  const signatureB64 = signature.toString('base64url');
+
+  return `${headerB64}.${payloadB64}.${signatureB64}`;
+}

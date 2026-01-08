@@ -82,7 +82,15 @@ export type { TestUserFixture } from './auth/user-fixtures';
 export { MockOAuthServer } from './auth/mock-oauth-server';
 export type { MockOAuthServerOptions, MockOAuthServerInfo } from './auth/mock-oauth-server';
 export { MockAPIServer } from './auth/mock-api-server';
-export type { MockAPIServerOptions, MockAPIServerInfo, MockRoute, MockResponse } from './auth/mock-api-server';
+export type {
+  MockAPIServerOptions,
+  MockAPIServerInfo,
+  MockRoute,
+  MockResponse,
+  MockRequest,
+  MockResponseHelper,
+  MockRouteHandler,
+} from './auth/mock-api-server';
 
 // ═══════════════════════════════════════════════════════════════════
 // SERVER

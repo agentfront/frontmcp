@@ -1,4 +1,21 @@
 import 'reflect-metadata';
+
+// NOTE: Importing `@frontmcp/sdk` installs a small global `process.emitWarning` filter.
+// It suppresses a noisy Express deprecation warning ("req.host has been replaced by req.hostname")
+// that can be triggered when validating request-like objects with Zod v4.
+// Express docs: https://expressjs.com/en/4x/api.html#req.hostname
+(function suppressZodExpressWarning() {
+  const originalEmitWarning = process.emitWarning.bind(process);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process as any).emitWarning = (warning: string | Error, ...args: any[]) => {
+    const message = typeof warning === 'string' ? warning : warning?.message;
+    if (message?.includes('req.host') && message?.includes('req.hostname')) {
+      return; // Suppress the Express req.host deprecation warning from Zod v4
+    }
+    return originalEmitWarning(warning, ...args);
+  };
+})();
+
 import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';

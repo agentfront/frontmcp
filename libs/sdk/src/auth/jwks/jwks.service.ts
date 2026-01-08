@@ -1,19 +1,29 @@
 // auth/jwks/jwks.service.ts
-import crypto from 'node:crypto';
-import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet } from 'jose';
+import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
+import { bytesToHex, randomBytes, rsaVerify } from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
 import { isDevKeyPersistenceEnabled, loadDevKey, saveDevKey, DevKeyData } from './dev-key-persistence';
+
+// Warning message for weak RSA keys (shown only once per provider)
+const WEAK_KEY_WARNING = `
+⚠️  SECURITY WARNING: OAuth provider is using an RSA key smaller than 2048 bits.
+    This is considered insecure and should be updated.
+    Please contact your OAuth provider to upgrade their signing keys.
+    Verification will proceed but with reduced security guarantees.
+`;
 
 export class JwksService {
   private readonly opts: Required<Omit<JwksServiceOptions, 'devKeyPersistence'>> & {
     devKeyPersistence?: JwksServiceOptions['devKeyPersistence'];
   };
 
+  private warnedProviders = new Set<string>();
+
   // Orchestrator signing material
   private orchestratorKey!: {
     kid: string;
-    privateKey: crypto.KeyObject;
+    privateKey: import('node:crypto').KeyObject;
     publicJwk: JSONWebKeySet;
     createdAt: number;
   };
@@ -105,8 +115,9 @@ export class JwksService {
     }
 
     for (const p of candidates) {
+      let jwks: JSONWebKeySet | undefined;
       try {
-        const jwks = await this.getJwksForProvider(p);
+        jwks = await this.getJwksForProvider(p);
         if (!jwks?.keys?.length) continue;
         const draftPayload = decodeJwtPayloadSafe(token);
         const JWKS = createLocalJWKSet(jwks);
@@ -124,13 +135,138 @@ export class JwksService {
           header: protectedHeader,
           payload,
         };
-      } catch (e) {
+      } catch (e: any) {
+        // Check for weak RSA key error from jose library
+        if (this.isWeakKeyError(e)) {
+          const fallbackJwks = jwks ?? (await this.getJwksForProvider(p));
+          if (fallbackJwks?.keys?.length) {
+            const fallbackResult = await this.verifyWithWeakKey(token, fallbackJwks, p);
+            if (fallbackResult.ok) {
+              return fallbackResult;
+            }
+          }
+        }
         console.log('failed to verify token for provider: ', p.id, e);
         // try next provider
       }
     }
 
     return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
+  }
+
+  /**
+   * Check if the error is due to weak RSA key (< 2048 bits)
+   */
+  private isWeakKeyError(error: unknown): boolean {
+    // NOTE: This is a best-effort fallback keyed off `jose` error message text.
+    // If `jose` changes this message format in a future major version, update this matcher and its tests.
+    const message =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : String(error);
+    return message.includes('modulusLength') && message.includes('2048');
+  }
+
+  /**
+   * Fallback verification for providers using RSA keys smaller than 2048 bits.
+   * Logs a security warning but allows verification to proceed.
+   */
+  private async verifyWithWeakKey(
+    token: string,
+    jwks: JSONWebKeySet,
+    provider: ProviderVerifyRef,
+  ): Promise<VerifyResult> {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return { ok: false, error: 'invalid_token_format' };
+      }
+
+      const [headerB64, payloadB64, signatureB64] = parts;
+      const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'));
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+
+      // Find matching key
+      const matchingKey = this.findMatchingKey(jwks, header);
+      if (!matchingKey) {
+        return { ok: false, error: 'no_matching_key' };
+      }
+
+      // Verify signature using Node's crypto (via @frontmcp/utils).
+      // NOTE: This fallback intentionally duplicates a small subset of `jose` verification behavior (tested with `jose@^6`).
+      // - `jose` rejects weak RSA keys (<2048) by design; this provides a controlled fallback for OAuth providers still using smaller keys.
+      // - RSA-PSS verification requires explicit padding/saltLength options (not supported via digest names like "RSA-PSS-SHA256").
+      const signatureInput = `${headerB64}.${payloadB64}`;
+      const signature = Buffer.from(signatureB64, 'base64url');
+
+      const jwtAlg = typeof header.alg === 'string' ? header.alg : undefined;
+      if (!jwtAlg) {
+        return { ok: false, error: 'missing_alg' };
+      }
+
+      const isValid = rsaVerify(jwtAlg, Buffer.from(signatureInput), matchingKey as unknown as JsonWebKey, signature);
+
+      if (!isValid) {
+        return { ok: false, error: 'signature_invalid' };
+      }
+
+      // Validate issuer
+      const payloadIssuerRaw = typeof payload.iss === 'string' ? payload.iss : undefined;
+      if (!payloadIssuerRaw) {
+        return { ok: false, error: 'issuer_mismatch' };
+      }
+      const trustedIssuers = new Set([normalizeIssuer(provider.issuerUrl)]);
+      const payloadIssuer = normalizeIssuer(payloadIssuerRaw);
+      if (!trustedIssuers.has(payloadIssuer)) {
+        return { ok: false, error: 'issuer_mismatch' };
+      }
+
+      // Check expiration
+      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+        return { ok: false, error: 'token_expired' };
+      }
+
+      // Emit warning (once per provider)
+      if (!this.warnedProviders.has(provider.id)) {
+        this.warnedProviders.add(provider.id);
+        console.warn(WEAK_KEY_WARNING);
+        console.warn(`    Provider: ${provider.id} (${provider.issuerUrl})`);
+      }
+
+      return {
+        ok: true,
+        issuer: payload.iss as string | undefined,
+        sub: payload.sub as string | undefined,
+        providerId: provider.id,
+        header,
+        payload,
+      };
+    } catch (err: any) {
+      return { ok: false, error: `weak_key_verification_failed: ${err?.message}` };
+    }
+  }
+
+  /**
+   * Find a matching key from JWKS based on token header
+   */
+  private findMatchingKey(jwks: JSONWebKeySet, header: { kid?: string; alg?: string }): JWK | undefined {
+    // First try exact kid match
+    if (header.kid) {
+      const byKid = jwks.keys.find((k) => k.kid === header.kid);
+      if (byKid) return byKid;
+    }
+
+    // Fall back to matching by algorithm
+    if (header.alg) {
+      const byAlg = jwks.keys.find((k) => k.alg === header.alg || (k.kty === 'RSA' && header.alg?.startsWith('RS')));
+      if (byAlg) return byAlg;
+    }
+
+    // Last resort: return first RSA key
+    return jwks.keys.find((k) => k.kty === 'RSA');
   }
 
   // ===========================================================================
@@ -191,7 +327,7 @@ export class JwksService {
   }
 
   /** Return private signing key + kid for issuing orchestrator tokens. */
-  async getOrchestratorSigningKey(): Promise<{ kid: string; key: crypto.KeyObject; alg: string }> {
+  async getOrchestratorSigningKey(): Promise<{ kid: string; key: import('node:crypto').KeyObject; alg: string }> {
     await this.ensureOrchestratorKey();
     return { kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg };
   }
@@ -277,9 +413,10 @@ export class JwksService {
         } else {
           // Reconstruct KeyObject from JWK
           try {
-            // Cast to crypto.JsonWebKey to satisfy TypeScript
-            const privateKey = crypto.createPrivateKey({
-              key: loaded.privateKey as crypto.JsonWebKey,
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { createPrivateKey } = require('node:crypto') as typeof import('node:crypto');
+            const privateKey = createPrivateKey({
+              key: loaded.privateKey as import('node:crypto').JsonWebKey,
               format: 'jwk',
             });
             this.orchestratorKey = {
@@ -317,15 +454,17 @@ export class JwksService {
   }
 
   private generateKey(alg: 'RS256' | 'ES256') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { generateKeyPairSync } = require('node:crypto') as typeof import('node:crypto');
     if (alg === 'RS256') {
-      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-      const kid = crypto.randomBytes(8).toString('hex');
+      const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const kid = bytesToHex(randomBytes(8));
       const publicJwk = publicKey.export({ format: 'jwk' });
       Object.assign(publicJwk, { kid, alg: 'RS256', use: 'sig', kty: 'RSA' });
       return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };
     } else {
-      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-      const kid = crypto.randomBytes(8).toString('hex');
+      const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+      const kid = bytesToHex(randomBytes(8));
       const publicJwk = publicKey.export({ format: 'jwk' });
       Object.assign(publicJwk, { kid, alg: 'ES256', use: 'sig', kty: 'EC' });
       return { kid, privateKey, publicJwk: { keys: [publicJwk] }, createdAt: Date.now() };

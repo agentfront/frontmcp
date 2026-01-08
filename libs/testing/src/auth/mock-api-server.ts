@@ -34,14 +34,38 @@ import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 // TYPES
 // ═══════════════════════════════════════════════════════════════════
 
-export interface MockRoute {
+/**
+ * Mock request object for handlers
+ */
+export interface MockRequest {
+  /** Request URL */
+  url: string;
   /** HTTP method */
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  /** Path to match (e.g., '/products', '/products/:id') */
-  path: string;
-  /** Response to return */
-  response: MockResponse;
+  method: string;
+  /** Request headers (lowercase keys) */
+  headers: Record<string, string | undefined>;
+  /** Path parameters extracted from the route */
+  params: Record<string, string>;
+  /** Query parameters */
+  query: Record<string, string>;
+  /** Request body (parsed JSON if applicable) */
+  body?: unknown;
 }
+
+/**
+ * Mock response helper for handlers
+ */
+export interface MockResponseHelper {
+  /** Send a JSON response */
+  json: (body: unknown, status?: number) => void;
+  /** Send a response with custom headers */
+  send: (body: unknown, status?: number, headers?: Record<string, string>) => void;
+}
+
+/**
+ * Handler function type for dynamic route handling
+ */
+export type MockRouteHandler = (req: MockRequest, res: MockResponseHelper) => void | Promise<void>;
 
 export interface MockResponse {
   /** HTTP status code (default: 200) */
@@ -52,9 +76,35 @@ export interface MockResponse {
   body: unknown;
 }
 
+export type MockRoute =
+  | {
+      /** HTTP method */
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      /** Path to match (e.g., '/products', '/products/:id') */
+      path: string;
+      /** Dynamic handler function (mutually exclusive with response) */
+      handler: MockRouteHandler;
+      /** Static response to return (mutually exclusive with handler) */
+      response?: never;
+    }
+  | {
+      /** HTTP method */
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      /** Path to match (e.g., '/products', '/products/:id') */
+      path: string;
+      /** Static response to return (mutually exclusive with handler) */
+      response: MockResponse;
+      /** Dynamic handler function (mutually exclusive with response) */
+      handler?: never;
+    };
+
 export interface MockAPIServerOptions {
   /** Port to listen on (default: random available port) */
   port?: number;
+  /** Maximum request body size (default: 1MB) */
+  maxBodyBytes?: number;
+  /** Request body read timeout in ms (default: 10s) */
+  bodyTimeoutMs?: number;
   /** OpenAPI spec to serve at /openapi.json */
   openApiSpec: unknown;
   /** Routes to mock */
@@ -91,6 +141,9 @@ export class MockAPIServer {
   constructor(options: MockAPIServerOptions) {
     this.options = options;
     this.routes = options.routes ?? [];
+    for (const route of this.routes) {
+      this.validateRoute(route);
+    }
   }
 
   /**
@@ -104,15 +157,16 @@ export class MockAPIServer {
     const port = this.options.port ?? 0; // 0 = random available port
 
     return new Promise((resolve, reject) => {
-      this.server = createServer(this.handleRequest.bind(this));
+      const server = createServer(this.handleRequest.bind(this));
+      this.server = server;
 
-      this.server.on('error', (err) => {
+      server.on('error', (err) => {
         this.log(`Server error: ${err.message}`);
         reject(err);
       });
 
-      this.server.listen(port, () => {
-        const address = this.server!.address();
+      server.listen(port, () => {
+        const address = server.address();
         if (!address || typeof address === 'string') {
           reject(new Error('Failed to get server address'));
           return;
@@ -136,12 +190,13 @@ export class MockAPIServer {
    * Stop the mock API server
    */
   async stop(): Promise<void> {
-    if (!this.server) {
+    const server = this.server;
+    if (!server) {
       return;
     }
 
     return new Promise((resolve, reject) => {
-      this.server!.close((err) => {
+      server.close((err) => {
         if (err) {
           reject(err);
         } else {
@@ -168,6 +223,7 @@ export class MockAPIServer {
    * Add a route dynamically
    */
   addRoute(route: MockRoute): void {
+    this.validateRoute(route);
     this.routes.push(route);
   }
 
@@ -181,6 +237,20 @@ export class MockAPIServer {
   // ═══════════════════════════════════════════════════════════════════
   // PRIVATE
   // ═══════════════════════════════════════════════════════════════════
+
+  private validateRoute(route: { method?: string; path?: string; handler?: unknown; response?: unknown }): void {
+    const method = route.method ?? 'UNKNOWN';
+    const path = route.path ?? '<unknown>';
+    const hasHandler = typeof route.handler === 'function';
+    const hasResponse = route.response != null;
+
+    if (hasHandler && hasResponse) {
+      throw new Error(`Mock route ${method} ${path} must define either 'handler' or 'response', not both`);
+    }
+    if (!hasHandler && !hasResponse) {
+      throw new Error(`Mock route ${method} ${path} must define either 'handler' or 'response'`);
+    }
+  }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url ?? '/';
@@ -208,17 +278,67 @@ export class MockAPIServer {
       }
 
       // Find matching route
-      const route = this.findRoute(method, url);
-      if (route) {
-        const status = route.response.status ?? 200;
-        const headers = {
-          'Content-Type': 'application/json',
-          ...route.response.headers,
-        };
-        res.writeHead(status, headers);
-        res.end(JSON.stringify(route.response.body));
-        this.log(`Matched route: ${method} ${route.path} -> ${status}`);
-        return;
+      const matchResult = this.findRoute(method, url);
+      if (matchResult) {
+        const { route, params } = matchResult;
+
+        // Handle dynamic handler
+        if (route.handler) {
+          // Parse request body for POST/PUT/PATCH
+          let body: unknown;
+          if (['POST', 'PUT', 'PATCH'].includes(method)) {
+            body = await this.parseBody(req);
+          }
+
+          // Parse query parameters
+          const queryString = url.includes('?') ? url.split('?')[1] : '';
+          const query: Record<string, string> = {};
+          if (queryString) {
+            const searchParams = new URLSearchParams(queryString);
+            searchParams.forEach((value, key) => {
+              query[key] = value;
+            });
+          }
+
+          // Create request object
+          const mockReq: MockRequest = {
+            url,
+            method,
+            headers: this.normalizeHeaders(req.headers as Record<string, string | string[] | undefined>),
+            params,
+            query,
+            body,
+          };
+
+          // Create response helper
+          const mockRes: MockResponseHelper = {
+            json: (responseBody: unknown, status = 200) => {
+              res.writeHead(status, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(responseBody));
+            },
+            send: (responseBody: unknown, status = 200, headers = {}) => {
+              res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
+              res.end(JSON.stringify(responseBody));
+            },
+          };
+
+          await route.handler(mockReq, mockRes);
+          this.log(`Matched route with handler: ${method} ${route.path}`);
+          return;
+        }
+
+        // Handle static response
+        if (route.response) {
+          const status = route.response.status ?? 200;
+          const headers = {
+            'Content-Type': 'application/json',
+            ...route.response.headers,
+          };
+          res.writeHead(status, headers);
+          res.end(JSON.stringify(route.response.body));
+          this.log(`Matched route: ${method} ${route.path} -> ${status}`);
+          return;
+        }
       }
 
       // No matching route
@@ -231,27 +351,105 @@ export class MockAPIServer {
     }
   }
 
-  private findRoute(method: string, url: string): MockRoute | undefined {
+  private findRoute(method: string, url: string): { route: MockRoute; params: Record<string, string> } | undefined {
     // Strip query string
     const path = url.split('?')[0];
 
-    return this.routes.find((route) => {
-      if (route.method !== method) return false;
+    for (const route of this.routes) {
+      if (route.method !== method) continue;
 
-      // Simple path matching (exact match or path params)
-      if (route.path === path) return true;
+      // Simple path matching (exact match)
+      if (route.path === path) {
+        return { route, params: {} };
+      }
 
       // Handle path parameters like /products/:id
       const routeParts = route.path.split('/');
       const urlParts = path.split('/');
 
-      if (routeParts.length !== urlParts.length) return false;
+      if (routeParts.length !== urlParts.length) continue;
 
-      return routeParts.every((part, i) => {
-        if (part.startsWith(':')) return true; // Path parameter
-        return part === urlParts[i];
-      });
+      const params: Record<string, string> = {};
+      let match = true;
+
+      for (let i = 0; i < routeParts.length; i++) {
+        if (routeParts[i].startsWith(':')) {
+          // Extract path parameter
+          params[routeParts[i].slice(1)] = urlParts[i];
+        } else if (routeParts[i] !== urlParts[i]) {
+          match = false;
+          break;
+        }
+      }
+
+      if (match) {
+        return { route, params };
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Parse request body as JSON
+   */
+  private async parseBody(req: IncomingMessage): Promise<unknown> {
+    const maxBodyBytes = this.options.maxBodyBytes ?? 1 * 1024 * 1024; // 1MB
+    const bodyTimeoutMs = this.options.bodyTimeoutMs ?? 10_000; // 10s
+
+    return new Promise((resolve, reject) => {
+      let body = '';
+      let bodyBytes = 0;
+
+      const onData = (chunk: Buffer) => {
+        bodyBytes += chunk.length;
+        if (bodyBytes > maxBodyBytes) {
+          cleanup();
+          req.destroy();
+          reject(new Error(`Request body too large (>${maxBodyBytes} bytes)`));
+          return;
+        }
+        body += chunk.toString();
+      };
+      const cleanup = () => {
+        req.off('data', onData);
+        req.off('end', onEnd);
+        req.off('error', onError);
+        clearTimeout(timeout);
+      };
+      const timeout = setTimeout(() => {
+        cleanup();
+        req.destroy();
+        reject(new Error(`Request body read timed out after ${bodyTimeoutMs}ms`));
+      }, bodyTimeoutMs);
+      const onEnd = () => {
+        cleanup();
+        try {
+          resolve(body ? JSON.parse(body) : undefined);
+        } catch {
+          resolve(body);
+        }
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+
+      req.on('data', onData);
+      req.once('end', onEnd);
+      req.once('error', onError);
     });
+  }
+
+  /**
+   * Normalize headers to lowercase keys
+   */
+  private normalizeHeaders(headers: Record<string, string | string[] | undefined>): Record<string, string | undefined> {
+    const normalized: Record<string, string | undefined> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      normalized[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
+    }
+    return normalized;
   }
 
   private log(message: string): void {

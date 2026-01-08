@@ -46,8 +46,8 @@
     }
   },
   "dependencies": {
-    "enclave-vm": "^2.4.0",
-    "vectoriadb": "^2.0.1",
+    "enclave-vm": "^2.5.0",
+    "vectoriadb": "^2.0.2",
     "@frontmcp/sdk": "0.6.3",
     "zod": "^4.0.0"
   },
