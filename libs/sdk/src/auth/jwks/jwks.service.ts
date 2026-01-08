@@ -189,7 +189,9 @@ export class JwksService {
       // Convert JWK to KeyObject for verification
       const publicKey = crypto.createPublicKey({ key: matchingKey as crypto.JsonWebKey, format: 'jwk' });
 
-      // Verify signature using Node's crypto (allows smaller keys)
+      // Verify signature using Node's crypto:
+      // - `jose` rejects weak RSA keys (<2048) by design; this provides a controlled fallback for OAuth providers still using smaller keys.
+      // - RSA-PSS verification requires explicit padding/saltLength options (not supported via digest names like "RSA-PSS-SHA256").
       const signatureInput = `${headerB64}.${payloadB64}`;
       const signature = Buffer.from(signatureB64, 'base64url');
 

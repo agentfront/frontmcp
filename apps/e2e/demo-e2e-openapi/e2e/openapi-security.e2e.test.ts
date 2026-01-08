@@ -9,9 +9,6 @@
  */
 import { TestServer, MockAPIServer, McpTestClient, expect, MockRequest, MockResponseHelper } from '@frontmcp/testing';
 
-// Track received headers for verification
-let lastReceivedHeaders: Record<string, string | undefined> = {};
-
 // OpenAPI spec with bearer auth
 const SECURED_OPENAPI_SPEC = {
   openapi: '3.0.0',
@@ -77,6 +74,8 @@ const SECURED_OPENAPI_SPEC = {
 };
 
 describe('OpenAPI Adapter Security E2E', () => {
+  // Track received headers for verification (scoped to this suite for isolation)
+  let lastReceivedHeaders: Record<string, string | undefined> = {};
   let mockApi: MockAPIServer;
   let server: TestServer;
   let client: McpTestClient;

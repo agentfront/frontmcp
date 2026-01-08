@@ -1,8 +1,9 @@
 import 'reflect-metadata';
 
-// Suppress Express req.host deprecation warning triggered by Zod v4 during object validation
-// Zod v4 internally accesses .host on objects which triggers Express's deprecation warning
-// This is harmless but noisy - see: https://github.com/colinhacks/zod/issues
+// NOTE: Importing `@frontmcp/sdk` installs a small global `process.emitWarning` filter.
+// It suppresses a noisy Express deprecation warning ("req.host has been replaced by req.hostname")
+// that can be triggered when validating request-like objects with Zod v4.
+// Express docs: https://expressjs.com/en/4x/api.html#req.hostname
 (function suppressZodExpressWarning() {
   const originalEmitWarning = process.emitWarning.bind(process);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -40,11 +40,32 @@ function generateRsaKeyPair(modulusLength = 2048, alg = 'RS256'): RsaKeyPair {
   };
 }
 
-function rsaSign(algorithm: string, data: Buffer, privateKey: crypto.KeyObject): Buffer {
-  const signer = crypto.createSign(algorithm);
-  signer.update(data);
-  signer.end();
-  return signer.sign(privateKey);
+function jwtAlgToNodeAlg(jwtAlg: string): string {
+  const mapping: Record<string, string> = {
+    RS256: 'RSA-SHA256',
+    RS384: 'RSA-SHA384',
+    RS512: 'RSA-SHA512',
+    PS256: 'RSA-SHA256',
+    PS384: 'RSA-SHA384',
+    PS512: 'RSA-SHA512',
+  };
+  const nodeAlg = mapping[jwtAlg];
+  if (!nodeAlg) {
+    throw new Error(`Unsupported JWT algorithm: ${jwtAlg}`);
+  }
+  return nodeAlg;
+}
+
+function rsaSignJwt(signatureInput: string, privateKey: crypto.KeyObject, jwtAlg: string): Buffer {
+  const nodeAlgorithm = jwtAlgToNodeAlg(jwtAlg);
+  const signingKey: crypto.KeyObject | crypto.SignKeyObjectInput = jwtAlg.startsWith('PS')
+    ? {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }
+    : privateKey;
+  return crypto.sign(nodeAlgorithm, Buffer.from(signatureInput), signingKey);
 }
 
 describe('JwksService Weak RSA Key Handling', () => {
@@ -56,6 +77,11 @@ describe('JwksService Weak RSA Key Handling', () => {
   const weakKeyPair = generateRsaKeyPair(1024);
   const weakKid = weakKeyPair.publicJwk.kid;
   const weakPublicJwk = weakKeyPair.publicJwk;
+
+  // Generate a weak (1024-bit) RSA key pair for PS256 testing
+  const weakPssKeyPair = generateRsaKeyPair(1024, 'PS256');
+  const weakPssKid = weakPssKeyPair.publicJwk.kid;
+  const weakPssPublicJwk = weakPssKeyPair.publicJwk;
 
   // Generate a strong (2048-bit) RSA key pair for comparison
   const strongKeyPair = generateRsaKeyPair(2048);
@@ -76,7 +102,7 @@ describe('JwksService Weak RSA Key Handling', () => {
     const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
     const signatureInput = `${headerB64}.${payloadB64}`;
 
-    const signature = rsaSign('RSA-SHA256', Buffer.from(signatureInput), privateKey);
+    const signature = rsaSignJwt(signatureInput, privateKey, alg);
     const signatureB64 = signature.toString('base64url');
 
     return `${headerB64}.${payloadB64}.${signatureB64}`;
@@ -208,6 +234,29 @@ describe('JwksService Weak RSA Key Handling', () => {
       expect(result.ok).toBe(false);
     });
 
+    it('should verify PS256 (RSA-PSS) token with weak key via fallback', async () => {
+      const issuer = 'https://pss-weak.example.com';
+      const payload = {
+        iss: issuer,
+        sub: 'user-pss',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      const token = createJwt(payload, weakPssKeyPair.privateKey, weakPssKid, 'PS256');
+
+      const result = await service.verifyTransparentToken(token, [
+        {
+          id: 'pss-weak-provider',
+          issuerUrl: issuer,
+          jwks: { keys: [weakPssPublicJwk] },
+        },
+      ]);
+
+      expect(result.ok).toBe(true);
+      expect(result.sub).toBe('user-pss');
+      expect(result.providerId).toBe('pss-weak-provider');
+    });
+
     it('should reject expired token even with weak key', async () => {
       const issuer = 'https://expired.example.com';
       const payload = {
@@ -302,11 +351,10 @@ describe('JwksService Weak RSA Key Handling', () => {
       expect(getNodeAlgorithm('RS256')).toBe('RSA-SHA256');
       expect(getNodeAlgorithm('RS384')).toBe('RSA-SHA384');
       expect(getNodeAlgorithm('RS512')).toBe('RSA-SHA512');
-      expect(getNodeAlgorithm('PS256')).toBe('RSA-PSS-SHA256');
-      expect(getNodeAlgorithm('PS384')).toBe('RSA-PSS-SHA384');
-      expect(getNodeAlgorithm('PS512')).toBe('RSA-PSS-SHA512');
-      // Unknown algorithms should default to RSA-SHA256
-      expect(getNodeAlgorithm('UNKNOWN')).toBe('RSA-SHA256');
+      expect(getNodeAlgorithm('PS256')).toBe('RSA-SHA256');
+      expect(getNodeAlgorithm('PS384')).toBe('RSA-SHA384');
+      expect(getNodeAlgorithm('PS512')).toBe('RSA-SHA512');
+      expect(() => getNodeAlgorithm('UNKNOWN')).toThrow('Unsupported JWT algorithm');
     });
   });
 });

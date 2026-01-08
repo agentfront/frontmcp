@@ -30,11 +30,7 @@ export function getCrypto(): CryptoProvider {
       _provider = require('./browser').browserCrypto as CryptoProvider;
     }
   }
-  // Provider is always initialized in the if block above
-  if (!_provider) {
-    throw new Error('Failed to initialize crypto provider');
-  }
-  return _provider;
+  return _provider!;
 }
 
 // Convenience function exports - delegate to provider
