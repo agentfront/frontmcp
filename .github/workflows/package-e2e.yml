@@ -21,6 +21,8 @@ jobs:
   package-e2e:
     name: "Package E2E (Verdaccio)"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       NX_DAEMON: "false"
     steps:
@@ -31,7 +33,9 @@ jobs:
 
       - name: Get Node version
         id: node-version
-        run: echo "version=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+        run: |
+          version="$(cat .nvmrc)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v6

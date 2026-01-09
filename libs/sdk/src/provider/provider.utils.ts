@@ -1,5 +1,6 @@
 import { Type, Token, ProviderKind, isClass, tokenName, getMetadata } from '@frontmcp/di';
-import { ProviderMetadata, FrontMcpProviderTokens, ProviderRecord, ProviderScope } from '../common';
+import { FrontMcpProviderTokens, ProviderScope } from '../common';
+import type { ProviderMetadata, ProviderRecord } from '../common';
 
 /**
  * Shape for provider input items (used during normalization).
