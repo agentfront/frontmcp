@@ -1,7 +1,7 @@
 import { BaseEntry } from './base.entry';
 import type { ProviderRecord } from '../records';
-import { ProviderInterface } from '../interfaces';
-import { ProviderMetadata } from '../metadata';
+import type { ProviderInterface } from '../interfaces';
+import type { ProviderMetadata } from '../metadata';
 
 abstract class ProviderEntry extends BaseEntry<ProviderRecord, ProviderInterface, ProviderMetadata> {}
 
