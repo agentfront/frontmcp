@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/ui",
-  "version": "0.7.1",
+  "version": "0.7.0",
   "description": "FrontMCP UI - React components and hooks for MCP applications",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",

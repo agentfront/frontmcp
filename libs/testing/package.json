@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/testing",
-  "version": "0.7.1",
+  "version": "0.7.0",
   "description": "E2E testing framework for FrontMCP servers - MCP client, auth mocks, Playwright integration",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
