@@ -1,0 +1,55 @@
+---
+title: Agent E2E Suite
+slug: testing/agents-suite
+description: Explore the demo-e2e-agents project that validates agent tooling and orchestration with mocked adapters.
+icon: robot
+---
+
+The `demo-e2e-agents` Nx project runs a lightweight server with built-in agents so you can test orchestration, tool calls, and agent-to-agent coordination without calling external APIs.
+
+## Server snapshot
+
+This server spins up `AgentsApp`, enables verbose logging, and exposes public auth with stateful transports so tests can hit both SSE and streamable HTTP paths.
+
+```ts
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import { AgentsApp } from './apps/agents';
+
+const port = parseInt(process.env['PORT'] ?? '3020', 10);
+
+@FrontMcp({
+  info: { name: 'Demo E2E Agents', version: '0.1.0' },
+  apps: [AgentsApp],
+  logging: { level: LogLevel.Verbose },
+  http: { port },
+  transport: { enableLegacySSE: true },
+  auth: {
+    mode: 'public',
+    sessionTtl: 3600,
+    anonymousScopes: ['anonymous'],
+    transport: {
+      enableStatefulHttp: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: false,
+      requireSessionForStreamable: false,
+      enableLegacySSE: true,
+      enableSseListener: true,
+    },
+  },
+})
+export default class Server {}
+```
+
+## Agents & behaviors
+
+- `EchoAgent` echoes every input via a mock `AgentLlmAdapter`, proving that agents can be registered as callable tools without real LLMs.
+- `CalculatorAgent` safely evaluates sanitized math expressions, reports success/failure metadata, and exposes a `swarm` configuration so other agents can see it.
+- `OrchestratorAgent` simulates coordination by reading the task, delegating to calculator or echo agents, and returning a summary; it also exposes `canSeeOtherAgents` and `visibleAgents` to mirror multi-agent workflows.
+
+## Running the suite
+
+Serve the server with `yarn nx serve demo-e2e-agents --port 3020` and run its tests with `yarn nx test demo-e2e-agents`. The dedicated Jest config (`apps/e2e/demo-e2e-agents/jest.e2e.config.ts`) wires in shared testing helpers, coverage presets, and module aliases for the polyrepo libs.
+
+<Tip>
+  After running unit and e2e suites, run `yarn coverage:merge && yarn coverage:check` so the new coverage aggregator validates combined results.
+</Tip>

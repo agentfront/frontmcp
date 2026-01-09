@@ -1,0 +1,54 @@
+---
+title: Dashboard Plugin
+slug: plugins/dashboard-plugin
+description: Visualize your MCP server with a live dashboard, graph explorer, and introspection tools.
+icon: chart-bar
+---
+
+The Dashboard plugin adds a ready-to-use visual surface that renders your server graph, lists your tools/resources, and streams updates in real time via SSE.
+
+## Why add the dashboard
+
+Use the dashboard to diagnose registrations, watch in-flight executions, and prove compliance.
+
+<CardGroup cols={3}>
+  <Card title="Graph visualization" icon="diagram-project">
+    Get nodes, edges, and status data for every app, tool, resource, and prompt so you can spot drift or bottlenecks.
+  </Card>
+  <Card title="Tool explorer" icon="tool">
+    Built-in tools like `dashboard:list-tools` and `dashboard:list-resources` surface metadata, descriptions, and schema coverage for debugging.
+  </Card>
+  <Card title="Real-time updates" icon="signal">
+    The UI uses SSE streams to show live state without manual refreshes, so approvals, memory entries, and transports stay visible.
+  </Card>
+</CardGroup>
+
+## Installation & configuration
+
+```ts
+import { DashboardPlugin } from '@frontmcp/plugins';
+
+@FrontMcp({
+  plugins: [
+    new DashboardPlugin({
+      basePath: '/dashboard',
+      auth: { enabled: true, token: process.env.DASHBOARD_TOKEN },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+The plugin loads its UI bundle from the CDN by default and mounts it at the configured `basePath`. Add `auth.token` to protect access or let it remain public in development.
+
+## Graph + introspection tools
+
+Dashboard tools are exposed alongside your own tools. `dashboard:graph` returns nodes/edges, `dashboard:list-tools` enumerates each registered tool, and `dashboard:list-resources` mirrors the resource catalog. You can call them programmatically or run them from the UI to understand how memory, agents, and approvals move through the system.
+
+## Real-time insights
+
+The dashboard keeps a live SSE connection to your MCP server, so tool registrations, memory updates, and transport health appear immediately. The UI also surfaces console logs and alerts when a remote app reconnects.
+
+<Tip>
+  Protect the dashboard in production by setting `auth.enabled` to `true`, passing a strong `auth.token`, and ensuring the reverse proxy routes the same `basePath`.
+</Tip>

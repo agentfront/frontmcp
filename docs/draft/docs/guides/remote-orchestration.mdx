@@ -1,0 +1,84 @@
+---
+title: Remote Orchestration
+slug: guides/remote-orchestration
+description: Connect remote MCP servers through a resilient gateway and orchestrate their tools, resources, and prompts from a single entry point.
+icon: network-wired
+---
+
+Remote orchestration lets you treat other MCP servers as federated partners. Register each upstream endpoint as an app and the gateway will proxy their tools, resources, and prompts so your workflows stay centralized while your clients only talk to the gateway.
+
+## Gateway blueprint for remote apps
+
+Remote apps live alongside local apps in your `@FrontMcp` configuration. Provide `urlType`, `url`, `namespace`, and `transportOptions`, then control capability refreshes via `refreshInterval` and caching via `cacheTTL`. `remoteAuth` handles upstream credentials while `namespace` keeps tool/resource/prompt names unique.
+
+### Example configuration
+
+```ts
+@FrontMcp({
+  info: { name: 'Gateway', version: '0.7.1' },
+  apps: [
+    {
+      name: 'mintlify-docs',
+      urlType: 'url',
+      url: 'https://mintlify.com/docs/mcp',
+      namespace: 'mintlify',
+      transportOptions: {
+        timeout: 60000,
+        retryAttempts: 3,
+        fallbackToSSE: true,
+      },
+      refreshInterval: 30000,
+      cacheTTL: 60000,
+      remoteAuth: { mode: 'forward', headerName: 'Authorization' },
+    },
+    {
+      name: 'local-service',
+      urlType: 'url',
+      url: 'http://localhost:3099/',
+      namespace: 'local',
+      transportOptions: {
+        timeout: 30000,
+        retryAttempts: 2,
+      },
+    },
+  ],
+})
+export default class GatewayServer {}
+```
+
+## Stay resilient and cached
+
+Remote connections are orchestrated by `McpClientService`, which wraps every call with retries (`withRetry`), circuit breakers, health checks, and automatic reconnects. Capabilities land in `CapabilityCache`, so `refreshInterval` reloads the list when new tools appear and `cacheTTL` keeps stale entries from lingering. If a remote server fails, the circuit opens and the gateway routes around it until it reports healthy again.
+
+<Tip>
+  Choose a positive `refreshInterval` when the remote capability list changes often; drop it to `0` for stable ports. `cacheTTL` (60 s default) keeps discovery results fresh while avoiding constant lookups.
+</Tip>
+
+<Note>
+  Remote tools ship without cache metadata, so combine `CachePlugin` with `toolPatterns` (for example `['mintlify:*']`) when you need response caching. See the [Cache Plugin guide](/docs/guides/caching-and-cache-miss#caching-remote-tools) for details.
+</Note>
+
+## Proxying prompts, resources, and agents
+
+Prompts, resources, and agent tools from the remote server appear automatically under their namespace (`mintlify:summary`, `local:inventory`). The flows that list tools, prompts, or resources include these proxies and make them available to orchestrator agents as if they were local.
+
+<Info>
+  Use `remoteAuth` mode `static`, `forward`, or `oauth` to match the upstream authentication strategy. `forward` reuses the gateway user's token, `static` sends a fixed API key, and `oauth` lets the remote server manage its own OAuth handshake.
+</Info>
+
+## Use cases
+
+<CardGroup cols={2}>
+  <Card title="MCP Gateway" icon="diagram-project">
+    Aggregate internal and external MCP servers behind one entry point with unified auth, authorization, and instrumentation.
+  </Card>
+  <Card title="Service mesh" icon="network-wired">
+    Treat each microservice as an MCP app and orchestrate them with shared tools while keeping services isolated.
+  </Card>
+  <Card title="Third-party integrations" icon="plug">
+    Proxy vendor endpoints (Mintlify, Claude, etc.) so you can add caching, approvals, and observability on top.
+  </Card>
+  <Card title="Edge resiliency" icon="shield-check">
+    Circuit breakers, retries, and health checks keep orchestrations stable even when a remote node flaps.
+  </Card>
+</CardGroup>

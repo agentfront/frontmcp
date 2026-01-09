@@ -1,0 +1,76 @@
+---
+title: Storage Helpers
+slug: guides/storage-helpers
+description: Use @frontmcp/utils storage helpers for predictable TTL, namespacing, and backend detection across approvals and caches.
+icon: database
+---
+
+The `@frontmcp/utils` storage helpers unify memory, Redis, Vercel KV, and Upstash under a single API so every plugin and flow can share TTL, prefix, and pattern logic.
+
+## Auto-detect storage backends
+
+`createStorage()` inspects the environment and chooses the most capable backend it can reach—Upstash first, then Vercel KV, then Redis, and finally memory. You can override the type, set a `prefix`, and decide whether to fall back to memory when the preferred backend fails.
+
+```ts
+import { createStorage, getDetectedStorageType } from '@frontmcp/utils';
+
+const store = await createStorage({
+  prefix: 'remember:',
+  fallback: 'memory',
+});
+
+console.log(`Detected storage: ${getDetectedStorageType()}`);
+```
+
+<Tip>
+  Keep `fallback: 'memory'` enabled in local runs so missing Redis/KV endpoints do not block startup; the helper logs warnings when it drops to memory in production.
+</Tip>
+
+<Info>
+  Need a synchronous store for unit tests or scripts? `createMemoryStorage()` returns an immediately ready root storage without an async call.
+</Info>
+
+## Namespaces, TTL, and quotas
+
+Namespacing keeps keys organized: `store.namespace('session', sessionId)` prefixes every action with `session:{sessionId}:`. TTL helpers such as `MAX_TTL_SECONDS`, `validateTTL`, `ttlToExpiresAt`, and `expiresAtToTTL` guard your expirations against bad values.
+
+```ts
+const session = store.namespace('session', sessionId);
+const expiresAt = ttlToExpiresAt(3600);
+
+await session.set('token', JSON.stringify(response), { ttlSeconds: 3600 });
+await session.expire('token', 1800);
+```
+
+## Safe pattern matching
+
+The storage helpers include `globToRegex`, `matchesPattern`, and `validatePattern` so you can list or filter keys without exposing yourself to ReDoS attacks.
+
+```ts
+import { globToRegex, matchesPattern } from '@frontmcp/utils';
+
+const regex = globToRegex('session:???');
+const isMatch = matchesPattern('session:123', 'session:???');
+```
+
+## Plug into approvals & caches
+
+Pass a namespaced storage instance directly into plugins that accept a `storageInstance`, like `ApprovalPlugin` or custom cache layers, to keep TTL and prefix logic consistent.
+
+```ts
+import { createStorage } from '@frontmcp/utils';
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+
+const approvals = await createStorage({
+  prefix: 'approval:',
+  type: 'auto',
+});
+
+const approvalPlugin = ApprovalPlugin.init({
+  storageInstance: approvals.namespace('requests'),
+});
+```
+
+<Info>
+  The cache plugin, remember plugin, and even custom tools can all share this helper so you never duplicate TTL validation or namespace prefixes.
+</Info>

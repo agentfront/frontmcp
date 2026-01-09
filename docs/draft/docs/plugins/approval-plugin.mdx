@@ -129,13 +129,13 @@ class DangerousTool extends ToolContext {
 
 ## Approval Scopes
 
-| Scope              | Description                              | Use Case                      |
-| ------------------ | ---------------------------------------- | ----------------------------- |
-| `session`          | Valid only for current session           | Default, most restrictive     |
-| `user`             | Persists across sessions for user        | Trusted tools                 |
-| `time_limited`     | Expires after specified TTL              | Temporary elevated access     |
-| `tool_specific`    | Tied to specific tool instance           | Fine-grained control          |
-| `context_specific` | Tied to context (e.g., specific repo)    | Context-aware approvals       |
+| Scope              | Description                           | Use Case                  |
+| ------------------ | ------------------------------------- | ------------------------- |
+| `session`          | Valid only for current session        | Default, most restrictive |
+| `user`             | Persists across sessions for user     | Trusted tools             |
+| `time_limited`     | Expires after specified TTL           | Temporary elevated access |
+| `tool_specific`    | Tied to specific tool instance        | Fine-grained control      |
+| `context_specific` | Tied to context (e.g., specific repo) | Context-aware approvals   |
 
 ---
 

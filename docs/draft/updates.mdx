@@ -5,17 +5,29 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
-<Update label="draft" description="2025-12-27" tags={["Releases"]}>
+<Update label="draft" description="2026-01-09" tags={["Releases"]}>
   <Card
     title="FrontMCP draft"
     href="/docs"
     cta="Read the release notes"
   >
-    🚀 **Session resurrection** – Streamable HTTP sessions now persist state and reattach to the same stream using the recreateable transports so serverless nodes, restarts, and reconnects stay live.
+    **Features**
 
-    🛡️ **Hardened session stores** – Redis and Vercel KV session caches can now sign data, cap lifetime, rate-limit lookups, and optionally reject fingerprint mismatches to block tampering and enumeration.
+    🚀 **Remote orchestration gateway** – Connect other MCP servers through resilient proxies, circuit breakers, and namespaces so tools, resources, and prompts participate in unified flows.
 
-    🎨 **Safer UI bundling** – The @frontmcp/uipack builder lazy-loads esbuild, surfaces a clear install error if it is missing, and strips absolute paths from bundle failures so your logs stay readable.
+    🧠 **Memory management tooling** – The Remember Plugin now ships with list/forget helpers, scope-aware limits, and dashboard-ready observability so session memory never drifts.
+
+    🧩 **Storage helper library** – `@frontmcp/utils` now auto-detects Upstash/Vercel/Redis/memory backends, validates TTLs/patterns, and plugs directly into approvals and cache workflows.
+
+    🧪 **Agent e2e suite** – `demo-e2e-agents` exercises calculator, echo, and orchestrator agents with mocked adapters so CI can verify agent tooling without network calls.
+
+    **Build/CI**
+
+    ⚙️ **Coverage & testing scripts** – New Nx targets and coverage commands run unit/e2e suites, merge stats, and enforce coverage checks so aggregated results stay trustworthy.
+
+    **Docs**
+
+    📚 **Fresh guides** – Added coverage for remote orchestration, memory management helpers, storage utilities, the dashboard plugin, and the agent-focused e2e suite so users discover the new capabilities.
 
   </Card>
 </Update>

@@ -1,0 +1,69 @@
+---
+title: Memory Management
+slug: guides/memory-management
+description: Keep session memory tidy with Remember Plugin tools, scopes, and observability helpers.
+icon: brain
+---
+
+The Remember Plugin extends every tool, agent, resource, prompt, and dashboard context with encrypted, scoped memory. Use the built-in tools to inspect what is stored, surface metadata, and remove stale data before it grows too large.
+
+## Tools for memory housekeeping
+
+Remember ships with helper tools that match the memory lifecycle:
+
+| Tool            | Purpose                                                              |
+| --------------- | -------------------------------------------------------------------- |
+| `remember-this` | Save a value with optional scope, brand, or TTL.                     |
+| `recall`        | Retrieve a value and fall back to defaults when it is missing.       |
+| `list_memories` | Enumerate keys in a scope with glob filtering and limit control.     |
+| `forget`        | Remove specific keys or entire scopes so stale memory can be purged. |
+
+Call `list_memories` from a tool or agent to enumerate session data, feed dashboards, or power moderators:
+
+```ts
+const response = await ctx.tools.call('list_memories', {
+  scope: 'session',
+  pattern: 'user_*',
+  limit: 25,
+});
+```
+
+The response includes the matching keys, the inspected scope, and a `truncated` flag when the limit is reached.
+
+## Scope-aware cleanup
+
+Configure `RememberPlugin` options such as `tools.allowedScopes`, `defaultScope`, and brands to keep data tethered to the right lifetime. TTL helpers from `@frontmcp/utils` (`validateTTL`, `MAX_TTL_SECONDS`, `ttlToExpiresAt`) ensure you never set invalid expirations, and the glob helpers keep pattern matching safe.
+
+<Tip>
+  Keep `list_memories` calls scoped to a single session or user and pass a `limit` to avoid scanning the entire store. Patterns are complexity-bounded, so heavy filters stay performant.
+</Tip>
+
+<Info>
+  Patterns flow through `globToRegex`, so `*` matches any sequence and `?` matches a single character while protecting you from abusive expressions via `StoragePatternError`.
+</Info>
+
+## Dashboard and observability
+
+Pair the Remember Plugin with the Dashboard plugin to visualize scopes, tools, and approvals in real time. The dashboard UI streams MCP state over SSE, so any memory change surfaces immediately.
+
+```ts
+import { DashboardPlugin } from '@frontmcp/plugins';
+import { RememberPlugin } from '@frontmcp/plugin-remember';
+
+@FrontMcp({
+  plugins: [
+    new DashboardPlugin({
+      basePath: '/dashboard',
+      auth: { enabled: true, token: process.env.DASHBOARD_TOKEN },
+    }),
+    RememberPlugin.init({
+      tools: {
+        allowedScopes: ['session', 'user'],
+      },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+Use the dashboard's graph and tool explorer to see which memories each tool touches and to verify that cleanup tasks are running as expected.
