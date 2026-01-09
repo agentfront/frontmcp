@@ -44,6 +44,20 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
 
   </Card>
 
+  <Card title="Approval Plugin" icon="shield-check" href="/docs/plugins/approval-plugin">
+    PKCE/webhook tool approval with scoped grant checks, human-in-the-loop workflows, and shared storage adapters.
+
+    **Features:**
+    - Claude Code-style approval hooks that guard sensitive tools before execution
+    - Scoped grants (session, user, time-limited, context-specific) with per-tool risk metadata
+    - PKCE webhook mode for secure external authorization plus recheck polling
+    - Shared storage adapters (Redis, Vercel KV, Upstash, memory) via `@frontmcp/utils/createStorage`
+    - Full audit trail showing grantor, timestamp, and reason for every approval
+
+    **Best for:** High-risk operations, compliance workflows, and prompting human reviewers before tools run.
+
+  </Card>
+
   <Card title="CodeCall Plugin" icon="code" href="/docs/plugins/codecall/overview">
     Hide large toolsets behind a code-first meta-API. Instead of exposing hundreds of tools directly, CodeCall provides
     search, describe, and execute capabilities that let models write JavaScript plans to orchestrate your tools.

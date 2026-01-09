@@ -150,14 +150,14 @@ export default class GatewayServer {}
 
 ### Remote App Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `name` | `string` | Unique identifier for the remote app |
-| `urlType` | `'url'` | Must be `'url'` for remote apps |
-| `url` | `string` | MCP server endpoint URL |
-| `namespace` | `string` | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
-| `transportOptions` | `object` | Connection settings (timeout, retry attempts) |
-| `standalone` | `boolean` | If `true`, don't merge with parent scope |
+| Option             | Type      | Description                                                             |
+| ------------------ | --------- | ----------------------------------------------------------------------- |
+| `name`             | `string`  | Unique identifier for the remote app                                    |
+| `urlType`          | `'url'`   | Must be `'url'` for remote apps                                         |
+| `url`              | `string`  | MCP server endpoint URL                                                 |
+| `namespace`        | `string`  | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
+| `transportOptions` | `object`  | Connection settings (timeout, retry attempts)                           |
+| `standalone`       | `boolean` | If `true`, don't merge with parent scope                                |
 
 ### Transport Options
 
@@ -210,6 +210,10 @@ See the [Cache Plugin documentation](/docs/plugins/cache-plugin#caching-remote-t
     Test against local MCP servers running on different ports
   </Card>
 </CardGroup>
+
+<Note>
+  Combine remote apps with tuned `transportOptions` (timeouts, retry attempts, and namespaces) and the server `transport` block (legacy SSE, streamable helpers, and session requirements) so orchestrator agents and gateway proxies keep cross-server flows predictable.
+</Note>
 
 ---
 

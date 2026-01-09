@@ -1,109 +1,159 @@
-# @frontmcp/utils
+# @frontmcp/plugin-approval
 
-Shared utility functions for the FrontMCP ecosystem. Provides generic, protocol-neutral utilities for string manipulation, URI handling, path operations, content processing, and more.
+Tool authorization workflow with PKCE webhook security for FrontMCP.
+
+## Features
+
+- **Tool Approval Checking**: Automatic approval check before tool execution via hook
+- **Multiple Approval Scopes**: SESSION, USER, TIME_LIMITED, TOOL_SPECIFIC, CONTEXT_SPECIFIC
+- **PKCE Webhook Security**: RFC 7636 compliant PKCE for secure external approval systems
+- **Recheck Mode**: Poll external API for approval status
+- **Full Audit Trail**: Track who approved/revoked and when
+- **Context Extension**: Use `this.approval` in tools
 
 ## Installation
 
 ```bash
-npm install @frontmcp/utils
-# or
-yarn add @frontmcp/utils
+npm install @frontmcp/plugin-approval
 ```
 
-## Features
+## Usage
 
-### Naming Utilities
+### Basic Setup
 
 ```typescript
-import { splitWords, toCase, shortHash, ensureMaxLen, idFromString } from '@frontmcp/utils';
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
 
-// Split strings into words (handles camelCase, PascalCase, delimiters)
-splitWords('myFunctionName'); // ['my', 'Function', 'Name']
+// Create plugin with default settings
+const plugin = ApprovalPlugin.init();
 
-// Convert to different cases
-toCase(['my', 'function'], 'snake'); // 'my_function'
-toCase(['my', 'function'], 'kebab'); // 'my-function'
-toCase(['my', 'function'], 'camel'); // 'myFunction'
-
-// Generate short hashes
-shortHash('some-string'); // '6-char hex hash'
-
-// Truncate with hash for uniqueness
-ensureMaxLen('very-long-name-that-exceeds-limit', 20);
-
-// Sanitize to valid ID
-idFromString('My Function Name!'); // 'My-Function-Name'
+// Install into scope
+await plugin.install(scope);
 ```
 
-### URI Utilities
+### With Webhook Mode
 
 ```typescript
-import {
-  isValidMcpUri,
-  extractUriScheme,
-  parseUriTemplate,
-  matchUriTemplate,
-  expandUriTemplate,
-} from '@frontmcp/utils';
-
-// Validate RFC 3986 URIs
-isValidMcpUri('https://example.com/resource'); // true
-isValidMcpUri('/path/without/scheme'); // false
-
-// Extract scheme
-extractUriScheme('https://example.com'); // 'https'
-
-// RFC 6570 URI Templates
-const params = matchUriTemplate('users/{userId}/posts/{postId}', 'users/123/posts/456');
-// { userId: '123', postId: '456' }
-
-expandUriTemplate('users/{userId}', { userId: '123' }); // 'users/123'
+const plugin = ApprovalPlugin.init({
+  mode: 'webhook',
+  webhook: {
+    url: 'https://approval.example.com/webhook',
+    challengeTtl: 300, // 5 minutes
+    callbackPath: '/approval/callback',
+  },
+});
 ```
 
-### Path Utilities
+### Using in Tools
 
 ```typescript
-import { trimSlashes, joinPath } from '@frontmcp/utils';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 
-trimSlashes('/path/to/resource/'); // 'path/to/resource'
-joinPath('api', 'v1', 'users'); // '/api/v1/users'
+@Tool({
+  name: 'dangerous_operation',
+  approval: {
+    required: true,
+    defaultScope: 'session',
+    category: 'write',
+    riskLevel: 'high',
+    approvalMessage: 'Allow dangerous operation?',
+  },
+})
+class DangerousTool extends ToolContext {
+  async execute() {
+    // This tool requires approval before execution
+    // The approval hook automatically checks and throws ApprovalRequiredError if needed
+
+    // You can also programmatically check/grant approvals:
+    const approved = await this.approval.isApproved('other-tool');
+    await this.approval.grantSessionApproval('helper-tool');
+  }
+}
 ```
 
-### Content Utilities
+### Approval Scopes
+
+| Scope              | Description                                 |
+| ------------------ | ------------------------------------------- |
+| `SESSION`          | Valid for current session only              |
+| `USER`             | Persists across sessions for the user       |
+| `TIME_LIMITED`     | Expires after specified TTL                 |
+| `TOOL_SPECIFIC`    | Specific to a particular tool               |
+| `CONTEXT_SPECIFIC` | Specific to a context (repo, project, etc.) |
+
+## Configuration Options
 
 ```typescript
-import { sanitizeToJson, inferMimeType } from '@frontmcp/utils';
+interface ApprovalPluginOptions {
+  // Storage configuration
+  storage?: StorageConfig;
+  storageInstance?: RootStorage | NamespacedStorage;
+  namespace?: string; // default: 'approval'
 
-// Sanitize values to JSON-safe objects
-sanitizeToJson({ date: new Date(), fn: () => {} }); // { date: '2024-01-01T00:00:00.000Z' }
+  // Approval mode
+  mode?: 'recheck' | 'webhook'; // default: 'recheck'
 
-// Infer MIME type from extension
-inferMimeType('document.json'); // 'application/json'
-inferMimeType('image.png'); // 'image/png'
+  // Recheck mode options
+  recheck?: {
+    url?: string;
+    auth?: 'jwt' | 'bearer' | 'none' | 'custom';
+    interval?: number;
+    maxAttempts?: number;
+  };
+
+  // Webhook mode options
+  webhook?: {
+    url?: string;
+    includeJwt?: boolean; // default: false (security)
+    challengeTtl?: number; // seconds, default: 300
+    callbackPath?: string; // default: '/approval/callback'
+  };
+
+  // Audit options
+  enableAudit?: boolean; // default: true
+  maxDelegationDepth?: number; // default: 3
+  cleanupIntervalSeconds?: number; // default: 60
+}
 ```
 
-### HTTP Utilities
+## Shared Storage & Auto-detection
 
-```typescript
-import { validateBaseUrl } from '@frontmcp/utils';
+ApprovalPlugin can reuse the same storage instance that backs caching or session memory by accepting a `storageInstance`. Use `createStorage` from `@frontmcp/utils` to auto-detect Upstash, Vercel KV, Redis, or falling back to memory so the human-in-the-loop flow stays consistent across environments.
 
-// Validate and normalize URLs
-const url = validateBaseUrl('https://api.example.com');
-// Throws for invalid URLs or unsupported protocols (file://, javascript:)
+```ts
+import { createStorage } from '@frontmcp/utils';
+import { ApprovalPlugin } from '@frontmcp/plugin-approval';
+
+const sharedStorage = await createStorage({
+  type: 'auto', // Upstash → Vercel KV → Redis → memory
+  prefix: 'approval:', // Keep keys namespaced between features
+  fallback: 'memory', // Safely degrade when distributed stores are unavailable
+});
+
+const plugin = ApprovalPlugin.init({
+  storageInstance: sharedStorage,
+});
 ```
 
-### File System Utilities
+`createStorage` also exposes helpers like `getDetectedStorageType` so you can log whether the edge (Upstash/Vercel) or a local Redis instance is powering the approvals.
 
-```typescript
-import { fileExists, readJSON, writeJSON, ensureDir, isDirEmpty } from '@frontmcp/utils';
+## PKCE Security (Webhook Mode)
 
-// Async file operations
-await fileExists('/path/to/file');
-await readJSON<Config>('/path/to/config.json');
-await writeJSON('/path/to/output.json', { key: 'value' });
-await ensureDir('/path/to/directory');
-await isDirEmpty('/path/to/directory');
-```
+When using webhook mode, ApprovalPlugin uses PKCE (RFC 7636) for secure authorization:
+
+1. Generate PKCE pair: `code_verifier` (secret) + `code_challenge` (hash)
+2. Store challenge in Redis: `challenge:{code_challenge}` → session info
+3. Send to webhook: `{code_challenge, toolId, callbackUrl}` (NO session ID!)
+4. External system calls back: `POST /approval/callback {code_verifier, approved}`
+5. Plugin validates: `SHA256(code_verifier) === stored code_challenge`
+6. Grant approval if valid
+
+This ensures:
+
+- Session ID is never exposed to external systems
+- Challenge is single-use (deleted after callback)
+- Challenge expires after TTL
+- Only holder of `code_verifier` can complete approval
 
 ## License
 
