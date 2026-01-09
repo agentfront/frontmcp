@@ -1,0 +1,68 @@
+name: Package E2E Tests
+
+# Tests published packages using Verdaccio to catch export issues
+# that work in development but fail when packages are installed from npm
+
+on:
+  push:
+    branches:
+      - main
+      - "next/**"
+  pull_request:
+    branches:
+      - main
+      - "next/**"
+
+concurrency:
+  group: package-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-e2e:
+    name: "Package E2E (Verdaccio)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      NX_DAEMON: "false"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Node version
+        id: node-version
+        run: |
+          version="$(cat .nvmrc)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Verdaccio globally
+        run: npm install -g verdaccio
+
+      - name: Run Package E2E Tests
+        run: |
+          chmod +x libs/cli/e2e/run-e2e.sh
+          libs/cli/e2e/run-e2e.sh
+        env:
+          # Set to true to also run generated e2e tests (slower)
+          RUN_GENERATED_E2E: "false"
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-e2e-failure-logs
+          path: |
+            libs/cli/e2e/storage/
+            /tmp/test-*/
+          retention-days: 7

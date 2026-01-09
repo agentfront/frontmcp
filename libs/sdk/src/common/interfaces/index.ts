@@ -1,5 +1,5 @@
 // Re-export DI types for backwards compatibility
-export {
+export type {
   Type,
   FuncType,
   PartialStagesType,

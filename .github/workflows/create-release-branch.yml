@@ -313,10 +313,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
+          BUMP="${{ inputs.bump }}"
 
-          echo "Bumping synchronized libraries to version $NEXT..."
-          node scripts/bump-synchronized-versions.mjs "$NEXT"
+          echo "Bumping all synchronized libraries ($BUMP version bump)..."
+          # Use Nx native release versioning - includes both libs/* and plugins/*
+          # --git-tag=false: Don't create git tags (done in publish workflow)
+          # --git-commit=false: Don't commit (we commit everything together later)
+          npx nx release version "$BUMP" --git-tag=false --git-commit=false
 
       - name: Bump independent libraries and write changelogs
         if: ${{ steps.independent.outputs.independent_projects != '' }}

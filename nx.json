@@ -81,7 +81,7 @@
     }
   },
   "release": {
-    "projects": ["libs/*"],
+    "projects": ["libs/*", "plugins/*"],
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
     }
