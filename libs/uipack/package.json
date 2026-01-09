@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/uipack",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "FrontMCP UIpack - Bundling, build tools, and platform adapters for MCP UI development (React-free core)",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
@@ -57,7 +57,7 @@
     "./esm": null
   },
   "dependencies": {
-    "@frontmcp/utils": "0.7.0",
+    "@frontmcp/utils": "0.7.1",
     "@swc/core": "^1.5.0",
     "enclave-vm": "^2.7.0",
     "esbuild": "^0.27.1",

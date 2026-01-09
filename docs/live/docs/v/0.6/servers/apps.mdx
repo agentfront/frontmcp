@@ -112,13 +112,104 @@ export default class BillingApp {}
 
 ---
 
-## Remote Apps (Roadmap)
+## Remote Apps
 
-<Info>
-  **Coming soon:** Connect to remote MCP servers and register them as `@App({ remote: true })`.
-  This will allow you to encapsulate external MCP servers and forward traffic with authentication,
-  treating them as first-class apps in your FrontMCP server.
-</Info>
+Connect to external MCP servers and proxy their tools, resources, and prompts through your gateway:
+
+```ts
+@FrontMcp({
+  info: { name: 'Gateway', version: '1.0.0' },
+  apps: [
+    // Remote MCP server connected via URL
+    {
+      name: 'mintlify-docs',
+      urlType: 'url',
+      url: 'https://mintlify.com/docs/mcp',
+      namespace: 'mintlify', // Tools prefixed as 'mintlify:ToolName'
+      transportOptions: {
+        timeout: 60000,
+        retryAttempts: 2,
+      },
+      standalone: false,
+    },
+    // Local MCP server on different port
+    {
+      name: 'local-service',
+      urlType: 'url',
+      url: 'http://localhost:3099/',
+      namespace: 'local',
+      transportOptions: {
+        timeout: 30000,
+        retryAttempts: 3,
+      },
+    },
+  ],
+})
+export default class GatewayServer {}
+```
+
+### Remote App Options
+
+| Option             | Type      | Description                                                             |
+| ------------------ | --------- | ----------------------------------------------------------------------- |
+| `name`             | `string`  | Unique identifier for the remote app                                    |
+| `urlType`          | `'url'`   | Must be `'url'` for remote apps                                         |
+| `url`              | `string`  | MCP server endpoint URL                                                 |
+| `namespace`        | `string`  | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
+| `transportOptions` | `object`  | Connection settings (timeout, retry attempts)                           |
+| `standalone`       | `boolean` | If `true`, don't merge with parent scope                                |
+
+### Transport Options
+
+```ts
+transportOptions: {
+  timeout: 60000,      // Request timeout in milliseconds
+  retryAttempts: 3,    // Number of retry attempts on failure
+}
+```
+
+### Caching Remote Tools
+
+Remote tools don't have cache metadata, so use the `toolPatterns` option in CachePlugin:
+
+```ts
+@FrontMcp({
+  apps: [
+    {
+      name: 'external-api',
+      urlType: 'url',
+      url: 'https://api.example.com/mcp',
+      namespace: 'api',
+    },
+  ],
+  plugins: [
+    CachePlugin.init({
+      type: 'memory',
+      defaultTTL: 300,
+      toolPatterns: ['api:*'], // Cache all tools from this namespace
+    }),
+  ],
+})
+```
+
+See the [Cache Plugin documentation](/docs/plugins/cache-plugin#caching-remote-tools) for more details on pattern-based caching.
+
+### Use Cases for Remote Apps
+
+<CardGroup cols={2}>
+  <Card title="MCP Gateway" icon="diagram-project">
+    Aggregate multiple MCP servers behind a single endpoint with unified authentication
+  </Card>
+  <Card title="Service Mesh" icon="network-wired">
+    Connect to internal microservices running as separate MCP servers
+  </Card>
+  <Card title="Third-Party Integration" icon="plug">
+    Proxy external MCP services like Mintlify, adding caching and rate limiting
+  </Card>
+  <Card title="Development" icon="code">
+    Test against local MCP servers running on different ports
+  </Card>
+</CardGroup>
 
 ---
 
