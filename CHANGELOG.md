@@ -1,4 +1,4 @@
-## [v0.7.0] - 2026-01-09
+## [v0.7.1] - 2026-01-09
 
 ### feat
 
@@ -169,7 +169,6 @@
 
 - Split draft/live Mintlify trees, auto-archive previous minors, and enforce husky + lint-staged guards so release branches stay focused on intentional changes.
 
-
 ## [v0.3.1] - 2025-11-16
 
 ### feat
@@ -300,4 +299,3 @@ This was a version bump only, there were no code changes.
 ### ❤️ Thank You
 
 - David Antoon @frontegg-david
-

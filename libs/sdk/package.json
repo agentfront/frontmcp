@@ -68,9 +68,9 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "0.7.0",
-    "@frontmcp/di": "0.7.0",
-    "@frontmcp/uipack": "0.7.0",
+    "@frontmcp/utils": "0.7.1",
+    "@frontmcp/di": "0.7.1",
+    "@frontmcp/uipack": "0.7.1",
     "@modelcontextprotocol/sdk": "1.25.1",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^1.2.0",
