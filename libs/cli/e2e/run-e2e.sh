@@ -67,20 +67,22 @@ export npm_config_registry="$VERDACCIO_URL"
 echo "//localhost:$VERDACCIO_PORT/:_authToken=fake-token-for-e2e" > "$ROOT_DIR/.npmrc.e2e"
 export NPM_CONFIG_USERCONFIG="$ROOT_DIR/.npmrc.e2e"
 
-# Build all packages
+# Build all packages (including dependencies: di, utils, uipack, individual plugins)
 echo "🔨 Building packages..."
 cd "$ROOT_DIR"
-npx nx run-many -t build --projects=sdk,ui,adapters,plugins,testing,cli --parallel=5
+npx nx run-many -t build --projects=di,utils,uipack,sdk,ui,adapters,plugin-cache,plugin-codecall,plugin-dashboard,plugin-remember,plugins,testing,cli --parallel=5
 
 # Clean old storage to avoid version conflicts
 rm -rf "$E2E_DIR/storage"
 
 # Publish packages to local registry
+# Order matters: dependencies must be published before dependents
 echo "📤 Publishing packages to local registry..."
 
-PACKAGES=("sdk" "ui" "adapters" "plugins" "testing" "cli")
-for pkg in "${PACKAGES[@]}"; do
-  echo "  Publishing $pkg..."
+# First publish libs packages
+LIBS_PACKAGES=("di" "utils" "uipack" "sdk" "ui" "adapters" "testing" "cli")
+for pkg in "${LIBS_PACKAGES[@]}"; do
+  echo "  Publishing libs/$pkg..."
   if [ -d "libs/$pkg/dist" ]; then
     cd "libs/$pkg/dist"
     if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
@@ -90,9 +92,40 @@ for pkg in "${PACKAGES[@]}"; do
     fi
     cd "$ROOT_DIR"
   else
-    echo "    ⚠️  No dist folder found for $pkg"
+    echo "    ⚠️  No dist folder found for libs/$pkg"
   fi
 done
+
+# Then publish individual plugins (required before meta-package)
+PLUGIN_PACKAGES=("plugin-cache" "plugin-codecall" "plugin-dashboard" "plugin-remember")
+for pkg in "${PLUGIN_PACKAGES[@]}"; do
+  echo "  Publishing plugins/$pkg..."
+  if [ -d "plugins/$pkg/dist" ]; then
+    cd "plugins/$pkg/dist"
+    if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+      echo "    ✅ Published successfully"
+    else
+      echo "    ⚠️  Publish failed (may already exist or missing dependency)"
+    fi
+    cd "$ROOT_DIR"
+  else
+    echo "    ⚠️  No dist folder found for plugins/$pkg"
+  fi
+done
+
+# Finally publish the plugins meta-package
+echo "  Publishing libs/plugins..."
+if [ -d "libs/plugins/dist" ]; then
+  cd "libs/plugins/dist"
+  if npm publish --registry "$VERDACCIO_URL" --access public 2>&1; then
+    echo "    ✅ Published successfully"
+  else
+    echo "    ⚠️  Publish failed (may already exist or missing dependency)"
+  fi
+  cd "$ROOT_DIR"
+else
+  echo "    ⚠️  No dist folder found for libs/plugins"
+fi
 
 echo ""
 echo "🧪 Running E2E tests..."
@@ -194,6 +227,55 @@ if [ $? -eq 0 ]; then
 else
   echo "  ❌ Failed to install dependencies"
   exit 1
+fi
+
+# Test 8: Verify TypeScript compilation works (catches export type issues)
+# This is the critical test that catches bugs like missing "export type" keywords
+# which work in development (via path mappings) but fail in published packages
+echo ""
+echo "Test 8: TypeScript compilation check (catches export type bugs)"
+npx tsc --noEmit
+if [ $? -eq 0 ]; then
+  echo "  ✅ TypeScript compilation successful"
+else
+  echo "  ❌ TypeScript compilation failed"
+  echo "  This often indicates missing or incorrect exports in published packages"
+  echo "  Common cause: using 'export { Type }' instead of 'export type { Type }'"
+  exit 1
+fi
+
+# Test 9: Verify ESM module resolution works
+echo ""
+echo "Test 9: ESM module resolution check"
+node --input-type=module -e "
+import('@frontmcp/sdk').then(m => {
+  if (m.FrontMcpInstance) {
+    console.log('  ✅ ESM import successful');
+    process.exit(0);
+  } else {
+    console.log('  ❌ FrontMcpInstance not exported');
+    process.exit(1);
+  }
+}).catch(e => {
+  console.log('  ❌ ESM import failed:', e.message);
+  process.exit(1);
+});
+"
+if [ $? -ne 0 ]; then
+  exit 1
+fi
+
+# Test 10: Run generated e2e tests (optional, can be slow)
+if [ "${RUN_GENERATED_E2E:-false}" = "true" ]; then
+  echo ""
+  echo "Test 10: Run generated e2e tests"
+  npm run test:e2e
+  if [ $? -eq 0 ]; then
+    echo "  ✅ Generated e2e tests passed"
+  else
+    echo "  ❌ Generated e2e tests failed"
+    exit 1
+  fi
 fi
 
 echo ""

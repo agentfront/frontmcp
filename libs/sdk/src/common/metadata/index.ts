@@ -1,5 +1,7 @@
 // Re-export DI metadata types for backwards compatibility
-export { ProviderScope, ProviderMetadata } from '@frontmcp/di';
+// ProviderScope is an enum (has runtime value), ProviderMetadata is type-only
+export { ProviderScope } from '@frontmcp/di';
+export type { ProviderMetadata } from '@frontmcp/di';
 
 export * from './front-mcp.metadata';
 export * from './flow.metadata';

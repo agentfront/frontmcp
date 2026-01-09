@@ -1,6 +1,7 @@
 // Re-export DI provider record types for backwards compatibility
-export {
-  ProviderKind,
+// ProviderKind is an enum (has runtime value), types are type-only
+export { ProviderKind } from '@frontmcp/di';
+export type {
   ProviderRecord,
   ProviderClassTokenRecord,
   ProviderClassRecord,
