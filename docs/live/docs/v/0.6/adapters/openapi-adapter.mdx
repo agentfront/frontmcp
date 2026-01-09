@@ -1,0 +1,893 @@
+---
+title: OpenAPI Adapter
+slug: adapters/openapi-adapter
+sidebarTitle: OpenAPI
+description: Generate MCP tools directly from an OpenAPI spec and call them with strong validation.
+icon: puzzle-piece
+---
+
+The OpenAPI Adapter automatically converts OpenAPI 3.x specifications into fully-functional MCP tools. Each API operation becomes a callable tool with built-in validation, authentication, and type safety.
+
+## Why use it
+
+- **Zero boilerplate** — Turn REST APIs into MCP tools without writing glue code
+- **Type-safe** — Automatic Zod schema generation from OpenAPI specs
+- **Multi-auth support** — Built-in support for multiple authentication providers
+- **Production-ready** — Comprehensive security validation and error handling
+- **Flexible** — Filter operations, customize schemas, and inject custom logic
+
+## Installation
+
+```bash
+npm install @frontmcp/adapters
+```
+
+## Quick start
+
+<CodeGroup>
+
+```ts Basic usage
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'my-api',
+  name: 'My API MCP Server',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      baseUrl: process.env.API_BASE_URL!,
+      url: process.env.OPENAPI_SPEC_URL!,
+    }),
+  ],
+})
+export default class MyApiApp {}
+```
+
+```ts With authentication
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'my-api',
+  name: 'My API MCP Server',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      baseUrl: process.env.API_BASE_URL!,
+      url: process.env.OPENAPI_SPEC_URL!,
+      additionalHeaders: {
+        'x-api-key': process.env.API_KEY!,
+      },
+    }),
+  ],
+})
+export default class MyApiApp {}
+```
+
+</CodeGroup>
+
+## Configuration
+
+### Required Options
+
+<ParamField path="name" type="string" required>
+  Unique identifier for this adapter instance. Used to prefix tool names when multiple adapters are present.
+</ParamField>
+
+<ParamField path="baseUrl" type="string" required>
+  Base URL for API requests (e.g., `https://api.example.com/v1`).
+</ParamField>
+
+<ParamField path="spec" type="OpenAPIV3.Document | OpenAPIV3_1.Document | object">
+  In-memory OpenAPI specification object. Accepts typed documents or plain objects from JSON imports. Use either `spec` or `url`, not both.
+</ParamField>
+
+<ParamField path="url" type="string">
+  URL or file path to the OpenAPI specification. Can be a local file path or remote URL. Use either `spec` or `url`, not
+  both.
+</ParamField>
+
+### Optional Configuration
+
+<ParamField path="additionalHeaders" type="Record<string, string>">
+  Static headers applied to every request. Useful for API keys or static authentication tokens.
+</ParamField>
+
+<ParamField path="headersMapper" type="(ctx: FrontMcpContext, headers: Headers) => Headers">
+  Function to dynamically set headers based on request context. Access `ctx.authInfo`, `ctx.sessionId`, `ctx.traceContext`, etc. Headers set here are hidden from MCP clients.
+</ParamField>
+
+<ParamField path="bodyMapper" type="(ctx: FrontMcpContext, body: any) => any">
+  Function to transform or augment the request body before sending. Access `ctx.authInfo`, `ctx.sessionId`, etc. Useful for adding tenant IDs or user-specific data.
+</ParamField>
+
+<ParamField path="loadOptions" type="LoadOptions">
+  Options for loading the OpenAPI specification (headers, timeout, etc.). See
+  [mcp-from-openapi](https://www.npmjs.com/package/mcp-from-openapi) for details.
+</ParamField>
+
+<ParamField path="generateOptions" type="GenerateOptions">
+  Options for tool generation. See [Advanced Features](#advanced-features) for details.
+</ParamField>
+
+<ParamField path="inputTransforms" type="InputTransformOptions">
+  Hide inputs from the schema and inject values at request time. Supports global, per-tool, and generator-based transforms. See [Input Schema Transforms](#input-schema-transforms).
+</ParamField>
+
+<ParamField path="toolTransforms" type="ToolTransformOptions">
+  Customize generated tools with annotations, tags, descriptions, and more. Supports global, per-tool, and generator-based transforms. See [Tool Transforms](#tool-transforms).
+</ParamField>
+
+<ParamField path="descriptionMode" type="'summaryOnly' | 'descriptionOnly' | 'combined' | 'full'">
+  How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
+</ParamField>
+
+<ParamField path="logger" type="FrontMcpLogger">
+  Logger instance for adapter diagnostics. When using `OpenapiAdapter.init()` within a FrontMCP app, the SDK automatically provides the logger via `setLogger()`. For standalone usage, you can optionally provide a logger implementing the `FrontMcpLogger` interface; if omitted, a console-based logger is created automatically.
+</ParamField>
+
+## Authentication
+
+The OpenAPI adapter provides multiple authentication strategies with different security risk levels. Choose the approach that best fits your use case.
+
+### Strategy 1: Static Headers (Medium Risk)
+
+Best for: Server-to-server APIs with static credentials.
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  additionalHeaders: {
+    'x-api-key': process.env.API_KEY!,
+    authorization: `Bearer ${process.env.API_TOKEN}`,
+  },
+});
+```
+
+<Warning>Store credentials in environment variables or secrets manager, never hardcode them.</Warning>
+
+### Strategy 2: Auth Provider Mapper (Low Risk) ⭐ Recommended
+
+Best for: Multi-provider authentication (GitHub, Slack, Google, etc.).
+
+This approach maps OpenAPI security scheme names to authentication extractors. Each security scheme can use a different auth provider from the authenticated user context.
+
+```ts
+OpenapiAdapter.init({
+  name: 'multi-auth-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  authProviderMapper: {
+    // Map security scheme 'GitHubAuth' to GitHub token from user context
+    GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
+
+    // Map security scheme 'SlackAuth' to Slack token from user context
+    SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
+
+    // Map security scheme 'ApiKeyAuth' to API key from user context
+    ApiKeyAuth: (ctx) => ctx.authInfo.user?.apiKey,
+  },
+});
+```
+
+**How it works:**
+
+1. Extracts security scheme names from OpenAPI spec (e.g., `GitHubAuth`, `SlackAuth`)
+2. For each tool, looks up the required security scheme
+3. Calls the corresponding extractor function to get the token from `ctx.authInfo`
+4. Applies the token to the request
+
+<Check>
+  **Security Risk: LOW** — Authentication is resolved from the request context, not exposed to MCP clients.
+</Check>
+
+<Info>
+  The `ctx` parameter in `authProviderMapper`, `headersMapper`, `bodyMapper`, and `securityResolver`
+  callbacks is the `FrontMcpContext` containing `authInfo`, `sessionId`, `traceContext`, and more. By the time your tool executes,
+  authentication has been verified and auth fields are populated.
+</Info>
+
+### Strategy 3: Custom Security Resolver (Low Risk)
+
+Best for: Complex authentication logic or custom security requirements.
+
+```ts
+OpenapiAdapter.init({
+  name: 'custom-auth-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  securityResolver: (tool, ctx) => {
+    const authInfo = ctx.authInfo;
+
+    // Use GitHub token for GitHub API tools
+    if (tool.name.startsWith('github_')) {
+      return { jwt: authInfo.user?.githubToken };
+    }
+
+    // Use Google token for Google API tools
+    if (tool.name.startsWith('google_')) {
+      return { jwt: authInfo.user?.googleToken };
+    }
+
+    // Use API key for admin tools
+    if (tool.name.startsWith('admin_')) {
+      return { apiKey: authInfo.user?.adminApiKey };
+    }
+
+    // Default to main JWT token
+    return { jwt: authInfo.token };
+  },
+});
+```
+
+<Check>**Security Risk: LOW** — Full control over authentication resolution from request context.</Check>
+
+### Strategy 4: Static Auth (Medium Risk)
+
+Best for: Server-to-server APIs where credentials don't change per user.
+
+```ts
+OpenapiAdapter.init({
+  name: 'backend-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  staticAuth: {
+    jwt: process.env.API_JWT_TOKEN,
+    apiKey: process.env.API_KEY,
+  },
+});
+```
+
+<Warning>**Security Risk: MEDIUM** — Store credentials securely in environment variables or secrets manager.</Warning>
+
+### Strategy 5: Dynamic Headers & Body Mapping (Low Risk)
+
+Best for: Adding user-specific data (tenant IDs, user IDs) to requests.
+
+```ts
+OpenapiAdapter.init({
+  name: 'tenant-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  headersMapper: (ctx, headers) => {
+    const authInfo = ctx.authInfo;
+
+    // Add authorization header
+    if (authInfo.token) {
+      headers.set('authorization', `Bearer ${authInfo.token}`);
+    }
+
+    // Add tenant ID from user context
+    if (authInfo.user?.tenantId) {
+      headers.set('x-tenant-id', authInfo.user.tenantId);
+    }
+
+    // Add trace ID for distributed tracing
+    headers.set('x-trace-id', ctx.traceContext.traceId);
+
+    return headers;
+  },
+  bodyMapper: (ctx, body) => {
+    const authInfo = ctx.authInfo;
+
+    // Add user ID to all request bodies
+    return {
+      ...body,
+      createdBy: authInfo.user?.id,
+      tenantId: authInfo.user?.tenantId,
+    };
+  },
+});
+```
+
+<Check>**Security Risk: LOW** — User-specific data is injected server-side, hidden from MCP clients.</Check>
+
+### Default Behavior (Medium Risk)
+
+If no authentication configuration is provided, the adapter uses `authInfo.token` for all Bearer auth schemes.
+
+```ts
+OpenapiAdapter.init({
+  name: 'simple-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  // No auth config - will use authInfo.token by default
+});
+```
+
+<Warning>
+  **Security Risk: MEDIUM** — Only works for single Bearer auth. For multiple auth providers, use `authProviderMapper`
+  or `securityResolver`.
+</Warning>
+
+## Advanced Features
+
+### Filtering Operations
+
+Control which API operations become MCP tools.
+
+<CodeGroup>
+
+```ts Filter by path
+OpenapiAdapter.init({
+  name: 'billing-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    filterFn: (op) => op.path.startsWith('/invoices') || op.path.startsWith('/customers'),
+  },
+});
+```
+
+```ts Exclude specific operations
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    excludeOperationIds: ['deprecatedEndpoint', 'internalOnly'],
+  },
+});
+```
+
+```ts Include only specific operations
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    defaultInclude: false,
+    filterFn: (op) => ['getUser', 'createUser', 'updateUser'].includes(op.operationId),
+  },
+});
+```
+
+</CodeGroup>
+
+### Input Schema Transformation
+
+Customize the input schema for generated tools.
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  generateOptions: {
+    inputSchemaMapper: (schema) => {
+      // Remove sensitive fields from the input schema
+      if (schema.properties?.password) {
+        delete schema.properties.password;
+      }
+
+      // Add custom fields
+      schema.properties.customField = {
+        type: 'string',
+        description: 'Custom field added by mapper',
+      };
+
+      return schema;
+    },
+  },
+});
+```
+
+### Input Schema Transforms
+
+Hide inputs from AI/users and inject values server-side at request time. This is more powerful than `inputSchemaMapper` as it provides access to the authentication context.
+
+<CodeGroup>
+
+```ts Global transforms
+OpenapiAdapter.init({
+  name: 'tenant-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    global: [
+      // Hide tenant header from AI, inject from user context
+      { inputKey: 'X-Tenant-Id', inject: (ctx) => ctx.authInfo.user?.tenantId },
+      // Add correlation ID to all requests
+      { inputKey: 'X-Correlation-Id', inject: () => crypto.randomUUID() },
+    ],
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'audit-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    perTool: {
+      'createAuditLog': [
+        { inputKey: 'userId', inject: (ctx) => ctx.authInfo.user?.id },
+        { inputKey: 'timestamp', inject: () => new Date().toISOString() },
+      ],
+    },
+  },
+});
+```
+
+```ts Dynamic generator
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  inputTransforms: {
+    generator: (tool) => {
+      // Add request ID to all mutating operations
+      if (['post', 'put', 'patch', 'delete'].includes(tool.metadata.method)) {
+        return [{ inputKey: 'X-Request-Id', inject: () => crypto.randomUUID() }];
+      }
+      return [];
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+<Check>
+  **Security Benefit:** Sensitive inputs like tenant IDs and user IDs are injected server-side, never exposed to MCP clients.
+</Check>
+
+### Tool Transforms
+
+Customize generated tools with annotations, tags, descriptions, and more.
+
+<CodeGroup>
+
+```ts Global transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    global: {
+      annotations: { openWorldHint: true },
+    },
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    perTool: {
+      'createUser': {
+        annotations: { destructiveHint: false },
+        tags: ['user-management'],
+      },
+      'deleteUser': {
+        annotations: { destructiveHint: true },
+        tags: ['user-management', 'dangerous'],
+      },
+    },
+  },
+});
+```
+
+```ts Dynamic generator
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  toolTransforms: {
+    generator: (tool) => {
+      // Auto-annotate based on HTTP method
+      if (tool.metadata.method === 'get') {
+        return { annotations: { readOnlyHint: true, destructiveHint: false } };
+      }
+      if (tool.metadata.method === 'delete') {
+        return { annotations: { destructiveHint: true } };
+      }
+      return undefined;
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+**Available transform properties:**
+
+| Property            | Type                 | Description                                |
+| ------------------- | -------------------- | ------------------------------------------ |
+| `name`              | `string \| function` | Override or transform the tool name        |
+| `description`       | `string \| function` | Override or transform the tool description |
+| `annotations`       | `ToolAnnotations`    | MCP tool behavior hints                    |
+| `tags`              | `string[]`           | Categorization tags                        |
+| `examples`          | `ToolExample[]`      | Usage examples                             |
+| `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
+| `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
+
+### x-frontmcp OpenAPI Extension
+
+Configure tool behavior directly in your OpenAPI spec using the `x-frontmcp` extension:
+
+```yaml openapi.yaml
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      x-frontmcp:
+        annotations:
+          readOnlyHint: true
+          idempotentHint: true
+        cache:
+          ttl: 300
+        tags:
+          - users
+          - public-api
+    delete:
+      operationId: deleteUser
+      summary: Delete a user
+      x-frontmcp:
+        annotations:
+          destructiveHint: true
+        tags:
+          - users
+          - dangerous
+```
+
+**Extension properties:**
+
+| Property            | Type       | Description                                                                               |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `annotations`       | `object`   | Tool behavior hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title) |
+| `cache`             | `object`   | Cache config: `ttl` (seconds), `slideWindow` (boolean)                                    |
+| `codecall`          | `object`   | CodeCall config: `enabledInCodeCall`, `visibleInListTools`                                |
+| `tags`              | `string[]` | Categorization tags                                                                       |
+| `hideFromDiscovery` | `boolean`  | Hide from tool listing                                                                    |
+| `examples`          | `array`    | Usage examples with input/output                                                          |
+
+<Tip>
+  Use `x-frontmcp` in your OpenAPI spec for declarative configuration.
+  Use `toolTransforms` in adapter config to override spec values.
+</Tip>
+
+### Description Mode
+
+Control how tool descriptions are generated from OpenAPI operations:
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  descriptionMode: 'combined', // Default: 'summaryOnly'
+});
+```
+
+| Mode                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `'summaryOnly'`     | Use only the OpenAPI summary (default)      |
+| `'descriptionOnly'` | Use only the OpenAPI description            |
+| `'combined'`        | Summary followed by description             |
+| `'full'`            | Summary, description, and operation details |
+
+### Load Options
+
+Configure how the OpenAPI spec is loaded.
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  loadOptions: {
+    headers: {
+      authorization: `Bearer ${process.env.SPEC_ACCESS_TOKEN}`,
+    },
+    timeout: 10000, // 10 seconds
+  },
+});
+```
+
+## How It Works
+
+### Request Processing
+
+1. **Path Parameters** — Interpolated into URL template (e.g., `/users/{id}` → `/users/123`)
+2. **Query Parameters** — Validated and appended to URL
+3. **Headers** — Merged from `additionalHeaders`, `headersMapper`, and security config
+4. **Request Body** — Validated and transformed by `bodyMapper` (for POST/PUT/PATCH)
+5. **Authentication** — Applied via selected strategy (auth provider mapper, security resolver, etc.)
+
+### Response Processing
+
+- **JSON responses** — Automatically parsed to objects
+- **Text responses** — Returned as plain text
+- **Error responses** — Thrown as errors with status code and message
+
+## Complete Examples
+
+### Multi-Provider OAuth Application
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'multi-provider-app',
+  name: 'Multi-Provider Integration',
+  adapters: [
+    // GitHub API
+    OpenapiAdapter.init({
+      name: 'github',
+      url: 'https://api.github.com/openapi.json',
+      baseUrl: 'https://api.github.com',
+      authProviderMapper: {
+        GitHubAuth: (ctx) => ctx.authInfo.user?.githubToken,
+      },
+    }),
+
+    // Slack API
+    OpenapiAdapter.init({
+      name: 'slack',
+      url: 'https://api.slack.com/openapi.json',
+      baseUrl: 'https://api.slack.com',
+      authProviderMapper: {
+        SlackAuth: (ctx) => ctx.authInfo.user?.slackToken,
+      },
+    }),
+  ],
+})
+export default class MultiProviderApp {}
+```
+
+### Multi-Tenant SaaS Application
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'saas-app',
+  name: 'SaaS Platform',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      spec: require('./openapi.json'),
+      baseUrl: process.env.API_BASE_URL!,
+      headersMapper: (ctx, headers) => {
+        // Add tenant ID to all requests
+        if (ctx.authInfo?.user?.tenantId) {
+          headers.set('x-tenant-id', ctx.authInfo.user.tenantId);
+        }
+
+        // Add user authorization
+        if (ctx.authInfo?.token) {
+          headers.set('authorization', `Bearer ${ctx.authInfo.token}`);
+        }
+
+        return headers;
+      },
+      bodyMapper: (ctx, body) => {
+        // Add user context to all mutations
+        return {
+          ...body,
+          tenantId: ctx.authInfo?.user?.tenantId,
+          userId: ctx.authInfo?.user?.id,
+          timestamp: new Date().toISOString(),
+        };
+      },
+    }),
+  ],
+})
+export default class SaasApp {}
+```
+
+### Expense Management (From Demo)
+
+```ts
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP app',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'backend:api',
+      url: process.env.OPENAPI_SPEC_URL!,
+      baseUrl: process.env.API_BASE_URL!,
+      headersMapper: (ctx, headers) => {
+        const token = ctx.authInfo?.token;
+        if (token) {
+          headers.set('authorization', `Bearer ${token}`);
+        }
+        return headers;
+      },
+    }),
+  ],
+})
+export default class ExpenseMcpApp {}
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Auth Provider Mapper" icon="shield-check">
+    For multi-provider authentication, use `authProviderMapper` to map each security scheme to the correct auth provider. This provides **LOW security risk**.
+  </Card>
+
+<Card title="Never Hardcode Credentials" icon="triangle-exclamation">
+  Always store credentials in environment variables or secrets manager. Never commit credentials to source control.
+</Card>
+
+<Card title="Avoid includeSecurityInInput" icon="xmark">
+  Setting `generateOptions.includeSecurityInInput: true` exposes auth fields to MCP clients (**HIGH risk**). Only use
+  for development/testing.
+</Card>
+
+  <Card title="Validate User Context" icon="user-check">
+    Always validate that `authInfo.user` contains the expected fields before extracting tokens. Handle missing tokens gracefully.
+  </Card>
+</CardGroup>
+
+## Security Risk Levels
+
+The adapter automatically validates your security configuration and assigns a risk score:
+
+| Risk Level    | Configuration                                  | Description                                             |
+| ------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| **LOW** ✅    | `authProviderMapper` or `securityResolver`     | Auth resolved from user context, not exposed to clients |
+| **MEDIUM** ⚠️ | `staticAuth`, `additionalHeaders`, or default  | Static credentials or default behavior                  |
+| **HIGH** 🚨   | `generateOptions.includeSecurityInInput: true` | Auth fields exposed to MCP clients (not recommended)    |
+
+## Built-in Security Protections
+
+Beyond authentication, the adapter includes defense-in-depth protections:
+
+| Protection                | Description                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **SSRF Prevention**       | Validates server URLs, blocks dangerous protocols (`file://`, `javascript://`, `data:`) |
+| **Header Injection**      | Rejects control characters (`\r`, `\n`, `\x00`, `\f`, `\v`) in header values            |
+| **Prototype Pollution**   | Blocks reserved JS keys (`__proto__`, `constructor`, `prototype`) in input transforms   |
+| **Request Size Limits**   | Content-Length validation with integer overflow protection                              |
+| **Query Param Collision** | Detects conflicts between security and user input parameters                            |
+
+**Auth Type Routing:** Tokens are automatically routed to the correct context field based on security scheme type (Bearer → `jwt`, API Key → `apiKey`, Basic → `basic`, OAuth2 → `oauth2Token`).
+
+<Tip>
+  These protections are automatic—no configuration required. See the [README](https://github.com/agentfront/frontmcp/tree/main/libs/adapters/src/openapi#security-protections) for implementation details.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Missing auth provider mappings">
+    **Cause:** Your OpenAPI spec defines security schemes that aren't mapped in `authProviderMapper`.
+
+    **Solution:** Add all required security schemes to `authProviderMapper`:
+
+    ```ts
+    authProviderMapper: {
+      'GitHubAuth': (ctx) => ctx.authInfo.user?.githubToken,
+      'SlackAuth': (ctx) => ctx.authInfo.user?.slackToken,
+      // Add all security schemes from your spec
+    }
+    ```
+
+  </Accordion>
+
+  <Accordion title="Error: Authentication required but no auth configuration found">
+    **Cause:** The tool requires authentication but no auth configuration was provided.
+
+    **Solution:** Choose one of the authentication strategies:
+
+    1. Add `authProviderMapper` (recommended for multi-provider)
+    2. Add `securityResolver` (for custom logic)
+    3. Add `staticAuth` (for server-to-server)
+    4. Add `additionalHeaders` (for static API keys)
+
+  </Accordion>
+
+  <Accordion title="Tools not appearing">
+    **Cause:** Tools may be filtered out by `filterFn` or `excludeOperationIds`.
+
+    **Solution:** Check your filter configuration or remove filters to include all operations.
+
+  </Accordion>
+
+  <Accordion title="Request fails with 401 Unauthorized">
+    **Cause:** Authentication token is missing or invalid.
+
+    **Solution:**
+    1. Verify `authInfo.user` contains the expected token fields
+    2. Check that token extraction returns a valid value
+    3. Verify the token is not expired
+    4. Check API logs for specific auth errors
+
+  </Accordion>
+
+  <Accordion title="TypeScript errors with OpenAPI spec">
+    **Cause:** OpenAPI spec may not be typed correctly.
+
+    **Solution:** Cast the spec to `OpenAPIV3.Document`:
+
+    ```ts
+    import { OpenAPIV3 } from 'openapi-types';
+
+    const spec = require('./openapi.json') as OpenAPIV3.Document;
+    ```
+
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+### OpenapiAdapter.init(options)
+
+Creates a new OpenAPI adapter instance.
+
+**Parameters:**
+
+- `options: OpenApiAdapterOptions` — Adapter configuration
+
+**Returns:** Adapter instance ready for use in `@App({ adapters: [...] })`
+
+### Security Types
+
+```ts
+// Security context passed to mcp-from-openapi
+interface SecurityContext {
+  jwt?: string;
+  apiKey?: string;
+  basic?: { username: string; password: string };
+  oauth2Token?: string;
+  apiKeys?: Record<string, string>;
+  customHeaders?: Record<string, string>;
+}
+
+// Auth info from FrontMCP
+interface AuthInfo {
+  token?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    [key: string]: any; // Custom user fields
+  };
+}
+```
+
+## Performance Tips
+
+<Tip>
+  The adapter uses lazy loading — the OpenAPI spec is only loaded and tools are only generated on first use, not during
+  initialization.
+</Tip>
+
+<Tip>Combine with app-level plugins (caching, logging, metrics) to enhance all generated tools automatically.</Tip>
+
+<Tip>Use `filterFn` to generate only the tools you need, reducing initialization time and memory usage.</Tip>
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo/src/apps/expenses">
+    See the expense management demo app using the OpenAPI adapter
+  </Card>
+
+<Card title="Example OpenAPI Spec" icon="file-code" href="https://frontmcp-test.proxy.beeceptor.com/openapi.json">
+  OpenAPI spec used in the demo application
+</Card>
+
+<Card title="Generator Library" icon="npm" href="https://www.npmjs.com/package/mcp-from-openapi">
+  Underlying library for OpenAPI to MCP conversion
+</Card>
+
+  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/adapters/src/openapi">
+    View the adapter source code
+  </Card>
+</CardGroup>

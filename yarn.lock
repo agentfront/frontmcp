@@ -5143,10 +5143,10 @@ assert-plus@1.0.0, assert-plus@^1.0.0:
   resolved "https://registry.yarnpkg.com/assert-plus/-/assert-plus-1.0.0.tgz#f12e0f3c5d77b0b1cdd9146942e4e96c1e4dd525"
   integrity sha512-NfJ4UzBCcQGLDlQq7nHxH+tv3kyZ0hHQqF5BO6J7tNJeP5do1llPr8dZ8zHonfhAu0PHAdMkSo+8o0wxg9lZWw==
 
-ast-guard@2.2.0, ast-guard@^2.2.0:
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/ast-guard/-/ast-guard-2.2.0.tgz#fad899306f617f8a644f35e7898067574b4d795a"
-  integrity sha512-bcjrT/wj2A6/gNTPjeBHr8lxUhw/2iQNNHLyAyJA0+YfAh6iTcUsSNJUvWXRGkJAIenVXACUX034TsmkM8onAA==
+ast-guard@2.4.0, ast-guard@^2.4.0:
+  version "2.4.0"
+  resolved "https://registry.yarnpkg.com/ast-guard/-/ast-guard-2.4.0.tgz#d23f457753609220341eb5ece691971311c90ef4"
+  integrity sha512-6JliDu1vs0TMSZJMYT/R776NrvL0aamWAU42V0lfuLrEkNOytlx+y7VXyUAKpldGUTyAPALbzNcT5uzQ3Lezkw==
   dependencies:
     acorn "8.15.0"
     acorn-walk "8.3.4"
@@ -6657,14 +6657,14 @@ emojis-list@^3.0.0:
   resolved "https://registry.yarnpkg.com/emojis-list/-/emojis-list-3.0.0.tgz#5570662046ad29e2e916e71aae260abdff4f6a78"
   integrity sha512-/kyM18EfinwXZbno9FyUGeFh87KC8HRQBQGildHZbEuRyWFOmv1U10o9BBp8XVZDVNNuQKyIGIu5ZYAAXJ0V2Q==
 
-enclave-vm@^2.5.0:
-  version "2.5.0"
-  resolved "https://registry.yarnpkg.com/enclave-vm/-/enclave-vm-2.5.0.tgz#4b7a38621cd13e8e17fdf3993fcbf8e03ebda69f"
-  integrity sha512-w4coCt/0dVGE/sPnZfSEJs110MYZcnsD51lDxiys3tI1CXhp6Qwk5X1HzXn50moYGd4h8kQRLWDARsyQJ5fNFg==
+enclave-vm@^2.7.0:
+  version "2.7.0"
+  resolved "https://registry.yarnpkg.com/enclave-vm/-/enclave-vm-2.7.0.tgz#da724c4989929d69be0e62915e47031f20a3200b"
+  integrity sha512-hwdhD0eOO519Xe+Rj7LuTb2B5vfk6oM7LInvtVBjNCbmwnYVhVPD6AinBwDqX8Disc5EdwWiLC5weRMHmh6Anw==
   dependencies:
     acorn "8.15.0"
     acorn-walk "8.3.4"
-    ast-guard "2.2.0"
+    ast-guard "2.4.0"
     astring "1.9.0"
     zod "^4.1.13"
 

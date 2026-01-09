@@ -268,6 +268,35 @@ When using hybrid configuration, you need a Redis service for pub/sub:
 
 ---
 
+## Alternative: Upstash Redis
+
+If you need full Redis features (including pub/sub) but want serverless pricing, consider **Upstash** instead of Vercel KV:
+
+```typescript
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  redis: {
+    provider: 'upstash',
+    // Uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from env
+  },
+})
+```
+
+| Feature                | Vercel KV        | Upstash         |
+| ---------------------- | ---------------- | --------------- |
+| REST API               | ✅ Yes           | ✅ Yes          |
+| Edge Compatible        | ✅ Yes           | ✅ Yes          |
+| Pub/Sub                | ❌ No            | ✅ Yes          |
+| Resource Subscriptions | ❌ Not supported | ✅ Full support |
+| Pricing                | Pay per request  | Pay per request |
+| Native Redis Client    | ❌ REST only     | ✅ Optional     |
+
+<Tip>
+**Upstash** is recommended when you need resource subscriptions or real-time features. For simple key-value storage, either Vercel KV or Upstash works well.
+</Tip>
+
+---
+
 ## Migration from Redis
 
 Switching from standard Redis to Vercel KV requires only a configuration change:

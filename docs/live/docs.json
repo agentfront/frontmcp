@@ -73,7 +73,7 @@
         "icon": "book",
         "versions": [
           {
-            "version": "v0.6 (latest)",
+            "version": "v0.7 (latest)",
             "default": true,
             "groups": [
               {
@@ -94,6 +94,7 @@
                   "docs/servers/tools",
                   "docs/servers/resources",
                   "docs/servers/prompts",
+                  "docs/servers/agents",
                   "docs/servers/discovery"
                 ]
               },
@@ -132,6 +133,7 @@
                 "pages": [
                   "docs/plugins/overview",
                   "docs/plugins/cache-plugin",
+                  "docs/plugins/remember-plugin",
                   {
                     "group": "CodeCall",
                     "icon": "code",
@@ -161,15 +163,10 @@
               {
                 "group": "Guides",
                 "pages": [
-                  "docs/guides/create-plugin",
-                  "docs/guides/add-openapi-adapter",
-                  "docs/guides/caching-and-cache-miss",
-                  "docs/guides/customize-flow-stages",
                   "docs/guides/ast-guard",
                   "docs/guides/enclave",
                   "docs/guides/vectoriadb",
-                  "docs/guides/ui-library",
-                  "docs/guides/codecall-crm-demo"
+                  "docs/guides/ui-library"
                 ]
               },
               {
@@ -180,6 +177,117 @@
                   "docs/deployment/redis-setup",
                   "docs/deployment/vercel-kv",
                   "docs/deployment/serverless"
+                ]
+              }
+            ]
+          },
+          {
+            "version": "v0.6",
+            "groups": [
+              {
+                "tag": "latest",
+                "group": "Get Started",
+                "pages": [
+                  "docs/v/0.6/getting-started/welcome",
+                  "docs/v/0.6/getting-started/installation",
+                  "docs/v/0.6/getting-started/quickstart",
+                  "updates"
+                ]
+              },
+              {
+                "group": "Servers",
+                "pages": [
+                  "docs/v/0.6/servers/server",
+                  "docs/v/0.6/servers/apps",
+                  "docs/v/0.6/servers/tools",
+                  "docs/v/0.6/servers/resources",
+                  "docs/v/0.6/servers/prompts",
+                  "docs/v/0.6/servers/discovery"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "icon": "shield-check",
+                "pages": [
+                  "docs/v/0.6/authentication/overview",
+                  "docs/v/0.6/authentication/modes",
+                  "docs/v/0.6/authentication/local",
+                  "docs/v/0.6/authentication/remote",
+                  "docs/v/0.6/authentication/remote-proxy",
+                  "docs/v/0.6/authentication/progressive",
+                  "docs/v/0.6/authentication/token",
+                  "docs/v/0.6/authentication/production",
+                  "docs/v/0.6/authentication/demo-servers"
+                ]
+              },
+              {
+                "group": "Extensibility",
+                "icon": "puzzle-piece",
+                "pages": [
+                  "docs/v/0.6/extensibility/providers",
+                  "docs/v/0.6/extensibility/request-context",
+                  "docs/v/0.6/extensibility/plugins",
+                  "docs/v/0.6/extensibility/adapters",
+                  "docs/v/0.6/extensibility/logging"
+                ]
+              },
+              {
+                "group": "Adapters",
+                "pages": ["docs/v/0.6/adapters/overview", "docs/v/0.6/adapters/openapi-adapter"]
+              },
+              {
+                "group": "Plugins",
+                "pages": [
+                  "docs/v/0.6/plugins/overview",
+                  "docs/v/0.6/plugins/cache-plugin",
+                  {
+                    "group": "CodeCall",
+                    "icon": "code",
+                    "pages": [
+                      "docs/v/0.6/plugins/codecall/overview",
+                      "docs/v/0.6/plugins/codecall/security",
+                      "docs/v/0.6/plugins/codecall/api-reference",
+                      "docs/v/0.6/plugins/codecall/configuration",
+                      "docs/v/0.6/plugins/codecall/scaling"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Testing",
+                "icon": "flask-vial",
+                "pages": [
+                  "docs/v/0.6/testing/overview",
+                  "docs/v/0.6/testing/fixtures",
+                  "docs/v/0.6/testing/matchers",
+                  "docs/v/0.6/testing/authentication",
+                  "docs/v/0.6/testing/interceptors",
+                  "docs/v/0.6/testing/http-mocking",
+                  "docs/v/0.6/testing/api-reference"
+                ]
+              },
+              {
+                "group": "Guides",
+                "pages": [
+                  "docs/v/0.6/guides/create-plugin",
+                  "docs/v/0.6/guides/add-openapi-adapter",
+                  "docs/v/0.6/guides/caching-and-cache-miss",
+                  "docs/v/0.6/guides/customize-flow-stages",
+                  "docs/v/0.6/guides/ast-guard",
+                  "docs/v/0.6/guides/enclave",
+                  "docs/v/0.6/guides/vectoriadb",
+                  "docs/v/0.6/guides/ui-library",
+                  "docs/v/0.6/guides/codecall-crm-demo"
+                ]
+              },
+              {
+                "group": "Deployment",
+                "pages": [
+                  "docs/v/0.6/deployment/local-dev-server",
+                  "docs/v/0.6/deployment/production-build",
+                  "docs/v/0.6/deployment/redis-setup",
+                  "docs/v/0.6/deployment/vercel-kv",
+                  "docs/v/0.6/deployment/serverless"
                 ]
               }
             ]
@@ -285,7 +393,6 @@
           },
           {
             "version": "v0.4",
-            "default": false,
             "groups": [
               {
                 "tag": "version 0.4",
@@ -367,96 +474,101 @@
         ]
       },
       {
-            "dropdown": "FrontMCP UI",
-            "icon": "palette",
-            "groups": [
-              {
-                "group": "Get Started",
-                "pages": ["docs/ui/overview", "docs/ui/getting-started"]
-              },
-              {
-                "group": "Components",
-                "icon": "grid-2",
-                "pages": [
-                  "docs/ui/components/overview",
-                  "docs/ui/components/button",
-                  "docs/ui/components/card",
-                  "docs/ui/components/badge",
-                  "docs/ui/components/alert",
-                  "docs/ui/components/form",
-                  "docs/ui/components/table",
-                  "docs/ui/components/list",
-                  "docs/ui/components/avatar",
-                  "docs/ui/components/modal",
-                  "docs/ui/components/resource-widgets"
-                ]
-              },
-              {
-                "group": "Layouts",
-                "icon": "table-layout",
-                "pages": ["docs/ui/layouts/overview", "docs/ui/layouts/templates"]
-              },
-              {
-                "group": "Templates",
-                "icon": "code",
-                "pages": [
-                  "docs/ui/templates/overview",
-                  "docs/ui/templates/html",
-                  "docs/ui/templates/react",
-                  "docs/ui/templates/mdx",
-                  "docs/ui/templates/custom"
-                ]
-              },
-              {
-                "group": "Integration",
-                "icon": "plug",
-                "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation", "docs/ui/integration/testing"]
-              },
-              {
-                "group": "Theming",
-                "icon": "paintbrush",
-                "pages": ["docs/ui/theming/overview", "docs/ui/theming/customization", "docs/ui/theming/dark-mode"]
-              },
-              {
-                "group": "Advanced",
-                "icon": "bolt",
-                "pages": [
-                  "docs/ui/advanced/platforms",
-                  "docs/ui/advanced/mcp-bridge",
-                  "docs/ui/advanced/hydration",
-                  "docs/ui/advanced/custom-renderers"
-                ]
-              },
-              {
-                "group": "API Reference",
-                "icon": "book-open",
-                "pages": [
-                  "docs/ui/api-reference/components",
-                  "docs/ui/api-reference/theme",
-                  "docs/ui/api-reference/runtime"
-                ]
-              }
+        "dropdown": "FrontMCP UI",
+        "icon": "palette",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["docs/ui/overview", "docs/ui/getting-started"]
+          },
+          {
+            "group": "Components",
+            "icon": "grid-2",
+            "pages": [
+              "docs/ui/components/overview",
+              "docs/ui/components/button",
+              "docs/ui/components/card",
+              "docs/ui/components/badge",
+              "docs/ui/components/alert",
+              "docs/ui/components/form",
+              "docs/ui/components/table",
+              "docs/ui/components/list",
+              "docs/ui/components/avatar",
+              "docs/ui/components/modal",
+              "docs/ui/components/resource-widgets"
             ]
           },
-      {
-            "dropdown": "Blog",
-            "icon": "blog",
-            "groups": [
-              {
-                "group": "General",
-                "pages": ["blog/index", "blog/external-links"]
-              },
-              {
-                "group": "November 2025",
-                "pages": [
-                  "blog/11-2025/codecall-plugin",
-                  "blog/11-2025/openapi-mcp-security-nightmare",
-                  "blog/11-2025/mcp-run-out-of-socket",
-                  "blog/11-2025/introducing-frontmcp"
-                ]
-              }
+          {
+            "group": "Layouts",
+            "icon": "table-layout",
+            "pages": ["docs/ui/layouts/overview", "docs/ui/layouts/templates"]
+          },
+          {
+            "group": "Templates",
+            "icon": "code",
+            "pages": [
+              "docs/ui/templates/overview",
+              "docs/ui/templates/html",
+              "docs/ui/templates/react",
+              "docs/ui/templates/mdx",
+              "docs/ui/templates/custom"
+            ]
+          },
+          {
+            "group": "Integration",
+            "icon": "plug",
+            "pages": ["docs/ui/integration/tools", "docs/ui/integration/validation", "docs/ui/integration/testing"]
+          },
+          {
+            "group": "Theming",
+            "icon": "paintbrush",
+            "pages": ["docs/ui/theming/overview", "docs/ui/theming/customization", "docs/ui/theming/dark-mode"]
+          },
+          {
+            "group": "Advanced",
+            "icon": "bolt",
+            "pages": [
+              "docs/ui/advanced/platforms",
+              "docs/ui/advanced/build-modes",
+              "docs/ui/advanced/mcp-bridge",
+              "docs/ui/advanced/hydration",
+              "docs/ui/advanced/custom-renderers"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "icon": "book-open",
+            "pages": [
+              "docs/ui/api-reference/components",
+              "docs/ui/api-reference/theme",
+              "docs/ui/api-reference/runtime"
             ]
           }
+        ]
+      },
+      {
+        "dropdown": "Blog",
+        "icon": "blog",
+        "groups": [
+          {
+            "group": "General",
+            "pages": ["blog/index", "blog/external-links"]
+          },
+          {
+            "group": "December 2025",
+            "pages": ["blog/12-2025/tool-ui", "blog/12-2025/deploy-to-vercel", "blog/12-2025/agent-as-tool"]
+          },
+          {
+            "group": "November 2025",
+            "pages": [
+              "blog/11-2025/codecall-plugin",
+              "blog/11-2025/openapi-mcp-security-nightmare",
+              "blog/11-2025/mcp-run-out-of-socket",
+              "blog/11-2025/introducing-frontmcp"
+            ]
+          }
+        ]
+      }
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-dashboard",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Dashboard plugin for FrontMCP - visual monitoring and introspection of MCP servers",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -45,7 +45,7 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "0.6.3",
+    "@frontmcp/sdk": "0.7.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

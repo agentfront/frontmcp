@@ -1,0 +1,126 @@
+---
+title: Session Recovery
+sidebarTitle: Session Recovery
+description: Persist streamable transports and harden session stores so clients reconnect after restarts.
+icon: refresh
+---
+
+FrontMCP keeps streamable transports alive by persisting every session's state when `transport.persistence.enabled` is true. If your node restarts, incoming Streamable HTTP requests can walk through Redis or Vercel KV and rehydrate the same transport without forcing clients to redo the initialization handshake.
+
+<Info>
+Session persistence stores the session payload (transport state, event IDs, fingerprints, and metadata) in Redis or Vercel KV so serverless cold starts, container restarts, and horizontal scaling events all reconnect to the same Streamable HTTP session.
+</Info>
+
+## How session recreation works
+
+When `HandleStreamableHttpFlow` receives a message, `TransportService` first checks the local in-memory cache and then, if needed, asks the session store for a matching `sessionId`. The stored payload includes the hashed token (`authorizationId`), optional `clientFingerprint`, and the `transportState` from the previous stream. After verifying the token hash and optional fingerprint, the service calls `recreateTransporter`, which builds a new `LocalTransporter`, assigns a `RecreateableStreamableHTTPServerTransport`, sets the MCP SDK `_initialized` flag, and caches the streamer for future requests.
+
+1. `getTransporter` looks for a cached transport under the session and token.
+2. If nothing is cached, `getStoredSession` reuses Redis only for `streamable-http` sessions.
+3. `recreateTransporter` instantiates a recreateable transport and calls `markAsInitialized`.
+4. The session store updates `lastAccessedAt`, keeps the TTL aligned with `defaultTtlMs`, and leaves `initialized: true` so the next request skips the handshake.
+
+<Tip>
+Look for `onMessage: transport recreated successfully` or the fingerprint-mismatch warning in your logs—these entries prove that persistence found a stored session and tell you if the incoming fingerprint differed from the original.
+</Tip>
+
+<Warning>
+Session persistence currently returns data only for the `streamable-http` protocol. SSE flows do not store their own history yet, although `RecreateableSSEServerTransport` exposes helpers for future reconnection logic.
+</Warning>
+
+## Configuring persistence
+
+Enable persistence by wiring the top-level `redis` block into `transport.persistence`. The configuration below reuses the same store for token caches and session recovery, lets `GETEX` stretch the TTL atomically, and caps the session lifetime with `maxLifetimeMs`.
+
+```ts
+@FrontMcp({
+  redis: {
+    host: 'redis.example.com',
+    port: 6379,
+    security: {
+      enableSigning: true,
+      enableRateLimiting: true,
+      signingSecret: process.env.MCP_SESSION_SECRET,
+      rateLimiting: {
+        windowMs: 120000, // 2 minutes
+        maxRequests: 40,
+      },
+      maxLifetimeMs: 86400000, // 24 hours
+    },
+  },
+  transport: {
+    persistence: {
+      enabled: true,
+      defaultTtlMs: 600000, // 10 minutes sliding window
+    },
+    requireSessionForStreamable: true,
+  },
+})
+```
+
+<Warning>
+`enableSigning` requires a strong secret. If you omit `security.signingSecret`, FrontMCP falls back to `MCP_SESSION_SECRET`, but you should supply a purpose-built secret for production workloads.
+</Warning>
+
+<Info>
+The same `security` block applies when you swap in `redis.provider: 'vercel-kv'`. Vercel KV implements `SessionSecurityConfig`, so HMAC signing, rate limiting, and max lifetime behave identically without changing your imports.
+</Info>
+
+## Security hardening options
+
+| Option                     | Default              | Description                                                                            |
+| -------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| `maxLifetimeMs`            | none                 | Force sessions to end after the configured window, preventing indefinite sliding TTLs. |
+| `enableSigning`            | `false`              | Store sessions with an HMAC-SHA256 signature so tampering results in a rejection.      |
+| `signingSecret`            | `MCP_SESSION_SECRET` | Override the secret used for signing. Rotate it like any other credential.             |
+| `enableRateLimiting`       | `false`              | Activate the `SessionRateLimiter` to throttle repeated session lookups.                |
+| `rateLimiting.windowMs`    | `60000`              | Window duration in milliseconds for the sliding limiter.                               |
+| `rateLimiting.maxRequests` | `100`                | Maximum lookups allowed per window before the store rejects requests.                  |
+
+<Info>
+The limiter uses a `clientIdentifier` (for example, a hashed IP) when provided and falls back to the session ID otherwise, so enumeration attacks never exceed the configured quota.
+</Info>
+
+## Fingerprint validation
+
+Every transport session now records an optional `clientFingerprint`. When you recreate a transport, pass the same fingerprint to `getStoredSession` so FrontMCP can reject sessions that jump between clients:
+
+```ts
+const storedSession = await transportService.getStoredSession('streamable-http', token, sessionId, {
+  clientFingerprint: fingerprint,
+  warnOnFingerprintMismatch: true,
+});
+```
+
+If the fingerprint differs, `TransportService` logs both values, drops the session unless `warnOnFingerprintMismatch` is `true`, and keeps a warning in the logs so you can investigate.
+
+<Tip>
+Derive the fingerprint from stable request attributes such as a hashed `x-forwarded-for`, user agent, or TLS client certificate. Passing the value through `Authorization.createTransportSession` keeps the stored session and recreation logic in sync.
+</Tip>
+
+## Custom transport helpers
+
+Import the new helpers from `@frontmcp/sdk/transport` when you need direct access to the recreateable transports:
+
+```ts
+import {
+  RecreateableStreamableHTTPServerTransport,
+  RecreateableSSEServerTransport,
+} from '@frontmcp/sdk/transport';
+
+const streamTransport = new RecreateableStreamableHTTPServerTransport({
+  sessionIdGenerator: () => sessionId,
+});
+streamTransport.setInitializationState(sessionId);
+
+const sseTransport = new RecreateableSSEServerTransport('/message', res, {
+  initialEventId: lastEventId,
+});
+sseTransport.setSessionState(sessionId, lastEventId);
+```
+
+`LocalTransporter.markAsInitialized()` now bridges the MCP SDK internals, so `TransportService` automatically calls `setInitializationState` after rehydrating a stored session. SSE helpers also preserve the last event ID, which keeps reconnections gapless.
+
+<Info>
+The recreateable transports warn if they cannot reach MCP SDK internals (missing `_webStandardTransport` or `_initialized` flags), helping you spot version skew between FrontMCP and the upstream SDK.
+</Info>

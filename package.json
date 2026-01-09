@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/source",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.0.0"
@@ -34,7 +34,7 @@
     "@rspack/core": "^1.3.12",
     "mcp-from-openapi": "2.1.2",
     "axios": "^1.6.0",
-    "enclave-vm": "^2.5.0",
+    "enclave-vm": "^2.7.0",
     "esbuild": "^0.27.1",
     "handlebars": "^4.7.8",
     "ioredis": "^5.8.0",
