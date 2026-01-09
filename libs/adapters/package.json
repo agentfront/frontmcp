@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/adapters",
-  "version": "0.7.1",
+  "version": "0.7.0",
   "description": "Adapters for the FrontMCP framework",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",
