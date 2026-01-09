@@ -9,6 +9,10 @@ icon: boxes
 
 They're declared with `@Provider()` and registered at **server** or **app** scope. Resolution is hierarchical: **tool → app → server**.
 
+<Info>
+  Provider metadata, records, and DI helpers remain available through `@frontmcp/sdk` as type-only exports, so your existing `@frontmcp/di` imports keep working while bundlers drop unused types. Enums such as `ProviderScope` and `ProviderKind` still expose their runtime values, so you can configure scopes the same way you always have.
+</Info>
+
 ## Define a provider
 
 ```ts
