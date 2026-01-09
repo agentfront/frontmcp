@@ -38,12 +38,12 @@ icon: code
 
 Traditional MCP tool calling doesn't scale:
 
-| Challenge | Impact |
-|-----------|--------|
-| **Token explosion** | 100 tools = ~25,000 tokens per request |
-| **Round-trip latency** | Each operation needs a full model round-trip |
+| Challenge                    | Impact                                                   |
+| ---------------------------- | -------------------------------------------------------- |
+| **Token explosion**          | 100 tools = ~25,000 tokens per request                   |
+| **Round-trip latency**       | Each operation needs a full model round-trip             |
 | **No server-side filtering** | Fetch everything, pay for all tokens, filter client-side |
-| **Discovery failure** | Models miss relevant tools buried in long lists |
+| **Discovery failure**        | Models miss relevant tools buried in long lists          |
 
 ---
 
@@ -51,12 +51,12 @@ Traditional MCP tool calling doesn't scale:
 
 CodeCall exposes **4 meta-tools** that replace direct tool access:
 
-| Meta-Tool | Purpose |
-|-----------|---------|
-| `codecall:search` | Find relevant tools by natural language |
-| `codecall:describe` | Get schemas for specific tools |
-| `codecall:execute` | Run JavaScript to orchestrate tools |
-| `codecall:invoke` | Direct tool call (no JS overhead) |
+| Meta-Tool           | Purpose                                 |
+| ------------------- | --------------------------------------- |
+| `codecall:search`   | Find relevant tools by natural language |
+| `codecall:describe` | Get schemas for specific tools          |
+| `codecall:execute`  | Run JavaScript to orchestrate tools     |
+| `codecall:invoke`   | Direct tool call (no JS overhead)       |
 
 ```mermaid
 sequenceDiagram
@@ -81,11 +81,11 @@ sequenceDiagram
 
 ## Token Savings
 
-| Scenario | Traditional | CodeCall | Savings |
-|----------|-------------|----------|---------|
-| 100 tools in context | ~25,000 tokens | ~3,000 tokens | **88%** |
-| 5-tool workflow | ~50,000 tokens | ~5,000 tokens | **90%** |
-| Complex filtering | ~100,000 tokens | ~8,000 tokens | **92%** |
+| Scenario             | Traditional     | CodeCall      | Savings |
+| -------------------- | --------------- | ------------- | ------- |
+| 100 tools in context | ~25,000 tokens  | ~3,000 tokens | **88%** |
+| 5-tool workflow      | ~50,000 tokens  | ~5,000 tokens | **90%** |
+| Complex filtering    | ~100,000 tokens | ~8,000 tokens | **92%** |
 
 ---
 
@@ -135,11 +135,11 @@ return {
 
 ## Operating Modes
 
-| Mode | Description | Best For |
-|------|-------------|----------|
-| `codecall_only` | All tools hidden, only meta-tools exposed | Maximum token savings |
-| `codecall_opt_in` | Tools opt in via metadata | Gradual migration |
-| `metadata_driven` | All tools visible, CodeCall available | Testing, compatibility |
+| Mode              | Description                               | Best For               |
+| ----------------- | ----------------------------------------- | ---------------------- |
+| `codecall_only`   | All tools hidden, only meta-tools exposed | Maximum token savings  |
+| `codecall_opt_in` | Tools opt in via metadata                 | Gradual migration      |
+| `metadata_driven` | All tools visible, CodeCall available     | Testing, compatibility |
 
 ```ts
 CodeCallPlugin.init({
@@ -162,11 +162,11 @@ CodeCall uses [Enclave](/docs/guides/enclave) for bank-grade execution with **6 
 
 ### Security Presets
 
-| Preset | Timeout | Max Tools | Use Case |
-|--------|---------|-----------|----------|
-| `locked_down` | 2s | 10 | Untrusted AI |
-| `secure` | 3.5s | 100 | Production |
-| `balanced` | 5s | 200 | Complex workflows |
+| Preset        | Timeout | Max Tools | Use Case          |
+| ------------- | ------- | --------- | ----------------- |
+| `locked_down` | 2s      | 10        | Untrusted AI      |
+| `secure`      | 3.5s    | 100       | Production        |
+| `balanced`    | 5s      | 200       | Complex workflows |
 
 ```ts
 CodeCallPlugin.init({
@@ -184,10 +184,10 @@ CodeCallPlugin.init({
 
 Powered by [VectoriaDB](/docs/guides/vectoriadb) for semantic discovery:
 
-| Strategy | Latency | Best For |
-|----------|---------|----------|
-| `tfidf` | ~1ms | Under 100 tools |
-| `embedding` | ~5ms | 100+ tools |
+| Strategy    | Latency | Best For        |
+| ----------- | ------- | --------------- |
+| `tfidf`     | ~1ms    | Under 100 tools |
+| `embedding` | ~5ms    | 100+ tools      |
 
 ```ts
 CodeCallPlugin.init({

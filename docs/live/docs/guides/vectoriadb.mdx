@@ -26,13 +26,13 @@ icon: magnifying-glass
 
 External embedding APIs add latency, cost, and privacy concerns. VectoriaDB runs **entirely on your server** with no network calls.
 
-| Feature | External APIs (OpenAI, etc.) | VectoriaDB |
-|---------|------------------------------|------------|
-| Data privacy | Sent to third party | **Stays local** |
-| Latency | 100-500ms network RTT | **Sub-1ms local** |
-| Cost | Per-token pricing | **Free** |
-| Offline support | Requires internet | **Works offline** |
-| Rate limits | Yes | **None** |
+| Feature         | External APIs (OpenAI, etc.) | VectoriaDB        |
+| --------------- | ---------------------------- | ----------------- |
+| Data privacy    | Sent to third party          | **Stays local**   |
+| Latency         | 100-500ms network RTT        | **Sub-1ms local** |
+| Cost            | Per-token pricing            | **Free**          |
+| Offline support | Requires internet            | **Works offline** |
+| Rate limits     | Yes                          | **None**          |
 
 <Note>
   The default `all-MiniLM-L6-v2` model is ~22MB. Downloaded once on first use and cached locally.
@@ -181,14 +181,14 @@ const results = db.search('authentication', { topK: 5 });
 
 ### When to Use Each
 
-| Scenario | Recommendation |
-|----------|----------------|
-| General semantic search | **ML Embeddings** |
-| Small corpus (under 1K docs) | Either works well |
-| Large corpus (>10K docs) | ML + HNSW indexing |
-| No model downloads allowed | **TF-IDF** |
-| Extremely latency-sensitive | **TF-IDF** |
-| Need synonyms/context | **ML Embeddings** |
+| Scenario                     | Recommendation     |
+| ---------------------------- | ------------------ |
+| General semantic search      | **ML Embeddings**  |
+| Small corpus (under 1K docs) | Either works well  |
+| Large corpus (>10K docs)     | ML + HNSW indexing |
+| No model downloads allowed   | **TF-IDF**         |
+| Extremely latency-sensitive  | **TF-IDF**         |
+| Need synonyms/context        | **ML Embeddings**  |
 
 ---
 
@@ -209,11 +209,11 @@ const db = new VectoriaDB<MyDoc>({
 
 ### HNSW vs Linear Search
 
-| Documents | Linear Search | HNSW |
-|-----------|---------------|------|
-| 1,000 | 5ms | 1ms |
-| 10,000 | 50ms | **2ms** |
-| 100,000 | 500ms | **5ms** |
+| Documents | Linear Search | HNSW    |
+| --------- | ------------- | ------- |
+| 1,000     | 5ms           | 1ms     |
+| 10,000    | 50ms          | **2ms** |
+| 100,000   | 500ms         | **5ms** |
 
 Enable HNSW when you have more than ~5,000 documents.
 

@@ -1,3 +1,24 @@
+## [v0.7.0] - 2026-01-09
+
+### feat
+
+- Orchestrate remote MCP servers through gateway proxies for tools, resources, and prompts while orchestrator agents and resilient transport settings keep cross-server flows predictable.
+- Expand plugin and memory tooling with scoped plugin controls, the new Approval Plugin (PKCE/webhook guards), and upgraded DI helpers so approvals and cleanup span Redis, Vercel KV, and Upstash stores.
+- Enhance agent tooling with built-in orchestrator, echo, and calculator examples plus progress notifications that auto-update with tokens for longer-running work.
+- Consolidate the @frontmcp/utils library around TTL/pattern validation, safe URI templates, and storage adapters for memory, Redis, Vercel KV, and Upstash so caching and approvals stay predictable.
+
+### fix
+
+- Normalize demo and e2e logging to `LogLevel.Verbose` so servers rely on the exported enum names instead of the deprecated `VERBOSE` constant.
+
+### docs
+
+- Document remote orchestration, the Approval Plugin, memory-management helpers, and the @frontmcp/utils storage helpers so gateways, approvals, and caches are easy to configure.
+
+### build
+
+- Add Nx scripts for unit/e2e runs plus coverage merging/check commands and new Jest coverage presets so aggregated stats stay accurate across suites.
+
 ## [v0.6.3] - 2025-12-27
 
 ### feat
@@ -148,6 +169,7 @@
 
 - Split draft/live Mintlify trees, auto-archive previous minors, and enforce husky + lint-staged guards so release branches stay focused on intentional changes.
 
+
 ## [v0.3.1] - 2025-11-16
 
 ### feat
@@ -278,3 +300,4 @@ This was a version bump only, there were no code changes.
 ### ❤️ Thank You
 
 - David Antoon @frontegg-david
+

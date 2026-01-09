@@ -26,13 +26,13 @@ icon: shield-halved
 
 Traditional JavaScript sandboxes like vm2 and isolated-vm have been [repeatedly bypassed](https://github.com/nickmccurdy/isolated-vm/issues/116). Enclave takes a fundamentally different approach:
 
-| Approach | vm2 / isolated-vm | Enclave |
-|----------|-------------------|---------|
-| Validation | Runtime only | AST + Runtime + AI Scoring |
-| Attack vectors blocked | ~50 | **150+** |
-| CVE coverage | Multiple CVEs | **100% coverage** |
-| Security tests | ~100 | **1000+** |
-| Code generation detection | No | **Yes (STRICT mode)** |
+| Approach                  | vm2 / isolated-vm | Enclave                    |
+| ------------------------- | ----------------- | -------------------------- |
+| Validation                | Runtime only      | AST + Runtime + AI Scoring |
+| Attack vectors blocked    | ~50               | **150+**                   |
+| CVE coverage              | Multiple CVEs     | **100% coverage**          |
+| Security tests            | ~100              | **1000+**                  |
+| Code generation detection | No                | **Yes (STRICT mode)**      |
 
 <Note>
   Enclave powers the [CodeCall Plugin](/docs/plugins/codecall/overview) for executing LLM-generated orchestration scripts. It's also available as a standalone library for custom use cases.
@@ -139,12 +139,12 @@ const users = await __safe_callTool('users:list', {});
 
 Semantic analysis detects attack patterns that pass static validation:
 
-| Pattern | Score | Description |
-|---------|-------|-------------|
-| `SENSITIVE_FIELD` | 35 | Access to password/token/secret fields |
-| `EXCESSIVE_LIMIT` | 25 | Limit values > 10,000 |
-| `EXFIL_PATTERN` | 50 | Fetch data → send to external service |
-| `LOOP_TOOL_CALL` | 25 | Tool calls inside loops (fan-out risk) |
+| Pattern           | Score | Description                            |
+| ----------------- | ----- | -------------------------------------- |
+| `SENSITIVE_FIELD` | 35    | Access to password/token/secret fields |
+| `EXCESSIVE_LIMIT` | 25    | Limit values > 10,000                  |
+| `EXFIL_PATTERN`   | 50    | Fetch data → send to external service  |
+| `LOOP_TOOL_CALL`  | 25    | Tool calls inside loops (fan-out risk) |
 
 ### Layer 4: Runtime Sandbox
 
@@ -171,14 +171,14 @@ All outputs are sanitized before returning:
 
 Enclave provides four pre-configured security profiles:
 
-| Setting | STRICT | SECURE | STANDARD | PERMISSIVE |
-|---------|--------|--------|----------|------------|
-| Timeout | 2s | 3.5s | 5s | 10s |
-| Max Iterations | 2,000 | 5,000 | 10,000 | 20,000 |
-| Max Tool Calls | 10 | 100 | 200 | 500 |
-| Console Output | 32KB | 64KB | 256KB | 1MB |
-| Code Gen Detection | YES | NO | NO | NO |
-| Stack Sanitization | YES | YES | NO | NO |
+| Setting            | STRICT | SECURE | STANDARD | PERMISSIVE |
+| ------------------ | ------ | ------ | -------- | ---------- |
+| Timeout            | 2s     | 3.5s   | 5s       | 10s        |
+| Max Iterations     | 2,000  | 5,000  | 10,000   | 20,000     |
+| Max Tool Calls     | 10     | 100    | 200      | 500        |
+| Console Output     | 32KB   | 64KB   | 256KB    | 1MB        |
+| Code Gen Detection | YES    | NO     | NO       | NO         |
+| Stack Sanitization | YES    | YES    | NO       | NO         |
 
 ```ts
 // For untrusted LLM-generated code
@@ -224,11 +224,11 @@ Worker Pool provides **dual-layer sandboxing**:
 
 ### When to Use Worker Pool
 
-| Scenario | Recommendation |
-|----------|----------------|
-| Trusted internal scripts | Standard VM (lower overhead) |
-| Multi-tenant execution | Worker Pool (OS isolation) |
-| Untrusted AI code | Worker Pool (hard halt) |
+| Scenario                   | Recommendation                  |
+| -------------------------- | ------------------------------- |
+| Trusted internal scripts   | Standard VM (lower overhead)    |
+| Multi-tenant execution     | Worker Pool (OS isolation)      |
+| Untrusted AI code          | Worker Pool (hard halt)         |
 | Memory-sensitive workloads | Worker Pool (per-worker limits) |
 
 ---

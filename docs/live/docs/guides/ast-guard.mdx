@@ -26,14 +26,14 @@ icon: shield-check
 
 Runtime sandboxes alone aren't enough. By the time code reaches runtime, the damage may already be done. ast-guard validates code **before** execution, blocking attacks at the source.
 
-| Feature | vm2 Runtime | ast-guard + Enclave |
-|---------|-------------|---------------------|
-| Validation timing | After execution starts | **Before execution** |
-| eval/Function detection | Sometimes | **Always blocked** |
-| Prototype pollution | Partial | **100% blocked** |
-| ReDoS protection | No | **Pre-scanner layer** |
-| Trojan Source (CVE-2021-42574) | No | **Blocked** |
-| Security tests | ~100 | **600+** |
+| Feature                        | vm2 Runtime            | ast-guard + Enclave   |
+| ------------------------------ | ---------------------- | --------------------- |
+| Validation timing              | After execution starts | **Before execution**  |
+| eval/Function detection        | Sometimes              | **Always blocked**    |
+| Prototype pollution            | Partial                | **100% blocked**      |
+| ReDoS protection               | No                     | **Pre-scanner layer** |
+| Trojan Source (CVE-2021-42574) | No                     | **Blocked**           |
+| Security tests                 | ~100                   | **600+**              |
 
 <Note>
   ast-guard powers [Enclave's](/docs/guides/enclave) first security layer and can be used standalone for any JavaScript validation needs.
@@ -96,21 +96,21 @@ if (!result.valid) {
 
 ### Attacks Blocked by Pre-Scanner
 
-| Attack | Description | Impact |
-|--------|-------------|--------|
-| **ReDoS** | `(a+)+` patterns cause exponential backtracking | Parser hangs for hours |
-| **Trojan Source** | Unicode BiDi characters hide malicious code | Code appears different than it executes |
-| **Stack Overflow** | Deeply nested `(((((x)))))` crashes parser | Server crashes |
-| **Memory Exhaustion** | 100MB input exhausts memory | OOM kill |
+| Attack                | Description                                     | Impact                                  |
+| --------------------- | ----------------------------------------------- | --------------------------------------- |
+| **ReDoS**             | `(a+)+` patterns cause exponential backtracking | Parser hangs for hours                  |
+| **Trojan Source**     | Unicode BiDi characters hide malicious code     | Code appears different than it executes |
+| **Stack Overflow**    | Deeply nested `(((((x)))))` crashes parser      | Server crashes                          |
+| **Memory Exhaustion** | 100MB input exhausts memory                     | OOM kill                                |
 
 ### Mandatory Limits (Cannot Disable)
 
-| Limit | Value | Purpose |
-|-------|-------|---------|
-| Max Input Size | 100MB | Memory protection |
-| Max Nesting Depth | 200 levels | Stack protection |
-| Max Line Length | 100,000 chars | Minified code safety |
-| Max Regex Length | 1,000 chars | ReDoS protection |
+| Limit             | Value         | Purpose              |
+| ----------------- | ------------- | -------------------- |
+| Max Input Size    | 100MB         | Memory protection    |
+| Max Nesting Depth | 200 levels    | Stack protection     |
+| Max Line Length   | 100,000 chars | Minified code safety |
+| Max Regex Length  | 1,000 chars   | ReDoS protection     |
 
 ---
 
@@ -136,15 +136,15 @@ const validator = new JSAstValidator(createAgentScriptPreset({
 
 ### What AgentScript Blocks
 
-| Category | Blocked | Why |
-|----------|---------|-----|
-| **Code Execution** | `eval`, `Function`, `AsyncFunction` | Code injection |
-| **System Access** | `process`, `require`, `module` | Node.js escape |
-| **Global Objects** | `window`, `globalThis`, `this` | Sandbox escape |
-| **Timers** | `setTimeout`, `setInterval` | Async escape |
-| **Prototype** | `__proto__`, `constructor` | Prototype pollution |
-| **Network** | `fetch`, `XMLHttpRequest` | Data exfiltration |
-| **Unbounded Loops** | `while`, `do-while`, `for-in` | Infinite loops |
+| Category            | Blocked                             | Why                 |
+| ------------------- | ----------------------------------- | ------------------- |
+| **Code Execution**  | `eval`, `Function`, `AsyncFunction` | Code injection      |
+| **System Access**   | `process`, `require`, `module`      | Node.js escape      |
+| **Global Objects**  | `window`, `globalThis`, `this`      | Sandbox escape      |
+| **Timers**          | `setTimeout`, `setInterval`         | Async escape        |
+| **Prototype**       | `__proto__`, `constructor`          | Prototype pollution |
+| **Network**         | `fetch`, `XMLHttpRequest`           | Data exfiltration   |
+| **Unbounded Loops** | `while`, `do-while`, `for-in`       | Infinite loops      |
 
 ### What AgentScript Allows
 
@@ -178,12 +178,12 @@ return { count, names };
 
 ast-guard provides four security presets for different use cases:
 
-| Preset | Use Case | Security Level |
-|--------|----------|----------------|
-| **AgentScript** | LLM-generated code | Highest - whitelist only |
-| **STRICT** | Untrusted guest code | High - no loops, no async |
-| **SECURE** | Automation scripts | Medium - bounded loops |
-| **STANDARD** | Trusted scripts | Low - basic guardrails |
+| Preset          | Use Case             | Security Level            |
+| --------------- | -------------------- | ------------------------- |
+| **AgentScript** | LLM-generated code   | Highest - whitelist only  |
+| **STRICT**      | Untrusted guest code | High - no loops, no async |
+| **SECURE**      | Automation scripts   | Medium - bounded loops    |
+| **STANDARD**    | Trusted scripts      | Low - basic guardrails    |
 
 ```ts
 import { JSAstValidator, createAgentScriptPreset, Presets } from 'ast-guard';
