@@ -379,13 +379,13 @@ export default class GlobalLoggerPlugin {
 
 ### When to Use Each Scope
 
-| Use Case                | Scope    | Example                          |
-| ----------------------- | -------- | -------------------------------- |
-| App-specific caching    | `app`    | Cache responses for one app only |
-| Per-app rate limiting   | `app`    | Different limits per app         |
-| Global audit logging    | `server` | Log all tool calls across apps   |
-| Cross-app orchestration | `server` | Access tools from multiple apps  |
-| Authentication gateway  | `server` | Validate tokens before any app   |
+| Use Case                 | Scope    | Example                            |
+| ------------------------ | -------- | ---------------------------------- |
+| App-specific caching     | `app`    | Cache responses for one app only   |
+| Per-app rate limiting    | `app`    | Different limits per app           |
+| Global audit logging     | `server` | Log all tool calls across apps     |
+| Cross-app orchestration  | `server` | Access tools from multiple apps    |
+| Authentication gateway   | `server` | Validate tokens before any app     |
 
 ### Accessing Other Apps (Server Scope)
 

@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/sdk",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "FrontMCP SDK",
   "author": "AgentFront <info@agentfront.dev>",
   "homepage": "https://docs.agentfront.dev",

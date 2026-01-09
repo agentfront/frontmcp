@@ -28,6 +28,7 @@ The user sees... JSON. Or maybe the LLM summarizes it into text. Either way, it'
 
 **What if your tool could return this instead?**
 
+
 <img
   className="blog-full-image"
   src="../../assets/banners/tool-ui/widget_example.png"
@@ -52,11 +53,11 @@ Rich UI in AI responses sounds simple until you realize:
 
 Building widgets for each platform means:
 
-| Platform       | Widget Format                | Security Model              |
-| -------------- | ---------------------------- | --------------------------- |
-| ChatGPT        | iframe + `window.openai` API | Strict CSP, isolated origin |
-| Claude         | Limited HTML                 | Markdown + basic HTML       |
-| Custom clients | Varies wildly                | Custom implementation       |
+| Platform | Widget Format | Security Model |
+| -------- | ------------- | -------------- |
+| ChatGPT | iframe + `window.openai` API | Strict CSP, isolated origin |
+| Claude | Limited HTML | Markdown + basic HTML |
+| Custom clients | Varies wildly | Custom implementation |
 
 Most developers give up and return plain text.
 
@@ -258,7 +259,6 @@ Tool UI supports four serving modes, each with different trade-offs:
     - Rendering overhead per request
 
     **Best for:** Dynamic content that changes per request
-
   </Tab>
 
   <Tab title="Static">
@@ -285,7 +285,6 @@ Tool UI supports four serving modes, each with different trade-offs:
     - More complex template
 
     **Best for:** Large, complex widgets with stable structure
-
   </Tab>
 
   <Tab title="Hybrid">
@@ -301,7 +300,6 @@ Tool UI supports four serving modes, each with different trade-offs:
     Combines static widget structure with per-request data. The widget shell is pre-compiled, and `ui/component` metadata contains the dynamic payload.
 
     **Best for:** Performance-critical widgets with dynamic data
-
   </Tab>
 
   <Tab title="Auto (Recommended)">
@@ -320,7 +318,6 @@ Tool UI supports four serving modes, each with different trade-offs:
     - Unknown → Conservative approach
 
     **Best for:** Cross-platform compatibility
-
   </Tab>
 </Tabs>
 
@@ -463,10 +460,10 @@ React widgets are **transpiled once at server startup**, not on every request. T
 
 ### Choosing Your Approach
 
-| Approach          | When to Use                                     | Serving Mode       |
-| ----------------- | ----------------------------------------------- | ------------------ |
-| **HTML Strings**  | Simple data display, dynamic templates          | `inline` or `auto` |
-| **React Widgets** | Interactive UI, complex layouts, tool callbacks | `static`           |
+| Approach | When to Use | Serving Mode |
+|----------|-------------|--------------|
+| **HTML Strings** | Simple data display, dynamic templates | `inline` or `auto` |
+| **React Widgets** | Interactive UI, complex layouts, tool callbacks | `static` |
 
 ### Available Components
 
@@ -505,20 +502,18 @@ React widgets are **transpiled once at server startup**, not on every request. T
 - `modal(content, options)` - Modal dialog
 
 **React Components** (`@frontmcp/ui/react`) - for static widgets:
-
 - `<Card>` - Card container with title, subtitle, actions
 - `<Badge>` - Status indicators and labels
 - `<Button>` - Clickable buttons with loading state
 - `<Alert>` - Info, success, warning, danger alerts
 
 **React Hooks** (`@frontmcp/ui/react/hooks`) - for interactive widgets:
-
 - `useToolInput<T>()` - Get typed tool input
 - `useToolOutput<T>()` - Get typed tool output
 - `useCallTool(name)` - Call another tool from widget
 - `useTheme()` - Access theme context
 - `useMcpBridge()` - Low-level bridge access
-  </Accordion>
+</Accordion>
 
 ---
 

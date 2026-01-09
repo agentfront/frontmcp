@@ -1,396 +1,381 @@
 ---
-title: VectoriaDB - Lightweight Vector Search
+title: Semantic Search with VectoriaDB
 sidebarTitle: VectoriaDB
 slug: guides/vectoriadb
-description: Zero-dependency vector database for AI agents. Offline semantic search, HNSW indexing, TF-IDF fallback. No API keys, no cloud, instant results.
+description: Index your FrontMCP tools with VectoriaDB for offline semantic discovery and personalized tool recommendations.
 icon: magnifying-glass
 ---
 
-**VectoriaDB** is a lightweight, offline-first vector database designed for AI agent systems. Run semantic search without sending data to external services. **No API keys, no cloud dependencies, instant results.**
+VectoriaDB is FrontMCP's in-memory vector database built on transformers.js. Use it to surface the right tool, prompt, or document snippet from natural-language queries without shipping data to an external service. This guide shows how to fold VectoriaDB into a FrontMCP server for always-on semantic discovery.
 
 <CardGroup cols={3}>
-  <Card title="100% Offline" icon="bolt">
-    Embeddings run locally via transformers.js. Your data never leaves the server.
+  <Card title="Offline embeddings" icon="bolt">
+    Embeddings run locally via transformers.js, so your users' data never leaves the server and you avoid API quotas.
   </Card>
-  <Card title="Sub-Millisecond Search" icon="clock">
-    HNSW indexing delivers >95% recall with 10,000+ documents.
+  <Card title="Type-safe metadata" icon="brackets-curly">
+    Strong generics ensure every document you index keeps the same shape as your tool metadata.
   </Card>
-  <Card title="Zero-Dep TF-IDF Mode" icon="feather">
-    Pure TypeScript fallback when ML models aren't an option.
+  <Card title="Operational guardrails" icon="shield">
+    Built-in rate limits, batch validation, HNSW indexing, and storage adapters keep the index production ready.
   </Card>
 </CardGroup>
 
----
+## What you'll build
 
-## Why VectoriaDB?
-
-External embedding APIs add latency, cost, and privacy concerns. VectoriaDB runs **entirely on your server** with no network calls.
-
-| Feature         | External APIs (OpenAI, etc.) | VectoriaDB        |
-| --------------- | ---------------------------- | ----------------- |
-| Data privacy    | Sent to third party          | **Stays local**   |
-| Latency         | 100-500ms network RTT        | **Sub-1ms local** |
-| Cost            | Per-token pricing            | **Free**          |
-| Offline support | Requires internet            | **Works offline** |
-| Rate limits     | Yes                          | **None**          |
+- A typed document shape for every tool, app, or resource you want to search
+- An indexing routine that stays in sync with `toolRegistry.getTools(true)`
+- Semantic queries with metadata filters, score thresholds, and pagination controls
+- Persistent caches (file or Redis) so restarts do not require re-embedding everything
+- Tunable HNSW search for large inventories
 
 <Note>
-  The default `all-MiniLM-L6-v2` model is ~22MB. Downloaded once on first use and cached locally.
+  The default Xenova `all-MiniLM-L6-v2` model is ~22 MB. The first initialization downloads and caches it under
+  `cacheDir`; subsequent boots reuse the local copy.
 </Note>
 
----
+## Prerequisites
 
-## Installation
+- Node.js 22 or later (Node 24 is recommended and is what FrontMCP tests against)
+- An existing FrontMCP server with at least one app and tool registry
+- Ability to install npm packages in the server workspace
+- Optional: writable disk or Redis if you plan to persist embeddings between restarts
+
+## Step 1: Install & initialize VectoriaDB
+
+Install the package alongside your server:
 
 <CodeGroup>
 ```bash npm
-npm install vectoriadb
+npm install vectoriadb@^2
 ```
 ```bash pnpm
-pnpm add vectoriadb
+pnpm add vectoriadb@^2
 ```
 ```bash yarn
-yarn add vectoriadb
+yarn add vectoriadb@^2
 ```
 </CodeGroup>
 
----
+<Info>
+  FrontMCP 0.5 depends on `vectoriadb@^2.0.1`. Use the `^2` range to stay compatible with the SDK and automatically pick up 2.x optimizations and fixes.
+</Info>
 
-## Quick Start
+Initialize a singleton database during server startup (for example inside your custom bootstrap or provider):
 
 ```ts
 import { VectoriaDB, DocumentMetadata } from 'vectoriadb';
 
 interface ToolDocument extends DocumentMetadata {
   toolName: string;
-  category: string;
+  owner: string;
+  tags: string[];
+  risk: 'safe' | 'destructive';
 }
 
-const db = new VectoriaDB<ToolDocument>({
+export const toolIndex = new VectoriaDB<ToolDocument>({
   cacheDir: './.cache/transformers',
   defaultSimilarityThreshold: 0.4,
 });
 
-await db.initialize();
-
-// Add documents
-await db.add('tool-1', 'User authentication and login management', {
-  id: 'tool-1',
-  toolName: 'auth:login',
-  category: 'security',
-});
-
-await db.add('tool-2', 'Send email notifications to users', {
-  id: 'tool-2',
-  toolName: 'notifications:sendEmail',
-  category: 'communication',
-});
-
-// Semantic search
-const results = await db.search('how do users log in?', { topK: 5 });
-
-console.log(results[0].metadata.toolName); // 'auth:login'
-console.log(results[0].score);             // 0.87
+await toolIndex.initialize(); // downloads and warms the embedding model once
 ```
 
----
+`initialize()` must run before `add`, `search`, or `update`. Calling it twice is safe because VectoriaDB short-circuits if it is already ready.
 
-## Use Cases
+## Step 2: Index your tools
 
-### Tool Discovery for AI Agents
-
-Let AI models find the right tools by description:
+Collect metadata from the tool registry (apps, plugins, adapters, or scopes) and write it into the database. Each document needs a unique `id`, the natural-language `text` you want to vectorize, and `metadata` that extends `DocumentMetadata`.
 
 ```ts
-const matches = await db.search('send notification to user', {
-  topK: 3,
-  threshold: 0.5,
-  filter: (m) => m.category === 'communication',
-});
+import type { ToolEntry, ToolRegistryInterface } from '@frontmcp/sdk';
 
-// Returns tools like 'notifications:sendEmail', 'notifications:sendSMS'
-```
+function collectToolDocuments(tools: ToolEntry[]): Array<{ id: string; text: string; metadata: ToolDocument }> {
+  return tools.map((tool) => {
+    const docId = `${tool.owner.id}:${tool.name}`;
+    return {
+      id: docId,
+      text: [
+        tool.metadata.description ?? tool.name,
+        `Inputs: ${Object.keys(tool.metadata.inputSchema ?? {}).join(', ') || 'none'}`,
+        `Tags: ${(tool.metadata.tags ?? []).join(', ') || 'none'}`,
+      ].join('\n'),
+      metadata: {
+        id: docId,
+        toolName: tool.name,
+        owner: tool.owner.id,
+        tags: tool.metadata.tags ?? [],
+        risk: tool.metadata.annotations?.destructiveHint ? 'destructive' : 'safe',
+      },
+    };
+  });
+}
 
-### Document Retrieval (RAG)
-
-Build retrieval-augmented generation without external APIs:
-
-```ts
-const context = await db.search(userQuery, { topK: 5 });
-const contextText = context.map(r => r.text).join('\n');
-
-// Pass to LLM as context
-const response = await llm.generate({
-  prompt: userQuery,
-  context: contextText,
-});
-```
-
-### Semantic Deduplication
-
-Find similar documents before adding new ones:
-
-```ts
-const similar = await db.search(newDocument, { threshold: 0.9 });
-if (similar.length > 0) {
-  console.log('Duplicate detected:', similar[0].metadata.id);
-} else {
-  await db.add(newId, newDocument, metadata);
+export async function indexTools(toolRegistry: ToolRegistryInterface) {
+  const tools = toolRegistry.getTools(true); // include hidden tools so you can filter later
+  await toolIndex.addMany(collectToolDocuments(tools));
 }
 ```
 
----
+`addMany` validates every document, enforces `maxBatchSize`, and prevents duplicates. Use it after deployments or whenever your tool inventory changes.
 
-## Embedding Strategies
+<Tip>
+When using the CodeCall plugin, tool examples are automatically indexed for semantic search. Example descriptions and input values receive 2x weight, so tools with relevant examples rank higher in search results. See the [Tools documentation](/servers/tools#tool-examples) for how to define examples.
+</Tip>
 
-### ML Embeddings (Default)
+## Step 3: Run semantic search
 
-Full semantic understanding using transformer models:
+Query the index anywhere you can run async code (for example inside a custom MCP tool that recommends next actions):
 
 ```ts
-const db = new VectoriaDB<MyDoc>({
-  modelName: 'Xenova/all-MiniLM-L6-v2',  // Default
-  cacheDir: './.cache/transformers',
+const matches = await toolIndex.search('reset a billing password', {
+  topK: 5,
+  threshold: 0.45,
+  filter: (metadata) => metadata.owner === 'billing' && !metadata.tags.includes('deprecated'),
 });
 
-await db.initialize(); // Downloads model on first run
+for (const match of matches) {
+  console.log(`${match.metadata.toolName} (${match.score.toFixed(2)})`);
+}
 ```
 
-**Pros:** Best semantic accuracy, understands synonyms and context
-**Cons:** ~22MB model download, async initialization
+`search` returns the best matches sorted by cosine similarity. Use `filter` to enforce authorization, `includeVector` to inspect raw vectors, and `threshold` to drop low-confidence hits.
 
-### TF-IDF (Zero Dependencies)
+<Tip>
+  Keep the index current with `updateMetadata`, `update`, or `updateMany`. Metadata-only updates never trigger re-embedding,
+  while text changes re-embed only the affected documents.
+</Tip>
 
-Keyword-based search with no ML models:
+## Persist embeddings between restarts
+
+Avoid re-indexing on every boot by swapping the default in-memory adapter with the provided file or Redis adapters plus a deterministic tools hash.
+
+```ts
+import { FileStorageAdapter, createToolsHash } from 'vectoriadb';
+
+export async function warmToolIndex(toolRegistry: ToolRegistryInterface) {
+  const documents = collectToolDocuments(toolRegistry.getTools(true));
+
+  const toolIndex = new VectoriaDB<ToolDocument>({
+    storageAdapter: new FileStorageAdapter({
+      cacheDir: './.cache/vectoriadb',
+      namespace: 'tool-index',
+    }),
+    toolsHash: createToolsHash(documents),
+    version: process.env.npm_package_version,
+  });
+
+  await toolIndex.initialize();
+
+  if (toolIndex.size() === 0) {
+    await toolIndex.addMany(documents);
+    await toolIndex.saveToStorage(); // persist embeddings to disk
+  }
+
+  return toolIndex;
+}
+```
+
+`toolsHash` automatically invalidates the cache when your tool list or descriptions change. Call `saveToStorage()` after indexing; `initialize()` transparently loads the cache on the next boot.
+
+<Note>
+  Need a shared cache across pods? Swap in `RedisStorageAdapter` with your preferred Redis client and namespace. TTLs and
+  key prefixes are configurable per adapter.
+</Note>
+
+## Scale & tune search
+
+- Enable `useHNSW` for datasets above roughly ten thousand documents. HNSW provides sub-millisecond queries with more than 95% recall.
+- Adjust `threshold` and `topK` per query to trade recall for precision.
+- Guard resource usage with `maxDocuments`, `maxDocumentSize`, and `maxBatchSize` (VectoriaDB enforces these automatically).
+- Set a custom `cacheDir` if your runtime has strict filesystem policies.
+
+```ts
+const toolIndex = new VectoriaDB<ToolDocument>({
+  useHNSW: true,
+  hnsw: { M: 16, efConstruction: 200, efSearch: 64 },
+  maxDocuments: 150_000,
+  maxBatchSize: 2_000,
+});
+```
+
+### Complete Configuration Options
+
+| Option                       | Type    | Default                     | Description                    |
+| ---------------------------- | ------- | --------------------------- | ------------------------------ |
+| `modelName`                  | string  | `'Xenova/all-MiniLM-L6-v2'` | Embedding model to use         |
+| `cacheDir`                   | string  | `'./.cache/transformers'`   | Model cache directory          |
+| `dimensions`                 | number  | Auto-detected               | Vector dimensions              |
+| `defaultSimilarityThreshold` | number  | `0.3`                       | Minimum similarity score       |
+| `defaultTopK`                | number  | `10`                        | Default results limit          |
+| `useHNSW`                    | boolean | `false`                     | Enable HNSW index              |
+| `maxDocuments`               | number  | `100000`                    | Max documents (DoS protection) |
+| `maxDocumentSize`            | number  | `1000000`                   | Max document size in chars     |
+| `maxBatchSize`               | number  | `1000`                      | Max batch operation size       |
+| `verboseErrors`              | boolean | `true`                      | Enable detailed errors         |
+
+### HNSW Configuration
+
+| Option           | Default | Description                                                |
+| ---------------- | ------- | ---------------------------------------------------------- |
+| `M`              | 16      | Connections per node in layer > 0 (higher = better recall) |
+| `M0`             | 32      | Connections for layer 0 (typically M \* 2)                 |
+| `efConstruction` | 200     | Candidate list size during construction                    |
+| `efSearch`       | 50      | Candidate list size during search                          |
+
+---
+
+## TF-IDF Variant (Zero Dependencies)
+
+For scenarios where ML model downloads aren't acceptable, use the TF-IDF variant:
 
 ```ts
 import { TFIDFVectoria } from 'vectoriadb';
 
-const db = new TFIDFVectoria<MyDoc>();
+interface ToolDocument extends DocumentMetadata {
+  toolName: string;
+  category: string;
+}
 
-db.addDocument('tool-1', 'User authentication login', metadata);
-db.addDocument('tool-2', 'Email notification sender', metadata);
+const db = new TFIDFVectoria<ToolDocument>({
+  defaultSimilarityThreshold: 0.0,
+  defaultTopK: 10,
+});
 
-db.reindex(); // Required after adding documents
+// Add documents
+db.addDocument('tool1', 'User authentication tool', { id: 'tool1', toolName: 'auth', category: 'security' });
+db.addDocument('tool2', 'User profile retrieval', { id: 'tool2', toolName: 'profile', category: 'user' });
 
+// Reindex after adding documents (required for IDF update)
+db.reindex();
+
+// Search
 const results = db.search('authentication', { topK: 5 });
 ```
 
-**Pros:** Zero dependencies, synchronous, instant startup
-**Cons:** Keyword-only, no semantic understanding
+### When to Use TF-IDF vs ML Embeddings
 
-### When to Use Each
-
-| Scenario                     | Recommendation     |
-| ---------------------------- | ------------------ |
-| General semantic search      | **ML Embeddings**  |
-| Small corpus (under 1K docs) | Either works well  |
-| Large corpus (>10K docs)     | ML + HNSW indexing |
-| No model downloads allowed   | **TF-IDF**         |
-| Extremely latency-sensitive  | **TF-IDF**         |
-| Need synonyms/context        | **ML Embeddings**  |
+| Feature                | TFIDFVectoria                  | VectoriaDB                    |
+| ---------------------- | ------------------------------ | ----------------------------- |
+| Dependencies           | Zero                           | transformers.js (~22MB model) |
+| Initialization         | Synchronous                    | Async (model download)        |
+| Semantic understanding | Keyword-based                  | Full semantic                 |
+| Best for               | Small corpora (under 10K docs) | Any size                      |
+| Reindex required       | Yes, after changes             | No                            |
 
 ---
 
-## HNSW Indexing
+## Storage Adapters
 
-For large document collections, enable HNSW (Hierarchical Navigable Small World) indexing:
-
-```ts
-const db = new VectoriaDB<MyDoc>({
-  useHNSW: true,
-  hnsw: {
-    M: 16,              // Connections per node (higher = better recall)
-    efConstruction: 200, // Build-time search depth
-    efSearch: 64,        // Query-time search depth
-  },
-});
-```
-
-### HNSW vs Linear Search
-
-| Documents | Linear Search | HNSW    |
-| --------- | ------------- | ------- |
-| 1,000     | 5ms           | 1ms     |
-| 10,000    | 50ms          | **2ms** |
-| 100,000   | 500ms         | **5ms** |
-
-Enable HNSW when you have more than ~5,000 documents.
-
----
-
-## Persistence
-
-### File Storage
-
-Save embeddings to disk for fast restarts:
+### File Adapter
 
 ```ts
 import { VectoriaDB, FileStorageAdapter } from 'vectoriadb';
 
-const db = new VectoriaDB<MyDoc>({
+const toolIndex = new VectoriaDB<ToolDocument>({
   storageAdapter: new FileStorageAdapter({
     cacheDir: './.cache/vectoriadb',
-    namespace: 'tools',
+    namespace: 'tool-index',
   }),
 });
-
-await db.initialize(); // Loads from cache if available
-
-// After adding documents
-await db.saveToStorage();
 ```
 
-### Redis Storage
+### Redis Adapter
 
-Share embeddings across multiple pods:
+For multi-pod environments, use Redis to share embeddings:
 
 ```ts
 import { VectoriaDB, RedisStorageAdapter } from 'vectoriadb';
 import Redis from 'ioredis';
 
-const db = new VectoriaDB<MyDoc>({
+const redisClient = new Redis();
+
+const toolIndex = new VectoriaDB<ToolDocument>({
   storageAdapter: new RedisStorageAdapter({
-    client: new Redis(),
-    namespace: 'tools',
-    ttl: 86400, // 24 hours
+    client: redisClient,
+    namespace: 'tool-index',
+    ttl: 86400,        // 24 hours (default)
+    keyPrefix: 'vectoriadb',
   }),
 });
 ```
 
-### Cache Invalidation
+### Memory Adapter (Default)
 
-Use `toolsHash` to automatically invalidate when tools change:
-
-```ts
-import { createToolsHash } from 'vectoriadb';
-
-const db = new VectoriaDB<MyDoc>({
-  storageAdapter: new FileStorageAdapter({ ... }),
-  toolsHash: createToolsHash(documents), // Hash of all documents
-  version: process.env.npm_package_version,
-});
-
-// Cache auto-invalidates when hash or version changes
-```
-
----
-
-## Filtering & Metadata
-
-Apply runtime filters on search results:
+No persistence - embeddings are lost on restart:
 
 ```ts
-const results = await db.search('user management', {
-  topK: 10,
-  threshold: 0.3,
-  filter: (metadata) => {
-    return metadata.category === 'admin' && !metadata.deprecated;
-  },
+import { VectoriaDB, MemoryStorageAdapter } from 'vectoriadb';
+
+const toolIndex = new VectoriaDB<ToolDocument>({
+  storageAdapter: new MemoryStorageAdapter({ namespace: 'tools' }),
 });
 ```
 
-### Metadata Updates
-
-Update metadata without re-embedding:
-
-```ts
-// Fast: metadata only
-await db.updateMetadata('tool-1', { deprecated: true });
-
-// Slow: re-embeds the document
-await db.update('tool-1', 'New description text', { ...newMetadata });
-```
-
 ---
 
-## Configuration Reference
+## Handle errors and monitor health
 
-<ParamField path="modelName" type="string" default="Xenova/all-MiniLM-L6-v2">
-  Transformer model for embeddings
-</ParamField>
+All errors extend `VectoriaError` and ship with machine-readable `code` values so you can branch on them.
 
-<ParamField path="cacheDir" type="string" default="./.cache/transformers">
-  Model cache directory
-</ParamField>
+### Error Types
 
-<ParamField path="defaultSimilarityThreshold" type="number" default="0.3">
-  Minimum similarity score for results
-</ParamField>
-
-<ParamField path="defaultTopK" type="number" default="10">
-  Default number of results
-</ParamField>
-
-<ParamField path="useHNSW" type="boolean" default="false">
-  Enable HNSW indexing for large corpora
-</ParamField>
-
-<ParamField path="maxDocuments" type="number" default="100000">
-  Maximum documents (DoS protection)
-</ParamField>
-
-<ParamField path="maxDocumentSize" type="number" default="1000000">
-  Maximum document text size in characters
-</ParamField>
-
----
-
-## Error Handling
-
-VectoriaDB provides typed errors for all failure modes:
+| Error                         | Code                        | Description                |
+| ----------------------------- | --------------------------- | -------------------------- |
+| `VectoriaNotInitializedError` | `NOT_INITIALIZED`           | Call `initialize()` first  |
+| `DocumentValidationError`     | `DOCUMENT_VALIDATION_ERROR` | Invalid document data      |
+| `DocumentNotFoundError`       | `DOCUMENT_NOT_FOUND`        | Document ID doesn't exist  |
+| `DocumentExistsError`         | `DOCUMENT_EXISTS`           | Document ID already exists |
+| `DuplicateDocumentError`      | `DUPLICATE_DOCUMENT`        | Duplicate in batch         |
+| `QueryValidationError`        | `QUERY_VALIDATION_ERROR`    | Invalid search query       |
+| `EmbeddingError`              | `EMBEDDING_ERROR`           | Model embedding failed     |
+| `StorageError`                | `STORAGE_ERROR`             | Storage operation failed   |
+| `ConfigurationError`          | `CONFIGURATION_ERROR`       | Invalid config             |
 
 ```ts
 import {
+  VectoriaError,
   VectoriaNotInitializedError,
   DocumentValidationError,
   DocumentNotFoundError,
   DocumentExistsError,
+  DuplicateDocumentError,
+  QueryValidationError,
+  EmbeddingError,
+  StorageError,
+  ConfigurationError,
 } from 'vectoriadb';
 
 try {
-  await db.add('doc-1', 'text', metadata);
+  await toolIndex.add(doc.id, doc.text, doc.metadata);
 } catch (error) {
   if (error instanceof VectoriaNotInitializedError) {
-    await db.initialize();
-  } else if (error instanceof DocumentExistsError) {
-    await db.update('doc-1', 'text', metadata);
+    await toolIndex.initialize();
+  } else if (error instanceof DocumentValidationError) {
+    console.warn({ tool: error.documentId }, 'invalid document skipped');
+  } else if (error instanceof VectoriaError) {
+    console.error({ code: error.code }, error.message);
+    throw error;
+  } else {
+    throw error;
   }
 }
 ```
 
----
-
-## Monitoring
-
-Track index health and memory usage:
+Use `toolIndex.getStats()` to feed dashboards or health endpoints:
 
 ```ts
-const stats = db.getStats();
-
-console.log({
-  totalDocuments: stats.totalEmbeddings,
-  dimensions: stats.dimensions,          // 384 for MiniLM
-  memoryMB: stats.estimatedMemoryBytes / 1024 / 1024,
-  model: stats.modelName,
-});
+const stats = toolIndex.getStats();
+/*
+{
+  totalEmbeddings: number;
+  dimensions: number;
+  estimatedMemoryBytes: number;
+  modelName: string;
+}
+*/
 ```
 
----
-
-## Resources
-
-<CardGroup cols={2}>
-  <Card title="CodeCall Plugin" icon="code" href="/docs/plugins/codecall/overview">
-    VectoriaDB powers CodeCall's tool search
-  </Card>
-  <Card title="Enclave" icon="shield" href="/docs/guides/enclave">
-    Secure sandbox that works with VectoriaDB
-  </Card>
-  <Card title="GitHub" icon="github" href="https://github.com/agentfront/enclave/tree/main/libs/vectoriadb">
-    View source code and benchmarks
-  </Card>
-  <Card title="npm" icon="npm" href="https://www.npmjs.com/package/vectoriadb">
-    Package details and version history
-  </Card>
-</CardGroup>
+<Info>
+  Pair stats with `toolIndex.size()`, `toolIndex.clear()`, and `toolIndex.clearStorage()` to expose maintenance commands or
+  admin tooling.
+</Info>

@@ -210,10 +210,9 @@ Configure default behavior when registering the plugin:
 <ParamField path="toolPatterns" type="string[]">
   Tool names or glob patterns to cache. Tools matching these patterns use `defaultTTL` unless they have custom cache metadata.
 
-```ts
-toolPatterns: ['mintlify:*', 'local:ping', 'api:get-*']
-```
-
+  ```ts
+  toolPatterns: ['mintlify:*', 'local:ping', 'api:get-*']
+  ```
 </ParamField>
 
 <ParamField path="bypassHeader" type="string" default="'x-frontmcp-disable-cache'">
@@ -321,13 +320,13 @@ CachePlugin.init({
 
 ### Pattern Syntax
 
-| Pattern       | Matches                    |
-| ------------- | -------------------------- |
-| `tool-name`   | Exact match only           |
-| `namespace:*` | All tools in namespace     |
-| `prefix-*`    | Tools starting with prefix |
-| `*-suffix`    | Tools ending with suffix   |
-| `api:*:list`  | Middle wildcard pattern    |
+| Pattern | Matches |
+|---------|---------|
+| `tool-name` | Exact match only |
+| `namespace:*` | All tools in namespace |
+| `prefix-*` | Tools starting with prefix |
+| `*-suffix` | Tools ending with suffix |
+| `api:*:list` | Middle wildcard pattern |
 
 ### Priority Rules
 
