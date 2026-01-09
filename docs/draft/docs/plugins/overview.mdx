@@ -31,12 +31,13 @@ These plugins are maintained by the FrontMCP team and included in `@frontmcp/plu
 
 <CardGroup cols={1}>
   <Card title="Remember Plugin" icon="brain" href="/docs/plugins/remember-plugin">
-    Encrypted session memory with scoped storage and tool approval system for secure AI agent interactions.
+    Encrypted session memory with scoped storage, LLM-managed memory tools, and tool approval controls for secure AI agent interactions.
 
     **Features:**
     - Encrypted AES-256-GCM storage with HKDF-SHA256 scope-based key derivation and unique IV per entry
     - Multiple scopes: session, user, tool, global
     - Tool approval system with audit trails
+    - Built-in memory-management tools (`memory_remember_this`, `memory_recall`, `memory_forget`, `memory_list_memories`) plus TTL/pattern validation helpers from `@frontmcp/utils`
     - Multiple backends: Memory, Redis, Vercel KV, Upstash
     - Branded payloads for semantic categorization
 

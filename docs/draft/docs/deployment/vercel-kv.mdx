@@ -282,14 +282,14 @@ If you need full Redis features (including pub/sub) but want serverless pricing,
 })
 ```
 
-| Feature              | Vercel KV          | Upstash            |
-| -------------------- | ------------------ | ------------------ |
-| REST API             | ✅ Yes             | ✅ Yes             |
-| Edge Compatible      | ✅ Yes             | ✅ Yes             |
-| Pub/Sub              | ❌ No              | ✅ Yes             |
-| Resource Subscriptions | ❌ Not supported | ✅ Full support    |
-| Pricing              | Pay per request    | Pay per request    |
-| Native Redis Client  | ❌ REST only       | ✅ Optional        |
+| Feature                | Vercel KV        | Upstash         |
+| ---------------------- | ---------------- | --------------- |
+| REST API               | ✅ Yes           | ✅ Yes          |
+| Edge Compatible        | ✅ Yes           | ✅ Yes          |
+| Pub/Sub                | ❌ No            | ✅ Yes          |
+| Resource Subscriptions | ❌ Not supported | ✅ Full support |
+| Pricing                | Pay per request  | Pay per request |
+| Native Redis Client    | ❌ REST only     | ✅ Optional     |
 
 <Tip>
 **Upstash** is recommended when you need resource subscriptions or real-time features. For simple key-value storage, either Vercel KV or Upstash works well.

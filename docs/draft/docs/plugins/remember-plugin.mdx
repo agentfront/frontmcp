@@ -138,12 +138,12 @@ export const PersonalizeGreeting = tool({
 
 Memory is organized into four scopes with different visibility and lifetime:
 
-| Scope     | Description                          | Use Case                          |
-| --------- | ------------------------------------ | --------------------------------- |
-| `session` | Current session only (default)       | Temporary state, conversation context |
-| `user`    | Persists across user sessions        | User preferences, settings        |
-| `tool`    | Tied to specific tool + session      | Tool-specific cache               |
-| `global`  | Shared across all sessions/users     | Application-wide configuration    |
+| Scope     | Description                      | Use Case                              |
+| --------- | -------------------------------- | ------------------------------------- |
+| `session` | Current session only (default)   | Temporary state, conversation context |
+| `user`    | Persists across user sessions    | User preferences, settings            |
+| `tool`    | Tied to specific tool + session  | Tool-specific cache                   |
+| `global`  | Shared across all sessions/users | Application-wide configuration        |
 
 ### Using Scopes
 
@@ -324,6 +324,7 @@ export REMEMBER_SECRET="your-generated-secret"
 ```
 
 File-based persistence is disabled in production by default for security.
+
 </Warning>
 
 ### Configuration
@@ -495,6 +496,7 @@ This exposes tools like `memory_remember_this`, `memory_recall`, `memory_forget`
     <Info>
     In development, the secret is auto-generated and stored in `.frontmcp/remember-secret.json`. Add this file to `.gitignore`.
     </Info>
+
   </Accordion>
 </AccordionGroup>
 

@@ -150,23 +150,51 @@ export default class GatewayServer {}
 
 ### Remote App Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `name` | `string` | Unique identifier for the remote app |
-| `urlType` | `'url'` | Must be `'url'` for remote apps |
-| `url` | `string` | MCP server endpoint URL |
-| `namespace` | `string` | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`) |
-| `transportOptions` | `object` | Connection settings (timeout, retry attempts) |
-| `standalone` | `boolean` | If `true`, don't merge with parent scope |
+<Note>
+Remote apps are fully adopted into the gateway scope: tools, resources, and prompts from the upstream server behave like local entries (with the configured namespace prefix) while still honoring your plugins, hooks, and authorization policies.
+</Note>
+
+| Option             | Type               | Description                                                                                |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------ |
+| `name`             | `string`           | Unique identifier for the remote app                                                       |
+| `urlType`          | `'url'`            | Must be `'url'` for remote apps                                                            |
+| `url`              | `string`           | MCP server endpoint URL                                                                    |
+| `namespace`        | `string`           | Prefix for tool/resource/prompt names (e.g., `mintlify:SearchMintlify`)                    |
+| `transportOptions` | `object`           | Connection settings (timeout, retry attempts, headers, and SSE fallback)                   |
+| `remoteAuth`       | `RemoteAuthConfig` | How the gateway authenticates with the remote MCP server (`static`, `forward`, or `oauth`) |
+| `refreshInterval`  | `number`           | Milliseconds between capability refreshes (0 disables auto-refresh)                        |
+| `cacheTTL`         | `number`           | Milliseconds to cache remote capabilities before reloading                                 |
+| `standalone`       | `boolean`          | If `true`, don't merge with parent scope                                                   |
+
+### Remote Authentication
+
+Remote servers often enforce their own auth requirements. Configure `remoteAuth` to satisfy the upstream policy:
+
+- `static`: Send a fixed bearer/basic/API key credential on every request.
+- `forward`: Relay the gateway user's token (default header `Authorization`) so the remote server can make user-specific decisions.
+- `oauth`: Let the remote server manage OAuth flows entirely; the gateway simply proxies traffic.
+
+Include optional `tokenClaim` or `headerName` when forwarding tokens to match the remote provider's expectations.
 
 ### Transport Options
 
 ```ts
 transportOptions: {
-  timeout: 60000,      // Request timeout in milliseconds
-  retryAttempts: 3,    // Number of retry attempts on failure
+  timeout: 60000,        // Request timeout in milliseconds
+  retryAttempts: 3,      // Retry attempts before failing
+  retryDelayMs: 250,     // Delay between retries
+  fallbackToSSE: true,   // Use SSE when streamable HTTP fails
+  headers: { 'x-org': 'gateway' }, // Additional headers
 }
 ```
+
+- `retryDelayMs` gives upstream systems time to recover between retries.
+- `fallbackToSSE` ensures legacy SSE clients stay connected when streamable HTTP is unavailable.
+- `headers` can inject custom metadata used by the remote server (e.g., to source audit logs).
+
+### Capability Refresh & Change Events
+
+Remote capabilities are cached locally using `cacheTTL` (default 60 seconds) to avoid repeated discovery calls. Set `refreshInterval` to poll for updates (e.g., new tools) without restarting the gateway. When the remote server advertises a change, FrontMCP invalidates the in-memory cache and reloads the updated tool/resource/prompt list before the next request.
 
 ### Caching Remote Tools
 
