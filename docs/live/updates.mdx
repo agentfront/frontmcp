@@ -5,7 +5,22 @@ icon: 'sparkles'
 mode: 'center'
 ---
 
+<Update label="v0.7.0" description="2026-01-09" tags={["Releases"]}>
+  <Card
+    title="FrontMCP v0.7.0: Orchestrated agents and safer tooling"
+    href="https://github.com/agentfront/frontmcp/releases/tag/v0.7.0"
+    cta="View full changlog"
+  >
+    🚀 **Remote MCP orchestration** – Proxy tools, resources, and prompts from external MCP servers while orchestrator agents and improved transport settings keep multi-server flows reliable.
 
+    🛡️ **Memory + approval tooling** – New memory-management helpers, scoped plugin controls, and the Approval Plugin’s PKCE/webhook workflow guard sensitive actions across Redis, Vercel KV, and Upstash stores.
+
+    🧠 **Agent workflows & progress** – Built-in orchestrator, echo, and calculator agents demonstrate multi-agent patterns while progress notifications now auto-update with tokens so long-running work reports status continuously.
+
+    🧰 **Utils + storage helpers** – `@frontmcp/utils` now exposes TTL/pattern validation, safe URI template helpers, and storage adapters for memory, Redis, Vercel KV, and Upstash so caching and approvals stay predictable.
+
+  </Card>
+</Update>
 
 <Update label="v0.6.x" description="2025-12-24" tags={["Releases"]}>
   <Card
@@ -183,24 +198,21 @@ mode: 'center'
     - 🧪 **Dev-only no-auth**: run without auth *in development mode only*.
     Example: <code>frontmcp dev --no-auth</code>
     - 🚀 **Project generator**: <code>npx frontmcp create &lt;name&gt;</code> scaffolds tsconfig, package.json
-    scripts, and starter files.
+    scripts, andstarter files.
     - 🔧 **Init for existing repos**: <code>npx frontmcp init</code> adds scripts and fixes tsconfig automatically.
-    - 🔭 **Inspector, zero setup**: <code>frontmcp
-    inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
+    - 🔭 **Inspector, zero setup**: <code>frontmcp inspector</code> launches <code>@modelcontextprotocol/inspector</code>.
     - 🩺 **Doctor**: validates Node ≥ 22, npm ≥ 10, entry detection, and configuration.
-    - ✨ **Tool schema ergonomics**: pass Zod fields directly
-    (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
+    - ✨ **Tool schema ergonomics**: pass Zod fields directly (<code>inputSchema: &#123; ... &#125;</code> / <code>outputSchema: &#123; ... &#125;</code>).
     - ⚡ **Async type checks in dev**: background type-checking while watching files.
-    - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>;
-    builds to <code>./dist</code> (override with <code>--out-dir</code>).
-    - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> and
-    session-aware SSE.
+    - 📦 **Entry detection & builds**: uses <code>package.json.main</code> or falls back to <code>src/main.ts</code>; builds to <code>./dist</code> (override with <code>--out-dir</code>).
+    - 📡 **Transport health**: unified SSE intent detection incl. legacy GET <code>event-stream</code> andnew session-aware SSE.
     - 📝 **Better logging**: consistent <code>verbose/info/warn/error</code> across flows.
 
     <Warning>
       The <strong>--no-auth</strong> option is restricted to <strong>development</strong>. Do not use in
-      production.
-    </Warning>
+
+defProduction.
+</Warning>
 
   </Card>
 
@@ -212,16 +224,14 @@ mode: 'center'
     href="/docs/v/0.1/"
     cta="Read the release notes"
   >
-    FrontMCP 0.1 lands streamlined <strong>Streamable HTTP</strong> transport, scoped <strong>DI-powered
-    invoker</strong> flows,
+    FrontMCP 0.1 lands streamlined <strong>Streamable HTTP</strong> transport, scoped <strong>DI-powered invoker</strong> flows,
     and first-class <strong>adapters/plugins</strong> so you can ship production MCP servers with minimal
     boilerplate.
 
     - ⚙️ <strong>Streamable HTTP</strong>: spec-compliant GET/POST with sessions and server-pushed events.
     - 🧩 <strong>Adapters & Plugins</strong>: load tools dynamically (OpenAPI, more coming) and add cross-cutting
     capabilities like caching.
-    - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution
-    transforms.
+    - 🧱 <strong>Composable hooks</strong>: fine-grained hooks for auth, rate-limit, logging, and execution transforms.
 
   </Card>
 
