@@ -62,10 +62,6 @@ jobs:
         run: npx prettier --check .
         continue-on-error: true
 
-      - name: Save Nx cache
-        if: always()
-        uses: ./.github/actions/nx-cache-save
-
   # Build all libraries
   build:
     name: "Build Libraries"
@@ -156,10 +152,6 @@ jobs:
       - name: Run unit tests
         run: npx nx affected -t test --passWithNoTests --exclude='demo-e2e-*'
 
-      - name: Save Nx cache
-        if: always()
-        uses: ./.github/actions/nx-cache-save
-
   # E2E tests - matrix strategy for parallelization
   e2e-tests:
     name: "E2E Tests (${{ matrix.project }})"
@@ -223,10 +215,6 @@ jobs:
         if: steps.test.outcome == 'failure'
         run: npx nx run ${{ matrix.project }}:test
 
-      - name: Save Nx cache
-        if: always()
-        uses: ./.github/actions/nx-cache-save
-
   # Coverage report (runs on main branch only)
   coverage:
     name: "Coverage Report"
@@ -276,7 +264,3 @@ jobs:
 
       - name: Check coverage threshold
         run: npx nyc check-coverage --temp-dir=coverage/merged --statements 95 --branches 95 --functions 95 --lines 95
-
-      - name: Save Nx cache
-        if: always()
-        uses: ./.github/actions/nx-cache-save

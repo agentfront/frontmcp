@@ -78,7 +78,12 @@ jobs:
 
           RELEASE_BRANCH="${{ steps.context.outputs.release_branch }}"
 
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          # Handle workflow_dispatch where repository context may be limited
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DEFAULT_BRANCH="${{ vars.DEFAULT_BRANCH || 'main' }}"
+          else
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          fi
           DEFAULT_REF="origin/$DEFAULT_BRANCH"
 
           # Ensure the default branch ref is available for diffing when needed.
@@ -190,11 +195,11 @@ jobs:
             echo "Successfully triggered docs update in $DOCS_REPO"
           elif [ "$HTTP_STATUS" -eq 404 ]; then
             echo "::error::Repository $DOCS_REPO not found or PAT doesn't have access"
-            cat /tmp/response.json
+            [ -f /tmp/response.json ] && cat /tmp/response.json
             exit 1
           else
             echo "::error::Failed to trigger docs update. HTTP status: $HTTP_STATUS"
-            cat /tmp/response.json
+            [ -f /tmp/response.json ] && cat /tmp/response.json
             exit 1
           fi
 

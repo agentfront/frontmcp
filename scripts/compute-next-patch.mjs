@@ -14,6 +14,14 @@
 
 import { execSync } from 'node:child_process';
 
+/**
+ * Escape all regex special characters in a string.
+ * Prevents regex injection when building patterns from user input.
+ */
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const [, , releaseLine, releaseType = 'stable', preReleaseNumArg] = process.argv;
 
 if (!releaseLine) {
@@ -59,7 +67,8 @@ const stableTags = tags.filter((t) => !t.includes('-'));
 let nextPatch = 0;
 
 if (stableTags.length > 0) {
-  const stableTagPattern = new RegExp(`^v${releaseLine.replace('.', '\\.')}\\.(\\d+)$`);
+  const escapedReleaseLine = escapeRegExp(releaseLine);
+  const stableTagPattern = new RegExp(`^v${escapedReleaseLine}\\.(\\d+)$`);
   for (const tag of stableTags) {
     const match = tag.match(stableTagPattern);
     if (match) {

@@ -84,12 +84,12 @@ jobs:
           packages:
             "@frontmcp/*":
               access: $all
-              publish: $anonymous
-              unpublish: $anonymous
+              publish: $authenticated
+              unpublish: $authenticated
             "frontmcp":
               access: $all
-              publish: $anonymous
-              unpublish: $anonymous
+              publish: $authenticated
+              unpublish: $authenticated
             "**":
               access: $all
               proxy: npmjs
@@ -103,6 +103,10 @@ jobs:
             format: pretty
             level: info
           EOF
+
+          # Create CI user for publishing
+          npm install -g htpasswd
+          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher ci-publisher-pass
 
       - name: Install and start Verdaccio
         run: |
@@ -130,7 +134,8 @@ jobs:
         run: |
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | \
             sudo tee /etc/apt/trusted.gpg.d/ngrok.asc > /dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | \
+          # Use dynamic distro detection instead of hardcoded "buster"
+          echo "deb https://ngrok-agent.s3.amazonaws.com $(lsb_release -cs) main" | \
             sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt-get update && sudo apt-get install -y ngrok
 
@@ -188,6 +193,11 @@ jobs:
       - name: Build all packages
         run: |
           npx nx run-many -t build --parallel=5
+
+      - name: Authenticate with Verdaccio
+        run: |
+          # Login to local Verdaccio registry
+          npm set //localhost:4873/:_authToken "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
 
       - name: Publish packages to local Verdaccio
         run: |

@@ -163,11 +163,12 @@ jobs:
         id: matrix
         run: |
           # Get synchronized libraries as JSON array for matrix
-          PROJECTS_JSON=$(npx nx show projects -p tag:versioning:synchronized --type lib --json 2>/dev/null || echo "[]")
+          # Use jq -c to compact JSON to single line (avoid multiline GITHUB_OUTPUT issues)
+          PROJECTS_JSON=$(npx nx show projects -p tag:versioning:synchronized --type lib --json 2>/dev/null | jq -c '.' || echo "[]")
 
           # Fallback if no synchronized tag
-          if [ "$PROJECTS_JSON" = "[]" ]; then
-            PROJECTS_JSON=$(npx nx show projects --type lib --json 2>/dev/null || echo "[]")
+          if [ "$PROJECTS_JSON" = "[]" ] || [ "$PROJECTS_JSON" = "null" ]; then
+            PROJECTS_JSON=$(npx nx show projects --type lib --json 2>/dev/null | jq -c '.' || echo "[]")
           fi
 
           echo "projects=$PROJECTS_JSON" >> "$GITHUB_OUTPUT"
@@ -177,6 +178,16 @@ jobs:
         run: |
           npx nx release version "${{ steps.version.outputs.version }}" \
             --git-tag=false --git-commit=false
+
+      - name: Commit version bump
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
+            git push origin HEAD
+          fi
 
       - name: Build all packages
         run: |
@@ -251,7 +262,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Update npm CLI for OIDC
-        run: npm install -g npm@latest
+        run: npm install -g npm@10.9.2 # Pin to known stable version with OIDC support
 
       - name: Publish ${{ matrix.project }}
         run: |
@@ -306,6 +317,12 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           TAG="v$VERSION"
+          BRANCH="${{ needs.prepare.outputs.branch }}"
+
+          # Fetch latest to ensure we tag the committed version
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull origin "$BRANCH"
 
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"

@@ -19,7 +19,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   create:
@@ -76,6 +75,12 @@ jobs:
           MINOR="${{ inputs.minor_version }}"
           BASE="${{ inputs.base_branch }}"
 
+          # Validate BASE doesn't start with '-' (option injection prevention)
+          if [[ "$BASE" == -* ]]; then
+            echo "::error::Invalid base_branch: cannot start with '-'"
+            exit 1
+          fi
+
           BRANCH="release/${MAJOR}.${MINOR}.x"
           VERSION="${MAJOR}.${MINOR}.0"
           RELEASE_LINE="${MAJOR}.${MINOR}"
@@ -113,7 +118,14 @@ jobs:
           BRANCH="${{ steps.branch.outputs.branch }}"
           BASE="${{ steps.branch.outputs.base }}"
 
-          git fetch origin "$BASE" --tags
+          # Validate BASE is a real git ref
+          git fetch origin --tags
+          if ! git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
+            echo "::error::Invalid base_branch: '$BASE' does not exist on remote"
+            exit 1
+          fi
+
+          git fetch origin "$BASE"
           git checkout -b "$BRANCH" "origin/$BASE"
 
           echo "Created branch $BRANCH from $BASE"
@@ -127,10 +139,11 @@ jobs:
           # Get last release tag for archival purposes
           # Note: exclude pre-release tags (e.g., -rc/-beta) so new-minor detection
           # doesn't get confused by pre-releases on the target minor.
+          # Wrap grep in command group to handle no matches gracefully under set -euo pipefail
           LAST_TAG=$(
-            git tag --list "v*" --sort=-version:refname |
-              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
-              head -n1 || echo ""
+            git tag --list "v*" --sort=-version:refname | {
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
+            } | head -n1 || echo ""
           )
           if [ -n "$LAST_TAG" ]; then
             LAST_VERSION="${LAST_TAG#v}"

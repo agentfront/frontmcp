@@ -17,9 +17,11 @@ jobs:
   cherry-pick:
     # Only run when:
     # - PR was merged (not just closed)
+    # - PR is not from a fork (forked PRs have read-only GITHUB_TOKEN)
     # - Target branch is a release branch (not main)
     if: >
       github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.fork == false &&
       github.event.pull_request.base.ref != github.event.repository.default_branch &&
       (startsWith(github.event.pull_request.base.ref, 'release/') ||
        startsWith(github.event.pull_request.base.ref, 'next/'))
@@ -53,6 +55,12 @@ jobs:
           CHERRY_BRANCH="${ORIGINAL_BRANCH}-cherry-pick-main"
           CHERRY_BRANCH=$(echo "$CHERRY_BRANCH" | sed 's/[^a-zA-Z0-9._/-]/-/g' | head -c 100)
 
+          # Validate branch name is valid for git
+          if ! git check-ref-format --branch "$CHERRY_BRANCH" >/dev/null 2>&1; then
+            echo "::error::Invalid branch name after sanitization: $CHERRY_BRANCH"
+            exit 1
+          fi
+
           echo "cherry_branch=$CHERRY_BRANCH" >> "$GITHUB_OUTPUT"
           echo "Cherry-pick branch: $CHERRY_BRANCH"
 
@@ -69,7 +77,18 @@ jobs:
 
           # Attempt cherry-pick
           echo "Attempting cherry-pick of $MERGE_SHA..."
-          if git cherry-pick "$MERGE_SHA" --no-commit; then
+
+          # Detect if merge commit (has multiple parents)
+          PARENT_COUNT=$(git rev-list --parents -n1 "$MERGE_SHA" | wc -w)
+          PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract the commit itself
+
+          CHERRY_PICK_ARGS="--no-commit"
+          if [ "$PARENT_COUNT" -gt 1 ]; then
+            echo "Detected merge commit with $PARENT_COUNT parents, using -m 1"
+            CHERRY_PICK_ARGS="-m 1 --no-commit"
+          fi
+
+          if git cherry-pick $CHERRY_PICK_ARGS "$MERGE_SHA"; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
 
             # Create commit with proper attribution
