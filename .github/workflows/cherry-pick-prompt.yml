@@ -72,7 +72,15 @@ jobs:
           git checkout "$DEFAULT_BRANCH"
           git pull origin "$DEFAULT_BRANCH"
 
-          # Create the cherry-pick branch
+          # Create the cherry-pick branch (delete if already exists)
+          if git show-ref --verify --quiet "refs/heads/$CHERRY_BRANCH"; then
+            echo "Branch $CHERRY_BRANCH already exists locally, deleting..."
+            git branch -D "$CHERRY_BRANCH"
+          fi
+          if git ls-remote --heads origin "$CHERRY_BRANCH" | grep -q .; then
+            echo "Branch $CHERRY_BRANCH already exists on remote, deleting..."
+            git push origin --delete "$CHERRY_BRANCH" || true
+          fi
           git checkout -b "$CHERRY_BRANCH"
 
           # Attempt cherry-pick
@@ -175,6 +183,7 @@ jobs:
           )"
 
       - name: Create issue for conflict
+        id: create_issue
         if: steps.prepare.outputs.conflict == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -187,12 +196,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Create issue without assignee (assignee may fail if user can't be assigned)
           ISSUE_URL=$(gh issue create \
             --title "Manual cherry-pick needed: $PR_TITLE" \
             --label "cherry-pick" \
             --label "conflict" \
             --label "needs-attention" \
-            --assignee "$PR_AUTHOR" \
             --body "$(cat <<EOF
           ## Manual Cherry-pick Required
 
@@ -215,8 +224,10 @@ jobs:
           # Create a new branch for the cherry-pick
           git checkout -b cherry-pick-pr-$ORIGINAL_PR
 
-          # Cherry-pick the commit
+          # Cherry-pick the commit (use -m 1 for merge commits)
           git cherry-pick $MERGE_SHA
+          # OR for merge commits:
+          # git cherry-pick -m 1 $MERGE_SHA
 
           # Resolve conflicts manually, then:
           git add .
@@ -237,6 +248,19 @@ jobs:
           )")
 
           echo "Created issue for manual cherry-pick: $ISSUE_URL"
+          echo "issue_url=$ISSUE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Attempt to assign issue
+        if: steps.prepare.outputs.conflict == 'true' && steps.create_issue.outputs.issue_url != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          ISSUE_URL: ${{ steps.create_issue.outputs.issue_url }}
+        run: |
+          # Extract issue number from URL
+          ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+          gh issue edit "$ISSUE_NUMBER" --add-assignee "$PR_AUTHOR" || echo "Could not assign to $PR_AUTHOR, skipping assignment"
 
       - name: Comment on original PR (conflict)
         if: steps.prepare.outputs.conflict == 'true'

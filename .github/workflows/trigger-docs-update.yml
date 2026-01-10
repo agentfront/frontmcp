@@ -53,12 +53,38 @@ jobs:
             RELEASE_BRANCH="${{ github.event.pull_request.base.ref }}"
             SHA="${{ github.event.pull_request.merge_commit_sha }}"
 
-            # Extract version from package.json
-            VERSION=$(node -e "console.log(require('./package.json').version)")
+            # Extract version from package.json with error handling
+            if [ ! -f "./package.json" ]; then
+              echo "::error::package.json not found"
+              exit 1
+            fi
+
+            VERSION=$(node -e "
+              try {
+                const pkg = require('./package.json');
+                if (!pkg.version) throw new Error('No version field');
+                console.log(pkg.version);
+              } catch (e) {
+                console.error('Failed to read version:', e.message);
+                process.exit(1);
+              }
+            ")
+
+            if [ -z "$VERSION" ]; then
+              echo "::error::Failed to extract version from package.json"
+              exit 1
+            fi
           fi
 
-          # Extract minor version (e.g., 0.7 from 0.7.1)
-          VERSION_MINOR=$(echo "$VERSION" | awk -F. '{print $1"."$2}')
+          # Extract minor version (e.g., 0.7 from 0.7.1 or 0.7.1-beta.1)
+          # Handle pre-release versions by stripping the pre-release suffix first
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+          VERSION_MINOR=$(echo "$BASE_VERSION" | awk -F. '{print $1"."$2}')
+
+          if [ -z "$VERSION_MINOR" ]; then
+            echo "::error::Failed to extract minor version from $VERSION"
+            exit 1
+          fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version_minor=$VERSION_MINOR" >> "$GITHUB_OUTPUT"

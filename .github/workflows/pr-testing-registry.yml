@@ -196,23 +196,30 @@ jobs:
 
       - name: Authenticate with Verdaccio
         run: |
-          # Login to local Verdaccio registry
-          npm set //localhost:4873/:_authToken "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
+          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
+          npm set //localhost:4873/:_auth "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
 
       - name: Publish packages to local Verdaccio
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           PR_NUM="${{ inputs.pr_number }}"
+          FAILED_PACKAGES=()
+          PUBLISHED_PACKAGES=()
 
           # Publish libs packages
           LIBS_PACKAGES=(di utils uipack sdk ui adapters testing cli plugins)
           for pkg in "${LIBS_PACKAGES[@]}"; do
             if [ -d "libs/$pkg/dist" ]; then
               echo "Publishing @frontmcp/$pkg@$VERSION..."
-              npm publish "libs/$pkg/dist" \
+              if npm publish "libs/$pkg/dist" \
                 --registry http://localhost:4873 \
                 --access public \
-                --tag "pr-$PR_NUM" || echo "Warning: publish failed for $pkg"
+                --tag "pr-$PR_NUM"; then
+                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
+              else
+                echo "Warning: publish failed for $pkg"
+                FAILED_PACKAGES+=("@frontmcp/$pkg")
+              fi
             fi
           done
 
@@ -221,14 +228,29 @@ jobs:
           for pkg in "${PLUGIN_PACKAGES[@]}"; do
             if [ -d "plugins/$pkg/dist" ]; then
               echo "Publishing @frontmcp/$pkg@$VERSION..."
-              npm publish "plugins/$pkg/dist" \
+              if npm publish "plugins/$pkg/dist" \
                 --registry http://localhost:4873 \
                 --access public \
-                --tag "pr-$PR_NUM" || echo "Warning: publish failed for $pkg"
+                --tag "pr-$PR_NUM"; then
+                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
+              else
+                echo "Warning: publish failed for $pkg"
+                FAILED_PACKAGES+=("@frontmcp/$pkg")
+              fi
             fi
           done
 
-          echo "All packages published to local Verdaccio"
+          echo ""
+          echo "=== Publish Summary ==="
+          echo "Published: ${#PUBLISHED_PACKAGES[@]} packages"
+          echo "Failed: ${#FAILED_PACKAGES[@]} packages"
+
+          if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
+            echo ""
+            echo "::warning::Failed to publish: ${FAILED_PACKAGES[*]}"
+          fi
+
+          echo "All packages processed"
 
       - name: Create registry info artifact
         run: |
@@ -378,7 +400,29 @@ jobs:
             # Check if Verdaccio is still running
             if ! curl -s http://localhost:4873 > /dev/null 2>&1; then
               echo "Verdaccio stopped unexpectedly. Restarting..."
+
+              # Clean up stale PID if exists
+              if [ -f /tmp/verdaccio-pr/pid ]; then
+                OLD_PID=$(cat /tmp/verdaccio-pr/pid)
+                if kill -0 "$OLD_PID" 2>/dev/null; then
+                  kill "$OLD_PID" 2>/dev/null || true
+                  sleep 1
+                fi
+                rm -f /tmp/verdaccio-pr/pid
+              fi
+
+              # Wait for port to be free
+              for j in {1..10}; do
+                if ! ss -tlnp | grep -q ':4873 '; then
+                  break
+                fi
+                echo "Waiting for port 4873 to be free... ($j/10)"
+                sleep 1
+              done
+
+              # Start Verdaccio and save new PID
               verdaccio --config /tmp/verdaccio-pr/config.yaml --listen 4873 &
+              echo $! > /tmp/verdaccio-pr/pid
               sleep 5
             fi
 

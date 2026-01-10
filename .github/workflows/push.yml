@@ -9,7 +9,7 @@ on:
       - "hotfix/**"
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -101,7 +101,7 @@ jobs:
 
       - name: Retry build without cache
         if: steps.build.outcome == 'failure'
-        run: npx nx affected -t build
+        run: npx nx affected -t build --skip-nx-cache
 
       - name: Save Nx cache
         if: always()

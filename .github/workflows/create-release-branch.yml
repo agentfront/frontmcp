@@ -29,13 +29,16 @@ jobs:
 
     steps:
       - name: Validate inputs
+        env:
+          MAJOR_VERSION: ${{ inputs.major_version }}
+          MINOR_VERSION: ${{ inputs.minor_version }}
         run: |
-          if ! [[ "${{ inputs.major_version }}" =~ ^[0-9]+$ ]]; then
-            echo "::error::Invalid major version: ${{ inputs.major_version }}. Must be a number."
+          if ! [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid major version: $MAJOR_VERSION. Must be a number."
             exit 1
           fi
-          if ! [[ "${{ inputs.minor_version }}" =~ ^[0-9]+$ ]]; then
-            echo "::error::Invalid minor version: ${{ inputs.minor_version }}. Must be a number."
+          if ! [[ "$MINOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid minor version: $MINOR_VERSION. Must be a number."
             exit 1
           fi
 
@@ -68,12 +71,12 @@ jobs:
       - name: Determine branch and version
         id: branch
         shell: bash
+        env:
+          MAJOR: ${{ inputs.major_version }}
+          MINOR: ${{ inputs.minor_version }}
+          BASE: ${{ inputs.base_branch }}
         run: |
           set -euo pipefail
-
-          MAJOR="${{ inputs.major_version }}"
-          MINOR="${{ inputs.minor_version }}"
-          BASE="${{ inputs.base_branch }}"
 
           # Validate BASE doesn't start with '-' (option injection prevention)
           if [[ "$BASE" == -* ]]; then
@@ -118,8 +121,7 @@ jobs:
           BRANCH="${{ steps.branch.outputs.branch }}"
           BASE="${{ steps.branch.outputs.base }}"
 
-          # Validate BASE is a real git ref
-          git fetch origin --tags
+          # Validate BASE is a real git ref (tags already fetched in previous step)
           if ! git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
             echo "::error::Invalid base_branch: '$BASE' does not exist on remote"
             exit 1

@@ -262,7 +262,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Update npm CLI for OIDC
-        run: npm install -g npm@10.9.2 # Pin to known stable version with OIDC support
+        run: npm install -g npm@11.5.1 # Pin to version with proper OIDC publishing support
 
       - name: Publish ${{ matrix.project }}
         run: |
