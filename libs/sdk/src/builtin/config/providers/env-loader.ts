@@ -120,6 +120,20 @@ export function populateProcessEnv(env: Record<string, string>, override: boolea
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Keys that are unsafe to use in nested object paths.
+ * These can be exploited for prototype pollution attacks.
+ */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Check if a key is safe to use in nested object paths.
+ * Blocks prototype pollution attack vectors.
+ */
+function isSafeKey(key: string): boolean {
+  return !UNSAFE_KEYS.has(key);
+}
+
+/**
  * Convert a schema path to environment variable name.
  * Example: 'database.url' -> 'DATABASE_URL'
  */
@@ -130,9 +144,20 @@ export function pathToEnvKey(path: string): string {
 /**
  * Set a value at a nested path in an object.
  * Example: setNestedValue({}, 'database.url', 'x') -> { database: { url: 'x' } }
+ *
+ * @security Validates keys to prevent prototype pollution attacks.
+ * Paths containing __proto__, constructor, or prototype are silently ignored.
  */
 export function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown): void {
   const keys = path.split('.');
+
+  // Validate all keys before setting to prevent prototype pollution
+  for (const key of keys) {
+    if (!isSafeKey(key)) {
+      return; // Silently skip unsafe paths
+    }
+  }
+
   let current = obj;
 
   for (let i = 0; i < keys.length - 1; i++) {
@@ -149,9 +174,20 @@ export function setNestedValue(obj: Record<string, unknown>, path: string, value
 /**
  * Get a value from a nested path in an object.
  * Example: getNestedValue({ database: { url: 'x' } }, 'database.url') -> 'x'
+ *
+ * @security Validates keys to prevent prototype pollution attacks.
+ * Paths containing __proto__, constructor, or prototype return undefined.
  */
 export function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   const keys = path.split('.');
+
+  // Validate all keys to prevent prototype pollution
+  for (const key of keys) {
+    if (!isSafeKey(key)) {
+      return undefined; // Block unsafe paths
+    }
+  }
+
   let current: unknown = obj;
 
   for (const key of keys) {

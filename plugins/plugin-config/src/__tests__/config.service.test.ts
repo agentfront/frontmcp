@@ -217,4 +217,69 @@ describe('ConfigValidationError', () => {
     expect(ConfigValidationError).toBeDefined();
     expect(typeof ConfigValidationError).toBe('function');
   });
+
+  it('should format Zod errors with paths', () => {
+    const { z } = require('zod');
+    const zodError = new z.ZodError([
+      {
+        code: 'invalid_type',
+        expected: 'string',
+        received: 'number',
+        path: ['database', 'url'],
+        message: 'Expected string',
+      },
+    ]);
+    const error = new ConfigValidationError('Validation failed', zodError);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(ConfigValidationError);
+    expect(error.name).toBe('ConfigValidationError');
+    expect(error.message).toContain('database.url');
+    expect(error.message).toContain('Expected string');
+    expect(error.zodError).toBe(zodError);
+  });
+
+  it('should handle multiple validation errors', () => {
+    const { z } = require('zod');
+    const zodError = new z.ZodError([
+      {
+        code: 'invalid_type',
+        expected: 'string',
+        received: 'undefined',
+        path: ['api', 'key'],
+        message: 'Required',
+      },
+      {
+        code: 'too_small',
+        minimum: 1,
+        type: 'number',
+        inclusive: true,
+        path: ['port'],
+        message: 'Too small',
+      },
+    ]);
+    const error = new ConfigValidationError('Config invalid', zodError);
+
+    expect(error.message).toContain('api.key');
+    expect(error.message).toContain('port');
+    expect(error.message).toContain('Required');
+    expect(error.message).toContain('Too small');
+  });
+
+  it('should handle empty path errors', () => {
+    const { z } = require('zod');
+    const zodError = new z.ZodError([
+      {
+        code: 'invalid_type',
+        expected: 'object',
+        received: 'undefined',
+        path: [],
+        message: 'Required',
+      },
+    ]);
+    const error = new ConfigValidationError('Root validation failed', zodError);
+
+    expect(error.message).toContain('Root validation failed');
+    expect(error.message).toContain('Required');
+  });
 });

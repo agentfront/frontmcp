@@ -203,6 +203,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    * @throws Error if ConfigPlugin is not installed
    */
   get config(): ConfigService {
+    // ConfigService class serves as its own DI token; cast needed for type compatibility
     return this.providers.get(ConfigService as unknown as Token<ConfigService>);
   }
 }

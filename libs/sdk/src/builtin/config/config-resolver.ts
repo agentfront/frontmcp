@@ -145,6 +145,9 @@ export function generateFallbacks(key: string, context: ConfigResolutionContext)
  * 2. `{ENTITY_TYPE}_{KEY}` - Entity-type default
  * 3. `{KEY}` - Global default
  *
+ * Note: Keys are converted to uppercase with non-alphanumeric chars replaced by underscores.
+ * CamelCase keys like 'openaiKey' become 'OPENAIKEY' (no word-boundary detection).
+ *
  * @param key - The config key
  * @param context - Entity context
  * @returns Array of env var names to try
@@ -152,7 +155,7 @@ export function generateFallbacks(key: string, context: ConfigResolutionContext)
  * @example
  * ```typescript
  * generateEnvFallbacks('openaiKey', { entityType: 'agents', entityName: 'research-agent' })
- * // Returns: ['AGENTS_RESEARCH_AGENT_OPENAI_KEY', 'AGENTS_OPENAI_KEY', 'OPENAI_KEY']
+ * // Returns: ['AGENTS_RESEARCH_AGENT_OPENAIKEY', 'AGENTS_OPENAIKEY', 'OPENAIKEY']
  * ```
  */
 export function generateEnvFallbacks(key: string, context: ConfigResolutionContext): string[] {

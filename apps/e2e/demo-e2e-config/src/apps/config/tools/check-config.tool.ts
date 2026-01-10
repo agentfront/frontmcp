@@ -11,7 +11,6 @@ const outputSchema = z.object({
   key: z.string(),
   exists: z.boolean(),
   isNumber: z.boolean(),
-  isBoolean: z.boolean(),
   numberValue: z.number().nullable(),
   booleanValue: z.boolean().nullable(),
 });
@@ -35,7 +34,6 @@ export default class CheckConfigTool extends ToolContext<typeof inputSchema, typ
       key: input.key,
       exists,
       isNumber: !isNaN(numberValue),
-      isBoolean: exists, // getBoolean always returns a boolean
       numberValue: isNaN(numberValue) ? null : numberValue,
       booleanValue: exists ? booleanValue : null,
     };
