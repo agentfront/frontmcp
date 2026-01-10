@@ -1,26 +1,28 @@
 {
-  "name": "@frontmcp/plugins",
+  "name": "@frontmcp/plugin-config",
   "version": "0.7.1",
-  "description": "FrontMCP plugins meta-package - installs all official plugins",
+  "description": "Config plugin for FrontMCP - environment variable management with typed access",
   "author": "AgentFront <info@agentfront.dev>",
-  "homepage": "https://docs.agentfront.dev",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",
-    "plugins",
-    "agentfront",
+    "config",
+    "environment",
+    "dotenv",
+    "env",
+    "plugin",
     "frontmcp",
-    "framework",
-    "typescript"
+    "agentfront"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agentfront/frontmcp.git",
-    "directory": "libs/plugins"
+    "directory": "plugins/plugin-config"
   },
   "bugs": {
     "url": "https://github.com/agentfront/frontmcp/issues"
   },
+  "homepage": "https://github.com/agentfront/frontmcp/blob/main/plugins/plugin-config/README.md",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -45,11 +47,9 @@
     }
   },
   "dependencies": {
-    "@frontmcp/plugin-cache": "0.7.1",
-    "@frontmcp/plugin-codecall": "0.7.1",
-    "@frontmcp/plugin-config": "0.7.1",
-    "@frontmcp/plugin-dashboard": "0.7.1",
-    "@frontmcp/plugin-remember": "0.7.1"
+    "@frontmcp/sdk": "0.7.1",
+    "@frontmcp/utils": "0.7.1",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "reflect-metadata": "^0.2.2"

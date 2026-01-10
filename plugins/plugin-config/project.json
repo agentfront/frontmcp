@@ -1,0 +1,84 @@
+{
+  "name": "plugin-config",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "plugins/plugin-config/src",
+  "projectType": "library",
+  "tags": ["scope:plugins", "scope:publishable", "versioning:synchronized"],
+  "targets": {
+    "build-cjs": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["^build"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-config/dist",
+        "main": "plugins/plugin-config/src/index.ts",
+        "tsConfig": "plugins/plugin-config/tsconfig.lib.json",
+        "format": ["cjs"],
+        "declaration": true,
+        "declarationRootDir": "plugins/plugin-config/src",
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "assets": [
+          "plugins/plugin-config/README.md",
+          "plugins/plugin-config/CHANGELOG.md",
+          "LICENSE",
+          "plugins/plugin-config/package.json"
+        ],
+        "esbuildOptions": {
+          "outExtension": { ".js": ".js" },
+          "external": ["@frontmcp/sdk", "@frontmcp/utils", "zod", "reflect-metadata"]
+        }
+      }
+    },
+    "build-esm": {
+      "executor": "@nx/esbuild:esbuild",
+      "dependsOn": ["build-cjs"],
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "plugins/plugin-config/dist/esm",
+        "main": "plugins/plugin-config/src/index.ts",
+        "tsConfig": "plugins/plugin-config/tsconfig.lib.json",
+        "format": ["esm"],
+        "declaration": false,
+        "bundle": true,
+        "thirdParty": false,
+        "platform": "node",
+        "esbuildOptions": {
+          "outExtension": { ".js": ".mjs" },
+          "external": ["@frontmcp/sdk", "@frontmcp/utils", "zod", "reflect-metadata"]
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs", "build-esm"],
+      "options": {
+        "command": "node scripts/strip-dist-from-pkg.js plugins/plugin-config/dist/package.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/unit/plugin-config"],
+      "options": {
+        "jestConfig": "plugins/plugin-config/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish plugins/plugin-config/dist --access public --registry=https://registry.npmjs.org/"
+      }
+    },
+    "publish-alpha": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "bash scripts/publish-alpha.sh {projectRoot}/dist",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

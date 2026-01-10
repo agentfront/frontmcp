@@ -10,6 +10,7 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ScopeEntry } from '../entries';
 import { FrontMcpContext, FRONTMCP_CONTEXT } from '../../context';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
+import { ConfigService } from '../../builtin/config/providers/config.service';
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -187,5 +188,21 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   protected get error(): Error | undefined {
     return this._error;
+  }
+
+  /**
+   * Get the ConfigService for typed environment variable access.
+   *
+   * Available when ConfigPlugin is installed. Provides methods like:
+   * - get(key, defaultValue?) - Get env var with optional default
+   * - getRequired(key) - Get required env var (throws if missing)
+   * - getNumber(key, defaultValue?) - Get as number
+   * - getBoolean(key, defaultValue?) - Get as boolean
+   * - has(key) - Check if env var exists
+   *
+   * @throws Error if ConfigPlugin is not installed
+   */
+  get config(): ConfigService {
+    return this.providers.get(ConfigService as unknown as Token<ConfigService>);
   }
 }

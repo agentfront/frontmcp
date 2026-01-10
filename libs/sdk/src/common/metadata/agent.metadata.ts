@@ -44,8 +44,46 @@ declare global {
 export type AgentLlmProviderType = 'openai' | 'anthropic' | 'google' | 'mistral' | 'groq';
 
 /**
+ * Fallback configuration for withConfig.
+ * - string[] = custom fallback paths to try in order
+ * - false = disable fallbacks (direct lookup only)
+ * - undefined = use auto-fallbacks based on entity context (default)
+ */
+export type WithConfigFallbacks = string[] | false;
+
+/**
+ * Options for withConfig factory function.
+ */
+export interface WithConfigOptions<T = string> {
+  /**
+   * Optional transform function to convert the raw config value.
+   */
+  transform?: (value: unknown) => T;
+
+  /**
+   * Fallback paths to try if configPath not found.
+   * - undefined: auto-generate based on entity context (default)
+   * - string[]: use these specific paths in order
+   * - false: no fallbacks, direct lookup only
+   */
+  fallbacks?: WithConfigFallbacks;
+}
+
+/**
  * Helper type for resolving configuration from app config paths.
- * @example withConfig('llm.openai.apiKey')
+ * Supports automatic fallback resolution based on entity context.
+ *
+ * @example
+ * ```typescript
+ * // Auto-fallback: agents.my-agent.openaiKey → agents.openaiKey → openaiKey
+ * withConfig('openaiKey')
+ *
+ * // Custom fallbacks
+ * withConfig('apiKey', { fallbacks: ['custom.path', 'default.apiKey'] })
+ *
+ * // Direct lookup only (no fallbacks)
+ * withConfig('specificKey', { fallbacks: false })
+ * ```
  */
 export interface WithConfig<T = string> {
   /**
@@ -58,13 +96,48 @@ export interface WithConfig<T = string> {
    * Optional transform function to convert the raw config value.
    */
   transform?: (value: unknown) => T;
+
+  /**
+   * Fallback paths to try if configPath not found.
+   * - undefined: auto-generate based on entity context (default)
+   * - string[]: use these specific paths in order
+   * - false: no fallbacks, direct lookup only
+   */
+  fallbacks?: WithConfigFallbacks;
 }
 
 /**
  * Factory function to create a WithConfig reference.
+ *
+ * @example
+ * ```typescript
+ * // Basic usage - auto-fallback based on entity context
+ * apiKey: withConfig('openaiKey')
+ *
+ * // With transform
+ * port: withConfig('dbPort', { transform: (v) => parseInt(v as string, 10) })
+ *
+ * // Custom fallbacks
+ * apiKey: withConfig('key', { fallbacks: ['custom.key', 'default.key'] })
+ *
+ * // Disable fallbacks
+ * apiKey: withConfig('exactPath.key', { fallbacks: false })
+ * ```
  */
-export function withConfig<T = string>(configPath: string, transform?: (value: unknown) => T): WithConfig<T> {
-  return { configPath, transform };
+export function withConfig<T = string>(
+  configPath: string,
+  options?: WithConfigOptions<T> | ((value: unknown) => T),
+): WithConfig<T> {
+  // Support legacy signature: withConfig(path, transform)
+  if (typeof options === 'function') {
+    return { configPath, transform: options };
+  }
+
+  return {
+    configPath,
+    transform: options?.transform,
+    fallbacks: options?.fallbacks,
+  };
 }
 
 /**
@@ -420,6 +493,7 @@ export interface AgentMetadata<
 const withConfigSchema = z.object({
   configPath: z.string().min(1),
   transform: z.function().optional(),
+  fallbacks: z.union([z.array(z.string()), z.literal(false)]).optional(),
 });
 
 const apiKeyConfigSchema = z.union([z.string(), z.object({ env: z.string() }), withConfigSchema]);

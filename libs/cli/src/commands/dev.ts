@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { ParsedArgs } from '../args';
 import { c } from '../colors';
 import { resolveEntry } from '../utils/fs';
+import { loadDevEnv } from '../utils/env';
 
 function killQuiet(proc?: ChildProcess) {
   try {
@@ -17,6 +18,9 @@ function killQuiet(proc?: ChildProcess) {
 export async function runDev(opts: ParsedArgs): Promise<void> {
   const cwd = process.cwd();
   const entry = await resolveEntry(cwd, opts.entry);
+
+  // Load .env and .env.local files before starting the server
+  loadDevEnv(cwd);
 
   console.log(`${c('cyan', '[dev]')} using entry: ${path.relative(cwd, entry)}`);
   console.log(

@@ -95,3 +95,53 @@ export const ListResourceTemplatesHook = FlowHooksOf('resources:list-resource-te
 
 // Agent hooks
 export const AgentCallHook = FlowHooksOf('agents:call-agent');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Built-in Plugins
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ConfigPlugin - Environment variable management (built-in, no separate install required)
+export {
+  ConfigPlugin,
+  ConfigService,
+  ConfigMissingError,
+  ConfigValidationError,
+  ConfigPluginConfigToken,
+  getConfig,
+  tryGetConfig,
+  // Env loader utilities
+  loadEnvFiles,
+  parseEnvContent,
+  parseEnvContentSync,
+  populateProcessEnv,
+  // Schema-based env mapping utilities
+  pathToEnvKey,
+  setNestedValue,
+  getNestedValue,
+  extractSchemaPaths,
+  mapEnvToNestedConfig,
+  // Config loader
+  loadConfig,
+  deepMerge,
+} from './builtin/config';
+export type {
+  ConfigPluginOptions,
+  ConfigPluginOptionsInput,
+  ParsedEnvConfig,
+  ConfigLoaderOptions,
+  // Config resolver types
+  ConfigEntityType,
+  ConfigResolutionContext,
+  ConfigResolver,
+} from './builtin/config';
+
+// Config resolver functions
+export {
+  normalizeNameForEnv,
+  normalizePathSegment,
+  generateFallbacks,
+  generateEnvFallbacks,
+  resolveWithFallbacks,
+  createContextResolver,
+  createDirectResolver,
+} from './builtin/config';
