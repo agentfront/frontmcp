@@ -1,0 +1,236 @@
+name: Cherry-pick to main
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: cherry-pick-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  cherry-pick:
+    # Only run when:
+    # - PR was merged (not just closed)
+    # - Target branch is a release branch (not main)
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref != github.event.repository.default_branch &&
+      (startsWith(github.event.pull_request.base.ref, 'release/') ||
+       startsWith(github.event.pull_request.base.ref, 'next/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git user
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+
+      - name: Prepare cherry-pick branch
+        id: prepare
+        shell: bash
+        env:
+          ORIGINAL_BRANCH: ${{ github.event.pull_request.head.ref }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          # Create cherry-pick branch name
+          # Sanitize branch name (remove invalid characters, truncate if needed)
+          CHERRY_BRANCH="${ORIGINAL_BRANCH}-cherry-pick-main"
+          CHERRY_BRANCH=$(echo "$CHERRY_BRANCH" | sed 's/[^a-zA-Z0-9._/-]/-/g' | head -c 100)
+
+          echo "cherry_branch=$CHERRY_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Cherry-pick branch: $CHERRY_BRANCH"
+
+          # Get default branch
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          # Checkout default branch (main)
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+          git pull origin "$DEFAULT_BRANCH"
+
+          # Create the cherry-pick branch
+          git checkout -b "$CHERRY_BRANCH"
+
+          # Attempt cherry-pick
+          echo "Attempting cherry-pick of $MERGE_SHA..."
+          if git cherry-pick "$MERGE_SHA" --no-commit; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+
+            # Create commit with proper attribution
+            git commit -m "$(cat <<EOF
+          Cherry-pick: $PR_TITLE
+
+          Cherry-picked from #$PR_NUMBER (merged to $RELEASE_BRANCH)
+          Original commit: $MERGE_SHA
+
+          Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>
+          EOF
+          )"
+            echo "Cherry-pick successful"
+          else
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            git cherry-pick --abort || true
+            echo "Cherry-pick failed due to conflicts"
+          fi
+
+      - name: Push branch and create PR
+        if: steps.prepare.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHERRY_BRANCH: ${{ steps.prepare.outputs.cherry_branch }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          ORIGINAL_PR: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          # Push the cherry-pick branch
+          git push origin "$CHERRY_BRANCH"
+
+          # Create the PR
+          PR_URL=$(gh pr create \
+            --base "$DEFAULT_BRANCH" \
+            --head "$CHERRY_BRANCH" \
+            --title "Cherry-pick: $PR_TITLE" \
+            --label "cherry-pick" \
+            --label "auto-cherry-pick" \
+            --body "$(cat <<EOF
+          ## Cherry-pick to main
+
+          This PR cherry-picks the changes from #$ORIGINAL_PR which was merged to \`$RELEASE_BRANCH\`.
+
+          ### Original PR
+          - **PR:** #$ORIGINAL_PR
+          - **Title:** $PR_TITLE
+          - **Author:** @$PR_AUTHOR
+          - **Merged to:** \`$RELEASE_BRANCH\`
+
+          ### Action Required
+          Please review this cherry-pick to ensure it applies correctly to \`$DEFAULT_BRANCH\`.
+
+          If the changes are NOT needed in \`$DEFAULT_BRANCH\`, close this PR.
+
+          ---
+          _This PR was automatically created by the cherry-pick workflow._
+          EOF
+          )")
+
+          echo "Created cherry-pick PR: $PR_URL"
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on original PR (success)
+        if: steps.prepare.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORIGINAL_PR: ${{ github.event.pull_request.number }}
+          CHERRY_BRANCH: ${{ steps.prepare.outputs.cherry_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          gh pr comment "$ORIGINAL_PR" --body "$(cat <<EOF
+          ## Cherry-pick Created
+
+          A cherry-pick PR to \`$DEFAULT_BRANCH\` has been automatically created.
+
+          **Please review and merge if this change should also be in \`$DEFAULT_BRANCH\`.**
+
+          If the cherry-pick is not needed, close the PR.
+          EOF
+          )"
+
+      - name: Create issue for conflict
+        if: steps.prepare.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          ORIGINAL_PR: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          ISSUE_URL=$(gh issue create \
+            --title "Manual cherry-pick needed: $PR_TITLE" \
+            --label "cherry-pick" \
+            --label "conflict" \
+            --label "needs-attention" \
+            --assignee "$PR_AUTHOR" \
+            --body "$(cat <<EOF
+          ## Manual Cherry-pick Required
+
+          The automatic cherry-pick of #$ORIGINAL_PR to \`$DEFAULT_BRANCH\` failed due to merge conflicts.
+
+          ### Original PR
+          - **PR:** #$ORIGINAL_PR
+          - **Title:** $PR_TITLE
+          - **Author:** @$PR_AUTHOR
+          - **Merged to:** \`$RELEASE_BRANCH\`
+          - **Commit:** \`$MERGE_SHA\`
+
+          ### Manual Cherry-pick Instructions
+
+          \`\`\`bash
+          # Checkout main branch
+          git checkout $DEFAULT_BRANCH
+          git pull origin $DEFAULT_BRANCH
+
+          # Create a new branch for the cherry-pick
+          git checkout -b cherry-pick-pr-$ORIGINAL_PR
+
+          # Cherry-pick the commit
+          git cherry-pick $MERGE_SHA
+
+          # Resolve conflicts manually, then:
+          git add .
+          git cherry-pick --continue
+
+          # Push and create PR
+          git push origin cherry-pick-pr-$ORIGINAL_PR
+          gh pr create --base $DEFAULT_BRANCH --title "Cherry-pick: $PR_TITLE"
+          \`\`\`
+
+          ### Decision Required
+          - [ ] Cherry-pick is needed - resolve conflicts and apply
+          - [ ] Cherry-pick is NOT needed - close this issue
+
+          ---
+          _This issue was automatically created by the cherry-pick workflow._
+          EOF
+          )")
+
+          echo "Created issue for manual cherry-pick: $ISSUE_URL"
+
+      - name: Comment on original PR (conflict)
+        if: steps.prepare.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORIGINAL_PR: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          gh pr comment "$ORIGINAL_PR" --body "$(cat <<EOF
+          ## Cherry-pick Conflict
+
+          Automatic cherry-pick to \`$DEFAULT_BRANCH\` failed due to merge conflicts.
+
+          An issue has been created with manual instructions. Please resolve if this change should also be in \`$DEFAULT_BRANCH\`.
+          EOF
+          )"

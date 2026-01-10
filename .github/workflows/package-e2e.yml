@@ -8,10 +8,12 @@ on:
     branches:
       - main
       - "next/**"
+      - "release/**"
   pull_request:
     branches:
       - main
       - "next/**"
+      - "release/**"
 
 concurrency:
   group: package-e2e-${{ github.ref }}
