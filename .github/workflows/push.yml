@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
@@ -58,6 +61,10 @@ jobs:
       - name: Run prettier
         run: npx prettier --check .
         continue-on-error: true
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
 
   # Build all libraries
   build:
@@ -81,11 +88,28 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
       - name: Build libraries
+        id: build
+        continue-on-error: true
         run: npx nx affected -t build
+
+      - name: Reset Nx cache on failure
+        if: steps.build.outcome == 'failure'
+        run: npx nx reset
+
+      - name: Retry build without cache
+        if: steps.build.outcome == 'failure'
+        run: npx nx affected -t build
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -123,11 +147,18 @@ jobs:
         with:
           name: dist
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
       - name: Run unit tests
         run: npx nx affected -t test --passWithNoTests --exclude='demo-e2e-*'
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
 
   # E2E tests - matrix strategy for parallelization
   e2e-tests:
@@ -173,6 +204,9 @@ jobs:
         with:
           name: dist
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
@@ -188,6 +222,10 @@ jobs:
       - name: Retry E2E tests (${{ matrix.project }})
         if: steps.test.outcome == 'failure'
         run: npx nx run ${{ matrix.project }}:test
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
 
   # Coverage report (runs on main branch only)
   coverage:
@@ -217,6 +255,9 @@ jobs:
         with:
           name: dist
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Run unit tests with coverage
         run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage
 
@@ -235,3 +276,7 @@ jobs:
 
       - name: Check coverage threshold
         run: npx nyc check-coverage --temp-dir=coverage/merged --statements 95 --branches 95 --functions 95 --lines 95
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
