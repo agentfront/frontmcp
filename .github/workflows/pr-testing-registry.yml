@@ -137,8 +137,8 @@ jobs:
 
       - name: Install ngrok via npm
         run: |
-          # Use official @ngrok/ngrok package with pinned version
-          npm install -g @ngrok/ngrok@1.5.2
+          # Install ngrok CLI globally
+          npm install -g ngrok
 
       - name: Validate ngrok domain input
         if: ${{ inputs.ngrok_domain != '' }}
