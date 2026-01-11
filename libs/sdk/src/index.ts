@@ -145,3 +145,17 @@ export {
   createContextResolver,
   createDirectResolver,
 } from './builtin/config';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Direct Server Access (Programmatic / In-Memory / Stdio)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Direct MCP Server - programmatic access without HTTP transport
+export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
+
+// In-memory server for MCP SDK Client integration
+export { createInMemoryServer } from './transport';
+export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
+
+// Transport types
+export type { TransportType, TransportKey } from './transport';
