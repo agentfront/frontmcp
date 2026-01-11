@@ -8,28 +8,10 @@ import {
 } from '../../common';
 import { LlmAdapterError } from './base.adapter';
 import { createProviderAdapterSync } from './providers';
+import { ConfigResolver, ConfigResolutionContext, generateFallbacks } from '../../builtin/config/config-resolver';
 
-// ============================================================================
-// Configuration Resolution Types
-// ============================================================================
-
-/**
- * Interface for resolving configuration values.
- * Implementations can resolve from app config, environment, etc.
- */
-export interface ConfigResolver {
-  /**
-   * Get a configuration value by path.
-   * @param path Dot-notation path (e.g., 'llm.openai.apiKey')
-   * @returns The resolved value
-   */
-  get<T = unknown>(path: string): T;
-
-  /**
-   * Try to get a configuration value, returning undefined if not found.
-   */
-  tryGet<T = unknown>(path: string): T | undefined;
-}
+// Re-export ConfigResolver for backwards compatibility
+export type { ConfigResolver } from '../../builtin/config/config-resolver';
 
 /**
  * Interface for provider registry (DI).
@@ -51,9 +33,58 @@ export interface ProviderResolver {
 // ============================================================================
 
 /**
- * Resolve an API key from various sources.
+ * Resolve a WithConfig value using the appropriate fallback strategy.
+ *
+ * @param withConfig - The WithConfig object
+ * @param configResolver - Config resolver instance
+ * @param entityContext - Optional entity context for auto-fallbacks
+ * @returns The resolved value or undefined if not found
  */
-export function resolveApiKey(config: AgentApiKeyConfig, configResolver?: ConfigResolver): string {
+function resolveWithConfigValue<T>(
+  withConfig: WithConfig<T>,
+  configResolver: ConfigResolver,
+  entityContext?: ConfigResolutionContext,
+): T | undefined {
+  // Determine which paths to try
+  let paths: string[];
+
+  if (withConfig.fallbacks === false) {
+    // Fallbacks disabled - direct lookup only
+    paths = [withConfig.configPath];
+  } else if (Array.isArray(withConfig.fallbacks)) {
+    // Custom fallbacks provided
+    paths = withConfig.fallbacks;
+  } else if (entityContext) {
+    // Auto-generate fallbacks from entity context
+    paths = generateFallbacks(withConfig.configPath, entityContext);
+  } else {
+    // No context - direct lookup
+    paths = [withConfig.configPath];
+  }
+
+  // Try each path in order
+  for (const path of paths) {
+    const value = configResolver.tryGet<T>(path);
+    if (value !== undefined) {
+      return withConfig.transform ? withConfig.transform(value as unknown) : value;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve an API key from various sources.
+ *
+ * @param config - API key configuration (string, env var, or WithConfig)
+ * @param configResolver - Optional config resolver for WithConfig values
+ * @param entityContext - Optional entity context for auto-fallbacks
+ */
+export function resolveApiKey(
+  config: AgentApiKeyConfig,
+  configResolver?: ConfigResolver,
+  entityContext?: ConfigResolutionContext,
+): string {
   // Direct string
   if (typeof config === 'string') {
     return config;
@@ -68,7 +99,7 @@ export function resolveApiKey(config: AgentApiKeyConfig, configResolver?: Config
     return value;
   }
 
-  // WithConfig reference
+  // WithConfig reference with fallback support
   if ('configPath' in config) {
     if (!configResolver) {
       throw new LlmAdapterError(
@@ -77,10 +108,29 @@ export function resolveApiKey(config: AgentApiKeyConfig, configResolver?: Config
         'no_resolver',
       );
     }
-    const value = configResolver.get<string>(config.configPath);
-    if (config.transform) {
-      return config.transform(value);
+
+    const value = resolveWithConfigValue(config, configResolver, entityContext);
+
+    if (value === undefined) {
+      // Build helpful error message showing what was tried
+      let triedPaths: string[];
+      if (config.fallbacks === false) {
+        triedPaths = [config.configPath];
+      } else if (Array.isArray(config.fallbacks)) {
+        triedPaths = config.fallbacks;
+      } else if (entityContext) {
+        triedPaths = generateFallbacks(config.configPath, entityContext);
+      } else {
+        triedPaths = [config.configPath];
+      }
+
+      throw new LlmAdapterError(
+        `Config key "${config.configPath}" not found. Tried: ${triedPaths.join(', ')}`,
+        'config',
+        'key_not_found',
+      );
     }
+
     return value;
   }
 
@@ -89,8 +139,16 @@ export function resolveApiKey(config: AgentApiKeyConfig, configResolver?: Config
 
 /**
  * Resolve a string value that may be a WithConfig reference.
+ *
+ * @param value - String or WithConfig reference
+ * @param configResolver - Optional config resolver
+ * @param entityContext - Optional entity context for auto-fallbacks
  */
-export function resolveStringValue(value: string | WithConfig<string>, configResolver?: ConfigResolver): string {
+export function resolveStringValue(
+  value: string | WithConfig<string>,
+  configResolver?: ConfigResolver,
+  entityContext?: ConfigResolutionContext,
+): string {
   if (typeof value === 'string') {
     return value;
   }
@@ -103,10 +161,28 @@ export function resolveStringValue(value: string | WithConfig<string>, configRes
     );
   }
 
-  const resolved = configResolver.get<string>(value.configPath);
-  if (value.transform) {
-    return value.transform(resolved);
+  const resolved = resolveWithConfigValue(value, configResolver, entityContext);
+
+  if (resolved === undefined) {
+    // Build helpful error message showing what was tried
+    let triedPaths: string[];
+    if (value.fallbacks === false) {
+      triedPaths = [value.configPath];
+    } else if (Array.isArray(value.fallbacks)) {
+      triedPaths = value.fallbacks;
+    } else if (entityContext) {
+      triedPaths = generateFallbacks(value.configPath, entityContext);
+    } else {
+      triedPaths = [value.configPath];
+    }
+
+    throw new LlmAdapterError(
+      `Config key "${value.configPath}" not found. Tried: ${triedPaths.join(', ')}`,
+      'config',
+      'key_not_found',
+    );
   }
+
   return resolved;
 }
 
@@ -175,6 +251,22 @@ export interface CreateAdapterOptions {
    * Provider resolver for DI token resolution.
    */
   providerResolver?: ProviderResolver;
+
+  /**
+   * Entity context for auto-fallback resolution.
+   * When provided, WithConfig values without explicit fallbacks will
+   * automatically try entity-specific paths first.
+   *
+   * @example
+   * ```typescript
+   * entityContext: {
+   *   entityType: 'agents',
+   *   entityName: 'research-agent',
+   * }
+   * // For openaiKey, tries: agents.research_agent.openaiKey → agents.openaiKey → openaiKey
+   * ```
+   */
+  entityContext?: ConfigResolutionContext;
 }
 
 /**
@@ -210,7 +302,7 @@ export interface CreateAdapterOptions {
  * ```
  */
 export function createAdapter(config: AgentLlmConfig, options: CreateAdapterOptions = {}): AgentLlmAdapter {
-  const { configResolver, providerResolver } = options;
+  const { configResolver, providerResolver, entityContext } = options;
 
   // Handle DI token
   if (isTokenConfig(config)) {
@@ -237,7 +329,7 @@ export function createAdapter(config: AgentLlmConfig, options: CreateAdapterOpti
 
   // Handle built-in adapter config
   if (isBuiltinConfig(config)) {
-    return createBuiltinAdapter(config, configResolver);
+    return createBuiltinAdapter(config, configResolver, entityContext);
   }
 
   // Check if it's a direct adapter instance passed without wrapper
@@ -269,14 +361,18 @@ export function createAdapter(config: AgentLlmConfig, options: CreateAdapterOpti
  * })
  * ```
  */
-function createBuiltinAdapter(config: AgentLlmBuiltinConfig, configResolver?: ConfigResolver): AgentLlmAdapter {
+function createBuiltinAdapter(
+  config: AgentLlmBuiltinConfig,
+  configResolver?: ConfigResolver,
+  entityContext?: ConfigResolutionContext,
+): AgentLlmAdapter {
   // Extract provider from the discriminated union
   const obj = config as unknown as Record<string, unknown>;
   const provider = obj['provider'] as string;
-  const model = resolveStringValue(config.model as string | WithConfig<string>, configResolver);
-  const apiKey = resolveApiKey(config.apiKey, configResolver);
+  const model = resolveStringValue(config.model as string | WithConfig<string>, configResolver, entityContext);
+  const apiKey = resolveApiKey(config.apiKey, configResolver, entityContext);
   const baseUrl = config.baseUrl
-    ? resolveStringValue(config.baseUrl as string | WithConfig<string>, configResolver)
+    ? resolveStringValue(config.baseUrl as string | WithConfig<string>, configResolver, entityContext)
     : undefined;
   const { temperature, maxTokens } = config;
 

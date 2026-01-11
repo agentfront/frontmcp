@@ -32,7 +32,8 @@ import ProviderRegistry from '../provider/provider.registry';
 import HookRegistry from '../hooks/hook.registry';
 import { Scope } from '../scope';
 import { normalizeHooksFromCls } from '../hooks/hooks.utils';
-import { createAdapter, CreateAdapterOptions } from './adapters';
+import { createAdapter, CreateAdapterOptions, ConfigResolver } from './adapters';
+import { ConfigService } from '../builtin/config';
 import type { CallToolRequest, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { InvalidHookFlowError, AgentNotConfiguredError, AgentToolNotFoundError } from '../errors';
 import { agentToolName, isAgentVisibleToSwarm, canAgentSeeSwarm, getVisibleAgentIds } from './agent.utils';
@@ -203,6 +204,7 @@ export class AgentInstance<
       return;
     }
 
+    // Build adapter options with provider resolver
     const adapterOptions: CreateAdapterOptions = {
       providerResolver: {
         get: <T>(token: Token<T>): T => {
@@ -216,7 +218,23 @@ export class AgentInstance<
           }
         },
       },
+      // Entity context for auto-fallback config resolution
+      entityContext: {
+        entityType: 'agents',
+        entityName: this.name,
+      },
     };
+
+    // Try to get ConfigService for config resolution
+    try {
+      const configService = this.providers.get(ConfigService);
+      if (configService) {
+        adapterOptions.configResolver = this.createConfigResolver(configService);
+      }
+    } catch {
+      // ConfigPlugin not installed - config resolution via withConfig will not be available
+      this.scope.logger.debug(`ConfigService not available for agent ${this.name} - withConfig resolution disabled`);
+    }
 
     try {
       this.llmAdapter = createAdapter(llmConfig, adapterOptions);
@@ -224,6 +242,42 @@ export class AgentInstance<
       this.scope.logger.error(`Failed to create LLM adapter for agent ${this.name}`, error);
       throw error;
     }
+  }
+
+  /**
+   * Create a ConfigResolver from the ConfigService.
+   * Uses getAll() and manual path traversal to avoid DottedPath type complexity.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private createConfigResolver(configService: ConfigService<any>): ConfigResolver {
+    // Get the raw config object to avoid DottedPath type complexity
+    const config = configService.getAll();
+
+    const getNestedValue = (path: string): unknown => {
+      const keys = path.split('.');
+      let current: unknown = config;
+      for (const key of keys) {
+        if (current && typeof current === 'object' && key in current) {
+          current = (current as Record<string, unknown>)[key];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    };
+
+    return {
+      get<T>(path: string): T {
+        const value = getNestedValue(path);
+        if (value === undefined) {
+          throw new Error(`Config key "${path}" not found`);
+        }
+        return value as T;
+      },
+      tryGet<T>(path: string): T | undefined {
+        return getNestedValue(path) as T | undefined;
+      },
+    };
   }
 
   /**

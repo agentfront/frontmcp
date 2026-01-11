@@ -1,0 +1,391 @@
+---
+title: Environment Configuration
+sidebarTitle: Config
+slug: extensibility/config
+description: Environment variable management with typed access via ConfigPlugin
+icon: gear
+---
+
+The **ConfigPlugin** provides typed environment variable access for your FrontMCP servers. It automatically loads `.env` and `.env.local` files, and exposes configuration via `this.config` in all execution contexts.
+
+## Built-in Feature
+
+ConfigPlugin is **built into the SDK** - no separate installation required. Just import and use:
+
+```ts
+import { ConfigPlugin } from '@frontmcp/sdk';
+```
+
+## Why Use ConfigPlugin?
+
+<CardGroup cols={2}>
+  <Card title="Typed Access" icon="code">
+    Type-safe environment variable access with `getRequired()`, `getNumber()`, `getBoolean()`
+  </Card>
+  <Card title="Auto-Loading" icon="file-import">
+    Automatically loads `.env` and `.env.local` files with proper precedence
+  </Card>
+  <Card title="Schema Validation" icon="shield-check">
+    Optional Zod schema validation for fail-fast configuration errors
+  </Card>
+  <Card title="DI Integration" icon="plug">
+    Access via `this.config` in tools, resources, prompts, and other contexts
+  </Card>
+</CardGroup>
+
+---
+
+## Quick Start
+
+### 1. Create your .env files
+
+```bash
+# .env - Base configuration (committed to git)
+DATABASE_URL=postgres://localhost:5432/myapp
+API_TIMEOUT=30000
+DEBUG=false
+```
+
+```bash
+# .env.local - Local overrides (gitignored)
+DATABASE_URL=postgres://localhost:5432/myapp_dev
+DEBUG=true
+```
+
+### 2. Add ConfigPlugin to your server
+
+```ts
+import { FrontMcp, App, ConfigPlugin } from '@frontmcp/sdk';
+
+@App({
+  name: 'my-app',
+  plugins: [
+    ConfigPlugin.init({
+      basePath: __dirname,      // Directory containing .env files
+      loadEnv: true,            // Load .env files (default: true)
+      populateProcessEnv: true, // Set process.env values (default: true)
+    }),
+  ],
+  tools: [MyTool],
+})
+class MyApp {}
+
+@FrontMcp({
+  info: { name: 'My Server', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class Server {}
+```
+
+### 3. Use this.config in your tools
+
+```ts
+import { Tool, ToolContext } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+@Tool({
+  name: 'connect-db',
+  description: 'Connect to the database',
+  inputSchema: z.object({}),
+})
+export default class ConnectDbTool extends ToolContext {
+  async execute() {
+    // Get required config (throws if missing)
+    const dbUrl = this.config.getRequired('DATABASE_URL');
+
+    // Get with default value
+    const timeout = this.config.getNumber('API_TIMEOUT', 5000);
+
+    // Check existence
+    const isDebug = this.config.getBoolean('DEBUG', false);
+
+    return { connected: true, debug: isDebug };
+  }
+}
+```
+
+---
+
+## Configuration Options
+
+Configure the plugin when initializing:
+
+```ts
+ConfigPlugin.init({
+  basePath: __dirname,        // Base directory for resolving paths
+  envPath: '.env',            // Path to base env file (default: '.env')
+  localEnvPath: '.env.local', // Path to local override file (default: '.env.local')
+  loadEnv: true,              // Whether to load .env files (default: true)
+  populateProcessEnv: true,   // Whether to set process.env (default: true)
+  schema: envSchema,          // Optional Zod schema for validation
+})
+```
+
+<ParamField path="basePath" type="string">
+  Base directory for resolving relative `.env` paths. Required for file loading.
+</ParamField>
+
+<ParamField path="envPath" type="string" default="'.env'">
+  Path to the base environment file, relative to `basePath`.
+</ParamField>
+
+<ParamField path="localEnvPath" type="string" default="'.env.local'">
+  Path to the local override file, relative to `basePath`. Values in this file override the base file.
+</ParamField>
+
+<ParamField path="loadEnv" type="boolean" default="true">
+  Whether to load `.env` files. Set to `false` if you only want to read from `process.env`.
+</ParamField>
+
+<ParamField path="populateProcessEnv" type="boolean" default="true">
+  Whether to set loaded values into `process.env`. Does not override existing values.
+</ParamField>
+
+<ParamField path="schema" type="z.ZodType">
+  Optional Zod schema to validate the configuration. Throws `ConfigValidationError` if validation fails.
+</ParamField>
+
+---
+
+## ConfigService API
+
+Access configuration values via `this.config` in any execution context:
+
+### get(key, defaultValue?)
+
+Get a configuration value with optional default:
+
+```ts
+// Returns string | undefined
+const apiKey = this.config.get('API_KEY');
+
+// Returns string (uses default if not found)
+const region = this.config.get('AWS_REGION', 'us-east-1');
+```
+
+### getRequired(key)
+
+Get a required configuration value. Throws `ConfigMissingError` if not found:
+
+```ts
+// Throws ConfigMissingError if DATABASE_URL is not set
+const dbUrl = this.config.getRequired('DATABASE_URL');
+```
+
+### has(key)
+
+Check if a configuration key exists:
+
+```ts
+if (this.config.has('OPTIONAL_FEATURE')) {
+  // Enable optional feature
+}
+```
+
+### getAll()
+
+Get all configuration values as a record:
+
+```ts
+const allConfig = this.config.getAll();
+console.log(Object.keys(allConfig).length, 'config values loaded');
+```
+
+### getNumber(key, defaultValue?)
+
+Parse a configuration value as a number:
+
+```ts
+// Returns NaN if not found or not a number
+const port = this.config.getNumber('PORT');
+
+// Returns 3000 if PORT is not set
+const port = this.config.getNumber('PORT', 3000);
+```
+
+### getBoolean(key, defaultValue?)
+
+Parse a configuration value as a boolean:
+
+```ts
+// Returns true for 'true', '1', 'yes', 'on' (case-insensitive)
+const debug = this.config.getBoolean('DEBUG', false);
+```
+
+---
+
+## Schema Validation
+
+Define a Zod schema to validate your configuration at startup:
+
+```ts
+import { z } from 'zod';
+import { ConfigPlugin } from '@frontmcp/sdk';
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  API_KEY: z.string().min(10),
+  PORT: z.coerce.number().default(3000),
+  DEBUG: z.coerce.boolean().default(false),
+});
+
+ConfigPlugin.init({
+  basePath: __dirname,
+  schema: envSchema,
+})
+```
+
+<Warning>
+  When schema validation is enabled, missing or invalid values will throw `ConfigValidationError` during server startup, preventing the server from running with invalid configuration.
+</Warning>
+
+---
+
+## File Loading Behavior
+
+### Precedence Rules
+
+1. **Base file** (`.env`) is loaded first
+2. **Local file** (`.env.local`) overrides base values
+3. **Existing `process.env`** values are not overwritten
+
+### Supported Syntax
+
+```bash
+# Comments start with #
+DATABASE_URL=postgres://localhost:5432/myapp
+
+# Quoted values (single or double quotes)
+API_KEY="secret-key-with-spaces"
+MESSAGE='Hello, World!'
+
+# Empty values
+EMPTY_VAR=
+
+# Escape sequences in double quotes
+MULTILINE="line1\nline2\ttabbed"
+```
+
+<Tip>
+  Add `.env.local` to your `.gitignore` file to keep local secrets out of version control.
+</Tip>
+
+---
+
+## CLI Integration
+
+The `frontmcp dev` command automatically loads `.env` files before starting your server:
+
+```bash
+# Automatically loads .env and .env.local from current directory
+frontmcp dev
+
+# Your server starts with environment variables already set
+```
+
+<Info>
+  The CLI loads environment files **before** spawning your server process, so `process.env` values are available immediately.
+</Info>
+
+---
+
+## Error Handling
+
+### ConfigMissingError
+
+Thrown when `getRequired()` is called for a missing key:
+
+```ts
+import { ConfigMissingError } from '@frontmcp/sdk';
+
+try {
+  const secret = this.config.getRequired('MISSING_KEY');
+} catch (error) {
+  if (error instanceof ConfigMissingError) {
+    console.error(`Missing config: ${error.key}`);
+  }
+}
+```
+
+### ConfigValidationError
+
+Thrown when schema validation fails:
+
+```ts
+// At server startup, if DATABASE_URL is invalid:
+// ConfigValidationError: Configuration validation failed
+//   - DATABASE_URL: Invalid url
+```
+
+---
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext, ConfigPlugin } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Define configuration schema
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  API_KEY: z.string(),
+  PORT: z.coerce.number().default(3000),
+  DEBUG: z.coerce.boolean().default(false),
+  CACHE_TTL: z.coerce.number().default(3600),
+});
+
+// Tool that uses configuration
+@Tool({
+  name: 'get-config-info',
+  description: 'Get current configuration status',
+  inputSchema: z.object({}),
+})
+class GetConfigInfoTool extends ToolContext {
+  async execute() {
+    return {
+      debug: this.config.getBoolean('DEBUG'),
+      port: this.config.getNumber('PORT'),
+      cacheTtl: this.config.getNumber('CACHE_TTL', 3600),
+      hasApiKey: this.config.has('API_KEY'),
+    };
+  }
+}
+
+@App({
+  name: 'config-demo',
+  plugins: [
+    ConfigPlugin.init({
+      basePath: __dirname,
+      schema: envSchema,
+    }),
+  ],
+  tools: [GetConfigInfoTool],
+})
+class ConfigDemoApp {}
+
+@FrontMcp({
+  info: { name: 'Config Demo Server', version: '1.0.0' },
+  apps: [ConfigDemoApp],
+  http: { port: 3000 },
+})
+export default class Server {}
+```
+
+---
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="Source Code" icon="github" href="https://github.com/agentfront/frontmcp/tree/main/libs/sdk/src/builtin/config">
+    View the ConfigPlugin source code
+  </Card>
+  <Card title="Providers Guide" icon="boxes" href="/docs/extensibility/providers">
+    Learn about dependency injection and providers
+  </Card>
+  <Card title="Plugins Overview" icon="puzzle-piece" href="/docs/extensibility/plugins">
+    Learn about the FrontMCP plugin system
+  </Card>
+  <Card title="Demo Application" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo">
+    See ConfigPlugin in action with real examples
+  </Card>
+</CardGroup>

@@ -6,11 +6,13 @@
  *
  * - @frontmcp/plugin-cache
  * - @frontmcp/plugin-codecall
+ * - @frontmcp/plugin-config
  * - @frontmcp/plugin-dashboard
  * - @frontmcp/plugin-remember
  */
 
 export * from '@frontmcp/plugin-cache';
 export * from '@frontmcp/plugin-codecall';
+export * from '@frontmcp/plugin-config';
 export * from '@frontmcp/plugin-dashboard';
 export * from '@frontmcp/plugin-remember';
