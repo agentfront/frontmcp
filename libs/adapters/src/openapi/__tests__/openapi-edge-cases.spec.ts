@@ -410,7 +410,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
   });
 
   describe('parseResponse - Error Messages', () => {
-    it('should not expose response body or statusText in error messages', async () => {
+    it('should return structured error with body data for non-ok responses', async () => {
       const sensitiveBody = '{"error": "Secret API key invalid: sk_live_123456"}';
       const response = {
         ok: false,
@@ -420,19 +420,16 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve(sensitiveBody),
       } as Response;
 
-      // Error should only contain status code, not statusText (which could leak secrets)
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 401/);
+      // Now returns structured response instead of throwing
+      const result = await parseResponse(response);
 
-      try {
-        await parseResponse(response);
-      } catch (err) {
-        const errorMessage = (err as Error).message;
-        // Ensure error message doesn't contain the sensitive body
-        expect(errorMessage).not.toContain('sk_live_123456');
-        // Ensure error message doesn't contain sensitive statusText
-        expect(errorMessage).not.toContain('abc123');
-        expect(errorMessage).not.toContain('Unauthorized');
-      }
+      // Should return structured error with status
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(401);
+      // Error message should be extracted from JSON body if present
+      expect(result.error).toBeDefined();
+      // Data should contain the parsed body
+      expect(result.data).toEqual({ error: 'Secret API key invalid: sk_live_123456' });
     });
   });
 
@@ -470,7 +467,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
   });
 
   describe('parseResponse - Various HTTP Status Codes', () => {
-    it('should throw error for 400 Bad Request', async () => {
+    it('should return structured error for 400 Bad Request', async () => {
       const response = {
         ok: false,
         status: 400,
@@ -479,10 +476,13 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve('{"error": "Invalid input"}'),
       } as Response;
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 400/);
+      const result = await parseResponse(response);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(400);
+      expect(result.data).toEqual({ error: 'Invalid input' });
     });
 
-    it('should throw error for 403 Forbidden', async () => {
+    it('should return structured error for 403 Forbidden', async () => {
       const response = {
         ok: false,
         status: 403,
@@ -491,10 +491,13 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve('{"error": "Access denied"}'),
       } as Response;
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 403/);
+      const result = await parseResponse(response);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(403);
+      expect(result.data).toEqual({ error: 'Access denied' });
     });
 
-    it('should throw error for 429 Rate Limited', async () => {
+    it('should return structured error for 429 Rate Limited', async () => {
       const response = {
         ok: false,
         status: 429,
@@ -503,10 +506,13 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve('{"error": "Rate limit exceeded"}'),
       } as Response;
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 429/);
+      const result = await parseResponse(response);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(429);
+      expect(result.data).toEqual({ error: 'Rate limit exceeded' });
     });
 
-    it('should throw error for 502 Bad Gateway', async () => {
+    it('should return structured error for 502 Bad Gateway', async () => {
       const response = {
         ok: false,
         status: 502,
@@ -515,10 +521,13 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve('<html>Bad Gateway</html>'),
       } as Response;
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 502/);
+      const result = await parseResponse(response);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(502);
+      expect(result.data).toBe('<html>Bad Gateway</html>');
     });
 
-    it('should throw error for 503 Service Unavailable', async () => {
+    it('should return structured error for 503 Service Unavailable', async () => {
       const response = {
         ok: false,
         status: 503,
@@ -527,7 +536,10 @@ describe('OpenapiAdapter - Edge Cases', () => {
         text: () => Promise.resolve('Service is down'),
       } as Response;
 
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 503/);
+      const result = await parseResponse(response);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(503);
+      expect(result.data).toBe('Service is down');
     });
   });
 

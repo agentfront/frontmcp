@@ -388,41 +388,62 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `## PR Testing Registry Available
+            const marker = '<!-- frontmcp-pr-testing-registry -->';
+            const body = `${marker}
+            ## 🟢 PR Testing Registry Available
 
             A temporary npm registry has been created for testing this PR.
 
-            ### Registry URL
-            \`\`\`
-            ${{ env.NGROK_URL }}
-            \`\`\`
-
-            ### Version
-            \`${{ steps.version.outputs.version }}\`
+            | Property | Value |
+            |----------|-------|
+            | **Registry URL** | \`${{ env.NGROK_URL }}\` |
+            | **Version** | \`${{ steps.version.outputs.version }}\` |
+            | **Expires** | ~${{ inputs.timeout_hours }} hour(s) from now |
+            | **Started by** | @${{ github.actor }} |
 
             ### Quick Install
+
             \`\`\`bash
             npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}
             \`\`\`
 
             ### .npmrc Configuration
+
             \`\`\`
             @frontmcp:registry=${{ env.NGROK_URL }}
             \`\`\`
 
-            **Note:** This registry will be available for approximately ${{ inputs.timeout_hours }} hour(s).
-
-            To stop the registry early, [cancel the workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-
             ---
-            _Registry started by @${{ github.actor }}_`;
+            <sub>To stop the registry early, [cancel the workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).</sub>`;
 
-            await github.rest.issues.createComment({
+            // Find existing comment with our marker
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ inputs.pr_number }},
-              body: body
             });
+
+            const existingComment = comments.find(c => c.body.includes(marker));
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+              console.log(`Updated existing comment: ${existingComment.id}`);
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ inputs.pr_number }},
+                body: body
+              });
+              console.log('Created new comment');
+            }
 
       - name: Summary
         run: |
@@ -617,15 +638,47 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ inputs.pr_number }},
-              body: `## PR Testing Registry Stopped
+            const marker = '<!-- frontmcp-pr-testing-registry -->';
+            const reason = '${{ job.status }}' === 'cancelled' ? 'Workflow cancelled' : 'Timeout reached';
+            const body = `${marker}
+            ## ⏹️ PR Testing Registry Stopped
 
             The temporary npm registry for this PR has been shut down.
 
-            **Reason:** ${{ job.status == 'cancelled' && 'Workflow cancelled' || 'Timeout reached' }}
+            | Property | Value |
+            |----------|-------|
+            | **Version** | \`${{ steps.version.outputs.version }}\` |
+            | **Reason** | ${reason} |
+            | **Stopped at** | ${new Date().toISOString()} |
 
-            To start a new registry, trigger the "PR Testing Registry" workflow again.`
+            ---
+            <sub>To start a new registry, [trigger the workflow again](${{ github.server_url }}/${{ github.repository }}/actions/workflows/pr-testing-registry.yml).</sub>`;
+
+            // Find existing comment with our marker
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr_number }},
             });
+
+            const existingComment = comments.find(c => c.body.includes(marker));
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+              console.log(`Updated existing comment: ${existingComment.id}`);
+            } else {
+              // Create new comment (shouldn't happen normally, but handle edge case)
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ inputs.pr_number }},
+                body: body
+              });
+              console.log('Created new comment');
+            }

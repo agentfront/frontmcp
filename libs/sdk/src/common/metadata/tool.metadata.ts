@@ -196,6 +196,12 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   outputSchema?: OutSchema;
 
   /**
+   * Raw JSON Schema representation of the output schema.
+   * Used by OpenAPI tools and tool/list to expose structured output schema.
+   */
+  rawOutputSchema?: JsonSchema;
+
+  /**
    * Optional list of tags/labels that categorize the tool for discovery and filtering.
    */
   tags?: string[];
@@ -256,6 +262,7 @@ export const frontMcpToolMetadataSchema = z
     inputSchema: z.instanceof(Object),
     rawInputSchema: z.any().optional(),
     outputSchema: toolOutputSchema.optional(),
+    rawOutputSchema: z.any().optional(),
     tags: z.array(z.string().min(1)).optional(),
     annotations: mcpToolAnnotationsSchema.optional(),
     hideFromDiscovery: z.boolean().optional().default(false),
