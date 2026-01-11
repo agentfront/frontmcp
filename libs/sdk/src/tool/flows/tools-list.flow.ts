@@ -294,7 +294,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         };
 
         // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
-        const outputSchemaRaw = tool.getRawOutputSchema?.();
+        const outputSchemaRaw = tool.getRawOutputSchema();
         if (outputSchemaRaw) {
           item.outputSchema = outputSchemaRaw;
         }
