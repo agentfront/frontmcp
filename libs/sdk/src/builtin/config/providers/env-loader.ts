@@ -147,6 +147,7 @@ export function pathToEnvKey(path: string): string {
  *
  * @security Validates keys to prevent prototype pollution attacks.
  * Paths containing __proto__, constructor, or prototype are silently ignored.
+ * Uses Object.create(null) for new nested objects to avoid prototype chain.
  */
 export function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown): void {
   const keys = path.split('.');
@@ -162,13 +163,23 @@ export function setNestedValue(obj: Record<string, unknown>, path: string, value
 
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
+    // Explicit inline check to satisfy CodeQL flow analysis
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return;
+    }
     if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
-      current[key] = {};
+      // Use Object.create(null) to create object without prototype chain
+      current[key] = Object.create(null);
     }
     current = current[key] as Record<string, unknown>;
   }
 
-  current[keys[keys.length - 1]] = value;
+  const finalKey = keys[keys.length - 1];
+  // Explicit inline check for final key assignment
+  if (finalKey === '__proto__' || finalKey === 'constructor' || finalKey === 'prototype') {
+    return;
+  }
+  current[finalKey] = value;
 }
 
 /**
@@ -191,6 +202,10 @@ export function getNestedValue(obj: Record<string, unknown>, path: string): unkn
   let current: unknown = obj;
 
   for (const key of keys) {
+    // Explicit inline check to satisfy CodeQL flow analysis
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return undefined;
+    }
     if (current && typeof current === 'object' && key in current) {
       current = (current as Record<string, unknown>)[key];
     } else {

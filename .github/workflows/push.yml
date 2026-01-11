@@ -2,11 +2,6 @@ name: On Push
 
 on:
   push:
-    branches:
-      - main
-      - "next/**"
-      - "release/**"
-      - "hotfix/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -174,6 +169,7 @@ jobs:
           - demo-e2e-notifications
           - demo-e2e-serverless
           - demo-e2e-multiapp
+          - demo-e2e-config
     env:
       NX_DAEMON: "false"
     steps:

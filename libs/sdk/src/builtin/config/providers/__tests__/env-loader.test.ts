@@ -370,7 +370,9 @@ describe('env-loader', () => {
   });
 
   describe('loadEnvFiles', () => {
-    const fixturesPath = path.resolve(__dirname, '../../../../../../apps/e2e/demo-e2e-config/src/apps/config');
+    // Path to demo-e2e-config root where .env files exist
+    // From __dirname (libs/sdk/src/builtin/config/providers/__tests__) need 7 levels up to reach project root
+    const fixturesPath = path.resolve(__dirname, '../../../../../../../apps/e2e/demo-e2e-config');
 
     it('should load env files from a directory', async () => {
       const result = await loadEnvFiles(fixturesPath, '.env', '.env.local');
@@ -392,12 +394,10 @@ describe('env-loader', () => {
       // This tests the merging precedence - .env.local should override .env
       const result = await loadEnvFiles(fixturesPath, '.env', '.env.local');
 
-      // The demo config has OVERRIDDEN_VAR in both files
-      // .env has: OVERRIDDEN_VAR=base_value
-      // .env.local has: OVERRIDDEN_VAR=local_value
-      if (result.OVERRIDDEN_VAR) {
-        expect(result.OVERRIDDEN_VAR).toBe('local_value');
-      }
+      // Verify override behavior:
+      // .env has API_KEY=test-api-key-12345
+      // .env.local has API_KEY=local-override-key
+      expect(result.API_KEY).toBe('local-override-key');
     });
   });
 

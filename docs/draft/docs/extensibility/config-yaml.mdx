@@ -64,7 +64,7 @@ const configSchema = z.object({
     pool: z.object({
       min: z.number().default(2),
       max: z.number().default(10),
-    }).default({}),
+    }).default({ min: 2, max: 10 }),
   }),
   api: z.object({
     key: z.string(),
@@ -219,7 +219,7 @@ const configSchema = z.object({
   features: z.object({
     darkMode: z.boolean().default(false),
     maxItems: z.number().default(100),
-  }).default({}),
+  }).default({ darkMode: false, maxItems: 100 }),
 });
 
 type Config = z.infer<typeof configSchema>;
@@ -246,8 +246,8 @@ class MyApp {}
 class MyTool extends ToolContext {
   async execute() {
     return {
-      dbPort: this.config.get('database.port'),
-      darkMode: this.config.get('features.darkMode'),
+      dbPort: this.config.getNumber('database.port'),
+      darkMode: this.config.getBoolean('features.darkMode'),
     };
   }
 }
