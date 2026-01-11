@@ -97,12 +97,11 @@ describe('decodeJwtPayloadSafe', () => {
     expect(decodeJwtPayloadSafe(`header.${nullPayload}.signature`)).toBeUndefined();
   });
 
-  it('should handle array payload (returns object)', () => {
-    // Note: Arrays are technically objects in JavaScript, so they pass the object check
+  it('should return undefined for array payload', () => {
+    // Arrays are rejected since JWT payloads must be objects per RFC 7519
     const arrayPayload = Buffer.from(JSON.stringify([1, 2, 3])).toString('base64url');
     const result = decodeJwtPayloadSafe(`header.${arrayPayload}.signature`);
-    // Arrays pass typeof === 'object' check, so they are returned as-is
-    expect(result).toEqual([1, 2, 3]);
+    expect(result).toBeUndefined();
   });
 
   it('should handle base64url encoding with - and _ characters', () => {

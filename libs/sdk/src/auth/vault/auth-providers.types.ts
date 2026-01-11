@@ -192,9 +192,10 @@ export const credentialProviderConfigSchema = z
     scope: credentialScopeSchema,
     loading: loadingStrategySchema,
     cacheTtl: z.number().nonnegative().optional(),
-    factory: z.function(),
-    refresh: z.function().optional(),
-    toHeaders: z.function().optional(),
+    // Functions validated at runtime, not via Zod (Zod 4 compatibility)
+    factory: z.any(),
+    refresh: z.any().optional(),
+    toHeaders: z.any().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     required: z.boolean().optional(),
   })

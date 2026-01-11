@@ -39,6 +39,9 @@ export const credentialTypeSchema = z.enum([
   'private_key', // Private key for signing (JWT, etc.)
   'mtls', // Mutual TLS certificate
   'custom', // Custom credential type
+  'ssh_key', // SSH key for authentication
+  'service_account', // Cloud provider service accounts
+  'oauth_pkce', // OAuth 2.0 with PKCE for public clients
 ]);
 
 export type CredentialType = z.infer<typeof credentialTypeSchema>;
@@ -211,8 +214,6 @@ export const pkceOAuthCredentialSchema = z.object({
   scopes: z.array(z.string()).default([]),
   /** ID token for OIDC (optional) */
   idToken: z.string().optional(),
-  /** Code verifier used in PKCE flow (stored for refresh) */
-  codeVerifier: z.string().optional(),
   /** Authorization server issuer */
   issuer: z.string().optional(),
 });
@@ -853,9 +854,9 @@ export class InMemoryAuthorizationVault implements AuthorizationVault {
 
     const key = this.credentialKey(appId, providerId);
     const credential = entry.appCredentials[key];
-    if (!credential || credential.credential.type !== 'oauth') return;
+    if (!credential || (credential.credential.type !== 'oauth' && credential.credential.type !== 'oauth_pkce')) return;
 
-    // Update OAuth tokens
+    // Update OAuth/PKCE tokens
     credential.credential.accessToken = tokens.accessToken;
     if (tokens.refreshToken !== undefined) {
       credential.credential.refreshToken = tokens.refreshToken;
@@ -1190,9 +1191,9 @@ export class RedisAuthorizationVault implements AuthorizationVault {
 
     const key = this.credentialKey(appId, providerId);
     const credential = entry.appCredentials[key];
-    if (!credential || credential.credential.type !== 'oauth') return;
+    if (!credential || (credential.credential.type !== 'oauth' && credential.credential.type !== 'oauth_pkce')) return;
 
-    // Update OAuth tokens
+    // Update OAuth/PKCE tokens
     credential.credential.accessToken = tokens.accessToken;
     if (tokens.refreshToken !== undefined) {
       credential.credential.refreshToken = tokens.refreshToken;

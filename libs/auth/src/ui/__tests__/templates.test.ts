@@ -93,8 +93,7 @@ describe('buildConsentPage', () => {
   it('should include callback path in form action', () => {
     const html = buildConsentPage(defaultParams);
 
-    // Note: escapeHtml converts / to &#x2F;
-    expect(html).toContain('action="&#x2F;oauth&#x2F;callback"');
+    expect(html).toContain('action="/oauth/callback"');
   });
 
   it('should escape XSS in client name', () => {
@@ -119,8 +118,7 @@ describe('buildConsentPage', () => {
       ],
     });
 
-    // Note: escapeHtml converts / to &#x2F;
-    expect(html).toContain('https:&#x2F;&#x2F;example.com&#x2F;icon.png');
+    expect(html).toContain('https://example.com/icon.png');
     expect(html).toContain('<img');
   });
 
@@ -143,6 +141,36 @@ describe('buildConsentPage', () => {
     expect(html).toContain('First App');
     expect(html).toContain('Second App');
     expect(html).toContain('Third App');
+  });
+
+  it('should escape XSS in app name', () => {
+    const html = buildConsentPage({
+      ...defaultParams,
+      apps: [{ ...defaultParams.apps[0], appName: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in app description', () => {
+    const html = buildConsentPage({
+      ...defaultParams,
+      apps: [{ ...defaultParams.apps[0], description: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in required scopes', () => {
+    const html = buildConsentPage({
+      ...defaultParams,
+      apps: [{ ...defaultParams.apps[0], requiredScopes: ['<script>alert("xss")</script>'] }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 
@@ -209,6 +237,36 @@ describe('buildIncrementalAuthPage', () => {
 
     expect(html).toContain('flex items-center justify-center');
   });
+
+  it('should escape XSS in app name', () => {
+    const html = buildIncrementalAuthPage({
+      ...defaultParams,
+      app: { ...defaultParams.app, appName: '<script>alert("xss")</script>' },
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in app description', () => {
+    const html = buildIncrementalAuthPage({
+      ...defaultParams,
+      app: { ...defaultParams.app, description: '<script>alert("xss")</script>' },
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in tool ID', () => {
+    const html = buildIncrementalAuthPage({
+      ...defaultParams,
+      toolId: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });
 
 describe('buildFederatedLoginPage', () => {
@@ -224,7 +282,6 @@ describe('buildFederatedLoginPage', () => {
     ],
     clientName: 'Test Client',
     pendingAuthId: 'pending-123',
-    csrfToken: 'csrf-456',
     callbackPath: '/oauth/federated',
   };
 
@@ -313,8 +370,47 @@ describe('buildFederatedLoginPage', () => {
       ],
     });
 
-    // Note: escapeHtml converts / to &#x2F;
-    expect(html).toContain('https:&#x2F;&#x2F;auth.custom.com');
+    expect(html).toContain('https://auth.custom.com');
+  });
+
+  it('should escape XSS in provider name', () => {
+    const html = buildFederatedLoginPage({
+      ...defaultParams,
+      providers: [{ ...defaultParams.providers[0], providerName: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in provider URL', () => {
+    const html = buildFederatedLoginPage({
+      ...defaultParams,
+      providers: [{ ...defaultParams.providers[0], providerUrl: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in app IDs', () => {
+    const html = buildFederatedLoginPage({
+      ...defaultParams,
+      providers: [{ ...defaultParams.providers[0], appIds: ['<script>alert("xss")</script>'] }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in client name', () => {
+    const html = buildFederatedLoginPage({
+      ...defaultParams,
+      clientName: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 
@@ -438,6 +534,56 @@ describe('buildToolConsentPage', () => {
     expect(html).toContain('GitHub');
     expect(html).toContain('Slack');
   });
+
+  it('should escape XSS in tool name', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      tools: [{ ...defaultParams.tools[0], toolName: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in tool description', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      tools: [{ ...defaultParams.tools[0], description: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in app name', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      tools: [{ ...defaultParams.tools[0], appName: '<script>alert("xss")</script>' }],
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in user name', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      userName: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in user email', () => {
+    const html = buildToolConsentPage({
+      ...defaultParams,
+      userEmail: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });
 
 describe('buildLoginPage', () => {
@@ -521,6 +667,26 @@ describe('buildLoginPage', () => {
     const html = buildLoginPage(defaultParams);
 
     expect(html).toContain('flex items-center justify-center');
+  });
+
+  it('should escape XSS in client name', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      clientName: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape XSS in scope', () => {
+    const html = buildLoginPage({
+      ...defaultParams,
+      scope: '<script>alert("xss")</script>',
+    });
+
+    expect(html).not.toContain('<script>alert("xss")</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 

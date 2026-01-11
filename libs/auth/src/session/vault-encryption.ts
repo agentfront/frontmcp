@@ -186,7 +186,7 @@ export class VaultEncryption {
     const iv = randomBytes(12);
 
     // Encrypt using AES-256-GCM
-    const { ciphertext, tag } = await encryptAesGcm(key, iv, new TextEncoder().encode(plaintext));
+    const { ciphertext, tag } = await encryptAesGcm(key, new TextEncoder().encode(plaintext), iv);
 
     return {
       v: 1,
@@ -225,7 +225,7 @@ export class VaultEncryption {
 
     // Decrypt
     try {
-      const plaintext = await decryptAesGcm(key, ivBuffer, ciphertext, tagBuffer);
+      const plaintext = await decryptAesGcm(key, ciphertext, ivBuffer, tagBuffer);
       return new TextDecoder().decode(plaintext);
     } catch (error) {
       // GCM authentication failed - wrong key or tampered data

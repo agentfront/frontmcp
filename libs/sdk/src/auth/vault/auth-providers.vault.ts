@@ -252,9 +252,7 @@ export class AuthProvidersVault {
         return `${this.namespace}global`;
       case 'user':
         if (!userId) {
-          // Fall back to session scope if no userId
-          this.logger?.warn('User scope requested but no userId provided, falling back to session');
-          return `${this.namespace}session:${sessionId}`;
+          throw new Error(`userId is required for user-scoped credentials (namespace: ${this.namespace})`);
         }
         return `${this.namespace}user:${userId}`;
       case 'session':

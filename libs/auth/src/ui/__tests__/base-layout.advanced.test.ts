@@ -18,7 +18,7 @@ import {
 
 describe('escapeHtml edge cases', () => {
   it('should handle string with only special characters', () => {
-    expect(escapeHtml('<>&"\'//')).toBe('&lt;&gt;&amp;&quot;&#39;&#x2F;&#x2F;');
+    expect(escapeHtml('<>&"\'//')).toBe('&lt;&gt;&amp;&quot;&#39;//');
   });
 
   it('should handle unicode characters', () => {

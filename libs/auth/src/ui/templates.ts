@@ -255,10 +255,9 @@ export function buildFederatedLoginPage(params: {
   providers: ProviderCard[];
   clientName: string;
   pendingAuthId: string;
-  csrfToken: string;
   callbackPath: string;
 }): string {
-  const { providers, clientName, pendingAuthId, csrfToken, callbackPath } = params;
+  const { providers, clientName, pendingAuthId, callbackPath } = params;
 
   const providerCards = providers
     .map((provider) => {

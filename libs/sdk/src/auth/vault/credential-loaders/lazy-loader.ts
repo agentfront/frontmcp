@@ -9,6 +9,7 @@ import type { Credential } from '../../session/authorization-vault';
 import type { NormalizedProviderConfig } from '../auth-providers.registry';
 import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import { FrontMcpLogger } from '../../../common';
+import { extractCredentialExpiry } from './credential-helpers';
 
 /**
  * LazyCredentialLoader - Loads credentials on first access
@@ -77,7 +78,7 @@ export class LazyCredentialLoader {
         credential,
         providerId: config.name,
         acquiredAt: Date.now(),
-        expiresAt: this.extractExpiry(credential),
+        expiresAt: extractCredentialExpiry(credential),
         isValid: true,
         scope: config.scope,
       };
@@ -127,7 +128,7 @@ export class LazyCredentialLoader {
         credential,
         providerId: config.name,
         acquiredAt: Date.now(),
-        expiresAt: this.extractExpiry(credential),
+        expiresAt: extractCredentialExpiry(credential),
         isValid: true,
         scope: config.scope,
       };
@@ -158,20 +159,5 @@ export class LazyCredentialLoader {
    */
   cancelAll(): void {
     this.loading.clear();
-  }
-
-  /**
-   * Extract expiry time from credential
-   */
-  private extractExpiry(credential: Credential): number | undefined {
-    switch (credential.type) {
-      case 'oauth':
-      case 'oauth_pkce':
-      case 'bearer':
-      case 'service_account':
-        return credential.expiresAt;
-      default:
-        return undefined;
-    }
   }
 }

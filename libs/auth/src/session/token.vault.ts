@@ -5,7 +5,7 @@
  * Supports key rotation for seamless key management.
  */
 
-import { encryptAesGcm, decryptAesGcm, randomBytes } from '@frontmcp/utils';
+import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode } from '@frontmcp/utils';
 
 export type EncBlob = {
   alg: 'A256GCM';
@@ -46,9 +46,9 @@ export class TokenVault {
     return {
       alg: 'A256GCM',
       kid: this.active.kid,
-      iv: this.toBase64Url(iv),
-      tag: this.toBase64Url(tag),
-      data: this.toBase64Url(ciphertext),
+      iv: base64urlEncode(iv),
+      tag: base64urlEncode(tag),
+      data: base64urlEncode(ciphertext),
       exp: opts?.exp,
       meta: opts?.meta,
     };
@@ -58,19 +58,11 @@ export class TokenVault {
     const key = this.keys.get(blob.kid);
     if (!key) throw new Error(`vault_unknown_kid:${blob.kid}`);
 
-    const iv = this.fromBase64Url(blob.iv);
-    const tag = this.fromBase64Url(blob.tag);
-    const data = this.fromBase64Url(blob.data);
+    const iv = base64urlDecode(blob.iv);
+    const tag = base64urlDecode(blob.tag);
+    const data = base64urlDecode(blob.data);
 
-    const plaintext = await decryptAesGcm(key, iv, data, tag);
+    const plaintext = await decryptAesGcm(key, data, iv, tag);
     return new TextDecoder().decode(plaintext);
-  }
-
-  private toBase64Url(data: Uint8Array): string {
-    return Buffer.from(data).toString('base64url');
-  }
-
-  private fromBase64Url(str: string): Uint8Array {
-    return new Uint8Array(Buffer.from(str, 'base64url'));
   }
 }

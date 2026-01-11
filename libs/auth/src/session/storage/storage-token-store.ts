@@ -51,13 +51,20 @@ export class StorageTokenStore implements TokenStore {
   private readonly storage: TypedStorage<SecretRecord>;
   private readonly namespace: string;
   private readonly defaultTtlSeconds?: number;
+  /** Track if original storage was namespaced to avoid double-prefixing */
+  private readonly storageIsNamespaced: boolean;
 
   constructor(storage: StorageAdapter | NamespacedStorage, options: StorageTokenStoreOptions = {}) {
     this.namespace = options.namespace ?? 'tok';
     this.defaultTtlSeconds = options.defaultTtlSeconds;
 
+    // Track whether original storage supports namespacing
+    this.storageIsNamespaced = 'namespace' in storage && typeof storage.namespace === 'function';
+
     // Create a namespaced view if we have a NamespacedStorage
-    const namespacedStorage = this.isNamespacedStorage(storage) ? storage.namespace(this.namespace) : storage;
+    const namespacedStorage = this.storageIsNamespaced
+      ? (storage as NamespacedStorage).namespace(this.namespace)
+      : storage;
 
     this.storage = new TypedStorage<SecretRecord>(namespacedStorage);
   }
@@ -127,17 +134,10 @@ export class StorageTokenStore implements TokenStore {
 
   /**
    * Build the storage key for a token ID.
-   * For non-namespaced storage, includes the namespace prefix.
+   * For namespaced storage, the namespace is handled by the storage layer.
+   * For non-namespaced storage, includes the namespace prefix in the key.
    */
   private key(id: string): string {
-    // If using raw StorageAdapter (not NamespacedStorage), include namespace prefix
-    return this.isNamespacedStorage(this.storage.raw) ? id : `${this.namespace}:${id}`;
-  }
-
-  /**
-   * Type guard to check if storage is a NamespacedStorage.
-   */
-  private isNamespacedStorage(storage: StorageAdapter | NamespacedStorage): storage is NamespacedStorage {
-    return 'namespace' in storage && typeof storage.namespace === 'function';
+    return this.storageIsNamespaced ? id : `${this.namespace}:${id}`;
   }
 }

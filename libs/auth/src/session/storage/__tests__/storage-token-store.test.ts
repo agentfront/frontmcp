@@ -174,10 +174,10 @@ describe('StorageTokenStore', () => {
 
       await tokenStore.put(id, blob);
 
-      // The record should still be stored (TTL set to 1 second minimum)
-      // but will expire very soon
+      // Record should exist immediately after put (before 1s min TTL expires)
       const record = await tokenStore.get(id);
-      // May or may not exist depending on timing
+      expect(record).toBeDefined();
+      expect(record?.id).toBe(id);
     });
 
     it('should use defaultTtlSeconds when blob has no expiration', async () => {

@@ -18,7 +18,7 @@ export function decodeJwtPayloadSafe(token?: string): Record<string, unknown> | 
         : // browser fallback
           atob(b64);
     const obj = JSON.parse(json);
-    return obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : undefined;
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? (obj as Record<string, unknown>) : undefined;
   } catch {
     return undefined;
   }

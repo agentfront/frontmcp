@@ -9,13 +9,13 @@ module.exports = {
   coverageDirectory: '../../coverage/libs/auth',
   // Transform jose ESM module
   transformIgnorePatterns: ['node_modules/(?!(jose)/)'],
-  // Coverage thresholds - can be increased as more tests are added
+  // TODO: Raise coverage thresholds to 95% (current values are temporary)
   coverageThreshold: {
     global: {
-      statements: 65,
-      branches: 60,
-      functions: 40,
-      lines: 65,
+      statements: 65, // Target: 95
+      branches: 60, // Target: 95
+      functions: 40, // Target: 95
+      lines: 65, // Target: 95
     },
   },
 };

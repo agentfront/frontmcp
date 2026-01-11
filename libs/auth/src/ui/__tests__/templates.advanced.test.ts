@@ -143,7 +143,6 @@ describe('Template Edge Cases', () => {
         ],
         clientName: 'Client',
         pendingAuthId: 'pending-123',
-        csrfToken: 'csrf-456',
         callbackPath: '/callback',
       });
 
@@ -163,7 +162,6 @@ describe('Template Edge Cases', () => {
         ],
         clientName: 'Client',
         pendingAuthId: 'pending-123',
-        csrfToken: 'csrf-456',
         callbackPath: '/callback',
       });
 
@@ -183,7 +181,6 @@ describe('Template Edge Cases', () => {
         ],
         clientName: 'Client',
         pendingAuthId: 'pending-123',
-        csrfToken: 'csrf-456',
         callbackPath: '/callback',
       });
 
@@ -206,7 +203,6 @@ describe('Template Edge Cases', () => {
         providers,
         clientName: 'Client',
         pendingAuthId: 'pending-123',
-        csrfToken: 'csrf-456',
         callbackPath: '/callback',
       });
 
@@ -228,7 +224,6 @@ describe('Template Edge Cases', () => {
         ],
         clientName: 'Client',
         pendingAuthId: 'pending-123',
-        csrfToken: 'csrf-456',
         callbackPath: '/callback',
       });
 

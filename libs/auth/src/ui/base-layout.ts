@@ -25,6 +25,8 @@
  * ```
  */
 
+import { escapeHtml } from '@frontmcp/utils';
+
 // ============================================
 // CDN Configuration
 // ============================================
@@ -151,26 +153,8 @@ export interface BaseLayoutOptions {
 // Utility Functions
 // ============================================
 
-/**
- * Escape HTML special characters to prevent XSS
- * Per OWASP guidelines, escapes: & < > " ' /
- *
- * @param str - The string to escape
- * @returns The escaped string safe for HTML content and attributes
- *
- * @example
- * escapeHtml('<script>alert("xss")</script>')
- * // => '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;'
- */
-export function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/\//g, '&#x2F;');
-}
+// Re-export escapeHtml from @frontmcp/utils for backwards compatibility
+export { escapeHtml } from '@frontmcp/utils';
 
 /**
  * Build the @theme CSS block from theme configuration

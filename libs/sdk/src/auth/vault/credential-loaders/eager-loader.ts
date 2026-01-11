@@ -10,6 +10,7 @@ import type { AuthProvidersRegistry, NormalizedProviderConfig } from '../auth-pr
 import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import type { CredentialCache } from '../credential-cache';
 import { FrontMcpLogger } from '../../../common';
+import { extractCredentialExpiry } from './credential-helpers';
 
 /**
  * Result of eager loading
@@ -127,24 +128,9 @@ export class EagerCredentialLoader {
       credential,
       providerId,
       acquiredAt: Date.now(),
-      expiresAt: this.extractExpiry(credential),
+      expiresAt: extractCredentialExpiry(credential),
       isValid: true,
       scope: config.scope,
     };
-  }
-
-  /**
-   * Extract expiry time from credential
-   */
-  private extractExpiry(credential: Credential): number | undefined {
-    switch (credential.type) {
-      case 'oauth':
-      case 'oauth_pkce':
-      case 'bearer':
-      case 'service_account':
-        return credential.expiresAt;
-      default:
-        return undefined;
-    }
   }
 }

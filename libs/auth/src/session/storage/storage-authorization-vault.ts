@@ -120,7 +120,10 @@ export class StorageAuthorizationVault implements AuthorizationVault {
 
   async update(id: string, updates: Partial<AuthorizationVaultEntry>): Promise<void> {
     const entry = await this.get(id);
-    if (!entry) return;
+    if (!entry) {
+      console.warn(`[StorageAuthorizationVault] Update failed: vault entry not found for id ${id}`);
+      return;
+    }
 
     const updated = {
       ...entry,
@@ -403,7 +406,7 @@ export class StorageAuthorizationVault implements AuthorizationVault {
 
     const key = this.credentialKey(appId, providerId);
     const credential = entry.appCredentials[key];
-    if (!credential || credential.credential.type !== 'oauth') return;
+    if (!credential || (credential.credential.type !== 'oauth' && credential.credential.type !== 'oauth_pkce')) return;
 
     // Update OAuth tokens
     credential.credential.accessToken = tokens.accessToken;

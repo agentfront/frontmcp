@@ -34,14 +34,12 @@ describe('escapeHtml', () => {
     expect(escapeHtml("foo 'bar'")).toBe('foo &#39;bar&#39;');
   });
 
-  it('should escape forward slashes', () => {
-    expect(escapeHtml('foo / bar')).toBe('foo &#x2F; bar');
+  it('should not escape forward slashes (not HTML special characters)', () => {
+    expect(escapeHtml('foo / bar')).toBe('foo / bar');
   });
 
-  it('should escape all special characters together', () => {
-    expect(escapeHtml('<script>alert("xss")</script>')).toBe(
-      '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;',
-    );
+  it('should escape all HTML special characters together', () => {
+    expect(escapeHtml('<script>alert("xss")</script>')).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
   });
 
   it('should handle empty string', () => {
