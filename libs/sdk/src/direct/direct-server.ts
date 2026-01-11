@@ -80,7 +80,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     options?: DirectCallOptions,
   ): Promise<T> {
     if (this._isDisposed) {
-      throw new Error('DirectMcpServer has been disposed');
+      throw new InternalMcpError('DirectMcpServer has been disposed');
     }
 
     const ctx = this.buildHandlerContext(options);
@@ -174,8 +174,9 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     if (this.scope.transportService) {
       try {
         await this.scope.transportService.destroy();
-      } catch {
-        // Ignore cleanup errors
+      } catch (err) {
+        // Log but don't throw - cleanup should be best-effort
+        console.debug('DirectMcpServer cleanup warning:', err);
       }
     }
   }

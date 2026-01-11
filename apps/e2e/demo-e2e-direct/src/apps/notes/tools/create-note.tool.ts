@@ -1,5 +1,6 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import { notesStore } from '../data/notes.store';
 
 const inputSchema = z
@@ -28,7 +29,7 @@ type CreateNoteOutput = z.infer<typeof outputSchema>;
 export default class CreateNoteTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: CreateNoteInput): Promise<CreateNoteOutput> {
     const note = {
-      id: `note-${Date.now()}`,
+      id: `note-${randomUUID()}`,
       title: input.title,
       content: input.content,
       createdAt: new Date().toISOString(),

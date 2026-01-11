@@ -19,6 +19,11 @@ on:
           - "5"
           - "6"
         default: "2"
+      ngrok_domain:
+        description: "Custom ngrok domain (optional, e.g., my-domain.ngrok.io)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -130,27 +135,37 @@ jobs:
             exit 1
           fi
 
-      - name: Setup ngrok
+      - name: Install ngrok via npm
         run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | \
-            sudo tee /etc/apt/trusted.gpg.d/ngrok.asc > /dev/null
-          # Use dynamic distro detection instead of hardcoded "buster"
-          echo "deb https://ngrok-agent.s3.amazonaws.com $(lsb_release -cs) main" | \
-            sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt-get update && sudo apt-get install -y ngrok
+          npm install -g ngrok
 
       - name: Start ngrok tunnel
         id: ngrok
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          NGROK_DOMAIN: ${{ inputs.ngrok_domain }}
         run: |
-          if [ -z "${NGROK_AUTH_TOKEN:-}" ]; then
-            echo "::error::NGROK_AUTH_TOKEN secret is not configured"
-            exit 1
+          # Configure auth token if available (optional but recommended for stable URLs)
+          if [ -n "${NGROK_AUTH_TOKEN:-}" ]; then
+            echo "Configuring ngrok with auth token..."
+            npx ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+          else
+            echo "::warning::NGROK_AUTH_TOKEN not configured. Using ngrok without authentication (random URLs, rate limits may apply)."
           fi
 
-          ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
-          ngrok http 4873 --log=stdout > /tmp/ngrok.log 2>&1 &
+          # Build ngrok command with optional domain
+          NGROK_CMD="npx ngrok http 4873"
+          if [ -n "${NGROK_DOMAIN:-}" ]; then
+            if [ -z "${NGROK_AUTH_TOKEN:-}" ]; then
+              echo "::error::Custom domain requires NGROK_AUTH_TOKEN to be configured"
+              exit 1
+            fi
+            echo "Using custom domain: $NGROK_DOMAIN"
+            NGROK_CMD="$NGROK_CMD --domain=$NGROK_DOMAIN"
+          fi
+
+          # Start ngrok
+          $NGROK_CMD --log=stdout > /tmp/ngrok.log 2>&1 &
           echo $! > /tmp/ngrok-pid
 
           # Wait for ngrok to start and get URL
@@ -207,18 +222,21 @@ jobs:
           PUBLISHED_PACKAGES=()
 
           # Publish libs packages
+          # Note: 'cli' package is named 'frontmcp' (non-scoped), others are @frontmcp/*
           LIBS_PACKAGES=(di utils uipack sdk ui adapters testing cli plugins)
           for pkg in "${LIBS_PACKAGES[@]}"; do
             if [ -d "libs/$pkg/dist" ]; then
-              echo "Publishing @frontmcp/$pkg@$VERSION..."
+              # Get actual package name from package.json
+              PKG_NAME=$(jq -r '.name' "libs/$pkg/dist/package.json" 2>/dev/null || echo "@frontmcp/$pkg")
+              echo "Publishing $PKG_NAME@$VERSION..."
               if npm publish "libs/$pkg/dist" \
                 --registry http://localhost:4873 \
                 --access public \
                 --tag "pr-$PR_NUM"; then
-                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
+                PUBLISHED_PACKAGES+=("$PKG_NAME")
               else
-                echo "Warning: publish failed for $pkg"
-                FAILED_PACKAGES+=("@frontmcp/$pkg")
+                echo "Warning: publish failed for $PKG_NAME"
+                FAILED_PACKAGES+=("$PKG_NAME")
               fi
             fi
           done
@@ -269,13 +287,23 @@ jobs:
 
           ## Usage
 
-          ### Install packages from this registry:
+          ### Install CLI (frontmcp):
+
+          \`\`\`bash
+          # Install globally
+          npm install -g frontmcp@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}
+
+          # Or run directly with npx
+          npx --registry=${{ env.NGROK_URL }} frontmcp@${{ steps.version.outputs.version }}
+          \`\`\`
+
+          ### Install SDK packages:
 
           \`\`\`bash
           npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}
           \`\`\`
 
-          ### Or configure .npmrc:
+          ### Configure .npmrc (for @frontmcp/* packages only):
 
           \`\`\`
           @frontmcp:registry=${{ env.NGROK_URL }}
@@ -287,12 +315,18 @@ jobs:
           npm install @frontmcp/sdk@${{ steps.version.outputs.version }}
           \`\`\`
 
+          **Note:** The \`frontmcp\` CLI is NOT scoped, so .npmrc won't work for it.
+          You must use \`--registry\` flag for the CLI.
+
           ## Available Packages
 
           All packages are published with version \`${{ steps.version.outputs.version }}\`:
 
+          ### CLI (non-scoped)
+          - frontmcp (use with: \`npx frontmcp\` or \`npm install -g frontmcp\`)
+
+          ### SDK Packages (@frontmcp/*)
           - @frontmcp/sdk
-          - @frontmcp/cli
           - @frontmcp/adapters
           - @frontmcp/plugins
           - @frontmcp/ui
@@ -300,6 +334,8 @@ jobs:
           - @frontmcp/di
           - @frontmcp/utils
           - @frontmcp/uipack
+
+          ### Plugin Packages
           - @frontmcp/plugin-approval
           - @frontmcp/plugin-cache
           - @frontmcp/plugin-codecall
@@ -371,6 +407,94 @@ jobs:
           echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
           echo "npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Print install commands
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REGISTRY="${{ env.NGROK_URL }}"
+
+          echo ""
+          echo "============================================"
+          echo "  INSTALL COMMANDS FOR PR TESTING REGISTRY"
+          echo "============================================"
+          echo ""
+          echo "Registry URL: $REGISTRY"
+          echo "Version: $VERSION"
+          echo ""
+          echo "--------------------------------------------"
+          echo "  FRONTMCP CLI (npx frontmcp)"
+          echo "--------------------------------------------"
+          echo ""
+          echo "# Install CLI globally:"
+          echo "npm install -g frontmcp@$VERSION --registry=$REGISTRY"
+          echo ""
+          echo "# Or run directly with npx:"
+          echo "npx --registry=$REGISTRY frontmcp@$VERSION"
+          echo ""
+          echo "# Yarn:"
+          echo "yarn global add frontmcp@$VERSION --registry $REGISTRY"
+          echo ""
+          echo "--------------------------------------------"
+          echo "  NPM INSTALL COMMANDS (@frontmcp/* packages)"
+          echo "--------------------------------------------"
+          echo ""
+          echo "# Install individual packages:"
+          echo "npm install @frontmcp/sdk@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/cli@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/adapters@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/plugins@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/ui@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/testing@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/di@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/utils@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/uipack@$VERSION --registry=$REGISTRY"
+          echo ""
+          echo "# Install plugin packages:"
+          echo "npm install @frontmcp/plugin-approval@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/plugin-cache@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/plugin-codecall@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/plugin-dashboard@$VERSION --registry=$REGISTRY"
+          echo "npm install @frontmcp/plugin-remember@$VERSION --registry=$REGISTRY"
+          echo ""
+          echo "--------------------------------------------"
+          echo "  YARN INSTALL COMMANDS (@frontmcp/* packages)"
+          echo "--------------------------------------------"
+          echo ""
+          echo "# Install individual packages:"
+          echo "yarn add @frontmcp/sdk@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/cli@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/adapters@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/plugins@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/ui@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/testing@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/di@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/utils@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/uipack@$VERSION --registry $REGISTRY"
+          echo ""
+          echo "# Install plugin packages:"
+          echo "yarn add @frontmcp/plugin-approval@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/plugin-cache@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/plugin-codecall@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/plugin-dashboard@$VERSION --registry $REGISTRY"
+          echo "yarn add @frontmcp/plugin-remember@$VERSION --registry $REGISTRY"
+          echo ""
+          echo "--------------------------------------------"
+          echo "  .NPMRC CONFIGURATION"
+          echo "--------------------------------------------"
+          echo ""
+          echo "# For @frontmcp/* scoped packages, add to .npmrc:"
+          echo "@frontmcp:registry=$REGISTRY"
+          echo ""
+          echo "# Then install scoped packages normally:"
+          echo "npm install @frontmcp/sdk@$VERSION"
+          echo ""
+          echo "# NOTE: The 'frontmcp' CLI is NOT scoped, so .npmrc won't work."
+          echo "# You must use --registry flag for the CLI:"
+          echo "npm install -g frontmcp@$VERSION --registry=$REGISTRY"
+          echo "npx --registry=$REGISTRY frontmcp@$VERSION"
+          echo ""
+          echo "============================================"
+          echo ""
 
       - name: Keep registry alive
         run: |

@@ -154,7 +154,8 @@ export {
 export type { DirectMcpServer, DirectAuthContext, DirectCallOptions, DirectRequestMetadata } from './direct';
 
 // In-memory server for MCP SDK Client integration
-export { createInMemoryServer, CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
+export { createInMemoryServer } from './transport';
+export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transport';
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';

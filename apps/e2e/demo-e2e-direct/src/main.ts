@@ -9,16 +9,24 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { NotesApp } from './apps/notes';
 
-const port = parseInt(process.env['PORT'] ?? '3015', 10);
+// Validate port - fallback to 3015 if invalid
+const rawPort = parseInt(process.env['PORT'] ?? '3015', 10);
+const port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 3015;
 
-@FrontMcp({
+/**
+ * Base configuration shared between HTTP server and direct usage.
+ * This ensures consistency and prevents config drift.
+ */
+const baseConfig = {
   info: { name: 'Demo E2E Direct', version: '0.1.0' },
   apps: [NotesApp],
-  logging: { level: LogLevel.Verbose },
+  logging: { level: LogLevel.Verbose, enableConsole: true },
+  auth: { mode: 'public' as const },
+};
+
+@FrontMcp({
+  ...baseConfig,
   http: { port },
-  auth: {
-    mode: 'public',
-  },
 })
 export default class Server {}
 
@@ -26,11 +34,4 @@ export default class Server {}
  * Export the configuration for direct usage testing.
  * This allows tests to import the config directly.
  */
-export const serverConfig = {
-  info: { name: 'Demo E2E Direct', version: '0.1.0' },
-  apps: [NotesApp],
-  logging: { level: LogLevel.Verbose, enableConsole: true },
-  auth: {
-    mode: 'public' as const,
-  },
-};
+export const serverConfig = baseConfig;

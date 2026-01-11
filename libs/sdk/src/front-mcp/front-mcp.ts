@@ -1,4 +1,11 @@
-import { FrontMcpConfigInput, FrontMcpConfigType, FrontMcpInterface, FrontMcpServer, ScopeEntry } from '../common';
+import {
+  FrontMcpConfigInput,
+  FrontMcpConfigType,
+  FrontMcpInterface,
+  FrontMcpServer,
+  ScopeEntry,
+  frontMcpMetadataSchema,
+} from '../common';
 import { ScopeRegistry } from '../scope/scope.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import { createMcpGlobalProviders } from './front-mcp.providers';
@@ -95,7 +102,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const scopes = instance.getScopes();
    */
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const frontMcp = new FrontMcpInstance(options as FrontMcpConfigType);
+    // Parse config through Zod to apply defaults (providers, tools, etc.)
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
   }
@@ -131,12 +140,13 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * ```
    */
   public static async createDirect(options: FrontMcpConfigInput): Promise<DirectMcpServer> {
-    // Create instance without HTTP server
-    const frontMcp = new FrontMcpInstance({
+    // Parse config through Zod to apply defaults, then disable HTTP server
+    const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
       // Disable HTTP server since we're using direct access
       http: undefined,
-    } as FrontMcpConfigType);
+    });
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
     // Get the primary scope
@@ -183,11 +193,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
     const { Server: McpServer } = await import('@modelcontextprotocol/sdk/server/index.js');
 
-    // Create instance without HTTP server
-    const frontMcp = new FrontMcpInstance({
+    // Parse config through Zod to apply defaults, then disable HTTP server
+    const parsedConfig = frontMcpMetadataSchema.parse({
       ...options,
       http: undefined,
-    } as FrontMcpConfigType);
+    });
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
     // Get the primary scope
@@ -238,6 +249,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Register handlers
     const handlers = createMcpHandlers({ scope, serverOptions });
     for (const handler of handlers) {
+      // Cast required: MCP SDK's handler type expects specific context shape,
+      // but our wrapped handlers preserve all context properties via pass-through
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mcpServer.setRequestHandler(handler.requestSchema, handler.handler as any);
     }
@@ -246,13 +259,21 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const transport = new StdioServerTransport();
     await mcpServer.connect(transport);
 
-    // Handle graceful shutdown
+    // Handle graceful shutdown with error handling
     process.on('SIGINT', async () => {
-      await mcpServer.close();
+      try {
+        await mcpServer.close();
+      } catch (err) {
+        console.error('Error closing MCP server:', err);
+      }
       process.exit(0);
     });
     process.on('SIGTERM', async () => {
-      await mcpServer.close();
+      try {
+        await mcpServer.close();
+      } catch (err) {
+        console.error('Error closing MCP server:', err);
+      }
       process.exit(0);
     });
   }

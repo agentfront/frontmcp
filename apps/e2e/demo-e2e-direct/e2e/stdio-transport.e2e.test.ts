@@ -23,8 +23,9 @@ describe('Stdio Transport E2E', () => {
     if (client) {
       try {
         await client.close();
-      } catch {
-        // Ignore close errors
+      } catch (err) {
+        // Log but don't fail test - cleanup errors are often non-critical
+        console.debug('Client cleanup warning:', err);
       }
       client = null;
     }
@@ -33,8 +34,9 @@ describe('Stdio Transport E2E', () => {
     if (transport) {
       try {
         await transport.close();
-      } catch {
-        // Ignore close errors
+      } catch (err) {
+        // Log but don't fail test - process may have already exited
+        console.debug('Transport cleanup warning:', err);
       }
       transport = null;
     }
@@ -49,9 +51,7 @@ describe('Stdio Transport E2E', () => {
     transport = new StdioClientTransport({
       command: 'npx',
       args: ['tsx', entrypointPath],
-      env: {
-        ...process.env,
-      },
+      env: process.env as Record<string, string>,
       cwd: projectPath,
     });
 
@@ -84,6 +84,8 @@ describe('Stdio Transport E2E', () => {
 
     expect(createResult).toBeDefined();
     expect(createResult.isError).not.toBe(true);
+    // Validate response structure
+    expect(createResult.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
 
     // List notes
     const listResult = await client!.callTool({
@@ -93,6 +95,8 @@ describe('Stdio Transport E2E', () => {
 
     expect(listResult).toBeDefined();
     expect(listResult.isError).not.toBe(true);
+    // Validate response structure
+    expect(listResult.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
   }, 30000);
 
   it('should list resources via stdio transport', async () => {

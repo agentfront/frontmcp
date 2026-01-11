@@ -12,7 +12,7 @@
  * - Agent backends with custom invocation
  */
 
-import { FrontMcpInstance, createInMemoryServer, DirectMcpServer } from '@frontmcp/sdk';
+import { FrontMcpInstance, createInMemoryServer, DirectMcpServer, InternalMcpError } from '@frontmcp/sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { serverConfig } from '../src/main';
 import { notesStore } from '../src/apps/notes/data/notes.store';
@@ -179,6 +179,8 @@ describe('Direct Usage E2E', () => {
       it('should throw after dispose', async () => {
         await server.dispose();
 
+        // Verify specific error type and message
+        await expect(server.listTools()).rejects.toThrow(InternalMcpError);
         await expect(server.listTools()).rejects.toThrow('disposed');
       });
     });
@@ -360,7 +362,19 @@ describe('Direct Usage E2E', () => {
       // All should succeed
       results.forEach((result) => {
         expect(result.isError).not.toBe(true);
+        // Validate response structure
+        expect(result.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
       });
+
+      // Verify all IDs are unique (no collision with crypto.randomUUID())
+      const ids = results.map((r) => {
+        const content = r.content[0];
+        if ('text' in content) {
+          return JSON.parse(content.text).id;
+        }
+        return null;
+      });
+      expect(new Set(ids).size).toBe(ids.length); // All unique
 
       await server.dispose();
     });
