@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-config",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Config plugin for FrontMCP - environment variable management with typed access",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
