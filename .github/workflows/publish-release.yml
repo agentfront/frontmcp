@@ -1,0 +1,395 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: true
+        type: choice
+        options:
+          - stable
+          - rc
+          - beta
+        default: stable
+      pre_release_number:
+        description: "Pre-release number (for rc/beta, leave empty for auto-increment)"
+        required: false
+        type: string
+      run_e2e:
+        description: "Run E2E tests before publish (required for pre-releases)"
+        required: false
+        type: boolean
+        default: true
+      dry_run:
+        description: "Dry run (skip actual publish)"
+        required: false
+        type: boolean
+        default: false
+
+  pull_request:
+    types: [closed]
+    branches:
+      - "release/**"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  group: publish-release-${{ github.ref }}
+  cancel-in-progress: false
+
+# =============================================================================
+# JOB 1: PREPARE
+# - Determine version, build all packages, upload artifacts, output matrix
+# =============================================================================
+jobs:
+  prepare:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      NX_DAEMON: "false"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      npm_tag: ${{ steps.version.outputs.npm_tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      release_type: ${{ steps.version.outputs.release_type }}
+      branch: ${{ steps.context.outputs.branch }}
+      release_line: ${{ steps.context.outputs.release_line }}
+      matrix: ${{ steps.matrix.outputs.projects }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: "yarn"
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Determine release context
+        id: context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Get current branch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BRANCH="${GITHUB_REF#refs/heads/}"
+          else
+            BRANCH="${{ github.event.pull_request.base.ref }}"
+          fi
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          # Validate branch is a release branch
+          if [[ ! "$BRANCH" =~ ^release/[0-9]+\.[0-9]+\.x$ ]]; then
+            echo "::error::This workflow must be run from a release/X.Y.x branch. Current branch: $BRANCH"
+            exit 1
+          fi
+
+          # Extract release line (X.Y) from release/X.Y.x
+          RELEASE_LINE=$(echo "$BRANCH" | sed 's/release\/\([0-9]*\.[0-9]*\).*/\1/')
+          echo "release_line=$RELEASE_LINE" >> "$GITHUB_OUTPUT"
+
+          echo "Branch: $BRANCH"
+          echo "Release line: $RELEASE_LINE"
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_LINE="${{ steps.context.outputs.release_line }}"
+          RELEASE_TYPE="${{ inputs.release_type || 'stable' }}"
+          PRE_RELEASE_NUM="${{ inputs.pre_release_number }}"
+
+          # Fetch all tags
+          git fetch --tags
+
+          # Use compute-next-patch script
+          if [ -n "$PRE_RELEASE_NUM" ]; then
+            VERSION=$(node scripts/compute-next-patch.mjs "$RELEASE_LINE" "$RELEASE_TYPE" "$PRE_RELEASE_NUM")
+          else
+            VERSION=$(node scripts/compute-next-patch.mjs "$RELEASE_LINE" "$RELEASE_TYPE")
+          fi
+
+          # Determine if this is a pre-release
+          IS_PRERELEASE="false"
+          NPM_TAG="latest"
+          if [[ "$VERSION" == *"-rc."* ]]; then
+            IS_PRERELEASE="true"
+            NPM_TAG="rc"
+          elif [[ "$VERSION" == *"-beta."* ]]; then
+            IS_PRERELEASE="true"
+            NPM_TAG="beta"
+          fi
+
+          # Check if tag already exists
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag v$VERSION already exists!"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_type=$RELEASE_TYPE" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "npm_tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
+
+          echo "Version: $VERSION"
+          echo "Release type: $RELEASE_TYPE"
+          echo "Is prerelease: $IS_PRERELEASE"
+          echo "NPM tag: $NPM_TAG"
+
+      - name: Resolve projects and build matrix
+        id: matrix
+        run: |
+          # Get synchronized libraries as JSON array for matrix
+          # Use jq -c to compact JSON to single line (avoid multiline GITHUB_OUTPUT issues)
+          PROJECTS_JSON=$(npx nx show projects -p tag:versioning:synchronized --type lib --json 2>/dev/null | jq -c '.' || echo "[]")
+
+          # Fallback if no synchronized tag
+          if [ "$PROJECTS_JSON" = "[]" ] || [ "$PROJECTS_JSON" = "null" ]; then
+            PROJECTS_JSON=$(npx nx show projects --type lib --json 2>/dev/null | jq -c '.' || echo "[]")
+          fi
+
+          echo "projects=$PROJECTS_JSON" >> "$GITHUB_OUTPUT"
+          echo "Projects matrix: $PROJECTS_JSON"
+
+      - name: Update package versions
+        run: |
+          npx nx release version "${{ steps.version.outputs.version }}" \
+            --git-tag=false --git-commit=false
+
+      - name: Commit version bump
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
+            git push origin HEAD
+          fi
+
+      - name: Build all packages
+        run: |
+          PROJECTS=$(echo '${{ steps.matrix.outputs.projects }}' | jq -r 'join(",")')
+          npx nx run-many --targets=build --projects="$PROJECTS" --parallel=5
+
+      - name: Run E2E tests (pre-release gate)
+        if: ${{ (inputs.run_e2e == true || inputs.run_e2e == 'true') && steps.version.outputs.is_prerelease == 'true' }}
+        run: |
+          echo "Running E2E tests for pre-release..."
+          npx nx run-many -t test --projects='demo-e2e-*' --parallel=3
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: |
+            libs/*/dist
+            plugins/*/dist
+          retention-days: 1
+
+      - name: Prepare summary
+        run: |
+          echo "## Prepare Job Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release type | ${{ steps.version.outputs.release_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NPM tag | \`${{ steps.version.outputs.npm_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pre-release | ${{ steps.version.outputs.is_prerelease }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ steps.context.outputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Projects to publish:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ steps.matrix.outputs.projects }}' | jq -r '.[] | "- \(.)"' >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
+  # JOB 2: PUBLISH (Matrix)
+  # - Each package publishes in its own job for independent re-runs
+  # =============================================================================
+  publish:
+    needs: prepare
+    if: ${{ inputs.dry_run != true && inputs.dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout (for .nvmrc)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-packages
+
+      - name: Setup Node for npm publish
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Update npm CLI for OIDC
+        run: npm install -g npm@11.5.1 # Pin to version with proper OIDC publishing support
+
+      - name: Publish ${{ matrix.project }}
+        run: |
+          PROJECT="${{ matrix.project }}"
+          NPM_TAG="${{ needs.prepare.outputs.npm_tag }}"
+
+          # Determine dist path
+          if [ -d "libs/$PROJECT/dist" ]; then
+            DIST_PATH="libs/$PROJECT/dist"
+          elif [ -d "plugins/$PROJECT/dist" ]; then
+            DIST_PATH="plugins/$PROJECT/dist"
+          else
+            echo "::error::No dist found for $PROJECT"
+            exit 1
+          fi
+
+          echo "Publishing $PROJECT from $DIST_PATH with tag $NPM_TAG..."
+          npm publish "$DIST_PATH" --access public --tag "$NPM_TAG"
+
+          echo "✅ Successfully published $PROJECT"
+
+      - name: Job summary
+        if: success()
+        run: |
+          echo "## Published ${{ matrix.project }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** \`${{ needs.prepare.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **NPM tag:** \`${{ needs.prepare.outputs.npm_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
+  # JOB 3: FINALIZE
+  # - Create git tag and GitHub release after all publishes succeed
+  # =============================================================================
+  finalize:
+    needs: [prepare, publish]
+    if: ${{ inputs.dry_run != true && inputs.dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "agentfront[bot]"
+          git config user.email "agentfront[bot]@users.noreply.github.com"
+
+      - name: Create and push git tag
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          TAG="v$VERSION"
+          BRANCH="${{ needs.prepare.outputs.branch }}"
+
+          # Fetch latest to ensure we tag the committed version
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull origin "$BRANCH"
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "Created and pushed tag: $TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: v${{ needs.prepare.outputs.version }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease }}
+          generate_release_notes: true
+          body: |
+            ## Release v${{ needs.prepare.outputs.version }}
+
+            **Release type:** ${{ needs.prepare.outputs.release_type }}
+            **Release line:** ${{ needs.prepare.outputs.release_line }}.x
+            **Branch:** ${{ needs.prepare.outputs.branch }}
+
+            ### Installation
+
+            ```bash
+            npm install @frontmcp/sdk@${{ needs.prepare.outputs.version }}
+            ```
+
+            ${{ needs.prepare.outputs.is_prerelease == 'true' && '> **Note:** This is a pre-release version.' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Final summary
+        run: |
+          echo "## Release Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ needs.prepare.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | \`v${{ needs.prepare.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release type | ${{ needs.prepare.outputs.release_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NPM tag | \`${{ needs.prepare.outputs.npm_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pre-release | ${{ needs.prepare.outputs.is_prerelease }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All packages published successfully!" >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
+  # JOB 4: DRY RUN SUMMARY
+  # - Shows what would be published without actually publishing
+  # =============================================================================
+  dry-run-summary:
+    needs: prepare
+    if: ${{ inputs.dry_run == true || inputs.dry_run == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Dry run summary
+        run: |
+          echo "## Dry Run Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **This was a dry run. No packages were published.**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ needs.prepare.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release type | ${{ needs.prepare.outputs.release_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NPM tag | \`${{ needs.prepare.outputs.npm_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pre-release | ${{ needs.prepare.outputs.is_prerelease }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ needs.prepare.outputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Packages that would be published:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ needs.prepare.outputs.matrix }}' | jq -r '.[] | "- \(.)"' >> "$GITHUB_STEP_SUMMARY"

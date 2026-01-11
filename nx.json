@@ -78,6 +78,14 @@
       "cache": true,
       "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
+    },
+    "@nx/esbuild:esbuild": {
+      "cache": true,
+      "inputs": ["production", "^production"]
+    },
+    "build": {
+      "cache": true,
+      "inputs": ["production", "^production"]
     }
   },
   "release": {

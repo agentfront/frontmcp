@@ -1,42 +1,65 @@
-name: Create release branch (next/{semver})
+name: Create Release Branch (release/X.Y.x)
 
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: "Semver bump"
+      major_version:
+        description: "Major version (X)"
         required: true
-        type: choice
-        options: [patch, minor, major]
-        default: patch
+        type: string
+      minor_version:
+        description: "Minor version (Y)"
+        required: true
+        type: string
+      base_branch:
+        description: "Branch to create from"
+        required: false
+        type: string
+        default: main
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   create:
     runs-on: ubuntu-latest
     environment: release
     env:
-      # Disable Nx daemon in CI for determinism
       NX_DAEMON: "false"
 
     steps:
+      - name: Validate inputs
+        env:
+          MAJOR_VERSION: ${{ inputs.major_version }}
+          MINOR_VERSION: ${{ inputs.minor_version }}
+        run: |
+          if ! [[ "$MAJOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid major version: $MAJOR_VERSION. Must be a number."
+            exit 1
+          fi
+          if ! [[ "$MINOR_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid minor version: $MINOR_VERSION. Must be a number."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # we need tags & history
+          fetch-depth: 0
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version-file: ".nvmrc"
+          node-version: ${{ steps.node-version.outputs.version }}
           cache: "yarn"
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install deps
-        run: yarn
+        run: yarn install --frozen-lockfile
         env:
           npm_config_onnxruntime_node_install_cuda: skip
 
@@ -45,367 +68,121 @@ jobs:
           git config user.name "agentfront[bot]"
           git config user.email "agentfront[bot]@users.noreply.github.com"
 
-      # 🔢 Compute next semver strictly from root package.json + bump input
-      - name: Compute next semver from root package.json
-        id: next
+      - name: Determine branch and version
+        id: branch
+        shell: bash
+        env:
+          MAJOR: ${{ inputs.major_version }}
+          MINOR: ${{ inputs.minor_version }}
+          BASE: ${{ inputs.base_branch }}
+        run: |
+          set -euo pipefail
+
+          # Validate BASE doesn't start with '-' (option injection prevention)
+          if [[ "$BASE" == -* ]]; then
+            echo "::error::Invalid base_branch: cannot start with '-'"
+            exit 1
+          fi
+
+          BRANCH="release/${MAJOR}.${MINOR}.x"
+          VERSION="${MAJOR}.${MINOR}.0"
+          RELEASE_LINE="${MAJOR}.${MINOR}"
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_line=$RELEASE_LINE" >> "$GITHUB_OUTPUT"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+
+          echo "Branch: $BRANCH"
+          echo "Initial version: $VERSION"
+          echo "Release line: $RELEASE_LINE"
+          echo "Base branch: $BASE"
+
+      - name: Check if branch already exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${{ steps.branch.outputs.branch }}"
+
+          git fetch origin --tags
+
+          if git ls-remote --heads origin "$BRANCH" | grep -q .; then
+            echo "::error::Branch $BRANCH already exists!"
+            exit 1
+          fi
+
+          echo "Branch $BRANCH does not exist, proceeding..."
+
+      - name: Create release branch
         shell: bash
         run: |
           set -euo pipefail
 
-          # Run node with BUMP provided as env var
-          NEXT=$(BUMP="${{ inputs.bump }}" node - << 'EOF'
-          const fs = require('fs');
+          BRANCH="${{ steps.branch.outputs.branch }}"
+          BASE="${{ steps.branch.outputs.base }}"
 
-          const bump = (process.env.BUMP || 'patch').trim();
+          # Validate BASE is a real git ref (tags already fetched in previous step)
+          if ! git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
+            echo "::error::Invalid base_branch: '$BASE' does not exist on remote"
+            exit 1
+          fi
 
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          const raw = String(pkg.version || '0.0.0').trim();
+          git fetch origin "$BASE"
+          git checkout -b "$BRANCH" "origin/$BASE"
 
-          const parts = raw.split('.').map((n) => {
-            const v = Number.parseInt(n, 10);
-            return Number.isFinite(v) ? v : 0;
-          });
+          echo "Created branch $BRANCH from $BASE"
 
-          let [M, m, p] = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
-
-          if (bump === 'major') {
-            M += 1;
-            m = 0;
-            p = 0;
-          } else if (bump === 'minor') {
-            m += 1;
-            p = 0;
-          } else {
-            // default: patch
-            p += 1;
-          }
-
-          const next = [M, m, p].join('.');
-          process.stdout.write(next);
-          EOF
-          )
-
-          echo "Next version: $NEXT"
-          echo "value=$NEXT" >> "$GITHUB_OUTPUT"
-
-      - name: Get current and last release versions
+      - name: Get version context
         id: versions
         shell: bash
         run: |
           set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
 
-          # Get last release tag
-          LAST_TAG=$(git tag --list "v*" --sort=-version:refname | head -n1 || echo "")
+          # Get last release tag for archival purposes
+          # Note: exclude pre-release tags (e.g., -rc/-beta) so new-minor detection
+          # doesn't get confused by pre-releases on the target minor.
+          # Wrap grep in command group to handle no matches gracefully under set -euo pipefail
+          LAST_TAG=$(
+            git tag --list "v*" --sort=-version:refname | {
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
+            } | head -n1 || echo ""
+          )
           if [ -n "$LAST_TAG" ]; then
-            # Extract version from tag (remove 'v' prefix)
             LAST_VERSION="${LAST_TAG#v}"
-            # Get minor version (e.g., 0.3 from 0.3.1)
             LAST_MINOR=$(echo "$LAST_VERSION" | awk -F. '{print $1"."$2}')
           else
             LAST_VERSION=""
             LAST_MINOR=""
           fi
 
-          NEXT_MINOR=$(echo "$NEXT" | awk -F. '{print $1"."$2}')
+          NEXT_MINOR="${{ steps.branch.outputs.release_line }}"
 
           echo "last_version=$LAST_VERSION" >> "$GITHUB_OUTPUT"
           echo "last_minor=$LAST_MINOR" >> "$GITHUB_OUTPUT"
-          echo "next_version=$NEXT" >> "$GITHUB_OUTPUT"
           echo "next_minor=$NEXT_MINOR" >> "$GITHUB_OUTPUT"
 
-          echo "Last release: $LAST_VERSION (minor: $LAST_MINOR)"
-          echo "Next release: $NEXT (minor: $NEXT_MINOR)"
+          echo "Last version: $LAST_VERSION (minor: $LAST_MINOR)"
+          echo "Next minor: $NEXT_MINOR"
 
-      - name: Create branch next/${{ steps.next.outputs.value }} from base
-        id: branch
+      - name: Update package versions
         shell: bash
         run: |
           set -euo pipefail
-          BASE="main"
-          NEXT="${{ steps.next.outputs.value }}"
+          VERSION="${{ steps.branch.outputs.version }}"
 
-          git fetch origin "$BASE" --tags
-          git switch -c "next/$NEXT" "origin/$BASE"
+          echo "Updating all synchronized libraries to v$VERSION..."
+          npx nx release version "$VERSION" --git-tag=false --git-commit=false
 
-          echo "Created branch next/$NEXT from $BASE"
-          echo "name=next/$NEXT" >> "$GITHUB_OUTPUT"
-
-      # ========================================
-      # STEP 1: Identify affected independent libraries
-      # ========================================
-      - name: Identify affected independent libraries
-        id: independent
+      - name: Create release docs base marker
         shell: bash
         run: |
-          set -euo pipefail
+          # Store the SHA of the base branch for future diff calculations
+          # This allows trigger-docs-update.yml to calculate proper diffs
+          BASE_SHA=$(git rev-parse "origin/${{ steps.branch.outputs.base }}")
+          echo "$BASE_SHA" > .release-docs-base
+          echo "Created .release-docs-base marker with SHA: $BASE_SHA"
 
-          # Get all independent libraries
-          ALL_INDEPENDENT=$(node -e "
-            const { execSync } = require('child_process');
-            try {
-              const out = execSync('npx nx show projects -p tag:versioning:independent --type lib --json', { encoding: 'utf8' });
-              const arr = JSON.parse(out);
-              process.stdout.write(arr.join(','));
-            } catch (e) {
-              process.stdout.write('');
-            }
-          ")
-
-          if [ -z "$ALL_INDEPENDENT" ]; then
-            echo 'independent_projects=' >> "$GITHUB_OUTPUT"
-            echo "No independent libraries found"
-            exit 0
-          fi
-
-          echo "All independent libs: $ALL_INDEPENDENT"
-
-          # Get affected libraries (changed since last release)
-          LAST_TAG="${{ steps.versions.outputs.last_version }}"
-          if [ -n "$LAST_TAG" ]; then
-            LAST_TAG="v$LAST_TAG"
-          else
-            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-
-          AFFECTED=$(node -e "
-            const { execSync } = require('child_process');
-            try {
-              const out = execSync('npx nx show projects --affected --base=\"${LAST_TAG}\" --type lib --json', { encoding: 'utf8' });
-              const arr = JSON.parse(out);
-              process.stdout.write(arr.join(','));
-            } catch (e) {
-              process.stdout.write('');
-            }
-          ")
-
-          # Find intersection: affected AND independent
-          AFFECTED_INDEPENDENT=$(node -e "
-            const all = '$ALL_INDEPENDENT'.split(',').filter(Boolean);
-            const affected = '$AFFECTED'.split(',').filter(Boolean);
-            const intersection = all.filter(lib => affected.includes(lib));
-            process.stdout.write(intersection.join(','));
-          ")
-
-          echo "independent_projects=$AFFECTED_INDEPENDENT" >> "$GITHUB_OUTPUT"
-          if [ -n "$AFFECTED_INDEPENDENT" ]; then
-            echo "Affected independent libs: $AFFECTED_INDEPENDENT"
-          else
-            echo "No affected independent libraries"
-          fi
-
-      # ========================================
-      # STEP 2: Use Codex to analyze independent libs
-      # ========================================
-      - name: Prepare context for Codex lib analysis
-        if: ${{ steps.independent.outputs.independent_projects != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .github/codex/lib-analysis
-
-          INDEPENDENT="${{ steps.independent.outputs.independent_projects }}"
-          LAST_TAG="${{ steps.versions.outputs.last_version }}"
-          if [ -n "$LAST_TAG" ]; then
-            LAST_TAG="v$LAST_TAG"
-          else
-            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          TODAY=$(date -u +"%Y-%m-%d")
-
-          # Collect changes for all independent libraries
-          IFS=',' read -ra LIBS <<< "$INDEPENDENT"
-          LIBS_DATA=""
-
-          for lib in "${LIBS[@]}"; do
-            DIFF=$(git diff "$LAST_TAG"...HEAD -- "libs/$lib" 2>/dev/null || echo "")
-            COMMITS=$(git log "$LAST_TAG"...HEAD --oneline -- "libs/$lib" 2>/dev/null || echo "")
-
-            if [ -z "$DIFF" ] && [ -z "$COMMITS" ]; then
-              continue
-            fi
-
-            CURRENT_VERSION=$(node -e "console.log(require('./libs/$lib/package.json').version)")
-
-            LIBS_DATA+="
-          ================================================================================
-          LIBRARY: $lib
-          CURRENT VERSION: $CURRENT_VERSION
-          ================================================================================
-
-          COMMITS:
-          $COMMITS
-
-          DIFF (truncated to 8000 chars):
-          ${DIFF:0:8000}
-
-          "
-          done
-
-          # Create single prompt for all libraries
-          cat > .github/codex/lib-analysis/prompt.md <<EOF
-          IMPORTANT: You MUST ONLY analyze the libraries explicitly listed below. Do NOT explore the codebase or include any other libraries.
-
-          Analyze the following independent libraries and determine:
-          1. The appropriate semantic version bump (MAJOR/MINOR/PATCH)
-          2. A changelog entry for each library
-
-          Today's date: $TODAY
-
-          Semantic Versioning Rules:
-          - MAJOR: Breaking changes, incompatible API changes
-          - MINOR: New features, backwards-compatible functionality additions
-          - PATCH: Backwards-compatible bug fixes, documentation, refactoring, minor improvements
-
-          CRITICAL: Return the library name EXACTLY as shown in the "LIBRARY:" field below (the folder name like "sdk", NOT the npm package name like "@frontmcp/sdk").
-
-          Libraries to analyze (ONLY these, no others):
-          $LIBS_DATA
-
-          For each library listed above, respond with:
-          - name: The EXACT folder name from the "LIBRARY:" field (e.g., "sdk", "adapters", "cli")
-          - bump: major, minor, or patch
-          - changelog: Starting with ## [NEW_VERSION] - $TODAY and including appropriate sections
-
-          DO NOT include any libraries not listed above.
-          EOF
-
-          # Create output schema
-          cat > .github/codex/lib-analysis/schema.json <<'SCHEMA'
-          {
-            "type": "object",
-            "properties": {
-              "libraries": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string" },
-                    "bump": { "type": "string", "enum": ["major", "minor", "patch"] },
-                    "changelog": { "type": "string", "minLength": 10 }
-                  },
-                  "required": ["name", "bump", "changelog"],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "required": ["libraries"],
-            "additionalProperties": false
-          }
-          SCHEMA
-
-      - name: Run Codex to analyze independent libraries
-        if: ${{ steps.independent.outputs.independent_projects != '' }}
-        id: codex_libs
-        uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.CODEX_OPENAI_KEY }}
-          prompt-file: .github/codex/lib-analysis/prompt.md
-          output-file: .github/codex/lib-analysis/results.json
-          sandbox: read-only
-          safety-strategy: drop-sudo
-          output-schema-file: .github/codex/lib-analysis/schema.json
-
-      # ========================================
-      # STEP 3: Apply all version bumps
-      # ========================================
-      - name: Bump synchronized libraries
-        shell: bash
-        run: |
-          set -euo pipefail
-          BUMP="${{ inputs.bump }}"
-
-          echo "Bumping all synchronized libraries ($BUMP version bump)..."
-          # Use Nx native release versioning - includes both libs/* and plugins/*
-          # --git-tag=false: Don't create git tags (done in publish workflow)
-          # --git-commit=false: Don't commit (we commit everything together later)
-          npx nx release version "$BUMP" --git-tag=false --git-commit=false
-
-      - name: Bump independent libraries and write changelogs
-        if: ${{ steps.independent.outputs.independent_projects != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RESULTS_FILE=".github/codex/lib-analysis/results.json"
-          if [ ! -f "$RESULTS_FILE" ]; then
-            echo "No Codex results found, skipping independent lib bumps"
-            exit 0
-          fi
-
-          # Get the list of valid independent libraries for validation
-          VALID_LIBS="${{ steps.independent.outputs.independent_projects }}"
-
-          # Process each library from Codex results
-          LIBS_COUNT=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries.length)")
-
-          for ((i=0; i<LIBS_COUNT; i++)); do
-            RAW_LIB_NAME=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].name)")
-            BUMP_TYPE=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].bump)")
-            CHANGELOG_ENTRY=$(node -e "const data=require('./${RESULTS_FILE}'); console.log(data.libraries[$i].changelog)")
-
-            # Normalize library name: handle @frontmcp/name, @scope/name, or plain name formats
-            LIB_NAME=$(node -e "
-              const raw = '$RAW_LIB_NAME';
-              // Remove @scope/ prefix if present (e.g., @frontmcp/sdk -> sdk)
-              let name = raw.replace(/^@[^/]+\//, '');
-              // Handle special case: 'frontmcp (CLI)' -> 'cli'
-              if (raw.toLowerCase().includes('cli')) name = 'cli';
-              // Handle 'frontmcp' -> 'cli' (the CLI package name)
-              if (name === 'frontmcp') name = 'cli';
-              console.log(name);
-            ")
-
-            echo "================================"
-            echo "Processing: $RAW_LIB_NAME (normalized: $LIB_NAME)"
-            echo "Bump: $BUMP_TYPE"
-            echo "================================"
-
-            # Validate that this library is in the independent libs list
-            if ! echo ",$VALID_LIBS," | grep -q ",$LIB_NAME,"; then
-              echo "⚠️  Skipping $LIB_NAME - not in independent libraries list: $VALID_LIBS"
-              continue
-            fi
-
-            # Validate that the library directory exists
-            if [ ! -d "libs/$LIB_NAME" ]; then
-              echo "⚠️  Skipping $LIB_NAME - directory libs/$LIB_NAME does not exist"
-              continue
-            fi
-
-            # Bump version
-            node scripts/bump-version.mjs "$LIB_NAME" "$BUMP_TYPE"
-
-            # Get new version after bump
-            NEW_VERSION=$(node -e "console.log(require('./libs/${LIB_NAME}/package.json').version)")
-            CHANGELOG_PATH="libs/$LIB_NAME/CHANGELOG.md"
-
-            echo "Writing CHANGELOG for $LIB_NAME v$NEW_VERSION..."
-
-            if [ -f "$CHANGELOG_PATH" ]; then
-              # Prepend to existing changelog
-              echo "$CHANGELOG_ENTRY" > "$CHANGELOG_PATH.new"
-              echo "" >> "$CHANGELOG_PATH.new"
-              cat "$CHANGELOG_PATH" >> "$CHANGELOG_PATH.new"
-              mv "$CHANGELOG_PATH.new" "$CHANGELOG_PATH"
-            else
-              # Create new changelog
-              cat > "$CHANGELOG_PATH" <<CLEOF
-          # Changelog
-
-          All notable changes to $LIB_NAME will be documented in this file.
-
-          $CHANGELOG_ENTRY
-          CLEOF
-            fi
-
-            echo "✓ Bumped $LIB_NAME to $NEW_VERSION and updated CHANGELOG"
-          done
-
-      # ========================================
-      # STEP 4: Archive docs and publish draft to live
-      # ========================================
-      - name: Archive and publish docs
+      - name: Archive and publish docs (new minor version only)
         shell: bash
         run: |
           set -euo pipefail
@@ -420,90 +197,68 @@ jobs:
 
           # Only archive and publish if this is a new minor version
           if [ "$LAST_MINOR" = "$NEXT_MINOR" ]; then
-            echo "Same minor version ($NEXT_MINOR), skipping docs archival and publishing"
+            echo "Same minor version ($NEXT_MINOR), skipping docs archival"
             exit 0
           fi
 
-          echo "Running archive and publish docs script..."
-          node scripts/archive-and-publish-docs.mjs "$LAST_MINOR" "$NEXT_MINOR"
+          if [ -f "scripts/archive-and-publish-docs.mjs" ]; then
+            echo "Running archive and publish docs script..."
+            node scripts/archive-and-publish-docs.mjs "$LAST_MINOR" "$NEXT_MINOR"
+          else
+            echo "Archive docs script not found, skipping"
+          fi
 
-      # ========================================
-      # STEP 5: Commit all changes
-      # ========================================
       - name: Commit release preparation
         shell: bash
         run: |
           set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
 
-          # Check if there are changes
+          VERSION="${{ steps.branch.outputs.version }}"
+          BRANCH="${{ steps.branch.outputs.branch }}"
+
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
 
-            # Create detailed commit message
             cat > /tmp/commit-msg <<COMMITMSG
-          chore(release): prepare v$NEXT
+          chore(release): initialize $BRANCH at v$VERSION
 
-          - Bump synchronized libs to v$NEXT
-          - Bump independent libs (Codex-analyzed)
-          - Update CHANGELOGs for independent libs
-          - Archive v${{ steps.versions.outputs.last_minor }} docs to docs/live/docs/v/${{ steps.versions.outputs.last_minor }}
-          - Publish draft docs to live (docs/draft → docs/live)
-          - Update docs/live/docs.json versioning
+          - Set all synchronized libs to v$VERSION
+          - Create .release-docs-base marker for docs diffing
+          - Archive previous docs (if new minor version)
 
-          Note: updates.mdx will be updated by Codex workflow
+          This is a long-lived release branch for the ${BRANCH#release/} series.
+          Hotfixes and patches will be published from this branch.
           COMMITMSG
 
             git commit -F /tmp/commit-msg
-            echo "✓ Created release preparation commit"
+            echo "Created release preparation commit"
           else
             echo "No changes to commit"
-            git commit --allow-empty -m "chore(release): prepare v$NEXT"
+            git commit --allow-empty -m "chore(release): initialize $BRANCH at v$VERSION"
           fi
 
-      # 🚫 Push ONLY the branch, NOT tags – tags will be created & pushed by the publish workflow on merge
-      - name: Push branch (no tags)
+      - name: Push release branch
         shell: bash
         run: |
           set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
-          git push --set-upstream origin "next/$NEXT"
+          BRANCH="${{ steps.branch.outputs.branch }}"
 
-      # Open PR main <- next/{semver} with title v{semver}
-      - name: Open PR for next/${{ steps.next.outputs.value }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh CLI will use this
-        shell: bash
-        run: |
-          set -euo pipefail
-          NEXT="${{ steps.next.outputs.value }}"
-          BASE="main"
-          HEAD="next/$NEXT"
-          TITLE="v$NEXT"
-
-          echo "Checking for existing PR from $HEAD to $BASE..."
-          EXISTING_PR=$(gh pr list \
-            --base "$BASE" \
-            --head "$HEAD" \
-            --state open \
-            --json number \
-            --jq '.[0].number' || echo "")
-
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR #$EXISTING_PR already exists for $HEAD -> $BASE. Skipping creation."
-            exit 0
-          fi
-
-          echo "Creating PR: $TITLE ($HEAD -> $BASE)"
-          gh pr create \
-            --base "$BASE" \
-            --head "$HEAD" \
-            --title "$TITLE" \
-            --body "Release $TITLE"
+          git push --set-upstream origin "$BRANCH"
+          echo "Pushed branch $BRANCH"
 
       - name: Summary
         run: |
-          echo "✅ Created branch: next/${{ steps.next.outputs.value }}"
-          echo "➡️  Bump: ${{ inputs.bump }}"
-          echo "📦 PR title: v${{ steps.next.outputs.value }}"
+          echo "## Release Branch Created" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ steps.branch.outputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Initial version | \`${{ steps.branch.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release line | \`${{ steps.branch.outputs.release_line }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Base branch | \`${{ steps.branch.outputs.base }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Open PRs targeting \`${{ steps.branch.outputs.branch }}\` for hotfixes" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Use **Publish Release** workflow to publish versions" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. Cherry-picks to main will be prompted automatically" >> "$GITHUB_STEP_SUMMARY"
