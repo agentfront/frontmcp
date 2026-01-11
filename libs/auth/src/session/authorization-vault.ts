@@ -822,18 +822,18 @@ export class InMemoryAuthorizationVault implements AuthorizationVault {
     if (!entry) return false;
 
     // If consent is not enabled, always allow
-    if (!entry.consent?.enabled) {
+    const consent = entry.consent;
+    if (!consent?.enabled) {
       return true;
     }
 
     // If toolIds provided, check if any match consent selection
     if (toolIds && toolIds.length > 0) {
-      return toolIds.some((toolId) => entry.consent!.selectedToolIds.includes(toolId));
+      return toolIds.some((toolId) => consent.selectedToolIds.includes(toolId));
     }
 
     // Check if any tool for this app is in consent selection
-    const consentedToolIds = entry.consent.selectedToolIds;
-    return consentedToolIds.some((toolId) => toolId.startsWith(`${appId}:`));
+    return consent.selectedToolIds.some((toolId) => toolId.startsWith(`${appId}:`));
   }
 
   async invalidateCredential(vaultId: string, appId: string, providerId: string, reason: string): Promise<void> {
@@ -933,8 +933,13 @@ export class RedisAuthorizationVault implements AuthorizationVault {
     const data = await this.redis.get(this.key(id));
     if (!data) return null;
 
-    const entry = JSON.parse(data) as AuthorizationVaultEntry;
-    return entry;
+    try {
+      const entry = JSON.parse(data) as AuthorizationVaultEntry;
+      return entry;
+    } catch {
+      // Corrupted data in Redis - treat as missing entry
+      return null;
+    }
   }
 
   async update(id: string, updates: Partial<AuthorizationVaultEntry>): Promise<void> {
@@ -1164,18 +1169,18 @@ export class RedisAuthorizationVault implements AuthorizationVault {
     if (!entry) return false;
 
     // If consent is not enabled, always allow
-    if (!entry.consent?.enabled) {
+    const consent = entry.consent;
+    if (!consent?.enabled) {
       return true;
     }
 
     // If toolIds provided, check if any match consent selection
     if (toolIds && toolIds.length > 0) {
-      return toolIds.some((toolId) => entry.consent!.selectedToolIds.includes(toolId));
+      return toolIds.some((toolId) => consent.selectedToolIds.includes(toolId));
     }
 
     // Check if any tool for this app is in consent selection
-    const consentedToolIds = entry.consent.selectedToolIds;
-    return consentedToolIds.some((toolId) => toolId.startsWith(`${appId}:`));
+    return consent.selectedToolIds.some((toolId) => toolId.startsWith(`${appId}:`));
   }
 
   async invalidateCredential(vaultId: string, appId: string, providerId: string, reason: string): Promise<void> {

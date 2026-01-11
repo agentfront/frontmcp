@@ -50,13 +50,17 @@ export class TokenVault {
   }
 
   rotateTo(k: VaultKey) {
+    // Validate key is a 32-byte Uint8Array (required for AES-256-GCM)
+    if (!(k.key instanceof Uint8Array) || k.key.length !== 32) {
+      throw new Error(`TokenVault key "${k.kid}" must be a 32-byte Uint8Array for AES-256-GCM`);
+    }
     this.active = k;
     this.keys.set(k.kid, k.key);
   }
 
   async encrypt(plaintext: string, opts?: { exp?: number; meta?: Record<string, unknown> }): Promise<EncBlob> {
     const iv = randomBytes(12);
-    const { ciphertext, tag } = await encryptAesGcm(this.active.key, iv, new TextEncoder().encode(plaintext));
+    const { ciphertext, tag } = await encryptAesGcm(this.active.key, new TextEncoder().encode(plaintext), iv);
 
     return {
       alg: 'A256GCM',
