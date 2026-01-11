@@ -2,6 +2,15 @@ name: On Push
 
 on:
   push:
+    branches:
+      - main
+      - "next/**"
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - "next/**"
+      - "release/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

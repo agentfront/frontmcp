@@ -70,7 +70,7 @@ export NPM_CONFIG_USERCONFIG="$ROOT_DIR/.npmrc.e2e"
 # Build all packages (including dependencies: di, utils, uipack, individual plugins)
 echo "🔨 Building packages..."
 cd "$ROOT_DIR"
-npx nx run-many -t build --projects=di,utils,uipack,sdk,ui,adapters,plugin-cache,plugin-codecall,plugin-dashboard,plugin-remember,plugins,testing,cli --parallel=5
+npx nx run-many -t build --projects=di,utils,uipack,sdk,ui,adapters,plugin-cache,plugin-codecall,plugin-config,plugin-dashboard,plugin-remember,plugins,testing,cli --parallel=5
 
 # Clean old storage to avoid version conflicts
 rm -rf "$E2E_DIR/storage"
@@ -97,7 +97,7 @@ for pkg in "${LIBS_PACKAGES[@]}"; do
 done
 
 # Then publish individual plugins (required before meta-package)
-PLUGIN_PACKAGES=("plugin-cache" "plugin-codecall" "plugin-dashboard" "plugin-remember")
+PLUGIN_PACKAGES=("plugin-cache" "plugin-codecall" "plugin-config" "plugin-dashboard" "plugin-remember")
 for pkg in "${PLUGIN_PACKAGES[@]}"; do
   echo "  Publishing plugins/$pkg..."
   if [ -d "plugins/$pkg/dist" ]; then
