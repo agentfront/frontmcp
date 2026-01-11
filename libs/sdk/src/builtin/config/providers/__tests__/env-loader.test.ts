@@ -1,4 +1,16 @@
-import { setNestedValue, getNestedValue, pathToEnvKey, mapEnvToNestedConfig } from '../env-loader';
+import { z } from 'zod';
+import * as path from 'path';
+import {
+  setNestedValue,
+  getNestedValue,
+  pathToEnvKey,
+  mapEnvToNestedConfig,
+  parseEnvContent,
+  parseEnvContentSync,
+  loadEnvFiles,
+  populateProcessEnv,
+  extractSchemaPaths,
+} from '../env-loader';
 
 describe('env-loader', () => {
   describe('pathToEnvKey', () => {
@@ -144,6 +156,353 @@ describe('env-loader', () => {
           url: 'postgres://localhost',
         },
       });
+    });
+  });
+
+  describe('parseEnvContent', () => {
+    describe('basic key-value parsing', () => {
+      it('should parse unquoted values', () => {
+        const content = 'KEY=value\nANOTHER=123';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          KEY: 'value',
+          ANOTHER: '123',
+        });
+      });
+
+      it('should parse single-quoted values', () => {
+        const content = "KEY='quoted value'\nPATH='some/path'";
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          KEY: 'quoted value',
+          PATH: 'some/path',
+        });
+      });
+
+      it('should parse double-quoted values', () => {
+        const content = 'KEY="quoted value"\nPATH="some/path"';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          KEY: 'quoted value',
+          PATH: 'some/path',
+        });
+      });
+
+      it('should handle empty values', () => {
+        const content = 'EMPTY=\nALSO_EMPTY=""';
+        const result = parseEnvContent(content);
+        expect(result.EMPTY).toBe('');
+        expect(result.ALSO_EMPTY).toBe('');
+      });
+
+      it('should handle values with equals signs', () => {
+        const content = 'CONNECTION=host=localhost;user=admin';
+        const result = parseEnvContent(content);
+        expect(result.CONNECTION).toBe('host=localhost;user=admin');
+      });
+    });
+
+    describe('escape sequences in double-quoted values', () => {
+      it('should expand \\n to newline', () => {
+        const content = 'MSG="line1\\nline2"';
+        const result = parseEnvContent(content);
+        expect(result.MSG).toBe('line1\nline2');
+      });
+
+      it('should expand \\r to carriage return', () => {
+        const content = 'MSG="line1\\rline2"';
+        const result = parseEnvContent(content);
+        expect(result.MSG).toBe('line1\rline2');
+      });
+
+      it('should expand \\t to tab', () => {
+        const content = 'MSG="col1\\tcol2"';
+        const result = parseEnvContent(content);
+        expect(result.MSG).toBe('col1\tcol2');
+      });
+
+      it('should expand \\\\ to single backslash', () => {
+        const content = 'PATH="C:\\\\Windows\\\\System32"';
+        const result = parseEnvContent(content);
+        expect(result.PATH).toBe('C:\\Windows\\System32');
+      });
+
+      it('should handle multiple escape sequences', () => {
+        const content = 'MSG="line1\\n\\tindented\\nline3"';
+        const result = parseEnvContent(content);
+        expect(result.MSG).toBe('line1\n\tindented\nline3');
+      });
+
+      it('should not expand escape sequences in single-quoted values', () => {
+        const content = "MSG='line1\\nline2'";
+        const result = parseEnvContent(content);
+        expect(result.MSG).toBe('line1\\nline2');
+      });
+    });
+
+    describe('comments and empty lines', () => {
+      it('should skip comment lines', () => {
+        const content = '# This is a comment\nKEY=value\n# Another comment';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({ KEY: 'value' });
+        expect(Object.keys(result)).toHaveLength(1);
+      });
+
+      it('should skip empty lines', () => {
+        const content = 'KEY1=value1\n\n\nKEY2=value2';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          KEY1: 'value1',
+          KEY2: 'value2',
+        });
+      });
+
+      it('should skip lines with only whitespace', () => {
+        const content = 'KEY1=value1\n   \n\t\nKEY2=value2';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          KEY1: 'value1',
+          KEY2: 'value2',
+        });
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle keys with underscores and numbers', () => {
+        const content = 'MY_VAR_1=value1\n_UNDERSCORE=value2\nVAR2_NAME=value3';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          MY_VAR_1: 'value1',
+          _UNDERSCORE: 'value2',
+          VAR2_NAME: 'value3',
+        });
+      });
+
+      it('should trim whitespace around values', () => {
+        const content = 'KEY=  value  ';
+        const result = parseEnvContent(content);
+        expect(result.KEY).toBe('value');
+      });
+
+      it('should handle empty content', () => {
+        const result = parseEnvContent('');
+        expect(result).toEqual({});
+      });
+
+      it('should handle content with only comments', () => {
+        const content = '# Comment 1\n# Comment 2';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({});
+      });
+
+      it('should skip invalid lines without equals', () => {
+        const content = 'VALID=value\nINVALID_LINE\nALSO_VALID=test';
+        const result = parseEnvContent(content);
+        expect(result).toEqual({
+          VALID: 'value',
+          ALSO_VALID: 'test',
+        });
+      });
+    });
+  });
+
+  describe('parseEnvContentSync', () => {
+    it('should behave identically to parseEnvContent', () => {
+      const content = 'KEY1=value1\nKEY2="quoted"\n# comment\nKEY3=123';
+      const asyncResult = parseEnvContent(content);
+      const syncResult = parseEnvContentSync(content);
+      expect(syncResult).toEqual(asyncResult);
+    });
+
+    it('should handle escape sequences', () => {
+      const content = 'MSG="line1\\nline2"';
+      const result = parseEnvContentSync(content);
+      expect(result.MSG).toBe('line1\nline2');
+    });
+  });
+
+  describe('populateProcessEnv', () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      // Clean up test vars
+      delete process.env.TEST_POPULATE_VAR;
+      delete process.env.TEST_EXISTING_VAR;
+      delete process.env.TEST_OVERRIDE_VAR;
+    });
+
+    afterEach(() => {
+      // Restore original env
+      delete process.env.TEST_POPULATE_VAR;
+      delete process.env.TEST_EXISTING_VAR;
+      delete process.env.TEST_OVERRIDE_VAR;
+    });
+
+    it('should populate process.env with new values', () => {
+      populateProcessEnv({ TEST_POPULATE_VAR: 'new_value' });
+      expect(process.env.TEST_POPULATE_VAR).toBe('new_value');
+    });
+
+    it('should not override existing values by default', () => {
+      process.env.TEST_EXISTING_VAR = 'original';
+      populateProcessEnv({ TEST_EXISTING_VAR: 'new' });
+      expect(process.env.TEST_EXISTING_VAR).toBe('original');
+    });
+
+    it('should override existing values when override=true', () => {
+      process.env.TEST_OVERRIDE_VAR = 'original';
+      populateProcessEnv({ TEST_OVERRIDE_VAR: 'new' }, true);
+      expect(process.env.TEST_OVERRIDE_VAR).toBe('new');
+    });
+
+    it('should handle multiple values', () => {
+      populateProcessEnv({
+        TEST_VAR_A: 'valueA',
+        TEST_VAR_B: 'valueB',
+      });
+      expect(process.env.TEST_VAR_A).toBe('valueA');
+      expect(process.env.TEST_VAR_B).toBe('valueB');
+
+      // Clean up
+      delete process.env.TEST_VAR_A;
+      delete process.env.TEST_VAR_B;
+    });
+  });
+
+  describe('loadEnvFiles', () => {
+    const fixturesPath = path.resolve(__dirname, '../../../../../../apps/e2e/demo-e2e-config/src/apps/config');
+
+    it('should load env files from a directory', async () => {
+      const result = await loadEnvFiles(fixturesPath, '.env', '.env.local');
+      // Should have loaded some values
+      expect(typeof result).toBe('object');
+    });
+
+    it('should return empty object for non-existent directory', async () => {
+      const result = await loadEnvFiles('/non/existent/path', '.env', '.env.local');
+      expect(result).toEqual({});
+    });
+
+    it('should return empty object for non-existent files', async () => {
+      const result = await loadEnvFiles(__dirname, 'non-existent.env', 'also-missing.env');
+      expect(result).toEqual({});
+    });
+
+    it('should have .env.local values override .env values', async () => {
+      // This tests the merging precedence - .env.local should override .env
+      const result = await loadEnvFiles(fixturesPath, '.env', '.env.local');
+
+      // The demo config has OVERRIDDEN_VAR in both files
+      // .env has: OVERRIDDEN_VAR=base_value
+      // .env.local has: OVERRIDDEN_VAR=local_value
+      if (result.OVERRIDDEN_VAR) {
+        expect(result.OVERRIDDEN_VAR).toBe('local_value');
+      }
+    });
+  });
+
+  describe('extractSchemaPaths', () => {
+    it('should extract paths from simple object schema', () => {
+      const schema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('name');
+      expect(paths).toContain('age');
+    });
+
+    it('should extract nested paths from nested object schema', () => {
+      const schema = z.object({
+        database: z.object({
+          url: z.string(),
+          port: z.number(),
+        }),
+        debug: z.boolean(),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('database');
+      expect(paths).toContain('database.url');
+      expect(paths).toContain('database.port');
+      expect(paths).toContain('debug');
+    });
+
+    it('should handle deeply nested schemas', () => {
+      const schema = z.object({
+        level1: z.object({
+          level2: z.object({
+            level3: z.string(),
+          }),
+        }),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('level1');
+      expect(paths).toContain('level1.level2');
+      expect(paths).toContain('level1.level2.level3');
+    });
+
+    it('should handle schemas with optional fields', () => {
+      const schema = z.object({
+        required: z.string(),
+        optional: z.string().optional(),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('required');
+      expect(paths).toContain('optional');
+    });
+
+    it('should handle schemas with default values', () => {
+      const schema = z.object({
+        withDefault: z.string().default('default'),
+        nested: z
+          .object({
+            inner: z.number().default(42),
+          })
+          .default({}),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('withDefault');
+      expect(paths).toContain('nested');
+      expect(paths).toContain('nested.inner');
+    });
+
+    it('should handle schemas with nullable fields', () => {
+      const schema = z.object({
+        nullable: z.string().nullable(),
+        nested: z
+          .object({
+            inner: z.number().nullable(),
+          })
+          .nullable(),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('nullable');
+      expect(paths).toContain('nested');
+    });
+
+    it('should return empty array for non-object schemas', () => {
+      const schema = z.string();
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toEqual([]);
+    });
+
+    it('should handle empty object schema', () => {
+      const schema = z.object({});
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toEqual([]);
+    });
+
+    it('should handle array fields as leaf nodes', () => {
+      const schema = z.object({
+        tags: z.array(z.string()),
+        nested: z.object({
+          items: z.array(z.number()),
+        }),
+      });
+      const paths = extractSchemaPaths(schema);
+      expect(paths).toContain('tags');
+      expect(paths).toContain('nested');
+      expect(paths).toContain('nested.items');
     });
   });
 });

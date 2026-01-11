@@ -165,9 +165,9 @@ export function generateEnvFallbacks(key: string, context: ConfigResolutionConte
   const normalizedKey = normalizeNameForEnv(key);
 
   return [
-    `${normalizedType}_${normalizedName}_${normalizedKey}`, // AGENTS_RESEARCH_AGENT_OPENAI_KEY
-    `${normalizedType}_${normalizedKey}`, // AGENTS_OPENAI_KEY
-    normalizedKey, // OPENAI_KEY
+    `${normalizedType}_${normalizedName}_${normalizedKey}`, // e.g., AGENTS_RESEARCH_AGENT_OPENAIKEY (via normalizeNameForEnv)
+    `${normalizedType}_${normalizedKey}`, // e.g., AGENTS_OPENAIKEY (via normalizeNameForEnv)
+    normalizedKey, // e.g., OPENAIKEY (via normalizeNameForEnv)
   ];
 }
 

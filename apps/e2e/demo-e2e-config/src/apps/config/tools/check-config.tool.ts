@@ -7,13 +7,15 @@ const inputSchema = z
   })
   .strict();
 
-const outputSchema = z.object({
-  key: z.string(),
-  exists: z.boolean(),
-  isNumber: z.boolean(),
-  numberValue: z.number().nullable(),
-  booleanValue: z.boolean().nullable(),
-});
+const outputSchema = z
+  .object({
+    key: z.string(),
+    exists: z.boolean(),
+    isNumber: z.boolean(),
+    numberValue: z.number().nullable(),
+    booleanValue: z.boolean().nullable(),
+  })
+  .strict();
 
 type Input = z.infer<typeof inputSchema>;
 type Output = z.infer<typeof outputSchema>;
