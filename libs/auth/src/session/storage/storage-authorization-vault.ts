@@ -374,17 +374,18 @@ export class StorageAuthorizationVault implements AuthorizationVault {
     if (!entry) return false;
 
     // If consent is not enabled, always allow
-    if (!entry.consent?.enabled) {
+    const consent = entry.consent;
+    if (!consent?.enabled) {
       return true;
     }
 
     // If toolIds provided, check if any match consent selection
     if (toolIds && toolIds.length > 0) {
-      return toolIds.some((toolId) => entry.consent!.selectedToolIds.includes(toolId));
+      return toolIds.some((toolId) => consent.selectedToolIds.includes(toolId));
     }
 
     // Check if any tool for this app is in consent selection
-    const consentedToolIds = entry.consent.selectedToolIds;
+    const consentedToolIds = consent.selectedToolIds;
     return consentedToolIds.some((toolId) => toolId.startsWith(`${appId}:`));
   }
 

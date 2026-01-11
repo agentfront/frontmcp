@@ -38,7 +38,11 @@ export class StorageError extends Error {
  * ```
  */
 export class StorageConnectionError extends StorageError {
-  constructor(message: string, cause?: Error, public readonly backend?: string) {
+  constructor(
+    message: string,
+    cause?: Error,
+    public readonly backend?: string,
+  ) {
     super(message, cause);
     this.name = 'StorageConnectionError';
   }
@@ -58,7 +62,12 @@ export class StorageConnectionError extends StorageError {
  * ```
  */
 export class StorageOperationError extends StorageError {
-  constructor(public readonly operation: string, public readonly key: string, message: string, cause?: Error) {
+  constructor(
+    public readonly operation: string,
+    public readonly key: string,
+    message: string,
+    cause?: Error,
+  ) {
     super(`${operation} failed for key "${key}": ${message}`, cause);
     this.name = 'StorageOperationError';
   }
@@ -77,7 +86,11 @@ export class StorageOperationError extends StorageError {
  * ```
  */
 export class StorageNotSupportedError extends StorageError {
-  constructor(public readonly operation: string, public readonly backend: string, suggestion?: string) {
+  constructor(
+    public readonly operation: string,
+    public readonly backend: string,
+    suggestion?: string,
+  ) {
     const msg = suggestion
       ? `${operation} is not supported by ${backend}. ${suggestion}`
       : `${operation} is not supported by ${backend}`;
@@ -98,7 +111,10 @@ export class StorageNotSupportedError extends StorageError {
  * ```
  */
 export class StorageConfigError extends StorageError {
-  constructor(public readonly backend: string, message: string) {
+  constructor(
+    public readonly backend: string,
+    message: string,
+  ) {
     super(`Invalid ${backend} configuration: ${message}`);
     this.name = 'StorageConfigError';
   }
@@ -113,7 +129,10 @@ export class StorageConfigError extends StorageError {
  * ```
  */
 export class StorageTTLError extends StorageError {
-  constructor(public readonly ttl: unknown, message?: string) {
+  constructor(
+    public readonly ttl: unknown,
+    message?: string,
+  ) {
     super(message ?? `Invalid TTL value: ${ttl}. TTL must be a positive integer.`);
     this.name = 'StorageTTLError';
   }
@@ -131,7 +150,10 @@ export class StorageTTLError extends StorageError {
  * ```
  */
 export class StoragePatternError extends StorageError {
-  constructor(public readonly pattern: string, message: string) {
+  constructor(
+    public readonly pattern: string,
+    message: string,
+  ) {
     super(`Invalid pattern "${pattern}": ${message}`);
     this.name = 'StoragePatternError';
   }

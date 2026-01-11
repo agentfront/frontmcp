@@ -1025,6 +1025,11 @@ export class RedisAuthorizationVault implements AuthorizationVault {
     const pendingAuth = entry.pendingAuths.find((p) => p.id === pendingAuthId);
     if (pendingAuth) {
       pendingAuth.status = 'completed';
+
+      // Persist the status change before authorizeApp (which reloads the entry)
+      await this.redis.set(this.key(vaultId), JSON.stringify(entry));
+
+      // Auto-authorize the app
       await this.authorizeApp(vaultId, pendingAuth.appId);
     }
   }

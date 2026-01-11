@@ -29,9 +29,24 @@ export class TokenVault {
     if (!Array.isArray(keys) || keys.length === 0) {
       throw new Error('TokenVault requires at least one key');
     }
-    // first is active by convention
+
+    // Validate all keys before storing
+    for (const k of keys) {
+      // Validate key is a 32-byte Uint8Array (required for AES-256-GCM)
+      if (!(k.key instanceof Uint8Array) || k.key.length !== 32) {
+        throw new Error(`TokenVault key "${k.kid}" must be a 32-byte Uint8Array for AES-256-GCM`);
+      }
+
+      // Check for duplicate kid values
+      if (this.keys.has(k.kid)) {
+        throw new Error(`TokenVault duplicate kid: "${k.kid}"`);
+      }
+
+      this.keys.set(k.kid, k.key);
+    }
+
+    // First key is active by convention
     this.active = keys[0];
-    for (const k of keys) this.keys.set(k.kid, k.key);
   }
 
   rotateTo(k: VaultKey) {
@@ -55,6 +70,14 @@ export class TokenVault {
   }
 
   async decrypt(blob: EncBlob): Promise<string> {
+    // Check expiration first (exp is epoch seconds, undefined means non-expiring)
+    if (blob.exp !== undefined) {
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (nowSeconds > blob.exp) {
+        throw new Error(`vault_expired:${blob.kid}`);
+      }
+    }
+
     const key = this.keys.get(blob.kid);
     if (!key) throw new Error(`vault_unknown_kid:${blob.kid}`);
 
