@@ -270,16 +270,16 @@ describe('OpenapiAdapter - Utilities', () => {
   });
 
   describe('parseResponse', () => {
-    it('should parse JSON responses', async () => {
+    it('should parse JSON responses with structured format', async () => {
       const mockData = { id: 'user-123', name: 'John' };
       const response = await mockFetchSuccess(mockData);
 
       const result = await parseResponse(response);
 
-      expect(result).toEqual({ data: mockData });
+      expect(result).toEqual({ status: 200, ok: true, data: mockData });
     });
 
-    it('should handle text responses', async () => {
+    it('should handle text responses with structured format', async () => {
       const response = {
         ok: true,
         status: 200,
@@ -289,10 +289,10 @@ describe('OpenapiAdapter - Utilities', () => {
 
       const result = await parseResponse(response);
 
-      expect(result).toEqual({ data: 'Hello World' });
+      expect(result).toEqual({ status: 200, ok: true, data: 'Hello World' });
     });
 
-    it('should handle invalid JSON gracefully', async () => {
+    it('should handle invalid JSON gracefully with structured format', async () => {
       const response = {
         ok: true,
         status: 200,
@@ -303,28 +303,64 @@ describe('OpenapiAdapter - Utilities', () => {
       // Invalid JSON should be returned as text without logging to console
       const result = await parseResponse(response);
 
-      expect(result).toEqual({ data: 'not valid json{' });
+      expect(result).toEqual({ status: 200, ok: true, data: 'not valid json{' });
     });
 
-    it('should throw error for HTTP errors', async () => {
+    it('should return structured error for HTTP 404', async () => {
       const response = await mockFetchError(404, 'Not Found');
 
-      // Note: statusText is NOT included in error message for security (could leak sensitive info)
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 404/);
+      const result = await parseResponse(response);
+
+      expect(result).toEqual({
+        status: 404,
+        ok: false,
+        data: 'Not Found',
+        error: 'Not Found',
+      });
     });
 
-    it('should throw error for 401 Unauthorized', async () => {
+    it('should return structured error for 401 Unauthorized', async () => {
       const response = await mockFetchError(401, 'Unauthorized');
 
-      // Note: statusText is NOT included in error message for security (could leak sensitive info)
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 401/);
+      const result = await parseResponse(response);
+
+      expect(result).toEqual({
+        status: 401,
+        ok: false,
+        data: 'Unauthorized',
+        error: 'Unauthorized',
+      });
     });
 
-    it('should throw error for 500 Internal Server Error', async () => {
+    it('should return structured error for 500 Internal Server Error', async () => {
       const response = await mockFetchError(500, 'Internal Server Error');
 
-      // Note: statusText is NOT included in error message for security (could leak sensitive info)
-      await expect(parseResponse(response)).rejects.toThrow(/API request failed: 500/);
+      const result = await parseResponse(response);
+
+      expect(result).toEqual({
+        status: 500,
+        ok: false,
+        data: 'Internal Server Error',
+        error: 'Internal Server Error',
+      });
+    });
+
+    it('should extract error message from JSON response body', async () => {
+      const response = {
+        ok: false,
+        status: 400,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: () => Promise.resolve(JSON.stringify({ message: 'Invalid input parameter' })),
+      } as Response;
+
+      const result = await parseResponse(response);
+
+      expect(result).toEqual({
+        status: 400,
+        ok: false,
+        data: { message: 'Invalid input parameter' },
+        error: 'Invalid input parameter',
+      });
     });
   });
 });

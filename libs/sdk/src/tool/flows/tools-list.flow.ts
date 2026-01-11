@@ -39,7 +39,13 @@ const stateSchema = z.object({
   ),
 });
 
-type ResponseToolItem = z.infer<typeof outputSchema>['tools'][number];
+/** Base response tool item from MCP SDK */
+type BaseResponseToolItem = z.infer<typeof outputSchema>['tools'][number];
+
+/** Extended response tool item that includes outputSchema (MCP spec supports this) */
+type ResponseToolItem = BaseResponseToolItem & {
+  outputSchema?: Record<string, unknown>;
+};
 
 // TODO: add support for pagination
 // TODO: add support for session based tools
@@ -286,6 +292,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           annotations: tool.metadata.annotations,
           inputSchema,
         };
+
+        // Add outputSchema if available (from OpenAPI tools or explicit rawOutputSchema)
+        const outputSchemaRaw = tool.getRawOutputSchema?.();
+        if (outputSchemaRaw) {
+          item.outputSchema = outputSchemaRaw;
+        }
 
         // Add _meta for tools with UI configuration
         // OpenAI platforms use openai/* keys, other platforms use ui/* keys only

@@ -39,6 +39,21 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // Convert JSON Schema to Zod schema for input validation
   const schemaResult = getZodSchemaFromJsonSchema(openapiTool.inputSchema, openapiTool.name, logger);
 
+  // Build output schema from OpenAPI response definitions
+  // mcp-from-openapi generates outputSchema from response definitions
+  // Wrap with status for consistent response format
+  const baseOutputSchema = openapiTool.outputSchema ?? { type: 'string' };
+  const wrappedOutputSchema: JsonSchema = {
+    type: 'object',
+    properties: {
+      status: { type: 'number', description: 'HTTP status code' },
+      ok: { type: 'boolean', description: 'Whether the response was successful' },
+      data: baseOutputSchema as JsonSchema,
+      error: { type: 'string', description: 'Error message for non-ok responses' },
+    },
+    required: ['status', 'ok'],
+  };
+
   // Build tool metadata with transforms applied
   // Priority: OpenAPI x-frontmcp → toolTransforms (adapter can override spec)
   const toolMetadata: Record<string, unknown> = {
@@ -47,6 +62,8 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     description: openapiTool.description,
     inputSchema: schemaResult.schema.shape || {},
     rawInputSchema: openapiTool.inputSchema,
+    // Add output schema for tool/list to expose
+    rawOutputSchema: wrappedOutputSchema,
   };
 
   // Track schema conversion failure in metadata for debugging
@@ -189,8 +206,37 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         signal: controller.signal,
       });
 
-      // 10. Parse and return response
-      return await parseResponse(response, { maxResponseSize: options.maxResponseSize });
+      // 10. Parse response (returns structured OpenApiResponse)
+      const apiResponse = await parseResponse(response, { maxResponseSize: options.maxResponseSize });
+
+      // 11. Convert non-ok responses to MCP error format
+      if (!apiResponse.ok) {
+        // Return MCP error format with status in _meta
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                status: apiResponse.status,
+                error: apiResponse.error,
+                data: apiResponse.data,
+              }),
+            },
+          ],
+          isError: true,
+          _meta: {
+            status: apiResponse.status,
+            errorCode: 'OPENAPI_ERROR',
+          },
+        };
+      }
+
+      // 12. Return successful response with status
+      return {
+        status: apiResponse.status,
+        ok: true,
+        data: apiResponse.data,
+      };
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);

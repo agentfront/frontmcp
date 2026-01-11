@@ -202,20 +202,30 @@ export interface ParseResponseOptions {
 const DEFAULT_MAX_RESPONSE_SIZE = 10 * 1024 * 1024;
 
 /**
- * Parse API response based on content type
+ * Structured response from OpenAPI tool execution.
+ * Always includes status and ok flag for consistent error handling.
+ */
+export interface OpenApiResponse {
+  /** HTTP status code */
+  status: number;
+  /** Whether the response was successful (2xx status) */
+  ok: boolean;
+  /** Response data (parsed JSON or text) */
+  data?: unknown;
+  /** Error message for non-ok responses */
+  error?: string;
+}
+
+/**
+ * Parse API response based on content type.
+ * Returns structured response with status code - does NOT throw on error responses.
  *
  * @param response - Fetch response
  * @param options - Optional parsing options
- * @returns Parsed response data
+ * @returns Structured response with status, ok flag, and data or error
  */
-export async function parseResponse(response: Response, options?: ParseResponseOptions): Promise<{ data: unknown }> {
+export async function parseResponse(response: Response, options?: ParseResponseOptions): Promise<OpenApiResponse> {
   const maxSize = options?.maxResponseSize ?? DEFAULT_MAX_RESPONSE_SIZE;
-
-  // Check for error responses FIRST - don't expose response body in error
-  // Only include status code, not statusText (which could contain sensitive info)
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
-  }
 
   // Check Content-Length header first to avoid loading huge responses
   const contentLength = response.headers.get('content-length');
@@ -242,17 +252,40 @@ export async function parseResponse(response: Response, options?: ParseResponseO
     throw new Error(`Response size (${byteSize} bytes) exceeds maximum allowed (${maxSize} bytes)`);
   }
 
-  // Parse JSON responses - use case-insensitive check
+  // Parse response body
   const contentType = response.headers.get('content-type');
+  let data: unknown;
+
   if (contentType?.toLowerCase().includes('application/json')) {
     try {
-      return { data: JSON.parse(text) };
+      data = JSON.parse(text);
     } catch {
       // Invalid JSON, return as text (don't log to console in production)
-      return { data: text };
+      data = text;
     }
+  } else {
+    // Return text for non-JSON responses
+    data = text;
   }
 
-  // Return text for non-JSON responses
-  return { data: text };
+  // Return structured response - don't throw on error status codes
+  if (!response.ok) {
+    return {
+      status: response.status,
+      ok: false,
+      data,
+      error:
+        typeof data === 'object' && data !== null && 'message' in data
+          ? String((data as { message: unknown }).message)
+          : typeof data === 'string'
+          ? data
+          : `HTTP ${response.status} error`,
+    };
+  }
+
+  return {
+    status: response.status,
+    ok: true,
+    data,
+  };
 }
