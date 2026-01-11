@@ -16,7 +16,7 @@ import type {
   ListResourceTemplatesResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import type { DirectMcpServer, DirectCallOptions, DirectAuthContext } from './direct.types';
+import type { DirectMcpServer, DirectCallOptions, DirectAuthContext, DirectRequestMetadata } from './direct.types';
 import type { Scope } from '../scope/scope.instance';
 import { FlowControl } from '../common';
 import { InternalMcpError } from '../errors';
@@ -32,18 +32,27 @@ function buildAuthInfo(authContext?: DirectAuthContext, defaultSessionId?: strin
 
   // Build minimal auth info - flows handle missing fields gracefully
   const sessionId = authContext?.sessionId ?? defaultSessionId ?? `direct:${randomUUID()}`;
-  const token = authContext?.token ?? '';
-  const user = authContext?.user ? { sub: authContext.user.sub ?? 'direct', ...authContext.user } : { sub: 'direct' };
+  // UserClaim requires both 'iss' (issuer) and 'sub' (subject)
+  const user = authContext?.user
+    ? { iss: 'direct', sub: authContext.user.sub ?? 'direct', ...authContext.user }
+    : { iss: 'direct', sub: 'direct' };
+  const clientId = user.sub ?? 'direct';
 
-  // Cast via unknown to bypass strict type checking - flows handle missing fields gracefully
-  return {
-    token,
+  // Build auth info object, only including token if provided
+  const authInfo: Partial<AuthInfo> = {
     sessionId,
     user,
     scopes: [],
-    clientId: user.sub ?? 'direct',
+    clientId,
     extra: authContext?.extra,
-  } as unknown as Partial<AuthInfo>;
+  };
+
+  // Only add token if explicitly provided (don't coerce to empty string)
+  if (authContext?.token !== undefined) {
+    authInfo.token = authContext.token;
+  }
+
+  return authInfo;
 }
 
 /**
@@ -66,9 +75,15 @@ export class DirectMcpServerImpl implements DirectMcpServer {
    * Build the MCP handler context that flows expect.
    * This simulates what the transport layer creates from HTTP request.
    */
-  private buildHandlerContext(options?: DirectCallOptions): { authInfo?: Partial<AuthInfo> } {
+  private buildHandlerContext(options?: DirectCallOptions): {
+    authInfo?: Partial<AuthInfo>;
+    metadata?: DirectRequestMetadata;
+  } {
     const authInfo = buildAuthInfo(options?.authContext, this.defaultSessionId);
-    return { authInfo };
+    return {
+      authInfo,
+      metadata: options?.metadata,
+    };
   }
 
   /**
@@ -87,6 +102,8 @@ export class DirectMcpServerImpl implements DirectMcpServer {
 
     try {
       // All MCP operations go through the standard flow system
+      // Cast required: flowName is a string but runFlowForOutput expects specific flow type union.
+      // The flow names used here are all valid MCP flow names from the SDK.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return await this.scope.runFlowForOutput(flowName as any, { request, ctx });
     } catch (e) {
@@ -95,8 +112,9 @@ export class DirectMcpServerImpl implements DirectMcpServer {
         if (e.type === 'respond') {
           return e.output as T;
         }
-        // For other flow control types, throw an error
-        throw new InternalMcpError(`Flow ended with: ${e.type}`);
+        // For other flow control types (fail, abort), include details in error
+        const details = e.output ? `: ${JSON.stringify(e.output)}` : '';
+        throw new InternalMcpError(`Flow ended with ${e.type}${details}`);
       }
       throw e;
     }

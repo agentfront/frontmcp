@@ -137,35 +137,54 @@ jobs:
 
       - name: Install ngrok via npm
         run: |
-          npm install -g ngrok
+          # Use official @ngrok/ngrok package with pinned version
+          npm install -g @ngrok/ngrok@1.5.2
+
+      - name: Validate ngrok domain input
+        if: ${{ inputs.ngrok_domain != '' }}
+        run: |
+          DOMAIN="${{ inputs.ngrok_domain }}"
+          # Validate domain format: only allow alphanumeric, dots, and hyphens
+          if ! [[ "$DOMAIN" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]]; then
+            echo "::error::Invalid ngrok domain format. Only alphanumeric characters, dots, and hyphens are allowed."
+            exit 1
+          fi
+          # Reject dangerous characters that could enable command injection
+          if [[ "$DOMAIN" =~ [\;\|\&\<\>\"\'\`\$\(\)\{\}\[\]\\] ]]; then
+            echo "::error::Invalid characters in ngrok domain."
+            exit 1
+          fi
+          echo "Domain validation passed: $DOMAIN"
 
       - name: Start ngrok tunnel
         id: ngrok
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-          NGROK_DOMAIN: ${{ inputs.ngrok_domain }}
         run: |
           # Configure auth token if available (optional but recommended for stable URLs)
           if [ -n "${NGROK_AUTH_TOKEN:-}" ]; then
             echo "Configuring ngrok with auth token..."
-            npx ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+            npx @ngrok/ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
           else
             echo "::warning::NGROK_AUTH_TOKEN not configured. Using ngrok without authentication (random URLs, rate limits may apply)."
           fi
 
-          # Build ngrok command with optional domain
-          NGROK_CMD="npx ngrok http 4873"
-          if [ -n "${NGROK_DOMAIN:-}" ]; then
+          # Build ngrok arguments array (safe from injection)
+          NGROK_ARGS=("http" "4873" "--log=stdout")
+
+          # Add domain if provided (already validated above)
+          NGROK_DOMAIN="${{ inputs.ngrok_domain }}"
+          if [ -n "${NGROK_DOMAIN}" ]; then
             if [ -z "${NGROK_AUTH_TOKEN:-}" ]; then
               echo "::error::Custom domain requires NGROK_AUTH_TOKEN to be configured"
               exit 1
             fi
             echo "Using custom domain: $NGROK_DOMAIN"
-            NGROK_CMD="$NGROK_CMD --domain=$NGROK_DOMAIN"
+            NGROK_ARGS+=("--domain=$NGROK_DOMAIN")
           fi
 
-          # Start ngrok
-          $NGROK_CMD --log=stdout > /tmp/ngrok.log 2>&1 &
+          # Start ngrok using array expansion (prevents injection)
+          npx @ngrok/ngrok "${NGROK_ARGS[@]}" > /tmp/ngrok.log 2>&1 &
           echo $! > /tmp/ngrok-pid
 
           # Wait for ngrok to start and get URL
@@ -232,8 +251,13 @@ jobs:
           LIBS_PACKAGES=(di utils uipack sdk ui adapters testing cli plugins)
           for pkg in "${LIBS_PACKAGES[@]}"; do
             if [ -d "libs/$pkg/dist" ]; then
-              # Get actual package name from package.json
-              PKG_NAME=$(jq -r '.name' "libs/$pkg/dist/package.json" 2>/dev/null || echo "@frontmcp/$pkg")
+              # Get actual package name from package.json, handling null/empty cases
+              PKG_NAME_RAW=$(jq -r '.name // empty' "libs/$pkg/dist/package.json" 2>/dev/null)
+              if [ -z "$PKG_NAME_RAW" ] || [ "$PKG_NAME_RAW" = "null" ]; then
+                PKG_NAME="@frontmcp/$pkg"
+              else
+                PKG_NAME="$PKG_NAME_RAW"
+              fi
               echo "Publishing $PKG_NAME@$VERSION..."
               if npm publish "libs/$pkg/dist" \
                 --registry http://localhost:4873 \
@@ -444,9 +468,8 @@ jobs:
           echo "  NPM INSTALL COMMANDS (@frontmcp/* packages)"
           echo "--------------------------------------------"
           echo ""
-          echo "# Install individual packages:"
+          echo "# Install SDK and core packages:"
           echo "npm install @frontmcp/sdk@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/cli@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/adapters@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/plugins@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/ui@$VERSION --registry=$REGISTRY"
@@ -466,9 +489,8 @@ jobs:
           echo "  YARN INSTALL COMMANDS (@frontmcp/* packages)"
           echo "--------------------------------------------"
           echo ""
-          echo "# Install individual packages:"
+          echo "# Install SDK and core packages:"
           echo "yarn add @frontmcp/sdk@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/cli@$VERSION --registry $REGISTRY"
           echo "yarn add @frontmcp/adapters@$VERSION --registry $REGISTRY"
           echo "yarn add @frontmcp/plugins@$VERSION --registry $REGISTRY"
           echo "yarn add @frontmcp/ui@$VERSION --registry $REGISTRY"

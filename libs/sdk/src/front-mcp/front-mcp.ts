@@ -13,6 +13,7 @@ import LoggerRegistry from '../logger/logger.registry';
 import { DirectMcpServerImpl } from '../direct';
 import type { DirectMcpServer } from '../direct';
 import type { Scope } from '../scope/scope.instance';
+import { InternalMcpError } from '../errors';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -152,7 +153,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Get the primary scope
     const scopes = frontMcp.getScopes();
     if (scopes.length === 0) {
-      throw new Error('No scopes initialized. Ensure at least one app is configured.');
+      throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
     }
 
     // Return a DirectMcpServer wrapping the first scope
@@ -204,7 +205,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Get the primary scope
     const scopes = frontMcp.getScopes();
     if (scopes.length === 0) {
-      throw new Error('No scopes initialized. Ensure at least one app is configured.');
+      throw new InternalMcpError('No scopes initialized. Ensure at least one app is configured.');
     }
     const scope = scopes[0] as Scope;
 

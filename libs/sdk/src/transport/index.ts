@@ -29,7 +29,8 @@ export { SSEServerTransport, SSEServerTransportOptions } from './legacy/legacy.s
 
 // Transport types
 export { SupportedTransport } from './adapters/transport.local.adapter';
-export { TransportType, TransportKey } from './transport.types';
+// Type-only exports for TransportType and TransportKey (interfaces/type aliases)
+export type { TransportType, TransportKey } from './transport.types';
 
 /**
  * Creates an in-memory MCP server for programmatic access without HTTP transport.
