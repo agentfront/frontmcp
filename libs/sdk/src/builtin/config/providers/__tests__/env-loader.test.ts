@@ -370,9 +370,11 @@ describe('env-loader', () => {
   });
 
   describe('loadEnvFiles', () => {
-    // Path to demo-e2e-config root where .env files exist
-    // From __dirname (libs/sdk/src/builtin/config/providers/__tests__) need 7 levels up to reach project root
-    const fixturesPath = path.resolve(__dirname, '../../../../../../../apps/e2e/demo-e2e-config');
+    // Construct path to demo-e2e-config fixtures using explicit segments
+    // __dirname = libs/sdk/src/builtin/config/providers/__tests__
+    // Project root = 7 levels up, then into apps/e2e/demo-e2e-config
+    const projectRoot = path.join(__dirname, '..', '..', '..', '..', '..', '..', '..');
+    const fixturesPath = path.join(projectRoot, 'apps', 'e2e', 'demo-e2e-config');
 
     it('should load env files from a directory', async () => {
       const result = await loadEnvFiles(fixturesPath, '.env', '.env.local');

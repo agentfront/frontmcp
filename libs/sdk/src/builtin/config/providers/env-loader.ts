@@ -69,9 +69,9 @@ export function parseEnvContent(content: string): Record<string, string> {
  * @returns Record of merged environment variables
  */
 export async function loadEnvFiles(
-  basePath: string = process.cwd(),
-  envPath: string = '.env',
-  localEnvPath: string = '.env.local',
+  basePath = process.cwd(),
+  envPath = '.env',
+  localEnvPath = '.env.local',
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
 
@@ -107,7 +107,7 @@ export function parseEnvContentSync(content: string): Record<string, string> {
  * @param env - Environment variables to populate
  * @param override - Whether to override existing values (default: false)
  */
-export function populateProcessEnv(env: Record<string, string>, override: boolean = false): void {
+export function populateProcessEnv(env: Record<string, string>, override = false): void {
   for (const [key, value] of Object.entries(env)) {
     if (override || process.env[key] === undefined) {
       process.env[key] = value;

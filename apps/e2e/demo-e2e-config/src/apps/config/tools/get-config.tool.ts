@@ -26,8 +26,10 @@ type Output = z.infer<typeof outputSchema>;
 })
 export default class GetConfigTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: Input): Promise<Output> {
-    const value = this.config.get(input.key, input.defaultValue);
     const found = this.config.has(input.key);
+    // Use default value only if provided, otherwise get raw value
+    const value =
+      input.defaultValue !== undefined ? this.config.get(input.key, input.defaultValue) : this.config.get(input.key);
 
     return {
       key: input.key,
