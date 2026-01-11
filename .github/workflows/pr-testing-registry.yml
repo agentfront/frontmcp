@@ -196,7 +196,13 @@ jobs:
         run: |
           PR_NUM="${{ inputs.pr_number }}"
           SHA="${{ steps.pr-info.outputs.sha }}"
-          VERSION="0.0.0-pr.${PR_NUM}.${SHA}"
+
+          # Get current version from SDK package (the main package)
+          CURRENT_VERSION=$(jq -r '.version' libs/sdk/package.json)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Create PR version based on current version: e.g., 0.7.2-pr.205.00cc1a6
+          VERSION="${CURRENT_VERSION}-pr.${PR_NUM}.${SHA}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "PR Version: $VERSION"
 
