@@ -15,16 +15,18 @@ import {
 import 'reflect-metadata';
 import { z } from 'zod';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
-import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
-import type { JSONWebKeySet } from 'jose';
 import {
+  JwksService,
+  ProviderVerifyRef,
+  VerifyResult,
   buildPrmUrl,
   buildUnauthorizedHeader,
   buildInvalidTokenHeader,
   buildInsufficientScopeHeader,
   validateAudience,
   deriveExpectedAudience,
-} from '../utils';
+} from '@frontmcp/auth';
+import type { JSONWebKeySet } from 'jose';
 import {
   PublicAuthorization,
   TransparentAuthorization,

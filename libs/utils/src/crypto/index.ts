@@ -296,3 +296,31 @@ export {
   clearCachedSecret,
   isSecretCached,
 } from './secret-persistence';
+
+// Re-export unified key persistence utilities (recommended)
+export {
+  // Types
+  type BaseKeyData,
+  type SecretKeyData,
+  type AsymmetricKeyData,
+  type AnyKeyData,
+  type KeyPersistenceOptions,
+  type CreateKeyPersistenceOptions,
+  type CreateSecretOptions,
+  type CreateAsymmetricOptions,
+  type KeyValidationResult,
+  // Schemas
+  asymmetricAlgSchema,
+  secretKeyDataSchema,
+  asymmetricKeyDataSchema,
+  anyKeyDataSchema,
+  validateKeyData,
+  parseKeyData,
+  isSecretKeyData,
+  isAsymmetricKeyData,
+  // Main class
+  KeyPersistence,
+  // Factory functions
+  createKeyPersistence,
+  createKeyPersistenceWithStorage,
+} from './key-persistence';

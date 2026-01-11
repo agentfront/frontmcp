@@ -19,7 +19,7 @@ import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
-import { JwksService } from '../jwks';
+import { JwksService } from '@frontmcp/auth';
 import {
   AuthorizationStore,
   InMemoryAuthorizationStore,
@@ -93,7 +93,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     return this.authorizationStore;
   }
 
-  constructor(private scope: ScopeEntry, private providers: ProviderRegistry, options: LocalPrimaryAuthOptions) {
+  constructor(
+    private scope: ScopeEntry,
+    private providers: ProviderRegistry,
+    options: LocalPrimaryAuthOptions,
+  ) {
     super(options);
     this.logger = this.providers.getActiveScope().logger.child('LocalPrimaryAuth');
     this.port = this.providers.getActiveScope().metadata.http?.port ?? 3001;

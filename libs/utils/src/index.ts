@@ -111,7 +111,7 @@ export {
   DEFAULT_CODE_VERIFIER_LENGTH,
   PkceError,
   type PkcePair,
-  // Secret persistence utilities
+  // Secret persistence utilities (legacy)
   type SecretData,
   type SecretPersistenceOptions,
   type SecretValidationResult,
@@ -128,6 +128,27 @@ export {
   getOrCreateSecret,
   clearCachedSecret,
   isSecretCached,
+  // Unified key persistence (recommended)
+  type BaseKeyData,
+  type SecretKeyData,
+  type AsymmetricKeyData,
+  type AnyKeyData,
+  type KeyPersistenceOptions,
+  type CreateKeyPersistenceOptions,
+  type CreateSecretOptions,
+  type CreateAsymmetricOptions,
+  type KeyValidationResult,
+  asymmetricAlgSchema,
+  secretKeyDataSchema,
+  asymmetricKeyDataSchema,
+  anyKeyDataSchema,
+  validateKeyData,
+  parseKeyData,
+  isSecretKeyData,
+  isAsymmetricKeyData,
+  KeyPersistence,
+  createKeyPersistence,
+  createKeyPersistenceWithStorage,
 } from './crypto';
 
 // Safe regex utilities (ReDoS prevention)
@@ -199,6 +220,8 @@ export {
   RedisStorageAdapter,
   VercelKvStorageAdapter,
   UpstashStorageAdapter,
+  FileSystemStorageAdapter,
+  type FileSystemAdapterOptions,
   // Utilities
   globToRegex,
   matchesPattern,

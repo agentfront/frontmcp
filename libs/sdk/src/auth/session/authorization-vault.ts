@@ -153,6 +153,71 @@ export const customCredentialSchema = z.object({
 });
 
 /**
+ * SSH Key credential - for SSH-based authentication
+ */
+export const sshKeyCredentialSchema = z.object({
+  type: z.literal('ssh_key'),
+  /** Private key (PEM format) */
+  privateKey: z.string().min(1),
+  /** Public key (optional, can be derived from private key) */
+  publicKey: z.string().optional(),
+  /** Passphrase if private key is encrypted */
+  passphrase: z.string().optional(),
+  /** Key type */
+  keyType: z.enum(['rsa', 'ed25519', 'ecdsa', 'dsa']).default('ed25519'),
+  /** Key fingerprint (SHA256 hash) */
+  fingerprint: z.string().optional(),
+  /** Username for SSH connections */
+  username: z.string().optional(),
+});
+
+/**
+ * Service Account credential - for cloud provider service accounts (GCP, AWS, Azure)
+ */
+export const serviceAccountCredentialSchema = z.object({
+  type: z.literal('service_account'),
+  /** Cloud provider */
+  provider: z.enum(['gcp', 'aws', 'azure', 'custom']),
+  /** Raw credentials (JSON key file content, access keys, etc.) */
+  credentials: z.record(z.string(), z.unknown()),
+  /** Project/Account ID */
+  projectId: z.string().optional(),
+  /** Region for regional services */
+  region: z.string().optional(),
+  /** AWS: Role ARN to assume */
+  assumeRoleArn: z.string().optional(),
+  /** AWS: External ID for cross-account access */
+  externalId: z.string().optional(),
+  /** Service account email (GCP) or ARN (AWS) */
+  serviceAccountId: z.string().optional(),
+  /** Expiration timestamp for temporary credentials */
+  expiresAt: z.number().optional(),
+});
+
+/**
+ * PKCE OAuth credential - OAuth 2.0 with PKCE for public clients
+ */
+export const pkceOAuthCredentialSchema = z.object({
+  type: z.literal('oauth_pkce'),
+  /** Access token */
+  accessToken: z.string(),
+  /** Refresh token (optional) */
+  refreshToken: z.string().optional(),
+  /** Token type (usually 'Bearer') */
+  tokenType: z.string().default('Bearer'),
+  /** Token expiration timestamp (epoch ms) */
+  expiresAt: z.number().optional(),
+  /** Granted scopes */
+  scopes: z.array(z.string()).default([]),
+  /** ID token for OIDC (optional) */
+  idToken: z.string().optional(),
+  /** Code verifier used in PKCE flow (stored for refresh) */
+  codeVerifier: z.string().optional(),
+  /** Authorization server issuer */
+  issuer: z.string().optional(),
+});
+
+/**
  * Union of all credential types
  */
 export const credentialSchema = z.discriminatedUnion('type', [
@@ -163,6 +228,9 @@ export const credentialSchema = z.discriminatedUnion('type', [
   privateKeyCredentialSchema,
   mtlsCredentialSchema,
   customCredentialSchema,
+  sshKeyCredentialSchema,
+  serviceAccountCredentialSchema,
+  pkceOAuthCredentialSchema,
 ]);
 
 export type OAuthCredential = z.infer<typeof oauthCredentialSchema>;
@@ -172,6 +240,9 @@ export type BearerCredential = z.infer<typeof bearerCredentialSchema>;
 export type PrivateKeyCredential = z.infer<typeof privateKeyCredentialSchema>;
 export type MtlsCredential = z.infer<typeof mtlsCredentialSchema>;
 export type CustomCredential = z.infer<typeof customCredentialSchema>;
+export type SshKeyCredential = z.infer<typeof sshKeyCredentialSchema>;
+export type ServiceAccountCredential = z.infer<typeof serviceAccountCredentialSchema>;
+export type PkceOAuthCredential = z.infer<typeof pkceOAuthCredentialSchema>;
 export type Credential = z.infer<typeof credentialSchema>;
 
 // ============================================

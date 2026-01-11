@@ -53,7 +53,9 @@ export {
   RedisStorageAdapter,
   VercelKvStorageAdapter,
   UpstashStorageAdapter,
+  FileSystemStorageAdapter,
 } from './adapters';
+export type { FileSystemAdapterOptions } from './adapters';
 
 // Utilities (for advanced use)
 export { globToRegex, matchesPattern, validatePattern, escapeGlob } from './utils/pattern';

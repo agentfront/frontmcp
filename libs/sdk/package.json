@@ -71,6 +71,7 @@
     "@frontmcp/utils": "0.7.2",
     "@frontmcp/di": "0.7.2",
     "@frontmcp/uipack": "0.7.2",
+    "@frontmcp/auth": "0.7.2",
     "@modelcontextprotocol/sdk": "1.25.1",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^1.2.0",

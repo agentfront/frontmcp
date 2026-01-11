@@ -1,0 +1,69 @@
+{
+  "name": "@frontmcp/auth",
+  "version": "0.7.2",
+  "description": "FrontMCP Auth - Authentication, session management, and credential vault",
+  "author": "AgentFront <info@agentfront.dev>",
+  "homepage": "https://docs.agentfront.dev",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "auth",
+    "authentication",
+    "session",
+    "oauth",
+    "jwt",
+    "jwks",
+    "vault",
+    "credentials",
+    "agentfront",
+    "frontmcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "@vercel/kv": "^2.0.0 || ^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    },
+    "@vercel/kv": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@frontmcp/utils": "0.7.2",
+    "jose": "^6.1.3"
+  },
+  "devDependencies": {
+    "@vercel/kv": "^3.0.0",
+    "ioredis": "^5.8.0",
+    "typescript": "^5.9.3"
+  }
+}
