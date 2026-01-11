@@ -47,8 +47,8 @@
     }
   },
   "dependencies": {
-    "@frontmcp/sdk": "0.7.1",
-    "@frontmcp/utils": "0.7.1",
+    "@frontmcp/sdk": "0.7.2",
+    "@frontmcp/utils": "0.7.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {
