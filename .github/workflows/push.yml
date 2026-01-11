@@ -1,9 +1,15 @@
 name: On Push
 
-on: push
+on:
+  push:
+    branches:
+      - main
+      - "next/**"
+      - "release/**"
+      - "hotfix/**"
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
@@ -75,11 +84,28 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
       - name: Build libraries
+        id: build
+        continue-on-error: true
         run: npx nx affected -t build
+
+      - name: Reset Nx cache on failure
+        if: steps.build.outcome == 'failure'
+        run: npx nx reset
+
+      - name: Retry build without cache
+        if: steps.build.outcome == 'failure'
+        run: npx nx affected -t build
+
+      - name: Save Nx cache
+        if: always()
+        uses: ./.github/actions/nx-cache-save
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -116,6 +142,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
+
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
 
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
@@ -167,6 +196,9 @@ jobs:
         with:
           name: dist
 
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
       - name: Set Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
@@ -210,6 +242,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
+
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
 
       - name: Run unit tests with coverage
         run: npx nx run-many -t test --exclude='demo-e2e-*' --coverage

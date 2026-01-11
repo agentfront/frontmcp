@@ -1,0 +1,244 @@
+name: Trigger External Docs Update
+
+on:
+  # Trigger on PR merge to release branches
+  pull_request:
+    types: [closed]
+    branches:
+      - "release/**"
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to document (e.g., 0.7.1)"
+        required: true
+        type: string
+      release_branch:
+        description: "Release branch (e.g., release/0.7.x)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-docs:
+    # For PR events: only on merged PRs to release/* branches
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.base.ref, 'release/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release context
+        id: context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger
+            VERSION="${{ inputs.version }}"
+            RELEASE_BRANCH="${{ inputs.release_branch }}"
+            SHA="${{ github.sha }}"
+          else
+            # PR merge trigger
+            RELEASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+            SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+            # Extract version from package.json with error handling
+            if [ ! -f "./package.json" ]; then
+              echo "::error::package.json not found"
+              exit 1
+            fi
+
+            VERSION=$(node -e "
+              try {
+                const pkg = require('./package.json');
+                if (!pkg.version) throw new Error('No version field');
+                console.log(pkg.version);
+              } catch (e) {
+                console.error('Failed to read version:', e.message);
+                process.exit(1);
+              }
+            ")
+
+            if [ -z "$VERSION" ]; then
+              echo "::error::Failed to extract version from package.json"
+              exit 1
+            fi
+          fi
+
+          # Extract minor version (e.g., 0.7 from 0.7.1 or 0.7.1-beta.1)
+          # Handle pre-release versions by stripping the pre-release suffix first
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+          VERSION_MINOR=$(echo "$BASE_VERSION" | awk -F. '{print $1"."$2}')
+
+          if [ -z "$VERSION_MINOR" ]; then
+            echo "::error::Failed to extract minor version from $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_minor=$VERSION_MINOR" >> "$GITHUB_OUTPUT"
+          echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
+
+          echo "Version: $VERSION (minor: $VERSION_MINOR)"
+          echo "Release branch: $RELEASE_BRANCH"
+          echo "SHA: $SHA"
+
+      - name: Determine diff base for docs update
+        id: diff_base
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_BRANCH="${{ steps.context.outputs.release_branch }}"
+
+          # Handle workflow_dispatch where repository context may be limited
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DEFAULT_BRANCH="${{ vars.DEFAULT_BRANCH || 'main' }}"
+          else
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          fi
+          DEFAULT_REF="origin/$DEFAULT_BRANCH"
+
+          # Ensure the default branch ref is available for diffing when needed.
+          git fetch origin "$DEFAULT_BRANCH" --tags
+
+          # Check if release branch marker file exists
+          MARKER_FILE=".release-docs-base"
+
+          if [ -f "$MARKER_FILE" ]; then
+            MARKER_SHA=$(tr -d ' \n\r' < "$MARKER_FILE")
+
+            if git rev-parse --verify --quiet "${MARKER_SHA}^{commit}" >/dev/null; then
+              # Subsequent update: diff from branch base marker
+              DIFF_BASE="$MARKER_SHA"
+              IS_FIRST_UPDATE="false"
+              echo "Using marker file for diff base: $DIFF_BASE"
+            else
+              echo "::warning::Marker file $MARKER_FILE contains invalid SHA '$MARKER_SHA'. Falling back to $DEFAULT_REF."
+              DIFF_BASE="$DEFAULT_REF"
+              IS_FIRST_UPDATE="true"
+              echo "Using default branch for diff base: $DIFF_BASE"
+            fi
+          else
+            # First update: diff from default branch
+            DIFF_BASE="$DEFAULT_REF"
+            IS_FIRST_UPDATE="true"
+            echo "No marker file found, using $DEFAULT_REF as diff base"
+          fi
+
+          echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
+          echo "is_first_update=$IS_FIRST_UPDATE" >> "$GITHUB_OUTPUT"
+
+          echo "Diff base: $DIFF_BASE"
+          echo "Is first update: $IS_FIRST_UPDATE"
+
+      - name: Generate change summary
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DIFF_BASE="${{ steps.diff_base.outputs.diff_base }}"
+
+          # Get list of changed files (for logging)
+          # Use two-dot syntax for direct diff from DIFF_BASE to HEAD
+          CHANGED_FILES=$(git diff "$DIFF_BASE..HEAD" --name-only -- \
+            'libs/**/*.ts' \
+            'apps/**/*.ts' \
+            'package.json' \
+            'README.md' \
+            ':!**/*.spec.ts' \
+            ':!**/*.test.ts' | head -50 || echo "")
+
+          CHANGE_COUNT=$(echo "$CHANGED_FILES" | grep -c . || echo "0")
+
+          echo "changes_count=$CHANGE_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Found $CHANGE_COUNT changed files"
+
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Changed files (first 50):"
+            echo "$CHANGED_FILES"
+          fi
+
+      - name: Trigger external docs repository
+        env:
+          DOCS_REPO_PAT: ${{ secrets.DOCS_REPO_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Check if PAT is configured
+          if [ -z "${DOCS_REPO_PAT:-}" ]; then
+            echo "::warning::DOCS_REPO_PAT secret is not configured. Skipping docs trigger."
+            echo "To enable cross-repo docs updates, add the DOCS_REPO_PAT secret."
+            exit 0
+          fi
+
+          # Determine target repo (can be configured via variable)
+          DOCS_REPO="${{ vars.DOCS_REPO || 'agentfront/frontmcp-docs' }}"
+
+          echo "Triggering docs update in $DOCS_REPO..."
+
+          # Trigger workflow in external docs repo via repository_dispatch
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token $DOCS_REPO_PAT" \
+            "https://api.github.com/repos/${DOCS_REPO}/dispatches" \
+            -d @- <<EOF
+          {
+            "event_type": "docs-update",
+            "client_payload": {
+              "source_repo": "${{ github.repository }}",
+              "sha": "${{ steps.context.outputs.sha }}",
+              "version": "${{ steps.context.outputs.version }}",
+              "version_minor": "${{ steps.context.outputs.version_minor }}",
+              "release_branch": "${{ steps.context.outputs.release_branch }}",
+              "is_first_update": "${{ steps.diff_base.outputs.is_first_update }}",
+              "diff_base": "${{ steps.diff_base.outputs.diff_base }}",
+              "changes_count": "${{ steps.changes.outputs.changes_count }}",
+              "triggered_by": "${{ github.actor }}",
+              "run_id": "${{ github.run_id }}",
+              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+          )
+
+          if [ "$HTTP_STATUS" -eq 204 ]; then
+            echo "Successfully triggered docs update in $DOCS_REPO"
+          elif [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "::error::Repository $DOCS_REPO not found or PAT doesn't have access"
+            [ -f /tmp/response.json ] && cat /tmp/response.json
+            exit 1
+          else
+            echo "::error::Failed to trigger docs update. HTTP status: $HTTP_STATUS"
+            [ -f /tmp/response.json ] && cat /tmp/response.json
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Docs Update Triggered" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ steps.context.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Release branch | \`${{ steps.context.outputs.release_branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA | \`${{ steps.context.outputs.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Diff base | \`${{ steps.diff_base.outputs.diff_base }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| First update | ${{ steps.diff_base.outputs.is_first_update }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Changed files | ${{ steps.changes.outputs.changes_count }} |" >> "$GITHUB_STEP_SUMMARY"

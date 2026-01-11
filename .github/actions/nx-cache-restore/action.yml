@@ -1,0 +1,47 @@
+name: "Restore Nx Cache"
+description: "Restores Nx build cache from GitHub Actions cache"
+
+inputs:
+  cache-prefix:
+    description: "Cache prefix (default: nx-cache)"
+    required: false
+    default: "nx-cache"
+
+outputs:
+  cache-hit:
+    description: "Whether there was a cache hit"
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Compute cache key
+      id: cache-key
+      shell: bash
+      run: |
+        # Use PR number if available, otherwise branch name
+        if [ -n "${{ github.event.pull_request.number }}" ]; then
+          REF_KEY="pr-${{ github.event.pull_request.number }}"
+        else
+          REF_KEY="${{ github.ref_name }}"
+        fi
+
+        # Hash of lockfile for dependency changes
+        LOCK_HASH="${{ hashFiles('yarn.lock') }}"
+
+        echo "primary-key=${{ inputs.cache-prefix }}-${REF_KEY}-${LOCK_HASH}" >> $GITHUB_OUTPUT
+        echo "restore-keys<<EOF" >> $GITHUB_OUTPUT
+        echo "${{ inputs.cache-prefix }}-${REF_KEY}-" >> $GITHUB_OUTPUT
+        echo "${{ inputs.cache-prefix }}-main-" >> $GITHUB_OUTPUT
+        echo "${{ inputs.cache-prefix }}-" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Restore Nx cache
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          .nx/cache
+          .nx/workspace-data
+        key: ${{ steps.cache-key.outputs.primary-key }}
+        restore-keys: ${{ steps.cache-key.outputs.restore-keys }}

@@ -1,0 +1,480 @@
+name: PR Testing Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to test (e.g., 123)"
+        required: true
+        type: string
+      timeout_hours:
+        description: "How long to keep registry running (max 6 hours)"
+        required: false
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+        default: "2"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Max 6 hours runtime
+jobs:
+  start-registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      NX_DAEMON: "false"
+
+    steps:
+      - name: Validate PR number
+        run: |
+          if ! [[ "${{ inputs.pr_number }}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid PR number: ${{ inputs.pr_number }}"
+            exit 1
+          fi
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/pull/${{ inputs.pr_number }}/head
+
+      - name: Get PR info
+        id: pr-info
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          FULL_SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "full_sha=$FULL_SHA" >> "$GITHUB_OUTPUT"
+          echo "PR SHA: $SHA"
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Create Verdaccio config
+        run: |
+          mkdir -p /tmp/verdaccio-pr
+          cat > /tmp/verdaccio-pr/config.yaml << 'EOF'
+          storage: /tmp/verdaccio-pr/storage
+          auth:
+            htpasswd:
+              file: /tmp/verdaccio-pr/htpasswd
+              max_users: 1000
+          uplinks:
+            npmjs:
+              url: https://registry.npmjs.org/
+              cache: false
+          packages:
+            "@frontmcp/*":
+              access: $all
+              publish: $authenticated
+              unpublish: $authenticated
+            "frontmcp":
+              access: $all
+              publish: $authenticated
+              unpublish: $authenticated
+            "**":
+              access: $all
+              proxy: npmjs
+          server:
+            keepAliveTimeout: 60
+          middlewares:
+            audit:
+              enabled: true
+          log:
+            type: stdout
+            format: pretty
+            level: info
+          EOF
+
+          # Create CI user for publishing
+          npm install -g htpasswd
+          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher ci-publisher-pass
+
+      - name: Install and start Verdaccio
+        run: |
+          npm install -g verdaccio
+
+          verdaccio --config /tmp/verdaccio-pr/config.yaml --listen 4873 &
+          echo $! > /tmp/verdaccio-pr/pid
+
+          # Wait for Verdaccio to start
+          for i in {1..30}; do
+            if curl -s http://localhost:4873 > /dev/null 2>&1; then
+              echo "Verdaccio is running"
+              break
+            fi
+            echo "Waiting for Verdaccio... ($i/30)"
+            sleep 1
+          done
+
+          if ! curl -s http://localhost:4873 > /dev/null 2>&1; then
+            echo "::error::Failed to start Verdaccio"
+            exit 1
+          fi
+
+      - name: Setup ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | \
+            sudo tee /etc/apt/trusted.gpg.d/ngrok.asc > /dev/null
+          # Use dynamic distro detection instead of hardcoded "buster"
+          echo "deb https://ngrok-agent.s3.amazonaws.com $(lsb_release -cs) main" | \
+            sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update && sudo apt-get install -y ngrok
+
+      - name: Start ngrok tunnel
+        id: ngrok
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        run: |
+          if [ -z "${NGROK_AUTH_TOKEN:-}" ]; then
+            echo "::error::NGROK_AUTH_TOKEN secret is not configured"
+            exit 1
+          fi
+
+          ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+          ngrok http 4873 --log=stdout > /tmp/ngrok.log 2>&1 &
+          echo $! > /tmp/ngrok-pid
+
+          # Wait for ngrok to start and get URL
+          echo "Waiting for ngrok tunnel..."
+          for i in {1..30}; do
+            NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | \
+              jq -r '.tunnels[0].public_url' 2>/dev/null || echo "")
+
+            if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
+              echo "ngrok tunnel ready: $NGROK_URL"
+              break
+            fi
+            echo "Waiting for ngrok... ($i/30)"
+            sleep 2
+          done
+
+          if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
+            echo "::error::Failed to get ngrok URL"
+            cat /tmp/ngrok.log || true
+            exit 1
+          fi
+
+          echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
+          echo "ngrok_url=$NGROK_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate PR version
+        id: version
+        run: |
+          PR_NUM="${{ inputs.pr_number }}"
+          SHA="${{ steps.pr-info.outputs.sha }}"
+          VERSION="0.0.0-pr.${PR_NUM}.${SHA}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "PR Version: $VERSION"
+
+      - name: Update package versions
+        run: |
+          npx nx release version "${{ steps.version.outputs.version }}" \
+            --git-tag=false --git-commit=false
+
+      - name: Build all packages
+        run: |
+          npx nx run-many -t build --parallel=5
+
+      - name: Authenticate with Verdaccio
+        run: |
+          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
+          npm set //localhost:4873/:_auth "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
+
+      - name: Publish packages to local Verdaccio
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PR_NUM="${{ inputs.pr_number }}"
+          FAILED_PACKAGES=()
+          PUBLISHED_PACKAGES=()
+
+          # Publish libs packages
+          LIBS_PACKAGES=(di utils uipack sdk ui adapters testing cli plugins)
+          for pkg in "${LIBS_PACKAGES[@]}"; do
+            if [ -d "libs/$pkg/dist" ]; then
+              echo "Publishing @frontmcp/$pkg@$VERSION..."
+              if npm publish "libs/$pkg/dist" \
+                --registry http://localhost:4873 \
+                --access public \
+                --tag "pr-$PR_NUM"; then
+                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
+              else
+                echo "Warning: publish failed for $pkg"
+                FAILED_PACKAGES+=("@frontmcp/$pkg")
+              fi
+            fi
+          done
+
+          # Publish plugin packages
+          PLUGIN_PACKAGES=(plugin-approval plugin-cache plugin-codecall plugin-dashboard plugin-remember)
+          for pkg in "${PLUGIN_PACKAGES[@]}"; do
+            if [ -d "plugins/$pkg/dist" ]; then
+              echo "Publishing @frontmcp/$pkg@$VERSION..."
+              if npm publish "plugins/$pkg/dist" \
+                --registry http://localhost:4873 \
+                --access public \
+                --tag "pr-$PR_NUM"; then
+                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
+              else
+                echo "Warning: publish failed for $pkg"
+                FAILED_PACKAGES+=("@frontmcp/$pkg")
+              fi
+            fi
+          done
+
+          echo ""
+          echo "=== Publish Summary ==="
+          echo "Published: ${#PUBLISHED_PACKAGES[@]} packages"
+          echo "Failed: ${#FAILED_PACKAGES[@]} packages"
+
+          if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
+            echo ""
+            echo "::warning::Failed to publish: ${FAILED_PACKAGES[*]}"
+          fi
+
+          echo "All packages processed"
+
+      - name: Create registry info artifact
+        run: |
+          mkdir -p /tmp/registry-info
+          cat > /tmp/registry-info/README.md << EOF
+          # PR Testing Registry
+
+          ## Connection Info
+
+          - **Registry URL:** ${{ env.NGROK_URL }}
+          - **PR Number:** ${{ inputs.pr_number }}
+          - **Version:** ${{ steps.version.outputs.version }}
+          - **SHA:** ${{ steps.pr-info.outputs.full_sha }}
+          - **Started:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Expires:** Approximately ${{ inputs.timeout_hours }} hour(s) from start
+
+          ## Usage
+
+          ### Install packages from this registry:
+
+          \`\`\`bash
+          npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}
+          \`\`\`
+
+          ### Or configure .npmrc:
+
+          \`\`\`
+          @frontmcp:registry=${{ env.NGROK_URL }}
+          \`\`\`
+
+          Then install normally:
+
+          \`\`\`bash
+          npm install @frontmcp/sdk@${{ steps.version.outputs.version }}
+          \`\`\`
+
+          ## Available Packages
+
+          All packages are published with version \`${{ steps.version.outputs.version }}\`:
+
+          - @frontmcp/sdk
+          - @frontmcp/cli
+          - @frontmcp/adapters
+          - @frontmcp/plugins
+          - @frontmcp/ui
+          - @frontmcp/testing
+          - @frontmcp/di
+          - @frontmcp/utils
+          - @frontmcp/uipack
+          - @frontmcp/plugin-approval
+          - @frontmcp/plugin-cache
+          - @frontmcp/plugin-codecall
+          - @frontmcp/plugin-dashboard
+          - @frontmcp/plugin-remember
+          EOF
+
+          echo "${{ env.NGROK_URL }}" > /tmp/registry-info/registry-url.txt
+
+      - name: Upload registry info
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-testing-registry-info
+          path: /tmp/registry-info/
+          retention-days: 1
+
+      - name: Comment on PR with registry info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## PR Testing Registry Available
+
+            A temporary npm registry has been created for testing this PR.
+
+            ### Registry URL
+            \`\`\`
+            ${{ env.NGROK_URL }}
+            \`\`\`
+
+            ### Version
+            \`${{ steps.version.outputs.version }}\`
+
+            ### Quick Install
+            \`\`\`bash
+            npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}
+            \`\`\`
+
+            ### .npmrc Configuration
+            \`\`\`
+            @frontmcp:registry=${{ env.NGROK_URL }}
+            \`\`\`
+
+            **Note:** This registry will be available for approximately ${{ inputs.timeout_hours }} hour(s).
+
+            To stop the registry early, [cancel the workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            ---
+            _Registry started by @${{ github.actor }}_`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr_number }},
+              body: body
+            });
+
+      - name: Summary
+        run: |
+          echo "## PR Testing Registry Started" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Registry URL | \`${{ env.NGROK_URL }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| PR Number | #${{ inputs.pr_number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Timeout | ${{ inputs.timeout_hours }} hours |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Install Command" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "npm install @frontmcp/sdk@${{ steps.version.outputs.version }} --registry=${{ env.NGROK_URL }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep registry alive
+        run: |
+          TIMEOUT_SECONDS=$(( ${{ inputs.timeout_hours }} * 3600 ))
+          START_TIME=$(date +%s)
+          HEARTBEAT_INTERVAL=60
+
+          echo "============================================"
+          echo "Registry will run for ${{ inputs.timeout_hours }} hour(s)"
+          echo "Registry URL: ${{ env.NGROK_URL }}"
+          echo "Version: ${{ steps.version.outputs.version }}"
+          echo "============================================"
+          echo ""
+          echo "Cancel the workflow to stop the registry early."
+          echo ""
+
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            REMAINING=$((TIMEOUT_SECONDS - ELAPSED))
+
+            if [ $REMAINING -le 0 ]; then
+              echo "Timeout reached. Shutting down..."
+              break
+            fi
+
+            # Check if Verdaccio is still running
+            if ! curl -s http://localhost:4873 > /dev/null 2>&1; then
+              echo "Verdaccio stopped unexpectedly. Restarting..."
+
+              # Clean up stale PID if exists
+              if [ -f /tmp/verdaccio-pr/pid ]; then
+                OLD_PID=$(cat /tmp/verdaccio-pr/pid)
+                if kill -0 "$OLD_PID" 2>/dev/null; then
+                  kill "$OLD_PID" 2>/dev/null || true
+                  sleep 1
+                fi
+                rm -f /tmp/verdaccio-pr/pid
+              fi
+
+              # Wait for port to be free
+              for j in {1..10}; do
+                if ! ss -tlnp | grep -q ':4873 '; then
+                  break
+                fi
+                echo "Waiting for port 4873 to be free... ($j/10)"
+                sleep 1
+              done
+
+              # Start Verdaccio and save new PID
+              verdaccio --config /tmp/verdaccio-pr/config.yaml --listen 4873 &
+              echo $! > /tmp/verdaccio-pr/pid
+              sleep 5
+            fi
+
+            # Check if ngrok is still running
+            TUNNEL_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | \
+              jq -r '.tunnels[0].public_url' 2>/dev/null || echo "")
+            if [ -z "$TUNNEL_URL" ] || [ "$TUNNEL_URL" = "null" ]; then
+              echo "::warning::ngrok tunnel may be down. Check the registry URL."
+            fi
+
+            HOURS_LEFT=$((REMAINING / 3600))
+            MINS_LEFT=$(((REMAINING % 3600) / 60))
+            echo "[$(date +%H:%M:%S)] Registry active. Time remaining: ${HOURS_LEFT}h ${MINS_LEFT}m"
+
+            sleep $HEARTBEAT_INTERVAL
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up..."
+
+          # Kill Verdaccio
+          if [ -f /tmp/verdaccio-pr/pid ]; then
+            kill $(cat /tmp/verdaccio-pr/pid) 2>/dev/null || true
+          fi
+
+          # Kill ngrok
+          if [ -f /tmp/ngrok-pid ]; then
+            kill $(cat /tmp/ngrok-pid) 2>/dev/null || true
+          fi
+
+          # Cleanup temp files
+          rm -rf /tmp/verdaccio-pr
+          rm -f /tmp/ngrok.log /tmp/ngrok-pid
+
+          echo "Cleanup complete"
+
+      - name: Comment on PR (registry stopped)
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr_number }},
+              body: `## PR Testing Registry Stopped
+
+            The temporary npm registry for this PR has been shut down.
+
+            **Reason:** ${{ job.status == 'cancelled' && 'Workflow cancelled' || 'Timeout reached' }}
+
+            To start a new registry, trigger the "PR Testing Registry" workflow again.`
+            });
