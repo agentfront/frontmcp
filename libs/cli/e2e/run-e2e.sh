@@ -67,10 +67,35 @@ export npm_config_registry="$VERDACCIO_URL"
 echo "//localhost:$VERDACCIO_PORT/:_authToken=fake-token-for-e2e" > "$ROOT_DIR/.npmrc.e2e"
 export NPM_CONFIG_USERCONFIG="$ROOT_DIR/.npmrc.e2e"
 
-# Build all packages (including dependencies: di, utils, uipack, individual plugins)
-echo "🔨 Building packages..."
 cd "$ROOT_DIR"
-npx nx run-many -t build --projects=di,utils,uipack,sdk,ui,adapters,plugin-cache,plugin-codecall,plugin-config,plugin-dashboard,plugin-remember,plugins,testing,cli --parallel=5
+
+# Get package lists dynamically from Nx
+echo "📋 Discovering packages from Nx..."
+
+# Get libs packages (excludes demo-*, plugins meta-package handled separately)
+LIBS_PACKAGES=($(npx nx show projects --json 2>/dev/null | node --input-type=module -e "
+import fs from 'fs';
+const data = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+const libs = data.filter(p => {
+  if (p.startsWith('demo')) return false;
+  if (p.startsWith('plugin-')) return false;
+  if (p.startsWith('@')) return false;
+  if (p === 'plugins') return false;
+  return true;
+});
+console.log(libs.join(' '));
+"))
+
+# Get plugin packages dynamically
+PLUGIN_PACKAGES=($(npx nx show projects --projects "plugin-*" 2>/dev/null))
+
+echo "  Libs: ${LIBS_PACKAGES[*]}"
+echo "  Plugins: ${PLUGIN_PACKAGES[*]}"
+
+# Build all publishable packages (exclude demo apps)
+echo ""
+echo "🔨 Building packages..."
+npx nx run-many -t build --exclude="demo-*,@frontmcp/source" --parallel=5
 
 # Clean old storage to avoid version conflicts
 rm -rf "$E2E_DIR/storage"
@@ -80,7 +105,6 @@ rm -rf "$E2E_DIR/storage"
 echo "📤 Publishing packages to local registry..."
 
 # First publish libs packages
-LIBS_PACKAGES=("di" "utils" "uipack" "sdk" "ui" "adapters" "testing" "cli")
 for pkg in "${LIBS_PACKAGES[@]}"; do
   echo "  Publishing libs/$pkg..."
   if [ -d "libs/$pkg/dist" ]; then
@@ -97,7 +121,6 @@ for pkg in "${LIBS_PACKAGES[@]}"; do
 done
 
 # Then publish individual plugins (required before meta-package)
-PLUGIN_PACKAGES=("plugin-cache" "plugin-codecall" "plugin-config" "plugin-dashboard" "plugin-remember")
 for pkg in "${PLUGIN_PACKAGES[@]}"; do
   echo "  Publishing plugins/$pkg..."
   if [ -d "plugins/$pkg/dist" ]; then
