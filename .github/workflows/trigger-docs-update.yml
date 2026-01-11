@@ -154,7 +154,8 @@ jobs:
           DIFF_BASE="${{ steps.diff_base.outputs.diff_base }}"
 
           # Get list of changed files (for logging)
-          CHANGED_FILES=$(git diff "$DIFF_BASE"...HEAD --name-only -- \
+          # Use two-dot syntax for direct diff from DIFF_BASE to HEAD
+          CHANGED_FILES=$(git diff "$DIFF_BASE..HEAD" --name-only -- \
             'libs/**/*.ts' \
             'apps/**/*.ts' \
             'package.json' \
