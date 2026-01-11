@@ -164,13 +164,14 @@ jobs:
           # Configure auth token if available (optional but recommended for stable URLs)
           if [ -n "${NGROK_AUTH_TOKEN:-}" ]; then
             echo "Configuring ngrok with auth token..."
-            npx @ngrok/ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+            # Use globally installed ngrok command directly
+            ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
           else
             echo "::warning::NGROK_AUTH_TOKEN not configured. Using ngrok without authentication (random URLs, rate limits may apply)."
           fi
 
           # Build ngrok arguments array (safe from injection)
-          NGROK_ARGS=("http" "4873" "--log=stdout")
+          declare -a NGROK_ARGS=("http" "4873" "--log=stdout")
 
           # Add domain if provided (already validated above)
           NGROK_DOMAIN="${{ inputs.ngrok_domain }}"
@@ -179,12 +180,13 @@ jobs:
               echo "::error::Custom domain requires NGROK_AUTH_TOKEN to be configured"
               exit 1
             fi
-            echo "Using custom domain: $NGROK_DOMAIN"
-            NGROK_ARGS+=("--domain=$NGROK_DOMAIN")
+            echo "Using custom domain: ${NGROK_DOMAIN}"
+            NGROK_ARGS+=("--domain=${NGROK_DOMAIN}")
           fi
 
-          # Start ngrok using array expansion (prevents injection)
-          npx @ngrok/ngrok "${NGROK_ARGS[@]}" > /tmp/ngrok.log 2>&1 &
+          # Start ngrok using array expansion (prevents shell injection)
+          # Use globally installed ngrok command directly
+          ngrok "${NGROK_ARGS[@]}" > /tmp/ngrok.log 2>&1 &
           echo $! > /tmp/ngrok-pid
 
           # Wait for ngrok to start and get URL
@@ -455,14 +457,14 @@ jobs:
           echo "  FRONTMCP CLI (npx frontmcp)"
           echo "--------------------------------------------"
           echo ""
-          echo "# Install CLI globally:"
+          echo "# Install CLI globally (npm only - CLI is unscoped):"
           echo "npm install -g frontmcp@$VERSION --registry=$REGISTRY"
           echo ""
           echo "# Or run directly with npx:"
           echo "npx --registry=$REGISTRY frontmcp@$VERSION"
           echo ""
-          echo "# Yarn:"
-          echo "yarn global add frontmcp@$VERSION --registry $REGISTRY"
+          echo "# NOTE: Yarn does not support --registry flag for global installs."
+          echo "# Use npm for CLI installation."
           echo ""
           echo "--------------------------------------------"
           echo "  NPM INSTALL COMMANDS (@frontmcp/* packages)"
@@ -486,28 +488,25 @@ jobs:
           echo "npm install @frontmcp/plugin-remember@$VERSION --registry=$REGISTRY"
           echo ""
           echo "--------------------------------------------"
-          echo "  YARN INSTALL COMMANDS (@frontmcp/* packages)"
+          echo "  YARN CONFIGURATION (.yarnrc.yml)"
           echo "--------------------------------------------"
           echo ""
-          echo "# Install SDK and core packages:"
-          echo "yarn add @frontmcp/sdk@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/adapters@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/plugins@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/ui@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/testing@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/di@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/utils@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/uipack@$VERSION --registry $REGISTRY"
+          echo "# Yarn Berry does not support --registry flag."
+          echo "# Add to your .yarnrc.yml file:"
           echo ""
-          echo "# Install plugin packages:"
-          echo "yarn add @frontmcp/plugin-approval@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/plugin-cache@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/plugin-codecall@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/plugin-dashboard@$VERSION --registry $REGISTRY"
-          echo "yarn add @frontmcp/plugin-remember@$VERSION --registry $REGISTRY"
+          echo "npmScopes:"
+          echo "  frontmcp:"
+          echo "    npmRegistryServer: \"$REGISTRY\""
+          echo ""
+          echo "# Then install packages normally:"
+          echo "yarn add @frontmcp/sdk@$VERSION"
+          echo "yarn add @frontmcp/adapters@$VERSION"
+          echo ""
+          echo "# For the CLI (unscoped), use npm instead:"
+          echo "npm install -g frontmcp@$VERSION --registry=$REGISTRY"
           echo ""
           echo "--------------------------------------------"
-          echo "  .NPMRC CONFIGURATION"
+          echo "  .NPMRC CONFIGURATION (npm/pnpm)"
           echo "--------------------------------------------"
           echo ""
           echo "# For @frontmcp/* scoped packages, add to .npmrc:"
