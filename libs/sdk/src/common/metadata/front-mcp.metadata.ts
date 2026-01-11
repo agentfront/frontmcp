@@ -215,7 +215,11 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;
 export type FrontMcpSplitByAppConfig = z.infer<typeof frontMcpSplitByAppSchema>;
 
+/** Output type after zod parsing (with defaults applied) */
 export type FrontMcpConfigType = z.infer<typeof frontMcpMetadataSchema>;
+
+/** Input type for FrontMCP configuration (before zod defaults) */
+export type FrontMcpConfigInput = z.input<typeof frontMcpMetadataSchema>;
 
 export interface AppScopeMetadata extends Omit<FrontMcpSplitByAppMetadata, 'auth' | 'splitByApp'> {
   id: string;

@@ -29,3 +29,7 @@ export { SSEServerTransport, SSEServerTransportOptions } from './legacy/legacy.s
 
 // Transport types
 export { SupportedTransport } from './adapters/transport.local.adapter';
+export { TransportType, TransportKey } from './transport.types';
+
+// In-memory server for direct programmatic access
+export { createInMemoryServer, CreateInMemoryServerOptions, InMemoryServerResult } from './in-memory-server';

@@ -1,8 +1,11 @@
-import { FrontMcpConfigType, FrontMcpInterface, FrontMcpServer, ScopeEntry } from '../common';
+import { FrontMcpConfigInput, FrontMcpConfigType, FrontMcpInterface, FrontMcpServer, ScopeEntry } from '../common';
 import { ScopeRegistry } from '../scope/scope.registry';
 import ProviderRegistry from '../provider/provider.registry';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import LoggerRegistry from '../logger/logger.registry';
+import { DirectMcpServerImpl } from '../direct';
+import type { DirectMcpServer } from '../direct';
+import type { Scope } from '../scope/scope.instance';
 
 export class FrontMcpInstance implements FrontMcpInterface {
   config: FrontMcpConfigType;
@@ -91,9 +94,166 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const instance = await FrontMcpInstance.createForGraph(config);
    * const scopes = instance.getScopes();
    */
-  public static async createForGraph(options: FrontMcpConfigType): Promise<FrontMcpInstance> {
-    const frontMcp = new FrontMcpInstance(options);
+  public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+    const frontMcp = new FrontMcpInstance(options as FrontMcpConfigType);
     await frontMcp.ready;
     return frontMcp;
+  }
+
+  /**
+   * Creates a DirectMcpServer from a FrontMCP configuration.
+   * This provides direct programmatic access to MCP operations
+   * without requiring HTTP transport.
+   *
+   * Use cases:
+   * - Unit/integration testing tools, resources, prompts
+   * - Embedding MCP capabilities in other applications
+   * - CLI tools that need direct access
+   * - Agent backends with custom invocation
+   *
+   * @example
+   * ```typescript
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import MyServer from './my-server';
+   *
+   * const server = await FrontMcpInstance.createDirect(MyServer);
+   *
+   * // List all tools
+   * const tools = await server.listTools();
+   *
+   * // Call a tool with auth context
+   * const result = await server.callTool('my-tool', { param: 'value' }, {
+   *   authContext: { sessionId: 'user-123', token: 'jwt-token' }
+   * });
+   *
+   * // Cleanup when done
+   * await server.dispose();
+   * ```
+   */
+  public static async createDirect(options: FrontMcpConfigInput): Promise<DirectMcpServer> {
+    // Create instance without HTTP server
+    const frontMcp = new FrontMcpInstance({
+      ...options,
+      // Disable HTTP server since we're using direct access
+      http: undefined,
+    } as FrontMcpConfigType);
+    await frontMcp.ready;
+
+    // Get the primary scope
+    const scopes = frontMcp.getScopes();
+    if (scopes.length === 0) {
+      throw new Error('No scopes initialized. Ensure at least one app is configured.');
+    }
+
+    // Return a DirectMcpServer wrapping the first scope
+    return new DirectMcpServerImpl(scopes[0] as Scope);
+  }
+
+  /**
+   * Runs the FrontMCP server using stdio transport for use with Claude Code
+   * or other MCP clients that support stdio communication.
+   *
+   * This method connects the server to stdin/stdout and handles MCP protocol
+   * messages directly. It does not return until the connection is closed.
+   *
+   * @example
+   * ```typescript
+   * // In your CLI entrypoint
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import MyServer from './my-server';
+   *
+   * FrontMcpInstance.runStdio(MyServer);
+   * ```
+   *
+   * @example
+   * ```bash
+   * # In Claude Desktop config:
+   * {
+   *   "mcpServers": {
+   *     "my-server": {
+   *       "command": "node",
+   *       "args": ["./dist/main.js", "--stdio"]
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  public static async runStdio(options: FrontMcpConfigInput): Promise<void> {
+    // Dynamically import to avoid bundling issues
+    const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+    const { Server: McpServer } = await import('@modelcontextprotocol/sdk/server/index.js');
+
+    // Create instance without HTTP server
+    const frontMcp = new FrontMcpInstance({
+      ...options,
+      http: undefined,
+    } as FrontMcpConfigType);
+    await frontMcp.ready;
+
+    // Get the primary scope
+    const scopes = frontMcp.getScopes();
+    if (scopes.length === 0) {
+      throw new Error('No scopes initialized. Ensure at least one app is configured.');
+    }
+    const scope = scopes[0] as Scope;
+
+    // Import the MCP handlers creator
+    const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');
+
+    // Check for remote apps
+    const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
+
+    // Build server options with capabilities
+    const hasTools = scope.tools.hasAny() || hasRemoteApps;
+    const hasResources = scope.resources.hasAny() || hasRemoteApps;
+    const hasPrompts = scope.prompts.hasAny() || hasRemoteApps;
+    const hasAgents = scope.agents.hasAny();
+
+    const completionsCapability = hasPrompts || hasResources ? { completions: {} } : {};
+    const remoteCapabilities = hasRemoteApps
+      ? {
+          tools: { listChanged: true },
+          resources: { subscribe: true, listChanged: true },
+          prompts: { listChanged: true },
+        }
+      : {};
+
+    const serverOptions = {
+      instructions: '',
+      capabilities: {
+        ...remoteCapabilities,
+        ...scope.tools.getCapabilities(),
+        ...scope.resources.getCapabilities(),
+        ...scope.prompts.getCapabilities(),
+        ...scope.agents.getCapabilities(),
+        ...completionsCapability,
+        logging: {},
+      },
+      serverInfo: scope.metadata.info,
+    };
+
+    // Create MCP server
+    const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+
+    // Register handlers
+    const handlers = createMcpHandlers({ scope, serverOptions });
+    for (const handler of handlers) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mcpServer.setRequestHandler(handler.requestSchema, handler.handler as any);
+    }
+
+    // Create stdio transport and connect
+    const transport = new StdioServerTransport();
+    await mcpServer.connect(transport);
+
+    // Handle graceful shutdown
+    process.on('SIGINT', async () => {
+      await mcpServer.close();
+      process.exit(0);
+    });
+    process.on('SIGTERM', async () => {
+      await mcpServer.close();
+      process.exit(0);
+    });
   }
 }

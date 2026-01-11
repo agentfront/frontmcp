@@ -4,7 +4,7 @@ import { ZodType } from 'zod';
 import { Infer } from '../types/zod.types';
 import { ServerResponse } from '../common';
 
-export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http';
+export type TransportType = 'sse' | 'streamable-http' | 'http' | 'stateless-http' | 'in-memory' | 'stdio';
 
 export interface TransportKey {
   type: TransportType;
