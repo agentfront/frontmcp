@@ -1,13 +1,6 @@
 // auth/jwks/jwks.service.ts
 import { jwtVerify, createLocalJWKSet, decodeProtectedHeader, JSONWebKeySet, JWK } from 'jose';
-import {
-  bytesToHex,
-  randomBytes,
-  rsaVerify,
-  createKeyPersistence,
-  KeyPersistence,
-  AsymmetricKeyData,
-} from '@frontmcp/utils';
+import { bytesToHex, randomBytes, rsaVerify, createKeyPersistence, KeyPersistence } from '@frontmcp/utils';
 import { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
 import { normalizeIssuer, trimSlash, decodeJwtPayloadSafe } from './jwks.utils';
 
@@ -128,8 +121,9 @@ export class JwksService {
         payload,
         header: decodeProtectedHeader(token),
       };
-    } catch (err: any) {
-      return { ok: false, error: err?.message ?? 'verification_failed' };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'verification_failed';
+      return { ok: false, error: message };
     }
   }
 
@@ -171,7 +165,7 @@ export class JwksService {
           header: protectedHeader,
           payload,
         };
-      } catch (e: any) {
+      } catch (e: unknown) {
         // Check for weak RSA key error from jose library
         if (this.isWeakKeyError(e)) {
           const fallbackJwks = jwks ?? (await this.getJwksForProvider(p));
@@ -280,8 +274,9 @@ export class JwksService {
         header,
         payload,
       };
-    } catch (err: any) {
-      return { ok: false, error: `weak_key_verification_failed: ${err?.message}` };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'unknown';
+      return { ok: false, error: `weak_key_verification_failed: ${message}` };
     }
   }
 
@@ -343,7 +338,7 @@ export class JwksService {
     // Discover via AS .well-known
     const issuer = trimSlash(ref.issuerUrl);
     const meta = await this.tryFetchAsMeta(`${issuer}/.well-known/oauth-authorization-server`);
-    const uri = meta && typeof meta === 'object' && meta.jwks_uri ? String(meta.jwks_uri) : undefined;
+    const uri = meta && typeof meta === 'object' && meta['jwks_uri'] ? String(meta['jwks_uri']) : undefined;
     if (uri) {
       const fromMeta = await this.tryFetchJwks(ref.id, uri);
       if (fromMeta?.keys?.length) return fromMeta;
@@ -385,7 +380,7 @@ export class JwksService {
     return undefined;
   }
 
-  private async tryFetchAsMeta(url: string): Promise<any | undefined> {
+  private async tryFetchAsMeta(url: string): Promise<Record<string, unknown> | undefined> {
     try {
       return await this.fetchJson(url);
     } catch {
@@ -393,7 +388,7 @@ export class JwksService {
     }
   }
 
-  private async fetchJson<T = any>(url: string): Promise<T> {
+  private async fetchJson<T = unknown>(url: string): Promise<T> {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timer = setTimeout(() => ctl?.abort(), this.opts.networkTimeoutMs);
     try {
@@ -451,7 +446,6 @@ export class JwksService {
         } else {
           // Reconstruct KeyObject from JWK
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { createPrivateKey } = require('node:crypto') as typeof import('node:crypto');
             const privateKey = createPrivateKey({
               key: loaded.privateKey as import('node:crypto').JsonWebKey,
@@ -494,7 +488,6 @@ export class JwksService {
   }
 
   private generateKey(alg: 'RS256' | 'ES256') {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { generateKeyPairSync } = require('node:crypto') as typeof import('node:crypto');
     if (alg === 'RS256') {
       const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

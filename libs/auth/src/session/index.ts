@@ -62,7 +62,6 @@ export { TokenVault } from './token.vault';
 export type { EncBlob, VaultKey } from './token.vault';
 
 // Token Store
-export { MemoryTokenStore, RedisTokenStore } from './token.store';
 export type { SecretRecord, TokenStore } from './token.store';
 
 // Utilities

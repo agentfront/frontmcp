@@ -18,7 +18,7 @@
  */
 
 import { MemoryStorageAdapter } from '@frontmcp/utils';
-import { StorageAuthorizationVault, type StorageAuthorizationVaultOptions } from './storage-authorization-vault';
+import { StorageAuthorizationVault } from './storage-authorization-vault';
 
 /**
  * Options for InMemoryAuthorizationVault

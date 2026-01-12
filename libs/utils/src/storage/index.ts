@@ -44,7 +44,23 @@ export {
   StorageTTLError,
   StoragePatternError,
   StorageNotConnectedError,
+  EncryptedStorageError,
 } from './errors';
+
+// TypedStorage
+export { TypedStorage } from './typed-storage';
+export type { TypedStorageOptions, TypedSetOptions, TypedSetEntry } from './typed-storage.types';
+
+// EncryptedTypedStorage
+export { EncryptedTypedStorage } from './encrypted-typed-storage';
+export type {
+  EncryptedTypedStorageOptions,
+  EncryptedSetOptions,
+  EncryptedSetEntry,
+  EncryptionKey,
+  StoredEncryptedBlob,
+  ClientKeyBinding,
+} from './encrypted-typed-storage.types';
 
 // Adapters (for direct instantiation if needed)
 export {

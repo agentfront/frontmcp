@@ -173,3 +173,18 @@ export class StorageNotConnectedError extends StorageError {
     this.name = 'StorageNotConnectedError';
   }
 }
+
+/**
+ * Error thrown when encryption/decryption operations fail.
+ *
+ * @example
+ * ```typescript
+ * throw new EncryptedStorageError('Failed to decrypt: invalid key');
+ * ```
+ */
+export class EncryptedStorageError extends StorageError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EncryptedStorageError';
+  }
+}

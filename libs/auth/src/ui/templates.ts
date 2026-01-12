@@ -14,13 +14,7 @@
  * Uses base-layout.ts for consistent HTML shell with CDN resources.
  */
 
-import {
-  baseLayout,
-  wideLayout,
-  extraWideLayout,
-  centeredCardLayout,
-  escapeHtml as baseEscapeHtml,
-} from './base-layout';
+import { wideLayout, extraWideLayout, centeredCardLayout, escapeHtml as baseEscapeHtml } from './base-layout';
 
 // ============================================
 // Types

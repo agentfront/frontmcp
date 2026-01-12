@@ -360,7 +360,7 @@ describe('DEFAULT_THEME', () => {
 
   it('should have font configuration', () => {
     expect(DEFAULT_THEME.fonts).toHaveProperty('sans');
-    expect(DEFAULT_THEME.fonts!.sans).toContain('Inter');
+    expect(DEFAULT_THEME.fonts?.sans).toContain('Inter');
   });
 
   it('should use valid hex colors', () => {

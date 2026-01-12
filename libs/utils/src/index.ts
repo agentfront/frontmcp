@@ -214,6 +214,7 @@ export {
   StorageTTLError,
   StoragePatternError,
   StorageNotConnectedError,
+  EncryptedStorageError,
   // Adapters
   BaseStorageAdapter,
   MemoryStorageAdapter,
@@ -222,6 +223,19 @@ export {
   UpstashStorageAdapter,
   FileSystemStorageAdapter,
   type FileSystemAdapterOptions,
+  // TypedStorage (type-safe JSON wrapper)
+  TypedStorage,
+  type TypedStorageOptions,
+  type TypedSetOptions,
+  type TypedSetEntry,
+  // EncryptedTypedStorage (encrypted storage with key rotation)
+  EncryptedTypedStorage,
+  type EncryptedTypedStorageOptions,
+  type EncryptedSetOptions,
+  type EncryptedSetEntry,
+  type EncryptionKey,
+  type StoredEncryptedBlob,
+  type ClientKeyBinding,
   // Utilities
   globToRegex,
   matchesPattern,

@@ -116,12 +116,9 @@ export {
   VaultEncryption,
   // Token Vault
   TokenVault,
-  // Token Store (legacy)
-  MemoryTokenStore,
-  RedisTokenStore,
-  // Token Store (storage-backed - recommended)
+  // Token Store (storage-backed)
   StorageTokenStore,
-  // TypedStorage
+  // TypedStorage (re-exported from @frontmcp/utils)
   TypedStorage,
   // Utilities
   TinyTtlCache,

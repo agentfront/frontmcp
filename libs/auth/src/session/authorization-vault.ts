@@ -22,7 +22,7 @@
  */
 
 import { z } from 'zod';
-import { randomUUID } from '@frontmcp/utils';
+// randomUUID can be imported from @frontmcp/utils if needed
 
 // ============================================
 // Credential Type Enum

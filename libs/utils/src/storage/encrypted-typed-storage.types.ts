@@ -5,7 +5,7 @@
  * transparent encryption/decryption with key rotation support.
  */
 
-import type { SetOptions } from '@frontmcp/utils';
+import type { SetOptions } from './types';
 import type { z } from 'zod';
 
 /**
@@ -34,7 +34,7 @@ export interface EncryptionKey {
  * - Server cannot decrypt without client secret (e.g., sessionId)
  * - Client cannot decrypt without server key
  * - Prevents RCE attacks from stealing user data
- * - Deterministic derivation (same inputs → same key)
+ * - Deterministic derivation (same inputs -> same key)
  *
  * @example
  * ```typescript

@@ -45,7 +45,6 @@
     }
   },
   "peerDependencies": {
-    "tslib": "^2.0.0",
     "zod": "^4.0.0"
   },
   "dependencies": {

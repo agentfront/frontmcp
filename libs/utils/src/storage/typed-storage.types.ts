@@ -5,7 +5,7 @@
  * type-safe JSON serialization on top of StorageAdapter.
  */
 
-import type { SetOptions } from '@frontmcp/utils';
+import type { SetOptions } from './types';
 import type { z } from 'zod';
 
 /**

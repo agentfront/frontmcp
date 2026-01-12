@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { createStorage } from '@frontmcp/utils/storage';
+ * import { createStorage, TypedStorage } from '@frontmcp/utils';
  *
  * interface User {
  *   id: string;
@@ -21,7 +21,7 @@
  * ```
  */
 
-import type { StorageAdapter, NamespacedStorage, SetOptions } from '@frontmcp/utils';
+import type { StorageAdapter, NamespacedStorage, SetOptions } from './types';
 import type { TypedStorageOptions, TypedSetEntry } from './typed-storage.types';
 
 /**

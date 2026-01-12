@@ -1,10 +1,26 @@
 /**
  * Token Store
  *
- * Interface and implementations for storing encrypted token blobs.
+ * Interface for storing encrypted token blobs.
+ *
+ * For implementations, use StorageTokenStore with any storage adapter:
+ *
+ * @example
+ * ```typescript
+ * import { StorageTokenStore } from '@frontmcp/auth';
+ * import { MemoryStorageAdapter, createStorage } from '@frontmcp/utils';
+ *
+ * // In-memory (development/testing)
+ * const memoryAdapter = new MemoryStorageAdapter();
+ * await memoryAdapter.connect();
+ * const store = new StorageTokenStore(memoryAdapter);
+ *
+ * // With any backend (Redis, Vercel KV, Upstash)
+ * const storage = await createStorage({ type: 'auto' });
+ * const store = new StorageTokenStore(storage);
+ * ```
  */
 
-import { randomUUID } from '@frontmcp/utils';
 import type { EncBlob } from './token.vault';
 
 export type SecretRecord = {
@@ -22,52 +38,4 @@ export interface TokenStore {
   del(id: string): Promise<void>;
   /** Allocate a new id (opaque). */
   allocId(): string;
-}
-
-/** In-memory reference store (dev/test). */
-export class MemoryTokenStore implements TokenStore {
-  private m = new Map<string, SecretRecord>();
-  allocId() {
-    return randomUUID();
-  }
-  async put(id: string, blob: EncBlob) {
-    this.m.set(id, { id, blob, updatedAt: Date.now() });
-  }
-  async get(id: string) {
-    return this.m.get(id);
-  }
-  async del(id: string) {
-    this.m.delete(id);
-  }
-}
-
-/** Redis token store - replace `any` with your redis client type. */
-export class RedisTokenStore implements TokenStore {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(
-    private readonly redis: any,
-    private readonly ns = 'tok:',
-  ) {}
-  allocId() {
-    return randomUUID();
-  }
-  key(id: string) {
-    return `${this.ns}${id}`;
-  }
-
-  async put(id: string, blob: EncBlob) {
-    const rec = JSON.stringify({ id, blob, updatedAt: Date.now() });
-    // Optional: set EX by blob.exp if you want Redis eviction at token expiry
-    await this.redis.set(this.key(id), rec);
-  }
-
-  async get(id: string) {
-    const raw = await this.redis.get(this.key(id));
-    if (!raw) return undefined;
-    return JSON.parse(raw) as SecretRecord;
-  }
-
-  async del(id: string) {
-    await this.redis.del(this.key(id));
-  }
 }

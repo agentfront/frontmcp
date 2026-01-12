@@ -316,7 +316,7 @@ describe('JwksService Advanced', () => {
       });
 
       expect(result).toBeDefined();
-      expect(result!.keys.length).toBe(1);
+      expect(result?.keys.length).toBe(1);
     });
   });
 

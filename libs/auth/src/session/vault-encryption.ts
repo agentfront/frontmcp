@@ -227,7 +227,7 @@ export class VaultEncryption {
     try {
       const plaintext = await decryptAesGcm(key, ciphertext, ivBuffer, tagBuffer);
       return new TextDecoder().decode(plaintext);
-    } catch (error) {
+    } catch (_error) {
       // GCM authentication failed - wrong key or tampered data
       throw new Error('Decryption failed: invalid key or corrupted data');
     }

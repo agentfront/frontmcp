@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { MemoryStorageAdapter } from '@frontmcp/utils';
+import { MemoryStorageAdapter } from '../adapters';
 import { TypedStorage } from '../typed-storage';
 
 interface TestUser {

@@ -6,8 +6,10 @@
  */
 
 import { z } from 'zod';
-import { MemoryStorageAdapter, randomBytes } from '@frontmcp/utils';
-import { EncryptedTypedStorage, EncryptedStorageError } from '../encrypted-typed-storage';
+import { MemoryStorageAdapter } from '../adapters';
+import { randomBytes } from '../../crypto';
+import { EncryptedTypedStorage } from '../encrypted-typed-storage';
+import { EncryptedStorageError } from '../errors';
 import type { EncryptionKey } from '../encrypted-typed-storage.types';
 
 interface TestSecret {

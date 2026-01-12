@@ -30,7 +30,7 @@ export type VerifyResult = {
   issuer?: string;
   sub?: string;
   providerId?: string;
-  header?: any;
-  payload?: any;
+  header?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
   error?: string;
 };

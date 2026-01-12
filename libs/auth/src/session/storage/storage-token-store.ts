@@ -18,11 +18,10 @@
  * ```
  */
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, TypedStorage } from '@frontmcp/utils';
 import type { StorageAdapter, NamespacedStorage } from '@frontmcp/utils';
 import type { TokenStore, SecretRecord } from '../token.store';
 import type { EncBlob } from '../token.vault';
-import { TypedStorage } from './typed-storage';
 
 /**
  * Options for StorageTokenStore

@@ -5,12 +5,12 @@
  * Uses @frontmcp/utils/storage for unified backend support (Memory, Redis, Vercel KV, Upstash).
  */
 
-// TypedStorage
-export { TypedStorage } from './typed-storage';
-export type { TypedStorageOptions, TypedSetOptions, TypedSetEntry } from './typed-storage.types';
+// Re-export TypedStorage from @frontmcp/utils for backwards compatibility
+export { TypedStorage } from '@frontmcp/utils';
+export type { TypedStorageOptions, TypedSetOptions, TypedSetEntry } from '@frontmcp/utils';
 
-// EncryptedTypedStorage
-export { EncryptedTypedStorage, EncryptedStorageError } from './encrypted-typed-storage';
+// Re-export EncryptedTypedStorage from @frontmcp/utils for backwards compatibility
+export { EncryptedTypedStorage, EncryptedStorageError } from '@frontmcp/utils';
 export type {
   EncryptedTypedStorageOptions,
   EncryptedSetOptions,
@@ -18,7 +18,7 @@ export type {
   EncryptionKey,
   StoredEncryptedBlob,
   ClientKeyBinding,
-} from './encrypted-typed-storage.types';
+} from '@frontmcp/utils';
 
 // StorageTokenStore
 export { StorageTokenStore } from './storage-token-store';

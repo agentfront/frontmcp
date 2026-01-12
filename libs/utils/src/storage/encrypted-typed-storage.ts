@@ -8,8 +8,7 @@
  *
  * @example
  * ```typescript
- * import { createStorage, randomBytes } from '@frontmcp/utils';
- * import { EncryptedTypedStorage } from '@frontmcp/auth';
+ * import { createStorage, EncryptedTypedStorage, randomBytes } from '@frontmcp/utils';
  *
  * interface Secret {
  *   apiKey: string;
@@ -32,15 +31,8 @@
  * ```
  */
 
-import {
-  encryptAesGcm,
-  decryptAesGcm,
-  randomBytes,
-  base64urlEncode,
-  base64urlDecode,
-  hkdfSha256,
-} from '@frontmcp/utils';
-import type { StorageAdapter, NamespacedStorage, SetOptions } from '@frontmcp/utils';
+import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode, hkdfSha256 } from '../crypto';
+import type { StorageAdapter, NamespacedStorage, SetOptions } from './types';
 import type {
   EncryptedTypedStorageOptions,
   EncryptedSetEntry,
@@ -48,22 +40,13 @@ import type {
   StoredEncryptedBlob,
   ClientKeyBinding,
 } from './encrypted-typed-storage.types';
+import { EncryptedStorageError } from './errors';
 
 /** Text encoder for string to Uint8Array conversion */
 const textEncoder = new TextEncoder();
 
 /** Text decoder for Uint8Array to string conversion */
 const textDecoder = new TextDecoder();
-
-/**
- * Error thrown when encryption/decryption operations fail.
- */
-export class EncryptedStorageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'EncryptedStorageError';
-  }
-}
 
 /**
  * EncryptedTypedStorage provides transparent encryption/decryption
@@ -324,7 +307,7 @@ export class EncryptedTypedStorage<T> {
    * This provides zero-knowledge encryption where:
    * - Server cannot decrypt without client secret (sessionId)
    * - Client cannot decrypt without server key
-   * - Key derivation is deterministic (same inputs → same derived key)
+   * - Key derivation is deterministic (same inputs -> same derived key)
    *
    * @param serverKey - The server-side encryption key
    * @returns The key to use for actual encryption/decryption
@@ -388,7 +371,7 @@ export class EncryptedTypedStorage<T> {
     let blob: StoredEncryptedBlob;
     try {
       blob = JSON.parse(raw);
-    } catch (error) {
+    } catch (_error) {
       if (this.throwOnError) {
         throw new EncryptedStorageError(`Failed to parse stored blob for key "${storageKey}"`);
       }
