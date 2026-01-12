@@ -35,6 +35,8 @@ const config: Config.InitialOptions = {
     '^@frontmcp/sdk$': '<rootDir>/../../../libs/sdk/src/index.ts',
     '^@frontmcp/adapters$': '<rootDir>/../../../libs/adapters/src/index.ts',
     '^@frontmcp/plugins$': '<rootDir>/../../../libs/plugins/src/index.ts',
+    '^@frontmcp/auth$': '<rootDir>/../../../libs/auth/src/index.ts',
+    '^@frontmcp/utils$': '<rootDir>/../../../libs/utils/src/index.ts',
   },
   coverageDirectory: '../../../coverage/e2e/demo-e2e-redis',
   ...e2eCoveragePreset,

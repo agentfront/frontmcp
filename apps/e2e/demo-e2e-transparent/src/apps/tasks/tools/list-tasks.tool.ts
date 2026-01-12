@@ -34,7 +34,7 @@ type ListTasksOutput = z.infer<typeof outputSchema>;
 })
 export default class ListTasksTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: ListTasksInput): Promise<ListTasksOutput> {
-    const authInfo = this.authInfo;
+    const authInfo = this.getAuthInfo();
     const userId = authInfo?.user?.sub || 'anonymous';
 
     let tasks = tasksStore.getAll();

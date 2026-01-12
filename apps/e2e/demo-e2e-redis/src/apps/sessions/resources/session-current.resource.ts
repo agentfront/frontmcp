@@ -20,7 +20,7 @@ export default class SessionCurrentResource extends ResourceContext<
 > {
   async execute(): Promise<z.infer<typeof outputSchema>> {
     // Use shared session ID from authInfo so data is consistent across tools and resources
-    const sessionId = this.authInfo.sessionId ?? 'mock-session-default';
+    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 
     const data = store.getAll();

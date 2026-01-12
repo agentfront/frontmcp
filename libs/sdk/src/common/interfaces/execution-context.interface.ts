@@ -61,7 +61,7 @@ export abstract class ExecutionContextBase<Out = unknown> {
    */
   get context(): FrontMcpContext {
     try {
-      return this.providers.get(FRONTMCP_CONTEXT as Token<FrontMcpContext>);
+      return this.providers.get(FRONTMCP_CONTEXT);
     } catch {
       // Context not available (likely called during initialization or outside request scope)
       throw new RequestContextNotAvailableError();

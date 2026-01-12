@@ -31,7 +31,7 @@ type CreateTaskOutput = z.infer<typeof outputSchema>;
 })
 export default class CreateTaskTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: CreateTaskInput): Promise<CreateTaskOutput> {
-    const authInfo = this.authInfo;
+    const authInfo = this.getAuthInfo();
     const userId = authInfo?.user?.sub || 'anonymous';
 
     const task = {

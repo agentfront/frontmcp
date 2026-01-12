@@ -94,25 +94,39 @@ type ScopeRef = { readonly id: string; readonly logger: FrontMcpLogger };
 type TransportRef = { sendElicitRequest: TransportAccessor['elicit']; readonly type: string };
 
 /**
- * Session key validation rules.
+ * Session ID validation constants.
  */
-const SESSION_KEY_MAX_LENGTH = 2048;
-const SESSION_KEY_VALID_PATTERN = /^[a-zA-Z0-9\-_.:]+$/;
+
+/** Maximum allowed length for session IDs */
+export const SESSION_ID_MAX_LENGTH = 2048;
 
 /**
- * Validate a session key string.
- *
- * @param value - The session key to validate
- * @throws InvalidInputError if validation fails
+ * Valid characters for session IDs:
+ * - Alphanumeric (a-z, A-Z, 0-9)
+ * - Hyphen, underscore, period
+ * - Colon (for namespaced IDs like "anon:uuid")
  */
-function validateSessionKey(value: string): void {
+export const SESSION_ID_VALID_PATTERN = /^[a-zA-Z0-9\-_.:]+$/;
+
+/**
+ * Validate a session ID string.
+ *
+ * Validates:
+ * - Not empty
+ * - Maximum length (2048 characters)
+ * - Valid characters only (alphanumeric, hyphen, underscore, period, colon)
+ *
+ * @param value - The session ID to validate
+ * @throws InvalidInputError if validation fails (empty, too long, invalid characters)
+ */
+export function validateSessionId(value: string): void {
   if (!value || value.length === 0) {
     throw new InvalidInputError('Session ID cannot be empty');
   }
-  if (value.length > SESSION_KEY_MAX_LENGTH) {
-    throw new InvalidInputError(`Session ID exceeds maximum length of ${SESSION_KEY_MAX_LENGTH} characters`);
+  if (value.length > SESSION_ID_MAX_LENGTH) {
+    throw new InvalidInputError(`Session ID exceeds maximum length of ${SESSION_ID_MAX_LENGTH} characters`);
   }
-  if (!SESSION_KEY_VALID_PATTERN.test(value)) {
+  if (!SESSION_ID_VALID_PATTERN.test(value)) {
     throw new InvalidInputError(
       'Session ID contains invalid characters. Allowed: alphanumeric, hyphen, underscore, period, colon',
     );
@@ -192,7 +206,7 @@ export class FrontMcpContext {
 
   constructor(args: FrontMcpContextArgs) {
     // Validate session ID
-    validateSessionKey(args.sessionId);
+    validateSessionId(args.sessionId);
 
     this.requestId = args.requestId ?? randomUUID();
     this.sessionId = args.sessionId;
@@ -381,7 +395,7 @@ export class FrontMcpContext {
    */
   elapsed(from?: string, to?: string): number {
     const fromTime = this.marks.get(from ?? 'init') ?? this.timestamp;
-    const toTime = to ? this.marks.get(to) ?? Date.now() : Date.now();
+    const toTime = to ? (this.marks.get(to) ?? Date.now()) : Date.now();
     return toTime - fromTime;
   }
 
