@@ -17,7 +17,7 @@
       "@frontmcp/uipack/*": ["libs/uipack/dist/*/index.d.ts"],
       "@frontmcp/ui": ["libs/ui/dist/index.d.ts"],
       "@frontmcp/ui/*": ["libs/ui/dist/*/index.d.ts"],
-      "@frontmcp/auth": ["dist/libs/auth/src/index.d.ts"]
+      "@frontmcp/auth": ["libs/auth/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],
