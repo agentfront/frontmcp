@@ -11,6 +11,8 @@ import { isUIType } from '@frontmcp/uipack/types';
 import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import type { ToolPaginationOptions } from '../../common/types/options/pagination.options';
+import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination.options';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,
@@ -47,7 +49,6 @@ type ResponseToolItem = BaseResponseToolItem & {
   outputSchema?: Record<string, unknown>;
 };
 
-// TODO: add support for pagination
 // TODO: add support for session based tools
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
@@ -82,6 +83,65 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
   private sample<T>(arr: T[], n = 5): T[] {
     return arr.slice(0, n);
+  }
+
+  /**
+   * Determine if pagination should be applied based on tool count and config.
+   */
+  private shouldPaginate(toolCount: number, config?: ToolPaginationOptions): boolean {
+    // No config means use auto mode
+    if (!config) {
+      // Auto mode: paginate only if toolCount exceeds default threshold
+      return toolCount > DEFAULT_TOOL_PAGINATION.autoThreshold;
+    }
+
+    const mode = config.mode ?? 'auto';
+
+    // Explicit false disables pagination
+    if (mode === false) return false;
+
+    // Explicit true always enables pagination
+    if (mode === true) return true;
+
+    // 'auto' mode: paginate if tool count exceeds threshold
+    const threshold = config.autoThreshold ?? DEFAULT_TOOL_PAGINATION.autoThreshold;
+    return toolCount > threshold;
+  }
+
+  /**
+   * Parse a cursor string to extract the offset.
+   * Cursor format: Base64-encoded JSON { offset: number }
+   *
+   * @throws InvalidInputError if cursor is malformed or contains invalid offset
+   */
+  private parseCursor(cursor: string): number {
+    try {
+      const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+      const parsed = JSON.parse(decoded);
+      const offset = parsed?.offset;
+
+      if (typeof offset !== 'number' || offset < 0 || !Number.isInteger(offset)) {
+        throw new InvalidInputError(
+          `Invalid pagination cursor: offset must be a non-negative integer, got ${
+            typeof offset === 'number' ? offset : typeof offset
+          }`,
+        );
+      }
+
+      return offset;
+    } catch (e) {
+      if (e instanceof InvalidInputError) throw e;
+      throw new InvalidInputError(
+        `Invalid pagination cursor format. Expected base64-encoded JSON with 'offset' field.`,
+      );
+    }
+  }
+
+  /**
+   * Encode an offset into a cursor string.
+   */
+  private encodeCursor(offset: number): string {
+    return Buffer.from(JSON.stringify({ offset })).toString('base64');
   }
 
   @Stage('parseInput')
@@ -256,8 +316,51 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('parseTools:start');
 
     try {
-      const resolved = this.state.required.resolvedTools;
+      const allResolved = this.state.required.resolvedTools;
       const platformType = this.state.platformType ?? 'unknown';
+
+      // Get pagination config from scope
+      const scope = this.scope as Scope;
+      const paginationConfig = scope.pagination?.tools;
+
+      // Determine if pagination should apply
+      const usePagination = this.shouldPaginate(allResolved.length, paginationConfig);
+
+      // Sort tools by finalName for stable ordering across pagination requests.
+      // This ensures cursor-based pagination returns consistent results.
+      const sortedResolved = [...allResolved].sort((a, b) => a.finalName.localeCompare(b.finalName));
+
+      // Calculate page boundaries
+      let resolved = sortedResolved;
+      let nextCursor: string | undefined;
+
+      if (usePagination) {
+        const cursor = this.state.cursor;
+        const offset = cursor ? this.parseCursor(cursor) : 0;
+        const pageSize = paginationConfig?.pageSize ?? DEFAULT_TOOL_PAGINATION.pageSize;
+
+        // Validate offset is within bounds
+        if (offset > sortedResolved.length) {
+          throw new InvalidInputError(
+            `Invalid pagination cursor: offset ${offset} exceeds total tool count ${sortedResolved.length}`,
+          );
+        }
+
+        // Slice to current page
+        resolved = sortedResolved.slice(offset, offset + pageSize);
+
+        // Generate nextCursor if more tools remain
+        const nextOffset = offset + pageSize;
+        if (nextOffset < sortedResolved.length) {
+          nextCursor = this.encodeCursor(nextOffset);
+        }
+
+        this.logger.verbose(
+          `parseTools: pagination active - offset=${offset}, pageSize=${pageSize}, ` +
+            `returning ${resolved.length}/${sortedResolved.length} tools` +
+            (nextCursor ? `, nextCursor=${nextCursor}` : ''),
+        );
+      }
 
       // Only OpenAI ChatGPT uses openai/* meta keys
       // ext-apps (SEP-1865) uses ui/* keys per the MCP Apps specification
@@ -414,7 +517,12 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
       const extra = tools.length > 5 ? `, +${tools.length - 5} more` : '';
       this.logger.info(`parseTools: prepared ${tools.length} tool descriptor(s): ${preview}${extra}`);
 
-      this.respond({ tools });
+      // Respond with tools and optional nextCursor for pagination
+      if (nextCursor) {
+        this.respond({ tools, nextCursor });
+      } else {
+        this.respond({ tools });
+      }
       this.logger.info('parseTools: response sent');
       this.logger.verbose('parseTools:done');
     } catch (error) {
