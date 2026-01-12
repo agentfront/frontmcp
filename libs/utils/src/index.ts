@@ -130,6 +130,13 @@ export {
   getOrCreateSecret,
   clearCachedSecret,
   isSecretCached,
+  // HMAC signing utilities
+  type SignedData,
+  type HmacSigningConfig,
+  signData,
+  verifyData,
+  isSignedData,
+  verifyOrParseData,
   // Unified key persistence (recommended)
   type BaseKeyData,
   type SecretKeyData,

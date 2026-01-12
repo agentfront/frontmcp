@@ -1,36 +1,18 @@
 // auth/session/session.service.ts
-import { StatelessSession } from './record/session.stateless';
-import { StatefulSession } from './record/session.stateful';
 import { Scope } from '../../scope';
 import { CreateSessionArgs } from './session.types';
-import { TransparentSession } from './record/session.transparent';
-import { ScopedInMemoryStore } from '../../store';
+import { McpSession } from './record/session.mcp';
 
 export class SessionService {
-  private store = new ScopedInMemoryStore();
-
   /**
-   * Create and persist a new Session from verified auth data.
+   * Create a new Session from verified auth data.
    * The returned Session exposes async token helpers, scoped view, and transport JWT helpers.
    */
   async createSession(scope: Scope, args: CreateSessionArgs) {
-    if (scope.orchestrated) {
-      return this.createOrchestratedSession(scope, args);
-    } else {
-      return this.createTransparentSession(scope, args);
-    }
+    return this.createMcpSession(scope, args);
   }
 
-  private createOrchestratedSession(scope: Scope, args: CreateSessionArgs) {
-    const stateless = scope.metadata.transport?.sessionMode === 'stateless';
-    if (stateless) {
-      return new StatelessSession(args as any);
-    } else {
-      return new StatefulSession(args as any);
-    }
-  }
-
-  private createTransparentSession(scope: Scope, args: CreateSessionArgs) {
+  private createMcpSession(scope: Scope, args: CreateSessionArgs) {
     const primary = scope.auth;
 
     const apps = scope.apps.getApps();
@@ -49,12 +31,6 @@ export class SessionService {
         }
       }
     }
-
-    // TODO: the authorized resources should be computed from the oauth-protected-resource flow
-    // let authorizedResources: string[] = args.authorizedResources ?? [];
-    // if (!args.authorizedResources) {
-    //   authorizedResources = [];
-    // }
 
     // Providers snapshot
     let authorizedProviders = args.authorizedProviders;
@@ -82,11 +58,11 @@ export class SessionService {
       scopes = Array.isArray(rawScope)
         ? rawScope.map(String)
         : typeof rawScope === 'string'
-        ? rawScope.split(/[\s,]+/).filter(Boolean)
-        : [];
+          ? rawScope.split(/[\s,]+/).filter(Boolean)
+          : [];
     }
 
-    return new TransparentSession({
+    return new McpSession({
       apps: appIds,
       id: args.token,
       sessionId: args.sessionId,
@@ -99,7 +75,7 @@ export class SessionService {
       authorizedProviderIds: authorizedProviderIds as any,
       authorizedApps,
       authorizedAppIds: appIds,
-      authorizedResources: [], // TODO: fix
+      authorizedResources: [],
       scopes,
       authorizedTools: args.authorizedTools,
       authorizedToolIds: args.authorizedToolIds,

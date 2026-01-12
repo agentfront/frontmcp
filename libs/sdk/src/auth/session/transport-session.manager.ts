@@ -1,6 +1,6 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, encryptValue, decryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
 import {
   TransportSession,
   TransportProtocol,
@@ -10,10 +10,8 @@ import {
   SessionStore,
   SessionStorageConfig,
   TransportState,
-  EncryptedBlob,
 } from './transport-session.types';
 import { encryptJson } from './utils/session-id.utils';
-import { encryptAesGcmSync, decryptAesGcmSync, hkdfSha256, type SessionEncBlob } from '@frontmcp/auth';
 import { getMachineId } from '../authorization/authorization.class';
 import { RedisSessionStore } from './redis-session.store';
 
@@ -309,12 +307,12 @@ export class TransportSessionManager {
       const statelessPayload = payload as StatelessSessionJwtPayload;
 
       if (additionalState.state) {
-        const encrypted = encryptAesGcmSync(this.encryptionKey, JSON.stringify(additionalState.state));
+        const encrypted = encryptValue(additionalState.state, this.encryptionKey);
         statelessPayload.state = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
       }
 
       if (additionalState.tokens) {
-        const encrypted = encryptAesGcmSync(this.encryptionKey, JSON.stringify(additionalState.tokens));
+        const encrypted = encryptValue(additionalState.tokens, this.encryptionKey);
         statelessPayload.tokens = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
       }
     }
@@ -337,14 +335,10 @@ export class TransportSessionManager {
 
       const [ivB64, tagB64, ctB64] = parts;
 
-      const decrypted = decryptAesGcmSync(this.encryptionKey, {
-        alg: 'A256GCM',
-        iv: ivB64,
-        tag: tagB64,
-        data: ctB64,
-      });
-
-      const payload = JSON.parse(decrypted) as SessionJwtPayload;
+      const payload = decryptValue<SessionJwtPayload>(
+        { alg: 'A256GCM', iv: ivB64, tag: tagB64, data: ctB64 },
+        this.encryptionKey,
+      );
 
       // Validate expiration
       if (payload.exp && payload.exp * 1000 < Date.now()) {

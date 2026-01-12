@@ -19,13 +19,13 @@ import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
 import OauthRegisterFlow from '../flows/oauth.register.flow';
 import OauthTokenFlow from '../flows/oauth.token.flow';
 import OauthCallbackFlow from '../flows/oauth.callback.flow';
-import { JwksService } from '@frontmcp/auth';
 import {
+  JwksService,
   AuthorizationStore,
   InMemoryAuthorizationStore,
   AuthorizationCodeRecord,
   verifyPkce,
-} from '../session/authorization.store';
+} from '@frontmcp/auth';
 
 /**
  * Options type for LocalPrimaryAuth - can be public, orchestrated local, or orchestrated remote

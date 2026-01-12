@@ -326,6 +326,18 @@ export {
   isSecretCached,
 } from './secret-persistence';
 
+// Re-export HMAC signing utilities
+export {
+  // Types
+  type SignedData,
+  type HmacSigningConfig,
+  // Functions
+  signData,
+  verifyData,
+  isSignedData,
+  verifyOrParseData,
+} from './hmac-signing';
+
 // Re-export unified key persistence utilities (recommended)
 export {
   // Types

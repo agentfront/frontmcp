@@ -84,6 +84,13 @@ export type {
 // Session Module
 // ============================================
 export {
+  // OAuth Authorization Store
+  InMemoryAuthorizationStore,
+  RedisAuthorizationStore,
+  verifyPkce,
+  generatePkceChallenge,
+  pkceChallengeSchema,
+  authorizationCodeRecordSchema,
   // Credential schemas
   credentialTypeSchema,
   oauthCredentialSchema,
@@ -120,16 +127,25 @@ export {
   StorageTokenStore,
   // TypedStorage (re-exported from @frontmcp/utils)
   TypedStorage,
-  // Session Crypto
+  // Crypto utilities (re-exported from @frontmcp/utils)
+  hkdfSha256,
+  encryptValue,
+  decryptValue,
   encryptAesGcm,
   decryptAesGcm,
-  hkdfSha256,
-  encryptAesGcmSync,
-  decryptAesGcmSync,
   // Utilities
   TinyTtlCache,
 } from './session';
 export type {
+  // OAuth Authorization Store types
+  AuthorizationStore,
+  PkceChallenge,
+  AuthorizationCodeRecord,
+  PendingAuthorizationRecord,
+  RefreshTokenRecord,
+  ConsentStateRecord,
+  FederatedLoginStateRecord,
+  // Credential types
   CredentialType,
   OAuthCredential,
   ApiKeyCredential,
@@ -170,8 +186,8 @@ export type {
   ClientKeyBinding,
   StorageTokenStoreOptions,
   StorageAuthorizationVaultOptions,
-  // Session Crypto types
-  SessionEncBlob,
+  // Crypto types (re-exported from @frontmcp/utils)
+  EncryptedBlob,
 } from './session';
 
 // ============================================

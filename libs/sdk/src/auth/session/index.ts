@@ -21,5 +21,24 @@ export {
   SessionSigningConfig,
 } from './session-crypto';
 
-// Authorization store for OAuth flows
-export * from './authorization.store';
+// Authorization store for OAuth flows (re-exported from @frontmcp/auth)
+export {
+  // Classes
+  InMemoryAuthorizationStore,
+  RedisAuthorizationStore,
+  // Functions
+  verifyPkce,
+  generatePkceChallenge,
+  // Schemas
+  pkceChallengeSchema,
+  authorizationCodeRecordSchema,
+} from '@frontmcp/auth';
+export type {
+  AuthorizationStore,
+  PkceChallenge,
+  AuthorizationCodeRecord,
+  PendingAuthorizationRecord,
+  RefreshTokenRecord,
+  ConsentStateRecord,
+  FederatedLoginStateRecord,
+} from '@frontmcp/auth';

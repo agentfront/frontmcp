@@ -12,7 +12,7 @@
 import 'reflect-metadata';
 import { z } from 'zod';
 import OauthAuthorizeFlow from '../oauth.authorize.flow';
-import { InMemoryAuthorizationStore, generatePkceChallenge } from '../../session/authorization.store';
+import { InMemoryAuthorizationStore, generatePkceChallenge } from '@frontmcp/auth';
 import {
   // Flow test utilities
   createMockScopeEntry,

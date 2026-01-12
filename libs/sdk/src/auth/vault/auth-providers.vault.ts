@@ -9,7 +9,7 @@ import { Token } from '@frontmcp/di';
 import type { Credential, AuthorizationVault, AppCredential, CredentialScope } from '@frontmcp/auth';
 import { extractCredentialExpiry } from '@frontmcp/auth';
 import { FrontMcpLogger } from '../../common';
-import { InvalidInputError } from '../../errors/mcp.error';
+import { InvalidInputError, InternalMcpError } from '../../errors/mcp.error';
 
 /**
  * AuthProvidersVault - Storage layer for auth provider credentials
@@ -99,7 +99,14 @@ export class AuthProvidersVault {
       return appCredential.credential as T;
     } catch (error) {
       this.logger?.warn(`Failed to get credential "${providerId}":`, error);
-      return null;
+      // Re-throw storage errors so callers can distinguish "not found" from storage failure
+      if (error instanceof InternalMcpError) {
+        throw error;
+      }
+      throw new InternalMcpError(
+        `Storage error while retrieving credential "${providerId}": ${error instanceof Error ? error.message : String(error)}`,
+        'CREDENTIAL_STORAGE_ERROR',
+      );
     }
   }
 

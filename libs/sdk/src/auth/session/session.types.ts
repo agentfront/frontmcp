@@ -2,8 +2,8 @@
 
 import { SessionUser } from './record/session.base';
 
-/** How provider tokens are managed in a session. */
-export type SessionMode = 'transparent' | 'stateful' | 'stateless';
+/** Session mode identifier. */
+export type SessionMode = 'mcp';
 
 /**
  * How a single provider’s access token is represented inside the session payload.
@@ -53,4 +53,3 @@ export type CreateSessionArgs = {
   authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
   authorizedPromptIds?: string[];
 };
-

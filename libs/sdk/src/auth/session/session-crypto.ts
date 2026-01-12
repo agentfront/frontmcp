@@ -4,23 +4,26 @@
  * Provides HMAC signing and verification for stored session data.
  * Protects against session data tampering when stored in external
  * systems like Redis that don't provide application-level integrity.
+ *
+ * This module wraps the generic @frontmcp/utils HMAC signing utilities
+ * with session-specific types and environment-based secret handling.
  */
 
-import { hmacSha256, base64urlEncode, base64urlDecode, timingSafeEqual } from '@frontmcp/utils';
+import {
+  signData,
+  verifyData,
+  isSignedData,
+  verifyOrParseData,
+  type SignedData,
+  type HmacSigningConfig,
+} from '@frontmcp/utils';
 import type { StoredSession } from './transport-session.types';
 
 /**
  * Signed session wrapper structure.
  * Contains the session data and its HMAC signature.
  */
-export interface SignedSession {
-  /** The session data */
-  data: StoredSession;
-  /** HMAC-SHA256 signature in base64url format */
-  sig: string;
-  /** Signature version for future algorithm changes */
-  v: 1;
-}
+export type SignedSession = SignedData<StoredSession>;
 
 /**
  * Configuration for session signing.
@@ -57,14 +60,10 @@ function getSigningSecret(config?: SessionSigningConfig): string {
 }
 
 /**
- * Compute HMAC-SHA256 signature for session data.
+ * Resolve config to HmacSigningConfig with secret.
  */
-function computeSignature(data: string, secret: string): string {
-  const encoder = new TextEncoder();
-  const keyBytes = encoder.encode(secret);
-  const dataBytes = encoder.encode(data);
-  const hmac = hmacSha256(keyBytes, dataBytes);
-  return base64urlEncode(hmac);
+function resolveConfig(config?: SessionSigningConfig): HmacSigningConfig {
+  return { secret: getSigningSecret(config) };
 }
 
 /**
@@ -84,17 +83,7 @@ function computeSignature(data: string, secret: string): string {
  * ```
  */
 export function signSession(session: StoredSession, config?: SessionSigningConfig): string {
-  const secret = getSigningSecret(config);
-  const data = JSON.stringify(session);
-  const sig = computeSignature(data, secret);
-
-  const signed: SignedSession = {
-    data: session,
-    sig,
-    v: 1,
-  };
-
-  return JSON.stringify(signed);
+  return signData(session, resolveConfig(config));
 }
 
 /**
@@ -118,43 +107,7 @@ export function signSession(session: StoredSession, config?: SessionSigningConfi
  * ```
  */
 export function verifySession(signedData: string, config?: SessionSigningConfig): StoredSession | null {
-  try {
-    const secret = getSigningSecret(config);
-    const parsed = JSON.parse(signedData) as unknown;
-
-    // Check if this is a signed session (has 'sig' field)
-    if (!parsed || typeof parsed !== 'object' || !('sig' in parsed)) {
-      // Not a signed session - could be legacy data
-      // Return null to indicate verification failed
-      return null;
-    }
-
-    const signed = parsed as SignedSession;
-
-    // Verify version
-    if (signed.v !== 1) {
-      console.warn('[SessionCrypto] Unknown signature version:', signed.v);
-      return null;
-    }
-
-    // Recompute signature from data
-    const data = JSON.stringify(signed.data);
-    const expectedSig = computeSignature(data, secret);
-
-    // Use timing-safe comparison to prevent timing attacks
-    const sigBytes = base64urlDecode(signed.sig);
-    const expectedBytes = base64urlDecode(expectedSig);
-
-    if (!timingSafeEqual(sigBytes, expectedBytes)) {
-      console.warn('[SessionCrypto] HMAC verification failed - session data may be tampered');
-      return null;
-    }
-
-    return signed.data;
-  } catch (error) {
-    console.warn('[SessionCrypto] Failed to verify session:', (error as Error).message);
-    return null;
-  }
+  return verifyData<StoredSession>(signedData, resolveConfig(config));
 }
 
 /**
@@ -164,14 +117,7 @@ export function verifySession(signedData: string, config?: SessionSigningConfig)
  * @param data - Raw data from storage
  * @returns true if the data appears to be a signed session
  */
-export function isSignedSession(data: string): boolean {
-  try {
-    const parsed = JSON.parse(data);
-    return parsed && typeof parsed === 'object' && 'sig' in parsed && 'v' in parsed;
-  } catch {
-    return false;
-  }
-}
+export { isSignedData as isSignedSession };
 
 /**
  * Verify or parse a session, supporting both signed and unsigned formats.
@@ -182,16 +128,5 @@ export function isSignedSession(data: string): boolean {
  * @returns The session (verified if signed, parsed if unsigned) or null
  */
 export function verifyOrParseSession(data: string, config?: SessionSigningConfig): StoredSession | null {
-  if (isSignedSession(data)) {
-    return verifySession(data, config);
-  }
-
-  // Legacy unsigned session - parse without signature verification.
-  // IMPORTANT: Caller MUST validate the result with storedSessionSchema.safeParse()
-  // to ensure data integrity. See RedisSessionStore.get() for proper usage.
-  try {
-    return JSON.parse(data) as StoredSession;
-  } catch {
-    return null;
-  }
+  return verifyOrParseData<StoredSession>(data, resolveConfig(config));
 }
