@@ -81,6 +81,8 @@ export {
   bytesToHex,
   base64urlEncode,
   base64urlDecode,
+  base64Encode,
+  base64Decode,
   isNode,
   isBrowser,
   assertNode,

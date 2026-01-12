@@ -6,6 +6,7 @@
  */
 
 import type { Credential } from '@frontmcp/auth';
+import { base64Encode } from '@frontmcp/utils';
 import type { AuthProvidersAccessor } from './auth-providers.accessor';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from './auth-providers.registry';
 import type { AuthProvidersVault } from './auth-providers.vault';
@@ -159,9 +160,14 @@ export class AuthProvidersAccessorImpl implements AuthProvidersAccessor {
   }
 
   async has(providerName: string): Promise<boolean> {
-    // Check cache first
-    if (this.cache.has(providerName)) {
-      return true;
+    // Check cache first, but validate the entry
+    const cached = this.cache.get(providerName);
+    if (cached) {
+      if (this.isValid(cached)) {
+        return true;
+      }
+      // Cached credential is invalid/expired, remove it
+      this.cache.invalidate(providerName);
     }
 
     // Check vault
@@ -292,8 +298,8 @@ export class AuthProvidersAccessorImpl implements AuthProvidersAccessor {
         return { [credential.headerName]: credential.key };
 
       case 'basic': {
-        const encoded =
-          credential.encodedValue ?? Buffer.from(`${credential.username}:${credential.password}`).toString('base64');
+        const value = `${credential.username}:${credential.password}`;
+        const encoded = credential.encodedValue ?? base64Encode(new TextEncoder().encode(value));
         return { Authorization: `Basic ${encoded}` };
       }
 

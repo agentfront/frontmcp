@@ -10,6 +10,7 @@ import type { Credential, AuthorizationVault, AppCredential } from '@frontmcp/au
 import type { CredentialScope } from './auth-providers.types';
 import { extractCredentialExpiry } from './credential-loaders/credential-helpers';
 import { FrontMcpLogger } from '../../common';
+import { InvalidInputError } from '../../errors/mcp.error';
 
 /**
  * AuthProvidersVault - Storage layer for auth provider credentials
@@ -253,13 +254,16 @@ export class AuthProvidersVault {
         return `${this.namespace}global`;
       case 'user':
         if (!userId) {
-          throw new Error(`userId is required for user-scoped credentials (namespace: ${this.namespace})`);
+          throw new InvalidInputError(`userId is required for user-scoped credentials (namespace: ${this.namespace})`);
         }
         return `${this.namespace}user:${userId}`;
       case 'session':
         return `${this.namespace}session:${sessionId}`;
-      default:
-        return `${this.namespace}session:${sessionId}`;
+      default: {
+        // Exhaustive check - will cause compile error if new scope is added
+        const _exhaustive: never = scope;
+        throw new InvalidInputError(`Unknown credential scope: ${_exhaustive}`);
+      }
     }
   }
 }
