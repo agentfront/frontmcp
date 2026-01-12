@@ -32,6 +32,8 @@ export class SessionService {
           const toolNames = app.tools.getTools().map((t) => String(t.metadata.name));
           authorizedApps[app.id] = { id: app.id, toolIds: toolNames };
         } catch {
+          // Log for debugging in case of unexpected issues during app registration
+          console.warn(`[SessionService] Failed to retrieve tools for app ${app.id}, defaulting to empty toolIds`);
           authorizedApps[app.id] = { id: app.id, toolIds: [] };
         }
       }

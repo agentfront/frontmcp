@@ -70,16 +70,27 @@ function decryptSessionJson(sessionId: string): unknown {
   return decryptValue({ alg: 'A256GCM', iv: ivB64, tag: tagB64, data: ctB64 }, key);
 }
 
-function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {
+/**
+ * Validates the structure of a session payload without signature verification.
+ * Use this for structural validation only (e.g., when updating an existing session).
+ */
+function hasValidSessionStructure(dec: unknown): dec is SessionIdPayload {
   if (typeof dec !== 'object' || dec === null) return false;
   const d = dec as Record<string, unknown>;
   return (
     typeof d['nodeId'] === 'string' &&
     typeof d['authSig'] === 'string' &&
     typeof d['uuid'] === 'string' &&
-    typeof d['iat'] === 'number' &&
-    d['authSig'] === sig
+    typeof d['iat'] === 'number'
   );
+}
+
+/**
+ * Validates a session payload including signature verification.
+ * Use this when verifying a session against an expected auth signature.
+ */
+function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {
+  return hasValidSessionStructure(dec) && dec.authSig === sig;
 }
 
 function isValidPublicSessionPayload(dec: unknown): dec is SessionIdPayload {
@@ -163,19 +174,6 @@ export function parseSessionHeader(
   }
 
   return undefined;
-  // // Create fresh
-
-  // const decodedSse: SessionIdPayload = {
-  //   nodeId: MACHINE_ID,
-  //   authSig: currentAuthSig,
-  //   uuid: randomUUID(),
-  //   iat: nowSec(),
-  // };
-  // const header = encryptJson(decoded);
-  // const headerSse = encryptJson(decodedSse);
-  // cache.set(header, decoded);
-  // cache.set(headerSse, decodedSse);
-  // return { header, decoded, headerSse, isNew: true };
 }
 
 export interface CreateSessionOptions {
@@ -243,10 +241,7 @@ export function updateSessionPayload(sessionId: string, updates: Partial<Session
 
   // Try to decrypt and update if not in cache
   const decrypted = safeDecrypt(sessionId);
-  if (
-    isValidSessionPayload(decrypted, (decrypted as SessionIdPayload)?.authSig || '') ||
-    isValidPublicSessionPayload(decrypted)
-  ) {
+  if (hasValidSessionStructure(decrypted) || isValidPublicSessionPayload(decrypted)) {
     const payload = decrypted as SessionIdPayload;
     Object.assign(payload, updates);
     cache.set(sessionId, payload);
