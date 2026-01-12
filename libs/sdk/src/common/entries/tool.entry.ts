@@ -55,6 +55,8 @@ export abstract class ToolEntry<
   rawInputSchema: any;
   // This is your *metadata* outputSchema (literals / zod / raw shapes / arrays)
   outputSchema?: OutSchema;
+  // Raw JSON Schema for output (for tool/list to expose)
+  rawOutputSchema?: any;
 
   /**
    * Accessor used by tools/list to expose the tool's declared outputSchema.
@@ -63,6 +65,14 @@ export abstract class ToolEntry<
    */
   getOutputSchema(): OutSchema | undefined {
     return this.outputSchema;
+  }
+
+  /**
+   * Accessor used by tools/list to expose the tool's output schema as JSON Schema.
+   * Returns the raw JSON Schema representation if available.
+   */
+  getRawOutputSchema(): any | undefined {
+    return this.rawOutputSchema;
   }
 
   /**
