@@ -358,6 +358,14 @@ export class Scope extends ScopeEntry {
     return this.notificationService;
   }
 
+  /**
+   * Get pagination configuration for list operations.
+   * Returns the parsed pagination config from @FrontMcp metadata.
+   */
+  get pagination() {
+    return this.metadata.pagination;
+  }
+
   registryFlows(...flows: FlowType[]) {
     return this.scopeFlows.registryFlows(flows);
   }

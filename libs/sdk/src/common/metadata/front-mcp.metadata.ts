@@ -18,6 +18,8 @@ import {
   pubsubOptionsSchema,
   TransportOptionsInput,
   transportOptionsSchema,
+  PaginationOptions,
+  paginationOptionsSchema,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -85,6 +87,12 @@ export interface FrontMcpBaseMetadata {
    * These plugins have server-wide access (can see all apps in scope).
    */
   plugins?: PluginType[];
+
+  /**
+   * Pagination configuration for list operations.
+   * Currently only tool list pagination is supported (tools/list endpoint).
+   */
+  pagination?: PaginationOptions;
 }
 
 export const frontMcpBaseSchema = z.object({
@@ -101,6 +109,7 @@ export const frontMcpBaseSchema = z.object({
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
   session: sessionOptionsSchema.optional(), // @deprecated - kept for backward compatibility
   logging: loggingOptionsSchema.optional(),
+  pagination: paginationOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
 
 export interface FrontMcpMultiAppMetadata extends FrontMcpBaseMetadata {
