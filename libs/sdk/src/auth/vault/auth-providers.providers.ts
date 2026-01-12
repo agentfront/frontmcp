@@ -7,18 +7,17 @@
 
 import type { Token } from '@frontmcp/di';
 import { ProviderScope } from '@frontmcp/di';
+import type { AuthorizationVault, AuthProvidersVaultOptions, CredentialFactoryContext } from '@frontmcp/auth';
+import { CredentialCache } from '@frontmcp/auth';
 import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
 import type { FrontMcpContext } from '../../context/frontmcp-context';
-
+import { FrontMcpLogger } from '../../common';
 import { AuthProvidersRegistry, AUTH_PROVIDERS_REGISTRY } from './auth-providers.registry';
 import { AuthProvidersVault, AUTH_PROVIDERS_VAULT } from './auth-providers.vault';
-import { CredentialCache, CREDENTIAL_CACHE } from './credential-cache';
+import { CREDENTIAL_CACHE } from './credential-cache';
 import { AUTH_PROVIDERS_ACCESSOR } from './auth-providers.accessor';
 import { AuthProvidersAccessorImpl } from './auth-providers.accessor.impl';
 import { LazyCredentialLoader } from './credential-loaders/lazy-loader';
-import type { AuthProvidersVaultOptions, CredentialFactoryContext } from './auth-providers.types';
-import type { AuthorizationVault } from '@frontmcp/auth';
-import { FrontMcpLogger } from '../../common';
 
 /**
  * Token for lazy loader (internal use)

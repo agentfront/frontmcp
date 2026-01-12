@@ -22,19 +22,19 @@ FrontMCP implements a three-tier authentication system designed for flexibility 
 
 ```mermaid
 graph TB
-    subgraph "Authentication Modes"
-        Public["Public Mode<br/>Anonymous Access"]
-        Transparent["Transparent Mode<br/>Pass-through Tokens"]
-        Orchestrated["Orchestrated Mode<br/>Local Auth Server"]
-    end
+  subgraph "Authentication Modes"
+    Public["Public Mode<br/>Anonymous Access"]
+    Transparent["Transparent Mode<br/>Pass-through Tokens"]
+    Orchestrated["Orchestrated Mode<br/>Local Auth Server"]
+  end
 
-    subgraph "Orchestrated Types"
-        Local["Local<br/>Self-contained Auth"]
-        Remote["Remote<br/>Proxy to Upstream IdP"]
-    end
+  subgraph "Orchestrated Types"
+    Local["Local<br/>Self-contained Auth"]
+    Remote["Remote<br/>Proxy to Upstream IdP"]
+  end
 
-    Orchestrated --> Local
-    Orchestrated --> Remote
+  Orchestrated --> Local
+  Orchestrated --> Remote
 ```
 
 ### Key Features
@@ -110,12 +110,11 @@ const auth: AuthOptionsInput = {
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant FrontMCP
-
-    Client->>FrontMCP: Request without token
-    FrontMCP->>FrontMCP: Generate anonymous JWT
-    FrontMCP-->>Client: Response + anonymous session
+  participant Client
+  participant FrontMCP
+  Client ->> FrontMCP: Request without token
+  FrontMCP ->> FrontMCP: Generate anonymous JWT
+  FrontMCP -->> Client: Response + anonymous session
 ```
 
 ### 2. Transparent Mode (`mode: 'transparent'`)
@@ -137,16 +136,15 @@ const auth: AuthOptionsInput = {
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant FrontMCP
-    participant IdP as Identity Provider
-
-    Client->>IdP: Authenticate
-    IdP-->>Client: Access Token (JWT)
-    Client->>FrontMCP: Request + Bearer token
-    FrontMCP->>IdP: Fetch JWKS (cached)
-    FrontMCP->>FrontMCP: Verify JWT signature
-    FrontMCP-->>Client: Response
+  participant Client
+  participant FrontMCP
+  participant IdP as Identity Provider
+  Client ->> IdP: Authenticate
+  IdP -->> Client: Access Token (JWT)
+  Client ->> FrontMCP: Request + Bearer token
+  FrontMCP ->> IdP: Fetch JWKS (cached)
+  FrontMCP ->> FrontMCP: Verify JWT signature
+  FrontMCP -->> Client: Response
 ```
 
 ### 3. Orchestrated Mode (`mode: 'orchestrated'`)
@@ -193,55 +191,55 @@ const auth: AuthOptionsInput = {
 
 ```mermaid
 graph TB
-    subgraph "Entry Layer"
-        HTTP[HTTP Request]
-    end
+  subgraph "Entry Layer"
+    HTTP[HTTP Request]
+  end
 
-    subgraph "Auth Registry"
-        AR[AuthRegistry]
-        LP[LocalPrimaryAuth]
-        RP[RemotePrimaryAuth]
-    end
+  subgraph "Auth Registry"
+    AR[AuthRegistry]
+    LP[LocalPrimaryAuth]
+    RP[RemotePrimaryAuth]
+  end
 
-    subgraph "OAuth Flows"
-        Authorize["/oauth/authorize"]
-        Callback["/oauth/callback"]
-        Token["/oauth/token"]
-        Register["/oauth/register"]
-    end
+  subgraph "OAuth Flows"
+    Authorize["/oauth/authorize"]
+    Callback["/oauth/callback"]
+    Token["/oauth/token"]
+    Register["/oauth/register"]
+  end
 
-    subgraph "Well-Known"
-        AS["/.well-known/oauth-authorization-server"]
-        JWKS["/.well-known/jwks.json"]
-        PRM["/.well-known/oauth-protected-resource"]
-    end
+  subgraph "Well-Known"
+    AS["/.well-known/oauth-authorization-server"]
+    JWKS["/.well-known/jwks.json"]
+    PRM["/.well-known/oauth-protected-resource"]
+  end
 
-    subgraph "Services"
-        JwksService[JwksService]
-        AuthStore[AuthorizationStore]
-        SessionSvc[SessionService]
-    end
+  subgraph "Services"
+    JwksService[JwksService]
+    AuthStore[AuthorizationStore]
+    SessionSvc[SessionService]
+  end
 
-    subgraph "Storage"
-        Memory[In-Memory Store]
-        Redis[Redis Store]
-    end
+  subgraph "Storage"
+    Memory[In-Memory Store]
+    Redis[Redis Store]
+  end
 
-    HTTP --> AR
-    AR --> LP
-    AR --> RP
-    LP --> Authorize
-    LP --> Callback
-    LP --> Token
-    LP --> Register
-    LP --> AS
-    LP --> JWKS
-    LP --> PRM
-    LP --> JwksService
-    LP --> AuthStore
-    AuthStore --> Memory
-    AuthStore --> Redis
-    RP --> JwksService
+  HTTP --> AR
+  AR --> LP
+  AR --> RP
+  LP --> Authorize
+  LP --> Callback
+  LP --> Token
+  LP --> Register
+  LP --> AS
+  LP --> JWKS
+  LP --> PRM
+  LP --> JwksService
+  LP --> AuthStore
+  AuthStore --> Memory
+  AuthStore --> Redis
+  RP --> JwksService
 ```
 
 ### File Structure
@@ -305,75 +303,66 @@ auth/
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Client
-    participant FrontMCP as FrontMCP Auth Server
-    participant Store as Authorization Store
-
-    Note over Client: Generate PKCE<br/>code_verifier & code_challenge
-
-    Client->>FrontMCP: GET /oauth/authorize<br/>response_type=code<br/>client_id, redirect_uri<br/>code_challenge (S256)<br/>scope, state
-
-    FrontMCP->>Store: Store pending authorization
-    FrontMCP-->>User: Show login page
-
-    User->>FrontMCP: POST credentials (email)
-    FrontMCP->>FrontMCP: Validate user
-    FrontMCP->>Store: Create authorization code<br/>(60s TTL, single-use)
-    FrontMCP-->>Client: Redirect to redirect_uri<br/>?code=xxx&state=yyy
-
-    Client->>FrontMCP: POST /oauth/token<br/>grant_type=authorization_code<br/>code, redirect_uri<br/>client_id, code_verifier
-
-    FrontMCP->>Store: Get & validate code
-    FrontMCP->>FrontMCP: Verify PKCE<br/>SHA256(code_verifier) == code_challenge
-    FrontMCP->>Store: Mark code as used
-    FrontMCP->>FrontMCP: Sign access token (JWT)
-    FrontMCP->>Store: Store refresh token
-    FrontMCP-->>Client: { access_token, refresh_token, expires_in }
+  participant User
+  participant Client
+  participant FrontMCP as FrontMCP Auth Server
+  participant Store as Authorization Store
+  Note over Client: Generate PKCE<br/>code_verifier & code_challenge
+  Client ->> FrontMCP: GET /oauth/authorize<br/>response_type=code<br/>client_id, redirect_uri<br/>code_challenge (S256)<br/>scope, state
+  FrontMCP ->> Store: Store pending authorization
+  FrontMCP -->> User: Show login page
+  User ->> FrontMCP: POST credentials (email)
+  FrontMCP ->> FrontMCP: Validate user
+  FrontMCP ->> Store: Create authorization code<br/>(60s TTL, single-use)
+  FrontMCP -->> Client: Redirect to redirect_uri<br/>?code=xxx&state=yyy
+  Client ->> FrontMCP: POST /oauth/token<br/>grant_type=authorization_code<br/>code, redirect_uri<br/>client_id, code_verifier
+  FrontMCP ->> Store: Get & validate code
+  FrontMCP ->> FrontMCP: Verify PKCE<br/>SHA256(code_verifier) == code_challenge
+  FrontMCP ->> Store: Mark code as used
+  FrontMCP ->> FrontMCP: Sign access token (JWT)
+  FrontMCP ->> Store: Store refresh token
+  FrontMCP -->> Client: { access_token, refresh_token, expires_in }
 ```
 
 ### Refresh Token Flow
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant FrontMCP
-    participant Store as Authorization Store
-
-    Client->>FrontMCP: POST /oauth/token<br/>grant_type=refresh_token<br/>refresh_token, client_id
-
-    FrontMCP->>Store: Get refresh token
-    FrontMCP->>FrontMCP: Validate token<br/>(not expired, not revoked, client matches)
-    FrontMCP->>FrontMCP: Sign new access token
-    FrontMCP->>Store: Rotate refresh token<br/>(revoke old, create new)
-    FrontMCP-->>Client: { access_token, refresh_token, expires_in }
+  participant Client
+  participant FrontMCP
+  participant Store as Authorization Store
+  Client ->> FrontMCP: POST /oauth/token<br/>grant_type=refresh_token<br/>refresh_token, client_id
+  FrontMCP ->> Store: Get refresh token
+  FrontMCP ->> FrontMCP: Validate token<br/>(not expired, not revoked, client matches)
+  FrontMCP ->> FrontMCP: Sign new access token
+  FrontMCP ->> Store: Rotate refresh token<br/>(revoke old, create new)
+  FrontMCP -->> Client: { access_token, refresh_token, expires_in }
 ```
 
 ### Token Verification
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant FrontMCP
-    participant JwksService
+  participant Client
+  participant FrontMCP
+  participant JwksService
+  Client ->> FrontMCP: Request + Bearer token
 
-    Client->>FrontMCP: Request + Bearer token
+  alt Public/Orchestrated Mode
+    FrontMCP ->> JwksService: Get gateway JWKS
+    FrontMCP ->> FrontMCP: Verify JWT locally
+  else Transparent Mode
+    FrontMCP ->> JwksService: Get provider JWKS (cached)
+    Note over JwksService: Fetch from jwksUri or<br/>discover via .well-known
+    FrontMCP ->> FrontMCP: Verify JWT against provider
+  end
 
-    alt Public/Orchestrated Mode
-        FrontMCP->>JwksService: Get gateway JWKS
-        FrontMCP->>FrontMCP: Verify JWT locally
-    else Transparent Mode
-        FrontMCP->>JwksService: Get provider JWKS (cached)
-        Note over JwksService: Fetch from jwksUri or<br/>discover via .well-known
-        FrontMCP->>FrontMCP: Verify JWT against provider
-    end
-
-    alt Valid Token
-        FrontMCP->>FrontMCP: Extract claims (sub, scopes, etc.)
-        FrontMCP-->>Client: Authorized response
-    else Invalid Token
-        FrontMCP-->>Client: 401 Unauthorized<br/>WWW-Authenticate header
-    end
+  alt Valid Token
+    FrontMCP ->> FrontMCP: Extract claims (sub, scopes, etc.)
+    FrontMCP -->> Client: Authorized response
+  else Invalid Token
+    FrontMCP -->> Client: 401 Unauthorized<br/>WWW-Authenticate header
+  end
 ```
 
 ---
@@ -386,24 +375,18 @@ Dynamic Client Registration (RFC 7591) allows OAuth clients to register programm
 
 ```mermaid
 sequenceDiagram
-    participant Client as MCP Client
-    participant FrontMCP as FrontMCP Auth Server
-    participant Store as Client Registry
-
-    Note over Client: Client needs to connect<br/>to FrontMCP server
-
-    Client->>FrontMCP: GET /.well-known/oauth-authorization-server
-    FrontMCP-->>Client: { registration_endpoint: "/oauth/register", ... }
-
-    Client->>FrontMCP: POST /oauth/register<br/>{ redirect_uris, client_name,<br/>  grant_types, response_types }
-
-    FrontMCP->>FrontMCP: Validate request
-    FrontMCP->>Store: Store client metadata
-    FrontMCP-->>Client: { client_id, client_secret?,<br/>  client_id_issued_at, ... }
-
-    Note over Client: Client now has credentials<br/>for OAuth flow
-
-    Client->>FrontMCP: GET /oauth/authorize<br/>client_id=xxx, ...
+  participant Client as MCP Client
+  participant FrontMCP as FrontMCP Auth Server
+  participant Store as Client Registry
+  Note over Client: Client needs to connect<br/>to FrontMCP server
+  Client ->> FrontMCP: GET /.well-known/oauth-authorization-server
+  FrontMCP -->> Client: { registration_endpoint: "/oauth/register", ... }
+  Client ->> FrontMCP: POST /oauth/register<br/>{ redirect_uris, client_name,<br/> grant_types, response_types }
+  FrontMCP ->> FrontMCP: Validate request
+  FrontMCP ->> Store: Store client metadata
+  FrontMCP -->> Client: { client_id, client_secret?,<br/> client_id_issued_at, ... }
+  Note over Client: Client now has credentials<br/>for OAuth flow
+  Client ->> FrontMCP: GET /oauth/authorize<br/>client_id=xxx, ...
 ```
 
 ### Registration Request
@@ -412,24 +395,36 @@ sequenceDiagram
 // POST /oauth/register
 {
   // Required: at least one redirect URI
-  "redirect_uris": ["http://localhost:3000/callback"],
+  "redirect_uris"
+:
+  ["http://localhost:3000/callback"],
 
-  // Optional: client authentication method
-  // "none" for public clients (default)
-  // "client_secret_basic" or "client_secret_post" for confidential
-  "token_endpoint_auth_method": "none",
+    // Optional: client authentication method
+    // "none" for public clients (default)
+    // "client_secret_basic" or "client_secret_post" for confidential
+    "token_endpoint_auth_method"
+:
+  "none",
 
-  // Optional: grant types (default: ["authorization_code"])
-  "grant_types": ["authorization_code", "refresh_token"],
+    // Optional: grant types (default: ["authorization_code"])
+    "grant_types"
+:
+  ["authorization_code", "refresh_token"],
 
-  // Optional: response types (default: ["code"])
-  "response_types": ["code"],
+    // Optional: response types (default: ["code"])
+    "response_types"
+:
+  ["code"],
 
-  // Optional: human-readable name
-  "client_name": "My MCP Application",
+    // Optional: human-readable name
+    "client_name"
+:
+  "My MCP Application",
 
-  // Optional: requested scopes
-  "scope": "read write"
+    // Optional: requested scopes
+    "scope"
+:
+  "read write"
 }
 ```
 
@@ -438,16 +433,36 @@ sequenceDiagram
 ```typescript
 // 201 Created
 {
-  "client_id": "550e8400-e29b-41d4-a716-446655440000",
-  "client_secret": "dGhpcyBpcyBhIHNlY3JldA",  // Example placeholder only (base64: "this is a secret"), not a real credential
-  "client_id_issued_at": 1234567890,
-  "client_secret_expires_at": 0,  // 0 = never expires
-  "token_endpoint_auth_method": "none",
-  "grant_types": ["authorization_code", "refresh_token"],
-  "response_types": ["code"],
-  "redirect_uris": ["http://localhost:3000/callback"],
-  "client_name": "My MCP Application",
-  "scope": "read write"
+  "client_id"
+:
+  "550e8400-e29b-41d4-a716-446655440000",
+    "client_secret"
+:
+  "dGhpcyBpcyBhIHNlY3JldA",  // Example placeholder only (base64: "this is a secret"), not a real credential
+    "client_id_issued_at"
+:
+  1234567890,
+    "client_secret_expires_at"
+:
+  0,  // 0 = never expires
+    "token_endpoint_auth_method"
+:
+  "none",
+    "grant_types"
+:
+  ["authorization_code", "refresh_token"],
+    "response_types"
+:
+  ["code"],
+    "redirect_uris"
+:
+  ["http://localhost:3000/callback"],
+    "client_name"
+:
+  "My MCP Application",
+    "scope"
+:
+  "read write"
 }
 ```
 
@@ -457,11 +472,11 @@ After registration, the client_id is validated in `/oauth/authorize`:
 
 ```mermaid
 graph TD
-    A["/oauth/authorize request"] --> B{client_id registered?}
-    B -->|Yes| C{redirect_uri matches?}
-    B -->|No| D[Error: invalid_client]
-    C -->|Yes| E[Continue flow]
-    C -->|No| F[Error: invalid_redirect_uri]
+  A["/oauth/authorize request"] --> B{client_id registered?}
+  B -->|Yes| C{redirect_uri matches?}
+  B -->|No| D[Error: invalid_client]
+  C -->|Yes| E[Continue flow]
+  C -->|No| F[Error: invalid_redirect_uri]
 ```
 
 ### Security Considerations
@@ -487,36 +502,34 @@ FrontMCP implements a hierarchical authorization model with three levels:
 
 ```mermaid
 graph TB
-    subgraph "Server Level"
-        Global["Global Auth<br/>https://my-server"]
-    end
+  subgraph "Server Level"
+    Global["Global Auth<br/>https://my-server"]
+  end
 
-    subgraph "App Level"
-        App1["Slack App<br/>/slack<br/>standalone: true"]
-        App2["CRM App<br/>/crm<br/>Auth0"]
-        App3["Analytics<br/>/analytics<br/>Okta"]
-        App4["OpenAPI Adapter<br/>/github<br/>GitHub OAuth"]
-    end
+  subgraph "App Level"
+    App1["Slack App<br/>/slack<br/>standalone: true"]
+    App2["CRM App<br/>/crm<br/>Auth0"]
+    App3["Analytics<br/>/analytics<br/>Okta"]
+    App4["OpenAPI Adapter<br/>/github<br/>GitHub OAuth"]
+  end
 
-    subgraph "Tool Level"
-        T1["slack:send_message<br/>requires: slack:write"]
-        T2["crm:get_contacts<br/>requires: crm:read"]
-        T3["github:create_issue<br/>requires: repo:write"]
-    end
+  subgraph "Tool Level"
+    T1["slack:send_message<br/>requires: slack:write"]
+    T2["crm:get_contacts<br/>requires: crm:read"]
+    T3["github:create_issue<br/>requires: repo:write"]
+  end
 
-    Global --> App1
-    Global --> App2
-    Global --> App3
-    Global --> App4
-
-    App1 --> T1
-    App2 --> T2
-    App4 --> T3
-
-    style App1 fill:#e1f5fe
-    style App2 fill:#fff3e0
-    style App3 fill:#fff3e0
-    style App4 fill:#f3e5f5
+  Global --> App1
+  Global --> App2
+  Global --> App3
+  Global --> App4
+  App1 --> T1
+  App2 --> T2
+  App4 --> T3
+  style App1 fill: #e1f5fe
+  style App2 fill: #fff3e0
+  style App3 fill: #fff3e0
+  style App4 fill: #f3e5f5
 ```
 
 ### Standalone vs Nested Apps
@@ -576,39 +589,31 @@ Users can authorize apps incrementally. Skip now, authorize later when needed:
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Agent as AI Agent
-    participant FrontMCP
-    participant Slack as Slack (unauthorized)
-    participant CRM as CRM (authorized)
-
-    Note over User,FrontMCP: Initial: User only authorized CRM
-
-    Agent->>FrontMCP: Call tool: crm:get_contacts
-    FrontMCP->>FrontMCP: Check vault: CRM ✓
-    FrontMCP->>CRM: Execute with CRM token
-    CRM-->>FrontMCP: Contacts data
-    FrontMCP-->>Agent: Success
-
-    Agent->>FrontMCP: Call tool: slack:send_message
-    FrontMCP->>FrontMCP: Check vault: Slack ✗
-
-    FrontMCP-->>Agent: 403 Authorization Required<br/>{ auth_url: "/oauth/authorize?app=slack",<br/>  message: "Click to authorize Slack" }
-
-    Agent-->>User: "I need Slack access.<br/>Please click: [Authorize Slack]"
-
-    User->>FrontMCP: Click auth link
-    FrontMCP->>Slack: OAuth flow
-    Slack-->>FrontMCP: Token
-    FrontMCP->>FrontMCP: Update token vault<br/>Add Slack token
-
-    Note over FrontMCP: Same session token,<br/>expanded access
-
-    Agent->>FrontMCP: Retry: slack:send_message
-    FrontMCP->>FrontMCP: Check vault: Slack ✓
-    FrontMCP->>Slack: Execute with Slack token
-    Slack-->>FrontMCP: Message sent
-    FrontMCP-->>Agent: Success
+  participant User
+  participant Agent as AI Agent
+  participant FrontMCP
+  participant Slack as Slack (unauthorized)
+  participant CRM as CRM (authorized)
+  Note over User, FrontMCP: Initial: User only authorized CRM
+  Agent ->> FrontMCP: Call tool: crm:get_contacts
+  FrontMCP ->> FrontMCP: Check vault: CRM ✓
+  FrontMCP ->> CRM: Execute with CRM token
+  CRM -->> FrontMCP: Contacts data
+  FrontMCP -->> Agent: Success
+  Agent ->> FrontMCP: Call tool: slack:send_message
+  FrontMCP ->> FrontMCP: Check vault: Slack ✗
+  FrontMCP -->> Agent: 403 Authorization Required<br/>{ auth_url: "/oauth/authorize?app=slack",<br/> message: "Click to authorize Slack" }
+  Agent -->> User: "I need Slack access.<br/>Please click: [Authorize Slack]"
+  User ->> FrontMCP: Click auth link
+  FrontMCP ->> Slack: OAuth flow
+  Slack -->> FrontMCP: Token
+  FrontMCP ->> FrontMCP: Update token vault<br/>Add Slack token
+  Note over FrontMCP: Same session token,<br/>expanded access
+  Agent ->> FrontMCP: Retry: slack:send_message
+  FrontMCP ->> FrontMCP: Check vault: Slack ✓
+  FrontMCP ->> Slack: Execute with Slack token
+  Slack -->> FrontMCP: Message sent
+  FrontMCP -->> Agent: Success
 ```
 
 ### Token Vault Evolution
@@ -617,23 +622,23 @@ The token vault expands as users authorize more apps:
 
 ```mermaid
 graph LR
-    subgraph "Initial State"
-        T1["Session Token<br/>sub: user-123"]
-        V1["Vault:<br/>- CRM ✓"]
-    end
+  subgraph "Initial State"
+    T1["Session Token<br/>sub: user-123"]
+    V1["Vault:<br/>- CRM ✓"]
+  end
 
-    subgraph "After Slack Auth"
-        T2["Same Session Token<br/>sub: user-123"]
-        V2["Vault:<br/>- CRM ✓<br/>- Slack ✓"]
-    end
+  subgraph "After Slack Auth"
+    T2["Same Session Token<br/>sub: user-123"]
+    V2["Vault:<br/>- CRM ✓<br/>- Slack ✓"]
+  end
 
-    subgraph "After GitHub Auth"
-        T3["Same Session Token<br/>sub: user-123"]
-        V3["Vault:<br/>- CRM ✓<br/>- Slack ✓<br/>- GitHub ✓"]
-    end
+  subgraph "After GitHub Auth"
+    T3["Same Session Token<br/>sub: user-123"]
+    V3["Vault:<br/>- CRM ✓<br/>- Slack ✓<br/>- GitHub ✓"]
+  end
 
-    T1 --> T2
-    T2 --> T3
+  T1 --> T2
+  T2 --> T3
 ```
 
 ### Authorization UI with Skip Option
@@ -709,30 +714,29 @@ const server = new FrontMcp({
 
 ```mermaid
 graph TB
-    subgraph "GitHub Auth Group"
-        G1[github:repos_list]
-        G2[github:issues_create]
-        G3[github:pulls_merge]
-    end
+  subgraph "GitHub Auth Group"
+    G1[github:repos_list]
+    G2[github:issues_create]
+    G3[github:pulls_merge]
+  end
 
-    subgraph "Stripe Auth Group"
-        S1[stripe:customers_list]
-        S2[stripe:charges_create]
-        S3[stripe:subscriptions_update]
-    end
+  subgraph "Stripe Auth Group"
+    S1[stripe:customers_list]
+    S2[stripe:charges_create]
+    S3[stripe:subscriptions_update]
+  end
 
-    subgraph "No Auth Required"
-        P1[public:health_check]
-        P2[public:version]
-    end
+  subgraph "No Auth Required"
+    P1[public:health_check]
+    P2[public:version]
+  end
 
-    Auth1[GitHub OAuth] --> G1
-    Auth1 --> G2
-    Auth1 --> G3
-
-    Auth2[Stripe OAuth] --> S1
-    Auth2 --> S2
-    Auth2 --> S3
+  Auth1[GitHub OAuth] --> G1
+  Auth1 --> G2
+  Auth1 --> G3
+  Auth2[Stripe OAuth] --> S1
+  Auth2 --> S2
+  Auth2 --> S3
 ```
 
 ### Incremental Authorization Response
@@ -742,14 +746,30 @@ When a tool requires unauthorized access:
 ```typescript
 // Tool execution with missing authorization
 {
-  "error": "authorization_required",
-  "code": "AUTH_REQUIRED",
-  "app": "slack",
-  "tool": "slack:send_message",
-  "required_scopes": ["chat:write"],
-  "auth_url": "https://my-server/oauth/authorize?app=slack&scope=chat:write",
-  "message": "Slack authorization required. Please authorize to use this tool.",
-  "hint": "Click the authorization link to grant access to Slack."
+  "error"
+:
+  "authorization_required",
+    "code"
+:
+  "AUTH_REQUIRED",
+    "app"
+:
+  "slack",
+    "tool"
+:
+  "slack:send_message",
+    "required_scopes"
+:
+  ["chat:write"],
+    "auth_url"
+:
+  "https://my-server/oauth/authorize?app=slack&scope=chat:write",
+    "message"
+:
+  "Slack authorization required. Please authorize to use this tool.",
+    "hint"
+:
+  "Click the authorization link to grant access to Slack."
 }
 ```
 
@@ -809,20 +829,17 @@ When `standalone: true`, the app is accessible directly:
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant Slack as /slack (standalone)
-    participant Parent as / (parent)
-
-    Note over Client,Slack: Direct access to standalone app
-    Client->>Slack: GET /slack/.well-known/oauth-authorization-server
-    Slack-->>Client: Slack's own AS metadata
-
-    Client->>Slack: GET /slack/oauth/authorize
-    Slack-->>Client: Slack OAuth flow (not federated)
-
-    Note over Client,Parent: Access via parent (federated)
-    Client->>Parent: GET /oauth/authorize?scope=slack:write crm:read
-    Parent-->>Client: Federated auth UI (Slack + CRM)
+  participant Client
+  participant Slack as /slack (standalone)
+  participant Parent as / (parent)
+  Note over Client, Slack: Direct access to standalone app
+  Client ->> Slack: GET /slack/.well-known/oauth-authorization-server
+  Slack -->> Client: Slack's own AS metadata
+  Client ->> Slack: GET /slack/oauth/authorize
+  Slack -->> Client: Slack OAuth flow (not federated)
+  Note over Client, Parent: Access via parent (federated)
+  Client ->> Parent: GET /oauth/authorize?scope=slack:write crm:read
+  Parent -->> Client: Federated auth UI (Slack + CRM)
 ```
 
 ---
@@ -896,23 +913,23 @@ Manages OAuth artifacts during the authorization flow.
 
 ```mermaid
 graph LR
-    subgraph "Authorization Store"
-        PC[Pending Authorizations<br/>10 min TTL]
-        AC[Authorization Codes<br/>60s TTL, single-use]
-        RT[Refresh Tokens<br/>30 day TTL, rotated]
-    end
+  subgraph "Authorization Store"
+    PC[Pending Authorizations<br/>10 min TTL]
+    AC[Authorization Codes<br/>60s TTL, single-use]
+    RT[Refresh Tokens<br/>30 day TTL, rotated]
+  end
 
-    subgraph "Backends"
-        Mem[InMemoryAuthorizationStore<br/>Development]
-        Redis[RedisAuthorizationStore<br/>Production]
-    end
+  subgraph "Backends"
+    Mem[InMemoryAuthorizationStore<br/>Development]
+    Redis[RedisAuthorizationStore<br/>Production]
+  end
 
-    PC --> Mem
-    AC --> Mem
-    RT --> Mem
-    PC --> Redis
-    AC --> Redis
-    RT --> Redis
+  PC --> Mem
+  AC --> Mem
+  RT --> Mem
+  PC --> Redis
+  AC --> Redis
+  RT --> Redis
 ```
 
 **Security Features:**

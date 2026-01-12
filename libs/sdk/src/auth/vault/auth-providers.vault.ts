@@ -6,9 +6,8 @@
  */
 
 import { Token } from '@frontmcp/di';
-import type { Credential, AuthorizationVault, AppCredential } from '@frontmcp/auth';
-import type { CredentialScope } from './auth-providers.types';
-import { extractCredentialExpiry } from './credential-loaders/credential-helpers';
+import type { Credential, AuthorizationVault, AppCredential, CredentialScope } from '@frontmcp/auth';
+import { extractCredentialExpiry } from '@frontmcp/auth';
 import { FrontMcpLogger } from '../../common';
 import { InvalidInputError } from '../../errors/mcp.error';
 

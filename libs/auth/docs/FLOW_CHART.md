@@ -1,6 +1,7 @@
 # OAuth Orchestration and Well-Known Endpoints – Flow Charts
 
 This document visualizes how the gateway:
+
 - Scans and detects orchestrated auth providers (per provider and per scope)
 - Mounts well-known routes (scoped vs unsuffixed)
 - Computes the returned content for each well-known endpoint
@@ -12,6 +13,7 @@ References to source files and lines are included for traceability.
 ## 1) Detecting Orchestrated Providers and Scopes
 
 Rules from auth.registry.ts:
+
 - isOrchestratedForProvider (lines 192–203)
   - Orchestrated if gateway forces options.auth.orchestrate === true
   - Local provider implies orchestrated
@@ -37,6 +39,7 @@ flowchart TD
 ```
 
 Notes:
+
 - In by-app grouping, the scope contains a single provider; the flag comes directly from isOrchestratedForProvider.
 - In by-auth or single grouping, multi-provider scopes are always orchestrated.
 
@@ -45,6 +48,7 @@ Notes:
 ## 2) Mounting Well-Known Routes
 
 Where routes are mounted:
+
 - auth.registry.ts registerRoutes (lines 276–288)
   - Always registers scoped well-knowns via oauth.registerScopedRoutes
   - Registers unsuffixed well-knowns only for the entry owner when the owner scope is orchestrated or a single transparent remote
@@ -63,6 +67,7 @@ flowchart TD
 ```
 
 Path variants for each name (from makeWellKnownPaths):
+
 - Reversed root: /.well-known/<name><entryPrefix><scopeBase>
 - In prefix root: <entryPrefix>/.well-known/<name><scopeBase>
 - In prefix and scope: <entryPrefix><scopeBase>/.well-known/<name>
@@ -74,6 +79,7 @@ Names used: oauth-protected-resource, oauth-authorization-server, jwks.json
 ## 3) /.well-known/oauth-authorization-server (AS metadata)
 
 Source: flows/well-known.authorization-server.flow.ts
+
 - parseInput (lines 94–117): derives issuer, baseUrl, isUnsuffixedPath
 - collectData (lines 124–175): branching behavior
 
@@ -93,6 +99,7 @@ flowchart TD
 ## 4) /.well-known/jwks.json (JWKS)
 
 Source: flows/well-known.jwks.flow.ts
+
 - parseInput (lines 82–102): derives isUnsuffixedPath
 - collectData (lines 108–167): branching behavior and upstream JWKS discovery
 
@@ -115,6 +122,7 @@ flowchart TD
 ## 5) /.well-known/oauth-protected-resource (PRM)
 
 Source: flows/well-known.protected-resource.flow.ts
+
 - parseInput (lines 65–79): derives issuer, baseUrl, routeKind
 - collectData (lines 85–135): branching behavior
 

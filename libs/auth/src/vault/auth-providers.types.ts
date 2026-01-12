@@ -2,10 +2,11 @@
  * AuthProviders Vault - Core Type Definitions
  *
  * Types for credential management, provider configuration, and vault operations.
+ * These are portable types that can be used across different implementations.
  */
 
 import { z } from 'zod';
-import type { Credential, AuthorizationVault } from '@frontmcp/auth';
+import type { Credential, AuthorizationVault } from '../session';
 
 // ============================================
 // Credential Scope

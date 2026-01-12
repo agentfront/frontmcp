@@ -7,13 +7,13 @@
  */
 
 import { Token } from '@frontmcp/di';
-import type { Credential } from '@frontmcp/auth';
 import type {
+  Credential,
   CredentialProviderConfig,
   CredentialScope,
   LoadingStrategy,
   AuthProvidersVaultOptions,
-} from './auth-providers.types';
+} from '@frontmcp/auth';
 
 /**
  * Normalized provider config with defaults applied

@@ -58,14 +58,12 @@ sessions, OAuth, consent, and tool visibility for MCP clients (LLMs/browsers).
 3. **Single OAuth Provider Detected**
 
 - **Default**: **Transparent Auth** if consent is disabled.
-
   - MCP client → FrontMcp auth page → immediate redirect to provider start.
   - Register callback at the gateway.
   - On callback, gateway obtains tokens, stores them encrypted, generates **Exchange Code**.
   - Gateway returns code to client; client calls `/exchange` and receives **SMGT**.
 
 - **Non‑Transparent variant** (policy requires):
-
   - After provider callback, **direct exchange** at the gateway (no code to client), or still use the code → either way
     the tokens are stored encrypted.
   - If **consent is enabled**, show consent page before issuing **SMGT**.
@@ -74,7 +72,6 @@ sessions, OAuth, consent, and tool visibility for MCP clients (LLMs/browsers).
 
 - **Always non‑transparent**. Show an **Auth Hub** with provider buttons.
 - Each authorization round trips back to the hub showing:
-
   - **Continue** (finish and return to MCP), and
   - A list of **not‑yet‑authorized** providers that can **extend** the available tool set.
 
@@ -89,7 +86,6 @@ sessions, OAuth, consent, and tool visibility for MCP clients (LLMs/browsers).
 - Final exchange returns a **code** whose state contains: selected providers, encrypted token handles, and **consent
   selections**. `/exchange` yields **SMGT** whose claims include consent + provider mapping.
 - Consent plugin injects an **inline tool** (e.g., `consent.manage`) that:
-
   - Lists **unconsented/disabled** tools.
   - Returns a **generated link** to re‑open consent UI.
   - When consent changes, the plugin updates stored consent for the **SMGT** and emits
@@ -98,7 +94,6 @@ sessions, OAuth, consent, and tool visibility for MCP clients (LLMs/browsers).
 6. **Invocation & Policy**
 
 - Every action validates **SMGT**. If valid, construct **Invoke Context**:
-
   - **Token Access**: `claims-only` (default) or `full-token` per tool/provider policy.
   - **Consent Filter**: only consented tools are visible in `listTools` and invocable.
   - **Provider Scoping**: tools declare which `providerId` they require; the gateway attaches the corresponding token
@@ -239,7 +234,6 @@ sequenceDiagram
 
 - **Type**: JWT signed by the gateway (kid‑rotated). Acts as **MCP session id**.
 - **Claims** (illustrative):
-
   - `sid`: session id
   - `sub`: client identifier
   - `providers`: `{ [providerId]: { handle: vaultRef, scopes: [...], at_hash: ..., expires_at: ... } }`
@@ -270,22 +264,17 @@ sequenceDiagram
 ## Invocation Context & Tool Access
 
 - On **every call** (`listTools`, `callTool`, etc.):
-
   1. Validate **SMGT**.
   2. Resolve **consent filter** → only consented tools appear/execute.
   3. Resolve **provider requirements** per tool:
-
   - Inject **claims** (default) or **full token** as configured:
-
     - Global default: `claims-only`.
     - Per‑tool override: `full-token` allowed/denied.
     - Per‑provider override: e.g., always claims‑only for high‑risk providers.
 
 - **Consent Plugin Hooks**:
-
   - Intercept **/exchange** to bind consent → SMGT.
   - Inject a **virtual tool** (e.g., `consent.manage`) that returns:
-
     - List of **currently disabled/unconsented** tools.
     - A link to reopen consent UI for adjustments.
 
@@ -296,12 +285,10 @@ sequenceDiagram
 ## Configuration Surface
 
 - **App Registry**
-
   - Declares providers with `providerId`, scopes, callback URIs.
   - Annotates tools with `providerId` dependencies and `consentGroup` tags.
 
 - **Gateway Options**
-
   - `allowAnonymous`: boolean.
   - `transparentAuth`: boolean | per-provider override (default: true if exactly one provider and consent disabled).
   - `consent.enabled`: boolean (forces non‑transparent).

@@ -1,10 +1,10 @@
 /**
  * Credential Helpers
  *
- * Shared utilities for credential loaders.
+ * Shared utilities for credential handling.
  */
 
-import type { Credential } from '@frontmcp/auth';
+import type { Credential } from '../session';
 
 /**
  * Extract expiry time from a credential.

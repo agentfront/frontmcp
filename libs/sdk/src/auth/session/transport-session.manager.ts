@@ -13,7 +13,7 @@ import {
   EncryptedBlob,
 } from './transport-session.types';
 import { encryptJson } from './utils/session-id.utils';
-import { encryptAesGcm, decryptAesGcm, hkdfSha256 } from './session.crypto';
+import { encryptAesGcmSync, decryptAesGcmSync, hkdfSha256, type SessionEncBlob } from '@frontmcp/auth';
 import { getMachineId } from '../authorization/authorization.class';
 import { RedisSessionStore } from './redis-session.store';
 
@@ -121,7 +121,7 @@ export class InMemorySessionStore implements SessionStore {
 export class TransportSessionManager {
   private readonly store: SessionStore;
   private readonly mode: 'stateless' | 'stateful';
-  private readonly encryptionKey: Buffer;
+  private readonly encryptionKey: Uint8Array;
 
   constructor(config: SessionStorageConfig & { encryptionSecret?: string }) {
     this.mode = config.mode;
@@ -153,10 +153,11 @@ export class TransportSessionManager {
       );
     }
     const effectiveSecret = secret || getMachineId();
+    const encoder = new TextEncoder();
     this.encryptionKey = hkdfSha256(
-      Buffer.from(effectiveSecret),
-      Buffer.from('mcp-session-salt'),
-      Buffer.from('transport-session'),
+      encoder.encode(effectiveSecret),
+      encoder.encode('mcp-session-salt'),
+      encoder.encode('transport-session'),
       32,
     );
   }
@@ -308,12 +309,12 @@ export class TransportSessionManager {
       const statelessPayload = payload as StatelessSessionJwtPayload;
 
       if (additionalState.state) {
-        const encrypted = encryptAesGcm(this.encryptionKey, JSON.stringify(additionalState.state));
+        const encrypted = encryptAesGcmSync(this.encryptionKey, JSON.stringify(additionalState.state));
         statelessPayload.state = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
       }
 
       if (additionalState.tokens) {
-        const encrypted = encryptAesGcm(this.encryptionKey, JSON.stringify(additionalState.tokens));
+        const encrypted = encryptAesGcmSync(this.encryptionKey, JSON.stringify(additionalState.tokens));
         statelessPayload.tokens = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
       }
     }
@@ -335,15 +336,12 @@ export class TransportSessionManager {
       if (parts.length !== 3) return null;
 
       const [ivB64, tagB64, ctB64] = parts;
-      const iv = Buffer.from(ivB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const tag = Buffer.from(tagB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const data = Buffer.from(ctB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
-      const decrypted = decryptAesGcm(this.encryptionKey, {
+      const decrypted = decryptAesGcmSync(this.encryptionKey, {
         alg: 'A256GCM',
-        iv: iv.toString('base64url'),
-        tag: tag.toString('base64url'),
-        data: data.toString('base64url'),
+        iv: ivB64,
+        tag: tagB64,
+        data: ctB64,
       });
 
       const payload = JSON.parse(decrypted) as SessionJwtPayload;

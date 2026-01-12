@@ -5,11 +5,10 @@
  * Prevents concurrent loads for the same provider (deduplication).
  */
 
-import type { Credential } from '@frontmcp/auth';
+import type { Credential, CredentialFactoryContext, ResolvedCredential } from '@frontmcp/auth';
+import { extractCredentialExpiry } from '@frontmcp/auth';
 import type { NormalizedProviderConfig } from '../auth-providers.registry';
-import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import { FrontMcpLogger } from '../../../common';
-import { extractCredentialExpiry } from './credential-helpers';
 
 /**
  * LazyCredentialLoader - Loads credentials on first access

@@ -64,6 +64,10 @@ export type { EncBlob, VaultKey } from './token.vault';
 // Token Store
 export type { SecretRecord, TokenStore } from './token.store';
 
+// Session Crypto
+export { encryptAesGcm, decryptAesGcm, hkdfSha256, encryptAesGcmSync, decryptAesGcmSync } from './session-crypto';
+export type { SessionEncBlob } from './session-crypto';
+
 // Utilities
 export { TinyTtlCache } from './utils';
 

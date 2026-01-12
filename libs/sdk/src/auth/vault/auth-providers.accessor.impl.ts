@@ -5,15 +5,19 @@
  * Handles caching, vault storage, lazy loading, and credential refresh.
  */
 
-import type { Credential } from '@frontmcp/auth';
+import type {
+  Credential,
+  CredentialCache,
+  CredentialFactoryContext,
+  GetCredentialOptions,
+  ResolvedCredential,
+} from '@frontmcp/auth';
+import { extractCredentialExpiry } from '@frontmcp/auth';
 import { base64Encode } from '@frontmcp/utils';
 import type { AuthProvidersAccessor } from './auth-providers.accessor';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from './auth-providers.registry';
 import type { AuthProvidersVault } from './auth-providers.vault';
-import type { CredentialCache } from './credential-cache';
 import type { LazyCredentialLoader } from './credential-loaders/lazy-loader';
-import type { CredentialFactoryContext, GetCredentialOptions, ResolvedCredential } from './auth-providers.types';
-import { extractCredentialExpiry } from './credential-loaders/credential-helpers';
 import { FrontMcpLogger } from '../../common';
 
 /**

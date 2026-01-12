@@ -120,6 +120,12 @@ export {
   StorageTokenStore,
   // TypedStorage (re-exported from @frontmcp/utils)
   TypedStorage,
+  // Session Crypto
+  encryptAesGcm,
+  decryptAesGcm,
+  hkdfSha256,
+  encryptAesGcmSync,
+  decryptAesGcmSync,
   // Utilities
   TinyTtlCache,
 } from './session';
@@ -164,7 +170,35 @@ export type {
   ClientKeyBinding,
   StorageTokenStoreOptions,
   StorageAuthorizationVaultOptions,
+  // Session Crypto types
+  SessionEncBlob,
 } from './session';
+
+// ============================================
+// Authorization Module
+// ============================================
+export {
+  // Types
+  type AuthMode,
+  type AuthUser,
+  type AuthorizedTool,
+  type AuthorizedPrompt,
+  type LLMSafeAuthContext,
+  type AppAuthorizationRecord,
+  type ProgressiveAuthState,
+  type AuthorizationCreateCtx,
+  // Enums
+  AppAuthState,
+  // Schemas
+  authModeSchema,
+  authUserSchema,
+  authorizedToolSchema,
+  authorizedPromptSchema,
+  llmSafeAuthContextSchema,
+  appAuthStateSchema,
+  appAuthorizationRecordSchema,
+  progressiveAuthStateSchema,
+} from './authorization';
 
 // ============================================
 // Utils Module
@@ -190,3 +224,37 @@ export type {
   AudienceValidationResult,
   AudienceValidatorOptions,
 } from './utils';
+
+// ============================================
+// Vault Module (Auth Providers Types)
+// ============================================
+export {
+  // Types (re-exported)
+  type CredentialScope,
+  type LoadingStrategy,
+  type GetCredentialOptions,
+  type ResolvedCredential,
+  type CredentialFactoryContext,
+  type CredentialFactory,
+  type CredentialRefreshFn,
+  type CredentialHeadersFn,
+  type CredentialProviderConfig,
+  type AuthProviderMapping,
+  type CredentialCacheEntry,
+  type VaultStorageKey,
+  type AuthProvidersVaultOptions,
+  type CredentialEventType,
+  type CredentialEvent,
+  type CacheStats,
+  // Schemas
+  credentialScopeSchema,
+  loadingStrategySchema,
+  getCredentialOptionsSchema,
+  credentialProviderConfigSchema,
+  authProviderMappingSchema,
+  authProvidersVaultOptionsSchema,
+  // Helpers
+  extractCredentialExpiry,
+  // Cache
+  CredentialCache,
+} from './vault';

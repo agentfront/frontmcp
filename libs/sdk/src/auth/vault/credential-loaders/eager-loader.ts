@@ -5,12 +5,10 @@
  * Credentials are loaded in parallel at session start.
  */
 
-import type { Credential } from '@frontmcp/auth';
+import type { Credential, CredentialCache, CredentialFactoryContext, ResolvedCredential } from '@frontmcp/auth';
+import { extractCredentialExpiry } from '@frontmcp/auth';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from '../auth-providers.registry';
-import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
-import type { CredentialCache } from '../credential-cache';
 import { FrontMcpLogger } from '../../../common';
-import { extractCredentialExpiry } from './credential-helpers';
 
 /**
  * Result of eager loading

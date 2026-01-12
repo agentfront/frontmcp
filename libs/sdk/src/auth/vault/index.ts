@@ -41,7 +41,7 @@
  * ```
  */
 
-// Types
+// Types - re-export from @frontmcp/auth
 export type {
   CredentialScope,
   LoadingStrategy,
@@ -58,7 +58,8 @@ export type {
   AuthProvidersVaultOptions,
   CredentialEventType,
   CredentialEvent,
-} from './auth-providers.types';
+  CacheStats,
+} from '@frontmcp/auth';
 
 export {
   credentialScopeSchema,
@@ -67,7 +68,9 @@ export {
   credentialProviderConfigSchema,
   authProviderMappingSchema,
   authProvidersVaultOptionsSchema,
-} from './auth-providers.types';
+  CredentialCache,
+  extractCredentialExpiry,
+} from '@frontmcp/auth';
 
 // Accessor Interface
 export type { AuthProvidersAccessor } from './auth-providers.accessor';
@@ -80,9 +83,8 @@ export { AuthProvidersRegistry, AUTH_PROVIDERS_REGISTRY } from './auth-providers
 // Vault Storage
 export { AuthProvidersVault, AUTH_PROVIDERS_VAULT } from './auth-providers.vault';
 
-// Cache
-export type { CacheStats } from './credential-cache';
-export { CredentialCache, CREDENTIAL_CACHE } from './credential-cache';
+// SDK-specific DI token for CredentialCache
+export { CREDENTIAL_CACHE } from './credential-cache';
 
 // Loaders
 export { EagerCredentialLoader, type EagerLoadResult } from './credential-loaders/eager-loader';
