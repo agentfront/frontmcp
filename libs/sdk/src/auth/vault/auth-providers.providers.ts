@@ -17,7 +17,7 @@ import { AUTH_PROVIDERS_ACCESSOR } from './auth-providers.accessor';
 import { AuthProvidersAccessorImpl } from './auth-providers.accessor.impl';
 import { LazyCredentialLoader } from './credential-loaders/lazy-loader';
 import type { AuthProvidersVaultOptions, CredentialFactoryContext } from './auth-providers.types';
-import type { AuthorizationVault } from '../session/authorization-vault';
+import type { AuthorizationVault } from '@frontmcp/auth';
 import { FrontMcpLogger } from '../../common';
 
 /**

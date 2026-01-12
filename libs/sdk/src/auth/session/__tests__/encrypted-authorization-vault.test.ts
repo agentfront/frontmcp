@@ -4,8 +4,7 @@
  * Tests for the zero-knowledge encrypted vault implementation.
  */
 import { EncryptedRedisVault, createEncryptedVault } from '../encrypted-authorization-vault';
-import { VaultEncryption, VaultKeyDerivationClaims } from '../vault-encryption';
-import { AppCredential, VaultConsentRecord } from '../authorization-vault';
+import { VaultEncryption, VaultKeyDerivationClaims, AppCredential, VaultConsentRecord } from '@frontmcp/auth';
 
 /**
  * Mock Redis client for testing
@@ -40,7 +39,7 @@ describe('EncryptedRedisVault', () => {
   let redis: MockRedis;
   let encryption: VaultEncryption;
   let vault: EncryptedRedisVault;
-  let encryptionKey: Buffer;
+  let encryptionKey: Uint8Array;
 
   const claims: VaultKeyDerivationClaims = {
     jti: 'vault-123',
@@ -49,11 +48,11 @@ describe('EncryptedRedisVault', () => {
     vaultKey: 'secret-key',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     redis = new MockRedis();
     encryption = new VaultEncryption({ pepper: 'test-pepper' });
     vault = new EncryptedRedisVault(redis, encryption, 'test:');
-    encryptionKey = encryption.deriveKey(claims);
+    encryptionKey = await encryption.deriveKey(claims);
   });
 
   afterEach(() => {
@@ -201,7 +200,7 @@ describe('EncryptedRedisVault', () => {
       );
 
       // Use wrong key - should fail to decrypt
-      const wrongKey = encryption.deriveKey({
+      const wrongKey = await encryption.deriveKey({
         ...claims,
         jti: 'different-vault',
       });
@@ -638,15 +637,13 @@ describe('EncryptedRedisVault', () => {
 
       // Trying to decrypt with wrong key fails
       const serverEncryption = new VaultEncryption({ pepper: 'test-pepper' });
-      const wrongKey = serverEncryption.deriveKey({
+      const wrongKey = await serverEncryption.deriveKey({
         jti: 'attacker-attempt',
         sub: 'attacker',
         iat: Date.now(),
       });
 
-      expect(() => {
-        serverEncryption.decryptObject(parsed.encrypted, wrongKey);
-      }).toThrow();
+      await expect(serverEncryption.decryptObject(parsed.encrypted, wrongKey)).rejects.toThrow();
     });
 
     it('should produce different encrypted data for same credentials', async () => {

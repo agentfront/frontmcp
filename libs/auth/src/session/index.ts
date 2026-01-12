@@ -25,9 +25,6 @@ export {
   vaultFederatedRecordSchema,
   pendingIncrementalAuthSchema,
   authorizationVaultEntrySchema,
-  // Vault implementations
-  InMemoryAuthorizationVault,
-  RedisAuthorizationVault,
 } from './authorization-vault';
 export type {
   CredentialType,
@@ -78,6 +75,7 @@ export {
   EncryptedStorageError,
   StorageTokenStore,
   StorageAuthorizationVault,
+  InMemoryAuthorizationVault,
 } from './storage';
 export type {
   TypedStorageOptions,
@@ -91,4 +89,5 @@ export type {
   ClientKeyBinding,
   StorageTokenStoreOptions,
   StorageAuthorizationVaultOptions,
+  InMemoryAuthorizationVaultOptions,
 } from './storage';

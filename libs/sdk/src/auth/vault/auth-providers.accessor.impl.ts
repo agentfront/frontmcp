@@ -5,7 +5,7 @@
  * Handles caching, vault storage, lazy loading, and credential refresh.
  */
 
-import type { Credential } from '../session/authorization-vault';
+import type { Credential } from '@frontmcp/auth';
 import type { AuthProvidersAccessor } from './auth-providers.accessor';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from './auth-providers.registry';
 import type { AuthProvidersVault } from './auth-providers.vault';

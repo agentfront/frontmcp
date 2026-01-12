@@ -103,9 +103,8 @@ export {
   vaultFederatedRecordSchema,
   pendingIncrementalAuthSchema,
   authorizationVaultEntrySchema,
-  // Vault implementations (legacy)
+  // Vault implementations
   InMemoryAuthorizationVault,
-  RedisAuthorizationVault,
   // Vault implementations (storage-backed - recommended)
   StorageAuthorizationVault,
   // Encrypted storage
@@ -146,6 +145,7 @@ export type {
   PendingIncrementalAuth,
   AuthorizationVaultEntry,
   AuthorizationVault,
+  InMemoryAuthorizationVaultOptions,
   EncryptedData,
   VaultKeyDerivationClaims,
   VaultEncryptionConfig,

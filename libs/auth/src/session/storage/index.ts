@@ -27,3 +27,7 @@ export type { StorageTokenStoreOptions } from './storage-token-store';
 // StorageAuthorizationVault
 export { StorageAuthorizationVault } from './storage-authorization-vault';
 export type { StorageAuthorizationVaultOptions } from './storage-authorization-vault';
+
+// InMemoryAuthorizationVault
+export { InMemoryAuthorizationVault } from './in-memory-authorization-vault';
+export type { InMemoryAuthorizationVaultOptions } from './in-memory-authorization-vault';

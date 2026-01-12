@@ -7,7 +7,7 @@
  */
 
 import { Token } from '@frontmcp/di';
-import type { Credential } from '../session/authorization-vault';
+import type { Credential } from '@frontmcp/auth';
 import type {
   CredentialProviderConfig,
   CredentialScope,

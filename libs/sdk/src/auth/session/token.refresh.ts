@@ -1,7 +1,7 @@
 // auth/session/token.refresh.ts
 import type { ProviderSnapshot } from './session.types';
 import type { TokenStore } from './token.store';
-import type { TokenVault } from './token.vault';
+import type { TokenVault } from '@frontmcp/auth';
 
 // -----------------------------------------------------------------------------
 // Types

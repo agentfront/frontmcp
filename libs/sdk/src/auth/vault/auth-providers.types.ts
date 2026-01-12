@@ -5,8 +5,7 @@
  */
 
 import { z } from 'zod';
-import type { Credential } from '../session/authorization-vault';
-import type { AuthorizationVault } from '../session/authorization-vault';
+import type { Credential, AuthorizationVault } from '@frontmcp/auth';
 
 // ============================================
 // Credential Scope

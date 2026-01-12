@@ -1,7 +1,7 @@
 import { Session, type BaseCreateCtx } from './session.base';
 import { TokenRefresher } from '../token.refresh';
 import type { TokenStore } from '../token.store';
-import type { TokenVault } from '../token.vault';
+import type { TokenVault } from '@frontmcp/auth';
 
 export type StatefulCreateCtx = BaseCreateCtx & {};
 

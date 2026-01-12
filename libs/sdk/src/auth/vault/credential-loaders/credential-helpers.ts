@@ -4,7 +4,7 @@
  * Shared utilities for credential loaders.
  */
 
-import type { Credential } from '../../session/authorization-vault';
+import type { Credential } from '@frontmcp/auth';
 
 /**
  * Extract expiry time from a credential.

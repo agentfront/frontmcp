@@ -1,5 +1,5 @@
 import { Session, type BaseCreateCtx } from './session.base';
-import { TokenVault } from '../token.vault';
+import { TokenVault } from '@frontmcp/auth';
 import { InternalMcpError } from '../../../errors/mcp.error';
 
 export type StatefulCreateCtx = BaseCreateCtx & Record<string, never>;

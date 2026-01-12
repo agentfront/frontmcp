@@ -26,8 +26,11 @@
 import { z } from 'zod';
 import { randomUUID } from '@frontmcp/utils';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { VaultEncryption, EncryptedData, VaultSensitiveData, encryptedDataSchema } from './vault-encryption';
 import {
+  VaultEncryption,
+  EncryptedData,
+  VaultSensitiveData,
+  encryptedDataSchema,
   AuthorizationVault,
   AuthorizationVaultEntry,
   AppCredential,
@@ -35,7 +38,7 @@ import {
   VaultFederatedRecord,
   PendingIncrementalAuth,
   authorizationVaultEntrySchema,
-} from './authorization-vault';
+} from '@frontmcp/auth';
 
 // ============================================
 // Encrypted Vault Entry Schema
@@ -163,22 +166,22 @@ export class EncryptedRedisVault implements AuthorizationVault {
   /**
    * Encrypt sensitive data
    */
-  private encryptSensitive(data: VaultSensitiveData): EncryptedData {
+  private async encryptSensitive(data: VaultSensitiveData): Promise<EncryptedData> {
     return this.encryption.encryptObject(data, this.getKey());
   }
 
   /**
    * Decrypt sensitive data
    */
-  private decryptSensitive(encrypted: EncryptedData): VaultSensitiveData {
+  private async decryptSensitive(encrypted: EncryptedData): Promise<VaultSensitiveData> {
     return this.encryption.decryptObject<VaultSensitiveData>(encrypted, this.getKey());
   }
 
   /**
    * Convert Redis entry to full vault entry (decrypts sensitive data)
    */
-  private toVaultEntry(redisEntry: RedisVaultEntry): AuthorizationVaultEntry {
-    const sensitive = this.decryptSensitive(redisEntry.encrypted);
+  private async toVaultEntry(redisEntry: RedisVaultEntry): Promise<AuthorizationVaultEntry> {
+    const sensitive = await this.decryptSensitive(redisEntry.encrypted);
 
     return {
       id: redisEntry.id,
@@ -200,7 +203,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
   /**
    * Convert vault entry to Redis entry (encrypts sensitive data)
    */
-  private toRedisEntry(entry: AuthorizationVaultEntry): RedisVaultEntry {
+  private async toRedisEntry(entry: AuthorizationVaultEntry): Promise<RedisVaultEntry> {
     const sensitive: VaultSensitiveData = {
       appCredentials: entry.appCredentials,
       consent: entry.consent,
@@ -219,7 +222,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
       authorizedAppIds: entry.authorizedAppIds,
       skippedAppIds: entry.skippedAppIds,
       pendingAuthIds: entry.pendingAuths.map((p) => p.id),
-      encrypted: this.encryptSensitive(sensitive),
+      encrypted: await this.encryptSensitive(sensitive),
     };
   }
 
@@ -227,7 +230,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
    * Save entry to Redis
    */
   private async saveEntry(entry: AuthorizationVaultEntry): Promise<void> {
-    const redisEntry = this.toRedisEntry(entry);
+    const redisEntry = await this.toRedisEntry(entry);
     await this.redis.set(this.redisKey(entry.id), JSON.stringify(redisEntry));
   }
 
@@ -240,7 +243,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
 
     try {
       const redisEntry = redisVaultEntrySchema.parse(JSON.parse(data));
-      return this.toVaultEntry(redisEntry);
+      return await this.toVaultEntry(redisEntry);
     } catch (error) {
       // Could be decryption failure (wrong key) or corrupt data
       throw new Error(`Failed to load vault ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);

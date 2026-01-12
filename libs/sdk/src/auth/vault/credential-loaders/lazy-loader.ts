@@ -5,7 +5,7 @@
  * Prevents concurrent loads for the same provider (deduplication).
  */
 
-import type { Credential } from '../../session/authorization-vault';
+import type { Credential } from '@frontmcp/auth';
 import type { NormalizedProviderConfig } from '../auth-providers.registry';
 import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import { FrontMcpLogger } from '../../../common';

@@ -5,7 +5,7 @@
  * Credentials are loaded in parallel at session start.
  */
 
-import type { Credential } from '../../session/authorization-vault';
+import type { Credential } from '@frontmcp/auth';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from '../auth-providers.registry';
 import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import type { CredentialCache } from '../credential-cache';

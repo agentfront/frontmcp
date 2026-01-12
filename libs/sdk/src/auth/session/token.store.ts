@@ -1,6 +1,6 @@
 // auth/session/token.store.ts
 import { randomUUID } from '@frontmcp/utils';
-import type { EncBlob } from './token.vault';
+import type { EncBlob } from '@frontmcp/auth';
 
 export type SecretRecord = {
   id: string; // opaque reference id
@@ -38,7 +38,10 @@ export class MemoryTokenStore implements TokenStore {
 
 /** Redis (sketch) — replace `any` with your redis client type. */
 export class RedisTokenStore implements TokenStore {
-  constructor(private readonly redis: any, private readonly ns = 'tok:') {}
+  constructor(
+    private readonly redis: any,
+    private readonly ns = 'tok:',
+  ) {}
   allocId() {
     return randomUUID();
   }
