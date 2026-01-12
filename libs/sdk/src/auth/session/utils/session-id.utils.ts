@@ -1,5 +1,5 @@
 // auth/session/utils/session-id.utils.ts
-import { randomUUID, createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import { randomUUID, sha256, encryptValue, decryptValue } from '@frontmcp/utils';
 import { TinyTtlCache } from './tiny-ttl-cache';
 import { SessionIdPayload, TransportProtocolType, AIPlatformType } from '../../../common';
 import { getTokenSignatureFingerprint } from './auth-token.utils';
@@ -10,32 +10,23 @@ import { getMachineId } from '../../machine-id';
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
 
+// Cached encryption key (derived once per process)
+let cachedKey: Uint8Array | null = null;
+
 // Symmetric key derived from secret or machine id (stable for the process)
 // Uses getMachineId() from authorization module as single source of truth
-function getKey(): Buffer {
+function getKey(): Uint8Array {
+  if (cachedKey) return cachedKey;
   const base = process.env['MCP_SESSION_SECRET'] || getMachineId();
-  return createHash('sha256').update(base).digest(); // 32 bytes
-}
-
-function b64urlEncode(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function b64urlDecode(s: string): Buffer {
-  const pad = 4 - (s.length % 4);
-  const base64 = s.replace(/-/g, '+').replace(/_/g, '/') + (pad < 4 ? '='.repeat(pad) : '');
-  return Buffer.from(base64, 'base64');
+  cachedKey = sha256(new TextEncoder().encode(base)); // 32 bytes
+  return cachedKey;
 }
 
 export function encryptJson(obj: unknown): string {
   const key = getKey();
-  const iv = randomBytes(12); // AES-GCM 96-bit IV
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const pt = Buffer.from(JSON.stringify(obj), 'utf8');
-  const ct = Buffer.concat([cipher.update(pt), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  // Pack iv.tag.ct as base64url(iv.tag.ct)
-  return `${b64urlEncode(iv)}.${b64urlEncode(tag)}.${b64urlEncode(ct)}`;
+  const encrypted = encryptValue(obj, key);
+  // Pack iv.tag.ct as base64url format (matches decryptValue expected input)
+  return `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
 }
 
 /**
@@ -50,14 +41,7 @@ function decryptSessionJson(sessionId: string): unknown {
   if (!ivB64 || !tagB64 || !ctB64) return null;
 
   const key = getKey();
-  const iv = b64urlDecode(ivB64);
-  const tag = b64urlDecode(tagB64);
-  const ct = b64urlDecode(ctB64);
-
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
-  return JSON.parse(pt.toString('utf8'));
+  return decryptValue({ alg: 'A256GCM', iv: ivB64, tag: tagB64, data: ctB64 }, key);
 }
 
 function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {

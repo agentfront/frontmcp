@@ -8,7 +8,7 @@ export class SessionService {
    * Create a new Session from verified auth data.
    * The returned Session exposes async token helpers, scoped view, and transport JWT helpers.
    */
-  async createSession(scope: Scope, args: CreateSessionArgs) {
+  createSession(scope: Scope, args: CreateSessionArgs): McpSession {
     return this.createMcpSession(scope, args);
   }
 

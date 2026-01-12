@@ -170,7 +170,8 @@ export class SessionView {
     if (!this.allow(providerId)) throw new Error(`scoped_denied:${providerId}`);
     return this.parent.getToken(providerId);
   }
-  get transportId() {
-    return this.parent.getTransportSessionId;
+
+  getTransportSessionId(): Promise<string> {
+    return this.parent.getTransportSessionId();
   }
 }

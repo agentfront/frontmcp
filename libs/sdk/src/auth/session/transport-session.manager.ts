@@ -1,11 +1,10 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID, encryptValue, decryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
+import { randomUUID, decryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
 import {
   TransportSession,
   TransportProtocol,
   SessionJwtPayload,
-  StatelessSessionJwtPayload,
   StoredSession,
   SessionStore,
   SessionStorageConfig,
@@ -287,16 +286,9 @@ export class TransportSessionManager {
    * Encode a session as an encrypted JWT for the Mcp-Session-Id header
    *
    * @param session - The transport session to encode
-   * @param additionalState - Additional encrypted state for stateless mode
    * @returns Encrypted session JWT
    */
-  encodeSessionJwt(
-    session: TransportSession,
-    additionalState?: {
-      state?: unknown;
-      tokens?: Record<string, unknown>;
-    },
-  ): string {
+  encodeSessionJwt(session: TransportSession): string {
     const payload: SessionJwtPayload = {
       sid: session.id,
       aid: session.authorizationId,
@@ -305,20 +297,6 @@ export class TransportSessionManager {
       iat: Math.floor(Date.now() / 1000),
       exp: session.expiresAt ? Math.floor(session.expiresAt / 1000) : undefined,
     };
-
-    if (this.mode === 'stateless' && additionalState) {
-      const statelessPayload = payload as StatelessSessionJwtPayload;
-
-      if (additionalState.state) {
-        const encrypted = encryptValue(additionalState.state, this.encryptionKey);
-        statelessPayload.state = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
-      }
-
-      if (additionalState.tokens) {
-        const encrypted = encryptValue(additionalState.tokens, this.encryptionKey);
-        statelessPayload.tokens = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
-      }
-    }
 
     return encryptJson(payload);
   }
@@ -356,7 +334,10 @@ export class TransportSessionManager {
         expiresAt: payload.exp ? payload.exp * 1000 : undefined,
         nodeId: payload.nid,
       };
-    } catch {
+    } catch (err) {
+      if (process.env['NODE_ENV'] !== 'production') {
+        console.debug('[TransportSessionManager] Failed to decrypt session JWT:', err);
+      }
       return null;
     }
   }
