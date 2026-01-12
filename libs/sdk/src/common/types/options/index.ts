@@ -5,3 +5,4 @@ export * from './auth';
 export * from './logging.options';
 export * from './redis.options';
 export * from './transport.options';
+export * from './pagination.options';
