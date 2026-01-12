@@ -21,7 +21,14 @@
  */
 
 import { z } from 'zod';
-import { hkdfSha256, encryptAesGcm, decryptAesGcm, randomBytes } from '@frontmcp/utils';
+import {
+  hkdfSha256,
+  encryptAesGcm,
+  decryptAesGcm,
+  randomBytes,
+  base64urlEncode,
+  base64urlDecode,
+} from '@frontmcp/utils';
 
 // ============================================
 // Types and Schemas
@@ -191,9 +198,9 @@ export class VaultEncryption {
     return {
       v: 1,
       alg: 'aes-256-gcm',
-      iv: Buffer.from(iv).toString('base64'),
-      ct: Buffer.from(ciphertext).toString('base64'),
-      tag: Buffer.from(tag).toString('base64'),
+      iv: base64urlEncode(iv),
+      ct: base64urlEncode(ciphertext),
+      tag: base64urlEncode(tag),
     };
   }
 
@@ -218,10 +225,10 @@ export class VaultEncryption {
 
     const { iv, ct, tag } = parsed.data;
 
-    // Decode from base64
-    const ivBuffer = new Uint8Array(Buffer.from(iv, 'base64'));
-    const ciphertext = new Uint8Array(Buffer.from(ct, 'base64'));
-    const tagBuffer = new Uint8Array(Buffer.from(tag, 'base64'));
+    // Decode from base64url
+    const ivBuffer = base64urlDecode(iv);
+    const ciphertext = base64urlDecode(ct);
+    const tagBuffer = base64urlDecode(tag);
 
     // Decrypt
     try {

@@ -2,7 +2,7 @@ import { Session, type BaseCreateCtx } from './session.base';
 import { TokenVault } from '@frontmcp/auth';
 import { InternalMcpError } from '../../../errors/mcp.error';
 
-export type StatefulCreateCtx = BaseCreateCtx & Record<string, never>;
+export type StatelessCreateCtx = BaseCreateCtx & Record<string, never>;
 
 /**
  * Represents a **stateful session (non-refreshable)** where nested OAuth
@@ -21,7 +21,7 @@ export class StatelessSession extends Session {
    */
   // eslint-disable-next-line no-unused-private-class-members
   #vault: TokenVault;
-  constructor(ctx: StatefulCreateCtx) {
+  constructor(ctx: StatelessCreateCtx) {
     super(ctx as BaseCreateCtx);
     throw new InternalMcpError('StatelessSession not yet implemented', 'NOT_IMPLEMENTED');
   }

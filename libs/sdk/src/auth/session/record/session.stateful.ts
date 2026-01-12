@@ -2,6 +2,7 @@ import { Session, type BaseCreateCtx } from './session.base';
 import { TokenRefresher } from '../token.refresh';
 import type { TokenStore } from '../token.store';
 import type { TokenVault } from '@frontmcp/auth';
+import { InternalMcpError } from '../../../errors/mcp.error';
 
 export type StatefulCreateCtx = BaseCreateCtx & {};
 
@@ -49,12 +50,12 @@ export class StatefulSession extends Session {
   #defaultRefresher: TokenRefresher;
 
   constructor(ctx: StatefulCreateCtx) {
-    super(ctx as any);
-    throw new Error('Method not implemented.');
+    super(ctx as BaseCreateCtx);
+    throw new InternalMcpError('StatefulSession not yet implemented', 'NOT_IMPLEMENTED');
   }
 
-  override getToken(providerId?: string): Promise<string> | string {
-    throw new Error('Method not implemented.');
+  override getToken(_providerId?: string): Promise<string> | string {
+    throw new InternalMcpError('Method not implemented', 'NOT_IMPLEMENTED');
   }
   //
   // protected async attachProviderSecrets(p: ProviderInput): Promise<ProviderSnapshot> {

@@ -12,6 +12,7 @@ import type { AuthProvidersVault } from './auth-providers.vault';
 import type { CredentialCache } from './credential-cache';
 import type { LazyCredentialLoader } from './credential-loaders/lazy-loader';
 import type { CredentialFactoryContext, GetCredentialOptions, ResolvedCredential } from './auth-providers.types';
+import { extractCredentialExpiry } from './credential-loaders/credential-helpers';
 import { FrontMcpLogger } from '../../common';
 
 /**
@@ -226,7 +227,7 @@ export class AuthProvidersAccessorImpl implements AuthProvidersAccessor {
         credential,
         providerId: providerName,
         acquiredAt: Date.now(), // We don't store acquiredAt in vault
-        expiresAt: this.extractExpiry(credential),
+        expiresAt: extractCredentialExpiry(credential),
         isValid: true,
         scope: config.scope,
       };
@@ -308,21 +309,6 @@ export class AuthProvidersAccessorImpl implements AuthProvidersAccessor {
 
       default:
         return {};
-    }
-  }
-
-  /**
-   * Extract expiry time from credential
-   */
-  private extractExpiry(credential: Credential): number | undefined {
-    switch (credential.type) {
-      case 'oauth':
-      case 'oauth_pkce':
-      case 'bearer':
-      case 'service_account':
-        return credential.expiresAt;
-      default:
-        return undefined;
     }
   }
 }

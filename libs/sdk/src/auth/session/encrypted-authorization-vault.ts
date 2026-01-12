@@ -84,7 +84,7 @@ export type RedisVaultEntry = z.infer<typeof redisVaultEntrySchema>;
  */
 export interface EncryptionContext {
   /** Encryption key derived from JWT */
-  key: Buffer;
+  key: Uint8Array;
   /** Vault ID (from JWT jti claim) */
   vaultId: string;
 }
@@ -140,7 +140,7 @@ export class EncryptedRedisVault implements AuthorizationVault {
   /**
    * Get current encryption key from AsyncLocalStorage.
    */
-  private getKey(): Buffer {
+  private getKey(): Uint8Array {
     const asyncContext = encryptionContextStorage.getStore();
     if (asyncContext) {
       return asyncContext.key;

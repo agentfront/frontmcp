@@ -325,7 +325,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       deriveExpectedAudience(baseUrl);
     const expectedAudienceArray = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
 
-    const audResult = validateAudience(verifyResult.payload?.aud as string | string[] | undefined, {
+    const audResult = validateAudience(verifyResult.payload?.['aud'] as string | string[] | undefined, {
       expectedAudiences: expectedAudienceArray,
       allowNoAudience: true, // Some tokens may not have audience
     });
@@ -343,7 +343,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     // Check required scopes
     const requiredScopes = (authOptionsForAudience?.['requiredScopes'] as string[] | undefined) ?? [];
     if (requiredScopes.length > 0) {
-      const tokenScopes = this.parseScopes(verifyResult.payload?.scope);
+      const tokenScopes = this.parseScopes(verifyResult.payload?.['scope']);
       const hasAllScopes = requiredScopes.every((s: string) => tokenScopes.includes(s));
 
       if (!hasAllScopes) {

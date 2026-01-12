@@ -8,6 +8,7 @@
 import { Token } from '@frontmcp/di';
 import type { Credential, AuthorizationVault, AppCredential } from '@frontmcp/auth';
 import type { CredentialScope } from './auth-providers.types';
+import { extractCredentialExpiry } from './credential-loaders/credential-helpers';
 import { FrontMcpLogger } from '../../common';
 
 /**
@@ -48,7 +49,7 @@ export class AuthProvidersVault {
       credential,
       acquiredAt: Date.now(),
       isValid: true,
-      expiresAt: this.extractExpiry(credential),
+      expiresAt: extractCredentialExpiry(credential),
     };
 
     try {
@@ -259,21 +260,6 @@ export class AuthProvidersVault {
         return `${this.namespace}session:${sessionId}`;
       default:
         return `${this.namespace}session:${sessionId}`;
-    }
-  }
-
-  /**
-   * Extract expiry time from credential
-   */
-  private extractExpiry(credential: Credential): number | undefined {
-    switch (credential.type) {
-      case 'oauth':
-      case 'oauth_pkce':
-      case 'bearer':
-      case 'service_account':
-        return credential.expiresAt;
-      default:
-        return undefined;
     }
   }
 }
