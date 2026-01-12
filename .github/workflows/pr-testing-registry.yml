@@ -248,45 +248,37 @@ jobs:
           FAILED_PACKAGES=()
           PUBLISHED_PACKAGES=()
 
-          # Publish libs packages
-          # Note: 'cli' package is named 'frontmcp' (non-scoped), others are @frontmcp/*
-          LIBS_PACKAGES=(di utils uipack sdk ui adapters testing cli plugins)
-          for pkg in "${LIBS_PACKAGES[@]}"; do
-            if [ -d "libs/$pkg/dist" ]; then
-              # Get actual package name from package.json, handling null/empty cases
-              PKG_NAME_RAW=$(jq -r '.name // empty' "libs/$pkg/dist/package.json" 2>/dev/null)
-              if [ -z "$PKG_NAME_RAW" ] || [ "$PKG_NAME_RAW" = "null" ]; then
-                PKG_NAME="@frontmcp/$pkg"
-              else
-                PKG_NAME="$PKG_NAME_RAW"
-              fi
-              echo "Publishing $PKG_NAME@$VERSION..."
-              if npm publish "libs/$pkg/dist" \
-                --registry http://localhost:4873 \
-                --access public \
-                --tag "pr-$PR_NUM"; then
-                PUBLISHED_PACKAGES+=("$PKG_NAME")
-              else
-                echo "Warning: publish failed for $PKG_NAME"
-                FAILED_PACKAGES+=("$PKG_NAME")
-              fi
-            fi
-          done
+          # Dynamically discover all publishable packages using Nx
+          echo "Discovering publishable packages..."
+          PUBLISHABLE_PROJECTS=($(npx nx show projects --with-target publish 2>/dev/null))
+          echo "Found ${#PUBLISHABLE_PROJECTS[@]} publishable packages: ${PUBLISHABLE_PROJECTS[*]}"
 
-          # Publish plugin packages
-          PLUGIN_PACKAGES=(plugin-approval plugin-cache plugin-codecall plugin-dashboard plugin-remember)
-          for pkg in "${PLUGIN_PACKAGES[@]}"; do
-            if [ -d "plugins/$pkg/dist" ]; then
-              echo "Publishing @frontmcp/$pkg@$VERSION..."
-              if npm publish "plugins/$pkg/dist" \
-                --registry http://localhost:4873 \
-                --access public \
-                --tag "pr-$PR_NUM"; then
-                PUBLISHED_PACKAGES+=("@frontmcp/$pkg")
-              else
-                echo "Warning: publish failed for $pkg"
-                FAILED_PACKAGES+=("@frontmcp/$pkg")
-              fi
+          for project in "${PUBLISHABLE_PROJECTS[@]}"; do
+            # Determine dist path based on project location (libs/ or plugins/)
+            if [ -d "libs/$project/dist" ]; then
+              DIST_PATH="libs/$project/dist"
+            elif [ -d "plugins/$project/dist" ]; then
+              DIST_PATH="plugins/$project/dist"
+            else
+              echo "Warning: No dist folder found for $project"
+              continue
+            fi
+
+            # Get actual package name from package.json
+            PKG_NAME=$(jq -r '.name // empty' "$DIST_PATH/package.json" 2>/dev/null)
+            if [ -z "$PKG_NAME" ] || [ "$PKG_NAME" = "null" ]; then
+              PKG_NAME="@frontmcp/$project"
+            fi
+
+            echo "Publishing $PKG_NAME@$VERSION from $DIST_PATH..."
+            if npm publish "$DIST_PATH" \
+              --registry http://localhost:4873 \
+              --access public \
+              --tag "pr-$PR_NUM"; then
+              PUBLISHED_PACKAGES+=("$PKG_NAME")
+            else
+              echo "Warning: publish failed for $PKG_NAME"
+              FAILED_PACKAGES+=("$PKG_NAME")
             fi
           done
 
@@ -352,27 +344,15 @@ jobs:
 
           ## Available Packages
 
-          All packages are published with version \`${{ steps.version.outputs.version }}\`:
+          All packages with a \`publish\` target are automatically discovered and published.
+          Check the workflow logs for the complete list of published packages.
 
-          ### CLI (non-scoped)
-          - frontmcp (use with: \`npx frontmcp\` or \`npm install -g frontmcp\`)
+          Common packages include:
+          - **CLI**: \`frontmcp\` (non-scoped, use with \`npx frontmcp\` or \`npm install -g frontmcp\`)
+          - **SDK**: \`@frontmcp/sdk\`, \`@frontmcp/adapters\`, \`@frontmcp/plugins\`, etc.
+          - **Plugins**: \`@frontmcp/plugin-*\` packages
 
-          ### SDK Packages (@frontmcp/*)
-          - @frontmcp/sdk
-          - @frontmcp/adapters
-          - @frontmcp/plugins
-          - @frontmcp/ui
-          - @frontmcp/testing
-          - @frontmcp/di
-          - @frontmcp/utils
-          - @frontmcp/uipack
-
-          ### Plugin Packages
-          - @frontmcp/plugin-approval
-          - @frontmcp/plugin-cache
-          - @frontmcp/plugin-codecall
-          - @frontmcp/plugin-dashboard
-          - @frontmcp/plugin-remember
+          All published with version \`${{ steps.version.outputs.version }}\`
           EOF
 
           echo "${{ env.NGROK_URL }}" > /tmp/registry-info/registry-url.txt
@@ -491,22 +471,16 @@ jobs:
           echo "  NPM INSTALL COMMANDS (@frontmcp/* packages)"
           echo "--------------------------------------------"
           echo ""
-          echo "# Install SDK and core packages:"
+          echo "# All packages with 'publish' target are available."
+          echo "# Common examples:"
           echo "npm install @frontmcp/sdk@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/adapters@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/plugins@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/ui@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/testing@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/di@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/utils@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/uipack@$VERSION --registry=$REGISTRY"
           echo ""
-          echo "# Install plugin packages:"
-          echo "npm install @frontmcp/plugin-approval@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/plugin-cache@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/plugin-codecall@$VERSION --registry=$REGISTRY"
-          echo "npm install @frontmcp/plugin-dashboard@$VERSION --registry=$REGISTRY"
+          echo "# Plugin packages (all @frontmcp/plugin-* are available):"
+          echo "npm install @frontmcp/plugin-config@$VERSION --registry=$REGISTRY"
           echo "npm install @frontmcp/plugin-remember@$VERSION --registry=$REGISTRY"
+          echo "# ... and all other plugins"
           echo ""
           echo "--------------------------------------------"
           echo "  YARN CONFIGURATION (.yarnrc.yml)"
