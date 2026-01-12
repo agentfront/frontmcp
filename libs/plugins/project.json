@@ -4,7 +4,7 @@
   "sourceRoot": "libs/plugins/src",
   "projectType": "library",
   "tags": ["scope:libs", "scope:publishable", "versioning:synchronized"],
-  "implicitDependencies": ["plugin-cache", "plugin-codecall", "plugin-config", "plugin-dashboard", "plugin-remember"],
+  "implicitDependencies": ["plugin-cache", "plugin-codecall", "plugin-dashboard", "plugin-remember"],
   "targets": {
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",
@@ -26,7 +26,6 @@
           "external": [
             "@frontmcp/plugin-cache",
             "@frontmcp/plugin-codecall",
-            "@frontmcp/plugin-config",
             "@frontmcp/plugin-dashboard",
             "@frontmcp/plugin-remember",
             "reflect-metadata"
@@ -52,7 +51,6 @@
           "external": [
             "@frontmcp/plugin-cache",
             "@frontmcp/plugin-codecall",
-            "@frontmcp/plugin-config",
             "@frontmcp/plugin-dashboard",
             "@frontmcp/plugin-remember",
             "reflect-metadata"

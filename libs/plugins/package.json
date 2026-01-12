@@ -47,7 +47,6 @@
   "dependencies": {
     "@frontmcp/plugin-cache": "0.7.2",
     "@frontmcp/plugin-codecall": "0.7.2",
-    "@frontmcp/plugin-config": "0.7.2",
     "@frontmcp/plugin-dashboard": "0.7.2",
     "@frontmcp/plugin-remember": "0.7.2"
   },

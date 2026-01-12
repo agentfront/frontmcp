@@ -10,7 +10,6 @@
       "@frontmcp/sdk": ["libs/sdk/dist/index.d.ts"],
       "@frontmcp/plugin-cache": ["plugins/plugin-cache/dist/index.d.ts"],
       "@frontmcp/plugin-codecall": ["plugins/plugin-codecall/dist/index.d.ts"],
-      "@frontmcp/plugin-config": ["plugins/plugin-config/dist/index.d.ts"],
       "@frontmcp/plugin-dashboard": ["plugins/plugin-dashboard/dist/index.d.ts"],
       "@frontmcp/plugin-remember": ["plugins/plugin-remember/dist/index.d.ts"]
     }
