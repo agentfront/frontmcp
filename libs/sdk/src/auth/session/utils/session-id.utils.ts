@@ -13,11 +13,37 @@ const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
 // Cached encryption key (derived once per process)
 let cachedKey: Uint8Array | null = null;
 
-// Symmetric key derived from secret or machine id (stable for the process)
-// Uses getMachineId() from authorization module as single source of truth
+/**
+ * Symmetric key derived from secret or machine id (stable for the process).
+ * Uses getMachineId() from authorization module as single source of truth.
+ *
+ * SECURITY: In production, MCP_SESSION_SECRET is REQUIRED.
+ * Falls back to getMachineId() only in development/test environments.
+ *
+ * @throws Error if MCP_SESSION_SECRET is not set in production
+ */
 function getKey(): Uint8Array {
   if (cachedKey) return cachedKey;
-  const base = process.env['MCP_SESSION_SECRET'] || getMachineId();
+
+  const secret = process.env['MCP_SESSION_SECRET'];
+  const nodeEnv = process.env['NODE_ENV'];
+
+  if (!secret) {
+    // Fail fast in production - machine ID is not secure for production use
+    if (nodeEnv === 'production') {
+      throw new Error(
+        '[SessionIdUtils] MCP_SESSION_SECRET is required in production. ' +
+          'Set the MCP_SESSION_SECRET environment variable to a secure random string.',
+      );
+    }
+    // Development/test fallback - log warning
+    console.warn(
+      '[SessionIdUtils] Using machine ID as session encryption secret - NOT SECURE FOR PRODUCTION. ' +
+        'Set MCP_SESSION_SECRET environment variable for secure session encryption.',
+    );
+  }
+
+  const base = secret || getMachineId();
   cachedKey = sha256(new TextEncoder().encode(base)); // 32 bytes
   return cachedKey;
 }

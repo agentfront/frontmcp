@@ -1,6 +1,6 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID, decryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
+import { randomUUID, decryptValue, encryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
 import {
   TransportSession,
   TransportProtocol,
@@ -10,7 +10,6 @@ import {
   SessionStorageConfig,
   TransportState,
 } from './transport-session.types';
-import { encryptJson } from './utils/session-id.utils';
 import { getMachineId } from '../authorization/authorization.class';
 import { RedisSessionStore } from './redis-session.store';
 
@@ -286,9 +285,10 @@ export class TransportSessionManager {
    * Encode a session as an encrypted JWT for the Mcp-Session-Id header
    *
    * @param session - The transport session to encode
+   * @param _additionalState - (deprecated) Reserved for backwards compatibility
    * @returns Encrypted session JWT
    */
-  encodeSessionJwt(session: TransportSession): string {
+  encodeSessionJwt(session: TransportSession, _additionalState?: unknown): string {
     const payload: SessionJwtPayload = {
       sid: session.id,
       aid: session.authorizationId,
@@ -298,7 +298,9 @@ export class TransportSessionManager {
       exp: session.expiresAt ? Math.floor(session.expiresAt / 1000) : undefined,
     };
 
-    return encryptJson(payload);
+    // Use this.encryptionKey for consistency with decryptSessionJwt
+    const encrypted = encryptValue(payload, this.encryptionKey);
+    return `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
   }
 
   /**
@@ -306,11 +308,13 @@ export class TransportSessionManager {
    *
    * @param jwt - The encrypted session JWT
    * @returns Decoded session or null if invalid
+   *
+   * Note: In stateless mode, the session.id is the JWT token itself (not the decoded sid).
+   * This ensures consistency with createSession() which sets session.id = encodeSessionJwt().
    */
   private decryptSessionJwt(jwt: string): TransportSession | null {
     try {
-      // The encryptJson format is iv.tag.ct (base64url)
-      // We need to decrypt it using the same key
+      // The encrypted format is iv.tag.ct (base64url)
       const parts = jwt.split('.');
       if (parts.length !== 3) return null;
 
@@ -326,8 +330,10 @@ export class TransportSessionManager {
         return null;
       }
 
+      // Return the JWT token as session.id for stateless mode consistency
+      // (createSession sets session.id = encodeSessionJwt() in stateless mode)
       return {
-        id: payload.sid,
+        id: jwt,
         authorizationId: payload.aid,
         protocol: payload.proto,
         createdAt: payload.iat * 1000,

@@ -12,15 +12,20 @@ export class SessionService {
     return this.createMcpSession(scope, args);
   }
 
-  private createMcpSession(scope: Scope, args: CreateSessionArgs) {
+  private createMcpSession(scope: Scope, args: CreateSessionArgs): McpSession {
     const primary = scope.auth;
 
     const apps = scope.apps.getApps();
-    const appIds = apps.map((app) => app.id);
+    const scopeAppIds = apps.map((app) => app.id);
 
-    // Prefer precomputed projections when provided
-    let authorizedApps: Record<string, { id: string; toolIds: string[] }> = args.authorizedApps ?? {};
-    if (!args.authorizedApps) {
+    // Prefer caller-provided authorizedAppIds, fall back to scope apps
+    const authorizedAppIds: string[] = args.authorizedAppIds ?? scopeAppIds;
+
+    // Prefer caller-provided authorizedApps, fall back to building from scope apps
+    let authorizedApps: Record<string, { id: string; toolIds: string[] }>;
+    if (args.authorizedApps) {
+      authorizedApps = args.authorizedApps;
+    } else {
       authorizedApps = {};
       for (const app of apps) {
         try {
@@ -32,21 +37,31 @@ export class SessionService {
       }
     }
 
-    // Providers snapshot
+    // Providers snapshot - only derive the missing piece, not both
     let authorizedProviders: Record<string, import('./session.types').ProviderSnapshot> | undefined =
       args.authorizedProviders;
     let authorizedProviderIds: string[] | undefined = args.authorizedProviderIds;
-    if (!authorizedProviders || !authorizedProviderIds) {
+
+    // If authorizedProviders exists but authorizedProviderIds is missing, derive from keys
+    if (authorizedProviders && !authorizedProviderIds) {
+      authorizedProviderIds = Object.keys(authorizedProviders);
+    }
+
+    // If authorizedProviders is missing, build from primary/claims
+    if (!authorizedProviders) {
       const expClaim = args.claims && typeof args.claims['exp'] === 'number' ? Number(args.claims['exp']) : undefined;
       const providerSnapshot: import('./session.types').ProviderSnapshot = {
         id: primary.id,
         exp: expClaim,
         payload: args.claims ?? {},
-        apps: appIds.map((id) => ({ id, toolIds: authorizedApps[id]?.toolIds ?? [] })),
+        apps: authorizedAppIds.map((id) => ({ id, toolIds: authorizedApps[id]?.toolIds ?? [] })),
         embedMode: 'plain',
       };
       authorizedProviders = { [primary.id]: providerSnapshot };
-      authorizedProviderIds = [primary.id];
+      // Only set authorizedProviderIds if it wasn't already provided
+      if (!authorizedProviderIds) {
+        authorizedProviderIds = [primary.id];
+      }
     }
 
     // resolve granted scopes from token claims (scope or scp)
@@ -71,7 +86,7 @@ export class SessionService {
       authorizedProviders,
       authorizedProviderIds,
       authorizedApps,
-      authorizedAppIds: appIds,
+      authorizedAppIds,
       authorizedResources: args.authorizedResources ?? [],
       scopes,
       authorizedTools: args.authorizedTools,
