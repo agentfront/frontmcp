@@ -38,7 +38,7 @@ export type ProviderSnapshot = {
 export type CreateSessionArgs = {
   token: string;
   sessionId?: string;
-  claims: Record<string, any>;
+  claims: Record<string, unknown>;
   user: SessionUser;
   // Optional precomputed authorization projections (preferred when provided)
   authorizedProviders?: Record<string, import('./session.types').ProviderSnapshot>;
@@ -48,8 +48,8 @@ export type CreateSessionArgs = {
   authorizedResources?: string[];
   scopes?: string[];
   // Scoped tool/prompt projections for fast lookup
-  authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   authorizedToolIds?: string[];
-  authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   authorizedPromptIds?: string[];
 };

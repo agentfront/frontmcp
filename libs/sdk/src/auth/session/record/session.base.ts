@@ -22,9 +22,9 @@ export interface BaseCreateCtx {
   authorizedResources?: string[];
   scopes?: string[];
   // Scoped tools/prompts maps
-  authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   authorizedToolIds?: string[];
-  authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   authorizedPromptIds?: string[];
 }
 
@@ -38,7 +38,7 @@ export interface SessionUser {
 
 // TODO: can be extended
 export interface SessionClaims {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export abstract class Session {
@@ -58,9 +58,9 @@ export abstract class Session {
   readonly authorizedAppIds: string[];
   readonly authorizedResources: string[];
   readonly scopes?: string[];
-  readonly authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  readonly authorizedTools?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   readonly authorizedToolIds?: string[];
-  readonly authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, any> }>;
+  readonly authorizedPrompts?: Record<string, { executionPath: [string, string]; details?: Record<string, unknown> }>;
   readonly authorizedPromptIds?: string[];
 
   // ---------------- private/shared ----------------
@@ -79,8 +79,7 @@ export abstract class Session {
     this.user = ctx.user;
     this.claims = ctx.claims;
     // derive token expiration from JWT claims if present (exp in seconds)
-    const exp =
-      ctx.claims && typeof (ctx.claims as any)['exp'] === 'number' ? Number((ctx.claims as any)['exp']) : undefined;
+    const exp = ctx.claims && typeof ctx.claims['exp'] === 'number' ? Number(ctx.claims['exp']) : undefined;
     if (exp) {
       this.expiresAt = exp > 1e12 ? exp : exp * 1000;
     }
@@ -139,14 +138,17 @@ export abstract class Session {
       typeof allowed === 'function'
         ? allowed
         : Array.isArray(allowed)
-        ? (id: string) => allowed.includes(id)
-        : (id: string) => id === allowed;
+          ? (id: string) => allowed.includes(id)
+          : (id: string) => id === allowed;
     return new SessionView(this, fn);
   }
 }
 
 export class SessionView {
-  constructor(private readonly parent: Session, private readonly allow: (id: string) => boolean) {}
+  constructor(
+    private readonly parent: Session,
+    private readonly allow: (id: string) => boolean,
+  ) {}
 
   get id() {
     return this.parent.id;

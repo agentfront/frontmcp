@@ -201,6 +201,9 @@ export class TransportSessionManager {
         lastAccessedAt: Date.now(),
       };
       await this.store.set(sessionId, stored);
+    } else {
+      // Stateless mode: encode session as JWT - the id becomes the encrypted JWT
+      session.id = this.encodeSessionJwt(session);
     }
 
     return session;

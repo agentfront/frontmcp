@@ -9,7 +9,10 @@
  * - @frontmcp/plugin-dashboard
  * - @frontmcp/plugin-remember
  *
- * Note: ConfigPlugin is now built into @frontmcp/sdk
+ * MIGRATION: ConfigPlugin has been moved to @frontmcp/sdk.
+ * The @frontmcp/plugin-config package is no longer available.
+ * Import directly from the SDK: `import { ConfigPlugin } from '@frontmcp/sdk'`
+ * See docs/draft/docs/extensibility/config-yaml.mdx for migration details.
  */
 
 export * from '@frontmcp/plugin-cache';

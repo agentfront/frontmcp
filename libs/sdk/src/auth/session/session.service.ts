@@ -33,28 +33,26 @@ export class SessionService {
     }
 
     // Providers snapshot
-    let authorizedProviders = args.authorizedProviders;
-    let authorizedProviderIds = args.authorizedProviderIds;
+    let authorizedProviders: Record<string, import('./session.types').ProviderSnapshot> | undefined =
+      args.authorizedProviders;
+    let authorizedProviderIds: string[] | undefined = args.authorizedProviderIds;
     if (!authorizedProviders || !authorizedProviderIds) {
-      const expClaim =
-        args.claims && typeof (args.claims as any)['exp'] === 'number'
-          ? Number((args.claims as any)['exp'])
-          : undefined;
-      const providerSnapshot = {
+      const expClaim = args.claims && typeof args.claims['exp'] === 'number' ? Number(args.claims['exp']) : undefined;
+      const providerSnapshot: import('./session.types').ProviderSnapshot = {
         id: primary.id,
         exp: expClaim,
         payload: args.claims ?? {},
         apps: appIds.map((id) => ({ id, toolIds: authorizedApps[id]?.toolIds ?? [] })),
-        embedMode: 'plain' as const,
+        embedMode: 'plain',
       };
-      authorizedProviders = { [primary.id]: providerSnapshot } as any;
+      authorizedProviders = { [primary.id]: providerSnapshot };
       authorizedProviderIds = [primary.id];
     }
 
     // resolve granted scopes from token claims (scope or scp)
     let scopes: string[] = args.scopes ?? [];
     if (!args.scopes) {
-      const rawScope = (args.claims && ((args.claims as any)['scope'] ?? (args.claims as any)['scp'])) as unknown;
+      const rawScope: unknown = args.claims ? (args.claims['scope'] ?? args.claims['scp']) : undefined;
       scopes = Array.isArray(rawScope)
         ? rawScope.map(String)
         : typeof rawScope === 'string'
@@ -63,7 +61,6 @@ export class SessionService {
     }
 
     return new McpSession({
-      apps: appIds,
       id: args.token,
       sessionId: args.sessionId,
       scope,
@@ -71,16 +68,16 @@ export class SessionService {
       issuer: primary.issuer,
       token: args.token,
       claims: args.claims,
-      authorizedProviders: authorizedProviders as any,
-      authorizedProviderIds: authorizedProviderIds as any,
+      authorizedProviders,
+      authorizedProviderIds,
       authorizedApps,
       authorizedAppIds: appIds,
-      authorizedResources: [],
+      authorizedResources: args.authorizedResources ?? [],
       scopes,
       authorizedTools: args.authorizedTools,
       authorizedToolIds: args.authorizedToolIds,
       authorizedPrompts: args.authorizedPrompts,
       authorizedPromptIds: args.authorizedPromptIds,
-    } as any);
+    });
   }
 }
