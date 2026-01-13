@@ -235,10 +235,13 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
             transformedData = await postToolTransform.transform(apiResponse.data, transformCtx);
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            logger.warn(
-              `[${openapiTool.name}] Post-tool output transform failed: ${errorMessage}. ` +
-                `Returning original response.`,
-            );
+            const errorStack = err instanceof Error ? err.stack : undefined;
+            logger.error(`[${openapiTool.name}] Post-tool output transform failed`, {
+              error: errorMessage,
+              stack: errorStack,
+              status: apiResponse.status,
+              ok: apiResponse.ok,
+            });
             // Keep original data on transform failure
           }
         }
@@ -274,8 +277,20 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       };
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
+        const timeoutError = new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
+        logger.error(`[${openapiTool.name}] API request timeout`, {
+          timeout: requestTimeout,
+          url,
+          method: openapiTool.metadata.method.toUpperCase(),
+        });
+        throw timeoutError;
       }
+      // Log all other API request errors
+      logger.error(`[${openapiTool.name}] API request failed`, {
+        url,
+        method: openapiTool.metadata.method.toUpperCase(),
+        error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+      });
       throw err;
     } finally {
       clearTimeout(timeoutId);

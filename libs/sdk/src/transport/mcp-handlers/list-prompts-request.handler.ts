@@ -1,9 +1,23 @@
 import { ListPromptsRequestSchema, ListPromptsRequest, ListPromptsResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
-export default function ListPromptsRequestHandler({ scope }: McpHandlerOptions) {
+export default function listPromptsRequestHandler({
+  scope,
+}: McpHandlerOptions): McpHandler<ListPromptsRequest, ListPromptsResult> {
+  const logger = scope.logger.child('list-prompts-request-handler');
+
   return {
     requestSchema: ListPromptsRequestSchema,
-    handler: (request: ListPromptsRequest, ctx) => scope.runFlowForOutput('prompts:list-prompts', { request, ctx }),
-  } satisfies McpHandler<ListPromptsRequest, ListPromptsResult>;
+    handler: async (request: ListPromptsRequest, ctx) => {
+      logger.verbose('prompts/list: listing prompts');
+      try {
+        return await scope.runFlowForOutput('prompts:list-prompts', { request, ctx });
+      } catch (e) {
+        logger.error('prompts/list failed', {
+          error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
+        });
+        throw e;
+      }
+    },
+  };
 }

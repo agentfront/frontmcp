@@ -1,9 +1,23 @@
 import { CompleteRequestSchema, CompleteRequest, CompleteResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
-export default function CompleteRequestHandler({ scope }: McpHandlerOptions) {
+export default function completeRequestHandler({
+  scope,
+}: McpHandlerOptions): McpHandler<CompleteRequest, CompleteResult> {
+  const logger = scope.logger.child('complete-request-handler');
+
   return {
     requestSchema: CompleteRequestSchema,
-    handler: (request: CompleteRequest, ctx) => scope.runFlowForOutput('completion:complete', { request, ctx }),
-  } satisfies McpHandler<CompleteRequest, CompleteResult>;
+    handler: async (request: CompleteRequest, ctx) => {
+      logger.verbose('completion/complete: completing');
+      try {
+        return await scope.runFlowForOutput('completion:complete', { request, ctx });
+      } catch (e) {
+        logger.error('completion/complete failed', {
+          error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
+        });
+        throw e;
+      }
+    },
+  };
 }
