@@ -31,7 +31,12 @@ export async function runDev(opts: ParsedArgs): Promise<void> {
   );
   console.log(`${c('gray', 'hint:')} press Ctrl+C to stop`);
 
-  const app = spawn('npx', ['-y', 'tsx', '--watch', entry], { stdio: 'inherit', shell: true });
+  // Use --conditions node to ensure proper Node.js module resolution
+  // This helps with dynamic require() calls in packages like ioredis
+  const app = spawn('npx', ['-y', 'tsx', '--conditions', 'node', '--watch', entry], {
+    stdio: 'inherit',
+    shell: true,
+  });
   const checker = spawn('npx', ['-y', 'tsc', '--noEmit', '--pretty', '--watch'], {
     stdio: 'inherit',
     shell: true,
