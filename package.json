@@ -68,6 +68,7 @@
     "@types/dagre": "^0.7.53",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
+    "@vercel/kv": "^3.0.0",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.23",
     "baseline-browser-mapping": "^2.9.9",
