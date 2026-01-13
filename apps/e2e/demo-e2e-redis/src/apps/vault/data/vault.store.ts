@@ -29,19 +29,22 @@ export async function getVault(sessionId: string): Promise<StorageAuthorizationV
 
   // Create initialization promise
   const initPromise = (async () => {
-    const storage = new MemoryStorageAdapter();
-    await storage.connect(); // Connect the adapter
-    storageInstances.set(sessionId, storage);
+    try {
+      const storage = new MemoryStorageAdapter();
+      await storage.connect(); // Connect the adapter
+      storageInstances.set(sessionId, storage);
 
-    const vault = new StorageAuthorizationVault(storage, {
-      namespace: 'vault',
-      pendingAuthTtlMs: 60000, // 1 minute for testing
-      validateOnRead: false, // Disable for simpler testing
-    });
+      const vault = new StorageAuthorizationVault(storage, {
+        namespace: 'vault',
+        pendingAuthTtlMs: 60000, // 1 minute for testing
+        validateOnRead: false, // Disable for simpler testing
+      });
 
-    vaultInstances.set(sessionId, vault);
-    initPromises.delete(sessionId);
-    return vault;
+      vaultInstances.set(sessionId, vault);
+      return vault;
+    } finally {
+      initPromises.delete(sessionId);
+    }
   })();
 
   initPromises.set(sessionId, initPromise);
@@ -59,6 +62,13 @@ export function getStorage(sessionId: string): MemoryStorageAdapter | undefined 
  * Clear all vault instances and disconnect storage adapters
  */
 export async function clearAllVaults(): Promise<void> {
+  // Snapshot and clear in-flight initializations first to prevent race conditions
+  const pendingInits = Array.from(initPromises.values());
+  initPromises.clear();
+
+  // Wait for any in-flight initializations to complete (they will clean up after themselves)
+  await Promise.allSettled(pendingInits);
+
   // Disconnect all storage adapters before clearing
   const disconnectPromises: Promise<void>[] = [];
   for (const storage of storageInstances.values()) {

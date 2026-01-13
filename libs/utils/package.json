@@ -29,6 +29,18 @@
     "ast-guard": "^2.4.0",
     "zod": "^4.0.0"
   },
+  "peerDependencies": {
+    "@vercel/kv": "^2.0.0 || ^3.0.0",
+    "ioredis": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vercel/kv": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
+  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/esm/index.mjs",

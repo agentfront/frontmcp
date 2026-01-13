@@ -37,6 +37,13 @@ export default class UpdateVaultEntryTool extends ToolContext<typeof inputSchema
         updates.userName = input.userName;
       }
 
+      if (Object.keys(updates).length === 0) {
+        return {
+          success: false,
+          message: 'No fields to update. Provide at least userEmail or userName.',
+        };
+      }
+
       await vault.update(input.entryId, updates);
 
       return {

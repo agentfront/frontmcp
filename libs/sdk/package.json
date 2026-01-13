@@ -59,13 +59,7 @@
     "express": "^4.18.0 || ^5.0.0",
     "cors": "^2.8.5",
     "raw-body": "^3.0.0",
-    "content-type": "^1.0.5",
-    "@vercel/kv": "^2.0.0 || ^3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@vercel/kv": {
-      "optional": true
-    }
+    "content-type": "^1.0.5"
   },
   "dependencies": {
     "@frontmcp/utils": "0.7.2",
@@ -87,7 +81,6 @@
     "@langchain/groq": "^1.0.2"
   },
   "devDependencies": {
-    "@vercel/kv": "^3.0.0",
     "typescript": "^5.9.3"
   }
 }

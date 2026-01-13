@@ -52,11 +52,14 @@ test.describe('Auth Providers Integration E2E', () => {
     test('should demonstrate credential scope pattern - machine/global', async ({ mcp }) => {
       // Machine/global scope credentials would be shared across all users
       // This tests the pattern without actual credential storage
-      const result = await mcp.tools.call('get-app-info', {});
+      const result1 = await mcp.tools.call('get-app-info', {});
+      const result2 = await mcp.tools.call('get-app-info', {});
 
-      expect(result).toBeSuccessful();
+      expect(result1).toBeSuccessful();
+      expect(result2).toBeSuccessful();
       // Instance ID being consistent across calls demonstrates global/machine scope
-      expect(result).toHaveTextContent('instanceId');
+      expect(result1).toHaveTextContent('"providerScope":"GLOBAL"');
+      expect(result2).toHaveTextContent('"providerScope":"GLOBAL"');
     });
 
     test('should demonstrate credential scope pattern - session', async ({ mcp }) => {
@@ -65,7 +68,7 @@ test.describe('Auth Providers Integration E2E', () => {
 
       expect(result).toBeSuccessful();
       // Request ID being session-scoped demonstrates session credential pattern
-      expect(result).toHaveTextContent('instanceId');
+      expect(result).toHaveTextContent('"providerScope":"CONTEXT"');
     });
   });
 
@@ -93,6 +96,7 @@ test.describe('Auth Providers Integration E2E', () => {
       const result = await mcp.prompts.get('debug-context', {});
 
       expect(result).toBeSuccessful();
+      expect(result.messages).toBeDefined();
       expect(result.messages.length).toBeGreaterThan(0);
     });
   });
@@ -119,13 +123,13 @@ test.describe('Auth Providers Integration E2E', () => {
   });
 
   test.describe('Graceful Degradation', () => {
-    test('should handle missing optional providers gracefully', async ({ mcp }) => {
-      // When optional providers are not configured, tools should still work
-      // This tests the pattern without authProviders specifically configured
+    test('should work with all providers available (smoke test)', async ({ mcp }) => {
+      // Basic smoke test to verify the server works with providers configured
+      // Full graceful degradation testing requires dedicated test app without providers
       const result = await mcp.tools.call('get-app-info', {});
 
       expect(result).toBeSuccessful();
-      // Tool works even without auth providers configured
+      expect(result).toHaveTextContent('Demo E2E Providers');
     });
 
     test('should list all expected tools when providers are configured', async ({ mcp }) => {
@@ -145,14 +149,16 @@ test.describe('Auth Providers Integration E2E', () => {
       const result = await mcp.prompts.get('debug-context', {});
 
       expect(result).toBeSuccessful();
+      expect(result.messages).toBeDefined();
+      expect(result.messages.length).toBeGreaterThan(0);
 
       const message = result.messages[0];
       expect(message.content.type).toBe('text');
-      if (message.content.type === 'text') {
-        // Prompt accesses both GLOBAL and CONTEXT providers
-        expect(message.content.text).toContain('GLOBAL Scope Provider');
-        expect(message.content.text).toContain('CONTEXT Scope Provider');
-      }
+      // Type assertion is safe since we asserted the type above
+      const textContent = (message.content as { type: 'text'; text: string }).text;
+      // Prompt accesses both GLOBAL and CONTEXT providers
+      expect(textContent).toContain('GLOBAL Scope Provider');
+      expect(textContent).toContain('CONTEXT Scope Provider');
     });
 
     test('should maintain provider isolation', async ({ mcp }) => {

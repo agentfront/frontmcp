@@ -41,6 +41,7 @@ test.describe('Storage Authorization Vault E2E', () => {
 
       // Extract entry ID from response using json() method
       const parsed = createResult.json<{ entryId: string }>();
+      expect(parsed.entryId).toBeDefined();
       const entryId = parsed.entryId;
 
       // Get entry
@@ -116,7 +117,9 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-cred-oauth',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Add OAuth credential
       const addResult = await mcp.tools.call('add-credential', {
@@ -152,7 +155,9 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-cred-apikey',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Add API key credential
       const addResult = await mcp.tools.call('add-credential', {
@@ -185,7 +190,9 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-cred-bearer',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Add bearer credential
       const addResult = await mcp.tools.call('add-credential', {
@@ -207,7 +214,9 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-multi-cred',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Add multiple credentials
       const addResult1 = await mcp.tools.call('add-credential', {
@@ -265,15 +274,19 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-consent-filter',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Set consent for specific app
-      await mcp.tools.call('update-consent', {
+      const consentResult = await mcp.tools.call('update-consent', {
         entryId,
         enabled: true,
         selectedToolIds: ['consented-app:tool1'],
         availableToolIds: ['consented-app:tool1', 'other-app:tool1'],
       });
+      expect(consentResult).toBeSuccessful();
+      expect(consentResult).toHaveTextContent('Updated consent');
 
       // Add credential for consented app
       const addCredResult = await mcp.tools.call('add-credential', {
@@ -615,30 +628,39 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-persist-test',
       });
 
+      expect(createResult).toBeSuccessful();
       const entryId = createResult.json<{ entryId: string }>().entryId;
+      expect(entryId).toBeDefined();
 
       // Add credential
-      await mcp.tools.call('add-credential', {
+      const addCredResult = await mcp.tools.call('add-credential', {
         entryId,
         appId: 'persist-app',
         providerId: 'persist-provider',
         credentialType: 'bearer',
         bearerToken: 'persist-token',
       });
+      expect(addCredResult).toBeSuccessful();
+      expect(addCredResult).toHaveTextContent('bearer');
 
       // Update consent
-      await mcp.tools.call('update-consent', {
+      const consentResult = await mcp.tools.call('update-consent', {
         entryId,
         enabled: true,
         selectedToolIds: ['persist-app:tool'],
         availableToolIds: ['persist-app:tool'],
       });
+      expect(consentResult).toBeSuccessful();
+      expect(consentResult).toHaveTextContent('Updated consent');
 
       // Authorize app
-      await mcp.tools.call('authorize-app', { entryId, appId: 'persist-app' });
+      const authResult = await mcp.tools.call('authorize-app', { entryId, appId: 'persist-app' });
+      expect(authResult).toBeSuccessful();
+      expect(authResult).toHaveTextContent('"isAuthorized":true');
 
       // Verify all data persisted
       const getResult = await mcp.tools.call('get-vault-entry', { entryId });
+      expect(getResult).toBeSuccessful();
       expect(getResult).toHaveTextContent('user-persist-test');
       expect(getResult).toHaveTextContent('"credentialCount":1');
       expect(getResult).toHaveTextContent('persist-app');
