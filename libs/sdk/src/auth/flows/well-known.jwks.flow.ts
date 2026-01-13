@@ -17,7 +17,7 @@ import {
 } from '../../common';
 import 'reflect-metadata';
 import { z } from 'zod';
-import { JwksService } from '../jwks';
+import { JwksService } from '@frontmcp/auth';
 
 const inputSchema = httpInputSchema;
 

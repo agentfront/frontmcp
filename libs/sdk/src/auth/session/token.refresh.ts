@@ -1,7 +1,7 @@
 // auth/session/token.refresh.ts
 import type { ProviderSnapshot } from './session.types';
-import type { TokenStore } from './token.store';
-import type { TokenVault } from './token.vault';
+import type { TokenStore, TokenVault } from '@frontmcp/auth';
+import { base64urlDecode } from '@frontmcp/utils';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -100,17 +100,10 @@ export function tryJwtExp(token?: string): number | undefined {
   const parts = token.split('.');
   if (parts.length < 2) return undefined;
   try {
-    const json = JSON.parse(base64urlDecode(parts[1]));
+    const json = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1])));
     const e = json?.exp;
     return typeof e === 'number' ? toEpochSeconds(e) : undefined;
   } catch {
     return undefined;
   }
-}
-
-function base64urlDecode(input: string): string {
-  // pad
-  const pad = input.length % 4 === 2 ? '==' : input.length % 4 === 3 ? '=' : '';
-  const s = input.replace(/-/g, '+').replace(/_/g, '/') + pad;
-  return Buffer.from(s, 'base64').toString('utf8');
 }

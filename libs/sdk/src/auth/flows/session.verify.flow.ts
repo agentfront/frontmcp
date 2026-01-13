@@ -20,7 +20,7 @@ import {
 import 'reflect-metadata';
 import { z } from 'zod';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
-import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
+import { JwksService, ProviderVerifyRef, VerifyResult } from '@frontmcp/auth';
 import { parseSessionHeader, encryptJson, decryptPublicSession } from '../session/utils/session-id.utils';
 import { getMachineId } from '../authorization';
 import { detectPlatformFromUserAgent } from '../../notification/notification.service';
@@ -188,10 +188,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const sessionProtocol = httpTransportHeader
       ? 'http'
       : sessionIdRawHeader
-      ? 'streamable-http'
-      : sessionIdQuery
-      ? 'sse'
-      : undefined;
+        ? 'streamable-http'
+        : sessionIdQuery
+          ? 'sse'
+          : undefined;
 
     const token = extractBearerToken(authorizationHeader);
     const userAgent = (request.headers?.['user-agent'] as string | undefined) ?? undefined;
@@ -300,7 +300,18 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
   @Stage('verifyIfJwt')
   async verifyIfJwt() {
     const jwks = this.get(JwksService); // TODO: fix providers
-    const token = this.state.required.token;
+    const token = this.state.token;
+
+    // Handle missing/empty token (e.g., "Bearer " or non-Bearer scheme like "Basic xxx")
+    // When authorizationHeader exists but extractBearerToken returns undefined,
+    // we should return 401 rather than throwing an error
+    if (!token) {
+      this.respond({
+        kind: 'unauthorized',
+        prmMetadataHeader: this.state.required.prmMetadataHeader,
+      });
+      return;
+    }
 
     if (!isJwt(token)) {
       // Non-JWT tokens are not supported - require JWT for verification

@@ -220,6 +220,35 @@ export function base64urlDecode(data: string): Uint8Array {
 }
 
 /**
+ * Encode a Uint8Array to standard base64 string.
+ * RFC 4648 Section 4: Uses +/= characters, suitable for HTTP Basic auth.
+ */
+export function base64Encode(data: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') {
+    // Node.js
+    return Buffer.from(data).toString('base64');
+  } else {
+    // Browser
+    const binString = Array.from(data, (byte) => String.fromCodePoint(byte)).join('');
+    return btoa(binString);
+  }
+}
+
+/**
+ * Decode a standard base64 string to Uint8Array.
+ */
+export function base64Decode(data: string): Uint8Array {
+  if (typeof Buffer !== 'undefined') {
+    // Node.js
+    return new Uint8Array(Buffer.from(data, 'base64'));
+  } else {
+    // Browser
+    const binString = atob(data);
+    return Uint8Array.from(binString, (c) => c.codePointAt(0) ?? 0);
+  }
+}
+
+/**
  * Compute SHA-256 hash and return as base64url string.
  * Commonly used for PKCE code_challenge (S256 method).
  */
@@ -296,3 +325,43 @@ export {
   clearCachedSecret,
   isSecretCached,
 } from './secret-persistence';
+
+// Re-export HMAC signing utilities
+export {
+  // Types
+  type SignedData,
+  type HmacSigningConfig,
+  // Functions
+  signData,
+  verifyData,
+  isSignedData,
+  verifyOrParseData,
+} from './hmac-signing';
+
+// Re-export unified key persistence utilities (recommended)
+export {
+  // Types
+  type BaseKeyData,
+  type SecretKeyData,
+  type AsymmetricKeyData,
+  type AnyKeyData,
+  type KeyPersistenceOptions,
+  type CreateKeyPersistenceOptions,
+  type CreateSecretOptions,
+  type CreateAsymmetricOptions,
+  type KeyValidationResult,
+  // Schemas
+  asymmetricAlgSchema,
+  secretKeyDataSchema,
+  asymmetricKeyDataSchema,
+  anyKeyDataSchema,
+  validateKeyData,
+  parseKeyData,
+  isSecretKeyData,
+  isAsymmetricKeyData,
+  // Main class
+  KeyPersistence,
+  // Factory functions
+  createKeyPersistence,
+  createKeyPersistenceWithStorage,
+} from './key-persistence';

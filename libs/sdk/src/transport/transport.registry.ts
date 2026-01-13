@@ -16,9 +16,8 @@ import { Scope } from '../scope';
 import HandleStreamableHttpFlow from './flows/handle.streamable-http.flow';
 import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
-import { StoredSession } from '../auth/session';
-import type { SessionStore } from '../auth/session/transport-session.types';
-import { createSessionStore } from '../store';
+import { StoredSession, createSessionStore } from '../auth/session';
+import type { SessionStore } from '../auth/session';
 import type { RedisOptions } from '../common/types/options/redis.options';
 import { getMachineId } from '../auth/authorization/authorization.class';
 

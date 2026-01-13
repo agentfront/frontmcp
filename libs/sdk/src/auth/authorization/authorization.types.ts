@@ -1,52 +1,37 @@
 // auth/authorization/authorization.types.ts
 
-import { z } from 'zod';
-import { ProviderSnapshot } from '../session/session.types';
-import { TransportSession, TransportProtocol } from '../session';
-import type { AuthMode } from '../../common';
+// Re-export all portable types from @frontmcp/auth
+export {
+  type AuthMode,
+  type AuthUser,
+  type AuthorizedTool,
+  type AuthorizedPrompt,
+  type LLMSafeAuthContext,
+  type AppAuthorizationRecord,
+  type ProgressiveAuthState,
+  type AuthorizationCreateCtx as BaseAuthorizationCreateCtx,
+  AppAuthState,
+  authModeSchema,
+  authUserSchema,
+  authorizedToolSchema,
+  authorizedPromptSchema,
+  llmSafeAuthContextSchema,
+  appAuthStateSchema,
+  appAuthorizationRecordSchema,
+  progressiveAuthStateSchema,
+} from '@frontmcp/auth';
+
+// SDK-specific imports
+import type { ProviderSnapshot } from '../session/session.types';
+import type { TransportSession, TransportProtocol } from '../session';
+import type { AuthMode, AuthUser, AuthorizedTool, AuthorizedPrompt } from '@frontmcp/auth';
+
+// ============================================
+// SDK-specific Types (require TransportSession/ProviderSnapshot)
+// ============================================
 
 /**
- * User identity from authentication
- */
-export interface AuthUser {
-  /** Subject identifier */
-  sub: string;
-  /** Display name */
-  name?: string;
-  /** Email address */
-  email?: string;
-  /** Profile picture URL */
-  picture?: string;
-  /** Whether this is an anonymous user */
-  anonymous?: boolean;
-}
-
-/**
- * Authorized tool entry
- */
-export interface AuthorizedTool {
-  /** Execution path: [appId, toolId] */
-  executionPath: [appId: string, toolId: string];
-  /** Required scopes for this tool */
-  scopes?: string[];
-  /** Additional tool metadata */
-  details?: Record<string, unknown>;
-}
-
-/**
- * Authorized prompt entry
- */
-export interface AuthorizedPrompt {
-  /** Execution path: [appId, promptId] */
-  executionPath: [appId: string, promptId: string];
-  /** Required scopes for this prompt */
-  scopes?: string[];
-  /** Additional prompt metadata */
-  details?: Record<string, unknown>;
-}
-
-/**
- * Authorization represents the authenticated user context.
+ * Authorization represents the authenticated user context (SDK-specific).
  * Created from JWT verification, independent of transport.
  * One authorization can have multiple transport sessions.
  */
@@ -150,7 +135,7 @@ export interface Authorization {
 }
 
 /**
- * Context for creating an authorization
+ * Context for creating an authorization (SDK-specific, includes ProviderSnapshot)
  */
 export interface AuthorizationCreateCtx {
   /** Unique ID (typically token signature fingerprint) */
@@ -167,7 +152,7 @@ export interface AuthorizationCreateCtx {
   scopes?: string[];
   /** The original token (for transparent mode) */
   token?: string;
-  /** Authorized providers */
+  /** Authorized providers (SDK-specific, uses ProviderSnapshot) */
   authorizedProviders?: Record<string, ProviderSnapshot>;
   /** Authorized provider IDs */
   authorizedProviderIds?: string[];
@@ -186,141 +171,3 @@ export interface AuthorizationCreateCtx {
   /** Authorized resources */
   authorizedResources?: string[];
 }
-
-/**
- * LLM-safe session context (no tokens exposed)
- */
-export interface LLMSafeAuthContext {
-  /** Authorization ID */
-  authorizationId: string;
-  /** Session ID */
-  sessionId: string;
-  /** Auth mode */
-  mode: AuthMode;
-  /** Whether anonymous */
-  isAnonymous: boolean;
-  /** User (sub and name only) */
-  user: { sub: string; name?: string };
-  /** Granted scopes */
-  scopes: string[];
-  /** Authorized tool IDs */
-  authorizedToolIds: string[];
-  /** Authorized prompt IDs */
-  authorizedPromptIds: string[];
-}
-
-// ============================================
-// Zod Schemas
-// ============================================
-
-export const authUserSchema = z.object({
-  sub: z.string(),
-  name: z.string().optional(),
-  email: z.string().email().optional(),
-  picture: z.string().url().optional(),
-  anonymous: z.boolean().optional(),
-});
-
-export const authorizedToolSchema = z.object({
-  executionPath: z.tuple([z.string(), z.string()]),
-  scopes: z.array(z.string()).optional(),
-  details: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const authorizedPromptSchema = z.object({
-  executionPath: z.tuple([z.string(), z.string()]),
-  scopes: z.array(z.string()).optional(),
-  details: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const authModeSchema = z.enum(['public', 'transparent', 'orchestrated']);
-
-export const llmSafeAuthContextSchema = z.object({
-  authorizationId: z.string(),
-  sessionId: z.string(),
-  mode: authModeSchema,
-  isAnonymous: z.boolean(),
-  user: z.object({
-    sub: z.string(),
-    name: z.string().optional(),
-  }),
-  scopes: z.array(z.string()),
-  authorizedToolIds: z.array(z.string()),
-  authorizedPromptIds: z.array(z.string()),
-});
-
-// ============================================
-// Progressive/Incremental Authorization Types
-// ============================================
-
-/**
- * State of app authorization within a session.
- * Used for progressive authorization flow.
- */
-export enum AppAuthState {
-  /** App has been fully authorized with tokens stored */
-  AUTHORIZED = 'authorized',
-  /** User explicitly skipped this app during initial auth */
-  SKIPPED = 'skipped',
-  /** App authorization is pending (not yet presented to user) */
-  PENDING = 'pending',
-}
-
-/**
- * App authorization record with state tracking.
- * Stored server-side, NOT in JWT.
- */
-export interface AppAuthorizationRecord {
-  /** App ID */
-  appId: string;
-  /** Current authorization state */
-  state: AppAuthState;
-  /** When the state was last changed (epoch ms) */
-  stateChangedAt: number;
-  /** Scopes granted for this app */
-  grantedScopes?: string[];
-  /** Auth provider ID used for this app */
-  authProviderId?: string;
-  /** Tool IDs accessible through this app authorization */
-  toolIds: string[];
-}
-
-/**
- * Progressive auth session state.
- * Tracks which apps are authorized, skipped, or pending.
- * Stored server-side for security.
- */
-export interface ProgressiveAuthState {
-  /** App authorization records by app ID */
-  apps: Record<string, AppAuthorizationRecord>;
-  /** Apps authorized during initial auth */
-  initiallyAuthorized: string[];
-  /** Apps skipped during initial auth */
-  initiallySkipped: string[];
-}
-
-/**
- * Zod schema for AppAuthState enum
- */
-export const appAuthStateSchema = z.nativeEnum(AppAuthState);
-
-/**
- * Zod schema for AppAuthorizationRecord
- */
-export const appAuthorizationRecordSchema = z.object({
-  appId: z.string(),
-  state: appAuthStateSchema,
-  stateChangedAt: z.number(),
-  grantedScopes: z.array(z.string()).optional(),
-  authProviderId: z.string().optional(),
-  toolIds: z.array(z.string()),
-});
-
-/**
- * Zod schema for ProgressiveAuthState
- */
-export const progressiveAuthStateSchema = z.object({
-  apps: z.record(z.string(), appAuthorizationRecordSchema),
-  initiallyAuthorized: z.array(z.string()),
-  initiallySkipped: z.array(z.string()),
-});

@@ -1,5 +1,5 @@
 // auth/session/utils/session-id.utils.ts
-import { randomUUID, createHash, randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import { randomUUID, sha256, encryptValue, decryptValue } from '@frontmcp/utils';
 import { TinyTtlCache } from './tiny-ttl-cache';
 import { SessionIdPayload, TransportProtocolType, AIPlatformType } from '../../../common';
 import { getTokenSignatureFingerprint } from './auth-token.utils';
@@ -10,32 +10,49 @@ import { getMachineId } from '../../machine-id';
 // 5s TTL cache for decrypted headers
 const cache = new TinyTtlCache<string, SessionIdPayload>(5000);
 
-// Symmetric key derived from secret or machine id (stable for the process)
-// Uses getMachineId() from authorization module as single source of truth
-function getKey(): Buffer {
-  const base = process.env['MCP_SESSION_SECRET'] || getMachineId();
-  return createHash('sha256').update(base).digest(); // 32 bytes
-}
+// Cached encryption key (derived once per process)
+let cachedKey: Uint8Array | null = null;
 
-function b64urlEncode(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
+/**
+ * Symmetric key derived from secret or machine id (stable for the process).
+ * Uses getMachineId() from authorization module as single source of truth.
+ *
+ * SECURITY: In production, MCP_SESSION_SECRET is REQUIRED.
+ * Falls back to getMachineId() only in development/test environments.
+ *
+ * @throws Error if MCP_SESSION_SECRET is not set in production
+ */
+function getKey(): Uint8Array {
+  if (cachedKey) return cachedKey;
 
-function b64urlDecode(s: string): Buffer {
-  const pad = 4 - (s.length % 4);
-  const base64 = s.replace(/-/g, '+').replace(/_/g, '/') + (pad < 4 ? '='.repeat(pad) : '');
-  return Buffer.from(base64, 'base64');
+  const secret = process.env['MCP_SESSION_SECRET'];
+  const nodeEnv = process.env['NODE_ENV'];
+
+  if (!secret) {
+    // Fail fast in production - machine ID is not secure for production use
+    if (nodeEnv === 'production') {
+      throw new Error(
+        '[SessionIdUtils] MCP_SESSION_SECRET is required in production. ' +
+          'Set the MCP_SESSION_SECRET environment variable to a secure random string.',
+      );
+    }
+    // Development/test fallback - log warning
+    console.warn(
+      '[SessionIdUtils] Using machine ID as session encryption secret - NOT SECURE FOR PRODUCTION. ' +
+        'Set MCP_SESSION_SECRET environment variable for secure session encryption.',
+    );
+  }
+
+  const base = secret || getMachineId();
+  cachedKey = sha256(new TextEncoder().encode(base)); // 32 bytes
+  return cachedKey;
 }
 
 export function encryptJson(obj: unknown): string {
   const key = getKey();
-  const iv = randomBytes(12); // AES-GCM 96-bit IV
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const pt = Buffer.from(JSON.stringify(obj), 'utf8');
-  const ct = Buffer.concat([cipher.update(pt), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  // Pack iv.tag.ct as base64url(iv.tag.ct)
-  return `${b64urlEncode(iv)}.${b64urlEncode(tag)}.${b64urlEncode(ct)}`;
+  const encrypted = encryptValue(obj, key);
+  // Pack iv.tag.ct as base64url format (matches decryptValue expected input)
+  return `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
 }
 
 /**
@@ -50,26 +67,30 @@ function decryptSessionJson(sessionId: string): unknown {
   if (!ivB64 || !tagB64 || !ctB64) return null;
 
   const key = getKey();
-  const iv = b64urlDecode(ivB64);
-  const tag = b64urlDecode(tagB64);
-  const ct = b64urlDecode(ctB64);
-
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
-  return JSON.parse(pt.toString('utf8'));
+  return decryptValue({ alg: 'A256GCM', iv: ivB64, tag: tagB64, data: ctB64 }, key);
 }
 
-function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {
+/**
+ * Validates the structure of a session payload without signature verification.
+ * Use this for structural validation only (e.g., when updating an existing session).
+ */
+function hasValidSessionStructure(dec: unknown): dec is SessionIdPayload {
   if (typeof dec !== 'object' || dec === null) return false;
   const d = dec as Record<string, unknown>;
   return (
     typeof d['nodeId'] === 'string' &&
     typeof d['authSig'] === 'string' &&
     typeof d['uuid'] === 'string' &&
-    typeof d['iat'] === 'number' &&
-    d['authSig'] === sig
+    typeof d['iat'] === 'number'
   );
+}
+
+/**
+ * Validates a session payload including signature verification.
+ * Use this when verifying a session against an expected auth signature.
+ */
+function isValidSessionPayload(dec: unknown, sig: string): dec is SessionIdPayload {
+  return hasValidSessionStructure(dec) && dec.authSig === sig;
 }
 
 function isValidPublicSessionPayload(dec: unknown): dec is SessionIdPayload {
@@ -153,19 +174,6 @@ export function parseSessionHeader(
   }
 
   return undefined;
-  // // Create fresh
-
-  // const decodedSse: SessionIdPayload = {
-  //   nodeId: MACHINE_ID,
-  //   authSig: currentAuthSig,
-  //   uuid: randomUUID(),
-  //   iat: nowSec(),
-  // };
-  // const header = encryptJson(decoded);
-  // const headerSse = encryptJson(decodedSse);
-  // cache.set(header, decoded);
-  // cache.set(headerSse, decodedSse);
-  // return { header, decoded, headerSse, isNew: true };
 }
 
 export interface CreateSessionOptions {
@@ -233,10 +241,7 @@ export function updateSessionPayload(sessionId: string, updates: Partial<Session
 
   // Try to decrypt and update if not in cache
   const decrypted = safeDecrypt(sessionId);
-  if (
-    isValidSessionPayload(decrypted, (decrypted as SessionIdPayload)?.authSig || '') ||
-    isValidPublicSessionPayload(decrypted)
-  ) {
+  if (hasValidSessionStructure(decrypted) || isValidPublicSessionPayload(decrypted)) {
     const payload = decrypted as SessionIdPayload;
     Object.assign(payload, updates);
     cache.set(sessionId, payload);

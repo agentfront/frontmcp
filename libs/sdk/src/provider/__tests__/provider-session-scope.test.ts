@@ -15,7 +15,6 @@
 import 'reflect-metadata';
 import ProviderRegistry from '../provider.registry';
 import { ProviderScope } from '../../common/metadata';
-import { SessionKey } from '../../context/session-key.provider';
 import { createValueProvider, createClassProvider } from '../../__test-utils__/fixtures/provider.fixtures';
 
 // Test fixtures
@@ -31,52 +30,31 @@ class GlobalService {
   readonly name = 'GlobalService';
 }
 
-@Injectable()
-class SessionService {
-  constructor(public readonly sessionKey: SessionKey) {}
-  getSessionId(): string {
-    return this.sessionKey.value;
-  }
-}
-
 describe('ProviderRegistry - Context Scope', () => {
   describe('buildViews', () => {
-    it('should validate sessionKey early', async () => {
+    it('should validate session ID early', async () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
-      // Invalid session key should throw before any cache operations
-      await expect(registry.buildViews('')).rejects.toThrow('SessionKey cannot be empty');
+      // Invalid session ID should throw before any cache operations
+      await expect(registry.buildViews('')).rejects.toThrow('Session ID cannot be empty');
     });
 
-    it('should reject sessionKey exceeding max length', async () => {
+    it('should reject session ID exceeding max length', async () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
       const tooLongKey = 'a'.repeat(2049);
       await expect(registry.buildViews(tooLongKey)).rejects.toThrow(
-        'SessionKey exceeds maximum length of 2048 characters',
+        'Session ID exceeds maximum length of 2048 characters',
       );
     });
 
-    it('should reject sessionKey with invalid characters', async () => {
+    it('should reject session ID with invalid characters', async () => {
       const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
       await registry.ready;
 
-      await expect(registry.buildViews('session@key')).rejects.toThrow('SessionKey contains invalid characters');
-    });
-
-    it('should inject SessionKey into context store', async () => {
-      const registry = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'test' })]);
-      await registry.ready;
-
-      const views = await registry.buildViews('my-session-123');
-
-      // SessionKey should be in the unified context store
-      expect(views.context.has(SessionKey)).toBe(true);
-      const sessionKey = views.context.get(SessionKey) as SessionKey;
-      expect(sessionKey).toBeInstanceOf(SessionKey);
-      expect(sessionKey.value).toBe('my-session-123');
+      await expect(registry.buildViews('session@key')).rejects.toThrow('Session ID contains invalid characters');
     });
 
     it('should provide session alias pointing to context store', async () => {

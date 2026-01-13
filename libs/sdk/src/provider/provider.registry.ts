@@ -27,7 +27,7 @@ import { RegistryAbstract, RegistryBuildMapResult } from '../regsitry';
 import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
-import { SessionKey } from '../context/session-key.provider';
+import { validateSessionId } from '../context/frontmcp-context';
 import { type DistributedConfigInput, shouldCacheProviders } from '../common/types/options/transport.options';
 
 /**
@@ -872,7 +872,7 @@ export default class ProviderRegistry
   async buildViews(sessionKey: string, contextProviders?: Map<Token, unknown>): Promise<ProviderViews> {
     // Early validation BEFORE any cache operations or lock acquisition
     // This prevents cache pollution with invalid session keys
-    SessionKey.validate(sessionKey);
+    validateSessionId(sessionKey);
 
     // 1. Global providers - return existing singletons
     const global = this.getAllSingletons();
@@ -908,12 +908,6 @@ export default class ProviderRegistry
           contextStore.set(token, instance);
         }
       }
-    }
-
-    // Inject SessionKey for backwards compatibility with providers that depend on it
-    // @deprecated - Providers should migrate to using FRONTMCP_CONTEXT instead
-    if (!contextStore.has(SessionKey)) {
-      contextStore.set(SessionKey, new SessionKey(sessionKey));
     }
 
     // Build all CONTEXT-scoped providers (including normalized SESSION/REQUEST)

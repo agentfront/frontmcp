@@ -21,8 +21,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
-import { FrontMcpContext, FrontMcpContextArgs, RequestMetadata } from './frontmcp-context';
+import { FrontMcpContext, FrontMcpContextArgs } from './frontmcp-context';
 import { parseTraceContext } from './trace-context';
+import { extractMetadata } from './metadata.utils';
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 
@@ -146,53 +147,6 @@ export class FrontMcpContextStorage {
     current.updateAuthInfo(authInfo);
     return fn();
   }
-}
-
-/**
- * Extract request metadata from headers.
- */
-function extractMetadata(headers: Record<string, unknown>): RequestMetadata {
-  const customHeaders: Record<string, string> = {};
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase().startsWith('x-frontmcp-') && typeof value === 'string') {
-      customHeaders[key.toLowerCase()] = value;
-    }
-  }
-
-  return {
-    userAgent: typeof headers['user-agent'] === 'string' ? headers['user-agent'] : undefined,
-    contentType: typeof headers['content-type'] === 'string' ? headers['content-type'] : undefined,
-    accept: typeof headers['accept'] === 'string' ? headers['accept'] : undefined,
-    clientIp: extractClientIp(headers),
-    customHeaders,
-  };
-}
-
-/**
- * Extract client IP from headers.
- * Handles both string and array header values (some adapters pass arrays).
- */
-function extractClientIp(headers: Record<string, unknown>): string | undefined {
-  // x-forwarded-for can be comma-separated list; first is client IP
-  const xff = headers['x-forwarded-for'];
-  if (typeof xff === 'string') {
-    return xff.split(',')[0]?.trim();
-  }
-  // Some adapters pass arrays for multi-value headers
-  if (Array.isArray(xff) && typeof xff[0] === 'string') {
-    return xff[0].split(',')[0]?.trim();
-  }
-
-  const realIp = headers['x-real-ip'];
-  if (typeof realIp === 'string') {
-    return realIp;
-  }
-  if (Array.isArray(realIp) && typeof realIp[0] === 'string') {
-    return realIp[0];
-  }
-
-  return undefined;
 }
 
 /**

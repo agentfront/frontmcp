@@ -15,16 +15,18 @@ import {
 import 'reflect-metadata';
 import { z } from 'zod';
 import { deriveTypedUser, extractBearerToken, isJwt } from '../session/utils/auth-token.utils';
-import { JwksService, ProviderVerifyRef, VerifyResult } from '../jwks';
-import type { JSONWebKeySet } from 'jose';
 import {
+  JwksService,
+  ProviderVerifyRef,
+  VerifyResult,
   buildPrmUrl,
   buildUnauthorizedHeader,
   buildInvalidTokenHeader,
   buildInsufficientScopeHeader,
   validateAudience,
   deriveExpectedAudience,
-} from '../utils';
+} from '@frontmcp/auth';
+import type { JSONWebKeySet } from 'jose';
 import {
   PublicAuthorization,
   TransparentAuthorization,
@@ -323,7 +325,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
       deriveExpectedAudience(baseUrl);
     const expectedAudienceArray = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
 
-    const audResult = validateAudience(verifyResult.payload?.aud as string | string[] | undefined, {
+    const audResult = validateAudience(verifyResult.payload?.['aud'] as string | string[] | undefined, {
       expectedAudiences: expectedAudienceArray,
       allowNoAudience: true, // Some tokens may not have audience
     });
@@ -341,7 +343,7 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     // Check required scopes
     const requiredScopes = (authOptionsForAudience?.['requiredScopes'] as string[] | undefined) ?? [];
     if (requiredScopes.length > 0) {
-      const tokenScopes = this.parseScopes(verifyResult.payload?.scope);
+      const tokenScopes = this.parseScopes(verifyResult.payload?.['scope']);
       const hasAllScopes = requiredScopes.every((s: string) => tokenScopes.includes(s));
 
       if (!hasAllScopes) {

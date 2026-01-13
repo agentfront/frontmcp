@@ -17,6 +17,7 @@ export const FrontMcpToolTokens = {
   examples: tokenFactory.meta('examples'),
   ui: tokenFactory.meta('ui'), // UI template configuration
   metadata: tokenFactory.meta('metadata'), // used in tool({}) construction
+  authProviders: tokenFactory.meta('authProviders'), // Auth provider refs (array)
 } as const satisfies RawMetadataShape<ToolMetadata, ExtendFrontMcpToolMetadata>;
 
 export const extendedToolMetadata = tokenFactory.meta('extendedToolMetadata');

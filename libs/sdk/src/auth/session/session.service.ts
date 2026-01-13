@@ -1,93 +1,83 @@
 // auth/session/session.service.ts
-import { StatelessSession } from './record/session.stateless';
-import { StatefulSession } from './record/session.stateful';
 import { Scope } from '../../scope';
 import { CreateSessionArgs } from './session.types';
-import { TransparentSession } from './record/session.transparent';
-import { ScopedInMemoryStore } from '../../store';
+import { McpSession } from './record/session.mcp';
 
 export class SessionService {
-  private store = new ScopedInMemoryStore();
-
   /**
-   * Create and persist a new Session from verified auth data.
+   * Create a new Session from verified auth data.
    * The returned Session exposes async token helpers, scoped view, and transport JWT helpers.
    */
-  async createSession(scope: Scope, args: CreateSessionArgs) {
-    if (scope.orchestrated) {
-      return this.createOrchestratedSession(scope, args);
-    } else {
-      return this.createTransparentSession(scope, args);
-    }
+  createSession(scope: Scope, args: CreateSessionArgs): McpSession {
+    return this.createMcpSession(scope, args);
   }
 
-  private createOrchestratedSession(scope: Scope, args: CreateSessionArgs) {
-    const stateless = scope.metadata.transport?.sessionMode === 'stateless';
-    if (stateless) {
-      return new StatelessSession(args as any);
-    } else {
-      return new StatefulSession(args as any);
-    }
-  }
-
-  private createTransparentSession(scope: Scope, args: CreateSessionArgs) {
+  private createMcpSession(scope: Scope, args: CreateSessionArgs): McpSession {
     const primary = scope.auth;
 
     const apps = scope.apps.getApps();
-    const appIds = apps.map((app) => app.id);
+    const scopeAppIds = apps.map((app) => app.id);
 
-    // Prefer precomputed projections when provided
-    let authorizedApps: Record<string, { id: string; toolIds: string[] }> = args.authorizedApps ?? {};
-    if (!args.authorizedApps) {
+    // Prefer caller-provided authorizedAppIds, fall back to scope apps
+    const authorizedAppIds: string[] = args.authorizedAppIds ?? scopeAppIds;
+
+    // Prefer caller-provided authorizedApps, fall back to building from scope apps
+    let authorizedApps: Record<string, { id: string; toolIds: string[] }>;
+    if (args.authorizedApps) {
+      authorizedApps = args.authorizedApps;
+    } else {
       authorizedApps = {};
       for (const app of apps) {
         try {
           const toolNames = app.tools.getTools().map((t) => String(t.metadata.name));
           authorizedApps[app.id] = { id: app.id, toolIds: toolNames };
         } catch {
+          // Log for debugging in case of unexpected issues during app registration
+          console.warn(`[SessionService] Failed to retrieve tools for app ${app.id}, defaulting to empty toolIds`);
           authorizedApps[app.id] = { id: app.id, toolIds: [] };
         }
       }
     }
 
-    // TODO: the authorized resources should be computed from the oauth-protected-resource flow
-    // let authorizedResources: string[] = args.authorizedResources ?? [];
-    // if (!args.authorizedResources) {
-    //   authorizedResources = [];
-    // }
+    // Providers snapshot - only derive the missing piece, not both
+    let authorizedProviders: Record<string, import('./session.types').ProviderSnapshot> | undefined =
+      args.authorizedProviders;
+    let authorizedProviderIds: string[] | undefined = args.authorizedProviderIds;
 
-    // Providers snapshot
-    let authorizedProviders = args.authorizedProviders;
-    let authorizedProviderIds = args.authorizedProviderIds;
-    if (!authorizedProviders || !authorizedProviderIds) {
-      const expClaim =
-        args.claims && typeof (args.claims as any)['exp'] === 'number'
-          ? Number((args.claims as any)['exp'])
-          : undefined;
-      const providerSnapshot = {
+    // If authorizedProviders exists but authorizedProviderIds is missing, derive from keys
+    if (authorizedProviders && !authorizedProviderIds) {
+      authorizedProviderIds = Object.keys(authorizedProviders);
+    }
+
+    // If authorizedProviders is missing, build from primary/claims
+    if (!authorizedProviders) {
+      const expClaim = args.claims && typeof args.claims['exp'] === 'number' ? Number(args.claims['exp']) : undefined;
+      const providerSnapshot: import('./session.types').ProviderSnapshot = {
         id: primary.id,
         exp: expClaim,
         payload: args.claims ?? {},
-        apps: appIds.map((id) => ({ id, toolIds: authorizedApps[id]?.toolIds ?? [] })),
-        embedMode: 'plain' as const,
+        apps: authorizedAppIds.map((id) => ({ id, toolIds: authorizedApps[id]?.toolIds ?? [] })),
+        embedMode: 'plain',
       };
-      authorizedProviders = { [primary.id]: providerSnapshot } as any;
-      authorizedProviderIds = [primary.id];
+      authorizedProviders = { [primary.id]: providerSnapshot };
+      // Only set authorizedProviderIds if it wasn't already provided
+      if (!authorizedProviderIds) {
+        authorizedProviderIds = [primary.id];
+      }
     }
 
     // resolve granted scopes from token claims (scope or scp)
     let scopes: string[] = args.scopes ?? [];
     if (!args.scopes) {
-      const rawScope = (args.claims && ((args.claims as any)['scope'] ?? (args.claims as any)['scp'])) as unknown;
+      const rawScope: unknown = args.claims ? (args.claims['scope'] ?? args.claims['scp']) : undefined;
       scopes = Array.isArray(rawScope)
         ? rawScope.map(String)
         : typeof rawScope === 'string'
-        ? rawScope.split(/[\s,]+/).filter(Boolean)
-        : [];
+          ? rawScope.split(/[\s,]+/).filter(Boolean)
+          : [];
     }
 
-    return new TransparentSession({
-      apps: appIds,
+    return new McpSession({
       id: args.token,
       sessionId: args.sessionId,
       scope,
@@ -95,16 +85,16 @@ export class SessionService {
       issuer: primary.issuer,
       token: args.token,
       claims: args.claims,
-      authorizedProviders: authorizedProviders as any,
-      authorizedProviderIds: authorizedProviderIds as any,
+      authorizedProviders,
+      authorizedProviderIds,
       authorizedApps,
-      authorizedAppIds: appIds,
-      authorizedResources: [], // TODO: fix
+      authorizedAppIds,
+      authorizedResources: args.authorizedResources ?? [],
       scopes,
       authorizedTools: args.authorizedTools,
       authorizedToolIds: args.authorizedToolIds,
       authorizedPrompts: args.authorizedPrompts,
       authorizedPromptIds: args.authorizedPromptIds,
-    } as any);
+    });
   }
 }

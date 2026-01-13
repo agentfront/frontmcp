@@ -8,7 +8,7 @@
 import { BaseStorageAdapter } from './base';
 import type { RedisAdapterOptions, SetOptions, MessageHandler, Unsubscribe } from '../types';
 import { StorageConnectionError, StorageConfigError } from '../errors';
-import { validateTTL } from '../utils/ttl';
+import { validateTTL } from '../utils';
 
 // Type imports for ioredis (dynamic import at runtime)
 type Redis = import('ioredis').Redis;

@@ -5,6 +5,42 @@ import type { JSONSchema } from 'zod/v4/core';
 /** JSON Schema type from Zod v4 */
 type JsonSchema = JSONSchema.JSONSchema;
 
+// ============================================
+// Auth Provider Mapping for Tools
+// ============================================
+
+/**
+ * Auth provider mapping for tool metadata.
+ * Used in @Tool({ authProviders: [...] }) decorator.
+ */
+export interface ToolAuthProviderMapping {
+  /** Provider name */
+  name: string;
+  /** Whether credential is required (default: true) */
+  required?: boolean;
+  /** Required scopes for OAuth providers */
+  scopes?: string[];
+  /** Alias to use when injecting (for multiple providers) */
+  alias?: string;
+}
+
+/**
+ * Auth provider reference - can be a string (provider name) or full mapping
+ */
+export type ToolAuthProviderRef = string | ToolAuthProviderMapping;
+
+const toolAuthProviderMappingSchema = z.union([
+  z.string().min(1),
+  z
+    .object({
+      name: z.string().min(1),
+      required: z.boolean().optional().default(true),
+      scopes: z.array(z.string()).optional(),
+      alias: z.string().optional(),
+    })
+    .strict(),
+]);
+
 import {
   ImageContentSchema,
   AudioContentSchema,
@@ -224,6 +260,48 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   examples?: ToolExample[];
 
   ui?: ToolUIConfig<ToolInputOf<InSchema>, ToolOutputOf<OutSchema>>;
+
+  /**
+   * Auth providers required by this tool.
+   * Credentials will be loaded before tool execution.
+   *
+   * @example Single provider (shorthand)
+   * ```typescript
+   * @Tool({ name: 'create-issue', authProviders: ['github'] })
+   * ```
+   *
+   * @example Single provider with options
+   * ```typescript
+   * @Tool({
+   *   name: 'deploy',
+   *   authProviders: [{
+   *     name: 'github',
+   *     required: true,
+   *     scopes: ['repo', 'workflow']
+   *   }]
+   * })
+   * ```
+   *
+   * @example Multiple providers
+   * ```typescript
+   * @Tool({
+   *   name: 'sync-data',
+   *   authProviders: ['github', 'jira']
+   * })
+   * ```
+   *
+   * @example Multiple providers with options
+   * ```typescript
+   * @Tool({
+   *   name: 'multi-sync',
+   *   authProviders: [
+   *     { name: 'github', required: true },
+   *     { name: 'jira', required: false }
+   *   ]
+   * })
+   * ```
+   */
+  authProviders?: ToolAuthProviderRef[];
 }
 
 /**
@@ -268,5 +346,6 @@ export const frontMcpToolMetadataSchema = z
     hideFromDiscovery: z.boolean().optional().default(false),
     examples: z.array(toolExampleSchema).optional(),
     ui: z.looseObject({}).optional(),
+    authProviders: z.array(toolAuthProviderMappingSchema).optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();

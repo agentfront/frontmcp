@@ -1,6 +1,6 @@
 // auth/session/redis-session.store.ts
-import IoRedis, { Redis, RedisOptions } from 'ioredis';
-import { randomUUID } from '@frontmcp/utils';
+import type { Redis } from 'ioredis';
+import { randomUUID, RedisStorageAdapter } from '@frontmcp/utils';
 import {
   SessionStore,
   StoredSession,
@@ -25,6 +25,7 @@ export interface RedisSessionStoreConfig extends RedisConfig {
  *
  * Provides persistent session storage for distributed deployments.
  * Sessions are stored as JSON with optional TTL.
+ * Uses @frontmcp/utils RedisStorageAdapter internally.
  *
  * Security features (configurable via security option):
  * - HMAC signing: Detects session data tampering
@@ -32,7 +33,7 @@ export interface RedisSessionStoreConfig extends RedisConfig {
  * - Max lifetime: Prevents indefinite session extension
  */
 export class RedisSessionStore implements SessionStore {
-  private readonly redis: Redis;
+  private readonly storage: RedisStorageAdapter;
   private readonly keyPrefix: string;
   private readonly defaultTtlMs: number;
   private readonly logger?: FrontMcpLogger;
@@ -51,6 +52,7 @@ export class RedisSessionStore implements SessionStore {
     // Default TTL of 1 hour for session extension on access
     this.defaultTtlMs = ('defaultTtlMs' in config ? config.defaultTtlMs : undefined) ?? 3600000;
     this.logger = logger;
+    this.keyPrefix = ('keyPrefix' in config ? config.keyPrefix : undefined) ?? 'mcp:session:';
 
     // Initialize security configuration
     this.security = ('security' in config ? config.security : undefined) ?? {};
@@ -64,38 +66,44 @@ export class RedisSessionStore implements SessionStore {
     }
 
     if ('redis' in config && config.redis) {
-      // Use provided Redis instance
-      this.redis = config.redis;
-      this.keyPrefix = config.keyPrefix ?? 'mcp:session:';
+      // Use provided Redis instance - wrap in adapter
+      this.storage = new RedisStorageAdapter({
+        client: config.redis,
+        keyPrefix: this.keyPrefix,
+      });
       this.externalInstance = true;
     } else {
       // Create new Redis connection from config
       const redisConfig = config as RedisConfig;
-      const options: RedisOptions = {
-        host: redisConfig.host,
-        port: redisConfig.port ?? 6379,
-        password: redisConfig.password,
-        db: redisConfig.db ?? 0,
-      };
-
-      if (redisConfig.tls) {
-        options.tls = {};
-      }
-
-      this.redis = new IoRedis(options);
-      this.keyPrefix = redisConfig.keyPrefix ?? 'mcp:session:';
+      this.storage = new RedisStorageAdapter({
+        config: {
+          host: redisConfig.host,
+          port: redisConfig.port ?? 6379,
+          password: redisConfig.password,
+          db: redisConfig.db ?? 0,
+          tls: redisConfig.tls,
+        },
+        keyPrefix: this.keyPrefix,
+      });
     }
   }
 
   /**
-   * Get the full Redis key for a session ID
+   * Get the full key for a session ID (without prefix, adapter handles it)
    * @throws Error if sessionId is empty
    */
-  private key(sessionId: string): string {
+  private validateSessionId(sessionId: string): void {
     if (!sessionId || sessionId.trim() === '') {
       throw new Error('[RedisSessionStore] sessionId cannot be empty');
     }
-    return `${this.keyPrefix}${sessionId}`;
+  }
+
+  /**
+   * Ensure the storage adapter is connected
+   */
+  private async ensureConnected(): Promise<void> {
+    // connect() is idempotent - it returns early if already connected
+    await this.storage.connect();
   }
 
   /**
@@ -111,6 +119,8 @@ export class RedisSessionStore implements SessionStore {
    *   If not provided, falls back to sessionId which provides DoS protection per-session.
    */
   async get(sessionId: string, options?: { clientIdentifier?: string }): Promise<StoredSession | null> {
+    this.validateSessionId(sessionId);
+
     // Check rate limit if enabled
     // Use clientIdentifier for enumeration protection, fallback to sessionId for DoS protection
     if (this.rateLimiter) {
@@ -126,18 +136,32 @@ export class RedisSessionStore implements SessionStore {
       }
     }
 
-    const key = this.key(sessionId);
+    await this.ensureConnected();
 
-    // Use GETEX to atomically get and extend TTL in a single operation
-    // This prevents the race where one request deletes expired session
-    // while another is trying to extend it
+    // Try to use GETEX for atomic get+extend TTL via underlying client
     let raw: string | null;
-    try {
-      // GETEX with EXAT/PXAT is atomic - no race condition possible
-      raw = await this.redis.getex(key, 'PX', this.defaultTtlMs);
-    } catch {
-      // Fallback for older Redis versions that don't support GETEX
-      raw = await this.redis.get(key);
+    const redis = this.storage.getClient();
+    const ttlSeconds = Math.ceil(this.defaultTtlMs / 1000);
+
+    if (redis) {
+      try {
+        // GETEX with EX is atomic - no race condition possible
+        // Note: Key prefix is handled by adapter, but GETEX needs full key
+        raw = await (redis as Redis).getex(this.keyPrefix + sessionId, 'EX', ttlSeconds);
+      } catch {
+        // Fallback for older Redis versions that don't support GETEX
+        raw = await this.storage.get(sessionId);
+        if (raw) {
+          // Extend TTL separately (non-atomic fallback)
+          await this.storage.expire(sessionId, ttlSeconds);
+        }
+      }
+    } else {
+      // No direct client access, use adapter methods
+      raw = await this.storage.get(sessionId);
+      if (raw) {
+        await this.storage.expire(sessionId, ttlSeconds);
+      }
     }
 
     if (!raw) return null;
@@ -197,8 +221,9 @@ export class RedisSessionStore implements SessionStore {
       if (session.session.expiresAt) {
         const ttlMs = Math.min(this.defaultTtlMs, session.session.expiresAt - Date.now());
         if (ttlMs > 0 && ttlMs < this.defaultTtlMs) {
+          const boundedTtlSeconds = Math.ceil(ttlMs / 1000);
           // Fire-and-forget with logging - we're only optimizing cache eviction timing
-          this.redis.pexpire(key, ttlMs).catch((err) => {
+          this.storage.expire(sessionId, boundedTtlSeconds).catch((err) => {
             this.logger?.warn('[RedisSessionStore] TTL extension failed', {
               sessionId: sessionId.slice(0, 20),
               error: (err as Error).message,
@@ -232,7 +257,8 @@ export class RedisSessionStore implements SessionStore {
    * Store a session with optional TTL
    */
   async set(sessionId: string, session: StoredSession, ttlMs?: number): Promise<void> {
-    const key = this.key(sessionId);
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
 
     // Apply HMAC signing if enabled
     let value: string;
@@ -243,20 +269,21 @@ export class RedisSessionStore implements SessionStore {
     }
 
     if (ttlMs && ttlMs > 0) {
-      // Use PX for millisecond precision
-      await this.redis.set(key, value, 'PX', ttlMs);
+      const ttlSeconds = Math.ceil(ttlMs / 1000);
+      await this.storage.set(sessionId, value, { ttlSeconds });
     } else if (session.session.expiresAt) {
       // Use session's expiration if available
       const ttl = session.session.expiresAt - Date.now();
       if (ttl > 0) {
-        await this.redis.set(key, value, 'PX', ttl);
+        const ttlSeconds = Math.ceil(ttl / 1000);
+        await this.storage.set(sessionId, value, { ttlSeconds });
       } else {
         // Already expired, but store anyway (will be cleaned up on next access)
-        await this.redis.set(key, value);
+        await this.storage.set(sessionId, value);
       }
     } else {
       // No TTL - session persists until explicitly deleted
-      await this.redis.set(key, value);
+      await this.storage.set(sessionId, value);
     }
   }
 
@@ -264,14 +291,18 @@ export class RedisSessionStore implements SessionStore {
    * Delete a session
    */
   async delete(sessionId: string): Promise<void> {
-    await this.redis.del(this.key(sessionId));
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
+    await this.storage.delete(sessionId);
   }
 
   /**
    * Check if a session exists
    */
   async exists(sessionId: string): Promise<boolean> {
-    return (await this.redis.exists(this.key(sessionId))) === 1;
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
+    return this.storage.exists(sessionId);
   }
 
   /**
@@ -286,15 +317,15 @@ export class RedisSessionStore implements SessionStore {
    */
   async disconnect(): Promise<void> {
     if (!this.externalInstance) {
-      await this.redis.quit();
+      await this.storage.disconnect();
     }
   }
 
   /**
    * Get the underlying Redis client (for advanced use cases)
    */
-  getRedisClient(): Redis {
-    return this.redis;
+  getRedisClient(): Redis | undefined {
+    return this.storage.getClient() as Redis | undefined;
   }
 
   /**
@@ -305,8 +336,8 @@ export class RedisSessionStore implements SessionStore {
    */
   async ping(): Promise<boolean> {
     try {
-      const result = await this.redis.ping();
-      return result === 'PONG';
+      await this.ensureConnected();
+      return this.storage.ping();
     } catch {
       return false;
     }

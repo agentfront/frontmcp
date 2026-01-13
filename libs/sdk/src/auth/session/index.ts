@@ -4,6 +4,9 @@ export { TransportSessionManager, InMemorySessionStore } from './transport-sessi
 export { RedisSessionStore, RedisSessionStoreConfig } from './redis-session.store';
 export { VercelKvSessionStore, VercelKvSessionConfig } from './vercel-kv-session.store';
 
+// Session store factory
+export { createSessionStore, createSessionStoreSync, createPubsubStore } from './session-store.factory';
+
 // Session security utilities
 export {
   SessionRateLimiter,
@@ -21,8 +24,24 @@ export {
   SessionSigningConfig,
 } from './session-crypto';
 
-// Authorization store for OAuth flows
-export * from './authorization.store';
-
-// Authorization vault for stateful sessions
-export * from './authorization-vault';
+// Authorization store for OAuth flows (re-exported from @frontmcp/auth)
+export {
+  // Classes
+  InMemoryAuthorizationStore,
+  RedisAuthorizationStore,
+  // Functions
+  verifyPkce,
+  generatePkceChallenge,
+  // Schemas
+  pkceChallengeSchema,
+  authorizationCodeRecordSchema,
+} from '@frontmcp/auth';
+export type {
+  AuthorizationStore,
+  PkceChallenge,
+  AuthorizationCodeRecord,
+  PendingAuthorizationRecord,
+  RefreshTokenRecord,
+  ConsentStateRecord,
+  FederatedLoginStateRecord,
+} from '@frontmcp/auth';

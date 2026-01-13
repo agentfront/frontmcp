@@ -9,6 +9,7 @@ import { ProviderScope } from '../common/metadata';
 import { AsyncProvider } from '../common/interfaces/provider.interface';
 import { FrontMcpContext } from './frontmcp-context';
 import { FrontMcpContextStorage } from './frontmcp-context-storage';
+import { Token } from '@frontmcp/di';
 
 /**
  * DI token for accessing the current FrontMcpContext.
@@ -28,12 +29,7 @@ import { FrontMcpContextStorage } from './frontmcp-context-storage';
  * const response = await ctx.fetch('https://api.example.com/data');
  * ```
  */
-export const FRONTMCP_CONTEXT = Symbol.for('frontmcp:CONTEXT');
-
-/**
- * @deprecated Use FRONTMCP_CONTEXT instead
- */
-export const REQUEST_CONTEXT = FRONTMCP_CONTEXT;
+export const FRONTMCP_CONTEXT: Token<FrontMcpContext> = Symbol.for('frontmcp:CONTEXT');
 
 /**
  * Factory provider for FrontMcpContext.
@@ -56,8 +52,3 @@ export const FrontMcpContextProvider = AsyncProvider({
     scope: ProviderScope.CONTEXT,
   },
 } as any); // Type assertion needed: normalizeProvider expects nested metadata structure
-
-/**
- * @deprecated Use FrontMcpContextProvider instead
- */
-export const RequestContextProvider = FrontMcpContextProvider;

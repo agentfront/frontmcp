@@ -8,19 +8,12 @@
  * - FrontMcpContextStorage: AsyncLocalStorage wrapper for context propagation
  * - FRONTMCP_CONTEXT: DI token for accessing current context
  * - TraceContext utilities: W3C Trace Context parsing and generation
- *
- * @deprecated exports (backward compatibility):
- * - RequestContext: Use FrontMcpContext instead
- * - RequestContextStorage: Use FrontMcpContextStorage instead
- * - REQUEST_CONTEXT: Use FRONTMCP_CONTEXT instead
- * - SessionKey: No longer needed with unified context
+ * - Session validation: validateSessionId for validating session identifiers
  */
 
 // =====================
-// New Unified Context (Primary exports)
+// FrontMcpContext - Unified context class
 // =====================
-
-// FrontMcpContext - unified context class
 export {
   FrontMcpContext,
   Context, // Short alias
@@ -28,41 +21,37 @@ export {
   FrontMcpContextConfig,
   RequestMetadata,
   TransportAccessor,
+  // Session validation
+  validateSessionId,
+  SESSION_ID_MAX_LENGTH,
+  SESSION_ID_VALID_PATTERN,
 } from './frontmcp-context';
 
+// =====================
 // FrontMcpContextStorage - AsyncLocalStorage wrapper
+// =====================
 export { FrontMcpContextStorage, ContextStorage } from './frontmcp-context-storage';
 
-// DI token and provider
-export {
-  FRONTMCP_CONTEXT,
-  FrontMcpContextProvider,
-  // Backward compatibility
-  REQUEST_CONTEXT,
-  RequestContextProvider,
-} from './frontmcp-context.provider';
+// =====================
+// DI Token and Provider
+// =====================
+export { FRONTMCP_CONTEXT, FrontMcpContextProvider } from './frontmcp-context.provider';
 
 // =====================
-// Trace Context (unchanged)
+// Trace Context (W3C compliant)
 // =====================
-
 export { TraceContext, parseTraceContext, generateTraceContext, createChildSpanContext } from './trace-context';
 
 // =====================
-// Backward Compatibility (deprecated)
+// Metadata Utilities
 // =====================
+export { extractMetadata, extractClientIp } from './metadata.utils';
 
-/**
- * @deprecated Use FrontMcpContext instead
- */
-export { RequestContext, RequestContextArgs as LegacyRequestContextArgs } from './request-context';
-
-/**
- * @deprecated Use FrontMcpContextStorage instead
- */
-export { RequestContextStorage } from './request-context-storage';
-
-/**
- * @deprecated SessionKey is no longer needed. Use ctx.sessionId directly.
- */
-export { SessionKey } from './session-key.provider';
+// =====================
+// Context Extension (Plugin System)
+// =====================
+export {
+  installContextExtensions,
+  isContextExtensionInstalled,
+  getInstalledContextExtensions,
+} from './context-extension';

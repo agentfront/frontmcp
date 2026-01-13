@@ -27,7 +27,7 @@ const outputSchema = z
 export default class SetSessionDataTool extends ToolContext<typeof inputSchema, typeof outputSchema> {
   async execute(input: z.infer<typeof inputSchema>): Promise<z.infer<typeof outputSchema>> {
     // Use shared context session ID so data persists across tool calls
-    const sessionId = this.authInfo.sessionId ?? 'mock-session-default';
+    const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const store = getSessionStore(sessionId);
 
     store.set(input.key, input.value, input.ttlSeconds);

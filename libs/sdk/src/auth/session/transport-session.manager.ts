@@ -1,19 +1,15 @@
 // auth/session/transport-session.manager.ts
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, decryptValue, encryptValue, hkdfSha256, type EncryptedBlob } from '@frontmcp/utils';
 import {
   TransportSession,
   TransportProtocol,
   SessionJwtPayload,
-  StatelessSessionJwtPayload,
   StoredSession,
   SessionStore,
   SessionStorageConfig,
   TransportState,
-  EncryptedBlob,
 } from './transport-session.types';
-import { encryptJson } from './utils/session-id.utils';
-import { encryptAesGcm, decryptAesGcm, hkdfSha256 } from './session.crypto';
 import { getMachineId } from '../authorization/authorization.class';
 import { RedisSessionStore } from './redis-session.store';
 
@@ -121,7 +117,7 @@ export class InMemorySessionStore implements SessionStore {
 export class TransportSessionManager {
   private readonly store: SessionStore;
   private readonly mode: 'stateless' | 'stateful';
-  private readonly encryptionKey: Buffer;
+  private readonly encryptionKey: Uint8Array;
 
   constructor(config: SessionStorageConfig & { encryptionSecret?: string }) {
     this.mode = config.mode;
@@ -153,10 +149,11 @@ export class TransportSessionManager {
       );
     }
     const effectiveSecret = secret || getMachineId();
+    const encoder = new TextEncoder();
     this.encryptionKey = hkdfSha256(
-      Buffer.from(effectiveSecret),
-      Buffer.from('mcp-session-salt'),
-      Buffer.from('transport-session'),
+      encoder.encode(effectiveSecret),
+      encoder.encode('mcp-session-salt'),
+      encoder.encode('transport-session'),
       32,
     );
   }
@@ -202,6 +199,9 @@ export class TransportSessionManager {
         lastAccessedAt: Date.now(),
       };
       await this.store.set(sessionId, stored);
+    } else {
+      // Stateless mode: encode session as JWT - the id becomes the encrypted JWT
+      session.id = this.encodeSessionJwt(session);
     }
 
     return session;
@@ -285,16 +285,10 @@ export class TransportSessionManager {
    * Encode a session as an encrypted JWT for the Mcp-Session-Id header
    *
    * @param session - The transport session to encode
-   * @param additionalState - Additional encrypted state for stateless mode
+   * @param _additionalState - (deprecated) Reserved for backwards compatibility
    * @returns Encrypted session JWT
    */
-  encodeSessionJwt(
-    session: TransportSession,
-    additionalState?: {
-      state?: unknown;
-      tokens?: Record<string, unknown>;
-    },
-  ): string {
+  encodeSessionJwt(session: TransportSession, _additionalState?: unknown): string {
     const payload: SessionJwtPayload = {
       sid: session.id,
       aid: session.authorizationId,
@@ -304,21 +298,9 @@ export class TransportSessionManager {
       exp: session.expiresAt ? Math.floor(session.expiresAt / 1000) : undefined,
     };
 
-    if (this.mode === 'stateless' && additionalState) {
-      const statelessPayload = payload as StatelessSessionJwtPayload;
-
-      if (additionalState.state) {
-        const encrypted = encryptAesGcm(this.encryptionKey, JSON.stringify(additionalState.state));
-        statelessPayload.state = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
-      }
-
-      if (additionalState.tokens) {
-        const encrypted = encryptAesGcm(this.encryptionKey, JSON.stringify(additionalState.tokens));
-        statelessPayload.tokens = `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
-      }
-    }
-
-    return encryptJson(payload);
+    // Use this.encryptionKey for consistency with decryptSessionJwt
+    const encrypted = encryptValue(payload, this.encryptionKey);
+    return `${encrypted.iv}.${encrypted.tag}.${encrypted.data}`;
   }
 
   /**
@@ -326,42 +308,42 @@ export class TransportSessionManager {
    *
    * @param jwt - The encrypted session JWT
    * @returns Decoded session or null if invalid
+   *
+   * Note: In stateless mode, the session.id is the JWT token itself (not the decoded sid).
+   * This ensures consistency with createSession() which sets session.id = encodeSessionJwt().
    */
   private decryptSessionJwt(jwt: string): TransportSession | null {
     try {
-      // The encryptJson format is iv.tag.ct (base64url)
-      // We need to decrypt it using the same key
+      // The encrypted format is iv.tag.ct (base64url)
       const parts = jwt.split('.');
       if (parts.length !== 3) return null;
 
       const [ivB64, tagB64, ctB64] = parts;
-      const iv = Buffer.from(ivB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const tag = Buffer.from(tagB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const data = Buffer.from(ctB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
-      const decrypted = decryptAesGcm(this.encryptionKey, {
-        alg: 'A256GCM',
-        iv: iv.toString('base64url'),
-        tag: tag.toString('base64url'),
-        data: data.toString('base64url'),
-      });
-
-      const payload = JSON.parse(decrypted) as SessionJwtPayload;
+      const payload = decryptValue<SessionJwtPayload>(
+        { alg: 'A256GCM', iv: ivB64, tag: tagB64, data: ctB64 },
+        this.encryptionKey,
+      );
 
       // Validate expiration
       if (payload.exp && payload.exp * 1000 < Date.now()) {
         return null;
       }
 
+      // Return the JWT token as session.id for stateless mode consistency
+      // (createSession sets session.id = encodeSessionJwt() in stateless mode)
       return {
-        id: payload.sid,
+        id: jwt,
         authorizationId: payload.aid,
         protocol: payload.proto,
         createdAt: payload.iat * 1000,
         expiresAt: payload.exp ? payload.exp * 1000 : undefined,
         nodeId: payload.nid,
       };
-    } catch {
+    } catch (err) {
+      if (process.env['NODE_ENV'] !== 'production') {
+        console.debug('[TransportSessionManager] Failed to decrypt session JWT:', err);
+      }
       return null;
     }
   }
