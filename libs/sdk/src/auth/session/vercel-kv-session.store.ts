@@ -326,7 +326,10 @@ export class VercelKvSessionStore implements SessionStore {
     try {
       await this.ensureConnected();
       return this.storage.ping();
-    } catch {
+    } catch (error) {
+      this.logger?.error('[VercelKvSessionStore] Connection failed', {
+        error: (error as Error).message,
+      });
       return false;
     }
   }

@@ -11,6 +11,7 @@ import { assertNode } from '../crypto/runtime';
 
 // Lazy-loaded Node.js modules to avoid import errors in browser
 let _fsp: typeof import('fs').promises | null = null;
+let _fs: typeof import('fs') | null = null;
 let _spawn: typeof import('child_process').spawn | null = null;
 
 function getFsp(): typeof import('fs').promises {
@@ -19,6 +20,14 @@ function getFsp(): typeof import('fs').promises {
     _fsp = require('fs').promises;
   }
   return _fsp as typeof import('fs').promises;
+}
+
+function getFs(): typeof import('fs') {
+  if (!_fs) {
+    assertNode('File system operations');
+    _fs = require('fs');
+  }
+  return _fs as typeof import('fs');
 }
 
 function getSpawn(): typeof import('child_process').spawn {
@@ -47,6 +56,26 @@ const F_OK = 0;
 export async function readFile(p: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
   const fsp = getFsp();
   return fsp.readFile(p, encoding);
+}
+
+/**
+ * Read a file's contents as a string synchronously.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * Use this only when async operations are not possible (e.g., module initialization).
+ * Prefer the async `readFile` function in most cases.
+ *
+ * @param p - Path to file
+ * @param encoding - Encoding (default 'utf8')
+ * @returns File contents as string
+ *
+ * @example
+ * const content = readFileSync('/path/to/file.txt');
+ */
+export function readFileSync(p: string, encoding: BufferEncoding = 'utf8'): string {
+  const fs = getFs();
+  return fs.readFileSync(p, encoding);
 }
 
 /**

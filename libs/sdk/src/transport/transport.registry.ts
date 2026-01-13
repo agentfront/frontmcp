@@ -101,8 +101,10 @@ export class TransportService {
         this.sessionStore = store as SessionStore & { ping?: () => Promise<boolean>; disconnect?: () => Promise<void> };
         this.pendingStoreConfig = undefined;
       } catch (error) {
+        const err = error as Error & { cause?: Error };
         this.scope.logger.error('[TransportService] Failed to create session store - session persistence disabled', {
-          error: (error as Error).message,
+          error: err.message,
+          cause: err.cause?.message,
         });
       }
     }

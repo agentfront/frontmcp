@@ -1,6 +1,7 @@
 export {
   // Low-level operations
   readFile,
+  readFileSync,
   readFileBuffer,
   writeFile,
   mkdir,

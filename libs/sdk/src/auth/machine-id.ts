@@ -15,7 +15,7 @@
  */
 
 import * as path from 'path';
-import { randomUUID, mkdir, writeFile } from '@frontmcp/utils';
+import { randomUUID, mkdir, writeFile, readFileSync } from '@frontmcp/utils';
 
 const DEFAULT_MACHINE_ID_PATH = '.frontmcp/machine-id';
 
@@ -45,10 +45,8 @@ function loadMachineIdSync(): string | null {
   const machineIdPath = resolveMachineIdPath();
 
   try {
-    // Use Node's fs for sync read
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs');
-    const content = fs.readFileSync(machineIdPath, 'utf8').trim();
+    // Use @frontmcp/utils readFileSync with lazy-load pattern
+    const content = readFileSync(machineIdPath, 'utf8').trim();
 
     // Validate UUID format (loose check)
     if (/^[0-9a-f-]{32,36}$/i.test(content)) {

@@ -338,7 +338,10 @@ export class RedisSessionStore implements SessionStore {
     try {
       await this.ensureConnected();
       return this.storage.ping();
-    } catch {
+    } catch (error) {
+      this.logger?.error('[RedisSessionStore] Connection failed', {
+        error: (error as Error).message,
+      });
       return false;
     }
   }
