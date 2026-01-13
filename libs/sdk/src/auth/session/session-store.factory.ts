@@ -6,17 +6,17 @@
  * Uses @frontmcp/utils storage adapters internally.
  */
 
-import type { StorageAdapter } from '@frontmcp/utils';
+import { RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 import type { SessionStore } from './transport-session.types';
-import type { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import {
+  type FrontMcpLogger,
   type RedisOptions,
   type RedisProviderOptions,
   type VercelKvProviderOptions,
   type PubsubOptions,
   isRedisProvider,
   isVercelKvProvider,
-} from '../../common/types/options/redis.options';
+} from '../../common';
 
 /**
  * Create a session store based on configuration
@@ -149,9 +149,6 @@ export function createSessionStoreSync(options: RedisOptions, logger?: FrontMcpL
  * ```
  */
 export function createPubsubStore(options: PubsubOptions): StorageAdapter {
-  // Lazy require to avoid bundling ioredis when not used
-  const { RedisStorageAdapter } = require('@frontmcp/utils');
-
   const redisOptions = options as RedisProviderOptions;
   return new RedisStorageAdapter({
     config: {
@@ -159,7 +156,7 @@ export function createPubsubStore(options: PubsubOptions): StorageAdapter {
       port: redisOptions.port,
       password: redisOptions.password,
       db: redisOptions.db,
-      tls: redisOptions.tls ? {} : undefined,
+      tls: redisOptions.tls,
     },
     keyPrefix: redisOptions.keyPrefix,
   });

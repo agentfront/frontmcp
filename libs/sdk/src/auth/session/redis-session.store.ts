@@ -1,5 +1,5 @@
 // auth/session/redis-session.store.ts
-import type { Redis, RedisOptions as IoRedisOptions } from 'ioredis';
+import type { Redis } from 'ioredis';
 import { randomUUID, RedisStorageAdapter } from '@frontmcp/utils';
 import {
   SessionStore,
