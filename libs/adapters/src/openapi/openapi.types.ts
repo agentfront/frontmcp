@@ -344,20 +344,11 @@ export interface ToolTransformOptions {
 }
 
 // ============================================================================
-// Output Transform Types
+// Schema Transform Types
 // ============================================================================
 
 /**
- * How to handle output schema in tool description.
- * - 'none': Don't add output schema to description (default)
- * - 'jsonSchema': Append full JSON Schema to description as code block
- * - 'summary': Append human-readable summary of output schema properties
- * - 'compact': Append compact one-line summary (type and main properties)
- */
-export type OutputSchemaDescriptionMode = 'none' | 'jsonSchema' | 'summary' | 'compact';
-
-/**
- * JSON Schema type for output transforms.
+ * JSON Schema type for schema transforms.
  */
 export type JsonSchemaType = {
   type?: string | string[];
@@ -368,6 +359,133 @@ export type JsonSchemaType = {
   description?: string;
   [key: string]: unknown;
 };
+
+/**
+ * Where to expose the output schema in tool definitions.
+ * - 'definition': Include in tool outputSchema only (default)
+ * - 'description': Include in tool description only (removes from outputSchema)
+ * - 'both': Include in both definition and description
+ */
+export type OutputSchemaMode = 'definition' | 'description' | 'both';
+
+/**
+ * How to format schema when included in description.
+ * - 'jsonSchema': Full JSON Schema as code block
+ * - 'summary': Human-readable property list
+ */
+export type SchemaDescriptionMode = 'jsonSchema' | 'summary';
+
+/**
+ * Context for schema transform functions.
+ */
+export interface SchemaTransformContext {
+  /** The OpenAPI tool being transformed */
+  tool: McpOpenAPITool;
+  /** Adapter options for reference */
+  adapterOptions: OpenApiAdapterOptions;
+}
+
+/**
+ * Context for schema description formatting.
+ */
+export interface SchemaDescriptionContext {
+  /** The OpenAPI tool */
+  tool: McpOpenAPITool;
+  /** Adapter options for reference */
+  adapterOptions: OpenApiAdapterOptions;
+  /** The original tool description */
+  originalDescription: string;
+}
+
+/**
+ * Schema description formatter function.
+ * Can be sync or async to support LLM-based generation.
+ */
+export type SchemaDescriptionFormatter = (
+  schema: JsonSchemaType,
+  ctx: SchemaDescriptionContext,
+) => string | Promise<string>;
+
+/**
+ * Schema transform function type.
+ */
+export type SchemaTransformFn<T = JsonSchemaType> = (schema: T, ctx: SchemaTransformContext) => T;
+
+/**
+ * Input schema transform configuration.
+ * Applied to tool inputSchema before tool list is returned.
+ */
+export interface InputSchemaTransformOptions {
+  /** Global transform applied to all tools */
+  global?: SchemaTransformFn<JsonSchemaType>;
+  /** Per-tool transforms keyed by tool name */
+  perTool?: Record<string, SchemaTransformFn<JsonSchemaType>>;
+  /** Dynamic transform generator */
+  generator?: (tool: McpOpenAPITool) => SchemaTransformFn<JsonSchemaType> | undefined;
+}
+
+/**
+ * Output schema transform configuration.
+ * Applied to tool outputSchema before tool list is returned.
+ */
+export interface OutputSchemaTransformOptions {
+  /** Global transform applied to all tools */
+  global?: SchemaTransformFn<JsonSchemaType | undefined>;
+  /** Per-tool transforms keyed by tool name */
+  perTool?: Record<string, SchemaTransformFn<JsonSchemaType | undefined>>;
+  /** Dynamic transform generator */
+  generator?: (tool: McpOpenAPITool) => SchemaTransformFn<JsonSchemaType | undefined> | undefined;
+}
+
+/**
+ * Schema transform options for modifying input and output schema definitions.
+ * These transforms are applied at fetch() time to modify tool definitions.
+ */
+export interface SchemaTransformOptions {
+  /**
+   * Transform input schema definition (what's returned in tool list).
+   * Use for adding/removing/modifying input schema properties.
+   */
+  input?: InputSchemaTransformOptions;
+
+  /**
+   * Transform output schema definition (what's returned in tool list).
+   * Use for adding/removing/modifying output schema properties.
+   */
+  output?: OutputSchemaTransformOptions;
+}
+
+/**
+ * Output schema options controlling where and how output schema is exposed.
+ */
+export interface OutputSchemaOptions {
+  /**
+   * Where to expose output schema.
+   * - 'definition': Include in tool outputSchema only (default)
+   * - 'description': Include in tool description only (removes from outputSchema)
+   * - 'both': Include in both definition and description
+   * @default 'definition'
+   */
+  mode?: OutputSchemaMode;
+
+  /**
+   * How to format schema when included in description.
+   * Only used when mode is 'description' or 'both'.
+   * @default 'summary'
+   */
+  descriptionFormat?: SchemaDescriptionMode;
+
+  /**
+   * Custom formatter for schema description.
+   * Can be async to support LLM-based generation.
+   * If not provided, uses built-in formatters based on descriptionFormat.
+   */
+  descriptionFormatter?: SchemaDescriptionFormatter;
+}
+
+// ============================================================================
+// Output Transform Types (Data Transforms at Execution Time)
+// ============================================================================
 
 /**
  * Context available for pre-tool output transforms (before createOpenApiTool).
@@ -445,26 +563,17 @@ export interface PostToolTransform {
 }
 
 /**
- * Output transform configuration options.
- * Combines built-in modes with custom transform callbacks.
+ * Data transform configuration options.
+ * Applied at execution time for response data manipulation.
+ *
+ * Note: For schema definition transforms, use `schemaTransforms` option.
+ * For output schema display options, use `outputSchema` option.
  */
-export interface OutputTransformOptions {
+export interface DataTransformOptions {
   /**
-   * Built-in mode for adding output schema to tool description.
-   * @default 'none'
-   */
-  outputSchemaDescriptionMode?: OutputSchemaDescriptionMode;
-
-  /**
-   * Custom function to format output schema as human-readable text.
-   * Only used when outputSchemaDescriptionMode is 'summary' or 'compact'.
-   * If not provided, uses built-in formatters.
-   */
-  formatOutputSchema?: (schema: JsonSchemaType, mode: 'summary' | 'compact') => string;
-
-  /**
-   * Pre-tool output transforms applied to McpOpenAPITool definitions.
+   * Pre-tool transforms applied to McpOpenAPITool definitions.
    * Applied during fetch() before createOpenApiTool() wrapping.
+   * Use for custom schema or description modifications beyond schemaTransforms.
    */
   preToolTransforms?: {
     /** Global transform applied to all tools */
@@ -476,8 +585,8 @@ export interface OutputTransformOptions {
   };
 
   /**
-   * Post-tool output transforms applied to API responses.
-   * Applied at execution time after response is received.
+   * Post-tool transforms applied to API responses at execution time.
+   * Use for filtering, reshaping, or enriching response data.
    */
   postToolTransforms?: {
     /** Global transform applied to all responses */
@@ -488,6 +597,12 @@ export interface OutputTransformOptions {
     generator?: (tool: McpOpenAPITool) => PostToolTransform | undefined;
   };
 }
+
+/**
+ * @deprecated Use `DataTransformOptions` instead.
+ * Kept for backward compatibility.
+ */
+export type OutputTransformOptions = DataTransformOptions;
 
 // ============================================================================
 // Extended Metadata Types (internal)
@@ -758,30 +873,65 @@ interface BaseOptions {
   descriptionMode?: DescriptionMode;
 
   /**
-   * Output transforms for modifying output schema and response data.
+   * Schema transforms for modifying input and output schema definitions.
+   * Applied at fetch() time before tools are registered.
    *
    * Use cases:
-   * - Add output schema to tool description for AI understanding
-   * - Remove or transform output schema definitions
-   * - Transform or filter API responses before returning
-   * - Reshape response data for MCP client consumption
+   * - Add/remove/modify input schema properties
+   * - Transform output schema for AI understanding
+   * - Simplify complex schemas
    *
    * @example
    * ```typescript
-   * outputTransforms: {
-   *   // Add human-readable output schema to description for all tools
-   *   outputSchemaDescriptionMode: 'summary',
-   *
-   *   // Custom pre-tool transform to remove schema and add to description
-   *   preToolTransforms: {
-   *     global: {
-   *       transformSchema: () => undefined, // Remove from schema
-   *       transformDescription: (desc, schema) =>
-   *         schema ? `${desc}\n\nReturns: ${JSON.stringify(schema)}` : desc,
+   * schemaTransforms: {
+   *   input: {
+   *     global: (schema) => ({ ...schema, additionalProperties: false }),
+   *   },
+   *   output: {
+   *     perTool: {
+   *       'getUser': (schema) => ({
+   *         type: 'object',
+   *         properties: { id: { type: 'string' }, name: { type: 'string' } },
+   *       }),
    *     },
    *   },
+   * }
+   * ```
+   */
+  schemaTransforms?: SchemaTransformOptions;
+
+  /**
+   * Output schema options controlling where and how output schema is exposed.
    *
-   *   // Custom post-tool transform to reshape response data
+   * Use cases:
+   * - Move output schema to description for AI readability
+   * - Use custom formatter (including LLM-based) for schema description
+   *
+   * @example
+   * ```typescript
+   * outputSchema: {
+   *   mode: 'description', // Move to description, remove from definition
+   *   descriptionFormat: 'summary', // Human-readable format
+   *   descriptionFormatter: async (schema, ctx) => {
+   *     // Custom LLM-based description generation
+   *     return await generateSchemaDescription(schema);
+   *   },
+   * }
+   * ```
+   */
+  outputSchema?: OutputSchemaOptions;
+
+  /**
+   * Data transforms for modifying API responses at execution time.
+   *
+   * Use cases:
+   * - Transform or filter API responses before returning
+   * - Reshape response data for MCP client consumption
+   * - Custom pre-tool description/schema modifications
+   *
+   * @example
+   * ```typescript
+   * dataTransforms: {
    *   postToolTransforms: {
    *     perTool: {
    *       'listUsers': {
@@ -791,6 +941,12 @@ interface BaseOptions {
    *   },
    * }
    * ```
+   */
+  dataTransforms?: DataTransformOptions;
+
+  /**
+   * @deprecated Use `dataTransforms` instead.
+   * Kept for backward compatibility.
    */
   outputTransforms?: OutputTransformOptions;
 

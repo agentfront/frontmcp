@@ -44,17 +44,22 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // Build output schema from OpenAPI response definitions
   // mcp-from-openapi generates outputSchema from response definitions
   // Wrap with status for consistent response format
-  const baseOutputSchema = openapiTool.outputSchema ?? { type: 'string' };
-  const wrappedOutputSchema: JsonSchema = {
-    type: 'object',
-    properties: {
-      status: { type: 'number', description: 'HTTP status code' },
-      ok: { type: 'boolean', description: 'Whether the response was successful' },
-      data: baseOutputSchema as JsonSchema,
-      error: { type: 'string', description: 'Error message for non-ok responses' },
-    },
-    required: ['status', 'ok'],
-  };
+  // Note: If outputSchema is explicitly undefined (e.g., outputSchemaMode: 'description'),
+  // we don't create a wrapped schema - the schema was moved to description
+  let wrappedOutputSchema: JsonSchema | undefined;
+  if (openapiTool.outputSchema !== undefined) {
+    const baseOutputSchema = openapiTool.outputSchema ?? { type: 'string' };
+    wrappedOutputSchema = {
+      type: 'object',
+      properties: {
+        status: { type: 'number', description: 'HTTP status code' },
+        ok: { type: 'boolean', description: 'Whether the response was successful' },
+        data: baseOutputSchema as JsonSchema,
+        error: { type: 'string', description: 'Error message for non-ok responses' },
+      },
+      required: ['status', 'ok'],
+    };
+  }
 
   // Build tool metadata with transforms applied
   // Priority: OpenAPI x-frontmcp → toolTransforms (adapter can override spec)
@@ -64,8 +69,8 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     description: openapiTool.description,
     inputSchema: schemaResult.schema.shape || {},
     rawInputSchema: openapiTool.inputSchema,
-    // Add output schema for tool/list to expose
-    rawOutputSchema: wrappedOutputSchema,
+    // Add output schema for tool/list to expose (only if not moved to description)
+    ...(wrappedOutputSchema && { rawOutputSchema: wrappedOutputSchema }),
   };
 
   // Track schema conversion failure in metadata for debugging

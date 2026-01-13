@@ -894,8 +894,8 @@ describe('OpenapiAdapter - Output Transforms', () => {
     jest.clearAllMocks();
   });
 
-  describe('outputSchemaDescriptionMode', () => {
-    it('should not modify description with none mode (default)', async () => {
+  describe('outputSchema options', () => {
+    it('should not modify description with definition mode (default)', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -917,8 +917,8 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'none',
+        outputSchema: {
+          mode: 'definition',
         },
       });
 
@@ -929,7 +929,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).not.toContain('Output Schema');
     });
 
-    it('should add JSON Schema to description with jsonSchema mode', async () => {
+    it('should add JSON Schema to description with jsonSchema format', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -951,8 +951,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'jsonSchema',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'jsonSchema',
         },
       });
 
@@ -965,7 +966,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).toContain('"type": "object"');
     });
 
-    it('should add human-readable summary with summary mode', async () => {
+    it('should add human-readable summary with summary format', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -988,8 +989,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
@@ -1003,7 +1005,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).toContain('User identifier');
     });
 
-    it('should add compact summary with compact mode', async () => {
+    it('should add summary to description with description mode', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1025,8 +1027,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'compact',
+        outputSchema: {
+          mode: 'description',
+          descriptionFormat: 'summary',
         },
       });
 
@@ -1034,11 +1037,11 @@ describe('OpenapiAdapter - Output Transforms', () => {
 
       const meta = getToolMeta(getFirstTool(result));
       expect(meta.description).toContain('Get all users');
-      expect(meta.description).toContain('Returns:');
-      expect(meta.description).toContain('object { id, name }');
+      expect(meta.description).toContain('## Returns');
+      expect(meta.description).toContain('**id**');
     });
 
-    it('should handle array schemas in compact mode', async () => {
+    it('should handle array schemas in summary format', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1057,18 +1060,19 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'compact',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
       const result = await adapter.fetch();
 
       const meta = getToolMeta(getFirstTool(result));
-      expect(meta.description).toContain('Returns: array of string');
+      expect(meta.description).toContain('Array of string');
     });
 
-    it('should use custom formatOutputSchema function', async () => {
+    it('should use custom descriptionFormatter function', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1087,16 +1091,51 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary',
-          formatOutputSchema: (schema, mode) => `Custom format: ${schema.type} (${mode})`,
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
+          descriptionFormatter: (schema) => `Custom format: ${schema.type}`,
         },
       });
 
       const result = await adapter.fetch();
 
       const meta = getToolMeta(getFirstTool(result));
-      expect(meta.description).toContain('Custom format: object (summary)');
+      expect(meta.description).toContain('Custom format: object');
+    });
+
+    it('should support async descriptionFormatter', async () => {
+      const { OpenAPIToolGenerator } = require('mcp-from-openapi');
+
+      const mockTool = createMockTool({
+        outputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+        },
+      });
+      const mockGenerator = {
+        generateTools: jest.fn().mockResolvedValue([mockTool]),
+      };
+      OpenAPIToolGenerator.fromJSON.mockResolvedValue(mockGenerator);
+
+      const adapter = new OpenapiAdapter({
+        name: 'test-api',
+        baseUrl: 'https://api.example.com',
+        spec: basicOpenApiSpec,
+        logger: createMockLogger(),
+        outputSchema: {
+          mode: 'both',
+          descriptionFormatter: async (schema) => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return `Async format: ${schema.type}`;
+          },
+        },
+      });
+
+      const result = await adapter.fetch();
+
+      const meta = getToolMeta(getFirstTool(result));
+      expect(meta.description).toContain('Async format: object');
     });
 
     it('should handle missing outputSchema gracefully', async () => {
@@ -1115,8 +1154,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'jsonSchema',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'jsonSchema',
         },
       });
 
@@ -1394,7 +1434,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
   });
 
   describe('combined transforms', () => {
-    it('should apply outputSchemaDescriptionMode and preToolTransforms together', async () => {
+    it('should apply outputSchema options and dataTransforms together', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1413,8 +1453,11 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'compact',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
+        },
+        dataTransforms: {
           preToolTransforms: {
             global: {
               transformDescription: (desc) => `[API] ${desc}`,
@@ -1428,7 +1471,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       const meta = getToolMeta(getFirstTool(result));
       // Built-in mode applied first, then custom transform
       expect(meta.description).toContain('[API]');
-      expect(meta.description).toContain('Returns:');
+      expect(meta.description).toContain('## Returns');
     });
 
     it('should apply preToolTransforms.transformSchema with context', async () => {
@@ -1498,8 +1541,11 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary', // This forces modification
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
+        },
+        dataTransforms: {
           postToolTransforms: {
             global: {
               transform: transformFn,
@@ -1516,7 +1562,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).toContain('## Returns');
     });
 
-    it('should not modify tool when outputTransforms has no effect', async () => {
+    it('should not modify tool when outputSchema has no effect', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1532,8 +1578,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary', // No effect without schema
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary', // No effect without schema
         },
       });
 
@@ -1585,7 +1632,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).toContain('[Schema: ModifiedSchema]');
     });
 
-    it('should handle objects with more than 3 properties in compact mode', async () => {
+    it('should handle objects with many properties in summary mode', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1610,16 +1657,18 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'compact',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
       const result = await adapter.fetch();
 
       const meta = getToolMeta(getFirstTool(result));
-      // Should truncate to first 3 properties with "..."
-      expect(meta.description).toContain('...');
+      // Should list all properties in summary mode
+      expect(meta.description).toContain('**id**');
+      expect(meta.description).toContain('**name**');
     });
 
     it('should handle array of objects in summary mode', async () => {
@@ -1645,8 +1694,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
@@ -1675,8 +1725,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
@@ -1705,8 +1756,9 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'summary',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
@@ -1716,7 +1768,7 @@ describe('OpenapiAdapter - Output Transforms', () => {
       expect(meta.description).toContain('any');
     });
 
-    it('should handle nested array type in getSchemaTypeString', async () => {
+    it('should handle nested array type in summary mode', async () => {
       const { OpenAPIToolGenerator } = require('mcp-from-openapi');
 
       const mockTool = createMockTool({
@@ -1738,16 +1790,17 @@ describe('OpenapiAdapter - Output Transforms', () => {
         baseUrl: 'https://api.example.com',
         spec: basicOpenApiSpec,
         logger: createMockLogger(),
-        outputTransforms: {
-          outputSchemaDescriptionMode: 'compact',
+        outputSchema: {
+          mode: 'both',
+          descriptionFormat: 'summary',
         },
       });
 
       const result = await adapter.fetch();
 
       const meta = getToolMeta(getFirstTool(result));
-      // Compact mode shows "array of X" format
-      expect(meta.description).toContain('array of string[]');
+      // Summary mode shows "Array of X" format
+      expect(meta.description).toContain('Array of string[]');
     });
   });
 });

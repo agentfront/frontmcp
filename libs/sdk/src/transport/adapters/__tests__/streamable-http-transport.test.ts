@@ -138,10 +138,10 @@ describe('RecreateableStreamableHTTPServerTransport', () => {
     });
 
     it('should throw error when expected fields are missing', () => {
-      (transport as any)._webStandardTransport = {}; // Missing _initialized and sessionId
+      (transport as any)._webStandardTransport = {}; // Missing _initialized
 
       expect(() => transport.setInitializationState('session-123')).toThrow(
-        'Expected fields not found on internal transport',
+        'Expected _initialized field not found on internal transport',
       );
     });
   });
