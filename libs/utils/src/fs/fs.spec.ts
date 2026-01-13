@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { fileExists, readJSON, writeJSON, ensureDir, isDirEmpty, runCmd } from './fs';
+import { fileExists, readFileSync, readJSON, writeJSON, ensureDir, isDirEmpty, runCmd } from './fs';
 
 describe('FS Utils', () => {
   let tempDir: string;
@@ -30,6 +30,29 @@ describe('FS Utils', () => {
 
     it('should return true for existing directory', async () => {
       expect(await fileExists(tempDir)).toBe(true);
+    });
+  });
+
+  describe('readFileSync', () => {
+    it('should read file contents as string', () => {
+      const testContent = 'hello world';
+      const filePath = path.join(tempDir, 'sync-test.txt');
+      fs.writeFileSync(filePath, testContent);
+
+      const content = readFileSync(filePath);
+      expect(content).toBe(testContent);
+    });
+
+    it('should throw ENOENT for non-existing file', () => {
+      expect(() => readFileSync(path.join(tempDir, 'nonexistent.txt'))).toThrow(/ENOENT/);
+    });
+
+    it('should support custom encoding', () => {
+      const filePath = path.join(tempDir, 'encoding-test.txt');
+      fs.writeFileSync(filePath, 'test content');
+
+      const content = readFileSync(filePath, 'utf8');
+      expect(content).toBe('test content');
     });
   });
 
