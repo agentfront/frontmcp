@@ -2,10 +2,10 @@
  * Vercel KV Session Store
  *
  * Session store implementation using Vercel KV (edge-compatible REST-based key-value store).
- * Uses dynamic import to avoid bundling @vercel/kv for non-Vercel deployments.
+ * Uses @frontmcp/utils VercelKvStorageAdapter internally.
  *
  * @warning **Atomicity Limitation**: Vercel KV does not support atomic GET+EXPIRE (GETEX).
- * The `get()` method uses separate GET and PEXPIRE calls, creating a small race window
+ * The `get()` method uses separate GET and EXPIRE calls, creating a small race window
  * where the session could expire between these two operations. For mission-critical
  * session handling requiring strict atomicity guarantees, consider using Redis directly
  * via `RedisSessionStore`.
@@ -13,22 +13,12 @@
  * @see https://vercel.com/docs/storage/vercel-kv
  */
 
-import { randomUUID } from '@frontmcp/utils';
+import { randomUUID, VercelKvStorageAdapter } from '@frontmcp/utils';
 import { SessionStore, StoredSession, storedSessionSchema, SessionSecurityConfig } from './transport-session.types';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import type { VercelKvProviderOptions } from '../../common/types/options/redis.options';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
-
-// Interface for the Vercel KV client (matches @vercel/kv API)
-// Using custom interface to avoid type compatibility issues with optional dependency
-interface VercelKVClient {
-  get<T = unknown>(key: string): Promise<T | null>;
-  set(key: string, value: unknown, options?: { ex?: number; px?: number }): Promise<void>;
-  del(...keys: string[]): Promise<number>;
-  exists(...keys: string[]): Promise<number>;
-  pexpire(key: string, milliseconds: number): Promise<number>;
-}
 
 export interface VercelKvSessionConfig {
   /**
@@ -66,21 +56,19 @@ export interface VercelKvSessionConfig {
  *
  * Provides persistent session storage for edge deployments using Vercel KV.
  * Sessions are stored as JSON with optional TTL.
+ * Uses @frontmcp/utils VercelKvStorageAdapter internally.
  */
 export class VercelKvSessionStore implements SessionStore {
-  private kv: VercelKVClient | null = null;
-  private connectPromise: Promise<void> | null = null;
+  private readonly storage: VercelKvStorageAdapter;
   private readonly keyPrefix: string;
   private readonly defaultTtlMs: number;
   private readonly logger?: FrontMcpLogger;
-  private readonly config: VercelKvSessionConfig;
 
   // Security features
   private readonly security: SessionSecurityConfig;
   private readonly rateLimiter?: SessionRateLimiter;
 
   constructor(config: VercelKvSessionConfig | VercelKvProviderOptions, logger?: FrontMcpLogger) {
-    this.config = config;
     this.keyPrefix = config.keyPrefix ?? 'mcp:session:';
     this.defaultTtlMs = config.defaultTtlMs ?? 3600000;
     this.logger = logger;
@@ -95,70 +83,46 @@ export class VercelKvSessionStore implements SessionStore {
         maxRequests: this.security.rateLimiting?.maxRequests,
       });
     }
+
+    // Create storage adapter
+    this.storage = new VercelKvStorageAdapter({
+      url: config.url,
+      token: config.token,
+      keyPrefix: this.keyPrefix,
+    });
+  }
+
+  /**
+   * Validate session ID
+   * @throws Error if sessionId is empty
+   */
+  private validateSessionId(sessionId: string): void {
+    if (!sessionId || sessionId.trim() === '') {
+      throw new Error('[VercelKvSessionStore] sessionId cannot be empty');
+    }
   }
 
   /**
    * Connect to Vercel KV
-   * Uses dynamic import to avoid bundling @vercel/kv when not used.
-   * Thread-safe: concurrent calls will share the same connection promise.
+   * Thread-safe: concurrent calls will share the same connection via adapter.
    */
   async connect(): Promise<void> {
-    if (this.kv) return;
-
-    // Prevent concurrent connection attempts
-    if (this.connectPromise) {
-      return this.connectPromise;
-    }
-
-    this.connectPromise = this.doConnect();
-    try {
-      await this.connectPromise;
-    } catch (error) {
-      // Reset promise on failure to allow retry
-      this.connectPromise = null;
-      throw error;
-    }
-  }
-
-  private async doConnect(): Promise<void> {
-    const { createClient } = await import('@vercel/kv');
-
-    const url = this.config.url || process.env['KV_REST_API_URL'];
-    const token = this.config.token || process.env['KV_REST_API_TOKEN'];
-
-    if (!url || !token) {
-      throw new Error(
-        'Vercel KV requires url and token. Set KV_REST_API_URL and KV_REST_API_TOKEN environment variables or provide them in config.',
-      );
-    }
-
-    // Cast to our interface to avoid type compatibility issues
-    this.kv = createClient({ url, token }) as unknown as VercelKVClient;
-  }
-
-  private async ensureConnected(): Promise<VercelKVClient> {
-    await this.connect();
-    if (!this.kv) {
-      throw new Error('[VercelKvSessionStore] Connection failed - client not initialized');
-    }
-    return this.kv;
+    // connect() is idempotent - it returns early if already connected
+    await this.storage.connect();
   }
 
   /**
-   * Get the full key for a session ID
-   * @throws Error if sessionId is empty
+   * Ensure the storage adapter is connected
    */
-  private key(sessionId: string): string {
-    if (!sessionId || sessionId.trim() === '') {
-      throw new Error('[VercelKvSessionStore] sessionId cannot be empty');
-    }
-    return `${this.keyPrefix}${sessionId}`;
+  private async ensureConnected(): Promise<void> {
+    // connect() is idempotent - it returns early if already connected
+    await this.storage.connect();
   }
 
   /**
    * Get a stored session by ID
    *
-   * Note: Vercel KV doesn't support GETEX, so we use GET + PEXPIRE separately.
+   * Note: Vercel KV doesn't support GETEX, so we use GET + EXPIRE separately.
    * This is slightly less atomic than Redis GETEX but sufficient for most use cases.
    *
    * @param sessionId - The session ID to look up
@@ -168,6 +132,8 @@ export class VercelKvSessionStore implements SessionStore {
    *   If not provided, falls back to sessionId which provides DoS protection per-session.
    */
   async get(sessionId: string, options?: { clientIdentifier?: string }): Promise<StoredSession | null> {
+    this.validateSessionId(sessionId);
+
     // Check rate limit if enabled
     // Use clientIdentifier for enumeration protection, fallback to sessionId for DoS protection
     if (this.rateLimiter) {
@@ -183,16 +149,17 @@ export class VercelKvSessionStore implements SessionStore {
       }
     }
 
-    const kv = await this.ensureConnected();
-    const key = this.key(sessionId);
+    await this.ensureConnected();
 
     // Get the session
-    const raw = await kv.get<string>(key);
+    const raw = await this.storage.get(sessionId);
     if (!raw) return null;
+
+    const ttlSeconds = Math.ceil(this.defaultTtlMs / 1000);
 
     // Extend TTL (fire-and-forget with logging, similar to Redis GETEX behavior)
     // Note: This is non-atomic - see class-level @warning for details
-    kv.pexpire(key, this.defaultTtlMs).catch((err) => {
+    this.storage.expire(sessionId, ttlSeconds).catch((err) => {
       this.logger?.warn('[VercelKvSessionStore] TTL extension failed', {
         sessionId: sessionId.slice(0, 20),
         error: (err as Error).message,
@@ -253,8 +220,9 @@ export class VercelKvSessionStore implements SessionStore {
       if (session.session.expiresAt) {
         const ttlMs = Math.min(this.defaultTtlMs, session.session.expiresAt - Date.now());
         if (ttlMs > 0 && ttlMs < this.defaultTtlMs) {
+          const boundedTtlSeconds = Math.ceil(ttlMs / 1000);
           // Fire-and-forget with logging - we're only optimizing cache eviction timing
-          kv.pexpire(key, ttlMs).catch((err) => {
+          this.storage.expire(sessionId, boundedTtlSeconds).catch((err) => {
             this.logger?.warn('[VercelKvSessionStore] TTL bound extension failed', {
               sessionId: sessionId.slice(0, 20),
               error: (err as Error).message,
@@ -285,8 +253,8 @@ export class VercelKvSessionStore implements SessionStore {
    * Store a session with optional TTL
    */
   async set(sessionId: string, session: StoredSession, ttlMs?: number): Promise<void> {
-    const kv = await this.ensureConnected();
-    const key = this.key(sessionId);
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
 
     // Apply HMAC signing if enabled
     let value: string;
@@ -297,20 +265,21 @@ export class VercelKvSessionStore implements SessionStore {
     }
 
     if (ttlMs && ttlMs > 0) {
-      // Use px for millisecond precision
-      await kv.set(key, value, { px: ttlMs });
+      const ttlSeconds = Math.ceil(ttlMs / 1000);
+      await this.storage.set(sessionId, value, { ttlSeconds });
     } else if (session.session.expiresAt) {
       // Use session's expiration if available
       const ttl = session.session.expiresAt - Date.now();
       if (ttl > 0) {
-        await kv.set(key, value, { px: ttl });
+        const ttlSeconds = Math.ceil(ttl / 1000);
+        await this.storage.set(sessionId, value, { ttlSeconds });
       } else {
         // Already expired, but store anyway (will be cleaned up on next access)
-        await kv.set(key, value);
+        await this.storage.set(sessionId, value);
       }
     } else {
       // No TTL - session persists until explicitly deleted
-      await kv.set(key, value);
+      await this.storage.set(sessionId, value);
     }
   }
 
@@ -318,16 +287,18 @@ export class VercelKvSessionStore implements SessionStore {
    * Delete a session
    */
   async delete(sessionId: string): Promise<void> {
-    const kv = await this.ensureConnected();
-    await kv.del(this.key(sessionId));
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
+    await this.storage.delete(sessionId);
   }
 
   /**
    * Check if a session exists
    */
   async exists(sessionId: string): Promise<boolean> {
-    const kv = await this.ensureConnected();
-    return (await kv.exists(this.key(sessionId))) === 1;
+    this.validateSessionId(sessionId);
+    await this.ensureConnected();
+    return this.storage.exists(sessionId);
   }
 
   /**
@@ -339,26 +310,22 @@ export class VercelKvSessionStore implements SessionStore {
 
   /**
    * Disconnect from Vercel KV
-   * Vercel KV uses REST API, so there's no persistent connection to close
+   * Vercel KV uses REST API, so this just clears internal state
    */
   async disconnect(): Promise<void> {
-    this.kv = null;
-    this.connectPromise = null;
+    await this.storage.disconnect();
   }
 
   /**
-   * Test Vercel KV connection by setting and getting a test key.
+   * Test Vercel KV connection by checking if we can access the API.
    * Useful for validating connection on startup.
    *
    * @returns true if connection is healthy, false otherwise
    */
   async ping(): Promise<boolean> {
     try {
-      const kv = await this.ensureConnected();
-      const testKey = `${this.keyPrefix}__ping__`;
-      await kv.set(testKey, 'pong', { ex: 1 });
-      const result = await kv.get<string>(testKey);
-      return result === 'pong';
+      await this.ensureConnected();
+      return this.storage.ping();
     } catch {
       return false;
     }

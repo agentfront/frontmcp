@@ -4,6 +4,9 @@ export { TransportSessionManager, InMemorySessionStore } from './transport-sessi
 export { RedisSessionStore, RedisSessionStoreConfig } from './redis-session.store';
 export { VercelKvSessionStore, VercelKvSessionConfig } from './vercel-kv-session.store';
 
+// Session store factory
+export { createSessionStore, createSessionStoreSync, createPubsubStore } from './session-store.factory';
+
 // Session security utilities
 export {
   SessionRateLimiter,

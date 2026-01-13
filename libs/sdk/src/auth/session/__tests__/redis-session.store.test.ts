@@ -2,28 +2,32 @@
  * Redis Session Store Tests
  *
  * Tests for the Redis-backed session storage implementation.
+ * Uses mocked RedisStorageAdapter from @frontmcp/utils.
  */
 import { RedisSessionStore } from '../redis-session.store';
 import { StoredSession, TransportSession } from '../transport-session.types';
 
-// Mock ioredis
-jest.mock('ioredis', () => {
-  return {
-    default: jest.fn().mockImplementation(() => mockRedisInstance),
-    __esModule: true,
-  };
-});
+// Mock the RedisStorageAdapter from @frontmcp/utils
+const mockStorageAdapter = {
+  connect: jest.fn().mockResolvedValue(undefined),
+  disconnect: jest.fn().mockResolvedValue(undefined),
+  ping: jest.fn().mockResolvedValue(true),
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  delete: jest.fn().mockResolvedValue(true),
+  exists: jest.fn().mockResolvedValue(false),
+  expire: jest.fn().mockResolvedValue(true),
+  getClient: jest.fn().mockReturnValue(null),
+};
 
-// Mock Redis instance with all methods
-const mockRedisInstance = {
-  get: jest.fn(),
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  RedisStorageAdapter: jest.fn().mockImplementation(() => mockStorageAdapter),
+}));
+
+// Mock Redis client for direct GETEX calls
+const mockRedisClient = {
   getex: jest.fn(),
-  set: jest.fn(),
-  del: jest.fn(),
-  exists: jest.fn(),
-  ping: jest.fn(),
-  quit: jest.fn(),
-  pexpire: jest.fn(),
 };
 
 describe('RedisSessionStore', () => {
@@ -32,14 +36,16 @@ describe('RedisSessionStore', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset all mock implementations to defaults
-    mockRedisInstance.get.mockResolvedValue(null);
-    mockRedisInstance.getex.mockResolvedValue(null);
-    mockRedisInstance.set.mockResolvedValue('OK');
-    mockRedisInstance.del.mockResolvedValue(1);
-    mockRedisInstance.exists.mockResolvedValue(0);
-    mockRedisInstance.ping.mockResolvedValue('PONG');
-    mockRedisInstance.quit.mockResolvedValue('OK');
-    mockRedisInstance.pexpire.mockResolvedValue(1);
+    mockStorageAdapter.connect.mockResolvedValue(undefined);
+    mockStorageAdapter.disconnect.mockResolvedValue(undefined);
+    mockStorageAdapter.ping.mockResolvedValue(true);
+    mockStorageAdapter.get.mockResolvedValue(null);
+    mockStorageAdapter.set.mockResolvedValue(undefined);
+    mockStorageAdapter.delete.mockResolvedValue(true);
+    mockStorageAdapter.exists.mockResolvedValue(false);
+    mockStorageAdapter.expire.mockResolvedValue(true);
+    mockStorageAdapter.getClient.mockReturnValue(mockRedisClient);
+    mockRedisClient.getex.mockResolvedValue(null);
 
     store = new RedisSessionStore({
       host: 'localhost',
@@ -108,8 +114,9 @@ describe('RedisSessionStore', () => {
     });
 
     it('should accept external Redis instance', () => {
+      const mockRedis = {} as never;
       const newStore = new RedisSessionStore({
-        redis: mockRedisInstance as never,
+        redis: mockRedis,
         keyPrefix: 'ext:',
       });
       expect(newStore).toBeDefined();
@@ -122,7 +129,7 @@ describe('RedisSessionStore', () => {
 
   describe('get', () => {
     it('should return null for non-existent session', async () => {
-      mockRedisInstance.getex.mockResolvedValue(null);
+      mockRedisClient.getex.mockResolvedValue(null);
 
       const result = await store.get('nonexistent-session');
       expect(result).toBeNull();
@@ -130,7 +137,7 @@ describe('RedisSessionStore', () => {
 
     it('should return session for valid data', async () => {
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
 
@@ -140,40 +147,43 @@ describe('RedisSessionStore', () => {
 
     it('should use GETEX to atomically extend TTL', async () => {
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       await store.get('test-session-id');
 
-      expect(mockRedisInstance.getex).toHaveBeenCalledWith(
+      expect(mockRedisClient.getex).toHaveBeenCalledWith(
         'mcp:session:test-session-id',
-        'PX',
-        3600000, // default TTL
+        'EX',
+        3600, // default TTL in seconds
       );
     });
 
-    it('should fallback to get() when getex() fails', async () => {
+    it('should fallback to storage.get() when getex() fails', async () => {
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockRejectedValue(new Error('GETEX not supported'));
-      mockRedisInstance.get.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockRejectedValue(new Error('GETEX not supported'));
+      mockStorageAdapter.get.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
 
       expect(result).not.toBeNull();
-      expect(mockRedisInstance.get).toHaveBeenCalled();
+      expect(mockStorageAdapter.get).toHaveBeenCalledWith('test-session-id');
+      expect(mockStorageAdapter.expire).toHaveBeenCalledWith('test-session-id', 3600);
     });
 
     it('should return null and delete corrupted JSON', async () => {
-      mockRedisInstance.getex.mockResolvedValue('not valid json {{{');
+      mockRedisClient.getex.mockResolvedValue('not valid json {{{');
 
       const result = await store.get('test-session-id');
       expect(result).toBeNull();
       // Corrupted data should be deleted to prevent repeated failures (poison pill prevention)
-      expect(mockRedisInstance.del).toHaveBeenCalledWith('mcp:session:test-session-id');
+      // Wait for fire-and-forget delete to complete
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockStorageAdapter.delete).toHaveBeenCalledWith('test-session-id');
     });
 
     it('should return null for invalid schema', async () => {
       // Missing required fields
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify({ invalid: true }));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify({ invalid: true }));
 
       const result = await store.get('test-session-id');
       expect(result).toBeNull();
@@ -182,18 +192,18 @@ describe('RedisSessionStore', () => {
     it('should delete and return null for logically expired session', async () => {
       const storedSession = createValidStoredSession();
       storedSession.session.expiresAt = Date.now() - 1000; // Expired 1 second ago
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
 
       expect(result).toBeNull();
-      expect(mockRedisInstance.del).toHaveBeenCalledWith('mcp:session:test-session-id');
+      expect(mockStorageAdapter.delete).toHaveBeenCalledWith('test-session-id');
     });
 
     it('should update lastAccessedAt timestamp', async () => {
       const storedSession = createValidStoredSession();
       const originalLastAccessed = storedSession.lastAccessedAt;
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
 
@@ -203,21 +213,21 @@ describe('RedisSessionStore', () => {
 
     it('should use custom key prefix', async () => {
       const customStore = new RedisSessionStore({
-        redis: mockRedisInstance as never,
+        host: 'localhost',
         keyPrefix: 'custom:',
       });
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       await customStore.get('test-session-id');
 
-      expect(mockRedisInstance.getex).toHaveBeenCalledWith('custom:test-session-id', 'PX', expect.any(Number));
+      expect(mockRedisClient.getex).toHaveBeenCalledWith('custom:test-session-id', 'EX', expect.any(Number));
     });
 
     it('should handle session with no expiresAt', async () => {
       const storedSession = createValidStoredSession();
       delete storedSession.session.expiresAt;
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
       expect(result).not.toBeNull();
@@ -234,12 +244,7 @@ describe('RedisSessionStore', () => {
 
       await store.set('test-session-id', storedSession, 60000);
 
-      expect(mockRedisInstance.set).toHaveBeenCalledWith(
-        'mcp:session:test-session-id',
-        expect.any(String),
-        'PX',
-        60000,
-      );
+      expect(mockStorageAdapter.set).toHaveBeenCalledWith('test-session-id', expect.any(String), { ttlSeconds: 60 });
     });
 
     it('should use session expiresAt when no TTL provided', async () => {
@@ -249,12 +254,9 @@ describe('RedisSessionStore', () => {
 
       await store.set('test-session-id', storedSession);
 
-      expect(mockRedisInstance.set).toHaveBeenCalledWith(
-        'mcp:session:test-session-id',
-        expect.any(String),
-        'PX',
-        expect.any(Number), // TTL calculated from expiresAt
-      );
+      expect(mockStorageAdapter.set).toHaveBeenCalledWith('test-session-id', expect.any(String), {
+        ttlSeconds: expect.any(Number),
+      });
     });
 
     it('should set session without TTL when no expiry', async () => {
@@ -263,7 +265,7 @@ describe('RedisSessionStore', () => {
 
       await store.set('test-session-id', storedSession);
 
-      expect(mockRedisInstance.set).toHaveBeenCalledWith('mcp:session:test-session-id', expect.any(String));
+      expect(mockStorageAdapter.set).toHaveBeenCalledWith('test-session-id', expect.any(String));
     });
 
     it('should store already expired session (cleaned on next access)', async () => {
@@ -272,7 +274,7 @@ describe('RedisSessionStore', () => {
 
       await store.set('test-session-id', storedSession);
 
-      expect(mockRedisInstance.set).toHaveBeenCalled();
+      expect(mockStorageAdapter.set).toHaveBeenCalled();
     });
 
     it('should serialize session as JSON', async () => {
@@ -280,7 +282,7 @@ describe('RedisSessionStore', () => {
 
       await store.set('test-session-id', storedSession, 60000);
 
-      const callArgs = mockRedisInstance.set.mock.calls[0];
+      const callArgs = mockStorageAdapter.set.mock.calls[0];
       const storedValue = callArgs[1];
       expect(() => JSON.parse(storedValue)).not.toThrow();
 
@@ -297,18 +299,19 @@ describe('RedisSessionStore', () => {
     it('should delete session by ID', async () => {
       await store.delete('test-session-id');
 
-      expect(mockRedisInstance.del).toHaveBeenCalledWith('mcp:session:test-session-id');
+      expect(mockStorageAdapter.delete).toHaveBeenCalledWith('test-session-id');
     });
 
-    it('should use custom key prefix', async () => {
+    it('should use custom key prefix (handled by adapter)', async () => {
       const customStore = new RedisSessionStore({
-        redis: mockRedisInstance as never,
+        host: 'localhost',
         keyPrefix: 'custom:',
       });
 
       await customStore.delete('test-session-id');
 
-      expect(mockRedisInstance.del).toHaveBeenCalledWith('custom:test-session-id');
+      // Key prefix is handled by the adapter, so we just pass the session ID
+      expect(mockStorageAdapter.delete).toHaveBeenCalledWith('test-session-id');
     });
   });
 
@@ -318,14 +321,14 @@ describe('RedisSessionStore', () => {
 
   describe('exists', () => {
     it('should return true when session exists', async () => {
-      mockRedisInstance.exists.mockResolvedValue(1);
+      mockStorageAdapter.exists.mockResolvedValue(true);
 
       const result = await store.exists('test-session-id');
       expect(result).toBe(true);
     });
 
     it('should return false when session does not exist', async () => {
-      mockRedisInstance.exists.mockResolvedValue(0);
+      mockStorageAdapter.exists.mockResolvedValue(false);
 
       const result = await store.exists('test-session-id');
       expect(result).toBe(false);
@@ -334,7 +337,7 @@ describe('RedisSessionStore', () => {
     it('should use correct key format', async () => {
       await store.exists('test-session-id');
 
-      expect(mockRedisInstance.exists).toHaveBeenCalledWith('mcp:session:test-session-id');
+      expect(mockStorageAdapter.exists).toHaveBeenCalledWith('test-session-id');
     });
   });
 
@@ -363,21 +366,21 @@ describe('RedisSessionStore', () => {
 
   describe('ping', () => {
     it('should return true when Redis is healthy', async () => {
-      mockRedisInstance.ping.mockResolvedValue('PONG');
+      mockStorageAdapter.ping.mockResolvedValue(true);
 
       const result = await store.ping();
       expect(result).toBe(true);
     });
 
-    it('should return false when Redis responds with wrong value', async () => {
-      mockRedisInstance.ping.mockResolvedValue('WRONG');
+    it('should return false when Redis is unhealthy', async () => {
+      mockStorageAdapter.ping.mockResolvedValue(false);
 
       const result = await store.ping();
       expect(result).toBe(false);
     });
 
     it('should return false when Redis throws error', async () => {
-      mockRedisInstance.ping.mockRejectedValue(new Error('Connection refused'));
+      mockStorageAdapter.connect.mockRejectedValue(new Error('Connection refused'));
 
       const result = await store.ping();
       expect(result).toBe(false);
@@ -389,21 +392,22 @@ describe('RedisSessionStore', () => {
   // ============================================
 
   describe('disconnect', () => {
-    it('should call quit on owned connection', async () => {
+    it('should call disconnect on owned connection', async () => {
       await store.disconnect();
 
-      expect(mockRedisInstance.quit).toHaveBeenCalled();
+      expect(mockStorageAdapter.disconnect).toHaveBeenCalled();
     });
 
-    it('should not call quit on external connection', async () => {
+    it('should not call disconnect on external connection', async () => {
+      const mockRedis = {} as never;
       const externalStore = new RedisSessionStore({
-        redis: mockRedisInstance as never,
+        redis: mockRedis,
       });
 
       await externalStore.disconnect();
 
-      // quit should not be called for external instance
-      expect(mockRedisInstance.quit).not.toHaveBeenCalled();
+      // disconnect should not be called for external instance
+      expect(mockStorageAdapter.disconnect).not.toHaveBeenCalled();
     });
   });
 
@@ -412,9 +416,16 @@ describe('RedisSessionStore', () => {
   // ============================================
 
   describe('getRedisClient', () => {
-    it('should return the Redis client', () => {
+    it('should return the Redis client from adapter', () => {
+      mockStorageAdapter.getClient.mockReturnValue(mockRedisClient);
       const client = store.getRedisClient();
-      expect(client).toBeDefined();
+      expect(client).toBe(mockRedisClient);
+    });
+
+    it('should return undefined when adapter has no client', () => {
+      mockStorageAdapter.getClient.mockReturnValue(undefined);
+      const client = store.getRedisClient();
+      expect(client).toBeUndefined();
     });
   });
 
@@ -425,11 +436,11 @@ describe('RedisSessionStore', () => {
   describe('Edge Cases', () => {
     it('should handle sessionId with colons', async () => {
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       await store.get('session:with:colons');
 
-      expect(mockRedisInstance.getex).toHaveBeenCalledWith('mcp:session:session:with:colons', 'PX', expect.any(Number));
+      expect(mockRedisClient.getex).toHaveBeenCalledWith('mcp:session:session:with:colons', 'EX', expect.any(Number));
     });
 
     it('should reject empty sessionId', async () => {
@@ -444,11 +455,11 @@ describe('RedisSessionStore', () => {
     it('should handle very long sessionId', async () => {
       const longId = 'x'.repeat(1000);
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       await store.get(longId);
 
-      expect(mockRedisInstance.getex).toHaveBeenCalledWith(`mcp:session:${longId}`, 'PX', expect.any(Number));
+      expect(mockRedisClient.getex).toHaveBeenCalledWith(`mcp:session:${longId}`, 'EX', expect.any(Number));
     });
 
     it('should handle session with large meta field', async () => {
@@ -457,7 +468,7 @@ describe('RedisSessionStore', () => {
       (storedSession as unknown as Record<string, unknown>)['meta'] = {
         largeField: 'x'.repeat(10000),
       };
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
       expect(result).not.toBeNull();
@@ -473,7 +484,7 @@ describe('RedisSessionStore', () => {
           data: 'encryptedData',
         },
       };
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const result = await store.get('test-session-id');
       expect(result).not.toBeNull();
@@ -482,12 +493,12 @@ describe('RedisSessionStore', () => {
 
     it('should handle concurrent get requests', async () => {
       const storedSession = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(storedSession));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
 
       const results = await Promise.all([store.get('session1'), store.get('session2'), store.get('session3')]);
 
       expect(results.every((r) => r !== null)).toBe(true);
-      expect(mockRedisInstance.getex).toHaveBeenCalledTimes(3);
+      expect(mockRedisClient.getex).toHaveBeenCalledTimes(3);
     });
 
     it('should handle concurrent set requests', async () => {
@@ -499,7 +510,7 @@ describe('RedisSessionStore', () => {
         store.set('session3', sessions[2]),
       ]);
 
-      expect(mockRedisInstance.set).toHaveBeenCalledTimes(3);
+      expect(mockStorageAdapter.set).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -514,7 +525,7 @@ describe('RedisSessionStore', () => {
         createdAt: Date.now(),
         lastAccessedAt: Date.now(),
       };
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(invalid));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(invalid));
 
       const result = await store.get('test-session-id');
       expect(result).toBeNull();
@@ -532,7 +543,7 @@ describe('RedisSessionStore', () => {
         createdAt: Date.now(),
         lastAccessedAt: Date.now(),
       };
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(invalid));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(invalid));
 
       const result = await store.get('test-session-id');
       expect(result).toBeNull();
@@ -540,7 +551,7 @@ describe('RedisSessionStore', () => {
 
     it('should accept session with all valid fields', async () => {
       const valid = createValidStoredSession();
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(valid));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(valid));
 
       const result = await store.get('test-session-id');
       expect(result).not.toBeNull();
@@ -553,7 +564,7 @@ describe('RedisSessionStore', () => {
         requestSeq: 1,
         activeStreamId: 'stream-1',
       };
-      mockRedisInstance.getex.mockResolvedValue(JSON.stringify(valid));
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(valid));
 
       const result = await store.get('test-session-id');
       expect(result).not.toBeNull();
