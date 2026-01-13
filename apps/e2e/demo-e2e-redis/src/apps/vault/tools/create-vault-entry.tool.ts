@@ -32,19 +32,29 @@ export default class CreateVaultEntryTool extends ToolContext<typeof inputSchema
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
-    const entry = await vault.create({
-      userSub: input.userSub,
-      userEmail: input.userEmail,
-      userName: input.userName,
-      clientId: input.clientId,
-    });
+    try {
+      const entry = await vault.create({
+        userSub: input.userSub,
+        userEmail: input.userEmail,
+        userName: input.userName,
+        clientId: input.clientId,
+      });
 
-    return {
-      success: true,
-      entryId: entry.id,
-      userSub: entry.userSub,
-      clientId: entry.clientId,
-      message: `Created vault entry ${entry.id} for user ${input.userSub}`,
-    };
+      return {
+        success: true,
+        entryId: entry.id,
+        userSub: entry.userSub,
+        clientId: entry.clientId,
+        message: `Created vault entry ${entry.id} for user ${input.userSub}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entryId: '',
+        userSub: input.userSub,
+        clientId: input.clientId,
+        message: `Failed to create vault entry: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

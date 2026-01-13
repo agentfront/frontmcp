@@ -26,11 +26,18 @@ export default class DeleteVaultEntryTool extends ToolContext<typeof inputSchema
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
-    await vault.delete(input.entryId);
+    try {
+      await vault.delete(input.entryId);
 
-    return {
-      success: true,
-      message: `Deleted vault entry ${input.entryId}`,
-    };
+      return {
+        success: true,
+        message: `Deleted vault entry ${input.entryId}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to delete vault entry: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

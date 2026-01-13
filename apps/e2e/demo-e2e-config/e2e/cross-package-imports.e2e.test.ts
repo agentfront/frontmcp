@@ -35,7 +35,7 @@ import {
   base64urlDecode,
 } from '@frontmcp/utils';
 
-// Import from @frontmcp/sdk (should re-export auth types)
+// Import SDK decorators and context types from @frontmcp/sdk
 import { FrontMcp, Tool, ToolContext, Resource, ResourceContext, Prompt, PromptContext, App } from '@frontmcp/sdk';
 
 test.describe('Cross-Package Imports E2E', () => {
@@ -249,6 +249,12 @@ test.describe('Cross-Package Imports E2E', () => {
 
       const result = authUserSchema.safeParse(validUser);
       expect(result.success).toBe(true);
+    });
+
+    test('should reject invalid authUser schema (missing required sub)', () => {
+      const invalidUser = { email: 'user@example.com' };
+      const invalidResult = authUserSchema.safeParse(invalidUser);
+      expect(invalidResult.success).toBe(false);
     });
 
     test('should validate credentialType schema', () => {

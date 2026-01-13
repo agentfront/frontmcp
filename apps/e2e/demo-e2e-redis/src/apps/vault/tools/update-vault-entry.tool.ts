@@ -28,19 +28,26 @@ export default class UpdateVaultEntryTool extends ToolContext<typeof inputSchema
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
-    const updates: Record<string, unknown> = {};
-    if (input.userEmail !== undefined) {
-      updates.userEmail = input.userEmail;
-    }
-    if (input.userName !== undefined) {
-      updates.userName = input.userName;
-    }
+    try {
+      const updates: Record<string, unknown> = {};
+      if (input.userEmail !== undefined) {
+        updates.userEmail = input.userEmail;
+      }
+      if (input.userName !== undefined) {
+        updates.userName = input.userName;
+      }
 
-    await vault.update(input.entryId, updates);
+      await vault.update(input.entryId, updates);
 
-    return {
-      success: true,
-      message: `Updated vault entry ${input.entryId}`,
-    };
+      return {
+        success: true,
+        message: `Updated vault entry ${input.entryId}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to update vault entry: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

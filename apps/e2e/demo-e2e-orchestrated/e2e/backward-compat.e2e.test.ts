@@ -129,14 +129,13 @@ test.describe('Orchestrated Auth Backward Compatibility E2E', () => {
         headers: { Accept: 'application/json' },
       });
 
-      // JWKS should be available for orchestrated mode
-      if (response.status === 200) {
-        const jwks = await response.json();
-        expect(jwks.keys).toBeDefined();
-        expect(Array.isArray(jwks.keys)).toBe(true);
-        // Should have at least one key
-        expect(jwks.keys.length).toBeGreaterThanOrEqual(0);
-      }
+      // JWKS must be available for orchestrated mode
+      expect(response.status).toBe(200);
+      const jwks = await response.json();
+      expect(jwks.keys).toBeDefined();
+      expect(Array.isArray(jwks.keys)).toBe(true);
+      // Must have at least one signing key
+      expect(jwks.keys.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -148,8 +147,8 @@ test.describe('Orchestrated Auth Backward Compatibility E2E', () => {
         redirect: 'manual',
       });
 
-      // Should be 200 or redirect (some configurations redirect)
-      expect([200, 301, 302, 307, 308, 404]).toContain(response.status);
+      // Should be 200 or redirect (redirects are acceptable for federation)
+      expect([200, 301, 302, 307, 308]).toContain(response.status);
 
       if (response.status === 200) {
         const metadata = await response.json();

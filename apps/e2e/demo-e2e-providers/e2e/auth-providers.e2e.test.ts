@@ -34,6 +34,11 @@ test.describe('Auth Providers Integration E2E', () => {
       // Verify GLOBAL scope behavior
       expect(content1).toContain('"providerScope":"GLOBAL"');
       expect(content2).toContain('"providerScope":"GLOBAL"');
+
+      // Verify same instance is returned (singleton)
+      const match1 = content1.match(/"instanceId":"([^"]+)"/);
+      const match2 = content2.match(/"instanceId":"([^"]+)"/);
+      expect(match1?.[1]).toBe(match2?.[1]);
     });
 
     test('should support CONTEXT scope for per-session state', async ({ mcp }) => {
@@ -123,9 +128,8 @@ test.describe('Auth Providers Integration E2E', () => {
       // Tool works even without auth providers configured
     });
 
-    test('should provide helpful error messages for missing required providers', async ({ mcp }) => {
-      // Required providers should give clear error messages
-      // Testing with tools that have required dependencies
+    test('should list all expected tools when providers are configured', async ({ mcp }) => {
+      // Verify all expected tools are available when providers are properly configured
       const tools = await mcp.tools.list();
 
       // All tools should be available, indicating proper provider setup
@@ -143,6 +147,7 @@ test.describe('Auth Providers Integration E2E', () => {
       expect(result).toBeSuccessful();
 
       const message = result.messages[0];
+      expect(message.content.type).toBe('text');
       if (message.content.type === 'text') {
         // Prompt accesses both GLOBAL and CONTEXT providers
         expect(message.content.text).toContain('GLOBAL Scope Provider');

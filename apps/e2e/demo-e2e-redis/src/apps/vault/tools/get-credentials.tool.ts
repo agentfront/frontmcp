@@ -8,7 +8,11 @@ const inputSchema = z
     appId: z.string().optional().describe('Filter by application ID'),
     providerId: z.string().optional().describe('Filter by provider ID (requires appId)'),
   })
-  .strict();
+  .strict()
+  .refine((data) => !data.providerId || data.appId, {
+    message: 'providerId requires appId to be specified',
+    path: ['providerId'],
+  });
 
 const credentialSchema = z.object({
   appId: z.string(),
@@ -59,7 +63,7 @@ export default class GetCredentialsTool extends ToolContext<typeof inputSchema, 
       type: c.credential.type,
       isValid: c.isValid,
       expiresAt: c.expiresAt,
-      createdAt: c.createdAt,
+      createdAt: c.acquiredAt,
     }));
 
     return {

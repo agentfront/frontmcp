@@ -67,6 +67,7 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-update-test',
       });
 
+      expect(createResult).toBeSuccessful();
       const parsed = createResult.json<{ entryId: string }>();
       const entryId = parsed.entryId;
 
@@ -92,6 +93,7 @@ test.describe('Storage Authorization Vault E2E', () => {
         clientId: 'client-delete-test',
       });
 
+      expect(createResult).toBeSuccessful();
       const parsed = createResult.json<{ entryId: string }>();
       const entryId = parsed.entryId;
 
@@ -208,21 +210,23 @@ test.describe('Storage Authorization Vault E2E', () => {
       const entryId = createResult.json<{ entryId: string }>().entryId;
 
       // Add multiple credentials
-      await mcp.tools.call('add-credential', {
+      const addResult1 = await mcp.tools.call('add-credential', {
         entryId,
         appId: 'app1',
         providerId: 'provider1',
         credentialType: 'api_key',
         apiKey: 'key1',
       });
+      expect(addResult1).toBeSuccessful();
 
-      await mcp.tools.call('add-credential', {
+      const addResult2 = await mcp.tools.call('add-credential', {
         entryId,
         appId: 'app2',
         providerId: 'provider2',
         credentialType: 'bearer',
         bearerToken: 'token2',
       });
+      expect(addResult2).toBeSuccessful();
 
       // Get all credentials
       const getResult = await mcp.tools.call('get-credentials', { entryId });
@@ -272,13 +276,14 @@ test.describe('Storage Authorization Vault E2E', () => {
       });
 
       // Add credential for consented app
-      await mcp.tools.call('add-credential', {
+      const addCredResult = await mcp.tools.call('add-credential', {
         entryId,
         appId: 'consented-app',
         providerId: 'provider',
         credentialType: 'api_key',
         apiKey: 'allowed-key',
       });
+      expect(addCredResult).toBeSuccessful();
 
       // Get credentials - should include the consented credential
       const getResult = await mcp.tools.call('get-credentials', {

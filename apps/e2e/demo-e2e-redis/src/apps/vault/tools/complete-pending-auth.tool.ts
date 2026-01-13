@@ -28,17 +28,24 @@ export default class CompletePendingAuthTool extends ToolContext<typeof inputSch
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
-    if (input.action === 'complete') {
-      await vault.completePendingAuth(input.entryId, input.pendingAuthId);
+    try {
+      if (input.action === 'complete') {
+        await vault.completePendingAuth(input.entryId, input.pendingAuthId);
+        return {
+          success: true,
+          message: `Completed pending auth ${input.pendingAuthId}`,
+        };
+      } else {
+        await vault.cancelPendingAuth(input.entryId, input.pendingAuthId);
+        return {
+          success: true,
+          message: `Cancelled pending auth ${input.pendingAuthId}`,
+        };
+      }
+    } catch (error) {
       return {
-        success: true,
-        message: `Completed pending auth ${input.pendingAuthId}`,
-      };
-    } else {
-      await vault.cancelPendingAuth(input.entryId, input.pendingAuthId);
-      return {
-        success: true,
-        message: `Cancelled pending auth ${input.pendingAuthId}`,
+        success: false,
+        message: `Failed to ${input.action} pending auth: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }

@@ -56,9 +56,16 @@ export function getStorage(sessionId: string): MemoryStorageAdapter | undefined 
 }
 
 /**
- * Clear all vault instances
+ * Clear all vault instances and disconnect storage adapters
  */
-export function clearAllVaults(): void {
+export async function clearAllVaults(): Promise<void> {
+  // Disconnect all storage adapters before clearing
+  const disconnectPromises: Promise<void>[] = [];
+  for (const storage of storageInstances.values()) {
+    disconnectPromises.push(storage.disconnect());
+  }
+  await Promise.all(disconnectPromises);
+
   vaultInstances.clear();
   storageInstances.clear();
 }

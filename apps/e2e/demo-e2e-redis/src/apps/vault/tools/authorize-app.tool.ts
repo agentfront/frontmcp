@@ -28,13 +28,21 @@ export default class AuthorizeAppTool extends ToolContext<typeof inputSchema, ty
     const sessionId = this.getAuthInfo().sessionId ?? 'mock-session-default';
     const vault = await getVault(sessionId);
 
-    await vault.authorizeApp(input.entryId, input.appId);
-    const isAuthorized = await vault.isAppAuthorized(input.entryId, input.appId);
+    try {
+      await vault.authorizeApp(input.entryId, input.appId);
+      const isAuthorized = await vault.isAppAuthorized(input.entryId, input.appId);
 
-    return {
-      success: true,
-      isAuthorized,
-      message: `App ${input.appId} is ${isAuthorized ? '' : 'not '}authorized`,
-    };
+      return {
+        success: true,
+        isAuthorized,
+        message: `App ${input.appId} is ${isAuthorized ? '' : 'not '}authorized`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        isAuthorized: false,
+        message: `Failed to authorize app: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

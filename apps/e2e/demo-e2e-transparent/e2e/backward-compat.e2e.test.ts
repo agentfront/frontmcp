@@ -486,8 +486,8 @@ describe('Transparent Auth Backward Compatibility E2E', () => {
         }),
       });
 
-      // Server should reject with 4xx or 5xx error for invalid format
-      expect(response.status).toBeGreaterThanOrEqual(400);
+      // Server should reject with 401 for empty/invalid token
+      expect(response.status).toBe(401);
     });
 
     it('should reject non-Bearer auth scheme', async () => {
@@ -511,8 +511,8 @@ describe('Transparent Auth Backward Compatibility E2E', () => {
         }),
       });
 
-      // Server should reject with 4xx or 5xx error for invalid auth scheme
-      expect(response.status).toBeGreaterThanOrEqual(400);
+      // Server should reject with 401 for invalid auth scheme
+      expect(response.status).toBe(401);
     });
 
     it('should handle concurrent validation of same token', async () => {
