@@ -7,6 +7,7 @@ import type {
   InputTransformContext,
   ExtendedToolMetadata,
   InputTransform,
+  PostToolTransformContext,
 } from './openapi.types';
 import type { JSONSchema } from 'zod/v4/core';
 
@@ -31,6 +32,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // Get transforms stored in metadata by adapter
   const inputTransforms = metadata.adapter?.inputTransforms ?? [];
   const toolTransform = metadata.adapter?.toolTransform ?? {};
+  const postToolTransform = metadata.adapter?.postToolTransform;
 
   // Validate and parse x-frontmcp extension from OpenAPI spec
   const frontmcpValidation = validateFrontMcpExtension(metadata.frontmcp, openapiTool.name, logger);
@@ -209,7 +211,35 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       // 10. Parse response (returns structured OpenApiResponse)
       const apiResponse = await parseResponse(response, { maxResponseSize: options.maxResponseSize });
 
-      // 11. Convert non-ok responses to MCP error format
+      // 11. Apply post-tool output transform if configured
+      let transformedData = apiResponse.data;
+      if (postToolTransform) {
+        const transformCtx: PostToolTransformContext = {
+          ctx,
+          tool: openapiTool,
+          status: apiResponse.status,
+          ok: apiResponse.ok,
+          adapterOptions: options,
+        };
+
+        // Check filter (if provided)
+        const shouldTransform = postToolTransform.filter ? postToolTransform.filter(transformCtx) : true;
+
+        if (shouldTransform) {
+          try {
+            transformedData = await postToolTransform.transform(apiResponse.data, transformCtx);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            logger.warn(
+              `[${openapiTool.name}] Post-tool output transform failed: ${errorMessage}. ` +
+                `Returning original response.`,
+            );
+            // Keep original data on transform failure
+          }
+        }
+      }
+
+      // 12. Convert non-ok responses to MCP error format
       if (!apiResponse.ok) {
         // Return MCP error format with status in _meta
         return {
@@ -219,7 +249,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
               text: JSON.stringify({
                 status: apiResponse.status,
                 error: apiResponse.error,
-                data: apiResponse.data,
+                data: transformedData,
               }),
             },
           ],
@@ -231,11 +261,11 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         };
       }
 
-      // 12. Return successful response with status
+      // 13. Return successful response with status
       return {
         status: apiResponse.status,
         ok: true,
-        data: apiResponse.data,
+        data: transformedData,
       };
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {

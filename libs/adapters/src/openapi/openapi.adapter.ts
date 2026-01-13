@@ -1,5 +1,15 @@
 import { Adapter, DynamicAdapter, FrontMcpAdapterResponse, FrontMcpLogger } from '@frontmcp/sdk';
-import { OpenApiAdapterOptions, InputTransform, ToolTransform, ExtendedMcpOpenAPITool } from './openapi.types';
+import {
+  OpenApiAdapterOptions,
+  InputTransform,
+  ToolTransform,
+  ExtendedMcpOpenAPITool,
+  PreToolTransform,
+  PostToolTransform,
+  PreToolTransformContext,
+  OutputSchemaDescriptionMode,
+  JsonSchemaType,
+} from './openapi.types';
 import { OpenAPIToolGenerator, McpOpenAPITool } from 'mcp-from-openapi';
 import { createOpenApiTool } from './openapi.tool';
 import { validateSecurityConfiguration } from './openapi.security';
@@ -135,6 +145,11 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
     // 3. Apply input transforms (hide inputs, inject values at runtime)
     if (this.options.inputTransforms) {
       transformedTools = transformedTools.map((tool) => this.applyInputTransforms(tool));
+    }
+
+    // 4. Apply output transforms (pre-tool level - schema, description modifications)
+    if (this.options.outputTransforms) {
+      transformedTools = transformedTools.map((tool) => this.applyOutputTransforms(tool));
     }
 
     // Convert OpenAPI tools to FrontMCP tools
@@ -467,5 +482,244 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         },
       },
     } as ExtendedMcpOpenAPITool;
+  }
+
+  /**
+   * Apply output transforms to an OpenAPI tool.
+   * Handles both built-in schema description modes and custom transforms.
+   * @private
+   */
+  private applyOutputTransforms(tool: McpOpenAPITool): McpOpenAPITool {
+    const opts = this.options.outputTransforms;
+    if (!opts) return tool;
+
+    let newDescription = tool.description;
+    let newOutputSchema = tool.outputSchema as JsonSchemaType | undefined;
+
+    // 1. Apply built-in output schema description mode
+    if (opts.outputSchemaDescriptionMode && opts.outputSchemaDescriptionMode !== 'none') {
+      newDescription = this.applyOutputSchemaToDescription(
+        tool.description,
+        newOutputSchema,
+        opts.outputSchemaDescriptionMode,
+        opts.formatOutputSchema,
+      );
+    }
+
+    // 2. Collect custom pre-tool transforms
+    const preTransform = this.collectPreToolTransforms(tool);
+
+    // 3. Apply custom pre-tool transforms
+    if (preTransform) {
+      const ctx: PreToolTransformContext = {
+        tool,
+        adapterOptions: this.options,
+      };
+
+      if (preTransform.transformSchema) {
+        newOutputSchema = preTransform.transformSchema(newOutputSchema, ctx);
+      }
+
+      if (preTransform.transformDescription) {
+        newDescription = preTransform.transformDescription(newDescription, newOutputSchema, ctx);
+      }
+    }
+
+    // 4. Collect post-tool transform for runtime use
+    const postTransform = this.collectPostToolTransforms(tool);
+
+    // If nothing changed, return original tool
+    if (newDescription === tool.description && newOutputSchema === tool.outputSchema && !postTransform) {
+      return tool;
+    }
+
+    this.logger.debug(`Applied output transforms to '${tool.name}'`);
+
+    const metadataRecord = tool.metadata as unknown as Record<string, unknown>;
+    const existingAdapter = metadataRecord['adapter'] as Record<string, unknown> | undefined;
+    return {
+      ...tool,
+      description: newDescription,
+      outputSchema: newOutputSchema,
+      metadata: {
+        ...tool.metadata,
+        adapter: {
+          ...(existingAdapter || {}),
+          ...(postTransform && { postToolTransform: postTransform }),
+        },
+      },
+    } as ExtendedMcpOpenAPITool;
+  }
+
+  /**
+   * Apply built-in output schema description mode.
+   * @private
+   */
+  private applyOutputSchemaToDescription(
+    description: string,
+    outputSchema: JsonSchemaType | undefined,
+    mode: OutputSchemaDescriptionMode,
+    customFormatter?: (schema: JsonSchemaType, mode: 'summary' | 'compact') => string,
+  ): string {
+    if (!outputSchema || mode === 'none') return description;
+
+    let schemaText: string;
+
+    switch (mode) {
+      case 'jsonSchema':
+        schemaText = `\n\n## Output Schema\n\`\`\`json\n${JSON.stringify(outputSchema, null, 2)}\n\`\`\``;
+        break;
+
+      case 'summary':
+        schemaText = customFormatter
+          ? `\n\n## Returns\n${customFormatter(outputSchema, 'summary')}`
+          : `\n\n## Returns\n${this.formatSchemaAsSummary(outputSchema)}`;
+        break;
+
+      case 'compact':
+        schemaText = customFormatter
+          ? ` Returns: ${customFormatter(outputSchema, 'compact')}`
+          : ` Returns: ${this.formatSchemaAsCompact(outputSchema)}`;
+        break;
+
+      default:
+        return description;
+    }
+
+    return description + schemaText;
+  }
+
+  /**
+   * Format JSON Schema as human-readable summary.
+   * @private
+   */
+  private formatSchemaAsSummary(schema: JsonSchemaType): string {
+    const lines: string[] = [];
+
+    if (schema.type === 'object' && schema.properties) {
+      const required = new Set(schema.required || []);
+
+      for (const [name, propSchema] of Object.entries(schema.properties)) {
+        const isRequired = required.has(name);
+        const typeStr = this.getSchemaTypeString(propSchema);
+        const desc = propSchema.description ? ` - ${propSchema.description}` : '';
+        const reqStr = isRequired ? ' (required)' : ' (optional)';
+        lines.push(`- **${name}**: ${typeStr}${reqStr}${desc}`);
+      }
+    } else if (schema.type === 'array' && schema.items) {
+      const itemType = this.getSchemaTypeString(schema.items);
+      lines.push(`Array of ${itemType}`);
+    } else {
+      lines.push(this.getSchemaTypeString(schema));
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Format JSON Schema as compact one-liner.
+   * @private
+   */
+  private formatSchemaAsCompact(schema: JsonSchemaType): string {
+    if (schema.type === 'object' && schema.properties) {
+      const propNames = Object.keys(schema.properties);
+      if (propNames.length <= 3) {
+        return `object { ${propNames.join(', ')} }`;
+      }
+      return `object { ${propNames.slice(0, 3).join(', ')}, ... }`;
+    } else if (schema.type === 'array' && schema.items) {
+      return `array of ${this.getSchemaTypeString(schema.items)}`;
+    }
+    return this.getSchemaTypeString(schema);
+  }
+
+  /**
+   * Get human-readable type string from JSON Schema.
+   * @private
+   */
+  private getSchemaTypeString(schema: JsonSchemaType): string {
+    if (schema.type === 'array') {
+      return schema.items ? `${this.getSchemaTypeString(schema.items)}[]` : 'array';
+    }
+    if (schema.type === 'object') {
+      return schema.title || 'object';
+    }
+    if (Array.isArray(schema.type)) {
+      return schema.type.join(' | ');
+    }
+    return (schema.type as string) || 'any';
+  }
+
+  /**
+   * Collect pre-tool output transforms for a specific tool.
+   * @private
+   */
+  private collectPreToolTransforms(tool: McpOpenAPITool): PreToolTransform | undefined {
+    const opts = this.options.outputTransforms?.preToolTransforms;
+    if (!opts) return undefined;
+
+    let result: PreToolTransform | undefined;
+
+    // 1. Apply global transform
+    if (opts.global) {
+      result = { ...opts.global };
+    }
+
+    // 2. Apply per-tool transform (override)
+    if (opts.perTool?.[tool.name]) {
+      result = { ...result, ...opts.perTool[tool.name] };
+    }
+
+    // 3. Apply generator transform (override)
+    if (opts.generator) {
+      const generated = opts.generator(tool);
+      if (generated) {
+        result = { ...result, ...generated };
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Collect post-tool output transforms for a specific tool.
+   * @private
+   */
+  private collectPostToolTransforms(tool: McpOpenAPITool): PostToolTransform | undefined {
+    const opts = this.options.outputTransforms?.postToolTransforms;
+    if (!opts) return undefined;
+
+    let result: PostToolTransform | undefined;
+
+    // 1. Apply global transform
+    if (opts.global) {
+      result = { ...opts.global };
+    }
+
+    // 2. Apply per-tool transform (override)
+    if (opts.perTool?.[tool.name]) {
+      const perTool = opts.perTool[tool.name];
+      result = result
+        ? {
+            transform: perTool.transform,
+            filter: perTool.filter ?? result.filter,
+          }
+        : perTool;
+    }
+
+    // 3. Apply generator transform (override)
+    if (opts.generator) {
+      const generated = opts.generator(tool);
+      if (generated) {
+        result = result
+          ? {
+              transform: generated.transform,
+              filter: generated.filter ?? result.filter,
+            }
+          : generated;
+      }
+    }
+
+    return result;
   }
 }

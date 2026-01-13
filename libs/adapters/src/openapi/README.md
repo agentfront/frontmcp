@@ -17,6 +17,8 @@ FrontMCP tools with full type safety, authentication support, and automatic requ
 
 ✅ **Custom Mappers** - Transform headers and body based on session data
 
+✅ **Output Transforms** - Modify output schemas, add schema to descriptions, transform response data
+
 ✅ **Production Ready** - Comprehensive error handling, validation, and security protections
 
 ## Quick Start
@@ -667,6 +669,281 @@ annotations: {
   destructiveHint: false,  // Tool doesn't delete data
   idempotentHint: true,    // Repeated calls have same effect
   openWorldHint: true,     // Tool interacts with external systems
+}
+```
+
+## Output Transforms
+
+Transform output schemas and response data before they're returned to MCP clients. Output transforms provide a final
+transformation layer that runs after all other transforms (description mode, tool transforms, input transforms).
+
+### Output Schema Description Mode
+
+Add the output schema to tool descriptions automatically, making it easier for AI models to understand what the tool
+returns:
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    outputSchemaDescriptionMode: 'summary', // or 'jsonSchema', 'compact', 'none'
+  },
+});
+```
+
+| Mode           | Description                                         | Example Output                                   |
+| -------------- | --------------------------------------------------- | ------------------------------------------------ |
+| `'none'`       | Don't add output schema to description (default)    | Original description only                        |
+| `'jsonSchema'` | Append full JSON Schema as a code block             | `## Output Schema\n\`\`\`json\n{...}\n\`\`\``    |
+| `'summary'`    | Append human-readable summary with property details | `## Returns\n- **id**: string (required)\n- ...` |
+| `'compact'`    | Append compact one-line summary                     | `Returns: object { id, name, email }`            |
+
+#### Custom Schema Formatter
+
+Provide your own formatter for `'summary'` or `'compact'` modes:
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    outputSchemaDescriptionMode: 'summary',
+    formatOutputSchema: (schema, mode) => {
+      if (mode === 'summary') {
+        return `This endpoint returns a ${schema.type} with ${Object.keys(schema.properties || {}).length} properties.`;
+      }
+      return `${schema.type}`;
+    },
+  },
+});
+```
+
+### Pre-Tool Transforms
+
+Transform the `McpOpenAPITool` definition before it's converted to a FrontMCP tool. Use this to modify the output
+schema, description, or remove the output schema entirely.
+
+#### Remove Output Schema and Add to Description
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    preToolTransforms: {
+      global: {
+        // Remove schema from tool definition
+        transformSchema: () => undefined,
+        // Add schema info to description instead
+        transformDescription: (desc, schema) =>
+          schema ? `${desc}\n\nReturns: ${JSON.stringify(schema, null, 2)}` : desc,
+      },
+    },
+  },
+});
+```
+
+#### Filter Internal Properties from Schema
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    preToolTransforms: {
+      global: {
+        transformSchema: (schema) => {
+          if (!schema || schema.type !== 'object') return schema;
+          // Remove internal properties starting with underscore
+          const filteredProps = Object.fromEntries(
+            Object.entries(schema.properties || {}).filter(([key]) => !key.startsWith('_')),
+          );
+          return { ...schema, properties: filteredProps };
+        },
+      },
+    },
+  },
+});
+```
+
+#### Per-Tool Transforms
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    preToolTransforms: {
+      perTool: {
+        listUsers: {
+          transformDescription: (desc) => `${desc}\n\nNote: Results are paginated.`,
+        },
+        getUser: {
+          transformSchema: (schema) => ({
+            ...schema,
+            description: 'Single user object',
+          }),
+        },
+      },
+    },
+  },
+});
+```
+
+#### Dynamic Transforms with Generator
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    preToolTransforms: {
+      generator: (tool) => {
+        // Add method info to all tool descriptions
+        return {
+          transformDescription: (desc) => `[${tool.metadata.method.toUpperCase()}] ${desc}`,
+        };
+      },
+    },
+  },
+});
+```
+
+### Post-Tool Transforms
+
+Transform API response data at runtime, after the HTTP request completes but before returning to the MCP client.
+
+#### Extract Nested Data
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    postToolTransforms: {
+      perTool: {
+        // Extract users array from paginated response
+        listUsers: {
+          transform: (data) => (data as { users: unknown[] })?.users ?? data,
+        },
+        // Extract single item from wrapper
+        getUser: {
+          transform: (data) => (data as { data: unknown })?.data ?? data,
+        },
+      },
+    },
+  },
+});
+```
+
+#### Add Metadata to Responses
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    postToolTransforms: {
+      global: {
+        transform: (data, ctx) => ({
+          data,
+          _meta: {
+            toolName: ctx.tool.name,
+            timestamp: new Date().toISOString(),
+            status: ctx.status,
+          },
+        }),
+      },
+    },
+  },
+});
+```
+
+#### Conditional Transforms with Filter
+
+```typescript
+const adapter = new OpenapiAdapter({
+  name: 'my-api',
+  baseUrl: 'https://api.example.com',
+  spec: mySpec,
+  outputTransforms: {
+    postToolTransforms: {
+      generator: (tool) => {
+        // Only transform successful GET requests
+        if (tool.metadata.method === 'get') {
+          return {
+            filter: (ctx) => ctx.ok && ctx.status === 200,
+            transform: (data) => ({ cached: false, data }),
+          };
+        }
+        return undefined;
+      },
+    },
+  },
+});
+```
+
+### Transform Context
+
+#### Pre-Tool Transform Context
+
+```typescript
+interface PreToolTransformContext {
+  tool: McpOpenAPITool; // The OpenAPI tool being transformed
+  adapterOptions: OpenApiAdapterOptions; // Adapter configuration
+}
+```
+
+#### Post-Tool Transform Context
+
+```typescript
+interface PostToolTransformContext {
+  ctx: FrontMcpContext; // FrontMCP request context (authInfo, sessionId, etc.)
+  tool: McpOpenAPITool; // The OpenAPI tool that was executed
+  status: number; // HTTP status code
+  ok: boolean; // Whether response was successful (2xx)
+  adapterOptions: OpenApiAdapterOptions; // Adapter configuration
+}
+```
+
+### Transform Priority
+
+Transforms are applied in this order:
+
+1. **descriptionMode** - Basic description generation from OpenAPI summary/description
+2. **toolTransforms** - Tool metadata modifications (annotations, tags, etc.)
+3. **inputTransforms** - Input schema modifications (hide/inject fields)
+4. **outputTransforms** - Output schema and response modifications
+   - `outputSchemaDescriptionMode` (built-in) runs first
+   - `preToolTransforms` run second (can override built-in)
+   - `postToolTransforms` are stored and run at execution time
+
+### Error Handling
+
+Post-tool transforms include graceful error handling. If a transform fails:
+
+- A warning is logged with the error details
+- The original (untransformed) data is returned
+- The tool call does not fail
+
+```typescript
+// If transform throws, original data is returned
+postToolTransforms: {
+  global: {
+    transform: (data) => {
+      throw new Error('Transform failed');
+      // Warning logged, original data returned
+    },
+  },
 }
 ```
 

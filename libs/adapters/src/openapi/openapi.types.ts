@@ -344,6 +344,152 @@ export interface ToolTransformOptions {
 }
 
 // ============================================================================
+// Output Transform Types
+// ============================================================================
+
+/**
+ * How to handle output schema in tool description.
+ * - 'none': Don't add output schema to description (default)
+ * - 'jsonSchema': Append full JSON Schema to description as code block
+ * - 'summary': Append human-readable summary of output schema properties
+ * - 'compact': Append compact one-line summary (type and main properties)
+ */
+export type OutputSchemaDescriptionMode = 'none' | 'jsonSchema' | 'summary' | 'compact';
+
+/**
+ * JSON Schema type for output transforms.
+ */
+export type JsonSchemaType = {
+  type?: string | string[];
+  properties?: Record<string, JsonSchemaType>;
+  items?: JsonSchemaType;
+  required?: string[];
+  title?: string;
+  description?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * Context available for pre-tool output transforms (before createOpenApiTool).
+ * Applied during fetch() in the adapter to the McpOpenAPITool definitions.
+ */
+export interface PreToolTransformContext {
+  /** The OpenAPI tool being transformed */
+  tool: McpOpenAPITool;
+  /** Adapter options for reference */
+  adapterOptions: OpenApiAdapterOptions;
+}
+
+/**
+ * Context available for post-tool output transforms (at execution time).
+ * Applied after API response is received in createOpenApiTool.
+ */
+export interface PostToolTransformContext {
+  /** FrontMCP request context */
+  ctx: FrontMcpContext;
+  /** The OpenAPI tool that was executed */
+  tool: McpOpenAPITool;
+  /** HTTP status code */
+  status: number;
+  /** Whether response was successful */
+  ok: boolean;
+  /** Adapter options for reference */
+  adapterOptions: OpenApiAdapterOptions;
+}
+
+/**
+ * Pre-tool output transform - modifies McpOpenAPITool before FrontMCP wrapping.
+ * Use for modifying outputSchema, description, or other metadata.
+ */
+export interface PreToolTransform {
+  /**
+   * Transform the output schema definition.
+   * Return modified schema or undefined to remove the schema.
+   */
+  transformSchema?: (
+    outputSchema: JsonSchemaType | undefined,
+    ctx: PreToolTransformContext,
+  ) => JsonSchemaType | undefined;
+
+  /**
+   * Transform the tool description with output schema info.
+   * Return modified description.
+   */
+  transformDescription?: (
+    description: string,
+    outputSchema: JsonSchemaType | undefined,
+    ctx: PreToolTransformContext,
+  ) => string;
+}
+
+/**
+ * Post-tool output transform - modifies API response at execution time.
+ * Use for filtering, reshaping, or enriching response data.
+ */
+export interface PostToolTransform {
+  /**
+   * Transform the response data before returning to MCP client.
+   * Receives the parsed response and returns transformed response.
+   *
+   * @param data - Response data from API (or undefined for empty responses)
+   * @param ctx - Transform context with request info
+   * @returns Transformed data
+   */
+  transform: (data: unknown, ctx: PostToolTransformContext) => unknown | Promise<unknown>;
+
+  /**
+   * Optional filter - if returns false, transform is skipped.
+   * Use to apply transform only to specific tools or responses.
+   */
+  filter?: (ctx: PostToolTransformContext) => boolean;
+}
+
+/**
+ * Output transform configuration options.
+ * Combines built-in modes with custom transform callbacks.
+ */
+export interface OutputTransformOptions {
+  /**
+   * Built-in mode for adding output schema to tool description.
+   * @default 'none'
+   */
+  outputSchemaDescriptionMode?: OutputSchemaDescriptionMode;
+
+  /**
+   * Custom function to format output schema as human-readable text.
+   * Only used when outputSchemaDescriptionMode is 'summary' or 'compact'.
+   * If not provided, uses built-in formatters.
+   */
+  formatOutputSchema?: (schema: JsonSchemaType, mode: 'summary' | 'compact') => string;
+
+  /**
+   * Pre-tool output transforms applied to McpOpenAPITool definitions.
+   * Applied during fetch() before createOpenApiTool() wrapping.
+   */
+  preToolTransforms?: {
+    /** Global transform applied to all tools */
+    global?: PreToolTransform;
+    /** Per-tool transforms keyed by tool name */
+    perTool?: Record<string, PreToolTransform>;
+    /** Dynamic transform generator */
+    generator?: (tool: McpOpenAPITool) => PreToolTransform | undefined;
+  };
+
+  /**
+   * Post-tool output transforms applied to API responses.
+   * Applied at execution time after response is received.
+   */
+  postToolTransforms?: {
+    /** Global transform applied to all responses */
+    global?: PostToolTransform;
+    /** Per-tool transforms keyed by tool name */
+    perTool?: Record<string, PostToolTransform>;
+    /** Dynamic transform generator */
+    generator?: (tool: McpOpenAPITool) => PostToolTransform | undefined;
+  };
+}
+
+// ============================================================================
 // Extended Metadata Types (internal)
 // ============================================================================
 
@@ -366,6 +512,10 @@ export interface ExtendedToolMetadata extends ToolMetadata {
     securitySchemesInInput?: string[];
     /** Security schemes resolved from context (authProviderMapper, etc.) */
     securitySchemesFromContext?: string[];
+    /** Pre-tool output transform configuration */
+    preToolTransform?: PreToolTransform;
+    /** Post-tool output transform to apply at runtime */
+    postToolTransform?: PostToolTransform;
   };
 }
 
@@ -606,6 +756,43 @@ interface BaseOptions {
    * @default 'summaryOnly'
    */
   descriptionMode?: DescriptionMode;
+
+  /**
+   * Output transforms for modifying output schema and response data.
+   *
+   * Use cases:
+   * - Add output schema to tool description for AI understanding
+   * - Remove or transform output schema definitions
+   * - Transform or filter API responses before returning
+   * - Reshape response data for MCP client consumption
+   *
+   * @example
+   * ```typescript
+   * outputTransforms: {
+   *   // Add human-readable output schema to description for all tools
+   *   outputSchemaDescriptionMode: 'summary',
+   *
+   *   // Custom pre-tool transform to remove schema and add to description
+   *   preToolTransforms: {
+   *     global: {
+   *       transformSchema: () => undefined, // Remove from schema
+   *       transformDescription: (desc, schema) =>
+   *         schema ? `${desc}\n\nReturns: ${JSON.stringify(schema)}` : desc,
+   *     },
+   *   },
+   *
+   *   // Custom post-tool transform to reshape response data
+   *   postToolTransforms: {
+   *     perTool: {
+   *       'listUsers': {
+   *         transform: (data) => (data as any)?.users ?? data,
+   *       },
+   *     },
+   *   },
+   * }
+   * ```
+   */
+  outputTransforms?: OutputTransformOptions;
 
   /**
    * Logger instance for adapter diagnostics.
