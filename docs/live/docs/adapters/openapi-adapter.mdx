@@ -119,6 +119,10 @@ export default class MyApiApp {}
   Customize generated tools with annotations, tags, descriptions, and more. Supports global, per-tool, and generator-based transforms. See [Tool Transforms](#tool-transforms).
 </ParamField>
 
+<ParamField path="outputTransforms" type="OutputTransformOptions">
+  Transform output schemas and response data. Supports built-in modes (move schema to description) and custom transforms at both pre-tool (schema) and post-tool (response) levels. See [Output Transforms](#output-transforms).
+</ParamField>
+
 <ParamField path="descriptionMode" type="'summaryOnly' | 'descriptionOnly' | 'combined' | 'full'">
   How to generate tool descriptions from OpenAPI operations. Default: `'summaryOnly'`.
 </ParamField>
@@ -508,6 +512,208 @@ OpenapiAdapter.init({
 | `examples`          | `ToolExample[]`      | Usage examples                             |
 | `hideFromDiscovery` | `boolean`            | Hide tool from listing                     |
 | `ui`                | `ToolUIConfig`       | UI configuration for tool forms            |
+
+### Output Transforms
+
+Transform output schemas and response data before tools are finalized. This feature provides built-in modes for common patterns plus custom callbacks for full flexibility.
+
+#### Output Schema Description Modes
+
+Control how output schemas appear in tool definitions with built-in modes:
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    outputSchemaDescriptionMode: 'summary', // or 'jsonSchema', 'compact', 'none'
+  },
+});
+```
+
+| Mode         | Description                                                         |
+| ------------ | ------------------------------------------------------------------- |
+| `'none'`     | No modification (default)                                           |
+| `'jsonSchema'` | Append full JSON Schema to description                            |
+| `'summary'`  | Append human-readable summary (e.g., "Returns: object with status, data, items (array)") |
+| `'compact'`  | Append one-line type summary (e.g., "Returns: { status: number, data: object }") |
+
+#### Custom Schema Formatter
+
+Provide your own formatter for `summary` and `compact` modes:
+
+```ts
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    outputSchemaDescriptionMode: 'summary',
+    formatOutputSchema: (schema, mode) => {
+      if (mode === 'summary') {
+        return `Response: ${JSON.stringify(schema.properties || {})}`;
+      }
+      return `Type: ${schema.type || 'unknown'}`;
+    },
+  },
+});
+```
+
+#### Pre-Tool Transforms (Schema Level)
+
+Modify output schemas and descriptions before tools are created:
+
+<CodeGroup>
+
+```ts Global transform
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    preToolTransforms: {
+      global: {
+        // Remove output schema from all tools
+        transformSchema: () => undefined,
+        // Add schema info to description
+        transformDescription: (desc, schema) =>
+          schema ? `${desc}\n\nReturns: ${JSON.stringify(schema)}` : desc,
+      },
+    },
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    preToolTransforms: {
+      perTool: {
+        'listUsers': {
+          transformDescription: (desc) => `${desc}\n\nPaginated list of users.`,
+        },
+        'getUser': {
+          transformSchema: (schema) => ({
+            ...schema,
+            description: 'User object with profile data',
+          }),
+        },
+      },
+    },
+  },
+});
+```
+
+```ts Dynamic generator
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    preToolTransforms: {
+      generator: (tool) => {
+        // Remove output schema from all GET operations
+        if (tool.metadata.method === 'get') {
+          return {
+            transformSchema: () => undefined,
+            transformDescription: (desc, schema) =>
+              schema ? `${desc}\n\n---\nOutput: ${JSON.stringify(schema)}` : desc,
+          };
+        }
+        return undefined;
+      },
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+#### Post-Tool Transforms (Response Level)
+
+Transform API response data at runtime:
+
+<CodeGroup>
+
+```ts Global transform
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    postToolTransforms: {
+      global: {
+        transform: (data) => {
+          // Add metadata to all responses
+          return { ...data, _transformedAt: new Date().toISOString() };
+        },
+      },
+    },
+  },
+});
+```
+
+```ts Per-tool transforms
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    postToolTransforms: {
+      perTool: {
+        'listUsers': {
+          // Extract users array from response
+          transform: (data) => (data as any)?.users ?? data,
+        },
+        'getUser': {
+          // Add computed fields
+          transform: (data) => ({
+            ...data,
+            fullName: `${(data as any)?.firstName} ${(data as any)?.lastName}`,
+          }),
+        },
+      },
+    },
+  },
+});
+```
+
+```ts With filter
+OpenapiAdapter.init({
+  name: 'my-api',
+  url: 'https://api.example.com/openapi.json',
+  baseUrl: 'https://api.example.com',
+  outputTransforms: {
+    postToolTransforms: {
+      global: {
+        // Only transform successful responses
+        filter: (ctx) => ctx.ok && ctx.status === 200,
+        transform: (data) => ({ result: data }),
+      },
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+**Post-tool transform context:**
+
+| Property         | Type              | Description                         |
+| ---------------- | ----------------- | ----------------------------------- |
+| `ctx`            | `FrontMcpContext` | Full request context                |
+| `tool`           | `McpOpenAPITool`  | Tool definition                     |
+| `status`         | `number`          | HTTP response status code           |
+| `ok`             | `boolean`         | Whether response was successful     |
+| `adapterOptions` | `object`          | Adapter configuration               |
+
+<Check>
+  **Error Handling:** Transform failures are logged and the original data is returned, ensuring graceful degradation.
+</Check>
 
 ### x-frontmcp OpenAPI Extension
 

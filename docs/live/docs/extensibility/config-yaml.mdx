@@ -1,0 +1,266 @@
+---
+title: YAML Configuration Loading
+sidebarTitle: YAML Config
+slug: extensibility/config-yaml
+description: Load configuration from YAML files using ConfigPlugin's loadYaml option
+icon: file-code
+---
+
+The **ConfigPlugin** supports loading configuration from YAML files via the `loadYaml` option. This enables structured, hierarchical configuration alongside environment variables.
+
+## Overview
+
+When `loadYaml` is enabled, the `loadConfig` function:
+1. Loads and parses YAML config files using [js-yaml](https://www.npmjs.com/package/js-yaml) (v4.1.1+)
+2. Merges YAML config with environment variables (env vars take precedence)
+3. Validates the merged config against your Zod schema
+
+## Quick Start
+
+### 1. Enable YAML loading
+
+```ts
+import { ConfigPlugin } from '@frontmcp/sdk';
+
+@App({
+  plugins: [
+    ConfigPlugin.init({
+      basePath: __dirname,
+      loadYaml: true,           // Enable YAML loading (default: false)
+      configPath: 'config.yml', // Path to YAML file (default: 'config.yml')
+    }),
+  ],
+})
+class MyApp {}
+```
+
+### 2. Create a YAML config file
+
+```yaml
+# config.yml
+database:
+  url: postgres://localhost:5432/myapp
+  port: 5432
+  pool:
+    min: 2
+    max: 10
+
+api:
+  key: your-api-key
+  timeout: 30000
+
+debug: false
+```
+
+### 3. Define your schema
+
+```ts
+import { z } from 'zod';
+
+const configSchema = z.object({
+  database: z.object({
+    url: z.string(),
+    port: z.number().default(5432),
+    pool: z.object({
+      min: z.number().default(2),
+      max: z.number().default(10),
+    }).default({ min: 2, max: 10 }),
+  }),
+  api: z.object({
+    key: z.string(),
+    timeout: z.number().default(30000),
+  }),
+  debug: z.boolean().default(false),
+});
+```
+
+## Using loadConfig Directly
+
+For programmatic configuration loading outside of plugins:
+
+```ts
+import { loadConfig } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+const schema = z.object({
+  database: z.object({
+    url: z.string(),
+    port: z.number().default(5432),
+  }),
+});
+
+// Load with YAML support
+const config = await loadConfig(schema, {
+  basePath: __dirname,
+  loadYaml: true,
+  configPath: 'config.yml',
+});
+
+console.log(config.database.url);
+```
+
+## Configuration Options
+
+### loadYaml
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `loadYaml` | `boolean` | `false` | Enable YAML config file loading |
+
+When `false` (default), only environment variables and `.env` files are loaded. Set to `true` to also load YAML configuration.
+
+### configPath
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `configPath` | `string` | `'config.yml'` | Path to YAML config file relative to `basePath` |
+
+### Accepted File Extensions
+
+The loader automatically tries these extensions in order:
+- `.yml`
+- `.yaml`
+- No extension (if `configPath` includes the extension)
+
+```ts
+// All of these work:
+configPath: 'config'      // → tries config.yml, config.yaml
+configPath: 'config.yml'  // → tries config.yml
+configPath: 'config.yaml' // → tries config.yaml
+configPath: 'app/settings.yml'  // → relative path supported
+```
+
+## Priority and Merging
+
+Configuration sources are merged with this priority (highest to lowest):
+
+1. **Environment variables** (`process.env`)
+2. **`.env.local`** file
+3. **`.env`** file
+4. **YAML config file** (when `loadYaml: true`)
+5. **Schema defaults** (from Zod `.default()`)
+
+<Note>
+Environment variables always override YAML values. This allows you to commit safe defaults in YAML while overriding sensitive values via environment variables in production.
+</Note>
+
+### Example: Override YAML with Env Vars
+
+```yaml
+# config.yml
+database:
+  url: postgres://localhost:5432/dev_db
+  port: 5432
+```
+
+```bash
+# .env.local (overrides YAML)
+DATABASE_URL=postgres://prod-server:5432/prod_db
+```
+
+The final `database.url` will be `postgres://prod-server:5432/prod_db`.
+
+## Error Handling
+
+### File Not Found
+
+If the YAML file doesn't exist, loading continues silently (no error). Schema defaults will be used.
+
+### Parse Errors
+
+If the YAML file contains invalid syntax, `loadConfig` throws a standard YAML parse error from js-yaml.
+
+### Validation Errors
+
+If the merged configuration fails schema validation, a `ConfigValidationError` is thrown:
+
+```ts
+import { ConfigValidationError } from '@frontmcp/sdk';
+
+try {
+  const config = await loadConfig(schema, { loadYaml: true });
+} catch (error) {
+  if (error instanceof ConfigValidationError) {
+    console.error('Config validation failed:', error.message);
+    console.error('Zod errors:', error.zodError.issues);
+  }
+}
+```
+
+## Dependency
+
+YAML loading depends on [js-yaml](https://www.npmjs.com/package/js-yaml) version `^4.1.1` or higher. This dependency is included in `@frontmcp/sdk` and requires no additional installation.
+
+```json
+// @frontmcp/sdk package.json
+{
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  }
+}
+```
+
+<Warning>
+Version 4.1.1+ is required to address CVE-2025-64718. Earlier versions should not be used.
+</Warning>
+
+## Complete Example
+
+```ts
+import { FrontMcp, App, Tool, ToolContext, ConfigPlugin } from '@frontmcp/sdk';
+import { z } from 'zod';
+
+// Define typed schema
+const configSchema = z.object({
+  database: z.object({
+    url: z.string().describe('Database connection URL'),
+    port: z.number().default(5432).describe('Database port'),
+  }),
+  features: z.object({
+    darkMode: z.boolean().default(false),
+    maxItems: z.number().default(100),
+  }).default({ darkMode: false, maxItems: 100 }),
+});
+
+type Config = z.infer<typeof configSchema>;
+
+@App({
+  name: 'my-app',
+  plugins: [
+    ConfigPlugin.init({
+      basePath: __dirname,
+      loadYaml: true,
+      configPath: 'config.yml',
+      schema: configSchema,
+    }),
+  ],
+  tools: [MyTool],
+})
+class MyApp {}
+
+@Tool({
+  name: 'get-settings',
+  description: 'Get current configuration settings',
+  inputSchema: z.object({}),
+})
+class MyTool extends ToolContext {
+  async execute() {
+    return {
+      dbPort: this.config.getNumber('database.port'),
+      darkMode: this.config.getBoolean('features.darkMode'),
+    };
+  }
+}
+
+@FrontMcp({
+  info: { name: 'YAML Config Demo', version: '1.0.0' },
+  apps: [MyApp],
+})
+export default class Server {}
+```
+
+## Related
+
+- [ConfigPlugin](/docs/extensibility/config) - Full ConfigPlugin documentation
+- [Environment Variables](/docs/extensibility/config#file-loading-behavior) - .env file loading
+- [Schema Validation](/docs/extensibility/config#schema-validation) - Zod schema validation

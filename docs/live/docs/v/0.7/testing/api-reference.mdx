@@ -1,0 +1,918 @@
+---
+title: API Reference
+sidebarTitle: API Reference
+slug: testing/api-reference
+icon: code
+description: Complete API reference for @frontmcp/testing
+---
+
+Complete API documentation for all `@frontmcp/testing` exports, types, and methods.
+
+---
+
+## Test Function
+
+### test
+
+The main test function with fixture injection.
+
+```ts
+import { test } from '@frontmcp/testing';
+
+test('description', async ({ mcp, auth, server }) => {
+  // Test implementation
+});
+
+// Describe blocks
+test.describe('group name', () => {
+  test('test 1', async ({ mcp }) => {});
+  test('test 2', async ({ mcp }) => {});
+});
+
+// Skip tests
+test.skip('skipped test', async ({ mcp }) => {});
+
+// Only run this test
+test.only('focused test', async ({ mcp }) => {});
+```
+
+### test.use
+
+Configure fixtures for a test file.
+
+```ts
+test.use(options: TestOptions): void
+```
+
+| Option           | Type                                     | Default             | Description                          |
+| ---------------- | ---------------------------------------- | ------------------- | ------------------------------------ |
+| `server`         | `string`                                 | —                   | Path to server entry file (required) |
+| `port`           | `number`                                 | Auto                | Port to run server on                |
+| `transport`      | `'sse' \| 'streamable-http'`             | `'streamable-http'` | Transport protocol                   |
+| `auth`           | `AuthOptions`                            | —                   | Authentication configuration         |
+| `logLevel`       | `'debug' \| 'info' \| 'warn' \| 'error'` | `'warn'`            | Server log level                     |
+| `env`            | `Record<string, string>`                 | —                   | Environment variables                |
+| `startupTimeout` | `number`                                 | `30000`             | Startup timeout in ms                |
+| `baseUrl`        | `string`                                 | —                   | Connect to existing server           |
+
+---
+
+## McpTestClient
+
+The primary fixture for testing MCP servers.
+
+### Tools API
+
+#### tools.list
+
+List all available tools.
+
+```ts
+mcp.tools.list(): Promise<Tool[]>
+```
+
+**Returns:** Array of tool definitions with `name`, `description`, and `inputSchema`.
+
+#### tools.call
+
+Call a tool with arguments.
+
+```ts
+mcp.tools.call(name: string, args: Record<string, unknown>): Promise<ToolResult>
+```
+
+| Parameter | Type                      | Description    |
+| --------- | ------------------------- | -------------- |
+| `name`    | `string`                  | Tool name      |
+| `args`    | `Record<string, unknown>` | Tool arguments |
+
+**Returns:** `ToolResult` with methods:
+
+```ts
+interface ToolResult {
+  // Status checks
+  isSuccess: boolean;
+  isError: boolean;
+
+  // Content accessors
+  text(): string;                    // Get text content
+  json<T = unknown>(): T;            // Parse JSON content
+  image(): { data: string; mimeType: string };
+
+  // Raw access
+  raw: CallToolResult;               // Raw MCP response
+  content: Content[];                // Content array
+
+  // Error info (if isError)
+  error?: { code: number; message: string };
+}
+```
+
+---
+
+### Resources API
+
+#### resources.list
+
+List static resources.
+
+```ts
+mcp.resources.list(): Promise<Resource[]>
+```
+
+**Returns:** Array of resources with `uri`, `name`, `description`, and `mimeType`.
+
+#### resources.listTemplates
+
+List resource templates.
+
+```ts
+mcp.resources.listTemplates(): Promise<ResourceTemplate[]>
+```
+
+**Returns:** Array of templates with `uriTemplate`, `name`, and `description`.
+
+#### resources.read
+
+Read a resource by URI.
+
+```ts
+mcp.resources.read(uri: string): Promise<ResourceContent>
+```
+
+**Returns:** `ResourceContent` with methods:
+
+```ts
+interface ResourceContent {
+  text(): string;                    // Get text content
+  json<T = unknown>(): T;            // Parse JSON content
+  blob(): Uint8Array;                // Get binary content
+  mimeType: string;                  // Content MIME type
+  uri: string;                       // Resource URI
+  raw: ReadResourceResult;           // Raw MCP response
+}
+```
+
+---
+
+### Prompts API
+
+#### prompts.list
+
+List available prompts.
+
+```ts
+mcp.prompts.list(): Promise<Prompt[]>
+```
+
+**Returns:** Array of prompts with `name`, `description`, and `arguments`.
+
+#### prompts.get
+
+Get a prompt with arguments.
+
+```ts
+mcp.prompts.get(name: string, args?: Record<string, string>): Promise<PromptResult>
+```
+
+**Returns:** `PromptResult` with:
+
+```ts
+interface PromptResult {
+  messages: PromptMessage[];         // Array of messages
+  description?: string;              // Optional description
+}
+
+interface PromptMessage {
+  role: 'user' | 'assistant';
+  content: TextContent | ImageContent | EmbeddedResource;
+}
+```
+
+---
+
+### Session & Connection
+
+#### isConnected
+
+Check connection status.
+
+```ts
+mcp.isConnected(): boolean
+```
+
+#### sessionId
+
+Get the current session ID.
+
+```ts
+mcp.sessionId: string | undefined
+```
+
+#### serverInfo
+
+Get server information.
+
+```ts
+mcp.serverInfo: {
+  name: string;
+  version: string;
+}
+```
+
+#### protocolVersion
+
+Get the MCP protocol version.
+
+```ts
+mcp.protocolVersion: string
+```
+
+#### capabilities
+
+Get server capabilities.
+
+```ts
+mcp.capabilities: ServerCapabilities
+```
+
+#### hasCapability
+
+Check for a specific capability.
+
+```ts
+mcp.hasCapability(name: 'tools' | 'resources' | 'prompts'): boolean
+```
+
+#### authenticate
+
+Authenticate the client with a JWT token.
+
+```ts
+mcp.authenticate(token: string): Promise<void>
+```
+
+#### disconnect
+
+Disconnect from the server.
+
+```ts
+mcp.disconnect(): Promise<void>
+```
+
+---
+
+### Raw Protocol API
+
+#### raw.request
+
+Send a raw JSON-RPC request.
+
+```ts
+mcp.raw.request(request: JsonRpcRequest): Promise<JsonRpcResponse>
+```
+
+```ts
+interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id: number | string;
+  method: string;
+  params?: unknown;
+}
+
+interface JsonRpcResponse {
+  jsonrpc: '2.0';
+  id: number | string;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+```
+
+#### raw.notify
+
+Send a JSON-RPC notification (no response expected).
+
+```ts
+mcp.raw.notify(notification: JsonRpcNotification): Promise<void>
+```
+
+#### raw.sendRaw
+
+Send raw string data (for testing parse errors).
+
+```ts
+mcp.raw.sendRaw(data: string): Promise<JsonRpcResponse>
+```
+
+---
+
+### Logging & Tracing
+
+#### logs.all
+
+Get all captured logs.
+
+```ts
+mcp.logs.all(): LogEntry[]
+```
+
+#### logs.filter
+
+Filter logs by level.
+
+```ts
+mcp.logs.filter(level: 'debug' | 'info' | 'warn' | 'error'): LogEntry[]
+```
+
+#### logs.search
+
+Search logs by text.
+
+```ts
+mcp.logs.search(query: string): LogEntry[]
+```
+
+#### logs.clear
+
+Clear captured logs.
+
+```ts
+mcp.logs.clear(): void
+```
+
+#### trace.all
+
+Get all request traces.
+
+```ts
+mcp.trace.all(): RequestTrace[]
+```
+
+```ts
+interface RequestTrace {
+  method: string;
+  params: unknown;
+  response: unknown;
+  durationMs: number;
+  timestamp: Date;
+}
+```
+
+#### trace.last
+
+Get the last request trace.
+
+```ts
+mcp.trace.last(): RequestTrace | undefined
+```
+
+#### trace.clear
+
+Clear request traces.
+
+```ts
+mcp.trace.clear(): void
+```
+
+---
+
+## Auth Fixture
+
+The `auth` fixture generates JWT tokens for authentication testing.
+
+### createToken
+
+Create a valid JWT token.
+
+```ts
+auth.createToken(options: TokenOptions): Promise<string>
+```
+
+```ts
+interface TokenOptions {
+  sub: string;                              // Subject (required)
+  scopes?: string[];                        // OAuth scopes
+  email?: string;                           // Email claim
+  name?: string;                            // Name claim
+  claims?: Record<string, unknown>;         // Custom claims
+  expiresIn?: number;                       // Lifetime in seconds (default: 3600)
+}
+```
+
+### createExpiredToken
+
+Create an expired token for testing expiration handling.
+
+```ts
+auth.createExpiredToken(options: Omit<TokenOptions, 'expiresIn'>): Promise<string>
+```
+
+### createInvalidToken
+
+Create a token with an invalid signature.
+
+```ts
+auth.createInvalidToken(options: TokenOptions): string
+```
+
+### users
+
+Pre-built test user configurations.
+
+```ts
+auth.users: {
+  admin: { sub: 'test-admin', scopes: ['*'] };
+  user: { sub: 'test-user', scopes: ['read', 'write'] };
+  readOnly: { sub: 'test-readonly', scopes: ['read'] };
+}
+```
+
+### getJwks
+
+Get the public JWKS for token verification.
+
+```ts
+auth.getJwks(): Promise<JsonWebKeySet>
+```
+
+### getIssuer
+
+Get the token issuer.
+
+```ts
+auth.getIssuer(): string
+```
+
+### getAudience
+
+Get the token audience.
+
+```ts
+auth.getAudience(): string
+```
+
+---
+
+## Server Fixture
+
+The `server` fixture provides server control.
+
+### info
+
+Server information.
+
+```ts
+server.info: {
+  baseUrl: string;
+  port: number;
+  pid: number;
+}
+```
+
+### createClient
+
+Create an additional MCP client.
+
+```ts
+server.createClient(options?: ClientOptions): Promise<McpTestClient>
+```
+
+```ts
+interface ClientOptions {
+  transport?: 'sse' | 'streamable-http';
+  token?: string;
+}
+```
+
+### restart
+
+Restart the server.
+
+```ts
+server.restart(): Promise<void>
+```
+
+### getLogs
+
+Get server-side logs.
+
+```ts
+server.getLogs(): string[]
+```
+
+### clearLogs
+
+Clear server logs.
+
+```ts
+server.clearLogs(): void
+```
+
+---
+
+## Mock Registry
+
+The `mcp.mock` API for mocking MCP responses.
+
+### mock.add
+
+Add a mock definition.
+
+```ts
+mcp.mock.add(options: MockOptions): MockHandle
+```
+
+```ts
+interface MockOptions {
+  method: string;                           // MCP method to match
+  params?: Record<string, unknown>;         // Parameters to match (partial)
+  response: JsonRpcResponse;                // Response to return
+  times?: number;                           // Match count (default: unlimited)
+  delay?: number;                           // Response delay in ms
+}
+
+interface MockHandle {
+  callCount(): number;
+  calls(): MockCall[];
+  remove(): void;
+}
+```
+
+### mock.tool
+
+Convenience method for mocking tool responses.
+
+```ts
+mcp.mock.tool(name: string, response: unknown): MockHandle
+```
+
+### mock.toolError
+
+Mock a tool error.
+
+```ts
+mcp.mock.toolError(name: string, code: number, message: string): MockHandle
+```
+
+### mock.resource
+
+Mock a resource response.
+
+```ts
+mcp.mock.resource(uri: string, content: string | ResourceContent): MockHandle
+```
+
+### mock.clear
+
+Clear all mocks.
+
+```ts
+mcp.mock.clear(): void
+```
+
+---
+
+## Request Interceptors
+
+The `mcp.intercept` API for intercepting requests and responses.
+
+### intercept.request
+
+Intercept outgoing requests.
+
+```ts
+mcp.intercept.request(handler: RequestInterceptor): () => void
+```
+
+```ts
+type RequestInterceptor = (ctx: RequestContext) => InterceptAction;
+
+interface RequestContext {
+  request: JsonRpcRequest;
+  meta: { sessionId?: string };
+}
+
+type InterceptAction =
+  | { action: 'passthrough' }
+  | { action: 'modify'; request: JsonRpcRequest }
+  | { action: 'mock'; response: JsonRpcResponse }
+  | { action: 'error'; error: Error };
+```
+
+**Returns:** Function to remove the interceptor.
+
+### intercept.response
+
+Intercept incoming responses.
+
+```ts
+mcp.intercept.response(handler: ResponseInterceptor): () => void
+```
+
+```ts
+type ResponseInterceptor = (ctx: ResponseContext) => ResponseAction;
+
+interface ResponseContext {
+  request: JsonRpcRequest;
+  response: JsonRpcResponse;
+  durationMs: number;
+}
+
+type ResponseAction =
+  | { action: 'passthrough' }
+  | { action: 'modify'; response: JsonRpcResponse };
+```
+
+### intercept.delay
+
+Add delay to all requests.
+
+```ts
+mcp.intercept.delay(ms: number): () => void
+```
+
+**Returns:** Function to remove the delay.
+
+### intercept.failMethod
+
+Fail requests to a specific method.
+
+```ts
+mcp.intercept.failMethod(method: string, message: string): () => void
+```
+
+**Returns:** Function to remove the failure.
+
+---
+
+## HTTP Mock API
+
+The `httpMock` module for mocking external HTTP requests.
+
+### httpMock.interceptor
+
+Create an HTTP interceptor.
+
+```ts
+import { httpMock } from '@frontmcp/testing';
+
+const interceptor = httpMock.interceptor();
+```
+
+### Interceptor Methods
+
+#### get, post, put, delete
+
+Create method-specific mocks.
+
+```ts
+interceptor.get(url: UrlMatcher, response: unknown, options?: MockOptions): MockHandle
+interceptor.post(url: UrlMatcher, response: unknown, options?: MockOptions): MockHandle
+interceptor.put(url: UrlMatcher, response: unknown, options?: MockOptions): MockHandle
+interceptor.delete(url: UrlMatcher, response: unknown, options?: MockOptions): MockHandle
+```
+
+```ts
+type UrlMatcher = string | RegExp | ((url: string) => boolean);
+```
+
+#### any
+
+Match any HTTP method.
+
+```ts
+interceptor.any(url: UrlMatcher, response: unknown, options?: MockOptions): MockHandle
+```
+
+#### mock
+
+Full mock definition.
+
+```ts
+interceptor.mock(options: HttpMockOptions): MockHandle
+```
+
+```ts
+interface HttpMockOptions {
+  match: {
+    url: UrlMatcher;
+    method?: string | string[];
+    headers?: Record<string, string | RegExp>;
+    body?: unknown | ((body: unknown) => boolean);
+  };
+  response: HttpResponse;
+  times?: number;
+}
+
+interface HttpResponse {
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  delay?: number;
+}
+```
+
+#### allowPassthrough
+
+Allow unmatched requests to reach the network.
+
+```ts
+interceptor.allowPassthrough(enabled: boolean): void
+```
+
+#### assertDone
+
+Assert all one-time mocks were used.
+
+```ts
+interceptor.assertDone(): void
+```
+
+#### pending
+
+Get unused mocks.
+
+```ts
+interceptor.pending(): HttpMockOptions[]
+```
+
+#### restore
+
+Restore original fetch function.
+
+```ts
+interceptor.restore(): void
+```
+
+### MockHandle
+
+Returned by mock methods.
+
+```ts
+interface MockHandle {
+  callCount(): number;
+  calls(): HttpCall[];
+  waitForCalls(count: number, timeout?: number): Promise<HttpCall[]>;
+}
+
+interface HttpCall {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: unknown;
+}
+```
+
+---
+
+## Response Helpers
+
+### httpResponse
+
+Pre-built HTTP response creators.
+
+```ts
+import { httpResponse } from '@frontmcp/testing';
+
+httpResponse.json(data: unknown): HttpResponse
+httpResponse.text(text: string): HttpResponse
+httpResponse.html(html: string): HttpResponse
+httpResponse.notFound(): HttpResponse
+httpResponse.unauthorized(): HttpResponse
+httpResponse.forbidden(): HttpResponse
+httpResponse.serverError(message?: string): HttpResponse
+httpResponse.error(status: number, message: string): HttpResponse
+httpResponse.delayed(data: unknown, ms: number): HttpResponse
+```
+
+### mockResponse
+
+Pre-built MCP response creators.
+
+```ts
+import { mockResponse } from '@frontmcp/testing';
+
+mockResponse.success(result: unknown): JsonRpcResponse
+mockResponse.toolResult(content: Content[]): JsonRpcResponse
+mockResponse.toolsList(tools: Tool[]): JsonRpcResponse
+mockResponse.resourcesList(resources: Resource[]): JsonRpcResponse
+mockResponse.resourceRead(contents: ResourceContent[]): JsonRpcResponse
+mockResponse.error(code: number, message: string): JsonRpcResponse
+
+// Error shortcuts
+mockResponse.errors.methodNotFound(method: string): JsonRpcResponse
+mockResponse.errors.resourceNotFound(uri: string): JsonRpcResponse
+mockResponse.errors.invalidParams(message: string): JsonRpcResponse
+mockResponse.errors.unauthorized(): JsonRpcResponse
+```
+
+---
+
+## Custom Matchers
+
+All custom Jest matchers added by `@frontmcp/testing`.
+
+### Tool Matchers
+
+```ts
+expect(tools).toContainTool(name: string): void
+```
+
+### Result Matchers
+
+```ts
+expect(result).toBeSuccessful(): void
+expect(result).toBeError(code?: number): void
+```
+
+### Content Matchers
+
+```ts
+expect(result).toHaveTextContent(text?: string): void
+expect(result).toHaveImageContent(): void
+expect(result).toHaveResourceContent(): void
+expect(content).toHaveMimeType(mimeType: string): void
+```
+
+### Resource Matchers
+
+```ts
+expect(resources).toContainResource(uri: string): void
+expect(templates).toContainResourceTemplate(uriTemplate: string): void
+```
+
+### Prompt Matchers
+
+```ts
+expect(prompts).toContainPrompt(name: string): void
+expect(result).toHaveMessages(count: number): void
+expect(message).toHaveRole(role: 'user' | 'assistant'): void
+expect(message).toContainText(text: string): void
+```
+
+### JSON-RPC Matchers
+
+```ts
+expect(response).toBeValidJsonRpc(): void
+expect(response).toHaveResult(): void
+expect(response).toHaveError(): void
+expect(response).toHaveErrorCode(code: number): void
+```
+
+---
+
+## Error Codes
+
+Common MCP error codes for use in tests.
+
+| Code     | Name               | Description                |
+| -------- | ------------------ | -------------------------- |
+| `-32700` | Parse error        | Invalid JSON               |
+| `-32600` | Invalid request    | Invalid JSON-RPC structure |
+| `-32601` | Method not found   | Unknown method             |
+| `-32602` | Invalid params     | Invalid parameters         |
+| `-32603` | Internal error     | Server error               |
+| `-32001` | Unauthorized       | Authentication required    |
+| `-32002` | Resource not found | Resource doesn't exist     |
+| `-32800` | Request cancelled  | Request was cancelled      |
+
+---
+
+## Type Exports
+
+All types are exported for TypeScript usage.
+
+```ts
+import type {
+  // Test types
+  TestOptions,
+  TestFixtures,
+
+  // Client types
+  McpTestClient,
+  ToolResult,
+  ResourceContent,
+  PromptResult,
+
+  // Auth types
+  AuthFixture,
+  TokenOptions,
+
+  // Server types
+  ServerFixture,
+  ClientOptions,
+
+  // Mock types
+  MockOptions,
+  MockHandle,
+  HttpMockOptions,
+  HttpResponse,
+
+  // Interceptor types
+  RequestInterceptor,
+  ResponseInterceptor,
+  InterceptAction,
+  ResponseAction,
+} from '@frontmcp/testing';
+```

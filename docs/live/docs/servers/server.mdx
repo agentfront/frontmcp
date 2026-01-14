@@ -72,22 +72,19 @@ Everything else is optional with sensible defaults.
   transport?: {
     // Session lifecycle
     sessionMode?: 'stateful' | 'stateless',     // default 'stateful'
-    transportIdMode?: 'uuid' | 'jwt',           // default 'uuid'
     platformDetection?: { customOnly?: boolean },
 
-    // Protocol switches
-    enableLegacySSE?: false,
-    enableSseListener?: true,
-    enableStreamableHttp?: true,
-    enableStatelessHttp?: false,
-    enableStatefulHttp?: false,
-    requireSessionForStreamable?: true,
+    // Protocol configuration (use preset or custom config)
+    protocol?: 'legacy' | 'modern' | 'stateless-api' | 'full' | ProtocolConfig,
+    // default: 'legacy' (SSE + streamable + legacy SSE support)
 
-    // Session persistence (Redis-backed)
-    persistence?: {
-      enabled?: false,
+    // Session persistence (Redis-backed, auto-enabled when redis is configured)
+    persistence?: false | {
       defaultTtlMs?: 3600000,   // 1 hour
     },
+
+    // Distributed mode
+    distributedMode?: boolean | 'auto',  // default: false
   },
 
   /** Shared Redis config (NEW in v0.6) */
@@ -161,29 +158,25 @@ http: {
 **New in v0.6**: Transport configuration has moved from `auth.transport` and `session` to a dedicated top-level `transport` property. This separates transport/session lifecycle concerns from authentication. See [Migration](#migration-from-authttransport) below.
 </Info>
 
-The `transport` config controls session lifecycle, protocol switches, and session persistence. Configure it at the server level or per-app when using `splitByApp: true`.
+The `transport` config controls session lifecycle, protocol presets, and session persistence. Configure it at the server level or per-app when using `splitByApp: true`.
 
 ```ts
 @FrontMcp({
   transport: {
     // Session lifecycle
     sessionMode: 'stateful',
-    transportIdMode: 'uuid',
     platformDetection: { customOnly: false },
 
-    // Protocol switches
-    enableLegacySSE: false,
-    enableSseListener: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    enableStatefulHttp: false,
-    requireSessionForStreamable: true,
+    // Protocol preset (or custom config)
+    protocol: 'legacy',  // default - SSE + streamable + legacy SSE support
 
-    // Session persistence
+    // Session persistence (auto-enabled when top-level redis is configured)
     persistence: {
-      enabled: true,
       defaultTtlMs: 3600000,
     },
+
+    // Distributed mode for serverless/multi-instance deployments
+    distributedMode: false,
   },
 })
 ```
@@ -193,64 +186,83 @@ The `transport` config controls session lifecycle, protocol switches, and sessio
 | Option              | Default      | Description                                                                 |
 | ------------------- | ------------ | --------------------------------------------------------------------------- |
 | `sessionMode`       | `'stateful'` | `'stateful'` (server-side store) or `'stateless'` (JWT-based)               |
-| `transportIdMode`   | `'uuid'`     | `'uuid'` (per-node identity) or `'jwt'` (signed, distributed)               |
 | `platformDetection` | `undefined`  | Platform detection config; set `customOnly: true` to skip built-in mappings |
 
 <CodeGroup>
 ```ts Stateful Sessions
 transport: {
-  sessionMode: 'stateful',    // Server-side session store
-  transportIdMode: 'uuid',    // Random UUID per transport
+  sessionMode: 'stateful',    // Server-side session store (default)
 }
 ```
 
 ```ts Stateless Sessions
 transport: {
   sessionMode: 'stateless',   // JWT-based sessions (client-portable)
-  transportIdMode: 'jwt',     // Signed transport IDs for distributed setups
 }
 ```
 
 ```ts Dynamic (per issuer)
 transport: {
   sessionMode: (issuer) => issuer === 'internal' ? 'stateful' : 'stateless',
-  transportIdMode: (issuer) => issuer === 'internal' ? 'uuid' : 'jwt',
 }
 ```
 
 </CodeGroup>
 
-### Protocol Switches
+### Protocol Presets
 
-Choose which MCP transports to enable based on your deployment:
+Use protocol presets for simplified configuration, or provide a custom config object for fine-grained control:
 
-| Option                        | Default | When to enable                                          | Notes                                                                            |
-| ----------------------------- | ------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `enableStreamableHttp`        | `true`  | Modern MCP clients (Claude Desktop, Cursor, Rendezvous) | Primary transport; streams JSON-RPC over HTTP.                                   |
-| `enableStatefulHttp`          | `false` | Local previews, OAuth consent screens, Jest suites      | JSON-only endpoint for requests without SSE—handy for testing and health checks. |
-| `enableStatelessHttp`         | `false` | Public mode or CI agents that cannot run `initialize`   | Singleton transports that skip initialization handshake.                         |
-| `enableSseListener`           | `true`  | Manual SSE subscribers or dashboards                    | Controls `GET /message` endpoint. Disable to reduce long-lived sockets.          |
-| `enableLegacySSE`             | `false` | Supporting pre-Streamable clients temporarily           | Legacy HTTP + SSE combo—plan to remove once clients upgrade.                     |
-| `requireSessionForStreamable` | `true`  | Public demos or scripted tests                          | Set `false` to let Streamable HTTP requests bootstrap themselves.                |
+| Preset          | Description                                      | Legacy SSE | SSE | Streamable | JSON | Stateless | Strict Session |
+| --------------- | ------------------------------------------------ | ---------- | --- | ---------- | ---- | --------- | -------------- |
+| `legacy`        | **Default** - Modern + legacy SSE support        | ✅         | ✅  | ✅         | ❌   | ❌        | ✅             |
+| `modern`        | SSE + streamable HTTP with strict sessions       | ❌         | ✅  | ✅         | ❌   | ❌        | ✅             |
+| `stateless-api` | No sessions, pure request/response               | ❌         | ❌  | ❌         | ❌   | ✅        | ❌             |
+| `full`          | All protocols enabled, maximum compatibility     | ✅         | ✅  | ✅         | ✅   | ✅        | ❌             |
 
-<Tip>
-Leave `enableStatelessHttp` off in production unless you fully trust the client surface. Stateless transports reuse process-wide connections, which is perfect for CI but can bypass fine-grained session teardown.
-</Tip>
-
-```ts
+<CodeGroup>
+```ts Using a Preset
 @FrontMcp({
   transport: {
-    enableStreamableHttp: true,
-    enableStatefulHttp: true,      // JSON fallback for previews
-    enableStatelessHttp: false,    // keep anonymous traffic scoped
-    requireSessionForStreamable: false,
+    protocol: 'legacy',  // Default - backwards compatible
   },
 })
 ```
 
+```ts Custom Protocol Config
+@FrontMcp({
+  transport: {
+    protocol: {
+      sse: true,
+      streamable: true,
+      json: true,        // Enable JSON-only responses
+      stateless: false,
+      legacy: true,
+      strictSession: false,
+    },
+  },
+})
+```
+</CodeGroup>
+
+### Protocol Options (for custom config)
+
+| Option          | Default (legacy) | Description                                                |
+| --------------- | ---------------- | ---------------------------------------------------------- |
+| `sse`           | `true`           | Enable SSE listener for server-initiated messages          |
+| `streamable`    | `true`           | Enable streamable HTTP transport (POST with SSE response)  |
+| `json`          | `false`          | Enable JSON-only responses (stateful HTTP)                 |
+| `stateless`     | `false`          | Enable stateless HTTP mode (no session required)           |
+| `legacy`        | `true`           | Enable legacy SSE transport for older clients              |
+| `strictSession` | `true`           | Require session ID for streamable HTTP                     |
+
+<Tip>
+Use `protocol: 'legacy'` (the default) for maximum backwards compatibility with older MCP clients. Use `protocol: 'modern'` when you only need to support newer Streamable HTTP clients.
+</Tip>
+
 ### Session Persistence
 
-Enable Redis-backed session persistence for distributed deployments or session recovery:
+Session persistence is **automatically enabled** when you configure top-level `redis`. Sessions are persisted to Redis/Vercel KV and transports can be recreated after server restart.
 
 ```ts
 @FrontMcp({
@@ -258,10 +270,29 @@ Enable Redis-backed session persistence for distributed deployments or session r
     host: 'redis.example.com',
     port: 6379,
   },
+  // persistence auto-enabled using global redis config
+})
+```
+
+To explicitly disable persistence when redis is configured:
+
+```ts
+@FrontMcp({
+  redis: { host: 'localhost' },
+  transport: {
+    persistence: false,  // Explicitly disable
+  },
+})
+```
+
+To customize persistence TTL:
+
+```ts
+@FrontMcp({
+  redis: { host: 'localhost' },
   transport: {
     persistence: {
-      enabled: true,
-      defaultTtlMs: 7200000, // 2 hours
+      defaultTtlMs: 7200000, // 2 hours (default: 1 hour)
     },
   },
 })
@@ -269,11 +300,10 @@ Enable Redis-backed session persistence for distributed deployments or session r
 
 | Option         | Default   | Description                          |
 | -------------- | --------- | ------------------------------------ |
-| `enabled`      | `false`   | Enable session persistence           |
 | `defaultTtlMs` | `3600000` | Session TTL in milliseconds (1 hour) |
 
 <Info>
-Session persistence uses the top-level `redis` config. Configure `redis` once and reference it from both `transport.persistence` and `auth.tokenStorage`.
+Session persistence uses the top-level `redis` config. Configure `redis` once and it's automatically shared by `transport.persistence` and `auth.tokenStorage`.
 </Info>
 
 You can apply different transport policies per app when `splitByApp: true`. Sensitive apps stay stream-only with strict session IDs, while demo or health-check apps can enable stateful/stateless HTTP for easier automation.
@@ -326,7 +356,7 @@ The `redis` config is automatically used by:
     keyPrefix: 'myapp:',
   },
   transport: {
-    persistence: { enabled: true },
+    persistence: { defaultTtlMs: 3600000 },
   },
   auth: {
     mode: 'orchestrated',
@@ -351,7 +381,6 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
 @FrontMcp({
   session: {
     sessionMode: 'stateful',
-    transportIdMode: 'uuid',
   },
   auth: {
     mode: 'orchestrated',
@@ -375,12 +404,8 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
   },
   transport: {
     sessionMode: 'stateful',
-    transportIdMode: 'uuid',
-    enableStreamableHttp: true,
-    enableStatefulHttp: true,
-    persistence: {
-      enabled: true,
-    },
+    protocol: 'full',  // Or use custom: { streamable: true, json: true, ... }
+    // persistence auto-enabled when redis is configured
   },
   auth: {
     mode: 'orchestrated',
@@ -396,16 +421,19 @@ FrontMCP automatically migrates old configs at runtime with a deprecation warnin
 | Old Path                                     | New Path                                |
 | -------------------------------------------- | --------------------------------------- |
 | `session.sessionMode`                        | `transport.sessionMode`                 |
-| `session.transportIdMode`                    | `transport.transportIdMode`             |
 | `session.platformDetection`                  | `transport.platformDetection`           |
-| `auth.transport.enableLegacySSE`             | `transport.enableLegacySSE`             |
-| `auth.transport.enableSseListener`           | `transport.enableSseListener`           |
-| `auth.transport.enableStreamableHttp`        | `transport.enableStreamableHttp`        |
-| `auth.transport.enableStatelessHttp`         | `transport.enableStatelessHttp`         |
-| `auth.transport.enableStatefulHttp`          | `transport.enableStatefulHttp`          |
-| `auth.transport.requireSessionForStreamable` | `transport.requireSessionForStreamable` |
+| `auth.transport.enableLegacySSE`             | `transport.protocol.legacy`             |
+| `auth.transport.enableSseListener`           | `transport.protocol.sse`                |
+| `auth.transport.enableStreamableHttp`        | `transport.protocol.streamable`         |
+| `auth.transport.enableStatelessHttp`         | `transport.protocol.stateless`          |
+| `auth.transport.enableStatefulHttp`          | `transport.protocol.json`               |
+| `auth.transport.requireSessionForStreamable` | `transport.protocol.strictSession`      |
 | `auth.transport.recreation`                  | `transport.persistence`                 |
 | `auth.transport.recreation.redis`            | `redis` (top-level)                     |
+
+<Tip>
+Instead of individual flags, use a **protocol preset**: `'legacy'` (default), `'modern'`, `'stateless-api'`, or `'full'`.
+</Tip>
 
 ---
 
@@ -516,9 +544,9 @@ auth: {
 - Start with minimal config and add options as needed
 - Use `splitByApp: true` for multi-tenant deployments
 - Use top-level `transport` config (not `auth.transport` or `session`)
-- Configure `redis` at top-level for shared use across features
+- Use protocol presets (`'legacy'`, `'modern'`, etc.) instead of individual flags
+- Configure `redis` at top-level for shared use across features (auto-enables persistence)
 - Use `stateful` session mode with Redis for production deployments
-- Enable `persistence` for distributed or high-availability setups
 - Set log level to `Info` or higher in production
 
 **Don't:**
@@ -527,7 +555,7 @@ auth: {
 - Use deprecated `auth.transport` or `session` — migrate to `transport`
 - Disable `serve` unless you're managing bootstrap manually
 - Use `stateless` session mode with short-lived upstream tokens
-- Enable `enableStatelessHttp` in production without trust boundaries
+- Use `protocol: 'stateless-api'` in production without trust boundaries
 - Leave `enableConsole: true` in containerized production (use transports)
 
 ---

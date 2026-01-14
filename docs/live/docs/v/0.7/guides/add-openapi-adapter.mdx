@@ -1,0 +1,532 @@
+---
+title: Add OpenAPI Adapter
+slug: guides/add-openapi-adapter
+description: Generate MCP tools automatically from an OpenAPI specification
+icon: file-code
+---
+
+The OpenAPI Adapter automatically converts REST API endpoints defined in an OpenAPI 3.x specification into fully-functional MCP tools. This guide walks you through adding the adapter to your app.
+
+## What You'll Build
+
+By the end of this guide, you'll have:
+
+- ✅ An app that automatically generates tools from an OpenAPI spec
+- ✅ Type-safe input validation for all API endpoints
+- ✅ Authentication configured for API requests
+- ✅ Tools that inherit all your app-level plugins and providers
+
+<Tip>
+  The OpenAPI Adapter is perfect for quickly exposing REST APIs to AI agents without writing custom tool code for each
+  endpoint.
+</Tip>
+
+---
+
+## Prerequisites
+
+- A FrontMCP project initialized ([see Installation](/docs/getting-started/installation))
+- An OpenAPI 3.x specification (URL or local file)
+- Basic understanding of REST APIs
+
+---
+
+## Step 1: Install the Adapter
+
+<CodeGroup>
+
+```bash npm
+npm install @frontmcp/adapters
+```
+
+```bash pnpm
+pnpm add @frontmcp/adapters
+```
+
+```bash yarn
+yarn add @frontmcp/adapters
+```
+
+</CodeGroup>
+
+---
+
+## Step 2: Add Adapter to Your App
+
+Create or update your app to include the OpenAPI adapter:
+
+<CodeGroup>
+
+```ts Basic usage
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP App',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'expense-api',
+      baseUrl: 'https://api.example.com',
+      url: 'https://api.example.com/openapi.json',
+    }),
+  ],
+})
+export default class ExpenseApp {}
+```
+
+```ts Local spec file
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+import spec from './openapi.json';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP App',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'expense-api',
+      baseUrl: 'https://api.example.com',
+      spec: spec, // Direct JSON import supported
+    }),
+  ],
+})
+export default class ExpenseApp {}
+```
+
+```ts With authentication
+import { App } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+
+@App({
+  id: 'expense',
+  name: 'Expense MCP App',
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'expense-api',
+      baseUrl: 'https://api.example.com',
+      url: 'https://api.example.com/openapi.json',
+      additionalHeaders: {
+        'x-api-key': process.env.API_KEY!,
+      },
+    }),
+  ],
+})
+export default class ExpenseApp {}
+```
+
+</CodeGroup>
+
+---
+
+## Step 3: Configure Your Server
+
+Add your app to the FrontMCP server:
+
+```ts src/main.ts
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+import ExpenseApp from './apps/expense.app';
+
+@FrontMcp({
+  info: { name: 'Expense Server', version: '1.0.0' },
+  apps: [ExpenseApp],
+  http: { port: 3000 },
+  logging: { level: LogLevel.INFO },
+})
+export default class Server {}
+```
+
+---
+
+## Step 4: Run and Test
+
+<Steps>
+  <Step title="Start the server">
+    ```bash
+    npm run dev
+    ```
+
+    The server will load the OpenAPI spec and generate tools for each operation.
+
+  </Step>
+
+<Step title="Verify tools are loaded">
+  Check the console output for messages like: ``` [INFO] Generated 15 tools from expense-api [INFO] Server listening on
+  http://localhost:3000 ```
+</Step>
+
+  <Step title="Test with Inspector">
+    ```bash
+    npm run inspect
+    ```
+
+    Open the MCP Inspector and you'll see all generated tools from your API spec!
+
+  </Step>
+</Steps>
+
+---
+
+## Understanding Generated Tools
+
+Each OpenAPI operation becomes a tool with:
+
+### Tool Naming
+
+Tools are named using the pattern: `{adapter-name}:{method}_{path}`
+
+For example:
+
+- `GET /users` → `expense-api:get_users`
+- `POST /expenses` → `expense-api:post_expenses`
+- `GET /expenses/{id}` → `expense-api:get_expenses_id`
+
+<Tip>If your OpenAPI spec includes `operationId`, that will be used instead of the generated name.</Tip>
+
+### Input Schema
+
+The adapter automatically converts OpenAPI parameters to Zod schemas:
+
+```yaml OpenAPI spec
+paths:
+  /expenses:
+    post:
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                description:
+                  type: string
+```
+
+Becomes a tool with this input:
+
+```ts
+{
+  category: string,    // from query parameter
+  amount: number,      // from request body
+  description: string  // from request body
+}
+```
+
+---
+
+## Advanced Configuration
+
+<Tip>
+  For comprehensive documentation on all configuration options including `inputTransforms`, `toolTransforms`, `descriptionMode`, and the `x-frontmcp` OpenAPI extension, see the [full OpenAPI Adapter documentation](/docs/adapters/openapi-adapter).
+</Tip>
+
+### Filter Operations
+
+Only include specific endpoints:
+
+```ts
+OpenapiAdapter.init({
+  name: 'billing-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  generateOptions: {
+    // Only include operations starting with /invoices or /customers
+    filterFn: (op) => op.path.startsWith('/invoices') || op.path.startsWith('/customers'),
+  },
+});
+```
+
+### User-Based Authentication
+
+Use authenticated user context for API requests:
+
+```ts
+OpenapiAdapter.init({
+  name: 'user-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  headersMapper: (authInfo, headers) => {
+    // Add user's token to API requests
+    if (authInfo.token) {
+      headers.set('authorization', `Bearer ${authInfo.token}`);
+    }
+    return headers;
+  },
+});
+```
+
+### Multi-Tenant Setup
+
+Include tenant ID from user context:
+
+```ts
+OpenapiAdapter.init({
+  name: 'tenant-api',
+  baseUrl: 'https://api.example.com',
+  url: 'https://api.example.com/openapi.json',
+  headersMapper: (authInfo, headers) => {
+    // Add tenant ID header
+    if (authInfo.user?.tenantId) {
+      headers.set('x-tenant-id', authInfo.user.tenantId);
+    }
+    return headers;
+  },
+  bodyMapper: (authInfo, body) => {
+    // Add tenant ID to all request bodies
+    return {
+      ...body,
+      tenantId: authInfo.user?.tenantId,
+    };
+  },
+});
+```
+
+---
+
+## How It Works
+
+<Steps>
+  <Step title="Load Spec">
+    The adapter fetches and parses the OpenAPI specification from the URL or uses the provided spec object
+  </Step>
+
+  <Step title="Generate Tools">
+    Each operation in the spec becomes an MCP tool with: - Automatic input schema (path params, query params, headers,
+    body) - Type-safe validation using Zod - Description from the operation summary
+  </Step>
+
+  <Step title="Register Tools">
+    Generated tools are registered with your app and inherit: - App-level plugins (caching, logging, etc.) - App-level
+    providers - App-level authentication
+  </Step>
+
+  <Step title="Execute Requests">
+    When a tool is called:
+    1. Input is validated against the schema
+    2. Headers/body are mapped (if configured)
+    3. HTTP request is made to the API
+    4. Response is parsed and returned
+  </Step>
+</Steps>
+
+---
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Expose multiple APIs">
+    Add multiple adapters to one app:
+
+    ```ts
+    @App({
+      id: 'integrations',
+      name: 'Third-Party Integrations',
+      adapters: [
+        OpenapiAdapter.init({
+          name: 'github',
+          baseUrl: 'https://api.github.com',
+          url: 'https://api.github.com/openapi.json',
+        }),
+        OpenapiAdapter.init({
+          name: 'slack',
+          baseUrl: 'https://api.slack.com',
+          url: 'https://api.slack.com/openapi.json',
+        }),
+      ],
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Combine with custom tools">
+    Mix generated and hand-written tools:
+
+    ```ts
+    import CustomTool from './tools/custom.tool';
+
+    @App({
+      id: 'hybrid',
+      name: 'Hybrid App',
+      tools: [CustomTool], // Hand-written
+      adapters: [
+        OpenapiAdapter.init({...}), // Auto-generated
+      ],
+    })
+    ```
+
+  </Accordion>
+
+  <Accordion title="Apply plugins to generated tools">
+    Generated tools inherit app plugins:
+
+    ```ts
+    import CachePlugin from '@frontmcp/plugins/cache';
+
+    @App({
+      id: 'cached-api',
+      name: 'Cached API',
+      plugins: [
+        CachePlugin.init({
+          type: 'redis',
+          defaultTTL: 300,
+        }),
+      ],
+      adapters: [
+        OpenapiAdapter.init({...}),
+      ],
+    })
+    ```
+
+    Now all generated tools can use caching!
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No tools generated">
+    **Possible causes:**
+    - Invalid OpenAPI spec URL
+    - Spec is OpenAPI 2.0 (only 3.x supported)
+    - All operations filtered out by `filterFn`
+
+    **Solutions:**
+    - Verify the URL is accessible
+    - Convert OpenAPI 2.0 to 3.x using [Swagger Editor](https://editor.swagger.io/)
+    - Check your filter configuration
+
+  </Accordion>
+
+  <Accordion title="Authentication errors (401)">
+    **Possible causes:**
+    - Missing or invalid API credentials
+    - Headers not properly mapped
+
+    **Solutions:**
+    - Verify `additionalHeaders` or `headersMapper` configuration
+    - Check that `authInfo.token` contains the expected value
+    - Test the API directly with curl/Postman first
+
+  </Accordion>
+
+  <Accordion title="Tools have unexpected inputs">
+    **Possible cause:**
+    - OpenAPI spec has complex parameter definitions
+
+    **Solution:**
+    - Use `inputSchemaMapper` to transform the schema:
+
+    ```ts
+    generateOptions: {
+      inputSchemaMapper: (schema) => {
+        // Remove or modify fields
+        delete schema.properties.internalField;
+        return schema;
+      },
+    }
+    ```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Full OpenAPI Adapter Docs" icon="book" href="/docs/adapters/openapi-adapter">
+    Explore all configuration options and advanced features
+  </Card>
+
+<Card title="Authentication Setup" icon="lock" href="/docs/servers/authentication/overview">
+  Learn how to configure authentication for your APIs
+</Card>
+
+<Card title="Plugin System" icon="puzzle-piece" href="/docs/servers/extensibility/plugins">
+  Add caching, logging, and other features to generated tools
+</Card>
+
+  <Card title="Demo App" icon="code" href="https://github.com/agentfront/frontmcp/tree/main/apps/demo/src/apps/expenses">
+    See a complete example using the OpenAPI adapter
+  </Card>
+</CardGroup>
+
+---
+
+## Complete Example
+
+Here's a full working example with authentication and caching:
+
+```ts
+import { FrontMcp, App, LogLevel } from '@frontmcp/sdk';
+import { OpenapiAdapter } from '@frontmcp/adapters';
+import CachePlugin from '@frontmcp/plugins/cache';
+
+@App({
+  id: 'expense',
+  name: 'Expense Management',
+  plugins: [
+    CachePlugin.init({
+      type: 'redis',
+      defaultTTL: 300, // 5 minutes
+      config: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
+  ],
+  adapters: [
+    OpenapiAdapter.init({
+      name: 'expense-api',
+      baseUrl: process.env.API_BASE_URL!,
+      url: process.env.OPENAPI_SPEC_URL!,
+      headersMapper: (authInfo, headers) => {
+        // Add user's JWT token
+        if (authInfo.token) {
+          headers.set('authorization', `Bearer ${authInfo.token}`);
+        }
+        // Add tenant ID
+        if (authInfo.user?.tenantId) {
+          headers.set('x-tenant-id', authInfo.user.tenantId);
+        }
+        return headers;
+      },
+      bodyMapper: (authInfo, body) => {
+        // Add user context to mutations
+        return {
+          ...body,
+          createdBy: authInfo.user?.id,
+          tenantId: authInfo.user?.tenantId,
+        };
+      },
+      generateOptions: {
+        // Only expose expense-related endpoints
+        filterFn: (op) => op.path.startsWith('/expenses'),
+      },
+    }),
+  ],
+})
+class ExpenseApp {}
+
+@FrontMcp({
+  info: { name: 'Expense Server', version: '1.0.0' },
+  apps: [ExpenseApp],
+  http: { port: 3000 },
+  logging: { level: LogLevel.INFO },
+  auth: {
+    type: 'remote',
+    name: 'auth-provider',
+    baseUrl: process.env.AUTH_BASE_URL!,
+  },
+})
+export default class Server {}
+```

@@ -1,0 +1,269 @@
+---
+title: Theme System
+sidebarTitle: Overview
+icon: paintbrush
+description: FrontMCP UI includes a comprehensive theming system for customizing the appearance of your widgets. The default theme uses a GitHub/OpenAI-inspired gray-black aesthetic.
+---
+
+## Default Theme
+
+The default theme (`GITHUB_OPENAI_THEME`) provides:
+
+- **Colors**: Gray-black monochromatic palette with blue accent
+- **Typography**: System fonts with fallbacks
+- **Spacing**: Consistent padding and margin scale
+- **Shadows**: Subtle elevation shadows
+- **Radius**: Rounded corners for modern appearance
+
+```typescript
+import { DEFAULT_THEME, GITHUB_OPENAI_THEME } from '@frontmcp/uipack/theme';
+
+// DEFAULT_THEME is an alias for GITHUB_OPENAI_THEME
+console.log(DEFAULT_THEME.colors.semantic.primary); // '#24292f'
+```
+
+## Theme Structure
+
+A theme configuration has several sections:
+
+```typescript
+interface ThemeConfig {
+  name: string;              // Theme identifier
+  colors: ThemeColors;       // Color palette
+  typography: ThemeTypography; // Fonts and sizes
+  spacing: ThemeSpacing;     // Spacing scale
+  radius: ThemeRadius;       // Border radius values
+  shadows: ThemeShadows;     // Box shadows
+  components?: ComponentTokens; // Component-specific tokens
+  cdn?: ThemeCdnConfig;      // External resources
+}
+```
+
+## Colors
+
+### Semantic Colors
+
+Colors with meaning:
+
+```typescript
+const colors = {
+  semantic: {
+    primary: '#24292f',    // Primary brand color
+    secondary: '#57606a',  // Secondary actions
+    accent: '#0969da',     // Accent/highlight
+    success: '#1a7f37',    // Success states
+    warning: '#9a6700',    // Warning states
+    danger: '#cf222e',     // Error/danger states
+    info: '#0550ae',       // Informational
+  },
+};
+```
+
+### Surface Colors
+
+Background colors:
+
+```typescript
+const colors = {
+  surface: {
+    background: '#ffffff',   // Page background
+    foreground: '#ffffff',   // Card/elevated surfaces
+    muted: '#f6f8fa',        // Muted backgrounds
+    subtle: '#f3f4f6',       // Subtle contrast
+  },
+};
+```
+
+### Text Colors
+
+Typography colors:
+
+```typescript
+const colors = {
+  text: {
+    primary: '#24292f',      // Main text
+    secondary: '#57606a',    // Secondary text
+    muted: '#6e7781',        // Muted text
+    inverse: '#ffffff',      // Text on dark backgrounds
+    link: '#0969da',         // Link text
+  },
+};
+```
+
+### Border Colors
+
+```typescript
+const colors = {
+  border: {
+    default: '#d0d7de',      // Default borders
+    strong: '#8c959f',       // Emphasized borders
+    muted: '#e1e4e8',        // Subtle borders
+  },
+};
+```
+
+## Typography
+
+### Font Families
+
+```typescript
+const typography = {
+  families: {
+    sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    mono: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+    heading: 'inherit',  // Uses sans by default
+  },
+};
+```
+
+### Font Sizes
+
+```typescript
+const typography = {
+  sizes: {
+    xs: '0.75rem',    // 12px
+    sm: '0.875rem',   // 14px
+    base: '1rem',     // 16px
+    lg: '1.125rem',   // 18px
+    xl: '1.25rem',    // 20px
+    '2xl': '1.5rem',  // 24px
+    '3xl': '1.875rem', // 30px
+    '4xl': '2.25rem', // 36px
+  },
+};
+```
+
+### Font Weights
+
+```typescript
+const typography = {
+  weights: {
+    normal: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+  },
+};
+```
+
+## Spacing
+
+Consistent spacing scale:
+
+```typescript
+const spacing = {
+  0: '0',
+  1: '0.25rem',  // 4px
+  2: '0.5rem',   // 8px
+  3: '0.75rem',  // 12px
+  4: '1rem',     // 16px
+  5: '1.25rem',  // 20px
+  6: '1.5rem',   // 24px
+  8: '2rem',     // 32px
+  10: '2.5rem', // 40px
+  12: '3rem',   // 48px
+  16: '4rem',   // 64px
+};
+```
+
+## Border Radius
+
+```typescript
+const radius = {
+  none: '0',
+  sm: '0.25rem',   // 4px
+  md: '0.375rem',  // 6px
+  lg: '0.5rem',    // 8px
+  xl: '0.75rem',   // 12px
+  '2xl': '1rem',   // 16px
+  full: '9999px',  // Circular
+};
+```
+
+## Shadows
+
+```typescript
+const shadows = {
+  none: 'none',
+  sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
+  md: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+  lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+  xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+};
+```
+
+## Using Themes
+
+### In Layouts
+
+```typescript
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { DEFAULT_THEME } from '@frontmcp/uipack/theme';
+
+const html = baseLayout({
+  content: '...',
+  theme: DEFAULT_THEME,
+});
+```
+
+### In Tool UI
+
+```typescript
+import { createTheme } from '@frontmcp/uipack/theme';
+
+const customTheme = createTheme({
+  name: 'my-brand',
+  colors: {
+    semantic: { primary: '#4f46e5' },
+  },
+});
+
+@Tool({
+  name: 'my_tool',
+  ui: {
+    template: (ctx) => baseLayout({
+      content: card('...'),
+      theme: customTheme,
+    }),
+  },
+})
+```
+
+## CSS Variables
+
+The theme is applied via CSS variables:
+
+```css
+:root {
+  --color-primary: #24292f;
+  --color-secondary: #57606a;
+  --color-accent: #0969da;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-danger: #cf222e;
+  --color-background: #ffffff;
+  --color-text-primary: #24292f;
+  --color-text-secondary: #57606a;
+  --color-border: #d0d7de;
+  /* ... more variables */
+}
+```
+
+Use in your templates:
+
+```html
+<div class="bg-primary text-white">Primary background</div>
+<div class="text-text-secondary">Secondary text</div>
+<div class="border-border">Default border</div>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="sliders" href="/docs/ui/theming/customization">
+    Create custom themes
+  </Card>
+  <Card title="Dark Mode" icon="moon" href="/docs/ui/theming/dark-mode">
+    Add dark mode support
+  </Card>
+</CardGroup>

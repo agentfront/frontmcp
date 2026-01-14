@@ -1,0 +1,366 @@
+---
+title: Layout Templates
+sidebarTitle: Templates
+icon: clone
+description: FrontMCP UI includes pre-built layout templates for common widget patterns. These combine the base layout with structural components.
+---
+
+## Dashboard Layout
+
+A multi-panel dashboard with stats and content areas:
+
+```typescript
+import { dashboardLayout } from '@frontmcp/ui/layouts';
+
+const html = dashboardLayout({
+  title: 'Analytics Dashboard',
+  stats: [
+    { label: 'Total Users', value: '12,345', change: '+12%', trend: 'up' },
+    { label: 'Revenue', value: '$45,678', change: '+8%', trend: 'up' },
+    { label: 'Orders', value: '892', change: '-3%', trend: 'down' },
+  ],
+  mainContent: chartHtml,
+  sidebarContent: recentActivityHtml,
+});
+```
+
+### Dashboard Options
+
+```typescript
+dashboardLayout({
+  title: string,
+  subtitle?: string,
+  stats?: Array<{
+    label: string,
+    value: string | number,
+    change?: string,
+    trend?: 'up' | 'down' | 'neutral',
+    icon?: string,
+  }>,
+  mainContent: string,
+  sidebarContent?: string,
+  actions?: string,  // Header action buttons
+  theme?: ThemeConfig,
+})
+```
+
+## Detail Layout
+
+For displaying detailed information about a single item:
+
+```typescript
+import { detailLayout } from '@frontmcp/ui/layouts';
+
+const html = detailLayout({
+  title: 'Order #12345',
+  subtitle: 'Placed on March 15, 2025',
+  status: badge('Shipped', { variant: 'success' }),
+  metadata: [
+    { label: 'Customer', value: 'John Doe' },
+    { label: 'Email', value: 'john@example.com' },
+    { label: 'Total', value: '$149.99' },
+  ],
+  content: orderItemsHtml,
+  actions: buttonGroup([
+    button('Track Order'),
+    button('Contact Support', { variant: 'outline' }),
+  ]),
+});
+```
+
+### Detail Options
+
+```typescript
+detailLayout({
+  title: string,
+  subtitle?: string,
+  status?: string,        // Badge HTML
+  metadata?: Array<{
+    label: string,
+    value: string,
+  }>,
+  content: string,
+  actions?: string,
+  theme?: ThemeConfig,
+})
+```
+
+## List Layout
+
+For displaying lists of items with search and filters:
+
+```typescript
+import { listLayout } from '@frontmcp/ui/layouts';
+
+const html = listLayout({
+  title: 'Users',
+  searchPlaceholder: 'Search users...',
+  filters: [
+    { name: 'role', label: 'Role', options: ['All', 'Admin', 'User'] },
+    { name: 'status', label: 'Status', options: ['All', 'Active', 'Inactive'] },
+  ],
+  items: users.map(user => listItem({
+    title: user.name,
+    description: user.email,
+    icon: avatar({ name: user.name, size: 'sm' }),
+    trailing: badge(user.status),
+  })),
+  emptyState: 'No users found',
+  pagination: {
+    currentPage: 1,
+    totalPages: 5,
+    onPage: '/api/users?page=',
+  },
+});
+```
+
+### List Options
+
+```typescript
+listLayout({
+  title: string,
+  searchPlaceholder?: string,
+  searchHtmx?: {
+    get: string,
+    target: string,
+    trigger?: string,
+  },
+  filters?: Array<{
+    name: string,
+    label: string,
+    options: string[],
+  }>,
+  items: string[],
+  emptyState?: string,
+  pagination?: {
+    currentPage: number,
+    totalPages: number,
+    onPage: string,  // URL prefix
+  },
+  actions?: string,
+  theme?: ThemeConfig,
+})
+```
+
+## Form Layout
+
+Structured form with sections:
+
+```typescript
+import { formLayout } from '@frontmcp/ui/layouts';
+
+const html = formLayout({
+  title: 'User Settings',
+  action: '/api/settings',
+  method: 'POST',
+  sections: [
+    {
+      title: 'Profile',
+      description: 'Basic information about your account',
+      fields: [
+        input({ name: 'name', label: 'Full Name' }),
+        input({ name: 'email', type: 'email', label: 'Email' }),
+        textarea({ name: 'bio', label: 'Biography', rows: 3 }),
+      ],
+    },
+    {
+      title: 'Preferences',
+      description: 'Customize your experience',
+      fields: [
+        select({
+          name: 'language',
+          label: 'Language',
+          options: [{ value: 'en', label: 'English' }],
+        }),
+        checkbox({ name: 'notifications', label: 'Email notifications' }),
+      ],
+    },
+  ],
+  submitText: 'Save Changes',
+  cancelHref: '/settings',
+});
+```
+
+### Form Options
+
+```typescript
+formLayout({
+  title: string,
+  description?: string,
+  action: string,
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  htmx?: {
+    target: string,
+    swap?: string,
+  },
+  sections: Array<{
+    title: string,
+    description?: string,
+    fields: string[],
+  }>,
+  submitText?: string,
+  cancelHref?: string,
+  theme?: ThemeConfig,
+})
+```
+
+## Empty State Layout
+
+For when there's no content to display:
+
+```typescript
+import { emptyStateLayout } from '@frontmcp/ui/layouts';
+
+const html = emptyStateLayout({
+  icon: '📭',
+  title: 'No messages yet',
+  description: 'When you receive messages, they will appear here.',
+  action: button('Compose Message'),
+});
+```
+
+### Empty State Options
+
+```typescript
+emptyStateLayout({
+  icon?: string,
+  title: string,
+  description?: string,
+  action?: string,
+  theme?: ThemeConfig,
+})
+```
+
+## Error Layout
+
+For displaying error states:
+
+```typescript
+import { errorLayout } from '@frontmcp/ui/layouts';
+
+const html = errorLayout({
+  code: '404',
+  title: 'Page Not Found',
+  description: 'The page you are looking for does not exist.',
+  action: button('Go Home', { href: '/' }),
+});
+```
+
+## Success Layout
+
+For confirmation states:
+
+```typescript
+import { successLayout } from '@frontmcp/ui/layouts';
+
+const html = successLayout({
+  icon: '✅',
+  title: 'Order Placed!',
+  description: 'Your order #12345 has been confirmed.',
+  details: [
+    { label: 'Estimated Delivery', value: 'March 20, 2025' },
+    { label: 'Shipping To', value: 'John Doe, 123 Main St' },
+  ],
+  action: button('Track Order', { href: '/orders/12345' }),
+});
+```
+
+## Creating Custom Layouts
+
+Build your own layout functions:
+
+```typescript title="src/layouts/product-layout.ts"
+import { baseLayout } from '@frontmcp/ui/layouts';
+import { card, badge, button, escapeHtml } from '@frontmcp/ui/components';
+import type { ThemeConfig } from '@frontmcp/uipack/theme';
+
+interface ProductLayoutOptions {
+  product: {
+    name: string;
+    price: number;
+    description: string;
+    inStock: boolean;
+    images: string[];
+  };
+  relatedProducts?: string;
+  theme?: ThemeConfig;
+}
+
+export function productLayout(options: ProductLayoutOptions): string {
+  const { product, relatedProducts, theme } = options;
+
+  // Escape user-provided content for security
+  const safeName = escapeHtml(product.name);
+  const safeDescription = escapeHtml(product.description);
+
+  const stockBadge = product.inStock
+    ? badge('In Stock', { variant: 'success' })
+    : badge('Out of Stock', { variant: 'danger' });
+
+  const content = `
+    <div class="max-w-4xl mx-auto">
+      <div class="grid md:grid-cols-2 gap-8">
+        <!-- Image Gallery -->
+        <div class="space-y-4">
+          <img src="${escapeHtml(product.images[0])}" alt="${safeName}"
+               class="w-full rounded-xl shadow-lg" />
+          <div class="grid grid-cols-4 gap-2">
+            ${product.images.slice(1).map(img => `
+              <img src="${escapeHtml(img)}" class="rounded-lg cursor-pointer hover:opacity-75" />
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Product Info -->
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            ${stockBadge}
+          </div>
+          <h1 class="text-3xl font-bold mb-4">${safeName}</h1>
+          <p class="text-gray-600 mb-6">${safeDescription}</p>
+          <div class="text-2xl font-bold text-primary mb-6">
+            $${product.price.toFixed(2)}
+          </div>
+          ${product.inStock ? button('Add to Cart', { fullWidth: true }) : ''}
+        </div>
+      </div>
+
+      ${relatedProducts ? `
+        <div class="mt-12">
+          <h2 class="text-xl font-bold mb-4">Related Products</h2>
+          ${relatedProducts}
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  return baseLayout({
+    title: safeName,
+    content,
+    theme,
+  });
+}
+```
+
+Usage:
+
+```typescript
+import { productLayout } from './layouts/product-layout';
+
+@Tool({
+  name: 'get_product',
+  ui: {
+    template: (ctx) => productLayout({
+      product: ctx.output,
+    }),
+  },
+})
+```
+
+## Best Practices
+
+1. **Choose the right layout** - Match the layout to your content type
+2. **Keep layouts consistent** - Use the same layouts across similar tools
+3. **Customize with theme** - Pass a custom theme for branding
+4. **Add responsive classes** - Ensure layouts work on all screen sizes
+5. **Compose layouts** - Combine layouts with components for complex UIs

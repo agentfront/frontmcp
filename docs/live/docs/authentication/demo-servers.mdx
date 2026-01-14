@@ -55,17 +55,13 @@ Run `pnpm nx serve <project> --port <port>` and wait for the `Listening on` log.
     anonymousScopes: ['anonymous'],
   },
   transport: {
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
+    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
   },
 });
 ```
 
 - Exercises the `auth.publicAccess` path without any login UI.
-- Turns on stateful HTTP so you can hit tools and resources via plain JSON for smoke tests.
-- Leaves Streamable HTTP enabled for real MCP clients while skipping the `initialize` handshake.
+- Uses the `full` protocol preset—all transports enabled with relaxed session requirements—for easy smoke tests.
 
 <Tip>
 Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures that still cover transport-level behavior.
@@ -89,11 +85,8 @@ Use this project with `@frontmcp/testing` when you want fast, anonymous fixtures
     allowDefaultPublic: false,
   },
   transport: {
+    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
     sessionMode: 'stateful',
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
   },
 });
 ```
@@ -123,15 +116,12 @@ The demo login accepts any email address. Replace it with a real IdP before expo
     allowAnonymous: false,
   },
   transport: {
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
+    protocol: 'full',  // All protocols enabled, relaxed sessions for testing
   },
 });
 ```
 
-- Validates upstream JWTs while reusing the same consent UI and transport toggles.
+- Validates upstream JWTs while reusing the same consent UI and transport policies.
 - Demonstrates how to forward-declare an IdP without shipping secrets—set `IDP_PROVIDER_URL`/`IDP_EXPECTED_AUDIENCE` per environment.
 - Keeps anonymous access off so every tool call requires a verified token.
 
