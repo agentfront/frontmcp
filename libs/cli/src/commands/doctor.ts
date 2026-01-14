@@ -1,9 +1,9 @@
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { c } from '../colors';
+import { c } from '../colors.js';
 import { fileExists, readJSON } from '@frontmcp/utils';
-import { checkRequiredTsOptions } from '../tsconfig';
-import { resolveEntry } from '../utils/fs';
+import { checkRequiredTsOptions } from '../tsconfig.js';
+import { resolveEntry } from '../utils/fs.js';
 
 function cmpSemver(a: string, b: string): number {
   const pa = a.split('.').map((n) => parseInt(n, 10) || 0);

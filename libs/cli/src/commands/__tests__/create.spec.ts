@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { runCreate } from '../create';
+import { runCreate } from '../create.js';
 
 // Capture console output during tests
 let consoleLogs: string[] = [];

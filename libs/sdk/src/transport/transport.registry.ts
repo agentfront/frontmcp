@@ -313,6 +313,7 @@ export class TransportService {
 
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
+    const devBus = this.scope.devBus;
 
     // Create new transport
     const transporter = new LocalTransporter(this.scope, key, res, () => {
@@ -324,6 +325,10 @@ export class TransportService {
       // Remove from Redis on dispose
       if (sessionStore) {
         sessionStore.delete(sessionId).catch(() => void 0);
+      }
+      // Emit session disconnect event
+      if (devBus) {
+        devBus.emitSessionEvent('session:disconnect', { sessionId }, sessionId);
       }
     });
 
@@ -337,6 +342,18 @@ export class TransportService {
     }
 
     this.insertLocal(key, transporter);
+
+    // Emit session connect event for recreated session
+    if (devBus) {
+      devBus.emitSessionEvent(
+        'session:connect',
+        {
+          sessionId,
+          transportType: key.type,
+        },
+        sessionId,
+      );
+    }
 
     // Update session access time in Redis
     if (sessionStore) {
@@ -406,6 +423,7 @@ export class TransportService {
 
     const sessionStore = this.sessionStore;
     const defaultTtlMs = this.getDefaultTtlMs();
+    const devBus = this.scope.devBus;
 
     const transporter = new LocalTransporter(this.scope, key, res, () => {
       key.sessionId = sessionId;
@@ -417,11 +435,27 @@ export class TransportService {
       if (sessionStore) {
         sessionStore.delete(sessionId).catch(() => void 0);
       }
+      // Emit session disconnect event
+      if (devBus) {
+        devBus.emitSessionEvent('session:disconnect', { sessionId }, sessionId);
+      }
     });
 
     await transporter.ready();
 
     this.insertLocal(key, transporter);
+
+    // Emit session connect event
+    if (devBus) {
+      devBus.emitSessionEvent(
+        'session:connect',
+        {
+          sessionId,
+          transportType: type,
+        },
+        sessionId,
+      );
+    }
 
     // Persist session to Redis (streamable-http only for now)
     if (sessionStore && type === 'streamable-http') {

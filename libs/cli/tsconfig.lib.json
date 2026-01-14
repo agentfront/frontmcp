@@ -5,11 +5,12 @@
     "rootDir": "./src",
     "declaration": true,
     "types": ["node"],
+    "jsx": "react-jsx",
     "paths": {
       "@frontmcp/utils": ["libs/utils/dist/index.d.ts"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": [
     "jest.config.ts",
     "src/**/*.spec.ts",

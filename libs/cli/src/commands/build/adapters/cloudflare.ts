@@ -1,4 +1,4 @@
-import { AdapterTemplate } from '../types';
+import { AdapterTemplate } from '../types.js';
 
 /**
  * Cloudflare Workers adapter - edge deployment on Cloudflare.

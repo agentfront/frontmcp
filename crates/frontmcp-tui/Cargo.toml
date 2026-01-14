@@ -1,0 +1,25 @@
+[package]
+name = "frontmcp-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FrontMCP development dashboard TUI"
+readme = "README.md"
+
+[[bin]]
+name = "frontmcp-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui.workspace = true
+crossterm.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1.4"

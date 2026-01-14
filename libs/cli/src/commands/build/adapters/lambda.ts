@@ -1,4 +1,4 @@
-import { AdapterTemplate } from '../types';
+import { AdapterTemplate } from '../types.js';
 
 /**
  * AWS Lambda adapter - serverless deployment on AWS Lambda.

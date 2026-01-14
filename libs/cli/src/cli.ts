@@ -3,16 +3,16 @@
  * frontmcp - FrontMCP command line interface
  */
 
-import { c } from './colors';
-import { Command, ParsedArgs, parseArgs } from './args';
-import { runDev } from './commands/dev';
-import { runBuild } from './commands/build';
-import { runInit } from './tsconfig';
-import { runDoctor } from './commands/doctor';
-import { runInspector } from './commands/inspector';
-import { runCreate } from './commands/create';
-import { runTemplate } from './commands/template';
-import { runTest } from './commands/test';
+import { c } from './colors.js';
+import { Command, ParsedArgs, parseArgs } from './args.js';
+import { runDev } from './commands/dev.js';
+import { runBuild } from './commands/build/index.js';
+import { runInit } from './tsconfig.js';
+import { runDoctor } from './commands/doctor.js';
+import { runInspector } from './commands/inspector.js';
+import { runCreate } from './commands/create.js';
+import { runTemplate } from './commands/template.js';
+import { runTest } from './commands/test.js';
 
 function showHelp(): void {
   console.log(`

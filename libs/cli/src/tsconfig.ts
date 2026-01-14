@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { c } from './colors';
+import { c } from './colors.js';
 import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
 
 export const REQUIRED_DECORATOR_FIELDS = {

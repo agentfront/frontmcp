@@ -1,4 +1,4 @@
-import { AdapterTemplate } from '../types';
+import { AdapterTemplate } from '../types.js';
 
 /**
  * Node.js adapter - default deployment target.

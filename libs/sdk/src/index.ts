@@ -159,3 +159,33 @@ export type { CreateInMemoryServerOptions, InMemoryServerResult } from './transp
 
 // Transport types
 export type { TransportType, TransportKey } from './transport';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dev Event Bus (Development Dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Dev event bus for CLI dashboard integration
+export {
+  DevEventBus,
+  isDevBusEnabled,
+  DEV_EVENT_MAGIC,
+  isDevEventMessage,
+  parseDevEventBusOptions,
+  devEventBusOptionsSchema,
+} from './dev-bus';
+export type {
+  DevEvent,
+  DevEventBase,
+  DevEventCategory,
+  DevEventListener,
+  DevEventBusOptions,
+  DevEventBusOptionsInput,
+  SessionEvent,
+  RequestEvent,
+  RegistryEvent,
+  ConfigEvent,
+  ServerEvent,
+  ScopeGraphEvent,
+  ScopeGraphNode,
+  DevEventMessage,
+} from './dev-bus';

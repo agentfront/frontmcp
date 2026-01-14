@@ -1,8 +1,11 @@
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import * as readline from 'readline';
-import { c } from '../colors';
-import { ensureDir, fileExists } from '@frontmcp/utils';
-import { fsp } from '../utils/fs';
+import { c } from '../colors.js';
+import { fsp, fileExists, ensureDir } from '../utils/fs.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 type AuthType = 'oauth2' | 'bearer' | 'apiKey';
 

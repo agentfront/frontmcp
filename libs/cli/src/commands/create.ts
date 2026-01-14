@@ -1,10 +1,10 @@
 import * as path from 'path';
 import * as readline from 'readline';
 import { promises as fsp } from 'fs';
-import { c } from '../colors';
+import { c } from '../colors.js';
 import { ensureDir, fileExists, isDirEmpty, writeJSON, readJSON } from '@frontmcp/utils';
-import { runInit } from '../tsconfig';
-import { getSelfVersion } from '../version';
+import { runInit } from '../tsconfig.js';
+import { getSelfVersion } from '../version.js';
 
 // =============================================================================
 // Types
@@ -131,7 +131,7 @@ async function scaffoldFileIfMissing(baseDir: string, p: string, content: string
 const TEMPLATE_MAIN_TS = `
 import 'reflect-metadata';
 import { FrontMcp } from '@frontmcp/sdk';
-import { CalcApp } from './calc.app';
+import { CalcApp } from './calc.app.js';
 
 @FrontMcp({
   info: { name: 'Demo 🚀', version: '0.1.0' },
@@ -142,7 +142,7 @@ export default class Server {}
 
 const TEMPLATE_CALC_APP_TS = `
 import { App } from '@frontmcp/sdk';
-import AddTool from './tools/add.tool';
+import AddTool from './tools/add.tool.js';
 
 @App({
   id: 'calc',
@@ -1053,10 +1053,10 @@ This project includes GitHub Actions workflows:
       deploymentTarget === 'node'
         ? 'GitHub Container Registry'
         : deploymentTarget === 'vercel'
-        ? 'Vercel'
-        : deploymentTarget === 'lambda'
-        ? 'AWS Lambda'
-        : 'Cloudflare Workers'
+          ? 'Vercel'
+          : deploymentTarget === 'lambda'
+            ? 'AWS Lambda'
+            : 'Cloudflare Workers'
     }
 
 ### Required Secrets

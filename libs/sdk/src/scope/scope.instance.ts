@@ -33,6 +33,7 @@ import CompleteFlow from '../completion/flows/complete.flow';
 import { ToolUIRegistry, StaticWidgetResourceTemplate, hasUIConfig } from '../tool/ui';
 import CallAgentFlow from '../agent/flows/call-agent.flow';
 import PluginRegistry, { PluginScopeInfo } from '../plugin/plugin.registry';
+import { DevEventBus, isDevBusEnabled } from '../dev-bus';
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -59,6 +60,9 @@ export class Scope extends ScopeEntry {
 
   readonly server: FrontMcpServer;
 
+  /** Dev event bus for CLI dashboard integration (only active in dev mode) */
+  private readonly scopeDevBus: DevEventBus | null = null;
+
   constructor(rec: ScopeRecord, globalProviders: ProviderRegistry) {
     super(rec, rec.provide);
     this.id = rec.metadata.id;
@@ -71,6 +75,12 @@ export class Scope extends ScopeEntry {
       this.routeBase = `/${rec.metadata.id}`;
     } else {
       this.routeBase = '';
+    }
+
+    // Initialize dev event bus if dev mode is enabled
+    if (isDevBusEnabled()) {
+      this.scopeDevBus = new DevEventBus();
+      this.logger.verbose('DevEventBus created for CLI dashboard integration');
     }
 
     // Pass distributed config to ProviderRegistry for serverless/multi-instance support
@@ -277,6 +287,27 @@ export class Scope extends ScopeEntry {
         `\n\n*******************************\n  WARNING: FrontMcp is running without authentication. \n  This is a security risk and should only be used in development environments. \n*******************************\n\n`,
       );
     }
+
+    // Activate dev event bus after all registries are ready
+    if (this.scopeDevBus) {
+      this.scopeDevBus.activate({
+        id: this.id,
+        tools: this.scopeTools,
+        resources: this.scopeResources,
+        prompts: this.scopePrompts,
+        agents: this.scopeAgents,
+        notifications: {},
+      });
+      this.logger.verbose('DevEventBus activated');
+
+      // Emit server ready event
+      this.scopeDevBus.emitServerEvent('server:ready', {
+        serverInfo: {
+          name: this.id ?? 'FrontMCP Server',
+          version: '1.0.0',
+        },
+      });
+    }
   }
 
   private get defaultScopeProviders() {
@@ -366,6 +397,14 @@ export class Scope extends ScopeEntry {
    */
   get pagination() {
     return this.metadata.pagination;
+  }
+
+  /**
+   * Get the dev event bus for CLI dashboard integration.
+   * Returns null if not in dev mode (FRONTMCP_DEV_MODE env var not set).
+   */
+  get devBus(): DevEventBus | null {
+    return this.scopeDevBus;
   }
 
   registryFlows(...flows: FlowType[]) {

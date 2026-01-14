@@ -1,0 +1,19 @@
+{
+  "name": "@frontmcp/tui-linux-arm64-gnu",
+  "version": "0.7.2",
+  "description": "FrontMCP TUI dashboard binary for Linux ARM64 (glibc)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/frontmcp"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "frontmcp-tui"
+  ]
+}

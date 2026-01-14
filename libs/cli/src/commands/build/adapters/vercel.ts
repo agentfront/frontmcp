@@ -2,7 +2,7 @@ import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { mkdir, readdir, stat, cp, copyFile, readFile, writeFile } from '@frontmcp/utils';
-import { AdapterTemplate } from '../types';
+import { AdapterTemplate } from '../types.js';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 

@@ -31,8 +31,8 @@ jest.mock('../utils/fs', () => {
 
 import { spawn } from 'child_process';
 import { fileExists, readJSON } from '@frontmcp/utils';
-import { resolveEntry } from '../utils/fs';
-import { runDoctor } from '../commands/doctor';
+import { resolveEntry } from '../utils/fs.js';
+import { runDoctor } from '../commands/doctor.js';
 
 // Helper to simulate npm version check
 function mockNpmVersion(version: string) {

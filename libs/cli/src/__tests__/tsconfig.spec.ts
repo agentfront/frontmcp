@@ -18,7 +18,7 @@ import {
   ensureRequiredTsOptions,
   checkRequiredTsOptions,
   runInit,
-} from '../tsconfig';
+} from '../tsconfig.js';
 import { fileExists, readJSON, writeJSON } from '@frontmcp/utils';
 
 describe('tsconfig utilities', () => {

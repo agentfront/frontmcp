@@ -1,0 +1,46 @@
+{
+  "name": "frontmcp-tui",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "crates/frontmcp-tui/src",
+  "projectType": "application",
+  "tags": ["rust", "tui"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo build --release -p frontmcp-tui",
+        "cwd": "crates"
+      },
+      "outputs": ["{workspaceRoot}/crates/target/release/frontmcp-tui"]
+    },
+    "build-debug": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo build -p frontmcp-tui",
+        "cwd": "crates"
+      },
+      "outputs": ["{workspaceRoot}/crates/target/debug/frontmcp-tui"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p frontmcp-tui",
+        "cwd": "crates"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo clippy -p frontmcp-tui -- -D warnings",
+        "cwd": "crates"
+      }
+    },
+    "fmt": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo fmt -p frontmcp-tui --check",
+        "cwd": "crates"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 // file: libs/cli/src/commands/build/__tests__/adapters.spec.ts
 
-import { ADAPTERS, nodeAdapter, lambdaAdapter, cloudflareAdapter, vercelAdapter } from '../adapters';
+import { ADAPTERS, nodeAdapter, lambdaAdapter, cloudflareAdapter, vercelAdapter } from '../adapters.js';
 
 describe('Build Adapters', () => {
   describe('ADAPTERS registry', () => {

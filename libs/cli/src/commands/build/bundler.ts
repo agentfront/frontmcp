@@ -1,5 +1,5 @@
 import { rspack } from '@rspack/core';
-import { c } from '../../colors';
+import { c } from '../../colors.js';
 
 /**
  * Bundle the serverless entry point into a single CJS file using rspack.

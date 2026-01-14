@@ -1,10 +1,10 @@
 import * as path from 'path';
 import * as os from 'os';
 import { spawn, ChildProcess } from 'child_process';
-import { ParsedArgs } from '../args';
-import { c } from '../colors';
+import { ParsedArgs } from '../args.js';
+import { c } from '../colors.js';
 import { fileExists } from '@frontmcp/utils';
-import { fsp } from '../utils/fs';
+import { fsp } from '../utils/fs.js';
 
 /**
  * Generate Jest configuration programmatically for E2E tests.

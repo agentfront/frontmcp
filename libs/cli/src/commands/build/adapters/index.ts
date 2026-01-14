@@ -1,8 +1,8 @@
-import { AdapterTemplate, AdapterName } from '../types';
-import { nodeAdapter } from './node';
-import { vercelAdapter } from './vercel';
-import { lambdaAdapter } from './lambda';
-import { cloudflareAdapter } from './cloudflare';
+import { AdapterTemplate, AdapterName } from '../types.js';
+import { nodeAdapter } from './node.js';
+import { vercelAdapter } from './vercel.js';
+import { lambdaAdapter } from './lambda.js';
+import { cloudflareAdapter } from './cloudflare.js';
 
 /**
  * Registry of all available deployment adapters.

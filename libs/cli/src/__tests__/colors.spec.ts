@@ -1,6 +1,6 @@
 // file: libs/cli/src/__tests__/colors.spec.ts
 
-import { COLORS, c } from '../colors';
+import { COLORS, c } from '../colors.js';
 
 describe('colors', () => {
   describe('COLORS', () => {

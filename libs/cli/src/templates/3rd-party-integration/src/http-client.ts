@@ -1,4 +1,4 @@
-import { ExecuteContext } from "./mcp-http-types";
+import { ExecuteContext } from './mcp-http-types.js';
 
 export interface HttpRequestOptions {
   method: string;
@@ -27,7 +27,7 @@ export class HttpClient {
       return { Authorization: `Bearer ${auth.bearer.token}` };
     }
     if (auth.apiKey?.value) {
-      const headerName = auth.apiKey.name ?? "X-API-Key";
+      const headerName = auth.apiKey.name ?? 'X-API-Key';
       return { [headerName]: auth.apiKey.value };
     }
     return {};
@@ -45,10 +45,10 @@ export class HttpClient {
     }
 
     const baseHeaders: Record<string, string> = {
-      Accept: "application/json",
-      ...(this.ctx.requestId ? { "X-Request-Id": this.ctx.requestId } : {}),
+      Accept: 'application/json',
+      ...(this.ctx.requestId ? { 'X-Request-Id': this.ctx.requestId } : {}),
       ...this.resolveAuthHeader(),
-      ...(options.headers ?? {})
+      ...(options.headers ?? {}),
     };
 
     const controller = new AbortController();
@@ -58,20 +58,20 @@ export class HttpClient {
     const init: RequestInit = {
       method: options.method,
       headers: baseHeaders,
-      signal: controller.signal
+      signal: controller.signal,
     };
 
     if (options.bodyJson !== undefined) {
       init.body = JSON.stringify(options.bodyJson);
-      baseHeaders["Content-Type"] = baseHeaders["Content-Type"] ?? "application/json";
+      baseHeaders['Content-Type'] = baseHeaders['Content-Type'] ?? 'application/json';
     }
 
     if (this.ctx.logDebug) {
-      console.debug("[HttpClient] Request", {
+      console.debug('[HttpClient] Request', {
         url: url.toString(),
         method: options.method,
         headers: baseHeaders,
-        body: options.bodyJson
+        body: options.bodyJson,
       });
     }
 
@@ -81,9 +81,9 @@ export class HttpClient {
 
       let json: any | undefined;
       let text: string | undefined;
-      const contentType = res.headers.get("content-type") || "";
+      const contentType = res.headers.get('content-type') || '';
 
-      if (contentType.includes("application/json")) {
+      if (contentType.includes('application/json')) {
         try {
           json = await res.json();
         } catch {
@@ -98,11 +98,11 @@ export class HttpClient {
       }
 
       if (this.ctx.logDebug) {
-        console.debug("[HttpClient] Response", {
+        console.debug('[HttpClient] Response', {
           status: res.status,
           headers: headersObj,
           json,
-          text
+          text,
         });
       }
 
@@ -110,7 +110,7 @@ export class HttpClient {
         status: res.status,
         headers: headersObj,
         json,
-        text
+        text,
       };
     } finally {
       clearTimeout(t);

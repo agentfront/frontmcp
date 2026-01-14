@@ -29,6 +29,8 @@ export interface ParsedArgs {
   target?: DeploymentAdapter;
   redis?: RedisSetupOption;
   cicd?: boolean;
+  // Dev command flags
+  noDashboard?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -52,6 +54,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === '--redis') out.redis = argv[++i] as RedisSetupOption;
     else if (a === '--cicd') out.cicd = true;
     else if (a === '--no-cicd') out.cicd = false;
+    // Dev command flags
+    else if (a === '--no-dashboard') out.noDashboard = true;
     else out._.push(a);
   }
   return out;

@@ -1,41 +1,46 @@
 {
   "name": "demo",
   "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "node libs/cli/dist/src/cli.js dev --entry apps/demo/src/main.ts",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "dev:simple": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "node libs/cli/dist/src/cli.js dev --no-dashboard --entry apps/demo/src/main.ts",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
-        "args": [
-          "--node-env=production"
-        ],
+        "args": ["--node-env=production"],
         "cwd": "apps/demo"
       },
       "configurations": {
         "development": {
-          "args": [
-            "--node-env=development"
-          ]
+          "args": ["--node-env=development"]
         }
       }
     },
     "copy-workspace-modules": {
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "cache": true,
-      "outputs": [
-        "{workspaceRoot}/apps/demo/dist/workspace_modules"
-      ],
+      "outputs": ["{workspaceRoot}/apps/demo/dist/workspace_modules"],
       "executor": "@nx/js:copy-workspace-modules",
       "options": {
         "buildTarget": "build"
       }
     },
     "prune": {
-      "dependsOn": [
-        "prune-lockfile",
-        "copy-workspace-modules"
-      ],
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
       "executor": "nx:noop"
     },
     "serve": {

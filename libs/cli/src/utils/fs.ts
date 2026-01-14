@@ -2,9 +2,33 @@
 // CLI-specific file system utilities
 
 import * as path from 'path';
-import { promises as fsp } from 'fs';
-import { c } from '../colors';
-import { fileExists, readJSON } from '@frontmcp/utils';
+import { promises as fsp, constants } from 'fs';
+import { c } from '../colors.js';
+
+// Use direct fs implementation instead of @frontmcp/utils to avoid ESM/CJS issues
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fsp.access(p, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readJSON<T = unknown>(p: string): Promise<T | null> {
+  try {
+    const content = await fsp.readFile(p, 'utf8');
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureDir(dir: string): Promise<void> {
+  await fsp.mkdir(dir, { recursive: true });
+}
+
+export { fileExists, readJSON, ensureDir };
 
 function tryCandidates(base: string): string[] {
   const exts = ['', '.ts', '.tsx', '.js', '.mjs', '.cjs'];

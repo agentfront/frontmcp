@@ -10,7 +10,7 @@ jest.mock('@frontmcp/utils', () => {
   };
 });
 
-import { resolveEntry } from '../utils/fs';
+import { resolveEntry } from '../utils/fs.js';
 import { fileExists, readJSON } from '@frontmcp/utils';
 
 describe('fs utilities', () => {

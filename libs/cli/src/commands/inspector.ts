@@ -1,4 +1,4 @@
-import { c } from '../colors';
+import { c } from '../colors.js';
 import { runCmd } from '@frontmcp/utils';
 
 export async function runInspector(): Promise<void> {

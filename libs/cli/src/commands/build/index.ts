@@ -1,12 +1,12 @@
 import * as path from 'path';
-import { ParsedArgs } from '../../args';
-import { c } from '../../colors';
+import { ParsedArgs } from '../../args.js';
+import { c } from '../../colors.js';
 import { ensureDir, fileExists, runCmd, writeJSON } from '@frontmcp/utils';
-import { fsp, resolveEntry } from '../../utils/fs';
-import { REQUIRED_DECORATOR_FIELDS } from '../../tsconfig';
-import { ADAPTERS } from './adapters';
-import { AdapterName } from './types';
-import { bundleForServerless } from './bundler';
+import { fsp, resolveEntry } from '../../utils/fs.js';
+import { REQUIRED_DECORATOR_FIELDS } from '../../tsconfig.js';
+import { ADAPTERS } from './adapters/index.js';
+import { AdapterName } from './types.js';
+import { bundleForServerless } from './bundler.js';
 
 function isTsLike(p: string): boolean {
   return /\.tsx?$/i.test(p);

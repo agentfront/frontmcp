@@ -3,7 +3,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { c } from '../colors';
+import { c } from '../colors.js';
 
 /**
  * Parse a .env file content into key-value pairs.
