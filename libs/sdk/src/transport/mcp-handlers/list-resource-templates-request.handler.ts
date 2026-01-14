@@ -7,10 +7,23 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpHandler, McpHandlerOptions } from './mcp-handlers.types';
 
-export default function listResourceTemplatesRequestHandler({ scope }: McpHandlerOptions) {
+export default function listResourceTemplatesRequestHandler({
+  scope,
+}: McpHandlerOptions): McpHandler<ListResourceTemplatesRequest, ListResourceTemplatesResult> {
+  const logger = scope.logger.child('list-resource-templates-request-handler');
+
   return {
     requestSchema: ListResourceTemplatesRequestSchema,
-    handler: (request: ListResourceTemplatesRequest, ctx) =>
-      scope.runFlowForOutput('resources:list-resource-templates', { request, ctx }),
-  } satisfies McpHandler<ListResourceTemplatesRequest, ListResourceTemplatesResult>;
+    handler: async (request: ListResourceTemplatesRequest, ctx) => {
+      logger.verbose('resources/listTemplates: listing resource templates');
+      try {
+        return await scope.runFlowForOutput('resources:list-resource-templates', { request, ctx });
+      } catch (e) {
+        logger.error('resources/listTemplates failed', {
+          error: e instanceof Error ? { name: e.name, message: e.message, stack: e.stack } : e,
+        });
+        throw e;
+      }
+    },
+  };
 }

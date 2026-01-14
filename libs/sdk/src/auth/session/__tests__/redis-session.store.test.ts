@@ -385,6 +385,28 @@ describe('RedisSessionStore', () => {
       const result = await store.ping();
       expect(result).toBe(false);
     });
+
+    it('should log error when connection fails', async () => {
+      const mockLogger = {
+        error: jest.fn(),
+        warn: jest.fn(),
+        info: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn(),
+      };
+
+      const storeWithLogger = new RedisSessionStore({ host: 'localhost', port: 6379 }, mockLogger as never);
+
+      mockStorageAdapter.connect.mockRejectedValue(new Error('Connection refused'));
+
+      const result = await storeWithLogger.ping();
+
+      expect(result).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith('[RedisSessionStore] Connection failed', {
+        error: 'Connection refused',
+      });
+    });
   });
 
   // ============================================

@@ -1,4 +1,5 @@
-// common/types/options/redis.options.ts
+// common/types/options/redis/schema.ts
+// Zod schema for Redis/storage configuration
 
 import { z } from 'zod';
 
@@ -7,7 +8,7 @@ import { z } from 'zod';
 // ============================================
 
 /**
- * Supported storage providers
+ * Supported storage providers schema.
  */
 export const storageProviderSchema = z.enum(['redis', 'vercel-kv']);
 export type StorageProvider = z.infer<typeof storageProviderSchema>;

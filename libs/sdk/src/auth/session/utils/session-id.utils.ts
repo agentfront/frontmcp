@@ -4,7 +4,7 @@ import { TinyTtlCache } from './tiny-ttl-cache';
 import { SessionIdPayload, TransportProtocolType, AIPlatformType } from '../../../common';
 import { getTokenSignatureFingerprint } from './auth-token.utils';
 import { detectPlatformFromUserAgent } from '../../../notification/notification.service';
-import type { PlatformDetectionConfig } from '../../../common/types/options/session.options';
+import type { PlatformDetectionConfig } from '../../../common/types/options/session';
 import { getMachineId } from '../../machine-id';
 
 // 5s TTL cache for decrypted headers

@@ -12,14 +12,9 @@ const port = parseInt(process.env['PORT'] ?? '3021', 10);
     mode: 'public',
     sessionTtl: 3600,
     anonymousScopes: ['anonymous'],
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: false,
-      enableLegacySSE: true,
-      enableSseListener: true,
-    },
+  },
+  transport: {
+    protocol: { json: true, legacy: true, strictSession: false },
   },
 })
 export default class Server {}

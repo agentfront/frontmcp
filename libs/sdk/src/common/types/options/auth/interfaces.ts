@@ -1,4 +1,4 @@
-// common/types/options/auth/auth.interfaces.ts
+// common/types/options/auth/interfaces.ts
 // Explicit TypeScript interfaces for better IDE autocomplete
 //
 // These interfaces mirror the Zod schemas but provide better autocomplete
@@ -6,10 +6,10 @@
 // validation, while these interfaces are used for type hints.
 //
 // IMPORTANT: Keep these interfaces in sync with the Zod schemas.
-// The auth.typecheck.ts file will fail to compile if they get out of sync.
+// The typecheck.ts file will fail to compile if they get out of sync.
 
 import { JSONWebKeySet, JWK } from '../../auth';
-import { RedisConfig } from '../../../../auth/session/transport-session.types';
+import type { RedisConfig } from '../../../../auth/session/transport-session.types';
 
 // ============================================
 // SHARED CONFIG INTERFACES
@@ -239,32 +239,6 @@ export interface IncrementalAuthConfig {
 }
 
 // ============================================
-// DEPRECATED TRANSPORT CONFIG
-// ============================================
-
-/**
- * @deprecated Use top-level transport config instead
- */
-export interface TransportRecreationConfig {
-  enabled?: boolean;
-  redis?: RedisConfig;
-  defaultTtlMs?: number;
-}
-
-/**
- * @deprecated Use top-level transport config instead
- */
-export interface TransportConfig {
-  enableLegacySSE?: boolean;
-  enableSseListener?: boolean;
-  enableStreamableHttp?: boolean;
-  enableStatelessHttp?: boolean;
-  enableStatefulHttp?: boolean;
-  requireSessionForStreamable?: boolean;
-  recreation?: TransportRecreationConfig;
-}
-
-// ============================================
 // AUTH MODE INTERFACES
 // ============================================
 
@@ -317,11 +291,6 @@ export interface PublicAuthOptionsInterface {
    * @default auto-generated
    */
   signKey?: JWK | Uint8Array;
-
-  /**
-   * @deprecated Use top-level transport config instead
-   */
-  transport?: TransportConfig;
 }
 
 /**
@@ -369,11 +338,6 @@ export interface TransparentAuthOptionsInterface {
 
   /** Public access config for anonymous users */
   publicAccess?: PublicAccessConfig;
-
-  /**
-   * @deprecated Use top-level transport config instead
-   */
-  transport?: TransportConfig;
 }
 
 /**
@@ -405,12 +369,6 @@ export interface OrchestratedLocalOptionsInterface {
   tokenStorage?: TokenStorageConfig;
 
   /**
-   * Session storage mode
-   * @default 'stateful'
-   */
-  sessionMode?: 'stateful' | 'stateless';
-
-  /**
    * Allow default public access for unauthenticated requests
    * @default false
    */
@@ -436,11 +394,6 @@ export interface OrchestratedLocalOptionsInterface {
 
   /** Incremental authorization configuration */
   incrementalAuth?: IncrementalAuthConfig;
-
-  /**
-   * @deprecated Use top-level transport config instead
-   */
-  transport?: TransportConfig;
 }
 
 /**
@@ -478,12 +431,6 @@ export interface OrchestratedRemoteOptionsInterface {
   tokenStorage?: TokenStorageConfig;
 
   /**
-   * Session storage mode
-   * @default 'stateful'
-   */
-  sessionMode?: 'stateful' | 'stateless';
-
-  /**
    * Allow default public access for unauthenticated requests
    * @default false
    */
@@ -509,11 +456,6 @@ export interface OrchestratedRemoteOptionsInterface {
 
   /** Incremental authorization configuration */
   incrementalAuth?: IncrementalAuthConfig;
-
-  /**
-   * @deprecated Use top-level transport config instead
-   */
-  transport?: TransportConfig;
 }
 
 // ============================================

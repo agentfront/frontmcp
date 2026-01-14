@@ -16,7 +16,7 @@
 import { randomUUID, VercelKvStorageAdapter } from '@frontmcp/utils';
 import { SessionStore, StoredSession, storedSessionSchema, SessionSecurityConfig } from './transport-session.types';
 import { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import type { VercelKvProviderOptions } from '../../common/types/options/redis.options';
+import type { VercelKvProviderOptions } from '../../common/types/options/redis';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
 
@@ -326,7 +326,10 @@ export class VercelKvSessionStore implements SessionStore {
     try {
       await this.ensureConnected();
       return this.storage.ping();
-    } catch {
+    } catch (error) {
+      this.logger?.error('[VercelKvSessionStore] Connection failed', {
+        error: (error as Error).message,
+      });
       return false;
     }
   }

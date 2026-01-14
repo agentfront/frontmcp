@@ -56,6 +56,21 @@ describe('Storage Error Classes', () => {
       expect(error.cause).toBe(cause);
     });
 
+    it('should include cause message in error message', () => {
+      const cause = new Error('ECONNREFUSED 127.0.0.1:6379');
+      const error = new StorageConnectionError('Failed to connect to Redis', cause, 'redis');
+
+      expect(error.message).toBe('Failed to connect to Redis: ECONNREFUSED 127.0.0.1:6379');
+      expect(error.cause).toBe(cause);
+    });
+
+    it('should work without cause (message unchanged)', () => {
+      const error = new StorageConnectionError('Connection failed', undefined, 'redis');
+
+      expect(error.message).toBe('Connection failed');
+      expect(error.cause).toBeUndefined();
+    });
+
     it('should extend StorageError', () => {
       const error = new StorageConnectionError('Test');
       expect(error).toBeInstanceOf(StorageError);

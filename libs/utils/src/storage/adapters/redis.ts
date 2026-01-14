@@ -20,7 +20,18 @@ type RedisOptions = import('ioredis').RedisOptions;
 function getRedisClass(): typeof import('ioredis').default {
   try {
     return require('ioredis').default || require('ioredis');
-  } catch {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+
+    // Check if it's a bundler/ESM issue and provide helpful error
+    if (msg.includes('Dynamic require') || msg.includes('require is not defined')) {
+      throw new Error(
+        `Failed to load ioredis: ${msg}. ` +
+          'This typically happens with ESM bundlers (esbuild, Vite). ' +
+          'Ensure your bundler externalizes ioredis or use CJS mode.',
+      );
+    }
+
     throw new Error('ioredis is required for Redis storage adapter. Install it with: npm install ioredis');
   }
 }

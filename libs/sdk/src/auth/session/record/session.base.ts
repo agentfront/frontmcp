@@ -1,7 +1,6 @@
 // auth/session/record/session.base.ts
 
 import type { ProviderSnapshot, SessionMode } from '../session.types';
-import type { TransportIdMode } from '../../../common';
 import { TransportIdGenerator } from '../session.transport';
 import { Scope } from '../../../scope';
 
@@ -113,15 +112,8 @@ export abstract class Session {
 
   async getTransportSessionId(): Promise<string> {
     if (this.#activeTransportId) return this.#activeTransportId;
-    const mode = this.scope.metadata.transport?.transportIdMode ?? 'uuid';
-    if (typeof mode === 'string') {
-      return TransportIdGenerator.createId(mode as TransportIdMode);
-    } else {
-      // Cast to proper function type since Zod's z.function() type is too generic
-      const modeFn = mode as (issuer: string) => Promise<TransportIdMode> | TransportIdMode;
-      const modeResult = await modeFn(this.issuer);
-      return TransportIdGenerator.createId(modeResult);
-    }
+    // Always use JWT-style transport IDs for distributed session support
+    return TransportIdGenerator.createId('jwt');
   }
 
   /**

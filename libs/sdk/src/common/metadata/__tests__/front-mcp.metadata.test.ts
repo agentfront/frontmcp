@@ -5,8 +5,8 @@
 // by extracting and testing its logic.
 
 import { z } from 'zod';
-import { redisOptionsSchema, RedisOptions } from '../../types/options/redis.options';
-import { transportOptionsSchema } from '../../types/options/transport.options';
+import { redisOptionsSchema, RedisOptions } from '../../types/options/redis';
+import { transportOptionsSchema } from '../../types/options/transport';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
 function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {
@@ -15,62 +15,69 @@ function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key
 }
 
 // Type guard for persistence object shape (mirrors front-mcp.metadata.ts)
-function isPersistenceObject(
-  value: unknown,
-): value is { enabled?: boolean; redis?: unknown; defaultTtlMs?: number } | undefined {
+// New simplified format: false | { redis?, defaultTtlMs? } | undefined
+function isPersistenceObject(value: unknown): value is { redis?: unknown; defaultTtlMs?: number } | false | undefined {
   if (value === undefined || value === null) return true;
+  if (value === false) return true; // Explicitly disabled
   if (typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
-  // Use bracket notation for index signatures
-  if ('enabled' in obj && typeof obj['enabled'] !== 'boolean') return false;
+  // Check optional properties have correct types if present
   if ('defaultTtlMs' in obj && typeof obj['defaultTtlMs'] !== 'number') return false;
   return true;
 }
 
 // Recreate the transform function for isolated testing
 // This mirrors the logic in front-mcp.metadata.ts
+// New simplified behavior:
+// - persistence: false → explicitly disabled
+// - persistence: { redis?: ... } → enabled with config
+// - persistence: undefined → auto-enable when global redis exists
 function applyAutoTransportPersistence<T extends { redis?: unknown; transport?: { persistence?: unknown } }>(
   data: T,
 ): T {
+  // If no global redis config, nothing to auto-enable
   if (!data.redis) return data;
 
+  // Safe access with type guard validation
   const transport = data.transport as { persistence?: unknown } | undefined;
   const rawPersistence = transport?.persistence;
 
+  // Validate persistence shape at runtime (should always pass after Zod validation)
   if (!isPersistenceObject(rawPersistence)) {
+    return data; // Invalid shape, don't modify
+  }
+
+  // Case 1: persistence explicitly disabled (false) - respect that
+  if (rawPersistence === false) {
     return data;
   }
 
-  const persistence = rawPersistence;
-
-  if (persistence?.enabled === false) {
+  // Case 2: persistence is an object with explicit redis config - use that
+  if (rawPersistence && typeof rawPersistence === 'object' && 'redis' in rawPersistence && rawPersistence.redis) {
     return data;
   }
 
-  if (persistence?.redis) {
-    return data;
-  }
-
-  if (persistence?.enabled === true && !persistence.redis) {
+  // Case 3: persistence is an object without redis - use global redis
+  if (rawPersistence && typeof rawPersistence === 'object') {
     return {
       ...data,
       transport: {
         ...transport,
         persistence: {
-          ...persistence,
+          ...rawPersistence,
           redis: data.redis,
         },
       },
     };
   }
 
-  if (persistence === undefined) {
+  // Case 4: persistence not configured at all - auto-enable with global redis
+  if (rawPersistence === undefined) {
     return {
       ...data,
       transport: {
         ...transport,
         persistence: {
-          enabled: true,
           redis: data.redis,
         },
       },
@@ -103,16 +110,26 @@ describe('applyAutoTransportPersistence transform', () => {
       const config = {
         transport: {
           persistence: {
-            enabled: true,
             redis: { host: 'explicit-host' },
           },
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      const redis = result.transport?.persistence?.redis;
-      expect(redis && 'host' in redis ? redis.host : undefined).toBe('explicit-host');
+      // Presence of object means persistence is enabled
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const redis = result.transport?.persistence;
+      expect(
+        redis &&
+          typeof redis === 'object' &&
+          'redis' in redis &&
+          redis.redis &&
+          typeof redis.redis === 'object' &&
+          'host' in redis.redis
+          ? redis.redis.host
+          : undefined,
+      ).toBe('explicit-host');
     });
   });
 
@@ -123,37 +140,44 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      const redis = result.transport?.persistence?.redis;
-      expect(redis && 'host' in redis ? redis.host : undefined).toBe('global-redis');
+      // Presence of persistence object means enabled
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence;
+      const redis =
+        persistence && typeof persistence === 'object' && 'redis' in persistence ? persistence.redis : undefined;
+      expect(redis && 'host' in (redis as object) ? (redis as { host: string }).host : undefined).toBe('global-redis');
     });
 
-    it('should respect explicit persistence: { enabled: false }', () => {
+    it('should respect explicit persistence: false', () => {
       const config = {
         redis: { host: 'global-redis' },
         transport: {
-          persistence: { enabled: false },
+          persistence: false as const,
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(false);
-      expect(result.transport?.persistence?.redis).toBeUndefined();
+      expect(result.transport?.persistence).toBe(false);
     });
 
-    it('should use global redis when persistence: { enabled: true } without redis', () => {
+    it('should use global redis when persistence is empty object', () => {
       const config = {
         redis: { host: 'global-redis', port: 6380 },
         transport: {
-          persistence: { enabled: true },
+          persistence: {},
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      const redis = result.transport?.persistence?.redis;
-      expect(redis && 'host' in redis ? redis.host : undefined).toBe('global-redis');
-      expect(redis && 'port' in redis ? redis.port : undefined).toBe(6380);
+      // Empty object without redis gets global redis populated
+      const persistence = result.transport?.persistence;
+      expect(persistence).toBeDefined();
+      expect(persistence).not.toBe(false);
+      const redis =
+        persistence && typeof persistence === 'object' && 'redis' in persistence ? persistence.redis : undefined;
+      expect(redis && 'host' in (redis as object) ? (redis as { host: string }).host : undefined).toBe('global-redis');
+      expect(redis && 'port' in (redis as object) ? (redis as { port: number }).port : undefined).toBe(6380);
     });
 
     it('should use explicit redis when persistence has its own redis config', () => {
@@ -161,15 +185,20 @@ describe('applyAutoTransportPersistence transform', () => {
         redis: { host: 'global-redis' },
         transport: {
           persistence: {
-            enabled: true,
             redis: { host: 'custom-persistence-redis' },
           },
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('custom-persistence-redis');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      expect(
+        getRedisProperty(
+          (result.transport?.persistence as { redis?: unknown })?.redis as Record<string, unknown>,
+          'host',
+        ),
+      ).toBe('custom-persistence-redis');
     });
 
     it('should preserve other transport options when auto-enabling persistence', () => {
@@ -177,15 +206,23 @@ describe('applyAutoTransportPersistence transform', () => {
         redis: { host: 'global-redis' },
         transport: {
           sessionMode: 'stateless' as const,
-          enableLegacySSE: true,
+          protocol: { legacy: true }, // New format: protocol.legacy instead of enableLegacySSE
         },
       };
       const result = testSchema.parse(config);
 
       expect(result.transport?.sessionMode).toBe('stateless');
-      expect(result.transport?.enableLegacySSE).toBe(true);
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
+      expect(result.transport?.protocol).toBeDefined();
+      const protocol = result.transport?.protocol;
+      expect(typeof protocol === 'object' && 'legacy' in protocol ? protocol.legacy : undefined).toBe(true);
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      expect(
+        getRedisProperty(
+          (result.transport?.persistence as { redis?: unknown })?.redis as Record<string, unknown>,
+          'host',
+        ),
+      ).toBe('global-redis');
     });
   });
 
@@ -196,11 +233,13 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.provider).toBe('vercel-kv');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: { provider?: string } };
+      expect(persistence?.redis?.provider).toBe('vercel-kv');
     });
 
-    it('should use global vercel-kv when persistence: { enabled: true } without redis', () => {
+    it('should use global vercel-kv when persistence is empty object', () => {
       const config = {
         redis: {
           provider: 'vercel-kv' as const,
@@ -208,14 +247,16 @@ describe('applyAutoTransportPersistence transform', () => {
           token: 'test-token',
         },
         transport: {
-          persistence: { enabled: true },
+          persistence: {},
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.redis?.provider).toBe('vercel-kv');
-      expect((result.transport?.persistence?.redis as { url?: string })?.url).toBe('https://kv.example.com');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: { provider?: string; url?: string } };
+      expect(persistence?.redis?.provider).toBe('vercel-kv');
+      expect(persistence?.redis?.url).toBe('https://kv.example.com');
     });
   });
 
@@ -226,9 +267,11 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('legacy-redis');
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'port')).toBe(6379);
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: Record<string, unknown> };
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('legacy-redis');
+      expect(getRedisProperty(persistence?.redis, 'port')).toBe(6379);
     });
   });
 
@@ -238,26 +281,26 @@ describe('applyAutoTransportPersistence transform', () => {
         redis: { host: 'global-redis' },
         transport: {
           persistence: {
-            enabled: true,
             defaultTtlMs: 7200000,
           },
         },
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(result.transport?.persistence?.defaultTtlMs).toBe(7200000);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { defaultTtlMs?: number; redis?: Record<string, unknown> };
+      expect(persistence?.defaultTtlMs).toBe(7200000);
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('global-redis');
     });
   });
 
   describe('edge cases', () => {
-    it('should handle persistence with enabled: true and explicit redis (no modification)', () => {
+    it('should handle persistence with explicit redis (no modification)', () => {
       const config = {
         redis: { host: 'global-redis' },
         transport: {
           persistence: {
-            enabled: true,
             redis: { host: 'explicit-redis' },
             defaultTtlMs: 3600000,
           },
@@ -266,11 +309,13 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       // Should use explicit redis, not global
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('explicit-redis');
-      expect(result.transport?.persistence?.enabled).toBe(true);
+      const persistence = result.transport?.persistence as { redis?: Record<string, unknown>; defaultTtlMs?: number };
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('explicit-redis');
+      expect(persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
     });
 
-    it('should handle persistence object with only defaultTtlMs (no enabled flag)', () => {
+    it('should handle persistence object with only defaultTtlMs', () => {
       const config = {
         redis: { host: 'global-redis' },
         transport: {
@@ -281,9 +326,10 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      // persistence.enabled defaults to false in schema, so transform checks Case 3 (enabled: true without redis)
-      // which won't match since enabled is false by default, so it falls through
-      expect(result.transport?.persistence?.defaultTtlMs).toBe(7200000);
+      // Object without redis gets global redis populated (Case 3 in transform)
+      const persistence = result.transport?.persistence as { defaultTtlMs?: number; redis?: Record<string, unknown> };
+      expect(persistence?.defaultTtlMs).toBe(7200000);
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('global-redis');
     });
 
     it('should handle empty persistence object', () => {
@@ -295,8 +341,11 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      // Empty object gets enabled: false from schema defaults
-      expect(result.transport?.persistence?.enabled).toBe(false);
+      // Empty object gets global redis populated
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: Record<string, unknown> };
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('global-redis');
     });
 
     it('should preserve all global redis options when auto-populating', () => {
@@ -313,13 +362,15 @@ describe('applyAutoTransportPersistence transform', () => {
       };
       const result = testSchema.parse(config);
 
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'port')).toBe(6380);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'password')).toBe('secret');
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'db')).toBe(2);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'tls')).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'keyPrefix')).toBe('myapp:');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: Record<string, unknown> };
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('global-redis');
+      expect(getRedisProperty(persistence?.redis, 'port')).toBe(6380);
+      expect(getRedisProperty(persistence?.redis, 'password')).toBe('secret');
+      expect(getRedisProperty(persistence?.redis, 'db')).toBe(2);
+      expect(getRedisProperty(persistence?.redis, 'tls')).toBe(true);
+      expect(getRedisProperty(persistence?.redis, 'keyPrefix')).toBe('myapp:');
     });
 
     it('should handle redis: undefined explicitly', () => {
@@ -340,8 +391,10 @@ describe('applyAutoTransportPersistence transform', () => {
       const result = testSchema.parse(config);
 
       // Should still auto-enable even when transport is undefined
-      expect(result.transport?.persistence?.enabled).toBe(true);
-      expect(getRedisProperty(result.transport?.persistence?.redis, 'host')).toBe('global-redis');
+      expect(result.transport?.persistence).toBeDefined();
+      expect(result.transport?.persistence).not.toBe(false);
+      const persistence = result.transport?.persistence as { redis?: Record<string, unknown> };
+      expect(getRedisProperty(persistence?.redis, 'host')).toBe('global-redis');
     });
   });
 
@@ -364,7 +417,6 @@ describe('applyAutoTransportPersistence transform', () => {
       const config = {
         transport: {
           persistence: {
-            enabled: true,
             redis: { host: 'localhost' },
             defaultTtlMs: -1,
           },
@@ -383,22 +435,26 @@ describe('applyAutoTransportPersistence transform', () => {
       expect(isPersistenceObject(null)).toBe(true);
     });
 
+    it('should return true for false (explicitly disabled)', () => {
+      expect(isPersistenceObject(false)).toBe(true);
+    });
+
     it('should return true for valid persistence object', () => {
-      expect(isPersistenceObject({ enabled: true, defaultTtlMs: 3600000 })).toBe(true);
+      expect(isPersistenceObject({ defaultTtlMs: 3600000 })).toBe(true);
+    });
+
+    it('should return true for persistence object with redis', () => {
+      expect(isPersistenceObject({ redis: { host: 'localhost' }, defaultTtlMs: 3600000 })).toBe(true);
     });
 
     it('should return true for empty object', () => {
       expect(isPersistenceObject({})).toBe(true);
     });
 
-    it('should return false for non-object', () => {
+    it('should return false for non-object primitives', () => {
       expect(isPersistenceObject('string')).toBe(false);
       expect(isPersistenceObject(123)).toBe(false);
-    });
-
-    it('should return false when enabled is not boolean', () => {
-      expect(isPersistenceObject({ enabled: 'true' })).toBe(false);
-      expect(isPersistenceObject({ enabled: 1 })).toBe(false);
+      expect(isPersistenceObject(true)).toBe(false); // true is not valid, only false is
     });
 
     it('should return false when defaultTtlMs is not number', () => {

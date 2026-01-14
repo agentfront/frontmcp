@@ -1,13 +1,13 @@
-import { FrontMcpServer, HttpConfig, HttpMethod, ServerRequestHandler } from '../common';
+import { FrontMcpServer, HttpOptions, HttpMethod, ServerRequestHandler } from '../common';
 import { ExpressHostAdapter } from './adapters/express.host.adapter';
 import { HostServerAdapter } from './adapters/base.host.adapter';
 
 export class FrontMcpServerInstance extends FrontMcpServer {
-  config: HttpConfig;
+  config: HttpOptions;
   host: HostServerAdapter;
   private healthRouteRegistered = false;
 
-  constructor(httpConfig: HttpConfig) {
+  constructor(httpConfig: HttpOptions) {
     super();
     this.config = httpConfig;
     this.setupDefaults();

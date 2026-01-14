@@ -7,6 +7,7 @@ import type {
   InputTransformContext,
   ExtendedToolMetadata,
   InputTransform,
+  PostToolTransformContext,
 } from './openapi.types';
 import type { JSONSchema } from 'zod/v4/core';
 
@@ -31,6 +32,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // Get transforms stored in metadata by adapter
   const inputTransforms = metadata.adapter?.inputTransforms ?? [];
   const toolTransform = metadata.adapter?.toolTransform ?? {};
+  const postToolTransform = metadata.adapter?.postToolTransform;
 
   // Validate and parse x-frontmcp extension from OpenAPI spec
   const frontmcpValidation = validateFrontMcpExtension(metadata.frontmcp, openapiTool.name, logger);
@@ -42,17 +44,22 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
   // Build output schema from OpenAPI response definitions
   // mcp-from-openapi generates outputSchema from response definitions
   // Wrap with status for consistent response format
-  const baseOutputSchema = openapiTool.outputSchema ?? { type: 'string' };
-  const wrappedOutputSchema: JsonSchema = {
-    type: 'object',
-    properties: {
-      status: { type: 'number', description: 'HTTP status code' },
-      ok: { type: 'boolean', description: 'Whether the response was successful' },
-      data: baseOutputSchema as JsonSchema,
-      error: { type: 'string', description: 'Error message for non-ok responses' },
-    },
-    required: ['status', 'ok'],
-  };
+  // Note: If outputSchema is explicitly undefined (e.g., outputSchemaMode: 'description'),
+  // we don't create a wrapped schema - the schema was moved to description
+  let wrappedOutputSchema: JsonSchema | undefined;
+  if (openapiTool.outputSchema !== undefined) {
+    const baseOutputSchema = openapiTool.outputSchema ?? { type: 'string' };
+    wrappedOutputSchema = {
+      type: 'object',
+      properties: {
+        status: { type: 'number', description: 'HTTP status code' },
+        ok: { type: 'boolean', description: 'Whether the response was successful' },
+        data: baseOutputSchema as JsonSchema,
+        error: { type: 'string', description: 'Error message for non-ok responses' },
+      },
+      required: ['status', 'ok'],
+    };
+  }
 
   // Build tool metadata with transforms applied
   // Priority: OpenAPI x-frontmcp → toolTransforms (adapter can override spec)
@@ -62,8 +69,8 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
     description: openapiTool.description,
     inputSchema: schemaResult.schema.shape || {},
     rawInputSchema: openapiTool.inputSchema,
-    // Add output schema for tool/list to expose
-    rawOutputSchema: wrappedOutputSchema,
+    // Add output schema for tool/list to expose (only if not moved to description)
+    ...(wrappedOutputSchema && { rawOutputSchema: wrappedOutputSchema }),
   };
 
   // Track schema conversion failure in metadata for debugging
@@ -209,7 +216,38 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       // 10. Parse response (returns structured OpenApiResponse)
       const apiResponse = await parseResponse(response, { maxResponseSize: options.maxResponseSize });
 
-      // 11. Convert non-ok responses to MCP error format
+      // 11. Apply post-tool output transform if configured
+      let transformedData = apiResponse.data;
+      if (postToolTransform) {
+        const transformCtx: PostToolTransformContext = {
+          ctx,
+          tool: openapiTool,
+          status: apiResponse.status,
+          ok: apiResponse.ok,
+          adapterOptions: options,
+        };
+
+        // Check filter (if provided)
+        const shouldTransform = postToolTransform.filter ? postToolTransform.filter(transformCtx) : true;
+
+        if (shouldTransform) {
+          try {
+            transformedData = await postToolTransform.transform(apiResponse.data, transformCtx);
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const errorStack = err instanceof Error ? err.stack : undefined;
+            logger.error(`[${openapiTool.name}] Post-tool output transform failed`, {
+              error: errorMessage,
+              stack: errorStack,
+              status: apiResponse.status,
+              ok: apiResponse.ok,
+            });
+            // Keep original data on transform failure
+          }
+        }
+      }
+
+      // 12. Convert non-ok responses to MCP error format
       if (!apiResponse.ok) {
         // Return MCP error format with status in _meta
         return {
@@ -219,7 +257,7 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
               text: JSON.stringify({
                 status: apiResponse.status,
                 error: apiResponse.error,
-                data: apiResponse.data,
+                data: transformedData,
               }),
             },
           ],
@@ -231,16 +269,28 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         };
       }
 
-      // 12. Return successful response with status
+      // 13. Return successful response with status
       return {
         status: apiResponse.status,
         ok: true,
-        data: apiResponse.data,
+        data: transformedData,
       };
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
+        const timeoutError = new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
+        logger.error(`[${openapiTool.name}] API request timeout`, {
+          timeout: requestTimeout,
+          url,
+          method: openapiTool.metadata.method.toUpperCase(),
+        });
+        throw timeoutError;
       }
+      // Log all other API request errors
+      logger.error(`[${openapiTool.name}] API request failed`, {
+        url,
+        method: openapiTool.metadata.method.toUpperCase(),
+        error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+      });
       throw err;
     } finally {
       clearTimeout(timeoutId);

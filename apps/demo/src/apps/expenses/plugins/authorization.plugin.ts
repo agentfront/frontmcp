@@ -1,12 +1,11 @@
-import {DynamicPlugin, Plugin, FlowCtxOf, FlowHooksOf} from '@frontmcp/sdk';
-
+import { DynamicPlugin, Plugin, FlowCtxOf, FlowHooksOf } from '@frontmcp/sdk';
 
 const ListToolsHook = FlowHooksOf('tools:list-tools');
 
 declare global {
-    interface ExtendFrontMcpToolMetadata {
-      authorization?: AuthorizationToolOptions;
-    }
+  interface ExtendFrontMcpToolMetadata {
+    authorization?: AuthorizationToolOptions;
+  }
 }
 
 export interface AuthorizationPluginOptions {
@@ -16,7 +15,6 @@ export interface AuthorizationPluginOptions {
 export interface AuthorizationToolOptions {
   requiredRoles: string[];
 }
-
 
 @Plugin({
   name: 'authorization',
@@ -29,18 +27,23 @@ export default class AuthorizationPlugin extends DynamicPlugin<AuthorizationPlug
 
   @ListToolsHook.Did('findTools')
   async canActivate(flowCtx: FlowCtxOf<'tools:list-tools'>) {
-    const {tools} = flowCtx.state.required;
-    const {ctx: {authInfo}} = flowCtx.rawInput
+    const { tools } = flowCtx.state.required;
+    const {
+      ctx: { authInfo },
+    } = flowCtx.rawInput;
 
-    const authorizedTools = tools.filter(({tool}) => {
+    const authorizedTools = tools.filter(({ tool }) => {
       const metadata = tool.metadata;
 
       if (!metadata.authorization) return true;
-      const {requiredRoles} = metadata.authorization;
-      const roles = (authInfo.user as any).roles as string[];
+      const { requiredRoles } = metadata.authorization;
+      const roles = (authInfo?.user as any)?.roles as string[] | undefined;
+
+      // If no roles found, deny access to tools requiring roles
+      if (!roles || !Array.isArray(roles)) return false;
 
       // check if required roles are present in the user's roles
-      return requiredRoles.every(role => roles.includes(role));
+      return requiredRoles.every((role) => roles.includes(role));
     });
 
     flowCtx.state.set('tools', authorizedTools);

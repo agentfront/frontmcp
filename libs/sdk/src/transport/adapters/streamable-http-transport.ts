@@ -127,10 +127,12 @@ export class RecreateableStreamableHTTPServerTransport extends StreamableHTTPSer
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _applyInitState(webTransport: any, sessionId: string): void {
-    // Verify expected fields exist before setting (SDK version safety)
-    if (!('_initialized' in webTransport) || !('sessionId' in webTransport)) {
+    // Verify _initialized field exists (SDK version safety check)
+    // Note: sessionId is only assigned during initialization request processing,
+    // so it won't exist on a fresh transport - we're about to set it.
+    if (!('_initialized' in webTransport)) {
       throw new Error(
-        '[RecreateableStreamableHTTPServerTransport] Expected fields not found on internal transport. ' +
+        '[RecreateableStreamableHTTPServerTransport] Expected _initialized field not found on internal transport. ' +
           'This may indicate an incompatible MCP SDK version.',
       );
     }

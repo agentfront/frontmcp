@@ -3,7 +3,6 @@ import { CachePlugin } from '@frontmcp/plugins';
 
 const port = parseInt(process.env['PORT'] ?? '3098', 10);
 const localMcpPort = parseInt(process.env['LOCAL_MCP_PORT'] ?? '3099', 10);
-const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://autheu.davidantoon.me';
 
 @FrontMcp({
   info: { name: 'Remote Gateway E2E', version: '0.1.0' },
@@ -43,12 +42,7 @@ const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://autheu.davida
   logging: { level: LogLevel.Verbose },
   http: { port },
   transport: {
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
-    enableLegacySSE: true,
-    enableSseListener: true,
+    protocol: { json: true, legacy: true, strictSession: false },
   },
   auth: { mode: 'public' },
 })

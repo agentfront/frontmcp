@@ -20,7 +20,7 @@ on:
           - "6"
         default: "2"
       ngrok_domain:
-        description: "Custom ngrok domain (optional, e.g., my-domain.ngrok.io)"
+        description: "Custom ngrok domain (defaults to frontmcp-pr-{PR_NUM}.ngrok.io)"
         required: false
         type: string
         default: ""
@@ -173,8 +173,13 @@ jobs:
           # Build ngrok arguments array (safe from injection)
           declare -a NGROK_ARGS=("http" "4873" "--log=stdout")
 
-          # Add domain if provided (already validated above)
+          # Get domain - use provided value or default to frontmcp-pr-{PR_NUM}.ngrok.io
           NGROK_DOMAIN="${{ inputs.ngrok_domain }}"
+          if [ -z "${NGROK_DOMAIN}" ]; then
+            NGROK_DOMAIN="frontmcp-pr-${{ inputs.pr_number }}.ngrok.io"
+            echo "Using default domain: ${NGROK_DOMAIN}"
+          fi
+
           if [ -n "${NGROK_DOMAIN}" ]; then
             if [ -z "${NGROK_AUTH_TOKEN:-}" ]; then
               echo "::error::Custom domain requires NGROK_AUTH_TOKEN to be configured"

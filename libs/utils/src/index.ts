@@ -34,6 +34,7 @@ export { validateBaseUrl } from './http';
 // File system utilities (Node.js only)
 export {
   readFile,
+  readFileSync,
   readFileBuffer,
   writeFile,
   mkdir,

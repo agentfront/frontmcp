@@ -43,7 +43,9 @@ export class StorageConnectionError extends StorageError {
     cause?: Error,
     public readonly backend?: string,
   ) {
-    super(message, cause);
+    // Include cause message for better error visibility
+    const fullMessage = cause ? `${message}: ${cause.message}` : message;
+    super(fullMessage, cause);
     this.name = 'StorageConnectionError';
   }
 }

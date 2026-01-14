@@ -44,6 +44,9 @@
       }
     }
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@frontmcp/plugin-cache": "0.7.2",
     "@frontmcp/plugin-codecall": "0.7.2",

@@ -1,7 +1,7 @@
-// common/types/options/auth/auth.utils.ts
+// common/types/options/auth/utils.ts
 // Helper functions for auth options
 
-import { authOptionsSchema, AuthOptions, AuthOptionsInput } from './auth.schema';
+import { authOptionsSchema, AuthOptions, AuthOptionsInput } from './schema';
 import { PublicAuthOptions } from './public.schema';
 import { TransparentAuthOptions } from './transparent.schema';
 import { OrchestratedAuthOptions, OrchestratedLocalOptions, OrchestratedRemoteOptions } from './orchestrated.schema';
