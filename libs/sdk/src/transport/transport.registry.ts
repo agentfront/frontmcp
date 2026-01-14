@@ -64,6 +64,14 @@ export class TransportService {
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 
+  /**
+   * Get the default TTL for session persistence.
+   * Returns undefined if persistence is disabled or not configured.
+   */
+  private getDefaultTtlMs(): number | undefined {
+    return typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
+  }
+
   constructor(scope: Scope, persistenceConfig?: false | TransportPersistenceConfigInput) {
     this.scope = scope;
     this.persistenceConfig = persistenceConfig;
@@ -304,8 +312,7 @@ export class TransportService {
     this.sessionHistory.set(historyKey, storedSession.createdAt);
 
     const sessionStore = this.sessionStore;
-    // Get defaultTtlMs (persistenceConfig is object when sessionStore is set)
-    const defaultTtlMs = typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
+    const defaultTtlMs = this.getDefaultTtlMs();
 
     // Create new transport
     const transporter = new LocalTransporter(this.scope, key, res, () => {
@@ -398,8 +405,7 @@ export class TransportService {
     if (existing) return existing;
 
     const sessionStore = this.sessionStore;
-    // Get defaultTtlMs (persistenceConfig is object when sessionStore is set)
-    const defaultTtlMs = typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
+    const defaultTtlMs = this.getDefaultTtlMs();
 
     const transporter = new LocalTransporter(this.scope, key, res, () => {
       key.sessionId = sessionId;

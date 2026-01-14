@@ -22,7 +22,6 @@ export {
 } from './schema';
 
 export type {
-  StorageProvider,
   RedisProviderOptions,
   VercelKvProviderOptions,
   RedisOptions,

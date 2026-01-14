@@ -9,6 +9,8 @@ import { z } from 'zod';
 export const httpOptionsSchema = z.object({
   port: z.number().optional().default(3001),
   entryPath: z.string().default(''),
+  // Using z.any() because hostFactory accepts FrontMcpServer | ((config) => FrontMcpServer)
+  // which Zod cannot validate at runtime - type safety is enforced via TypeScript interface
   hostFactory: z.any().optional(),
 });
 

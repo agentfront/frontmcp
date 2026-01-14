@@ -356,7 +356,7 @@ The `redis` config is automatically used by:
     keyPrefix: 'myapp:',
   },
   transport: {
-    persistence: { enabled: true },
+    persistence: { defaultTtlMs: 3600000 },
   },
   auth: {
     mode: 'orchestrated',

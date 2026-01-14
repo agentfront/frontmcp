@@ -206,8 +206,17 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       this.logger.verbose(`[${this.requestId}] router: check request decision`);
 
       // Use transport config from scope metadata (top-level transport config only)
-      // Note: transportConfig is always defined after schema parsing (has defaults)
-      const transportConfig = this.scope.metadata.transport!;
+      const transportConfig = this.scope.metadata.transport;
+      if (!transportConfig) {
+        this.logger.error(`[${this.requestId}] transport config not found in scope metadata`);
+        this.respond(
+          httpRespond.json(
+            { error: 'Internal Server Error', message: 'Transport configuration missing' },
+            { status: 500 },
+          ),
+        );
+        return;
+      }
       // Convert protocol preset to legacy boolean flags for decideIntent
       const legacyFlags = toLegacyProtocolFlags(transportConfig.protocol);
       this.logger.debug(`[${this.requestId}] transport config`, {

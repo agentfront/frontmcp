@@ -131,7 +131,9 @@ export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMeta
 /**
  * Type guard for persistence object shape (simplified - no enabled flag)
  */
-function isPersistenceObject(value: unknown): value is { redis?: unknown; defaultTtlMs?: number } | false | undefined {
+function isPersistenceObject(
+  value: unknown,
+): value is { redis?: unknown; defaultTtlMs?: number } | false | undefined | null {
   if (value === undefined || value === null) return true;
   if (value === false) return true; // Explicitly disabled
   if (typeof value !== 'object') return false;

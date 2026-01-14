@@ -13,7 +13,7 @@ export const serverInfoOptionsSchema = z.object({
   name: z.string(),
   title: z.string().optional(),
   version: z.string(),
-  websiteUrl: z.string().optional(),
+  websiteUrl: z.url().optional(),
   icons: z.array(IconSchema).optional(),
 } satisfies RawZodShape<ServerInfoOptionsInterface>);
 

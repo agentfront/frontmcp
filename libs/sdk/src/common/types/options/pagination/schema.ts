@@ -2,7 +2,8 @@
 // Zod schema for pagination configuration
 
 import { z } from 'zod';
-import type { ToolPaginationOptionsInterface } from './interfaces';
+import type { RawZodShape } from '../../common.types';
+import type { PaginationOptionsInterface, ToolPaginationOptionsInterface } from './interfaces';
 
 /**
  * Zod schema for ToolPaginationOptions.
@@ -14,14 +15,14 @@ export const toolPaginationOptionsSchema = z.object({
     .default('auto'),
   pageSize: z.number().int().positive().optional().default(40),
   autoThreshold: z.number().int().positive().optional().default(40),
-});
+} satisfies RawZodShape<ToolPaginationOptionsInterface>);
 
 /**
  * Zod schema for PaginationOptions.
  */
 export const paginationOptionsSchema = z.object({
   tools: toolPaginationOptionsSchema.optional(),
-});
+} satisfies RawZodShape<PaginationOptionsInterface>);
 
 /**
  * Default pagination configuration values.

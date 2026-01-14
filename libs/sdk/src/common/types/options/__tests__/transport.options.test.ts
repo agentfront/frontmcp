@@ -363,4 +363,28 @@ describe('toLegacyProtocolFlags', () => {
       requireSessionForStreamable: false,
     });
   });
+
+  it('should convert stateless-api preset to legacy flags', () => {
+    const result = toLegacyProtocolFlags('stateless-api');
+    expect(result).toEqual({
+      enableLegacySSE: false,
+      enableSseListener: false,
+      enableStreamableHttp: false,
+      enableStatelessHttp: true,
+      enableStatefulHttp: false,
+      requireSessionForStreamable: false,
+    });
+  });
+
+  it('should convert full preset to legacy flags', () => {
+    const result = toLegacyProtocolFlags('full');
+    expect(result).toEqual({
+      enableLegacySSE: true,
+      enableSseListener: true,
+      enableStreamableHttp: true,
+      enableStatelessHttp: true,
+      enableStatefulHttp: true,
+      requireSessionForStreamable: false,
+    });
+  });
 });
