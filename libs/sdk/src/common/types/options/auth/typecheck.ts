@@ -1,7 +1,7 @@
-// common/types/options/auth/auth.typecheck.ts
+// common/types/options/auth/typecheck.ts
 // Compile-time type sync checks between interfaces and Zod schemas
 //
-// This file ensures that the explicit interfaces in auth.interfaces.ts
+// This file ensures that the explicit interfaces in interfaces.ts
 // stay in sync with the Zod schemas in the *.schema.ts files.
 //
 // If an interface property is added/removed/changed but schema isn't updated
@@ -26,7 +26,7 @@ import type {
   TransparentAuthOptionsInterface,
   OrchestratedLocalOptionsInterface,
   OrchestratedRemoteOptionsInterface,
-} from './auth.interfaces';
+} from './interfaces';
 
 // ============================================
 // TYPE SYNC HELPERS

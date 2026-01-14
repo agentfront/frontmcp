@@ -24,14 +24,9 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
     expectedAudience,
     requiredScopes: [],
     allowAnonymous: false,
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: true,
-      enableLegacySSE: true,
-      enableSseListener: true,
-    },
+  },
+  transport: {
+    protocol: { json: true, legacy: true },
   },
 })
 export default class Server {}

@@ -11,8 +11,8 @@ import { isUIType } from '@frontmcp/uipack/types';
 import type { AIPlatformType } from '@frontmcp/uipack/adapters';
 import type { Scope } from '../../scope/scope.instance';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import type { ToolPaginationOptions } from '../../common/types/options/pagination.options';
-import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination.options';
+import type { ToolPaginationOptions } from '../../common/types/options/pagination';
+import { DEFAULT_TOOL_PAGINATION } from '../../common/types/options/pagination';
 
 const inputSchema = z.object({
   request: ListToolsRequestSchema,

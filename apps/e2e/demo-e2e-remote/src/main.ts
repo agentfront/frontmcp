@@ -43,12 +43,7 @@ const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://autheu.davida
   logging: { level: LogLevel.Verbose },
   http: { port },
   transport: {
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
-    enableLegacySSE: true,
-    enableSseListener: true,
+    protocol: { json: true, legacy: true, strictSession: false },
   },
   auth: { mode: 'public' },
 })

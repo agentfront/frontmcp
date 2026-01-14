@@ -22,7 +22,6 @@
 
 - Introduce a **TransportRegistry** keyed by `Mcp-Session-Id` (and, for multi-stream cases, by **stream ID** as well).
 - Three concrete transports:
-
   - **Legacy SSE transport** (old protocol)
   - **Streamable HTTP (short-lived POST producing SSE)**
   - **Streamable HTTP (pure JSON POST, no SSE)**
@@ -52,7 +51,6 @@
 
 - Keep your **legacy GET SSE** open and **pin the transport** until the connection closes.
 - On **POSTs** that target legacy SSE:
-
   - If the request is not an `initialize` and there’s **no local SSE transport** for `sessionId`, **publish** the work
     item to pub/sub (with node origin headers) and **immediately end** the HTTP request. The actual response will arrive
     on the **already-open SSE** stream on whichever node owns it.
@@ -95,7 +93,6 @@
 
 - When enabled, if a request hits a **Streamable HTTP action without `Mcp-Session-Id`**, treat it as a **stateless**
   operation:
-
   - For `Accept: application/json` → return **JSON** batch response (no session, no event store). ([Model Context
     Protocol][1])
   - For `Accept: text/event-stream` → you **may** open a short-lived SSE for that single POST, but do **not** persist a
@@ -118,7 +115,6 @@
 - For **short-lived POST→SSE** mode and **SSE listener** mode, keep a **bounded event buffer per stream** (e.g., ring
   buffer) so you can replay on resume.
 - Storage choices:
-
   - **Distributed KV** (recommended for cross-node + restart)
   - In-memory only (fast but no resilience on restart / node change)
 
@@ -130,7 +126,6 @@
 - You **can** terminate an MCP session at will; after that respond **404** to any request with that `Mcp-Session-Id`.
   ([Model Context Protocol][1])
 - Treat transports (SSE streams) as **ephemeral** attachments to a session; on close, either:
-
   - Keep session alive (client can open a new stream or POST again), or
   - End the session and enforce 404.
 
@@ -153,7 +148,6 @@
 
 - Allow **N parallel sessions** per bearer token.
 - Each `initialize`:
-
   - Validates Authorization (per OAuth2.1) and negotiates capabilities (per Lifecycle). ([Model Context Protocol][2])
   - Issues a unique **`Mcp-Session-Id`** (JWT fine; ASCII, secure randomness). ([Model Context Protocol][1])
 
@@ -164,16 +158,71 @@
 
 ---
 
-# Config matrix & behavior (what devs can enable)
+# Protocol Presets (recommended configuration)
 
-Create a server config block like:
+Instead of configuring individual boolean flags, use **protocol presets** for simplified configuration:
 
-- `enableLegacySSE` (default: off)
-- `enableStreamableHTTP_JSON` (on)
-- `enableStreamableHTTP_SSE` (on)
-- `enableStreamableHTTP_GET_SSEListener` (optional; on for reverse-channel)
-- `enableStatelessStandardHTTP` (off)
-- `requireSessionForStreamableHTTP` (on)
+```typescript
+const server = new McpServer({
+  transport: {
+    protocol: 'legacy', // Default - best for backwards compatibility
+  },
+});
+```
+
+## Available Presets
+
+| Preset          | Description                                  | SSE | Streamable | JSON | Stateless | Legacy | Strict Session |
+| --------------- | -------------------------------------------- | --- | ---------- | ---- | --------- | ------ | -------------- |
+| `legacy`        | **Default** - Modern + legacy SSE support    | ✅  | ✅         | ❌   | ❌        | ✅     | ✅             |
+| `modern`        | SSE + streamable HTTP with strict sessions   | ✅  | ✅         | ❌   | ❌        | ❌     | ✅             |
+| `stateless-api` | No sessions, pure request/response           | ❌  | ❌         | ❌   | ✅        | ❌     | ❌             |
+| `full`          | All protocols enabled, maximum compatibility | ✅  | ✅         | ✅   | ✅        | ✅     | ❌             |
+
+## Custom Protocol Configuration
+
+For fine-grained control, pass an object instead of a preset:
+
+```typescript
+const server = new McpServer({
+  transport: {
+    protocol: {
+      sse: true,
+      streamable: true,
+      json: true, // Enable JSON-only responses
+      stateless: false,
+      legacy: true,
+      strictSession: true,
+    },
+  },
+});
+```
+
+## Protocol Options
+
+| Option          | Description                                       | Default (legacy) |
+| --------------- | ------------------------------------------------- | ---------------- |
+| `sse`           | Enable SSE listener for server-initiated messages | `true`           |
+| `streamable`    | Enable streamable HTTP transport (POST with SSE)  | `true`           |
+| `json`          | Enable JSON-only responses (stateful HTTP)        | `false`          |
+| `stateless`     | Enable stateless HTTP mode (no session required)  | `false`          |
+| `legacy`        | Enable legacy SSE transport for older clients     | `true`           |
+| `strictSession` | Require session ID for streamable HTTP            | `true`           |
+
+---
+
+# Config matrix & behavior (legacy flags)
+
+> **Note**: The individual flags below map to protocol presets. Prefer using `protocol: 'legacy'` (default) or other presets.
+
+Legacy config flags (for reference):
+
+- `enableLegacySSE` → `protocol.legacy` (default: on in `legacy` preset)
+- `enableStreamableHTTP_JSON` → `protocol.json`
+- `enableStreamableHTTP_SSE` → `protocol.streamable`
+- `enableStreamableHTTP_GET_SSEListener` → `protocol.sse`
+- `enableStatelessStandardHTTP` → `protocol.stateless`
+- `requireSessionForStreamableHTTP` → `protocol.strictSession`
 - `eventStore.mode` = `distributed | memory | off`
 - `eventStore.maxEventsPerStream` & `eventStore.ttlMs`
 - `pubsub.enabled` (on for multi-node) & backend selection
@@ -183,7 +232,6 @@ Create a server config block like:
 - If `requireSessionForStreamableHTTP` and request lacks `Mcp-Session-Id` (and isn’t `initialize`) → **400**. ([Model
   Context Protocol][1])
 - If `enableStatelessStandardHTTP` and _no_ `Mcp-Session-Id`:
-
   - Serve as **stateless** in the selected POST mode (JSON or POST-SSE based on `Accept`). **Do not** mint a session ID.
   - If a `Mcp-Session-Id` is present **and** you want to force stateless only → respond **404** “no active transport;
     initialize first” (makes it clear stateless requests must not carry a session header).
@@ -272,7 +320,6 @@ interface StoredSession {
 
 3. **Stateless transport object** - The `LocalTransporter` is effectively stateless from a persistence perspective. It
    only needs:
-
    - A session ID to identify the connection
    - A response object to write to
    - The scope for tool/resource access

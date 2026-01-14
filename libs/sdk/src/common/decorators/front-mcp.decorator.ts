@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { FrontMcpTokens } from '../tokens';
 import { FrontMcpMetadata, frontMcpMetadataSchema } from '../metadata';
-import { applyMigration } from '../migrate';
 import { InternalMcpError } from '../../errors/mcp.error';
 
 // Lazy imports to avoid circular dependency with @frontmcp/sdk package entry point.
@@ -42,9 +41,7 @@ function getServerlessHandlerFns(): ServerlessHandlerFns {
  */
 export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
   return (target: Function) => {
-    // Apply migration for deprecated auth.transport and session configs
-    const migratedMetadata = applyMigration(providedMetadata);
-    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(migratedMetadata);
+    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(providedMetadata);
     if (error) {
       if (error.format().apps) {
         throw new Error(

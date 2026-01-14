@@ -9,12 +9,7 @@ const port = parseInt(process.env['PORT'] ?? '3018', 10);
   logging: { level: LogLevel.Verbose },
   http: { port },
   transport: {
-    enableStatefulHttp: true,
-    enableStreamableHttp: true,
-    enableStatelessHttp: false,
-    requireSessionForStreamable: false,
-    enableLegacySSE: true,
-    enableSseListener: true,
+    protocol: { json: true, legacy: true, strictSession: false },
   },
   auth: {
     mode: 'public',

@@ -18,7 +18,7 @@ import HandleSseFlow from './flows/handle.sse.flow';
 import HandleStatelessHttpFlow from './flows/handle.stateless-http.flow';
 import { StoredSession, createSessionStore } from '../auth/session';
 import type { SessionStore } from '../auth/session';
-import type { RedisOptions } from '../common/types/options/redis.options';
+import type { RedisOptions } from '../common/types/options/redis';
 import { getMachineId } from '../auth/authorization/authorization.class';
 
 export class TransportService {
@@ -47,8 +47,11 @@ export class TransportService {
 
   /**
    * Transport persistence configuration
+   * - `false`: Explicitly disabled
+   * - `object`: Enabled with config (redis, defaultTtlMs)
+   * - `undefined`: Not configured
    */
-  private persistenceConfig?: TransportPersistenceConfigInput;
+  private persistenceConfig?: false | TransportPersistenceConfigInput;
 
   /**
    * Pending store configuration for async initialization
@@ -61,7 +64,7 @@ export class TransportService {
    */
   private readonly creationMutex: Map<string, Promise<Transporter>> = new Map();
 
-  constructor(scope: Scope, persistenceConfig?: TransportPersistenceConfigInput) {
+  constructor(scope: Scope, persistenceConfig?: false | TransportPersistenceConfigInput) {
     this.scope = scope;
     this.persistenceConfig = persistenceConfig;
     this.distributed = false; // get from scope metadata
@@ -71,7 +74,8 @@ export class TransportService {
     }
 
     // Initialize session store if persistence is enabled (Redis or Vercel KV)
-    if (persistenceConfig?.enabled && persistenceConfig.redis) {
+    // Simplified format: false = disabled, object with redis = enabled, undefined = not configured
+    if (persistenceConfig !== false && persistenceConfig?.redis) {
       // Use factory to create appropriate session store based on provider
       const redisConfig = persistenceConfig.redis;
       const providerType = 'provider' in redisConfig ? redisConfig.provider : 'redis';
@@ -113,10 +117,10 @@ export class TransportService {
     if (this.sessionStore) {
       const isConnected = this.sessionStore.ping ? await this.sessionStore.ping() : true;
       if (!isConnected) {
-        const providerType =
-          this.persistenceConfig?.redis && 'provider' in this.persistenceConfig.redis
-            ? this.persistenceConfig.redis.provider
-            : 'redis';
+        // Determine provider type for error message
+        // Note: persistenceConfig is already narrowed to object since sessionStore exists
+        const persistConfig = this.persistenceConfig as { redis?: { provider?: string } } | undefined;
+        const providerType = persistConfig?.redis?.provider ?? 'redis';
         this.scope.logger.error(
           `[TransportService] Failed to connect to ${providerType} - session persistence disabled`,
         );
@@ -300,7 +304,8 @@ export class TransportService {
     this.sessionHistory.set(historyKey, storedSession.createdAt);
 
     const sessionStore = this.sessionStore;
-    const persistenceConfig = this.persistenceConfig;
+    // Get defaultTtlMs (persistenceConfig is object when sessionStore is set)
+    const defaultTtlMs = typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
 
     // Create new transport
     const transporter = new LocalTransporter(this.scope, key, res, () => {
@@ -332,7 +337,7 @@ export class TransportService {
         ...storedSession,
         lastAccessedAt: Date.now(),
       };
-      sessionStore.set(sessionId, updatedSession, persistenceConfig?.defaultTtlMs).catch((err) => {
+      sessionStore.set(sessionId, updatedSession, defaultTtlMs).catch((err) => {
         this.scope.logger.warn('[TransportService] Failed to update session in Redis', {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),
@@ -393,7 +398,8 @@ export class TransportService {
     if (existing) return existing;
 
     const sessionStore = this.sessionStore;
-    const persistenceConfig = this.persistenceConfig;
+    // Get defaultTtlMs (persistenceConfig is object when sessionStore is set)
+    const defaultTtlMs = typeof this.persistenceConfig === 'object' ? this.persistenceConfig?.defaultTtlMs : undefined;
 
     const transporter = new LocalTransporter(this.scope, key, res, () => {
       key.sessionId = sessionId;
@@ -426,7 +432,7 @@ export class TransportService {
         lastAccessedAt: Date.now(),
         initialized: true, // Mark as initialized for session recreation
       };
-      sessionStore.set(sessionId, storedSession, persistenceConfig?.defaultTtlMs).catch((err) => {
+      sessionStore.set(sessionId, storedSession, defaultTtlMs).catch((err) => {
         this.scope.logger.warn('[TransportService] Failed to persist session to Redis', {
           sessionId: sessionId.slice(0, 20),
           error: err instanceof Error ? err.message : String(err),

@@ -3,7 +3,6 @@
 
 import { z } from 'zod';
 import { publicAccessConfigSchema, remoteProviderConfigSchema } from './shared.schemas';
-import { transportConfigSchema } from './transport.deprecated';
 
 // ============================================
 // TRANSPARENT MODE
@@ -47,11 +46,6 @@ export const transparentAuthOptionsSchema = z.object({
    * Public access config for anonymous users (when allowAnonymous=true)
    */
   publicAccess: publicAccessConfigSchema.optional(),
-
-  /**
-   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
-   */
-  transport: transportConfigSchema.optional(),
 });
 
 // ============================================

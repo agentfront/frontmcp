@@ -2,8 +2,6 @@ import { z } from 'zod';
 import {
   AuthOptions,
   authOptionsSchema,
-  SessionOptions,
-  sessionOptionsSchema,
   ServerInfoOptions,
   serverInfoOptionsSchema,
   HttpOptions,
@@ -20,6 +18,8 @@ import {
   transportOptionsSchema,
   PaginationOptions,
   paginationOptionsSchema,
+  HttpOptionsInput,
+  LoggingOptionsInput,
 } from '../types';
 import {
   annotatedFrontMcpAppSchema,
@@ -33,8 +33,8 @@ import { AppType, PluginType, ProviderType, ResourceType, ToolType } from '../in
 export interface FrontMcpBaseMetadata {
   info: ServerInfoOptions;
   apps: AppType[];
-  http?: HttpOptions;
-  logging?: LoggingOptions;
+  http?: HttpOptionsInput;
+  logging?: LoggingOptionsInput;
 
   serve?: boolean; // default to true
 
@@ -58,11 +58,6 @@ export interface FrontMcpBaseMetadata {
    * @default {} (all transport options use their schema defaults)
    */
   transport?: TransportOptionsInput; // Optional in input, but always defined in output
-
-  /**
-   * @deprecated Use `transport` instead. Session config has been merged into transport.
-   */
-  session?: SessionOptions;
 
   /**
    * Additional providers that are available to all apps.
@@ -107,7 +102,6 @@ export const frontMcpBaseSchema = z.object({
   redis: redisOptionsSchema.optional(),
   pubsub: pubsubOptionsSchema.optional(),
   transport: transportOptionsSchema.optional().transform((val) => val ?? transportOptionsSchema.parse({})),
-  session: sessionOptionsSchema.optional(), // @deprecated - kept for backward compatibility
   logging: loggingOptionsSchema.optional(),
   pagination: paginationOptionsSchema.optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
@@ -135,16 +129,14 @@ const frontMcpSplitByAppSchema = frontMcpBaseSchema.extend({
 export type FrontMcpMetadata = FrontMcpMultiAppMetadata | FrontMcpSplitByAppMetadata;
 
 /**
- * Type guard for persistence object shape
+ * Type guard for persistence object shape (simplified - no enabled flag)
  */
-function isPersistenceObject(
-  value: unknown,
-): value is { enabled?: boolean; redis?: unknown; defaultTtlMs?: number } | undefined {
+function isPersistenceObject(value: unknown): value is { redis?: unknown; defaultTtlMs?: number } | false | undefined {
   if (value === undefined || value === null) return true;
+  if (value === false) return true; // Explicitly disabled
   if (typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
-  // Check optional properties have correct types if present (use bracket notation for index signatures)
-  if ('enabled' in obj && typeof obj['enabled'] !== 'boolean') return false;
+  // Check optional properties have correct types if present
   if ('defaultTtlMs' in obj && typeof obj['defaultTtlMs'] !== 'number') return false;
   return true;
 }
@@ -153,11 +145,16 @@ function isPersistenceObject(
  * Transform function to auto-populate transport.persistence from global redis config.
  * This enables automatic transport session persistence when global redis is configured.
  *
+ * New simplified behavior:
+ * - `persistence: false` → explicitly disabled
+ * - `persistence: { redis?: ... }` → enabled with config
+ * - `persistence: undefined` → auto-enable when global redis exists
+ *
  * Behavior:
  * - If redis is set AND transport.persistence is not configured → auto-enable with global redis
- * - If transport.persistence.enabled=true but no redis → use global redis (if available)
- * - If transport.persistence.enabled=false → respect explicit disable
+ * - If transport.persistence is false → respect explicit disable
  * - If transport.persistence.redis is explicitly set → use that config
+ * - If transport.persistence is object without redis → use global redis
  */
 function applyAutoTransportPersistence<T extends { redis?: unknown; transport?: { persistence?: unknown } }>(
   data: T,
@@ -174,26 +171,24 @@ function applyAutoTransportPersistence<T extends { redis?: unknown; transport?: 
     return data; // Invalid shape, don't modify
   }
 
-  const persistence = rawPersistence;
-
-  // Case 1: persistence explicitly disabled - respect that
-  if (persistence?.enabled === false) {
+  // Case 1: persistence explicitly disabled (false) - respect that
+  if (rawPersistence === false) {
     return data;
   }
 
-  // Case 2: persistence has explicit redis config - use that
-  if (persistence?.redis) {
+  // Case 2: persistence is an object with explicit redis config - use that
+  if (rawPersistence && typeof rawPersistence === 'object' && 'redis' in rawPersistence && rawPersistence.redis) {
     return data;
   }
 
-  // Case 3: persistence enabled but no redis config - use global redis
-  if (persistence?.enabled === true && !persistence.redis) {
+  // Case 3: persistence is an object without redis - use global redis
+  if (rawPersistence && typeof rawPersistence === 'object') {
     return {
       ...data,
       transport: {
         ...transport,
         persistence: {
-          ...persistence,
+          ...rawPersistence,
           redis: data.redis,
         },
       },
@@ -201,13 +196,12 @@ function applyAutoTransportPersistence<T extends { redis?: unknown; transport?: 
   }
 
   // Case 4: persistence not configured at all - auto-enable with global redis
-  if (persistence === undefined) {
+  if (rawPersistence === undefined) {
     return {
       ...data,
       transport: {
         ...transport,
         persistence: {
-          enabled: true,
           redis: data.redis,
         },
       },

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ServerRequest } from '../interfaces';
-import { TransportConfig } from '../types';
+import { LegacyProtocolFlags } from '../types';
 
 /* --------------------------------- Schemas --------------------------------- */
 
@@ -53,9 +53,9 @@ export type Decision = {
 
 /**
  * Configuration for request intent decision.
- * Extends TransportConfig with additional runtime option.
+ * Extends LegacyProtocolFlags with additional runtime option.
  */
-export interface Config extends TransportConfig {
+export interface Config extends LegacyProtocolFlags {
   tolerateMissingAccept: boolean;
 }
 
@@ -181,18 +181,18 @@ function computeBitmap(req: ServerRequest, cfg: Config) {
     method === 'POST' && postToMessage
       ? CH_POST_MESSAGE
       : getToSsePath && acceptSSE
-      ? CH_GET_SSE_PATH // GET /sse → legacy SSE channel
-      : method === 'GET' && acceptSSE
-      ? CH_GET_SSE // GET / + SSE → forward to next middleware (unknown)
-      : method === 'POST' && init && acceptSSE
-      ? CH_POST_INIT_SSE
-      : method === 'POST' && init && acceptJSON
-      ? CH_POST_INIT_JSON
-      : method === 'POST' && !init && acceptSSE
-      ? CH_POST_SSE
-      : method === 'POST' && !init && acceptJSON
-      ? CH_POST_JSON
-      : CH_OTHER;
+        ? CH_GET_SSE_PATH // GET /sse → legacy SSE channel
+        : method === 'GET' && acceptSSE
+          ? CH_GET_SSE // GET / + SSE → forward to next middleware (unknown)
+          : method === 'POST' && init && acceptSSE
+            ? CH_POST_INIT_SSE
+            : method === 'POST' && init && acceptJSON
+              ? CH_POST_INIT_JSON
+              : method === 'POST' && !init && acceptSSE
+                ? CH_POST_SSE
+                : method === 'POST' && !init && acceptJSON
+                  ? CH_POST_JSON
+                  : CH_OTHER;
 
   let flags = 0;
   if (sessionId) flags |= B_HAS_SESSION;

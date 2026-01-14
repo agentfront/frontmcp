@@ -16,8 +16,6 @@ export type {
   SkippedAppBehavior,
   ConsentConfig,
   IncrementalAuthConfig,
-  TransportRecreationConfig,
-  TransportConfig,
   // Auth mode interfaces
   PublicAuthOptionsInterface,
   TransparentAuthOptionsInterface,
@@ -27,7 +25,7 @@ export type {
   AuthOptionsInterface,
   AuthMode,
   OrchestratedType,
-} from './auth.interfaces';
+} from './interfaces';
 
 // ============================================
 // SHARED SCHEMAS & TYPES
@@ -97,8 +95,8 @@ export type {
 // ============================================
 // UNIFIED AUTH SCHEMA
 // ============================================
-export { authOptionsSchema } from './auth.schema';
-export type { AuthOptions, AuthOptionsInput, AuthMode as AuthModeZod } from './auth.schema';
+export { authOptionsSchema } from './schema';
+export type { AuthOptions, AuthOptionsInput, AuthMode as AuthModeZod } from './schema';
 
 // ============================================
 // APP-LEVEL AUTH SCHEMA
@@ -117,20 +115,4 @@ export {
   isOrchestratedLocal,
   isOrchestratedRemote,
   allowsPublicAccess,
-} from './auth.utils';
-
-// ============================================
-// DEPRECATED TRANSPORT SCHEMAS
-// (To be removed in v1.0.0)
-// ============================================
-export {
-  transportConfigSchema,
-  transportRecreationConfigSchema,
-  DEFAULT_TRANSPORT_CONFIG,
-} from './transport.deprecated';
-export type {
-  TransportConfig as TransportConfigZod,
-  TransportConfigInput,
-  TransportRecreationConfig as TransportRecreationConfigZod,
-  TransportRecreationConfigInput,
-} from './transport.deprecated';
+} from './utils';

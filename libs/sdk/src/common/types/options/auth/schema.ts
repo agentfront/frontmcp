@@ -1,4 +1,4 @@
-// common/types/options/auth/auth.schema.ts
+// common/types/options/auth/schema.ts
 // Unified auth options schema combining all modes
 
 import { z } from 'zod';

@@ -28,17 +28,22 @@ import { ProviderViews } from './provider.types';
 import { Scope } from '../scope';
 import HookRegistry from '../hooks/hook.registry';
 import { validateSessionId } from '../context/frontmcp-context';
-import { type DistributedConfigInput, shouldCacheProviders } from '../common/types/options/transport.options';
+import { type DistributedEnabled, shouldCacheProviders } from '../common/types/options/transport';
 
 /**
  * Configuration options for ProviderRegistry.
  */
 export interface ProviderRegistryOptions {
   /**
-   * Distributed mode configuration.
+   * Distributed mode setting.
    * Controls provider caching behavior for serverless/distributed deployments.
    */
-  distributed?: DistributedConfigInput;
+  distributedMode?: DistributedEnabled;
+  /**
+   * Override for provider session caching.
+   * When undefined, defaults based on distributedMode setting.
+   */
+  providerCaching?: boolean;
 }
 
 export default class ProviderRegistry
@@ -84,7 +89,7 @@ export default class ProviderRegistry
     super('ProviderRegistry', parentProviders, list, false);
 
     this.providedBy = new Map();
-    this.sessionCacheEnabled = shouldCacheProviders(options?.distributed);
+    this.sessionCacheEnabled = shouldCacheProviders(options?.distributedMode, options?.providerCaching);
 
     this.buildGraph();
     this.topoSort();

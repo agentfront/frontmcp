@@ -16,6 +16,7 @@ import {
   normalizeEntryPrefix,
   normalizeScopeBase,
   FlowControl,
+  toLegacyProtocolFlags,
 } from '../../common';
 import { z } from 'zod';
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';
@@ -204,16 +205,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
       const { request } = this.rawInput;
       this.logger.verbose(`[${this.requestId}] router: check request decision`);
 
-      // Use transport config from scope metadata (top-level transport config)
-      // Fall back to auth.transport for backwards compatibility with deprecated config
-      const transport = this.scope.metadata.transport ?? this.scope.auth.transport;
+      // Use transport config from scope metadata (top-level transport config only)
+      // Note: transportConfig is always defined after schema parsing (has defaults)
+      const transportConfig = this.scope.metadata.transport!;
+      // Convert protocol preset to legacy boolean flags for decideIntent
+      const legacyFlags = toLegacyProtocolFlags(transportConfig.protocol);
       this.logger.debug(`[${this.requestId}] transport config`, {
-        enableLegacySSE: transport.enableLegacySSE,
-        enableStreamableHttp: transport.enableStreamableHttp,
+        protocol: transportConfig.protocol,
+        enableLegacySSE: legacyFlags.enableLegacySSE,
+        enableStreamableHttp: legacyFlags.enableStreamableHttp,
         path: request.path,
         accept: request.headers?.['accept'],
       });
-      const decision = decideIntent(request, { ...transport, tolerateMissingAccept: true });
+      const decision = decideIntent(request, { ...legacyFlags, tolerateMissingAccept: true });
       this.logger.debug(`[${this.requestId}] decision result`, {
         intent: decision.intent,
         reasons: decision.reasons,

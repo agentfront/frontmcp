@@ -21,17 +21,21 @@ const port = parseInt(process.env['PORT'] ?? '3005', 10);
       requireSelection: true,
       rememberConsent: true,
     },
-    sessionMode: 'stateful',
     tokenStorage: {
       type: 'memory', // Use 'redis' in production
     },
     allowDefaultPublic: false,
     anonymousScopes: ['anonymous'],
-    transport: {
-      enableStatefulHttp: true,
-      enableStreamableHttp: true,
-      enableStatelessHttp: false,
-      requireSessionForStreamable: false,
+  },
+  transport: {
+    sessionMode: 'stateful',
+    protocol: {
+      sse: true,
+      streamable: true,
+      json: true,
+      stateless: false,
+      legacy: false,
+      strictSession: false,
     },
   },
 })

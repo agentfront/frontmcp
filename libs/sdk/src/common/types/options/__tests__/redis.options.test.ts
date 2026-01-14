@@ -1,6 +1,6 @@
 // common/types/options/__tests__/redis.options.test.ts
 
-import { redisOptionsSchema, RedisOptions, RedisOptionsInput } from '../redis.options';
+import { redisOptionsSchema, RedisOptions, RedisOptionsInput } from '../redis';
 
 // Helper to safely access redis properties (handles union type with Vercel KV)
 function getRedisProperty<K extends string>(redis: RedisOptions | undefined, key: K): unknown {

@@ -1,8 +1,11 @@
-export * from './server-info.options';
-export * from './session.options';
-export * from './http.options';
+// common/types/options/index.ts
+// Barrel export for all options
+
+export * from './server-info';
+export * from './session';
+export * from './http';
 export * from './auth';
-export * from './logging.options';
-export * from './redis.options';
-export * from './transport.options';
-export * from './pagination.options';
+export * from './logging';
+export * from './redis';
+export * from './transport';
+export * from './pagination';

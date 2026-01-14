@@ -74,9 +74,11 @@ export class Scope extends ScopeEntry {
     }
 
     // Pass distributed config to ProviderRegistry for serverless/multi-instance support
-    const distributedConfig = rec.metadata.transport?.distributed;
+    const distributedMode = rec.metadata.transport?.distributedMode;
+    const providerCaching = rec.metadata.transport?.providerCaching;
     this.scopeProviders = new ProviderRegistry(this.defaultScopeProviders, globalProviders, {
-      distributed: distributedConfig,
+      distributedMode,
+      providerCaching,
     });
     this.ready = this.initialize();
   }

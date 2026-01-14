@@ -11,7 +11,6 @@ import {
   tokenRefreshConfigSchema,
   tokenStorageConfigSchema,
 } from './shared.schemas';
-import { transportConfigSchema } from './transport.deprecated';
 
 // ============================================
 // SHARED ORCHESTRATED FIELDS
@@ -35,14 +34,6 @@ const orchestratedSharedFields = {
    * @default { type: 'memory' }
    */
   tokenStorage: tokenStorageConfigSchema.default({ type: 'memory' }),
-
-  /**
-   * Session storage mode
-   * - 'stateful': Store sessions in Redis/memory, JWT contains only reference
-   * - 'stateless': All state encrypted in JWT
-   * @default 'stateful'
-   */
-  sessionMode: z.enum(['stateful', 'stateless']).default('stateful'),
 
   /**
    * Allow default public access for unauthenticated requests
@@ -86,11 +77,6 @@ const orchestratedSharedFields = {
    * @default { enabled: true, skippedAppBehavior: 'anonymous' }
    */
   incrementalAuth: incrementalAuthConfigSchema.optional(),
-
-  /**
-   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
-   */
-  transport: transportConfigSchema.optional(),
 };
 
 // ============================================

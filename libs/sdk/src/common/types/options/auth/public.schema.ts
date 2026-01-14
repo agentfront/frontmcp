@@ -4,7 +4,6 @@
 import { z } from 'zod';
 import { jsonWebKeySetSchema, jwkSchema } from '../../auth';
 import { publicAccessConfigSchema } from './shared.schemas';
-import { transportConfigSchema } from './transport.deprecated';
 
 // ============================================
 // PUBLIC MODE
@@ -48,11 +47,6 @@ export const publicAuthOptionsSchema = z.object({
    * @default auto-generated
    */
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
-
-  /**
-   * @deprecated Use top-level transport config instead. Kept for backward compatibility.
-   */
-  transport: transportConfigSchema.optional(),
 });
 
 // ============================================
